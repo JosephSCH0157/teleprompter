@@ -1769,8 +1769,23 @@ function toggleRec(){
   function scheduleAutosave(){ /* optional: attach a debounce here */ }
 
   function downloadAsFile(name, text, mime='text/plain'){
-    const a = document.createElement('a'); a.download=name; a.href=URL.createObjectURL(new Blob([text],{type:mime}));
-    document.body.appendChild(a); a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 500); a.remove();
+    try {
+      let type = String(mime || 'text/plain');
+      if (type.startsWith('text/') && !/charset=/i.test(type)) type += ';charset=utf-8';
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.download = name || 'download.txt';
+      a.href = url;
+      a.rel = 'noopener';
+      // Fallback for browsers that ignore the download attribute
+      if (typeof a.download === 'undefined') a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} a.remove(); }, 1000);
+    } catch (e) {
+      try { alert('Download failed: ' + (e?.message || e)); } catch {}
+    }
   }
 
   /* ──────────────────────────────────────────────────────────────
