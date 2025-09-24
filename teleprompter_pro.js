@@ -1,4 +1,4 @@
-/* Teleprompter Pro — JS CLEAN (v1.5.4b)
+/* Teleprompter Pro — JS CLEAN (v1.5.6)
    - Display handshake + retry pump
    - SmartTag supports: Name:, Name —, Name >, and block headers >> NAME:
    - DOCX import via Mammoth (auto‑loads on demand)
