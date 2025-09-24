@@ -240,7 +240,7 @@ export function ensureHelpUI(){
   }
 
   // --- wire open/close ---
-  const helpBtn = document.getElementById('shortcutsBtn');
+  helpBtn = document.getElementById('shortcutsBtn');
   const closeBtn = overlay.querySelector('#shortcutsClose');
   function openHelp(){ overlay.classList.remove('hidden'); helpBtn?.setAttribute('aria-expanded','true'); }
   function closeHelp(){ overlay.classList.add('hidden'); helpBtn?.setAttribute('aria-expanded','false'); }
