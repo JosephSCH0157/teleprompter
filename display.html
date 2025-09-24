@@ -8,14 +8,14 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Display</title>
         <style>
-          :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936}
+          :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa}
           html,body{height:100%}
           body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
           .wrap{height:100%;overflow:auto}
           .script{max-width:1200px;margin:0 auto;padding:40px}
           .script p{font-size:48px;line-height:1.35;margin:0 0 32px}
           .u{text-decoration:underline}
-          .note{color:#9ba7b2;font-style:italic;margin:0 0 32px}
+          .note{color:var(--muted);font-style:italic;margin:0 0 32px}
           .marker{position:sticky;top:40%;height:2px;background:#7cc4ff;box-shadow:0 0 6px #7cc4ff}
           .hud{position:fixed;right:12px;bottom:12px;font:12px/1.2 system-ui;color:#9ba7b2;opacity:.7}
           .btn{cursor:pointer;border:1px solid var(--edge);padding:6px 8px;border-radius:8px;background:#0e141b;color:#e7ebf0;margin-left:8px}
