@@ -10,6 +10,25 @@ kbd{display:inline-block;min-width:1.6em;padding:.15em .45em;border:1px solid #3
 .btn-chip:hover{background:#10161d}
 .sheet-section{margin-top:12px;padding-top:8px;border-top:1px solid var(--edge)}
 #validatePanel pre{white-space:pre-wrap;-webkit-user-select:text;user-select:text;margin-top:8px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;line-height:1.4;max-height:40vh;overflow:auto}
+
+/* Savanna theme (subtle, non-intrusive) */
+body.savanna { --edge:#a9763a; }
+body.savanna::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:-1;
+    background:
+        radial-gradient(1200px 800px at 85% -10%, rgba(214,125,45,.08), transparent 70%),
+        radial-gradient(900px 600px at -10% 110%, rgba(194,59,34,.06), transparent 70%);
+}
+body.savanna::after{
+    content:""; position:fixed; right:6%; bottom:6%; width:160px; height:160px;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='%23d67d2d' fill-opacity='.10'%3E%3Ccircle cx='60' cy='60' r='28'/%3E%3Ccircle cx='115' cy='50' r='24'/%3E%3Ccircle cx='160' cy='75' r='22'/%3E%3Ccircle cx='85' cy='110' r='26'/%3E%3Cellipse cx='120' cy='155' rx='55' ry='36'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,.2));
+    pointer-events:none;
+}
+
+/* dB meter party mode */
+#dbMeter.party .bar { animation: meterPulse 900ms linear infinite alternate; }
+@keyframes meterPulse { from { opacity:.6 } to { opacity:1 } }
 .section-title {
     display: flex;
     align-items: center;

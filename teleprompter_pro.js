@@ -40,6 +40,20 @@ function setStatus(msg){
   }
 }
 
+// Tiny toast utility (optional) for subtle pings
+window.toast = (msg) => {
+  try {
+    const t = document.createElement('div');
+    t.textContent = String(msg || '');
+    t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);' +
+      'background:#0e141b;border:1px solid var(--edge);padding:8px 12px;border-radius:10px;color:#c8d2dc;z-index:99999;opacity:0;pointer-events:none;';
+    document.body.appendChild(t);
+    requestAnimationFrame(()=>{ t.style.transition='opacity .2s ease, transform .2s ease'; t.style.opacity='1'; });
+    setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(8px)'; }, 1400);
+    setTimeout(()=> t.remove(), 1800);
+  } catch {}
+};
+
 // ⬇️ this line was missing; without it, nothing gets wired
 document.addEventListener('DOMContentLoaded', init);
 
@@ -386,6 +400,15 @@ function ensureHelpUI(){
             <button id="validateBtn" class="btn-chip">Validate markup</button>
           </div>
         </div>
+
+        <div id="helpAdvanced" class="hidden" style="margin-top:12px">
+          <h4 style="margin:0 0 6px">Advanced</h4>
+          <div class="shortcuts-grid">
+            <div><strong>Alt-click title</strong></div><div>Toggle this section</div>
+            <div><strong>~</strong></div><div>Debug HUD</div>
+            <div><strong>?v=clear</strong></div><div>Force refresh</div>
+          </div>
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -408,6 +431,22 @@ function ensureHelpUI(){
         </div>
       </div>`;
     sheet.appendChild(container);
+  }
+
+  // If missing, append the optional Advanced section (hidden by default)
+  if (overlay && !overlay.querySelector('#helpAdvanced')){
+    const sheet = overlay.querySelector('.sheet') || overlay;
+    const adv = document.createElement('div');
+    adv.innerHTML = `
+<div id="helpAdvanced" class="hidden" style="margin-top:12px">
+  <h4 style="margin:0 0 6px">Advanced</h4>
+  <div class="shortcuts-grid">
+    <div><strong>Alt-click title</strong></div><div>Toggle this section</div>
+    <div><strong>~</strong></div><div>Debug HUD</div>
+    <div><strong>?v=clear</strong></div><div>Force refresh</div>
+  </div>
+</div>`;
+    sheet.appendChild(adv.firstElementChild);
   }
 
   // --- wire open/close ---
@@ -902,6 +941,16 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Recognition on/off (placeholder toggle)
     recBtn?.addEventListener('click', toggleRec);
 
+    // Tiny wink: Shift+click Rec to hint at future calibration
+    if (recBtn){
+      recBtn.addEventListener('click', (e)=>{
+        if (e.shiftKey){
+          try { setStatus && setStatus('Calibration read: listen for pace… (coming soon)'); } catch {}
+          // future: sample speech rate and tune MATCH_WINDOW_AHEAD, thresholds, etc.
+        }
+      }, { capture:true }); // capture so it runs before the normal handler
+    }
+
     // Camera
     startCamBtn?.addEventListener('click', startCamera);
     stopCamBtn?.addEventListener('click', stopCamera);
@@ -974,8 +1023,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // Try to list devices
     populateDevices();
-
   setStatus('Ready.');
+    // Fun extras (Konami theme, meter party, advanced tools, :roar) — call once at the very end
+    try { installEasterEggs(); } catch {}
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -1750,6 +1800,118 @@ function toggleRec(){
       on = !on;
       if (!on) debugClear(); else ensureBox();
     }
+  });
+})();
+
+// ───────────────────────────────────────────────────────────────
+// Easter eggs: theme toggle, party meter, advanced tools, :roar
+// ───────────────────────────────────────────────────────────────
+function installEasterEggs(){
+  // ---- restore theme
+  try {
+    const savedTheme = localStorage.getItem('egg.theme');
+    if (savedTheme) document.body.classList.add(savedTheme);
+  } catch {}
+
+  // ---- Konami unlock -> toggles 'savanna' class
+  const konami = [38,38,40,40,37,39,37,39,66,65];
+  let pos = 0;
+  window.addEventListener('keydown', (e) => {
+    const code = e.keyCode || e.which;
+    pos = (code === konami[pos]) ? pos + 1 : 0;
+    if (pos === konami.length){
+      pos = 0;
+      document.body.classList.toggle('savanna');
+      const on = document.body.classList.contains('savanna');
+      try { localStorage.setItem('egg.theme', on ? 'savanna' : ''); } catch {}
+      try { setStatus && setStatus(on ? 'Savanna unlocked 🦁' : 'Savanna off'); } catch {}
+    }
+  });
+
+  // ---- dB meter party mode (5 clicks within 1.2s)
+  const meter = document.getElementById('dbMeter');
+  if (meter){
+    let clicks = 0, t0 = 0;
+    meter.addEventListener('click', () => {
+      const t = performance.now();
+      if (t - t0 > 1200) clicks = 0;
+      t0 = t; clicks++;
+      if (clicks >= 5){
+        clicks = 0;
+        meter.classList.toggle('party');
+        try { setStatus && setStatus(meter.classList.contains('party') ? 'Meter party 🎉' : 'Meter normal'); } catch {}
+      }
+    });
+  }
+
+  // ---- Help title alt-click -> show hidden "Advanced" tools
+  const helpTitle = document.getElementById('shortcutsTitle');
+  const advanced  = document.getElementById('helpAdvanced');
+  if (helpTitle && advanced){
+    helpTitle.addEventListener('click', (e)=>{
+      if (!e.altKey) return;
+      advanced.classList.toggle('hidden');
+    });
+  }
+
+  // ---- :roar in editor -> quick emoji confetti
+  const ed = document.getElementById('editor');
+  if (ed){
+    ed.addEventListener('input', ()=>{
+      const v = ed.value.slice(-5).toLowerCase();
+      if (v === ':roar') {
+        ed.value = ed.value.slice(0, -5);
+        roarOverlay();
+        ed.dispatchEvent(new Event('input', {bubbles:true}));
+      }
+    });
+  }
+}
+
+function roarOverlay(){
+  const o = document.createElement('div');
+  o.style.cssText = 'position:fixed;inset:0;display:grid;place-items:center;z-index:99999;pointer-events:none';
+  o.innerText = '🦁';
+  o.style.fontSize = '14vw'; o.style.opacity = '0';
+  document.body.appendChild(o);
+  requestAnimationFrame(()=>{
+    o.style.transition = 'transform .5s ease, opacity .5s ease';
+    o.style.transform = 'scale(1.1)'; o.style.opacity = '0.9';
+    setTimeout(()=>{ o.style.opacity='0'; o.style.transform='scale(0.9)'; }, 700);
+    setTimeout(()=> o.remove(), 1200);
+  });
+}
+
+// ───────────────────────────────────────────────────────────────
+// About popover (Ctrl+Alt+K)
+// ───────────────────────────────────────────────────────────────
+(function(){
+  let about;
+  function showAbout(){
+    if (!about){
+      about = document.createElement('div');
+      about.className = 'overlay';
+      const built = new Date().toLocaleString();
+      const ver = (window.APP_VERSION||'local');
+      about.innerHTML = `
+      <div class="sheet" style="max-width:560px">
+        <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <h3 style="margin:0">Teleprompter • About</h3>
+          <button class="btn-chip" id="aboutClose">Close</button>
+        </header>
+        <p style="margin:0 0 6px; color:#96a0aa">Hidden credits & build info</p>
+        <pre style="white-space:pre-wrap; user-select:text;">Build: ${built}
+JS: v${ver}
+Easter eggs: Konami (savanna), Meter party, :roar</pre>
+      </div>`;
+      document.body.appendChild(about);
+      about.addEventListener('click', e => { if (e.target === about) about.classList.add('hidden'); });
+      about.querySelector('#aboutClose').onclick = () => about.classList.add('hidden');
+    }
+    about.classList.remove('hidden');
+  }
+  window.addEventListener('keydown', (e)=>{
+    if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 })();
 
