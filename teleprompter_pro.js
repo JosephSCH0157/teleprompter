@@ -66,6 +66,7 @@ import('./help.js').then(mod => {
   window.validateStandardTags = mod.validateStandardTags;
 }).catch(()=>{});
 
+  // TP: normalize-fallback
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
   function fallbackNormalize(){
     try {
@@ -89,6 +90,7 @@ import('./help.js').then(mod => {
     }
   }
 
+  // TP: normalize-strict
   // Strict normalizer (single source of truth)
   window.normalizeToStandard = function normalizeToStandard() {
     const ta = document.getElementById('editor');
@@ -218,6 +220,7 @@ import('./help.js').then(mod => {
       dbMeter, dbMeterTop,
       toggleSpeakersBtn, speakersBody;
 
+  // TP: meter-audio
   // ───────────────────────────────────────────────────────────────
   // dB meter utilities (build bars, start/stop, mirror to top bar)
   // ───────────────────────────────────────────────────────────────
@@ -293,6 +296,7 @@ import('./help.js').then(mod => {
     } catch (e) { /* ignore */ }
   }
 
+  // TP: init-minimal
   // Minimal init to wire the meter pieces and help overlay
   function init(){
     // Help UI
@@ -311,12 +315,14 @@ import('./help.js').then(mod => {
     buildDbBars(dbMeter);
     buildDbBars(dbMeterTop);
 
-    // Wire mic + devices
+  // TP: mic-wire
+  // Wire mic + devices
     micBtn?.addEventListener('click', requestMic);
     refreshDevicesBtn?.addEventListener('click', populateDevices);
     try { populateDevices(); } catch {}
 
-    // Wire Top-bar Normalize button
+  // TP: normalize-top-btn
+  // Wire Top-bar Normalize button
     if (normalizeTopBtn && !normalizeTopBtn.dataset.wired){
       normalizeTopBtn.dataset.wired = '1';
       normalizeTopBtn.addEventListener('click', () => {
@@ -1009,7 +1015,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     camMirror?.addEventListener('change', applyCamMirror);
     camPiP?.addEventListener('click', togglePiP);
 
-    // Display handshake: accept either a string ping or a typed object
+  // TP: display-handshake
+  // Display handshake: accept either a string ping or a typed object
     window.addEventListener('message', (e) => {
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
@@ -1053,10 +1060,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       if (savedSmooth && motionSmoothSel) motionSmoothSel.value = savedSmooth;
     } catch {}
 
-    // Initial render
+  // TP: initial-render
+  // Initial render
     renderScript(editor.value || '');
     // Apply aggressiveness mapping now and on change
-    function applyAggro(){
+  // TP: matcher-tunables
+  function applyAggro(){
       const v = (matchAggroSel?.value || '2');
       if (v === '1'){ SIM_THRESHOLD = 0.60; MATCH_WINDOW_AHEAD = 140; }
       else if (v === '3'){ SIM_THRESHOLD = 0.42; MATCH_WINDOW_AHEAD = 260; }
@@ -1069,7 +1078,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     });
 
     // Apply motion smoothness mapping now and on change
-    function applySmooth(){
+  // TP: motion-smoothness
+  function applySmooth(){
       const v = (motionSmoothSel?.value || 'balanced');
       // adjust soft scroll tunables used in advanceByTranscript and scrollToCurrentIndex
       if (v === 'stable'){
@@ -1152,6 +1162,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
  function normWord(w){ return String(w).toLowerCase().replace(/[^a-z0-9']/g,''); }
 function splitWords(t){ return String(t).toLowerCase().split(/\s+/).map(normWord).filter(Boolean); }
 
+// TP: scroll-current-index
 function scrollToCurrentIndex(){
   if (!paraIndex.length) return;
   const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
@@ -1216,6 +1227,7 @@ function _sim(a, b){
 }
 
 // Advance currentIndex by trying to align recognized words to the upcoming script words
+// TP: advance-by-transcript
 function advanceByTranscript(transcript, isFinal){
   // Adopt current smoothness settings if provided
   const SC = (window.__TP_SCROLL || { DEAD: DEAD_BAND_PX, THROTTLE: CORRECTION_MIN_MS, FWD: MAX_FWD_STEP_PX, BACK: MAX_BACK_STEP_PX });
@@ -1345,6 +1357,7 @@ function advanceByTranscript(transcript, isFinal){
     return s;
   }
 
+  // TP: typography-apply
   function applyTypography(){
     scriptEl.querySelectorAll('p, .note').forEach(el => {
       el.style.fontSize  = String(fontSizeInput.value) + 'px';
@@ -1555,6 +1568,7 @@ function normTokens(text){
     return out.join('\n');
   }
 
+// TP: display-open
 function openDisplay(){
   try {
     displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
@@ -1588,6 +1602,7 @@ function openDisplay(){
   }
 }
   function closeDisplay(){ if(displayWin && !displayWin.closed) displayWin.close(); displayWin=null; closeDisplayBtn.disabled=true; displayChip.textContent='Display: closed'; }
+  // TP: display-send
   function sendToDisplay(payload){ if(displayWin && !displayWin.closed) displayWin.postMessage(payload, '*'); }
   window.sendToDisplay = sendToDisplay;
 
@@ -1634,7 +1649,8 @@ function tweakSpeed(delta){
     sec = Math.max(0, Number(sec)||0);
     if (!sec){ fn(); return; }
     let n = sec;
-    const show = (v) => { countNum.textContent = String(v); countOverlay.style.display='flex'; sendToDisplay({type:'preroll', show:true, n:v}); };
+  // TP: preroll-controls
+  const show = (v) => { countNum.textContent = String(v); countOverlay.style.display='flex'; sendToDisplay({type:'preroll', show:true, n:v}); };
     show(n);
     const id = setInterval(() => { n -= 1; if (n<=0){ clearInterval(id); countOverlay.style.display='none'; sendToDisplay({type:'preroll', show:false}); fn(); } else show(n); }, 1000);
   }
@@ -1760,6 +1776,7 @@ function toggleRec(){
   /* ──────────────────────────────────────────────────────────────
    * Speech recognition start/stop logic
    * ────────────────────────────────────────────────────────────── */
+  // TP: speech-start
   function startSpeechSync(){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR){
@@ -1823,11 +1840,13 @@ function toggleRec(){
     try { recog.start(); } catch(e){ console.warn('speech start failed', e); }
   }
 
+  // TP: speech-stop
   function stopSpeechSync(){
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
   }
 
+  // TP: docx-mammoth
   async function ensureMammoth(){
     if (window.mammoth) return window.mammoth;
     const loadScript = (src) => new Promise((res, rej) => {
@@ -1852,6 +1871,7 @@ function toggleRec(){
     throw new Error('Mammoth failed to load from CDN and local fallback. '+(lastErr?.message||''));
   }
 
+  // TP: upload-file
   async function uploadFromFile(file){
     const lower = (file.name||'').toLowerCase();
     const isDocx = lower.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -1920,6 +1940,7 @@ function toggleRec(){
 // ───────────────────────────────────────────────────────────────
 // Self-checks: quick asserts at load, with a small pass/fail bar
 // ───────────────────────────────────────────────────────────────
+// TP: self-checks
 function runSelfChecks(){
   const checks = [];
 
