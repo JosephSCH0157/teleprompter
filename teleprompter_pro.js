@@ -1023,7 +1023,11 @@ function scrollToCurrentIndex(){
   }
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
-  sendToDisplay({ type: 'scroll', top: viewer.scrollTop });
+  {
+    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const ratio = max ? (viewer.scrollTop / max) : 0;
+    sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+  }
 }
 
 
@@ -1138,7 +1142,11 @@ function advanceByTranscript(transcript, isFinal){
 
   viewer.scrollTop = next;
   if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
-  sendToDisplay({ type:'scroll', top: next });
+  {
+    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const ratio = max ? (next / max) : 0;
+    sendToDisplay({ type:'scroll', top: next, ratio });
+  }
   // mark progress for stall-recovery
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   _lastCorrectionAt = tNow;
@@ -1417,7 +1425,11 @@ function openDisplay(){
 
       // Send initial state
       sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop });
+      {
+        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+        const ratio = max ? (viewer.scrollTop / max) : 0;
+        sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+      }
       closeDisplayBtn.disabled = false;
     };
     window.addEventListener('message', readyListener);

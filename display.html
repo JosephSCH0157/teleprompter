@@ -13,9 +13,10 @@
           body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
           .wrap{height:100%;overflow:auto}
           .script{max-width:1200px;margin:0 auto;padding:40px}
-          .script p{font-size:48px;line-height:1.35;margin:0 0 32px}
+          /* Match main app metrics exactly for consistent scroll physics */
+          .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
           .u{text-decoration:underline}
-          .note{color:var(--muted);font-style:italic;margin:0 0 32px}
+          .note{color:var(--muted);font-style:italic;margin:0 0 28px}
           .marker{position:sticky;top:40%;height:2px;background:#7cc4ff;box-shadow:0 0 6px #7cc4ff}
           .hud{position:fixed;right:12px;bottom:12px;font:12px/1.2 system-ui;color:#9ba7b2;opacity:.7}
           .btn{cursor:pointer;border:1px solid var(--edge);padding:6px 8px;border-radius:8px;background:#0e141b;color:#e7ebf0;margin-left:8px}
@@ -40,7 +41,14 @@
               const d = ev.data||{};
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
-              if(d.type==='scroll'){ wrap.scrollTop = d.top||0; }
+              if(d.type==='scroll'){
+                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
+                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                  wrap.scrollTop = Math.round(d.ratio * max);
+                } else {
+                  wrap.scrollTop = d.top||0;
+                }
+              }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
                 else{ preRoll.style.display='none'; }
