@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Teleprompter — Pro v1_5_4b</title>
+<link href="data:," rel="icon"/>
+<script defer src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
+<link href="teleprompter_pro.css" rel="stylesheet"/>
+<style>
+.hidden{ display:none !important; }
+.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); -webkit-backdrop-filter:saturate(1.2) blur(2px); backdrop-filter:saturate(1.2) blur(2px);
+  z-index:9999; display:flex; align-items:center; justify-content:center; }
+.sheet{ width:min(820px,92vw); max-height:85vh; overflow:auto; background:#0e141b; border:1px solid var(--edge);
+  border-radius:16px; padding:20px; }
+.sheet header{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.hr{ border:0; border-top:1px solid var(--edge); margin:12px 0; }
+.shortcuts-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.btn-chip{ background:#0e141b; border:1px solid var(--edge); padding:8px 10px; border-radius:10px; cursor:pointer; }
+.db-bars{display:flex;gap:2px;height:10px;border:1px solid var(--edge);
+  border-radius:6px;padding:2px;background:#0e141b;min-width:180px}
+.db-bars .bar{flex:1;background:#22303d;border-radius:2px}
+.db-bars .bar.on{background:#7cc4ff}
+</style>
+</head>
+<body>
+<div class="topbar">
+<strong>Teleprompter_Pro</strong>
+<span class="chip" id="saveChip">Draft: —</span>
+<span class="chip" id="permChip">Mic: unknown</span>
+<span class="chip" id="displayChip">Display: closed</span>
+<span class="chip" id="recChip">Speech: idle</span>
+<!-- dB Meter (top bar mini) -->
+<div id="dbMeterTop" title="Input level"></div>
+<!-- Present Mode (top bar) -->
+<button class="inl-1 chip" id="presentBtn">Present Mode</button>
+<!-- Help/Shortcuts Button -->
+<button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Shortcuts</button>
+<!-- Speakers legend -->
+<div class="legend" id="legend"></div>
+</div>
+<div class="app">
+<aside class="panel">
+<h2>Controls</h2>
+<div class="row">
+<button id="openDisplayBtn">Open display window</button>
+<button disabled="" id="closeDisplayBtn">Close display window</button>
+</div>
+<div class="row">
+<button id="micBtn">Request mic</button>
+<button disabled="" id="recBtn">Start speech sync</button>
+</div>
+<div class="row" id="dbRow">
+  <div id="dbMeter" class="db-bars" aria-label="Microphone level">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+  </div>
+</div>
+<div class="row">
+<label>Mic device
+          <select id="micDeviceSel" class="select-md" ></select>
+</label>
+<button id="refreshDevicesBtn" title="Refresh devices">Refresh</button>
+</div>
+<h2 class="select-md" >Camera</h2>
+<div class="row">
+<button id="startCam">Start camera</button>
+<button disabled="" id="stopCam">Stop camera</button>
+</div>
+<div class="row">
+<label>Device
+<select id="camDevice" class="select-md"></select>
+</label>
+</div>
+<div class="row">
+<label>Size (%) <input id="camSize" max="60" min="15" step="1" type="number" value="28"/></label>
+<label>Opacity <input id="camOpacity" max="100" min="20" step="5" type="number" value="100"/></label>
+<label><input checked="" id="camMirror" type="checkbox"/> Mirror</label>
+<button id="camPiP">Picture-in-Picture</button>
+</div>
+<div class="row">
+<label>Font size <input id="fontSize" max="96" min="16" step="2" type="number" value="48"/></label>
+<label>Line height <input id="lineHeight" max="2" min="1.1" step="0.05" type="number" value="1.35"/></label>
+</div>
+<div class="row">
+<label>Auto-scroll (px/s) <input id="autoSpeed" max="300" min="0" step="5" type="number" value="0"/></label>
+<button id="autoToggle">Auto-scroll: Off</button>
+</div>
+<div class="row">
+<label>Pre-roll (sec)
+          <input id="preroll" max="10" min="0" step="1" type="number" value="3"/>
+</label>
+</div>
+<div class="row">
+  <label>Match aggressiveness
+    <select id="matchAggro" class="select-md">
+      <option value="1">Conservative</option>
+      <option value="2" selected>Normal</option>
+      <option value="3">Aggressive</option>
+    </select>
+  </label>
+</div>
+<div class="row">
+  <label>Motion smoothness
+    <select id="motionSmooth" class="select-md">
+      <option value="stable">Stable</option>
+      <option value="balanced" selected>Balanced</option>
+      <option value="responsive">Responsive</option>
+    </select>
+  </label>
+</div>
+<div class="row">
+<button id="resetBtn">Reset timer</button>
+<div class="timer" id="timer">00:00.0</div>
+</div>
+<div class="row">
+<button id="loadSample">Load sample text</button>
+<button id="normalizeTopBtn">Normalize</button>
+<button id="clearText">Clear</button>
+</div>
+<h2 class="section-title">
+  Speakers
+  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody">Hide</button>
+</h2>
+
+<div id="speakersBody">
+  <div class="row">
+    <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
+    <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
+    <button id="wrap-s1">Wrap ➜ S1</button>
+  </div>
+  <div class="row">
+    <label>Name <input id="name-s2" type="text" placeholder="Speaker 2"></label>
+    <label>Color <input id="color-s2" type="color" value="#facc15"></label>
+    <button id="wrap-s2">Wrap ➜ S2</button>
+  </div>
+  <div class="row">
+    <label>Name <input id="name-g1" type="text" placeholder="Guest 1"></label>
+    <label>Color <input id="color-g1" type="color" value="#34d399"></label>
+    <button id="wrap-g1">Wrap ➜ G1</button>
+  </div>
+  <div class="row">
+    <label>Name <input id="name-g2" type="text" placeholder="Guest 2"></label>
+    <label>Color <input id="color-g2" type="color" value="#f472b6"></label>
+    <button id="wrap-g2">Wrap ➜ G2</button>
+  </div>
+
+  <div class="row toolbar">
+    <button id="wrap-bold"><b>B</b></button>
+    <button id="wrap-italic"><i>I</i></button>
+    <button id="wrap-underline"><span class="u">U</span></button>
+    <button id="wrap-note">Note</button>
+    <button id="wrap-color">Color…</button>
+    <button id="wrap-bg">BG…</button>
+    <button id="autoTagBtn">Smart Tag</button>
+    <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
+  </div>
+</div>
+<div class="row">
+<button id="saveLocal">Save (browser)</button>
+<button id="loadLocal">Load (browser)</button>
+</div>
+<div class="row">
+<button id="downloadFile">Download .txt</button>
+<button id="uploadFileBtn">Upload file</button>
+<label for="uploadFile">Upload file
+  <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx">
+</label>
+</input></div>
+<div class="row">
+<label>Script
+          <select id="scriptSelect" class="select-md" ></select>
+</label>
+<button id="saveAsBtn">Save As</button>
+<button id="loadBtn">Load</button>
+<button id="deleteBtn">Delete</button>
+</div>
+<div class="row">
+<button id="resetScriptBtn">Reset Script</button>
+</div>
+<p class="status" id="status"></p>
+<h2>Script</h2>
+<textarea id="editor" placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+</aside>
+<main class="viewer" id="viewer">
+<div class="marker"></div>
+<div class="script" id="script"></div>
+<div class="camWrap" id="camWrap">
+<video autoplay="" id="camVideo" muted=""></video>
+</div>
+</main>
+</div>
+<!-- Pre-roll overlay (main window) -->
+<div id="countOverlay" class="inl-7">
+<div class="row" >
+<div class="select-md" >Begin speaking in</div>
+<div id="countNum" class="preroll-num" >3</div>
+</div>
+</div>
+<!-- Near the end of <body> -->
+<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+  <div class="sheet">
+    <header>
+      <h3 id="shortcutsTitle">Shortcuts</h3>
+      <button id="shortcutsClose" class="btn-chip">Close</button>
+    </header>
+
+    <div class="shortcuts-grid">
+      <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
+      <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed</div>
+      <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
+      <div><strong>Shift + ?</strong></div><div>Open Help</div>
+      <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
+    </div>
+    <!-- JS will inject the Tag Guide here, including the Normalize button -->
+  </div>
+</div>
+<script type="module">
+  import './teleprompter_pro.js'; // this dynamically imports speech/camera as needed
+</script>
+
+</body>
+</html>

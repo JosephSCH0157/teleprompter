@@ -1,0 +1,53 @@
+<script>
+  // … your existing code …
+  document.addEventListener('DOMContentLoaded', function() {
+    window.opener && window.opener.postMessage('DISPLAY_READY', '*');
+  });
+</script>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Display</title>
+        <style>
+          :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936}
+          html,body{height:100%}
+          body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
+          .wrap{height:100%;overflow:auto}
+          .script{max-width:1200px;margin:0 auto;padding:40px}
+          .script p{font-size:48px;line-height:1.35;margin:0 0 32px}
+          .u{text-decoration:underline}
+          .note{color:#9ba7b2;font-style:italic;margin:0 0 32px}
+          .marker{position:sticky;top:40%;height:2px;background:#7cc4ff;box-shadow:0 0 6px #7cc4ff}
+          .hud{position:fixed;right:12px;bottom:12px;font:12px/1.2 system-ui;color:#9ba7b2;opacity:.7}
+          .btn{cursor:pointer;border:1px solid var(--edge);padding:6px 8px;border-radius:8px;background:#0e141b;color:#e7ebf0;margin-left:8px}
+          #preRoll{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999}
+          #preRoll .card{background:#0e141b;border:1px solid var(--edge);padding:24px 32px;border-radius:16px;text-align:center}
+          #preRoll .hint{font-size:14px;color:#9ba7b2}
+          #preRoll .num{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
+        </style></head>
+        <body>
+          <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
+          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button></div>
+          <div id="preRoll"><div class="card"><div class="hint">Begin speaking in</div><div class="num" id="preRollNum">3</div></div></div>
+          <script>
+            const scriptEl = document.getElementById('script');
+            const wrap = document.getElementById('wrap');
+            const preRoll = document.getElementById('preRoll');
+            const preRollNum = document.getElementById('preRollNum');
+            function apply(fontSize,lineHeight){ scriptEl.querySelectorAll('p').forEach(p=>{ p.style.fontSize=fontSize+'px'; p.style.lineHeight=lineHeight; }); }
+            window.addEventListener('message', ev => {
+              const d = ev.data||{};
+              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
+              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
+              if(d.type==='scroll'){ wrap.scrollTop = d.top||0; }
+              if(d.type==='preroll'){
+                if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
+                else{ preRoll.style.display='none'; }
+              }
+            });
+            document.getElementById('flip').onclick = () => { document.body.style.transform = document.body.style.transform ? '' : 'scaleX(-1)'; };
+            document.getElementById('invert').onclick = () => {
+              if(!document.body.dataset.inv){ document.body.dataset.inv=1; document.body.style.background = '#f4f7fb'; document.body.style.color = '#0b0d10'; }
+              else { delete document.body.dataset.inv; document.body.style.background = '#000'; document.body.style.color = '#e7ebf0'; }
+            };
+          </script>
+        </body></html>
