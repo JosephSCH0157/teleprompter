@@ -298,6 +298,25 @@ function ensureHelpUI(){
     document.body.appendChild(overlay);
   }
 
+  // If we reused an existing overlay (from HTML), ensure the Tag Guide with Normalize/Validate exists
+  if (overlay && !overlay.querySelector('#normalizeBtn') && !overlay.querySelector('#guideNormalize')){
+    const sheet = overlay.querySelector('.sheet') || overlay;
+    const container = document.createElement('div');
+    container.innerHTML = `
+      <hr class="hr" />
+      <div>
+        <h4 style="margin:8px 0 6px">Official Teleprompter Tags</h4>
+        <p style="margin:0 0 8px; color:#96a0aa">
+          Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
+          <button id="normalizeBtn" class="btn-chip">Normalize current script</button>
+          <button id="validateBtn" class="btn-chip">Validate markup</button>
+        </div>
+      </div>`;
+    sheet.appendChild(container);
+  }
+
   // --- wire open/close ---
   const closeBtn = overlay.querySelector('#shortcutsClose');
   function openHelp(){ overlay.classList.remove('hidden'); helpBtn.setAttribute('aria-expanded','true'); }
