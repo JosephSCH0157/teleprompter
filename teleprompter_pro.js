@@ -58,8 +58,12 @@ window.toast = (msg) => {
 document.addEventListener('DOMContentLoaded', init);
 
 // Lightweight modular imports (browser native via type="module" in HTML)
-import('./eggs.js').then(mod => {
-  window.__eggs = mod;
+import('./eggs.js').then(mod => { window.__eggs = mod; }).catch(()=>{});
+import('./help.js').then(mod => {
+  window.__help = mod;
+  // Expose/override public helpers for callers already using window.*
+  window.showValidation = mod.showValidation;
+  window.validateStandardTags = mod.validateStandardTags;
 }).catch(()=>{});
 
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
@@ -138,126 +142,24 @@ import('./eggs.js').then(mod => {
 
   // Validator (quick “am I standard?” check)
   function showCopyDialog(text, title='Validation Results'){
-    let ov = document.getElementById('msgOverlay');
-    if (!ov) {
-      ov = document.createElement('div');
-      ov.id = 'msgOverlay';
-      ov.className = 'overlay hidden';
-      ov.innerHTML = `
-        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="msgTitle">
-          <header style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <h3 id="msgTitle" style="margin:0"></h3>
-            <button id="msgClose" class="btn-chip">Close</button>
-          </header>
-          <div style="display:flex; gap:8px; align-items:center; margin:0 0 8px">
-            <button id="msgCopy" class="btn-chip">Copy</button>
-            <span class="dim" style="font-size:12px">Tip: text is pre-selected — press Ctrl+C to copy</span>
-          </div>
-          <textarea id="msgText" readonly style="width:100%;min-height:220px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px"></textarea>
-        </div>`;
-      document.body.appendChild(ov);
-      ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.add('hidden'); });
-      ov.querySelector('#msgClose').onclick = ()=> ov.classList.add('hidden');
-      window.addEventListener('keydown', e=>{ if(!ov.classList.contains('hidden') && e.key==='Escape') ov.classList.add('hidden'); });
-      const copyBtn = ov.querySelector('#msgCopy');
-      copyBtn.onclick = async ()=>{
-        const ta = ov.querySelector('#msgText');
-        ta.focus(); ta.select();
-        try { await navigator.clipboard.writeText(ta.value); } catch { try{ document.execCommand('copy'); }catch{} }
-      };
-    }
-    ov.querySelector('#msgTitle').textContent = title;
-    const ta = ov.querySelector('#msgText');
-    ta.value = String(text||'');
-    ov.classList.remove('hidden');
-    // focus/select for immediate Ctrl+C
-    setTimeout(()=>{ ta.focus(); ta.select(); }, 0);
+    if (window.__help?.showCopyDialog) return window.__help.showCopyDialog(text, title);
+    // fallback: simple alert
+    alert(String(title)+"\n\n"+String(text||''));
   }
 
   // Global helper: show validation output in the Help overlay's panel with copy support
   window.showValidation = function showValidation(text){
-    try { ensureHelpUI(); } catch {}
-    const overlay = document.getElementById('shortcutsOverlay');
-    const sheet = overlay?.querySelector('.sheet') || overlay || document.body;
-    let panel = sheet.querySelector('#validatePanel');
-    if (!panel) {
-      const frag = document.createElement('div');
-      frag.innerHTML = `
-<div id="validatePanel" class="sheet-section hidden">
-  <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-    <h4 style="margin:0">Validation results</h4>
-    <button id="copyValidateBtn" class="btn-chip">Copy</button>
-  </header>
-  <pre id="validateOut" tabindex="0" style="white-space:pre-wrap; user-select:text; margin-top:8px"></pre>
-</div>`;
-      panel = frag.firstElementChild;
-      sheet.appendChild(panel);
-      const copyBtn = panel.querySelector('#copyValidateBtn');
-      if (copyBtn && !copyBtn.dataset.wired) {
-        copyBtn.dataset.wired = '1';
-        copyBtn.addEventListener('click', async () => {
-          const pre = panel.querySelector('#validateOut');
-          const txt = pre?.textContent || '';
-          try {
-            await navigator.clipboard.writeText(txt);
-            try { setStatus && setStatus('Validation copied ✓'); } catch {}
-          } catch {
-            // fallback if clipboard API blocked
-            try {
-              const sel = window.getSelection(); const r = document.createRange();
-              r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
-              document.execCommand('copy');
-              try { setStatus && setStatus('Validation copied ✓'); } catch {}
-            } catch (e) {
-              try { setStatus && setStatus('Copy failed: ' + (e?.message||e)); } catch {}
-            }
-          }
-        });
-      }
-    }
-    const pre = panel.querySelector('#validateOut');
-    pre.textContent = (String(text||'').trim()) || 'No issues found.';
-    panel.classList.remove('hidden');
-    // Focus and auto-select so Ctrl/Cmd+C works immediately
-    try {
-      pre.focus();
-      const sel = window.getSelection(); const r = document.createRange();
-      r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
-    } catch {}
+    if (window.__help?.showValidation) return window.__help.showValidation(text);
+    return showCopyDialog(text, 'Validation');
   };
 
   window.validateStandardTags = function validateStandardTags(silent=false) {
-    const ta = document.getElementById('editor');
-    const t = String(ta?.value || '');
-    const problems = [];
-
-    // only allowed tags
-    const badTag = t.match(/\[(?!\/?(?:s1|s2|note)\b)[^]]+\]/i);
-    if (badTag) problems.push('Unknown tag: ' + badTag[0]);
-
-    // speaker tags must be on their own lines
-    if (/\[(?:s1|s2)\]\s*\S/.test(t)) problems.push('Opening [s1]/[s2] must be on its own line.');
-    if (/\S\s*\[\/s[12]\]\s*$/im.test(t)) problems.push('Closing [/s1]/[/s2] must be on its own line.');
-
-    // notes must not be inside speakers
-    if (/\[(s1|s2)\][\s\S]*?\[note\][\s\S]*?\[\/note\][\s\S]*?\[\/\1\]/i.test(t))
-      problems.push('[note] blocks must be outside speaker sections.');
-
-    // balance using a simple stack (no nesting across different speakers)
-    const re = /\[(\/?)(s1|s2|note)\]/ig; const stack = [];
-    let m;
-    while ((m = re.exec(t))) {
-      const [, close, tag] = m;
-      if (!close) stack.push(tag);
-      else {
-        const top = stack.pop();
-        if (top !== tag) problems.push(`Mismatched closing [/${tag}] near index ${m.index}`);
-      }
-    }
-    if (stack.length) problems.push('Unclosed tag(s): ' + stack.join(', '));
-
-    const msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup conforms to the standard.';
-    if (!silent) { try { window.showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); } }
+    if (window.__help?.validateStandardTags) return window.__help.validateStandardTags(silent);
+    const t = String(document.getElementById('editor')?.value || '');
+    const count = (re) => (t.match(re)||[]).length;
+    const ok = count(/\[s1\]/gi)===count(/\[\/s1\]/gi) && count(/\[s2\]/gi)===count(/\[\/s2\]/gi) && count(/\[note\]/gi)===count(/\[\/note\]/gi);
+    const msg = ok ? 'Markup looks consistent.' : 'Markup issues (basic count mismatch).';
+    if (!silent) showCopyDialog(msg, 'Validator');
     return msg;
   };
 
@@ -340,6 +242,7 @@ import('./eggs.js').then(mod => {
 
   // ---- Help / Tag Guide injection ----
 function ensureHelpUI(){
+  if (window.__help?.ensureHelpUI) return window.__help.ensureHelpUI();
   // --- minimal CSS (only if missing) ---
   if (!document.getElementById('helpStyles')) {
     const css = `
@@ -746,7 +649,7 @@ function init() {
   }, 250);
 
   // After wiring open/close for the overlay:
-  ensureHelpUI();  // <- renames “Shortcuts” to “Help” and injects the Normalize + Validate buttons
+  (window.__help?.ensureHelpUI || ensureHelpUI)();  // <- renames “Shortcuts” to “Help” and injects Normalize + Validate
 
   // Query all elements once
   shortcutsBtn     = document.getElementById('shortcutsBtn');
