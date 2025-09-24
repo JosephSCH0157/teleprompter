@@ -27,4 +27,5 @@ Open `teleprompter_pro.html` in a modern browser (Chromium-based recommended). G
 ## Troubleshooting
 
 - If the camera doesn’t start automatically on iOS, tap the video area to trigger playback.
-- DOCX import loads Mammoth on demand from a CDN; ensure you’re online when importing `.docx`.
+- DOCX import: tries Mammoth from a CDN first (unpkg, jsDelivr). If offline, it will attempt a local fallback at `vendor/mammoth/mammoth.browser.min.js` if present.
+- After importing a `.docx`, the app auto-runs Normalize so the script lands in the exact standard immediately.

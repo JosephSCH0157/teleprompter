@@ -1688,10 +1688,26 @@ function toggleRec(){
 
   async function ensureMammoth(){
     if (window.mammoth) return window.mammoth;
-    await new Promise((res,rej)=>{
-      const s=document.createElement('script'); s.src='https://unpkg.com/mammoth/mammoth.browser.min.js'; s.onload=res; s.onerror=()=>rej(new Error('Mammoth failed to load')); document.head.appendChild(s);
+    const loadScript = (src) => new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = res;
+      s.onerror = () => rej(new Error('Failed to load '+src));
+      document.head.appendChild(s);
     });
-    return window.mammoth;
+    // Try primary CDN, then alternate, then local vendor copy if present
+    const sources = [
+      'https://unpkg.com/mammoth/mammoth.browser.min.js',
+      'https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js',
+      // Optional local fallback (place file at d:/teleprompter/vendor/mammoth/mammoth.browser.min.js)
+      'vendor/mammoth/mammoth.browser.min.js'
+    ];
+    let lastErr;
+    for (const src of sources){
+      try { await loadScript(src); if (window.mammoth) return window.mammoth; } catch(e){ lastErr = e; }
+    }
+    throw new Error('Mammoth failed to load from CDN and local fallback. '+(lastErr?.message||''));
   }
 
   async function uploadFromFile(file){
@@ -1705,6 +1721,14 @@ function toggleRec(){
         const { value } = await mammoth.extractRawText({ arrayBuffer });
         const text = String(value||'').replace(/\r\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
         editor.value = text; renderScript(text); setStatus(`Loaded “${file.name}” (.docx).`);
+        // Gently normalize to our exact standard so it’s ready to present
+        try {
+          if (typeof window.normalizeToStandard === 'function') {
+            window.normalizeToStandard();
+          } else if (typeof window.fallbackNormalize === 'function') {
+            window.fallbackNormalize();
+          }
+        } catch {}
       } catch(e){ err(e); setStatus('Failed to read .docx: ' + (e?.message||e)); }
       return;
     }
