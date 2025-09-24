@@ -172,6 +172,19 @@ import('./help.js').then(mod => {
   let recActive = false;          // you already have this
   let recog = null;               // SpeechRecognition instance
   let recAutoRestart = true;      // keep recognition alive while active
+  // Persisted preference (default ON)
+  try {
+    const v = localStorage.getItem('tp_rec_autorestart_v1');
+    if (v === '0' || v === 'false') recAutoRestart = false;
+  } catch {}
+  // Expose a live getter/setter for Help → Advanced to toggle at runtime
+  try {
+    Object.defineProperty(window, 'recAutoRestart', {
+      configurable: true,
+      get(){ return recAutoRestart; },
+      set(v){ recAutoRestart = !!v; try{ localStorage.setItem('tp_rec_autorestart_v1', recAutoRestart ? '1' : '0'); } catch {} }
+    });
+  } catch {}
   let recBackoffMs   = 300;       // grows on repeated failures
   const MATCH_WINDOW = 6;         // how far ahead we’ll look for the next word
   let autoTimer = null, chrono = null, chronoStart = 0;

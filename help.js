@@ -197,6 +197,8 @@ export function ensureHelpUI(){
             <div><strong>Alt-click title</strong></div><div>Toggle this section</div>
             <div><strong>~</strong></div><div>Debug HUD</div>
             <div><strong>?v=clear</strong></div><div>Force refresh</div>
+            <div><strong>Auto-restart speech</strong></div>
+            <div><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="optRecAuto" /> Enable (default)</label></div>
           </div>
         </div>
       </div>
@@ -234,6 +236,8 @@ export function ensureHelpUI(){
     <div><strong>Alt-click title</strong></div><div>Toggle this section</div>
     <div><strong>~</strong></div><div>Debug HUD</div>
     <div><strong>?v=clear</strong></div><div>Force refresh</div>
+    <div><strong>Auto-restart speech</strong></div>
+    <div><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="optRecAuto" /> Enable (default)</label></div>
   </div>
 </div>`;
     sheet.appendChild(adv.firstElementChild);
@@ -248,6 +252,16 @@ export function ensureHelpUI(){
   if (closeBtn) closeBtn.onclick = closeHelp;
   overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeHelp(); });
   document.addEventListener('keydown', (e)=>{ if(e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) { e.preventDefault(); openHelp(); } });
+
+  // --- Advanced: auto-restart speech toggle ---
+  try {
+    const chk = overlay.querySelector('#optRecAuto');
+    if (chk){
+      // reflect current state
+      chk.checked = !!(window.recAutoRestart ?? true);
+      chk.addEventListener('change', ()=>{ try { window.recAutoRestart = !!chk.checked; } catch {} });
+    }
+  } catch {}
 
   // --- Normalize (uses app function if provided; else safe fallback) ---
   const normalizeBtn = overlay.querySelector('#normalizeBtn');
