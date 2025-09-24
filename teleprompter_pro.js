@@ -305,6 +305,7 @@ import('./help.js').then(mod => {
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
     dbMeter = document.getElementById('dbMeter');
     dbMeterTop = document.getElementById('dbMeterTop');
+    const normalizeTopBtn = document.getElementById('normalizeTopBtn');
 
     // Build both meters
     buildDbBars(dbMeter);
@@ -314,6 +315,17 @@ import('./help.js').then(mod => {
     micBtn?.addEventListener('click', requestMic);
     refreshDevicesBtn?.addEventListener('click', populateDevices);
     try { populateDevices(); } catch {}
+
+    // Wire Top-bar Normalize button
+    if (normalizeTopBtn && !normalizeTopBtn.dataset.wired){
+      normalizeTopBtn.dataset.wired = '1';
+      normalizeTopBtn.addEventListener('click', () => {
+        try {
+          if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
+          else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
+        } catch (e) { try { alert('Normalize error: ' + (e?.message||e)); } catch {} }
+      });
+    }
   }
 
   /* ────────────────────────────────────────────────────────────── */
@@ -1941,6 +1953,33 @@ function runSelfChecks(){
     const ok = (typeof openDisplay === 'function' && typeof sendToDisplay === 'function');
     checks.push({ name:'Display handshake', pass: ok, info: ok ? 'wiring present' : 'functions missing' });
   } catch { checks.push({ name:'Display handshake', pass:false, info:'error' }); }
+
+  // 5) Top Normalize button wired
+  try {
+    const btn = document.getElementById('normalizeTopBtn');
+    const wired = !!(btn && (btn.onclick || btn.dataset.wired));
+    checks.push({ name:'Top Normalize button wired', pass: wired, info: wired ? 'OK' : 'missing' });
+  } catch { checks.push({ name:'Top Normalize button wired', pass:false, info:'error' }); }
+
+  // 6) Mic bars drawing (side meter)
+  try {
+    const meter = document.getElementById('dbMeter');
+    const bars = meter ? meter.querySelectorAll('.bar').length : 0;
+    // Consider pass if bars are present; if a stream is active, also check if any bar turns on shortly
+    let pass = bars >= 8; let info = `${bars} bars`;
+    if (audioStream && analyser){
+      // Sample once after a short delay to see if at least one bar lights
+      setTimeout(()=>{
+        try {
+          const on = meter.querySelectorAll('.bar.on').length;
+          const row = checks.find(c=>c.name==='Mic bars drawing');
+          if (row){ row.pass = row.pass && on > 0; row.info = `${bars} bars, ${on} on`; renderSelfChecks(checks); }
+        } catch {}
+      }, 300);
+      info += ', sampling…';
+    }
+    checks.push({ name:'Mic bars drawing', pass, info });
+  } catch { checks.push({ name:'Mic bars drawing', pass:false, info:'error' }); }
 
   renderSelfChecks(checks);
   return checks;
