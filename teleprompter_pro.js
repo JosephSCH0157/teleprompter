@@ -118,6 +118,43 @@ document.addEventListener('DOMContentLoaded', init);
   };
 
   // Validator (quick “am I standard?” check)
+  function showCopyDialog(text, title='Validation Results'){
+    let ov = document.getElementById('msgOverlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'msgOverlay';
+      ov.className = 'overlay hidden';
+      ov.innerHTML = `
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="msgTitle">
+          <header style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h3 id="msgTitle" style="margin:0"></h3>
+            <button id="msgClose" class="btn-chip">Close</button>
+          </header>
+          <div style="display:flex; gap:8px; align-items:center; margin:0 0 8px">
+            <button id="msgCopy" class="btn-chip">Copy</button>
+            <span class="dim" style="font-size:12px">Tip: text is pre-selected — press Ctrl+C to copy</span>
+          </div>
+          <textarea id="msgText" readonly style="width:100%;min-height:220px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px"></textarea>
+        </div>`;
+      document.body.appendChild(ov);
+      ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.add('hidden'); });
+      ov.querySelector('#msgClose').onclick = ()=> ov.classList.add('hidden');
+      window.addEventListener('keydown', e=>{ if(!ov.classList.contains('hidden') && e.key==='Escape') ov.classList.add('hidden'); });
+      const copyBtn = ov.querySelector('#msgCopy');
+      copyBtn.onclick = async ()=>{
+        const ta = ov.querySelector('#msgText');
+        ta.focus(); ta.select();
+        try { await navigator.clipboard.writeText(ta.value); } catch { try{ document.execCommand('copy'); }catch{} }
+      };
+    }
+    ov.querySelector('#msgTitle').textContent = title;
+    const ta = ov.querySelector('#msgText');
+    ta.value = String(text||'');
+    ov.classList.remove('hidden');
+    // focus/select for immediate Ctrl+C
+    setTimeout(()=>{ ta.focus(); ta.select(); }, 0);
+  }
+
   window.validateStandardTags = function validateStandardTags() {
     const ta = document.getElementById('editor');
     const t = String(ta?.value || '');
@@ -148,7 +185,8 @@ document.addEventListener('DOMContentLoaded', init);
     }
     if (stack.length) problems.push('Unclosed tag(s): ' + stack.join(', '));
 
-    alert(problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup conforms to the standard.');
+    const msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup conforms to the standard.';
+    showCopyDialog(msg, 'Validator');
   };
 
   /* ──────────────────────────────────────────────────────────────
