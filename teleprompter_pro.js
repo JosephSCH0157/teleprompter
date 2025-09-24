@@ -633,7 +633,11 @@ function init() {
   const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
       viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight);
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop });
+      {
+        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+        const ratio = max ? (viewer.scrollTop / max) : 0;
+        sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+      }
       // also advance logical index to the paragraph under the marker
       try{
         if (Array.isArray(paraIndex) && paraIndex.length){
@@ -887,7 +891,11 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         displayChip.textContent = 'Display: ready';
         // push initial state
         sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
-        sendToDisplay({ type:'scroll', top: viewer.scrollTop });
+        {
+          const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+          const ratio = max ? (viewer.scrollTop / max) : 0;
+          sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+        }
         closeDisplayBtn.disabled = false;
       }
     });
@@ -1449,7 +1457,11 @@ function startAutoScroll(){
   const step = () => {
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
     viewer.scrollTop += (pxPerSec / 60);
-    sendToDisplay({ type: 'scroll', top: viewer.scrollTop });
+    {
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+    }
     // keep label updated with live speed
     autoToggle.textContent = `Auto-scroll: On (${pxPerSec}px/s)`;
   };
