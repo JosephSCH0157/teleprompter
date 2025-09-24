@@ -820,11 +820,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   loadSample  = document.getElementById('loadSample');
   clearText   = document.getElementById('clearText');
 
-  saveLocalBtn     = document.getElementById('saveLocal');
-  loadLocalBtn     = document.getElementById('loadLocal');
   downloadFileBtn  = document.getElementById('downloadFile');
   uploadFileBtn    = document.getElementById('uploadFileBtn');
   uploadFileInput  = document.getElementById('uploadFile');
+  const scriptSelect = document.getElementById('scriptSelect');
+  const saveAsBtn    = document.getElementById('saveAsBtn');
+  const loadBtn      = document.getElementById('loadBtn');
+  const deleteBtn    = document.getElementById('deleteBtn');
 
   wrapBold      = document.getElementById('wrap-bold');
   wrapItalic    = document.getElementById('wrap-italic');
@@ -925,8 +927,26 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       });
     }
 
-    saveLocalBtn?.addEventListener('click', saveToLocal);
-    loadLocalBtn?.addEventListener('click', loadFromLocal);
+    // Populate dropdown from browser storage (single draft for now)
+    function refreshScriptSelect(){
+      if (!scriptSelect) return;
+      const opts = [];
+      try { if (localStorage.getItem(LS_KEY)) opts.push({ key: LS_KEY, name: 'Draft (browser)' }); } catch {}
+      scriptSelect.innerHTML = '';
+      if (opts.length === 0){
+        const o = document.createElement('option'); o.value=''; o.textContent='— No saved draft —'; scriptSelect.appendChild(o);
+      } else {
+        for (const it of opts){ const o=document.createElement('option'); o.value=it.key; o.textContent=it.name; scriptSelect.appendChild(o); }
+      }
+    }
+    refreshScriptSelect();
+
+    // Save As -> writes to browser draft and refreshes dropdown
+    saveAsBtn?.addEventListener('click', () => { saveToLocal(); refreshScriptSelect(); });
+    // Load button -> loads the draft from LS
+    loadBtn?.addEventListener('click', () => { loadFromLocal(); });
+    // Delete -> clears the draft from LS
+    deleteBtn?.addEventListener('click', () => { try{ localStorage.removeItem(LS_KEY); }catch{} refreshScriptSelect(); setStatus('Deleted browser draft.'); });
     // Download current script in chosen format
     const fmtSel = document.getElementById('downloadFormat');
     downloadFileBtn?.addEventListener('click', () => {
