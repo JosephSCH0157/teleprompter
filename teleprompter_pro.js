@@ -202,8 +202,106 @@ import('./help.js').then(mod => {
       nameS1, colorS1, wrapS1, nameS2, colorS2, wrapS2, nameG1, colorG1, wrapG1, nameG2, colorG2, wrapG2,
       camWrap, camVideo, startCamBtn, stopCamBtn, camDeviceSel, camSize, camOpacity, camMirror, camPiP,
       prerollInput, countOverlay, countNum,
-      dbMeter,
+      dbMeter, dbMeterTop,
       toggleSpeakersBtn, speakersBody;
+
+  // ───────────────────────────────────────────────────────────────
+  // dB meter utilities (build bars, start/stop, mirror to top bar)
+  // ───────────────────────────────────────────────────────────────
+  function buildDbBars(target){
+    if (!target) return [];
+    target.classList.add('db-bars');
+    // If already has bars, reuse
+    let bars = Array.from(target.querySelectorAll('.bar'));
+    if (bars.length >= 16) return bars;
+    target.innerHTML = '';
+    for (let i=0;i<20;i++){ const b=document.createElement('div'); b.className='bar'; target.appendChild(b); }
+    return Array.from(target.querySelectorAll('.bar'));
+  }
+
+  function clearBars(el){ if (!el) return; el.querySelectorAll('.bar.on').forEach(b=>b.classList.remove('on')); }
+
+  function stopDbMeter(){
+    if (dbAnim) cancelAnimationFrame(dbAnim); dbAnim = null;
+    try{ if (audioStream) audioStream.getTracks().forEach(t=>t.stop()); }catch{}
+    audioStream = null; analyser = null;
+    try { clearBars(dbMeter); clearBars(dbMeterTop); } catch {}
+  }
+
+  async function startDbMeter(stream){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { warn('AudioContext unavailable'); return; }
+    const ctx = new AC();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const sideBars = buildDbBars(dbMeter);
+    const topBars  = buildDbBars(dbMeterTop);
+    const draw = () => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length; // 0..255
+      const bars = Math.max(0, Math.min(sideBars.length, Math.round((avg/255)*sideBars.length)));
+      // update both meters
+      for (let i=0;i<sideBars.length;i++) sideBars[i].classList.toggle('on', i < bars);
+      for (let i=0;i<topBars.length;i++)  topBars[i].classList.toggle('on', i < bars);
+      dbAnim = requestAnimationFrame(draw);
+    };
+    draw();
+  }
+
+  async function requestMic(){
+    try {
+      const constraints = { audio: { deviceId: micDeviceSel?.value ? { exact: micDeviceSel.value } : undefined } };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      audioStream = stream;
+      try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
+      startDbMeter(stream);
+    } catch(e){
+      warn('Mic denied or failed', e);
+      try { permChip && (permChip.textContent = 'Mic: denied'); } catch {}
+    }
+  }
+
+  async function populateDevices(){
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const audios = list.filter(d => d.kind === 'audioinput');
+      if (micDeviceSel){
+        micDeviceSel.innerHTML = '';
+        for (const d of audios){
+          const opt = document.createElement('option');
+          opt.value = d.deviceId; opt.textContent = d.label || 'Microphone';
+          micDeviceSel.appendChild(opt);
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Minimal init to wire the meter pieces and help overlay
+  function init(){
+    // Help UI
+    try { ensureHelpUI(); } catch {}
+
+    // Query essentials
+    permChip = document.getElementById('permChip');
+    micBtn = document.getElementById('micBtn');
+    micDeviceSel = document.getElementById('micDeviceSel');
+    refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
+    dbMeter = document.getElementById('dbMeter');
+    dbMeterTop = document.getElementById('dbMeterTop');
+
+    // Build both meters
+    buildDbBars(dbMeter);
+    buildDbBars(dbMeterTop);
+
+    // Wire mic + devices
+    micBtn?.addEventListener('click', requestMic);
+    refreshDevicesBtn?.addEventListener('click', populateDevices);
+    try { populateDevices(); } catch {}
+  }
 
   /* ────────────────────────────────────────────────────────────── */
   // Speakers section show/hide with persistence (robust)
