@@ -121,3 +121,13 @@ select { font-size: 14px; }
     .camWrap video{ width:100%; height:100%; object-fit:cover; display:block; }
     .toolbar{display:flex;gap:6px;flex-wrap:wrap}
 .toolbar button{font-size:6px;padding:6px 8px}
+
+/* Subtle CK watermark */
+body.ck::after{
+    content:"CK";
+    position:fixed; left:10px; bottom:10px; z-index:9999;
+    font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing:2px;
+    color:#d67d2d; opacity:.18;
+    pointer-events:none;
+}
