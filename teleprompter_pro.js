@@ -1809,19 +1809,18 @@ function toggleRec(){
 
   // TP: reset-script
   function resetScript(){
-    try { localStorage.removeItem(LS_KEY); } catch {}
-    if (typeof editor !== 'undefined' && editor){ editor.value = ''; }
-    currentIndex = 0; scriptWords = []; paraIndex = [];
-    renderScript('');
-    // Ensure display syncs to top after reset
+    // Stop auto-scroll and reset timer for a clean take
+    if (autoTimer) stopAutoScroll();
+    resetTimer();
+    // Rebuild layout to ensure paraIndex is fresh, but keep content
+    renderScript(editor?.value || '');
+    // Reset logical position and scroll to the very top
+    currentIndex = 0;
+    viewer.scrollTop = 0;
     try {
-      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
-      sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
       sendToDisplay({ type:'scroll', top: 0, ratio: 0 });
     } catch {}
-    setStatus('Script reset.');
+    setStatus('Script reset to top for new take.');
   }
 
   function downloadAsFile(name, text, mime='text/plain'){
