@@ -165,7 +165,16 @@
 <button id="loadLocal">Load (browser)</button>
 </div>
 <div class="row">
-<button id="downloadFile">Download .txt</button>
+<label>Format
+  <select id="downloadFormat" class="select-sm">
+    <option value="txt" selected>.txt</option>
+    <option value="md">.md</option>
+    <option value="rtf">.rtf</option>
+    <option value="text">.text</option>
+    <option value="docx" disabled>.docx (soon)</option>
+  </select>
+  </label>
+<button id="downloadFile">Download</button>
 <button id="uploadFileBtn">Upload file</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
 </div>

@@ -883,7 +883,18 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     saveLocalBtn?.addEventListener('click', saveToLocal);
     loadLocalBtn?.addEventListener('click', loadFromLocal);
-    downloadFileBtn?.addEventListener('click', () => downloadAsFile('script.txt', editor.value));
+    // Download current script in chosen format
+    const fmtSel = document.getElementById('downloadFormat');
+    downloadFileBtn?.addEventListener('click', () => {
+      const fmt = (fmtSel?.value || 'txt');
+      const name = `script.${fmt}`;
+      let mime = 'text/plain';
+      if (fmt === 'md') mime = 'text/markdown';
+      else if (fmt === 'rtf') mime = 'application/rtf';
+      else if (fmt === 'text') mime = 'text/plain';
+      // For future docx support, we will generate a blob via Mammoth or a docx builder.
+      downloadAsFile(name, editor.value, mime);
+    });
 
     uploadFileBtn?.addEventListener('click', () => uploadFileInput?.click());
     uploadFileInput?.addEventListener('change', async (e) => {
@@ -1667,8 +1678,8 @@ function toggleRec(){
   function loadFromLocal(){ try{ const v = localStorage.getItem(LS_KEY)||''; editor.value=v; renderScript(v); setStatus('Loaded from browser.'); }catch(e){ setStatus('Load failed.'); } }
   function scheduleAutosave(){ /* optional: attach a debounce here */ }
 
-  function downloadAsFile(name, text){
-    const a = document.createElement('a'); a.download=name; a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));
+  function downloadAsFile(name, text, mime='text/plain'){
+    const a = document.createElement('a'); a.download=name; a.href=URL.createObjectURL(new Blob([text],{type:mime}));
     document.body.appendChild(a); a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 500); a.remove();
   }
 
