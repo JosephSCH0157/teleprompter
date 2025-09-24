@@ -155,7 +155,59 @@ document.addEventListener('DOMContentLoaded', init);
     setTimeout(()=>{ ta.focus(); ta.select(); }, 0);
   }
 
-  window.validateStandardTags = function validateStandardTags() {
+  // Global helper: show validation output in the Help overlay's panel with copy support
+  window.showValidation = function showValidation(text){
+    try { ensureHelpUI(); } catch {}
+    const overlay = document.getElementById('shortcutsOverlay');
+    const sheet = overlay?.querySelector('.sheet') || overlay || document.body;
+    let panel = sheet.querySelector('#validatePanel');
+    if (!panel) {
+      const frag = document.createElement('div');
+      frag.innerHTML = `
+<div id="validatePanel" class="sheet-section hidden">
+  <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <h4 style="margin:0">Validation results</h4>
+    <button id="copyValidateBtn" class="btn-chip">Copy</button>
+  </header>
+  <pre id="validateOut" tabindex="0" style="white-space:pre-wrap; user-select:text; margin-top:8px"></pre>
+</div>`;
+      panel = frag.firstElementChild;
+      sheet.appendChild(panel);
+      const copyBtn = panel.querySelector('#copyValidateBtn');
+      if (copyBtn && !copyBtn.dataset.wired) {
+        copyBtn.dataset.wired = '1';
+        copyBtn.addEventListener('click', async () => {
+          const pre = panel.querySelector('#validateOut');
+          const txt = pre?.textContent || '';
+          try {
+            await navigator.clipboard.writeText(txt);
+            try { setStatus && setStatus('Validation copied ✓'); } catch {}
+          } catch {
+            // fallback if clipboard API blocked
+            try {
+              const sel = window.getSelection(); const r = document.createRange();
+              r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
+              document.execCommand('copy');
+              try { setStatus && setStatus('Validation copied ✓'); } catch {}
+            } catch (e) {
+              try { setStatus && setStatus('Copy failed: ' + (e?.message||e)); } catch {}
+            }
+          }
+        });
+      }
+    }
+    const pre = panel.querySelector('#validateOut');
+    pre.textContent = (String(text||'').trim()) || 'No issues found.';
+    panel.classList.remove('hidden');
+    // Focus and auto-select so Ctrl/Cmd+C works immediately
+    try {
+      pre.focus();
+      const sel = window.getSelection(); const r = document.createRange();
+      r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
+    } catch {}
+  };
+
+  window.validateStandardTags = function validateStandardTags(silent=false) {
     const ta = document.getElementById('editor');
     const t = String(ta?.value || '');
     const problems = [];
@@ -186,7 +238,8 @@ document.addEventListener('DOMContentLoaded', init);
     if (stack.length) problems.push('Unclosed tag(s): ' + stack.join(', '));
 
     const msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup conforms to the standard.';
-    showCopyDialog(msg, 'Validator');
+    if (!silent) { try { window.showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); } }
+    return msg;
   };
 
   /* ──────────────────────────────────────────────────────────────
@@ -382,23 +435,76 @@ function ensureHelpUI(){
   // --- Validate tags quickly ---
   const validateBtn = overlay.querySelector('#validateBtn');
   if (validateBtn) {
-    validateBtn.onclick = () => {
-      if (typeof window.validateStandardTags === 'function') {
-        try { window.validateStandardTags(); return; } catch (e) { /* fall through */ }
+    const showValidation = (text) => {
+      const sheet = overlay.querySelector('.sheet') || overlay;
+      let panel = sheet.querySelector('#validatePanel');
+      if (!panel) {
+        const frag = document.createElement('div');
+        frag.innerHTML = `
+<div id="validatePanel" class="sheet-section hidden">
+  <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <h4 style="margin:0">Validation results</h4>
+    <button id="copyValidateBtn" class="btn-chip">Copy</button>
+  </header>
+  <pre id="validateOut" tabindex="0" style="white-space:pre-wrap; user-select:text; margin-top:8px"></pre>
+</div>`;
+        panel = frag.firstElementChild;
+        sheet.appendChild(panel);
+        const copyBtn = panel.querySelector('#copyValidateBtn');
+        if (copyBtn && !copyBtn.dataset.wired) {
+          copyBtn.dataset.wired = '1';
+          copyBtn.addEventListener('click', async () => {
+            const pre = panel.querySelector('#validateOut');
+            const txt = pre?.textContent || '';
+            try {
+              await navigator.clipboard.writeText(txt);
+              try { setStatus && setStatus('Validation copied ✓'); } catch {}
+            } catch {
+              // fallback if clipboard API blocked
+              try {
+                const sel = window.getSelection(); const r = document.createRange();
+                r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
+                document.execCommand('copy');
+                try { setStatus && setStatus('Validation copied ✓'); } catch {}
+              } catch (e) {
+                try { setStatus && setStatus('Copy failed: ' + (e?.message||e)); } catch {}
+              }
+            }
+          });
+        }
       }
-      // fallback: simple counts
-      const ta = document.getElementById('editor');
-      if (!ta) return;
-      const t = String(ta.value || '');
-      const count = (re) => (t.match(re) || []).length;
-      const s1 = count(/\[s1\]/gi), e1 = count(/\[\/s1\]/gi);
-      const s2 = count(/\[s2\]/gi), e2 = count(/\[\/s2\]/gi);
-      const sn = count(/\[note\]/gi), en = count(/\[\/note\]/gi);
-      const problems = [];
-      if (s1 !== e1) problems.push(`[s1] open ${s1} ≠ close ${e1}`);
-      if (s2 !== e2) problems.push(`[s2] open ${s2} ≠ close ${e2}`);
-      if (sn !== en) problems.push(`[note] open ${sn} ≠ close ${en}`);
-      alert(problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup looks consistent.');
+      const pre = panel.querySelector('#validateOut');
+      pre.textContent = (String(text||'').trim()) || 'No issues found.';
+      panel.classList.remove('hidden');
+      // focus so Ctrl/Cmd+C works immediately
+      pre.focus();
+      // auto-select all for instant copy
+      try {
+        const sel = window.getSelection(); const r = document.createRange();
+        r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
+      } catch {}
+    };
+
+    validateBtn.onclick = () => {
+      // Build validation message using strict validator if present
+      let msg = '';
+      if (typeof window.validateStandardTags === 'function') {
+        try { msg = window.validateStandardTags(true); } catch { msg = 'Validation failed to run.'; }
+      } else {
+        // fallback: simple counts
+        const ta = document.getElementById('editor');
+        const t = String(ta?.value || '');
+        const count = (re) => (t.match(re) || []).length;
+        const s1 = count(/\[s1\]/gi), e1 = count(/\[\/s1\]/gi);
+        const s2 = count(/\[s2\]/gi), e2 = count(/\[\/s2\]/gi);
+        const sn = count(/\[note\]/gi), en = count(/\[\/note\]/gi);
+        const problems = [];
+        if (s1 !== e1) problems.push(`[s1] open ${s1} ≠ close ${e1}`);
+        if (s2 !== e2) problems.push(`[s2] open ${s2} ≠ close ${e2}`);
+        if (sn !== en) problems.push(`[note] open ${sn} ≠ close ${en}`);
+        msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup looks consistent.';
+      }
+      try { window.showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); }
     };
   }
 }
