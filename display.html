@@ -23,6 +23,8 @@
           #preRoll .card{background:#0e141b;border:1px solid var(--edge);padding:24px 32px;border-radius:16px;text-align:center}
           #preRoll .hint{font-size:14px;color:#9ba7b2}
           #preRoll .num{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
+          /* CK watermark */
+          body.ck::after{content:"CK";position:fixed;left:10px;bottom:10px;z-index:9999;font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;letter-spacing:2px;color:#d67d2d;opacity:.18;pointer-events:none}
         </style></head>
         <body>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
@@ -42,6 +44,9 @@
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
                 else{ preRoll.style.display='none'; }
+              }
+              if(d.type==='toggle-ck'){
+                document.body.classList.toggle('ck', !!d.on);
               }
             });
             document.getElementById('flip').onclick = () => { document.body.style.transform = document.body.style.transform ? '' : 'scaleX(-1)'; };
