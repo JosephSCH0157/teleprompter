@@ -57,6 +57,11 @@ window.toast = (msg) => {
 // ⬇️ this line was missing; without it, nothing gets wired
 document.addEventListener('DOMContentLoaded', init);
 
+// Lightweight modular imports (browser native via type="module" in HTML)
+import('./eggs.js').then(mod => {
+  window.__eggs = mod;
+}).catch(()=>{});
+
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
   function fallbackNormalize(){
     try {
@@ -1036,9 +1041,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     populateDevices();
   setStatus('Ready.');
     // Fun extras (Konami theme, meter party, advanced tools, :roar) — call once at the very end
-    try { installEasterEggs(); } catch {}
+  try { (window.__eggs?.installEasterEggs || installEasterEggs)(); } catch {}
     // CK watermark egg (toggleable)
-    try { installCKEgg(); } catch {}
+  try { (window.__eggs?.installCKEgg || installCKEgg)(); } catch {}
 
     // Run tiny self-checks to catch regressions fast
     try { setTimeout(runSelfChecks, 0); } catch {}
@@ -1970,51 +1975,6 @@ function installEasterEggs(){
         ed.value = ed.value.slice(0, -5);
         roarOverlay();
         ed.dispatchEvent(new Event('input', {bubbles:true}));
-      }
-    });
-  }
-}
-
-// ───────────────────────────────────────────────────────────────
-// CK egg: toggle a subtle CK watermark via class and persist state
-// ───────────────────────────────────────────────────────────────
-function installCKEgg(){
-  const enable = (silent=false) => {
-    document.body.classList.add('ck');
-    localStorage.setItem('egg.ck','1');
-    try { sendToDisplay && sendToDisplay({ type:'toggle-ck', on:true }); } catch {}
-    if (!silent && typeof toast === 'function') toast('CK on');
-  };
-  const disable = (silent=false) => {
-    document.body.classList.remove('ck');
-    localStorage.removeItem('egg.ck');
-    try { sendToDisplay && sendToDisplay({ type:'toggle-ck', on:false }); } catch {}
-    if (!silent && typeof toast === 'function') toast('CK off');
-  };
-  // restore from localStorage
-  if (localStorage.getItem('egg.ck')) enable(true);
-
-  // URL opt-in: ?ck=1 or ?ck=0
-  const q = new URLSearchParams(location.search);
-  if (q.has('ck')) (q.get('ck') === '1' ? enable : disable)(true);
-
-  // Secret keys: Ctrl+Alt+C toggles
-  window.addEventListener('keydown', (e)=>{
-    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'c'){
-      e.preventDefault();
-      document.body.classList.contains('ck') ? disable() : enable();
-    }
-  });
-
-  // Editor trigger: type ":ck" to enable
-  const ed = document.getElementById('editor');
-  if (ed){
-    ed.addEventListener('input', ()=>{
-      const tail = ed.value.slice(-3).toLowerCase();
-      if (tail === ':ck'){
-        ed.value = ed.value.slice(0,-3);
-        ed.dispatchEvent(new Event('input', { bubbles:true }));
-        enable();
       }
     });
   }
