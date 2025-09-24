@@ -515,14 +515,24 @@ function init() {
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   setInterval(() => {
     if (!recActive || !viewer) return; // only when speech sync is active
+    if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
     const now = performance.now();
   const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
   const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
       viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight);
       sendToDisplay({ type:'scroll', top: viewer.scrollTop });
+      // also advance logical index to the paragraph under the marker
+      try{
+        if (Array.isArray(paraIndex) && paraIndex.length){
+          const markerY = viewer.scrollTop + (viewer.clientHeight * (MARKER_PCT || 0.33));
+          let target = paraIndex[0];
+          for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
+          if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
+        }
+      }catch{}
       _lastAdvanceAt = now;
-      if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: viewer.scrollTop });
+      if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: viewer.scrollTop, idx: currentIndex });
     }
   }, 250);
 
@@ -872,6 +882,7 @@ function scrollToCurrentIndex(){
   } else {
     viewer.scrollTop = target;
   }
+  if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
   sendToDisplay({ type: 'scroll', top: viewer.scrollTop });
 }
