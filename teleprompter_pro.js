@@ -995,7 +995,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const v = (matchAggroSel?.value || '2');
       if (v === '1'){ SIM_THRESHOLD = 0.60; MATCH_WINDOW_AHEAD = 140; }
       else if (v === '3'){ SIM_THRESHOLD = 0.42; MATCH_WINDOW_AHEAD = 260; }
-      else { SIM_THRESHOLD = 0.50; MATCH_WINDOW_AHEAD = 200; }
+  else { SIM_THRESHOLD = 0.48; MATCH_WINDOW_AHEAD = 200; }
     }
     applyAggro();
     matchAggroSel?.addEventListener('change', (e)=>{
@@ -1119,7 +1119,7 @@ const SPOKEN_N = 8;
   const MATCH_WINDOW_BACK = 30;
   // Tunables (let so we can adjust via the “Match aggressiveness” select)
   let MATCH_WINDOW_AHEAD = 200;
-  let SIM_THRESHOLD      = 0.50;
+  let SIM_THRESHOLD      = 0.48;
 // Similarity thresholds and motion clamps
 const STRICT_FORWARD_SIM = 0.72;
 const MAX_JUMP_AHEAD_WORDS = 12;
