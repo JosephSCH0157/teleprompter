@@ -1238,7 +1238,8 @@ const SPOKEN_N = 8;
 const STRICT_FORWARD_SIM = 0.72;
 const MAX_JUMP_AHEAD_WORDS = 12;
 // Scroll correction tuning
-const MARKER_PCT = 0.33;
+// TP: marker-percent — forward bias the reading line slightly to reduce lag
+const MARKER_PCT = 0.36;
 // Gentler motion to avoid jumpiness
 let DEAD_BAND_PX = 18;          // ignore small errors
 let CORRECTION_MIN_MS = 240;    // throttle corrections

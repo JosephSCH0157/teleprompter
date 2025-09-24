@@ -12,11 +12,13 @@
           html,body{height:100%}
           body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
           .wrap{height:100%;overflow:auto}
-          .script{max-width:1200px;margin:0 auto;padding:40px}
+          /* Match main app width for identical wrapping */
+          .script{max-width:900px;margin:0 auto;padding:40px}
           /* Match main app metrics exactly for consistent scroll physics */
           .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
           .u{text-decoration:underline}
           .note{color:var(--muted);font-style:italic;margin:0 0 28px}
+          /* Align with main marker at 40% */
           .marker{position:sticky;top:40%;height:2px;background:#7cc4ff;box-shadow:0 0 6px #7cc4ff}
           .hud{position:fixed;right:12px;bottom:12px;font:12px/1.2 system-ui;color:#9ba7b2;opacity:.7}
           .btn{cursor:pointer;border:1px solid var(--edge);padding:6px 8px;border-radius:8px;background:#0e141b;color:#e7ebf0;margin-left:8px}
@@ -46,7 +48,23 @@
                 }
               }, { capture:true });
             } catch {}
-            function apply(fontSize,lineHeight){ scriptEl.querySelectorAll('p,.note').forEach(p=>{ p.style.fontSize=fontSize+'px'; p.style.lineHeight=lineHeight; }); }
+            // TP: display-typography-scale
+            let baseFontSize = 48, baseLineHeight = 1.35;
+            let dispScale = 1.0;
+            try { const s = parseFloat(localStorage.getItem('tp_display_font_scale_v1')); if (isFinite(s) && s > 0.3 && s < 3) dispScale = s; } catch {}
+            function applyBase(fs, lh){
+              baseFontSize = Number(fs)||48; baseLineHeight = Number(lh)||1.35; applyScaled();
+            }
+            function applyScaled(){
+              const fs = Math.max(8, Math.min(200, Math.round(baseFontSize * dispScale)));
+              const lh = Math.max(1.1, Math.min(2.0, baseLineHeight));
+              scriptEl.querySelectorAll('p,.note').forEach(p=>{ p.style.fontSize=fs+'px'; p.style.lineHeight=lh; });
+            }
+            function nudgeScale(delta){
+              dispScale = Math.max(0.5, Math.min(2.5, Math.round((dispScale + delta) * 100) / 100));
+              try { localStorage.setItem('tp_display_font_scale_v1', String(dispScale)); } catch {}
+              applyScaled();
+            }
             function flip(){ document.body.style.transform = document.body.style.transform ? '' : 'scaleX(-1)'; }
             function invert(){
               if(!document.body.dataset.inv){ document.body.dataset.inv=1; document.body.style.background = '#f4f7fb'; document.body.style.color = '#0b0d10'; }
@@ -54,8 +72,8 @@
             }
             window.addEventListener('message', ev => {
               const d = ev.data||{};
-              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
-              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
+              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
+              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
               if(d.type==='scroll'){
                 if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
@@ -78,6 +96,12 @@
               const k = (e.key||'').toLowerCase();
               if (k === 'f'){ e.preventDefault(); flip(); }
               if (k === 'i'){ e.preventDefault(); invert(); }
+              // In-app zoom for display only (Ctrl/Cmd + +/-/0)
+              if (e.ctrlKey || e.metaKey){
+                if (k === '+' || k === '='){ e.preventDefault(); nudgeScale(+0.05); }
+                else if (k === '-' || k === '_'){ e.preventDefault(); nudgeScale(-0.05); }
+                else if (k === '0'){ e.preventDefault(); dispScale = 1.0; try{ localStorage.setItem('tp_display_font_scale_v1','1'); }catch{} applyScaled(); }
+              }
             });
           </script>
         </body></html>
