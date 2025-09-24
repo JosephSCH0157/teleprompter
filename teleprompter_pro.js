@@ -159,6 +159,8 @@ document.addEventListener('DOMContentLoaded', init);
   let dbAnim = null, analyser = null, audioStream = null;
   let recActive = false;          // you already have this
   let recog = null;               // SpeechRecognition instance
+  let recAutoRestart = true;      // keep recognition alive while active
+  let recBackoffMs   = 300;       // grows on repeated failures
   const MATCH_WINDOW = 6;         // how far ahead we’ll look for the next word
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
@@ -1356,6 +1358,8 @@ function tweakSpeed(delta){
 
 function toggleRec(){
   if (recActive){
+    // stopping (before calling recog.stop())
+    recAutoRestart = false;
     recActive = false;
     document.body.classList.remove('listening'); // when stopping
     stopSpeechSync();
@@ -1366,6 +1370,8 @@ function toggleRec(){
 
   const sec = Number(prerollInput?.value) || 0;
   beginCountdownThen(sec, () => {
+    // starting:
+    recAutoRestart = true;
     recActive = true;
     document.body.classList.add('listening'); // when starting
     recChip.textContent = 'Speech: listening…';
@@ -1484,6 +1490,13 @@ function toggleRec(){
     recog.interimResults = true;
     recog.lang = 'en-US';
 
+    // Reset backoff on a good start and reflect UI state
+    recog.onstart = () => {
+      recBackoffMs = 300;
+      document.body.classList.add('listening');
+      try { recChip.textContent = 'Speech: listening…'; } catch {}
+    };
+
     let _lastInterimAt = 0;
     recog.onresult = (e) => {
       let interim = '';
@@ -1506,8 +1519,21 @@ function toggleRec(){
 
     recog.onerror = (e) => { console.warn('speech error', e.error); };
     recog.onend = () => {
-      // Auto-restart while active (Chrome tends to end sessions periodically)
-      if (recActive) { try { recog.start(); } catch(_){} }
+      document.body.classList.remove('listening');
+      try { recChip.textContent = 'Speech: idle'; } catch {}
+      // If user didn't stop it, try to bring it back with backoff
+      if (recAutoRestart && recActive) {
+        setTimeout(() => {
+          try {
+            recog.start();
+            try { recChip.textContent = 'Speech: listening…'; } catch {}
+            document.body.classList.add('listening');
+          } catch (e) {
+            // swallow; next interval will try again
+          }
+        }, recBackoffMs);
+        recBackoffMs = Math.min(recBackoffMs * 1.5, 5000); // cap at 5s
+      }
     };
 
     try { recog.start(); } catch(e){ console.warn('speech start failed', e); }
