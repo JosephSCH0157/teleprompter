@@ -1032,9 +1032,8 @@ function advanceByTranscript(transcript, isFinal){
     // Map [speaker=1|2] to s1/s2 styling; strip [guest=*]
     s = s.replace(/\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi, (_, idx, inner) => `<span style="${roleStyle('s'+idx)}">${inner}<\/span>`);
     s = s.replace(/\[guest\s*=\s*(1|2)\]([\s\S]+?)\[\/guest\]/gi, '$2');
-    // final scrubs: remove any stray tags that slipped into inline text
+    // final scrub: remove any stray speaker tags that slipped into inline text (notes are handled as blocks)
     s = s.replace(/\[\/?(?:s1|s2|g1|g2)\]/gi, '');
-    s = s.replace(/\[\/?(?:s1|s2|note)\]/gi, '');
     return s;
   }
 
@@ -1068,14 +1067,25 @@ function advanceByTranscript(transcript, isFinal){
   scriptWords = normTokens(stripTagsForTokens(text));
 
     // Build paragraphs; preserve single \n as <br>
-    const paragraphs = t
-      .split(/\n{2,}/)
-      .map(p => {
-        const html = formatInlineMarkup(p).replace(/\n/g,'<br>');
-        // If note already renders as a block <div class="note">, don't wrap in <p>
-        return /^\s*<div class=\"note\"/i.test(html) ? html : `<p>${html}</p>`;
-      })
-      .join('');
+    // First, split on double newlines into blocks, then further split any block
+    // that contains note divs so note blocks always stand alone.
+    const blocks = t.split(/\n{2,}/);
+    const outParts = [];
+    for (const b of blocks){
+      // Convert inline markup first so notes become <div class="note"> blocks
+      const html = formatInlineMarkup(b).replace(/\n/g,'<br>');
+      // If there are one or more note divs inside, split them out to standalone entries
+      if (/<div class=\"note\"[\s\S]*?<\/div>/i.test(html)){
+        const pieces = html.split(/(?=<div class=\"note\")|(?<=<\/div>)/i).filter(Boolean);
+        for (const piece of pieces){
+          if (/^\s*<div class=\"note\"/i.test(piece)) outParts.push(piece);
+          else if (piece.trim()) outParts.push(`<p>${piece}</p>`);
+        }
+      } else {
+        outParts.push(html.trim() ? `<p>${html}</p>` : '');
+      }
+    }
+    const paragraphs = outParts.filter(Boolean).join('');
 
     scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
     applyTypography();

@@ -33,7 +33,7 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
-            function apply(fontSize,lineHeight){ scriptEl.querySelectorAll('p').forEach(p=>{ p.style.fontSize=fontSize+'px'; p.style.lineHeight=lineHeight; }); }
+            function apply(fontSize,lineHeight){ scriptEl.querySelectorAll('p,.note').forEach(p=>{ p.style.fontSize=fontSize+'px'; p.style.lineHeight=lineHeight; }); }
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) apply(d.fontSize,d.lineHeight); }
