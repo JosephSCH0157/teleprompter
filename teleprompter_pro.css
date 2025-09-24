@@ -9,7 +9,7 @@ kbd{display:inline-block;min-width:1.6em;padding:.15em .45em;border:1px solid #3
 .btn-chip{background:#0e141b;border:1px solid var(--edge);padding:8px 10px;border-radius:10px;cursor:pointer;color:var(--fg)}
 .btn-chip:hover{background:#10161d}
 .sheet-section{margin-top:12px;padding-top:8px;border-top:1px solid var(--edge)}
-#validatePanel pre{white-space:pre-wrap;-webkit-user-select:text;user-select:text;margin-top:8px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px}
+#validatePanel pre{white-space:pre-wrap;-webkit-user-select:text;user-select:text;margin-top:8px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;line-height:1.4;max-height:40vh;overflow:auto}
 .section-title {
     display: flex;
     align-items: center;
