@@ -891,6 +891,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         displayChip.textContent = 'Display: ready';
         // push initial state
         sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+        // also push explicit typography in case display needs to apply restored prefs
+        sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
         {
           const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
           const ratio = max ? (viewer.scrollTop / max) : 0;
@@ -904,6 +906,16 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     buildDbBars();
 
     // Restore UI prefs from localStorage (if any)
+      const FONT_KEY = 'tp_font_size_v1';
+      const LINE_KEY = 'tp_line_height_v1';
+      try {
+        const savedFont = localStorage.getItem(FONT_KEY);
+        if (savedFont && fontSizeInput) fontSizeInput.value = savedFont;
+      } catch {}
+      try {
+        const savedLH = localStorage.getItem(LINE_KEY);
+        if (savedLH && lineHeightInput) lineHeightInput.value = savedLH;
+      } catch {}
     const AGGRO_KEY = 'tp_match_aggro_v1';
     try {
       const savedAggro = localStorage.getItem(AGGRO_KEY);
@@ -1212,6 +1224,9 @@ function advanceByTranscript(transcript, isFinal){
       el.style.fontSize  = String(fontSizeInput.value) + 'px';
       el.style.lineHeight= String(lineHeightInput.value);
     });
+    // Persist preferences
+    try { localStorage.setItem('tp_font_size_v1', String(fontSizeInput.value||'')); } catch {}
+    try { localStorage.setItem('tp_line_height_v1', String(lineHeightInput.value||'')); } catch {}
     sendToDisplay({ type: 'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
   }
 
@@ -1433,6 +1448,7 @@ function openDisplay(){
 
       // Send initial state
       sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+      sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? (viewer.scrollTop / max) : 0;
