@@ -24,6 +24,20 @@
 
   // CSS rule '.hidden { display: none !important; }' removed. Add this to your CSS file instead.
 
+  // TP: zoom-guard (main)
+  // Prevent browser-level zoom (Ctrl/Meta + wheel or +/-/0) so each window keeps its own in-app typography zoom.
+  try {
+    window.addEventListener('wheel', (e)=>{
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); }
+    }, { passive: false });
+    window.addEventListener('keydown', (e)=>{
+      if (e.ctrlKey || e.metaKey) {
+        const k = (e.key||'');
+        if (k === '+' || k === '=' || k === '-' || k === '_' || k === '0') e.preventDefault();
+      }
+    }, { capture: true });
+  } catch {}
+
 
 
 function setStatus(msg){
