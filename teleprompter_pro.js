@@ -841,6 +841,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   const saveAsBtn    = document.getElementById('saveAsBtn');
   const loadBtn      = document.getElementById('loadBtn');
   const deleteBtn    = document.getElementById('deleteBtn');
+  const resetScriptBtn = document.getElementById('resetScriptBtn');
 
   wrapBold      = document.getElementById('wrap-bold');
   wrapItalic    = document.getElementById('wrap-italic');
@@ -1021,6 +1022,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       editor.value = smartTag(editor.value);
       renderScript(editor.value);
     });
+
+    // Reset Script -> clear draft, clear editor, reset view and sync
+    resetScriptBtn?.addEventListener('click', resetScript);
 
 
     // Mic and devices
@@ -1802,6 +1806,23 @@ function toggleRec(){
   function saveToLocal(){ try{ localStorage.setItem(LS_KEY, editor.value||''); setStatus('Saved to browser.'); }catch(e){ setStatus('Save failed.'); } }
   function loadFromLocal(){ try{ const v = localStorage.getItem(LS_KEY)||''; editor.value=v; renderScript(v); setStatus('Loaded from browser.'); }catch(e){ setStatus('Load failed.'); } }
   function scheduleAutosave(){ /* optional: attach a debounce here */ }
+
+  // TP: reset-script
+  function resetScript(){
+    try { localStorage.removeItem(LS_KEY); } catch {}
+    if (typeof editor !== 'undefined' && editor){ editor.value = ''; }
+    currentIndex = 0; scriptWords = []; paraIndex = [];
+    renderScript('');
+    // Ensure display syncs to top after reset
+    try {
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+      sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+      sendToDisplay({ type:'scroll', top: 0, ratio: 0 });
+    } catch {}
+    setStatus('Script reset.');
+  }
 
   function downloadAsFile(name, text, mime='text/plain'){
     try {
