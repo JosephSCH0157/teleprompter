@@ -907,14 +907,17 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // Top-bar Normalize button (near Load sample)
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
-    normalizeTopBtn?.addEventListener('click', () => {
-      if (typeof window.normalizeToStandard === 'function') {
-        try { window.normalizeToStandard(); } catch (e) { alert('Normalize error: ' + e.message); }
-        return;
-      }
-      // Shared fallback
-      fallbackNormalize();
-    });
+    if (normalizeTopBtn && !normalizeTopBtn.dataset.wired){
+      normalizeTopBtn.dataset.wired = '1';
+      normalizeTopBtn.addEventListener('click', () => {
+        if (typeof window.normalizeToStandard === 'function') {
+          try { window.normalizeToStandard(); } catch (e) { alert('Normalize error: ' + e.message); }
+          return;
+        }
+        // Shared fallback
+        fallbackNormalize();
+      });
+    }
 
     saveLocalBtn?.addEventListener('click', saveToLocal);
     loadLocalBtn?.addEventListener('click', loadFromLocal);
