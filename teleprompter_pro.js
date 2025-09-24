@@ -516,8 +516,8 @@ function init() {
   setInterval(() => {
     if (!recActive || !viewer) return; // only when speech sync is active
     const now = performance.now();
-    const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
-    const FALLBACK_STEP_PX = 36;     // one line nudge
+  const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
+  const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
       viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight);
       sendToDisplay({ type:'scroll', top: viewer.scrollTop });
