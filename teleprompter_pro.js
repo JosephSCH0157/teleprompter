@@ -1106,8 +1106,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   function applyAggro(){
       const v = (matchAggroSel?.value || '2');
       if (v === '1'){ SIM_THRESHOLD = 0.60; MATCH_WINDOW_AHEAD = 140; }
-      else if (v === '3'){ SIM_THRESHOLD = 0.42; MATCH_WINDOW_AHEAD = 260; }
-  else { SIM_THRESHOLD = 0.48; MATCH_WINDOW_AHEAD = 200; }
+      else if (v === '3'){ SIM_THRESHOLD = 0.50; MATCH_WINDOW_AHEAD = 220; }
+      else { SIM_THRESHOLD = 0.48; MATCH_WINDOW_AHEAD = 200; }
     }
     applyAggro();
     matchAggroSel?.addEventListener('change', (e)=>{
@@ -1123,9 +1123,11 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       if (v === 'stable'){
         window.__TP_SCROLL = { DEAD: 22, THROTTLE: 280, FWD: 80, BACK: 30, EASE_STEP: 60, EASE_MIN: 12 };
       } else if (v === 'responsive'){
-        window.__TP_SCROLL = { DEAD: 12, THROTTLE: 160, FWD: 120, BACK: 170, EASE_STEP: 96, EASE_MIN: 6 };
+        // less jitter: higher deadband/throttle, smaller back steps
+        window.__TP_SCROLL = { DEAD: 20, THROTTLE: 240, FWD: 110, BACK: 50, EASE_STEP: 96, EASE_MIN: 6 };
       } else {
-        window.__TP_SCROLL = { DEAD: 18, THROTTLE: 240, FWD: 96, BACK: 140, EASE_STEP: 80, EASE_MIN: 10 };
+        // balanced
+        window.__TP_SCROLL = { DEAD: 22, THROTTLE: 260, FWD: 96, BACK: 40, EASE_STEP: 80, EASE_MIN: 10 };
       }
     }
     applySmooth();
@@ -1249,6 +1251,8 @@ let DEAD_BAND_PX = 18;          // ignore small errors
 let CORRECTION_MIN_MS = 240;    // throttle corrections
 let MAX_FWD_STEP_PX = 96;       // clamp forward step size
 let MAX_BACK_STEP_PX = 140;     // clamp backward step size
+// Anti-jitter: remember last move direction (+1 fwd, -1 back, 0 none)
+let _lastMoveDir = 0;
 
 // Fast overlap score: count of shared tokens (case-normalized by normTokens already)
 function _overlap(a, b){
@@ -1330,6 +1334,12 @@ function advanceByTranscript(transcript, isFinal){
   const tNow = performance.now();
   if (Math.abs(err) < DEAD_BAND_PX || (tNow - _lastCorrectionAt) < CORRECTION_MIN_MS) return;
 
+  // Anti-jitter: for interim results, avoid backward corrections entirely
+  const dir = err > 0 ? 1 : (err < 0 ? -1 : 0);
+  if (!isFinal && dir < 0) return;
+  // Hysteresis: don’t change direction on interim unless the error is clearly large
+  if (!isFinal && _lastMoveDir !== 0 && dir !== 0 && dir !== _lastMoveDir && Math.abs(err) < (DEAD_BAND_PX * 2)) return;
+
   // Scale steps based on whether this came from a final (more confident) match
   const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
   const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
@@ -1347,6 +1357,7 @@ function advanceByTranscript(transcript, isFinal){
   // mark progress for stall-recovery
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   _lastCorrectionAt = tNow;
+  if (dir !== 0) _lastMoveDir = dir;
 }
 
   function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
