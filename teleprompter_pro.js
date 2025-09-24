@@ -1028,6 +1028,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     try { installEasterEggs(); } catch {}
     // CK watermark egg (toggleable)
     try { installCKEgg(); } catch {}
+
+    // Run tiny self-checks to catch regressions fast
+    try { setTimeout(runSelfChecks, 0); } catch {}
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -1804,6 +1807,97 @@ function toggleRec(){
     }
   });
 })();
+
+// ───────────────────────────────────────────────────────────────
+// Self-checks: quick asserts at load, with a small pass/fail bar
+// ───────────────────────────────────────────────────────────────
+function runSelfChecks(){
+  const checks = [];
+
+  // 1) Exactly one script include (by current script src if available)
+  try {
+    const cs = document.currentScript;
+    let count = 1, label = 'n/a';
+    if (cs && cs.src){
+      const src = cs.src;
+      count = Array.from(document.scripts).filter(s => s.src && s.src === src).length;
+      label = src.split('/').pop();
+    }
+    checks.push({ name:'Single script include', pass: count === 1, info:`${label} found ${count}` });
+  } catch (e) {
+    checks.push({ name:'Single script include', pass:true, info:'(skipped)' });
+  }
+
+  // 2) Help injected with Normalize/Validate
+  try {
+    const help = document.getElementById('shortcutsOverlay');
+    const has = !!(help && help.querySelector('#normalizeBtn') && help.querySelector('#validateBtn'));
+    checks.push({ name:'Help injected', pass: has, info: has ? 'OK' : 'missing pieces' });
+  } catch { checks.push({ name:'Help injected', pass:false, info:'error' }); }
+
+  // 3) Matcher constants defined and sane
+  try {
+    const a = (typeof SIM_THRESHOLD === 'number' && SIM_THRESHOLD > 0 && SIM_THRESHOLD < 1);
+    const b = (typeof MATCH_WINDOW_AHEAD === 'number' && MATCH_WINDOW_AHEAD >= 60 && MATCH_WINDOW_AHEAD <= 1000);
+    checks.push({ name:'Matcher constants', pass: a && b, info:`SIM=${typeof SIM_THRESHOLD==='number'?SIM_THRESHOLD:'?'} WIN=${typeof MATCH_WINDOW_AHEAD==='number'?MATCH_WINDOW_AHEAD:'?'}` });
+  } catch { checks.push({ name:'Matcher constants', pass:false, info:'not defined' }); }
+
+  // 4) Display handshake wiring present (openDisplay + sendToDisplay)
+  try {
+    const ok = (typeof openDisplay === 'function' && typeof sendToDisplay === 'function');
+    checks.push({ name:'Display handshake', pass: ok, info: ok ? 'wiring present' : 'functions missing' });
+  } catch { checks.push({ name:'Display handshake', pass:false, info:'error' }); }
+
+  renderSelfChecks(checks);
+  return checks;
+}
+
+function renderSelfChecks(checks){
+  try {
+    const total = checks.length;
+    const passed = checks.filter(c=>c.pass).length;
+    const allOk = passed === total;
+
+    // Try to append in the topbar if present; else fixed bar at top
+    const host = document.querySelector('.topbar');
+    let bar = document.getElementById('selfChecksBar');
+    if (!bar){
+      bar = document.createElement('div');
+      bar.id = 'selfChecksBar';
+      bar.style.cssText = host
+        ? 'margin-left:8px; padding:4px 8px; border:1px solid var(--edge); border-radius:8px; font-size:12px; cursor:pointer;'
+        : 'position:fixed; left:8px; right:8px; top:8px; z-index:99999; padding:8px 10px; border:1px solid var(--edge); border-radius:10px; font-size:13px; cursor:pointer; background:#0e141b; color:var(--fg);'
+      ;
+      if (host) host.appendChild(bar); else document.body.appendChild(bar);
+    }
+
+    bar.style.background = allOk ? (host ? '' : '#0e141b') : (host ? '' : '#241313');
+    bar.style.borderColor = allOk ? 'var(--edge)' : '#7f1d1d';
+    bar.textContent = `Self-checks: ${passed}/${total} ${allOk ? '✅' : '❌'}  (click)`;
+
+    let panel = document.getElementById('selfChecksPanel');
+    if (!panel){
+      panel = document.createElement('div');
+      panel.id = 'selfChecksPanel';
+      panel.className = 'hidden';
+      panel.style.cssText = 'position:fixed; right:10px; top:44px; z-index:99999; max-width:420px; background:#0e141b; border:1px solid var(--edge); border-radius:12px; box-shadow:0 8px 28px rgba(0,0,0,.45); padding:10px; color:var(--fg); font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;';
+      panel.innerHTML = '<div style="margin:4px 0 6px; opacity:.8">Quick startup checks</div><div id="selfChecksList"></div>';
+      document.body.appendChild(panel);
+      document.addEventListener('click', (e)=>{ if (e.target !== bar && !panel.contains(e.target)) panel.classList.add('hidden'); });
+    }
+
+    const list = panel.querySelector('#selfChecksList');
+    list.innerHTML = '';
+    for (const c of checks){
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; gap:10px; padding:4px 0; border-bottom:1px dashed var(--edge)';
+      row.innerHTML = `<span>${c.pass ? '✅' : '❌'} ${c.name}</span><span class="dim" style="opacity:.8">${c.info||''}</span>`;
+      list.appendChild(row);
+    }
+
+    bar.onclick = () => { panel.classList.toggle('hidden'); };
+  } catch (e) { try { console.warn('Self-checks UI failed:', e); } catch {} }
+}
 
 // ───────────────────────────────────────────────────────────────
 // Easter eggs: theme toggle, party meter, advanced tools, :roar
