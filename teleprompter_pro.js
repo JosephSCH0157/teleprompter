@@ -2723,13 +2723,25 @@ function toggleRec(){
         camVideo.addEventListener('click', onTap, { once: true });
       }
       camWrap.style.display = 'block'; startCamBtn.disabled=true; stopCamBtn.disabled=false; applyCamSizing(); applyCamOpacity(); applyCamMirror();
+      // Mirror to display window if open
+      try {
+        if (displayWin && !displayWin.closed && displayReady) {
+          displayWin.postMessage({ type:'camera-stream', stream }, '*');
+          // Also push current sizing / opacity / mirror
+          const pct = Math.max(15, Math.min(60, Number(camSize.value)||28));
+          const op  = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100));
+          displayWin.postMessage({ type:'cam-sizing', pct }, '*');
+          displayWin.postMessage({ type:'cam-opacity', opacity: op }, '*');
+          displayWin.postMessage({ type:'cam-mirror', on: !!camMirror.checked }, '*');
+        }
+      } catch(e){ /* ignore mirror errors */ }
       populateDevices();
     } catch(e){ warn('startCamera failed', e); }
   }
-  function stopCamera(){ try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{} camVideo.srcObject=null; camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true; }
-  function applyCamSizing(){ const pct = Math.max(15, Math.min(60, Number(camSize.value)||28)); camWrap.style.width = pct+'%'; }
-  function applyCamOpacity(){ const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100)); camWrap.style.opacity = String(op); }
-  function applyCamMirror(){ camWrap.classList.toggle('mirrored', !!camMirror.checked); }
+  function stopCamera(){ try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{} camVideo.srcObject=null; camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true; try{ sendToDisplay({ type:'camera-stop' }); }catch{} }
+  function applyCamSizing(){ const pct = Math.max(15, Math.min(60, Number(camSize.value)||28)); camWrap.style.width = pct+'%'; try{ sendToDisplay({ type:'cam-sizing', pct }); }catch{} }
+  function applyCamOpacity(){ const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100)); camWrap.style.opacity = String(op); try{ sendToDisplay({ type:'cam-opacity', opacity: op }); }catch{} }
+  function applyCamMirror(){ camWrap.classList.toggle('mirrored', !!camMirror.checked); try{ sendToDisplay({ type:'cam-mirror', on: !!camMirror.checked }); }catch{} }
   async function togglePiP(){ try{ if (document.pictureInPictureElement){ await document.exitPictureInPicture(); } else { await camVideo.requestPictureInPicture(); } } catch(e){ warn('PiP failed', e); } }
 
   /* ──────────────────────────────────────────────────────────────
