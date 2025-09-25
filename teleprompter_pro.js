@@ -1260,58 +1260,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       window.addEventListener('keydown', e => { if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) closeSettings(); });
     }
 
-    function buildSettingsContent(){
-      if (!settingsBody) return;
-      settingsBody.innerHTML = '';
-      // Helper to create a card
-      const card = (title, innerHtml) => {
-        const d = document.createElement('div');
-        d.className = 'settings-card';
-        d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
-        return d;
-      };
-      // Microphone
-      settingsBody.appendChild(card('Microphone', `
-        <div class="settings-inline-row">
-          <button id="settingsReqMic" class="btn-chip">Request mic</button>
-          <select id="settingsMicSel" class="select-md"></select>
-        </div>
-        <div class="settings-small">Select input and grant permission for speech sync & dB meter.</div>
-      `));
-      // Camera
-      settingsBody.appendChild(card('Camera', `
-        <div class="settings-inline-row">
-          <button id="settingsStartCam" class="btn-chip">Start</button>
-          <button id="settingsStopCam" class="btn-chip">Stop</button>
-          <select id="settingsCamSel" class="select-md"></select>
-        </div>
-        <div class="settings-inline-row">
-          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${camSize?.value||28}" style="width:70px"></label>
-          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${camOpacity?.value||100}" style="width:80px"></label>
-          <label><input id="settingsCamMirror" type="checkbox" ${camMirror?.checked? 'checked':''}/> Mirror</label>
-        </div>
-        <div class="settings-small">Camera overlay floats over the script.</div>
-      `));
-      // Speakers
-      settingsBody.appendChild(card('Speakers', `
-        <div class="settings-inline-row">
-          <button id="settingsShowSpeakers" class="btn-chip">${speakersBody?.classList.contains('hidden')?'Show':'Hide'} List</button>
-          <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
-        </div>
-        <div class="settings-small">Manage speaker tags & quick normalization.</div>
-      `));
-      // Recording / OBS
-      settingsBody.appendChild(card('Recording', `
-        <div class="settings-inline-row">
-          <label><input type="checkbox" id="settingsEnableObs" ${enableObsChk?.checked?'checked':''}/> Enable OBS</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" value="${obsUrlInput?.value||'ws://127.0.0.1:4455'}" placeholder="ws://host:port" />
-          <input id="settingsObsPass" class="obs-pass" type="password" value="${obsPassInput?.value||''}" placeholder="password" />
-          <button id="settingsObsTest" class="btn-chip">Test</button>
-        </div>
-        <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
-      `));
-      wireSettingsDynamic();
-    }
+    // (Removed duplicate simple buildSettingsContent; using tabbed version defined earlier.)
 
     function wireSettingsDynamic(){
       // Mic
