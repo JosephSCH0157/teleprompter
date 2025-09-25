@@ -3,6 +3,7 @@
 
 let _obs = null;
 let _cfg = { url: 'ws://127.0.0.1:4455', password: '' };
+let _lastErr = null;
 
 async function ensureObsLib(){
   if (window.OBSWebSocket) return window.OBSWebSocket;
@@ -27,11 +28,13 @@ export function createOBSAdapter(){
     configure,
     async isAvailable(){
       try {
+        _lastErr = null;
         const obs = await getObs();
         if (obs?.identified) return true;
         await obs.connect(_cfg.url, _cfg.password);
         return true;
-      } catch {
+      } catch (e) {
+        _lastErr = e;
         try { _obs?.disconnect(); } catch {}
         _obs = null;
         return false;
@@ -42,6 +45,7 @@ export function createOBSAdapter(){
       if (!obs?.identified) await obs.connect(_cfg.url, _cfg.password);
       await obs.call('StartRecord');
       active = true;
+      _lastErr = null;
     },
     async stop(){
       if (!active) return;
@@ -52,9 +56,10 @@ export function createOBSAdapter(){
     },
     async test(){
       const ok = await this.isAvailable();
-      if (!ok) throw new Error('OBS not available');
+      if (!ok) throw new Error(_lastErr?.message || 'OBS not available');
       const obs = await getObs();
       await obs.call('GetRecordStatus');
-    }
+    },
+    getLastError(){ return _lastErr ? (_lastErr.message || String(_lastErr)) : null; }
   };
 }

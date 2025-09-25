@@ -954,6 +954,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   // OBS toggle UI
   const enableObsChk = document.getElementById('enableObs');
   const obsStatus    = document.getElementById('obsStatus');
+  const obsUrlInput  = document.getElementById('obsUrl');
+  const obsPassInput = document.getElementById('obsPassword');
+  const obsTestBtn   = document.getElementById('obsTestBtn');
 
   dbMeter = document.getElementById('dbMeter'); // ← required by startDbMeter()
 
@@ -1000,6 +1003,11 @@ shortcutsClose   = document.getElementById('shortcutsClose');
             const has = s.selected.includes('obs');
             enableObsChk.checked = has;
             if (obsStatus) obsStatus.textContent = has ? 'OBS: enabled' : 'OBS: disabled';
+            // Prefill URL/password
+            try {
+              if (obsUrlInput && s.configs?.obs?.url) obsUrlInput.value = s.configs.obs.url;
+              if (obsPassInput && typeof s.configs?.obs?.password === 'string') obsPassInput.value = s.configs.obs.password;
+            } catch {}
         } catch {}
       };
       applyFromSettings();
@@ -1009,7 +1017,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           const s = __recorder.getSettings();
           let sel = s.selected.filter(id => id !== 'obs');
           if (enableObsChk.checked) sel.push('obs');
-          __recorder.setSettings({ selected: sel });
+          const cfgs = { ...(s.configs||{}) };
+          if (!cfgs.obs) cfgs.obs = { url: obsUrlInput?.value || 'ws://127.0.0.1:4455', password: obsPassInput?.value || '' };
+          __recorder.setSettings({ selected: sel, configs: cfgs });
           if (obsStatus) obsStatus.textContent = enableObsChk.checked ? 'OBS: enabled' : 'OBS: disabled';
           // Optionally check availability quickly
           if (enableObsChk.checked && __recorder.get('obs')?.isAvailable) {
@@ -1021,6 +1031,38 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         } catch {}
       });
     }
+
+    // OBS URL/password change persistence (debounced lightweight)
+    const saveObsConfig = () => {
+      try {
+        if (!__recorder?.getSettings || !__recorder?.setSettings) return;
+        const s = __recorder.getSettings();
+        const cfgs = { ...(s.configs||{}) };
+        const prev = cfgs.obs || {};
+        cfgs.obs = { ...prev, url: obsUrlInput?.value || prev.url || 'ws://127.0.0.1:4455', password: obsPassInput?.value || prev.password || '' };
+        __recorder.setSettings({ configs: cfgs });
+        if (obsStatus && enableObsChk?.checked) obsStatus.textContent = 'OBS: updated';
+      } catch {}
+    };
+    obsUrlInput?.addEventListener('change', saveObsConfig);
+    obsPassInput?.addEventListener('change', saveObsConfig);
+
+    // Test button
+    obsTestBtn?.addEventListener('click', async ()=>{
+      if (!__recorder?.get || !__recorder.get('obs')) { if (obsStatus) obsStatus.textContent='OBS: adapter missing'; return; }
+      if (obsStatus) obsStatus.textContent='OBS: testing…';
+      try {
+        saveObsConfig();
+        const ok = await __recorder.get('obs').test();
+        if (obsStatus) obsStatus.textContent = 'OBS: ok';
+      } catch (e){
+        if (obsStatus) obsStatus.textContent = 'OBS: failed';
+        try {
+          const errMsg = __recorder.get('obs').getLastError?.() || e?.message || String(e);
+          obsStatus.title = errMsg;
+        } catch {}
+      }
+    });
 
     resetBtn.addEventListener('click', resetTimer);
 
