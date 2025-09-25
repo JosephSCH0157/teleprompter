@@ -570,15 +570,14 @@ function wireNormalizeButton(btn){
 
   async function requestMic(){
     try {
-      const sel = document.getElementById('settingsMicSel');
-      const chosen = sel?.value;
-      const constraints = { audio: { deviceId: chosen ? { exact: chosen } : undefined } };
+      const chosenId = (typeof micDeviceSel !== 'undefined' && micDeviceSel?.value) || document.getElementById('settingsMicSel')?.value || undefined;
+      const constraints = { audio: { deviceId: chosenId ? { exact: chosenId } : undefined } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       audioStream = stream;
       try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
       startDbMeter(stream);
       // Persist chosen device
-      try { if (chosen) localStorage.setItem(DEVICE_KEY, chosen); } catch {}
+      try { if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId); } catch {}
     } catch(e){
       warn('Mic denied or failed', e);
       try { permChip && (permChip.textContent = 'Mic: denied'); } catch {}
