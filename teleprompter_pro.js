@@ -402,6 +402,9 @@ function wireNormalizeButton(btn){
   let displayHelloDeadline = 0;      // timestamp (ms) when we stop retrying
   let dbAnim = null, analyser = null, audioStream = null;
   let audioCtx = null; // global reference to AudioContext for suspend/resume
+  // WebRTC (camera mirroring to display window)
+  let camPC = null;       // RTCPeerConnection for camera
+  let camStream = null;   // Local camera MediaStream reference
   let peakHold = { value:0, decay:0.005, lastUpdate:0 };
   const DEVICE_KEY = 'tp_last_input_device_v1';
   let pendingAutoStart = false;
@@ -1595,6 +1598,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
         }
         closeDisplayBtn.disabled = false;
+        // If camera already running, start peer connection
+        try { if (camStream) ensureCamPeer(); } catch {}
+      } else if (e.data?.type === 'cam-answer' && camPC) {
+        try { const desc = { type:'answer', sdp: e.data.sdp }; camPC.setRemoteDescription(desc); } catch {}
+      } else if (e.data?.type === 'cam-ice' && camPC) {
+        try { camPC.addIceCandidate(e.data.candidate); } catch {}
       }
     });
 
@@ -2723,25 +2732,41 @@ function toggleRec(){
         camVideo.addEventListener('click', onTap, { once: true });
       }
       camWrap.style.display = 'block'; startCamBtn.disabled=true; stopCamBtn.disabled=false; applyCamSizing(); applyCamOpacity(); applyCamMirror();
-      // Mirror to display window if open
-      try {
-        if (displayWin && !displayWin.closed && displayReady) {
-          displayWin.postMessage({ type:'camera-stream', stream }, '*');
-          // Also push current sizing / opacity / mirror
-          const pct = Math.max(15, Math.min(60, Number(camSize.value)||28));
-          const op  = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100));
-          displayWin.postMessage({ type:'cam-sizing', pct }, '*');
-          displayWin.postMessage({ type:'cam-opacity', opacity: op }, '*');
-          displayWin.postMessage({ type:'cam-mirror', on: !!camMirror.checked }, '*');
-        }
-      } catch(e){ /* ignore mirror errors */ }
+      camStream = stream;
+      // Kick off WebRTC mirroring if display is open/ready
+      try { if (displayWin && !displayWin.closed && displayReady) await ensureCamPeer(); } catch {}
       populateDevices();
     } catch(e){ warn('startCamera failed', e); }
   }
-  function stopCamera(){ try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{} camVideo.srcObject=null; camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true; try{ sendToDisplay({ type:'camera-stop' }); }catch{} }
+  function stopCamera(){ try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{} camVideo.srcObject=null; camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true; camStream=null; try{ sendToDisplay({ type:'camera-stop' }); }catch{} try{ if (camPC){ camPC.close(); camPC=null; } }catch{} }
   function applyCamSizing(){ const pct = Math.max(15, Math.min(60, Number(camSize.value)||28)); camWrap.style.width = pct+'%'; try{ sendToDisplay({ type:'cam-sizing', pct }); }catch{} }
   function applyCamOpacity(){ const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100)); camWrap.style.opacity = String(op); try{ sendToDisplay({ type:'cam-opacity', opacity: op }); }catch{} }
   function applyCamMirror(){ camWrap.classList.toggle('mirrored', !!camMirror.checked); try{ sendToDisplay({ type:'cam-mirror', on: !!camMirror.checked }); }catch{} }
+
+  // ── WebRTC camera mirroring (simple in-window signaling) ──
+  async function ensureCamPeer(){
+    if (!camStream) return;
+    if (camPC) return; // already active
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      camPC = pc;
+      camStream.getTracks().forEach(t => pc.addTrack(t, camStream));
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          try { sendToDisplay({ type:'cam-ice', candidate: e.candidate }); } catch {}
+        }
+      };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          try { pc.close(); } catch {}
+          camPC = null;
+        }
+      };
+      const offer = await pc.createOffer({ offerToReceiveVideo: false });
+      await pc.setLocalDescription(offer);
+      sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
+    } catch (e) { warn('ensureCamPeer failed', e); }
+  }
   async function togglePiP(){ try{ if (document.pictureInPictureElement){ await document.exitPictureInPicture(); } else { await camVideo.requestPictureInPicture(); } } catch(e){ warn('PiP failed', e); } }
 
   /* ──────────────────────────────────────────────────────────────

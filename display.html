@@ -101,6 +101,34 @@
             }
             window.addEventListener('message', ev => {
               const d = ev.data||{};
+              // WebRTC camera offer/candidate handling
+              if (!window.__camPC && (d.type === 'cam-offer')) {
+                try {
+                  const pc = new RTCPeerConnection({ iceServers: [] });
+                  window.__camPC = pc;
+                  pc.ontrack = (e) => {
+                    let v = document.getElementById('mirrorCam');
+                    if (!v){
+                      v = document.createElement('video');
+                      v.id = 'mirrorCam';
+                      v.autoplay = true; v.playsInline = true; v.muted = true;
+                      v.style.cssText = 'position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;z-index:1200;';
+                      document.body.appendChild(v);
+                    }
+                    if (e.streams && e.streams[0]) v.srcObject = e.streams[0];
+                  };
+                  pc.onicecandidate = (e) => { if (e.candidate) { try { window.opener && window.opener.postMessage({ type:'cam-ice', candidate:e.candidate }, '*'); } catch {} } };
+                  pc.setRemoteDescription({ type:'offer', sdp: d.sdp }).then(async ()=>{
+                    const ans = await pc.createAnswer();
+                    await pc.setLocalDescription(ans);
+                    window.opener && window.opener.postMessage({ type:'cam-answer', sdp: ans.sdp }, '*');
+                  });
+                } catch (err) { console.warn('Display cam-offer handling failed', err); }
+                return; // stop further processing of this message
+              } else if (window.__camPC && d.type === 'cam-ice' && d.candidate) {
+                try { window.__camPC.addIceCandidate(d.candidate); } catch {}
+                return;
+              }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
               if(d.type==='scroll'){
