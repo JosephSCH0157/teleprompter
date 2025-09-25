@@ -2786,6 +2786,16 @@ function toggleRec(){
       camPC = pc;
       updateCamRtcChip('CamRTC: negotiating…');
       camStream.getTracks().forEach(t => pc.addTrack(t, camStream));
+      try {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          const p = sender.getParameters();
+          p.degradationPreference = 'maintain-framerate';
+          // Target ~720p @ ~0.9 Mbps; allow downscale if upstream constrained
+          p.encodings = [{ maxBitrate: 900_000, scaleResolutionDownBy: 1 }];
+          await sender.setParameters(p).catch(()=>{});
+        }
+      } catch {}
       pc.onicecandidate = (e) => {
         if (e.candidate) {
           try { sendToDisplay({ type:'cam-ice', candidate: e.candidate }); } catch {}
@@ -2828,6 +2838,14 @@ function toggleRec(){
       const sender = camPC?.getSenders?.().find(s => s.track && s.track.kind === 'video');
       if (sender && newTrack){
         await sender.replaceTrack(newTrack);
+        try {
+          const p = sender.getParameters();
+          p.degradationPreference = 'maintain-framerate';
+            // Keep same bitrate cap after swap
+          if (!p.encodings || !p.encodings.length) p.encodings = [{ maxBitrate: 900_000, scaleResolutionDownBy: 1 }];
+          else p.encodings[0].maxBitrate = 900_000;
+          await sender.setParameters(p).catch(()=>{});
+        } catch {}
         oldTracks.forEach(t => { try { t.stop(); } catch {} });
         updateCamRtcChip('CamRTC: swapping…');
         // Some browsers might require renegotiation if capabilities changed (rare)
