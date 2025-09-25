@@ -1308,7 +1308,14 @@ function tryStartCatchup(){
   const getTargetY = () => markerTop();
   const getAnchorY = () => {
     try {
-      // Find active paragraph (as set in scrollToCurrentIndex)
+      // Prefer most-visible paragraph from IntersectionObserver
+      const vis = _ioMostVisible || null;
+      if (vis) {
+        const rect = vis.getBoundingClientRect();
+        const vRect = viewer.getBoundingClientRect();
+        return rect.top - vRect.top; // Y relative to viewer
+      }
+      // Otherwise, find active paragraph (as set in scrollToCurrentIndex)
       const activeP = (scriptEl || viewer)?.querySelector('p.active') || null;
       if (activeP) {
         const rect = activeP.getBoundingClientRect();
@@ -1521,7 +1528,9 @@ function advanceByTranscript(transcript, isFinal){
   // Evaluate whether to run the gentle catch-up loop based on anchor position
   try {
     const vRect = viewer.getBoundingClientRect();
-    const pRect = targetPara.el.getBoundingClientRect();
+    // Prefer the most visible element if available; else current paragraph
+    const anchorEl = _ioMostVisible || targetPara.el;
+    const pRect = anchorEl.getBoundingClientRect();
     const anchorY = pRect.top - vRect.top; // anchor relative to viewer
     maybeCatchupByAnchor(anchorY, viewer.clientHeight);
   } catch {}
@@ -1631,7 +1640,12 @@ function advanceByTranscript(transcript, isFinal){
     sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
 
     // Build paragraph index
+    // Rebuild IntersectionObserver and (re)observe visible paragraphs
+    _ensureObserver();
     const paras = Array.from(scriptEl.querySelectorAll('p'));
+    if (_io) {
+      try { paras.forEach(p => _io.observe(p)); } catch {}
+    }
     lineEls = paras;
     paraIndex = []; let acc = 0;
     for (const el of paras){
@@ -1867,6 +1881,27 @@ function openDisplay(){
     sc.scrollTop = clampScrollTop(y);
   }
 
+  // Dense-threshold IntersectionObserver to monitor paragraph visibility within the scroller
+  const IO_THRESHOLDS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+  let _io = null;                    // IntersectionObserver instance
+  let _ioVis = new Map();            // Map<Element, number> — latest intersectionRatio
+  let _ioMostVisible = null;         // best current anchor candidate (Element)
+  function _ensureObserver(){
+    const sc = getScroller();
+    if (!sc) return;
+    if (_io) _io.disconnect();
+    _ioVis.clear(); _ioMostVisible = null;
+    const cb = (entries) => {
+      let bestEl = _ioMostVisible, bestR = bestEl ? (_ioVis.get(bestEl)||0) : 0;
+      for (const e of entries){
+        _ioVis.set(e.target, e.intersectionRatio || 0);
+        if ((e.intersectionRatio||0) > bestR){ bestR = e.intersectionRatio||0; bestEl = e.target; }
+      }
+      _ioMostVisible = bestEl;
+    };
+    try { _io = new IntersectionObserver(cb, { root: sc, threshold: IO_THRESHOLDS }); } catch { _io = null; }
+  }
+
   // Dead-man timer: if HUD index advances but scrollTop doesn’t, force a catch-up jump
   let _wdLastIdx = -1, _wdLastTop = 0, _wdLastT = 0;
   function deadmanWatchdog(idx){
@@ -1929,8 +1964,9 @@ function stopAutoScroll(){
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
       let anchorY = 0;
+      // Prefer most-visible from IO, then active/current paragraph
       const active = (scriptEl || viewer)?.querySelector('p.active');
-      const el = active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
+      const el = _ioMostVisible || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
       if (el){ const r = el.getBoundingClientRect(); anchorY = r.top - vRect.top; }
       maybeCatchupByAnchor(anchorY, viewer.clientHeight);
     } catch { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} }
