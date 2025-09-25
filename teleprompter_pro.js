@@ -369,8 +369,8 @@ try {
   }
 
   // TP: init-minimal
-  // Minimal init to wire the meter pieces and help overlay
-  function init(){
+  // Minimal init to wire the meter pieces and help overlay (internal helper)
+  function __initMinimal(){
     // Help UI
     try { ensureHelpUI(); } catch {}
 
@@ -496,17 +496,15 @@ function ensureHelpUI(){
           <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed</div>
           <div><strong>Shift + ?</strong></div><div>Open Help</div>
           <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
+          <div><strong>~</strong></div><div>Debug HUD</div>
+          <div><strong>?v=clear</strong></div><div>Force refresh</div>
         </div>
 
         <hr class="hr" />
         <div>
           <h4 style="margin:8px 0 6px">Official Teleprompter Tags</h4>
-          <p style="margin:0 0 8px; color:#96a0aa">
-            Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.
-          </p>
-          <!-- (docx import pipeline code removed: was accidentally injected here) -->
-            <div><strong>~</strong></div><div>Debug HUD</div>
-            <div><strong>?v=clear</strong></div><div>Force refresh</div>
+          <p style="margin:0 0 8px; color:#96a0aa">Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.</p>
+          <!-- Tag guide will be augmented below if missing Normalize/Validate -->
           </div>
         </div>
       </div>
@@ -753,6 +751,8 @@ function injectHelpPanel(){
 }
 
 function init() {
+  // Run minimal wiring first (meters, help overlay, normalize button)
+  try { __initMinimal(); } catch(e) { console.warn('Minimal init failed', e); }
   // ⬇️ grab these *first*
   shortcutsBtn     = document.getElementById('shortcutsBtn');
   shortcutsOverlay = document.getElementById('shortcutsOverlay');
