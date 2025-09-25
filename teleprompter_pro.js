@@ -288,91 +288,93 @@ function wireNormalizeButton(btn){
 
   window.validateStandardTags = function validateStandardTags(silent=false) {
     if (window.__help?.validateStandardTags) return window.__help.validateStandardTags(silent);
-    const src = String(document.getElementById('editor')?.value || '');
+    const ta = document.getElementById('editor');
+    const src = String(ta?.value || '');
     const lines = src.split(/\r?\n/);
-    const allowed = new Set(['s1','s2','note']);
+    // Configurable tag set
+    if (!window.validatorConfig) window.validatorConfig = { allowedTags: new Set(['s1','s2','note']) };
+    const allowed = window.validatorConfig.allowedTags;
     const speakerTags = new Set(['s1','s2']);
-    const stack = []; // {tag, line}
-    let s1Blocks=0, s2Blocks=0, noteBlocks=0;
-    let unknownCount = 0;
-    const issues = [];
-
-    function addIssue(line, msg){ issues.push(`line ${line}: ${msg}`); }
-
+    const stack = []; // {tag,line}
+    let s1Blocks=0, s2Blocks=0, noteBlocks=0; let unknownCount=0;
+    const issues=[]; const issueObjs=[];
+    function addIssue(line,msg,type='issue',detail){ issues.push(`line ${line}: ${msg}`); issueObjs.push({ line, message: msg, type, detail }); }
     const tagRe = /\[(\/)?([a-z0-9]+)(?:=[^\]]+)?\]/gi;
-    for (let i=0;i<lines.length;i++) {
-      const rawLine = lines[i];
-      const lineNum = i+1;
-      let m;
-      tagRe.lastIndex = 0;
-      while ((m = tagRe.exec(rawLine))){
-        const closing = !!m[1];
-        const nameRaw = m[2];
-        const name = nameRaw.toLowerCase();
-        if (!allowed.has(name)) { unknownCount++; addIssue(lineNum, `unsupported tag [${closing?'/':''}${nameRaw}]`); continue; }
-        if (!closing) {
-          if (name === 'note') {
-            if (stack.length) {
-              addIssue(lineNum, `[note] must not appear inside [${stack[stack.length-1].tag}] block opened on line ${stack[stack.length-1].line}`);
-            }
+    for (let i=0;i<lines.length;i++){
+      const rawLine=lines[i]; const lineNum=i+1; let m; tagRe.lastIndex=0;
+      while((m=tagRe.exec(rawLine))){
+        const closing=!!m[1]; const nameRaw=m[2]; const name=nameRaw.toLowerCase();
+        if(!allowed.has(name)){ unknownCount++; addIssue(lineNum,`unsupported tag [${closing?'\/':''}${nameRaw}]`,'unsupported',{tag:name}); continue; }
+        if(!closing){
+          if(name==='note'){
+            if(stack.length){ addIssue(lineNum,`[note] must not appear inside [${stack[stack.length-1].tag}] (opened line ${stack[stack.length-1].line})`,'nested-note',{parent:stack[stack.length-1].tag}); }
             stack.push({tag:name,line:lineNum});
-          } else if (speakerTags.has(name)) {
-            // if another speaker still open, that's improper nesting
-            if (stack.length && speakerTags.has(stack[stack.length-1].tag)) {
-              addIssue(lineNum, `[${name}] opened before closing previous [${stack[stack.length-1].tag}] (opened line ${stack[stack.length-1].line})`);
-            }
+          } else if(speakerTags.has(name)) {
+            if(stack.length && speakerTags.has(stack[stack.length-1].tag)) addIssue(lineNum,`[${name}] opened before closing previous [${stack[stack.length-1].tag}] (opened line ${stack[stack.length-1].line})`,'nested-speaker',{prev:stack[stack.length-1].tag,prevLine:stack[stack.length-1].line});
             stack.push({tag:name,line:lineNum});
-          } else {
-            stack.push({tag:name,line:lineNum});
-          }
-        } else { // closing
-          if (!stack.length) {
-            addIssue(lineNum, `stray closing tag [/${name}]`);
-            continue;
-          }
-            // find nearest same tag from top
-          const top = stack[stack.length-1];
-          if (top.tag === name) {
-            stack.pop();
-            if (name === 's1') s1Blocks++; else if (name==='s2') s2Blocks++; else if (name==='note') noteBlocks++;
-          } else {
-            // mismatch
-            addIssue(lineNum, `mismatched closing [/${name}] – expected [/${top.tag}] for opening on line ${top.line}`);
-            // attempt recovery: pop until match or empty
-            let poppedAny = false;
-            while (stack.length && stack[stack.length-1].tag !== name){ stack.pop(); poppedAny = true; }
-            if (stack.length && stack[stack.length-1].tag === name){
-              const opener = stack.pop();
-              if (name === 's1') s1Blocks++; else if (name==='s2') s2Blocks++; else if (name==='note') noteBlocks++;
-              if (poppedAny) addIssue(lineNum, `auto-recovered by closing [/${name}] (opened line ${opener.line}) after mismatches`);
-            } else {
-              addIssue(lineNum, `no matching open tag for [/${name}]`);
-            }
+          } else { stack.push({tag:name,line:lineNum}); }
+        } else {
+          if(!stack.length){ addIssue(lineNum,`stray closing tag [\/${name}]`,'stray-close',{tag:name}); continue; }
+          const top=stack[stack.length-1];
+          if(top.tag===name){ stack.pop(); if(name==='s1') s1Blocks++; else if(name==='s2') s2Blocks++; else if(name==='note') noteBlocks++; }
+          else {
+            addIssue(lineNum,`mismatched closing [\/${name}] – expected [\/${top.tag}] for opening on line ${top.line}`,'mismatch',{expected:top.tag,openLine:top.line,found:name});
+            let poppedAny=false; while(stack.length && stack[stack.length-1].tag!==name){ stack.pop(); poppedAny=true; }
+            if(stack.length && stack[stack.length-1].tag===name){ const opener=stack.pop(); if(name==='s1') s1Blocks++; else if(name==='s2') s2Blocks++; else if(name==='note') noteBlocks++; if(poppedAny) addIssue(lineNum,`auto-recovered by closing [\/${name}] (opened line ${opener.line}) after mismatches`,'auto-recover',{tag:name,openLine:opener.line}); }
+            else addIssue(lineNum,`no matching open tag for [\/${name}]`,'no-match',{tag:name});
           }
         }
       }
-      // Additional rule: a [note] block should occupy its own logical paragraph.
-      // If a line contains a [note] opening and additional non-tag text before another closing, that's fine; we enforce only not inside speaker.
     }
-
-    // Any unclosed tags
-    for (const open of stack){
-      addIssue(open.line, `unclosed [${open.tag}] opened here`);
+    for(const open of stack) addIssue(open.line,`unclosed [${open.tag}] opened here`,'unclosed',{tag:open.tag});
+    const summaryParts=[`s1 blocks: ${s1Blocks}`,`s2 blocks: ${s2Blocks}`,`notes: ${noteBlocks}`]; if(unknownCount) summaryParts.push(`unsupported tags: ${unknownCount}`);
+    // Quick fixes
+    const fixes=[]; for(const iss of issueObjs){
+      if(iss.type==='unclosed' && /(s1|s2)/i.test(iss.message)){ const tag=iss.message.match(/\[(s1|s2)\]/i)?.[1]; if(tag) fixes.push({type:'append-close',tag,label:`Append closing [\/${tag}] at end`,apply:(text)=> text + (text.endsWith('\n')?'':'\n') + `[\/${tag}]\n`}); }
+      else if(iss.type==='stray-close'){ fixes.push({type:'remove-line',line:iss.line,label:`Remove stray closing tag on line ${iss.line}`,apply:(text)=> text.split(/\r?\n/).filter((_,i)=>i!==iss.line-1).join('\n')}); }
+      else if(iss.type==='mismatch'){ const found=iss.message.match(/mismatched closing \[\/(\w+)\]/i)?.[1]; const expected=iss.message.match(/expected \[\/(\w+)\]/i)?.[1]; if(found&&expected&&found!==expected) fixes.push({type:'replace-tag',line:iss.line,from:found,to:expected,label:`Replace [\/${found}] with [\/${expected}] on line ${iss.line}`,apply:(text)=>{ const arr=text.split(/\r?\n/); const ln=arr[iss.line-1]; if(ln) arr[iss.line-1]=ln.replace(new RegExp(`\[\/${found}\]`,'i'),`[\/${expected}]`); return arr.join('\n'); }}); }
     }
-
-    // Count completed speaker blocks manually in case they never closed (already handled above) – already incremented when closed.
-    const summaryParts = [`s1 blocks: ${s1Blocks}`, `s2 blocks: ${s2Blocks}`, `notes: ${noteBlocks}`];
-    if (unknownCount) summaryParts.push(`unsupported tags: ${unknownCount}`);
-
-    let msg;
-    if (!issues.length) {
-      msg = `No issues found. (${summaryParts.join(', ')})`;
-    } else {
-      msg = `Validation issues (${issues.length}):\n- ` + issues.join('\n- ') + `\n\nSummary: ${summaryParts.join(', ')}`;
-    }
+    let msg = !issues.length ? `No issues found. (${summaryParts.join(', ')})` : `Validation issues (${issues.length}):\n- ${issues.join('\n- ')}\n\nSummary: ${summaryParts.join(', ')}`;
+    window.__lastValidation={ issues: issueObjs, summary: summaryParts, fixes };
+    // Inline highlighting
+    try {
+      const existing = document.getElementById('validatorLineOverlay');
+      if (existing) existing.remove();
+      if (issueObjs.length && ta){
+        const overlay = document.createElement('div');
+        overlay.id='validatorLineOverlay';
+        overlay.style.cssText='position:absolute;inset:0;pointer-events:none;font:inherit;';
+        // Positioning container wrapper if not already relative
+        const wrap = ta.parentElement;
+        if (wrap && getComputedStyle(wrap).position==='static') wrap.style.position='relative';
+        // Map: line -> severity color
+        const colors = { 'unclosed':'#d33', 'mismatch':'#d33', 'nested-speaker':'#d33', 'nested-note':'#d33', 'stray-close':'#d55', 'unsupported':'#b46', 'auto-recover':'#c80', 'no-match':'#d33', 'issue':'#c30' };
+        const badLines = new Set(issueObjs.map(i=>i.line));
+        // Build spans aligned via line height approximation
+        const style = getComputedStyle(ta); const lh = parseFloat(style.lineHeight)||16; const padTop = ta.scrollTop; // will adjust on scroll
+        function rebuild(){
+          overlay.innerHTML='';
+          const scrollTop = ta.scrollTop; const firstVisible = Math.floor(scrollTop / lh)-1; const linesVisible = Math.ceil(ta.clientHeight / lh)+2;
+          for (let i=0;i<linesVisible;i++){
+            const lineIdx = firstVisible + i; if (lineIdx <0) continue; const lineNumber=lineIdx+1; if(!badLines.has(lineNumber)) continue;
+            const issue = issueObjs.find(o=>o.line===lineNumber);
+            const bar = document.createElement('div');
+            bar.title = issue.message;
+            bar.style.cssText = `position:absolute;left:0;right:0;top:${lineIdx*lh}px;height:${lh}px;background:linear-gradient(90deg,${colors[issue.type]||'#c30'}22,transparent 80%);pointer-events:none;`;
+            overlay.appendChild(bar);
+          }
+        }
+        rebuild();
+        ta.addEventListener('scroll', rebuild, { passive:true });
+        // cleanup on next validation run handled by removal above
+        wrap.appendChild(overlay);
+      }
+    } catch {}
     if (!silent) showCopyDialog(msg, 'Validator');
     return msg;
   };
+  window.extendValidatorTags = function(tags){ if(!Array.isArray(tags)) return; if(!window.validatorConfig) window.validatorConfig={allowedTags:new Set(['s1','s2','note'])}; tags.forEach(t=>{ if(t) window.validatorConfig.allowedTags.add(String(t).toLowerCase()); }); };
+  window.setValidatorAllowedTags = function(tags){ if(!Array.isArray(tags)) return; window.validatorConfig={allowedTags:new Set(tags.map(t=>String(t).toLowerCase()))}; };
 
   /* ──────────────────────────────────────────────────────────────
    * Globals and state
