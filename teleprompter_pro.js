@@ -1599,6 +1599,15 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         STRICT_FORWARD_SIM = 0.82;
         MAX_JUMP_AHEAD_WORDS = 8;
       }
+      else if (v === '4'){
+        // Aggressive live-read: fastest catch for rapid speakers; very permissive similarity, broad forward window
+        // Intent: minimize lag when reader sprints ahead; accept earlier fuzzy alignment
+        SIM_THRESHOLD = 0.46;          // slightly below preset 3 to allow earlier partial matches
+        MATCH_WINDOW_AHEAD = 240;      // wide look-ahead similar to '3'
+        MATCH_WINDOW_BACK  = 40;       // allow some recovery if we overshoot
+        STRICT_FORWARD_SIM = 0.62;     // relax strict forward gate further
+        MAX_JUMP_AHEAD_WORDS = 22;     // permit larger forward corrections in one step
+      }
       else if (v === '3'){
         // Aggressive: lower similarity bar, broader windows, allow larger forward nudges
         SIM_THRESHOLD = 0.48;
