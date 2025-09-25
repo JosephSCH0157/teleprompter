@@ -397,6 +397,7 @@ function wireNormalizeButton(btn){
   let displayHelloTimer = null;      // interval id
   let displayHelloDeadline = 0;      // timestamp (ms) when we stop retrying
   let dbAnim = null, analyser = null, audioStream = null;
+  let audioCtx = null; // global reference to AudioContext for suspend/resume
   let peakHold = { value:0, decay:0.005, lastUpdate:0 };
   const DEVICE_KEY = 'tp_last_input_device_v1';
   let pendingAutoStart = false;
@@ -529,7 +530,8 @@ function wireNormalizeButton(btn){
   async function startDbMeter(stream){
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { warn('AudioContext unavailable'); return; }
-    const ctx = new AC();
+  const ctx = new AC();
+  audioCtx = ctx; // retain for suspend/resume when tab visibility changes
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
