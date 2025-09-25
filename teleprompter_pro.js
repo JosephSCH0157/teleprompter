@@ -1536,6 +1536,21 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       }
     } catch {}
 
+    // dB meter power save: suspend AudioContext when tab hidden, resume on return
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (!audioCtx) return;
+        if (document.hidden) {
+          if (audioCtx.state === 'running') audioCtx.suspend();
+        } else {
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+      } catch {}
+    });
+    // Extra safety: some browsers fire blur/focus without visibilitychange (e.g., alt-tab quickly)
+    window.addEventListener('focus', () => { try { if (audioCtx?.state === 'suspended') audioCtx.resume(); } catch {} });
+    window.addEventListener('blur',  () => { try { if (audioCtx?.state === 'running' && document.hidden) audioCtx.suspend(); } catch {} });
+
     // Tiny wink: Shift+click Rec to hint at future calibration
     if (recBtn){
       recBtn.addEventListener('click', (e)=>{
