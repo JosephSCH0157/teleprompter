@@ -750,7 +750,7 @@ function injectHelpPanel(){
   }catch(err){ console.error('Help injection failed', err); }
 }
 
-function init() {
+async function init() {
   // Run minimal wiring first (meters, help overlay, normalize button)
   try { __initMinimal(); } catch(e) { console.warn('Minimal init failed', e); }
   // ⬇️ grab these *first*
@@ -964,17 +964,16 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const shMod = await import('./scroll-helpers.js');
       const sh = shMod.createScrollerHelpers(() => viewer);
       __scrollHelpers = sh;
-      // bind local refs used throughout
       clampScrollTop = sh.clampScrollTop;
       scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
       scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
       scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
-    } catch {}
+    } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
       const ioMod = await import('./io-anchor.js');
       __anchorObs = ioMod.createAnchorObserver(() => viewer, () => { try{ updateDebugPosChip(); }catch{} });
-    } catch {}
+    } catch(e) { console.warn('io-anchor load failed', e); }
   // …keep the rest of your init() as-is…
 
     // Wire UI
