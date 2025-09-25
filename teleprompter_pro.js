@@ -468,7 +468,7 @@ function wireNormalizeButton(btn){
 
   // DOM (late‑bound during init)
   let editor, scriptEl, viewer, legendEl,
-      permChip, displayChip, recChip,
+    permChip, displayChip, recChip, camRtcChip,
     debugPosChip,
       openDisplayBtn, closeDisplayBtn, presentBtn,
   micBtn, recBtn, refreshDevicesBtn,
@@ -1132,6 +1132,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   permChip    = document.getElementById('permChip');
   displayChip = document.getElementById('displayChip');
   recChip     = document.getElementById('recChip');
+  camRtcChip  = document.getElementById('camRtcChip');
 
   openDisplayBtn  = document.getElementById('openDisplayBtn');
   closeDisplayBtn = document.getElementById('closeDisplayBtn');
@@ -2371,6 +2372,7 @@ function advanceByTranscript(transcript, isFinal){
       if (!displayWin || displayWin.closed) { displayReady = false; return; }
       const st = camPC?.connectionState;
       if (wantCamRTC && camStream && (!st || st === 'failed' || st === 'disconnected')) {
+        updateCamRtcChip('CamRTC: re-offer…');
         ensureCamPeer();
       }
     } catch {}
@@ -2760,12 +2762,14 @@ function toggleRec(){
       populateDevices();
     } catch(e){ warn('startCamera failed', e); }
   }
+  function updateCamRtcChip(msg){ try { if (camRtcChip) camRtcChip.textContent = msg; } catch {} }
   function stopCamera(){
     wantCamRTC = false;
     try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{}
     camVideo.srcObject=null;
     camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true;
     camStream=null;
+    updateCamRtcChip('CamRTC: idle');
     try{ sendToDisplay({ type:'webrtc-stop' }); }catch{}
     try{ if (camPC){ camPC.close(); camPC=null; } }catch{}
   }
@@ -2780,6 +2784,7 @@ function toggleRec(){
     try {
       const pc = new RTCPeerConnection({ iceServers: [] });
       camPC = pc;
+      updateCamRtcChip('CamRTC: negotiating…');
       camStream.getTracks().forEach(t => pc.addTrack(t, camStream));
       pc.onicecandidate = (e) => {
         if (e.candidate) {
@@ -2787,6 +2792,14 @@ function toggleRec(){
         }
       };
       pc.onconnectionstatechange = () => {
+        try {
+          const st = pc.connectionState;
+          if (st === 'connected')      updateCamRtcChip('CamRTC: connected');
+          else if (st === 'connecting')updateCamRtcChip('CamRTC: connecting…');
+          else if (st === 'disconnected') updateCamRtcChip('CamRTC: retry…');
+          else if (st === 'failed')   updateCamRtcChip('CamRTC: failed');
+          else if (st === 'closed')   updateCamRtcChip('CamRTC: closed');
+        } catch {}
         if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           try { pc.close(); } catch {}
           camPC = null;
@@ -2816,6 +2829,7 @@ function toggleRec(){
       if (sender && newTrack){
         await sender.replaceTrack(newTrack);
         oldTracks.forEach(t => { try { t.stop(); } catch {} });
+        updateCamRtcChip('CamRTC: swapping…');
         // Some browsers might require renegotiation if capabilities changed (rare)
         try {
           if (camPC && camPC.signalingState === 'stable') {
@@ -2834,6 +2848,7 @@ function toggleRec(){
                   const offer = await camPC.createOffer();
                   await camPC.setLocalDescription(offer);
                   sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
+                  updateCamRtcChip('CamRTC: renegotiate…');
                 }
               } catch {}
             }, 400);
