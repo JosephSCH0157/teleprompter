@@ -418,6 +418,8 @@ function wireNormalizeButton(btn){
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null;     // set after io-anchor.js loads
   let __scrollCtl = null;     // set after scroll-control.js loads
+  // Mic selector single source of truth (settings overlay)
+  const getMicSel = () => document.getElementById('settingsMicSel');
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
   // Hard-bound current line tracking
@@ -582,7 +584,7 @@ function wireNormalizeButton(btn){
 
   async function requestMic(){
     try {
-      const chosenId = (typeof micDeviceSel !== 'undefined' && micDeviceSel?.value) || document.getElementById('settingsMicSel')?.value || undefined;
+      const chosenId = getMicSel()?.value || undefined;
       const constraints = { audio: { deviceId: chosenId ? { exact: chosenId } : undefined } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       audioStream = stream;
@@ -644,7 +646,7 @@ function wireNormalizeButton(btn){
     // Query essentials
     permChip = document.getElementById('permChip');
     micBtn = document.getElementById('micBtn');
-  micDeviceSel = document.getElementById('settingsMicSel'); // legacy var now points to settings selector
+  // (Removed micDeviceSel rebinding; use getMicSel())
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
     dbMeterTop = document.getElementById('dbMeterTop');
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
@@ -1123,7 +1125,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
   micBtn          = document.getElementById('micBtn');
   recBtn          = document.getElementById('recBtn');
-  micDeviceSel    = document.getElementById('micDeviceSel');
+  // (Legacy hidden micDeviceSel retained but not bound; use getMicSel())
   refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
 
   fontSizeInput   = document.getElementById('fontSize');
