@@ -467,7 +467,7 @@ function wireNormalizeButton(btn){
       permChip, displayChip, recChip,
     debugPosChip,
       openDisplayBtn, closeDisplayBtn, presentBtn,
-      micBtn, recBtn, micDeviceSel, refreshDevicesBtn,
+  micBtn, recBtn, refreshDevicesBtn,
       fontSizeInput, lineHeightInput,
       autoToggle, autoSpeed,
       timerEl, resetBtn, loadSample, clearText,
@@ -1330,8 +1330,6 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       if (micSel){
         micSel.addEventListener('change', ()=>{
           try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
-          // Mirror value into legacy micDeviceSel element if it still exists
-          try { if (typeof micDeviceSel !== 'undefined' && micDeviceSel && micDeviceSel !== micSel) micDeviceSel.value = micSel.value; } catch {}
         });
       }
   reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
