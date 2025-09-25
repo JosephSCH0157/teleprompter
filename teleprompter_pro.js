@@ -2246,12 +2246,11 @@ function openDisplay(){
   function getScroller(){ return viewer; }
   let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
 
-  // Debug chip updater: shows anchor percentage within viewport and scrollTop
-  function updateDebugPosChip(){
+  // Debug chip updater (throttled via rAF): shows anchor percentage within viewport and scrollTop
+  function updateDebugPosChipImmediate(){
     try {
       if (!debugPosChip || !viewer) return;
       const vH = Math.max(1, viewer.clientHeight || 1);
-      // Choose an anchor element: IO best, then active, then currentIndex
       const active = (scriptEl || viewer)?.querySelector('p.active');
       const vis = __anchorObs?.mostVisibleEl?.() || null;
       const el = vis || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
@@ -2259,12 +2258,19 @@ function openDisplay(){
       if (el){
         const vRect = viewer.getBoundingClientRect();
         const r = el.getBoundingClientRect();
-        const anchorY = r.top - vRect.top; // relative to viewer
+        const anchorY = r.top - vRect.top;
         pct = Math.round(Math.max(0, Math.min(100, (anchorY / vH) * 100)));
       }
       const topStr = (viewer.scrollTop||0).toLocaleString();
       debugPosChip.textContent = `Anchor ${pct}% • scrollTop ${topStr}`;
     } catch {}
+  }
+  let __debugPosRaf = 0; let __debugPosPending = false;
+  function updateDebugPosChip(){
+    if (__debugPosPending) return; // already scheduled
+    __debugPosPending = true;
+    __debugPosRaf && cancelAnimationFrame(__debugPosRaf);
+    __debugPosRaf = requestAnimationFrame(()=>{ __debugPosPending = false; updateDebugPosChipImmediate(); });
   }
 
 
