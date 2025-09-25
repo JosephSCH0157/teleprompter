@@ -141,6 +141,9 @@ select { font-size: 14px; }
 .settings-tab.active{background:#12202a;color:var(--accent);border-color:var(--accent)}
 .settings-footer{margin-top:8px;opacity:.7;text-align:right}
 
+/* Sidebar hint for relocated media/OBS controls */
+.sidebar-hint{flex:1 1 100%;text-align:left;opacity:.75}
+
 /* Disable browser smooth scrolling for live-follow (always snap immediately) */
 #viewer, #scriptScrollContainer { scroll-behavior: auto !important; }
 

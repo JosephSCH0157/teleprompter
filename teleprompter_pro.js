@@ -133,14 +133,18 @@ function setStatus(msg){
     function setupSettingsTabs(){
       const tabs = document.querySelectorAll('#settingsTabs .settings-tab');
       const apply = (name) => {
-        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+        const sel = name || 'general';
+        try { localStorage.setItem('tp_settings_tab', sel); } catch {}
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === sel));
         settingsBody.querySelectorAll('.settings-card').forEach(c => {
-          const show = c.dataset.tab === name || (name === 'advanced' && c.dataset.tab === 'advanced');
+          const show = c.dataset.tab === sel || (sel === 'advanced' && c.dataset.tab === 'advanced');
           c.style.display = show ? 'flex' : 'none';
         });
       };
       tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
-      apply('general');
+      let last = 'general';
+      try { last = localStorage.getItem('tp_settings_tab') || 'general'; } catch {}
+      apply(last);
     }
     // (Removed stray recorder settings snippet accidentally injected here)
 
