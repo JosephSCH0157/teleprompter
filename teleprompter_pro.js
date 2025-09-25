@@ -591,20 +591,20 @@ function wireNormalizeButton(btn){
       const aud = devs.filter(d => d.kind === 'audioinput');
       const cams = devs.filter(d => d.kind === 'videoinput');
 
-      const micSelA = (typeof micDeviceSel !== 'undefined') ? micDeviceSel : null;
+      // Populate only the active settings mic selector; leave hidden legacy stub inert
       const micSelB = document.getElementById('settingsMicSel');
-      [micSelA, micSelB].filter(Boolean).forEach(sel => {
+      if (micSelB){
         try {
-          const cur = sel.value;
-          sel.innerHTML = '';
-            aud.forEach(d => {
-              const o = document.createElement('option');
-              o.value = d.deviceId; o.textContent = d.label || 'Microphone';
-              sel.appendChild(o);
-            });
-          if (cur && Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur;
+          const cur = micSelB.value;
+          micSelB.innerHTML = '';
+          aud.forEach(d => {
+            const o = document.createElement('option');
+            o.value = d.deviceId; o.textContent = d.label || 'Microphone';
+            micSelB.appendChild(o);
+          });
+          if (cur && Array.from(micSelB.options).some(o=>o.value===cur)) micSelB.value = cur;
         } catch {}
-      });
+      }
 
       const camSelA = (typeof camDeviceSel !== 'undefined') ? camDeviceSel : null;
       const camSelB = document.getElementById('settingsCamSel');
