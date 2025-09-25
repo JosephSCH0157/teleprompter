@@ -73,8 +73,11 @@ function wireNormalizeButton(btn){
     let _settingsBuilt = false;
     function buildSettingsContent(){
       if (!settingsBody) return;
-      if (_settingsBuilt){ syncSettingsValues(); return; }
-      _settingsBuilt = true;
+      if (_settingsBuilt){
+        // If somehow ended up empty (e.g., previous error), allow one forced rebuild
+        if (!settingsBody.querySelector('.settings-card')) { _settingsBuilt = false; }
+        else { syncSettingsValues(); return; }
+      }
       const frag = document.createDocumentFragment();
       const card = (id, title, tab, innerHtml) => {
         const d = document.createElement('div');
@@ -116,10 +119,18 @@ function wireNormalizeButton(btn){
           <button id="settingsObsTest" class="btn-chip">Test</button>
         </div>
         <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`));
-      settingsBody.appendChild(frag);
-      wireSettingsDynamic();
-      syncSettingsValues();
-      setupSettingsTabs();
+      try {
+        settingsBody.appendChild(frag);
+        wireSettingsDynamic();
+        syncSettingsValues();
+        setupSettingsTabs();
+        // Only mark built if cards actually present
+        if (settingsBody.querySelector('.settings-card')) _settingsBuilt = true;
+      } catch (e) {
+        // Failed; allow retry on next open
+        console.warn('Settings build failed, will retry', e);
+        _settingsBuilt = false;
+      }
     }
 
     function syncSettingsValues(){
