@@ -467,7 +467,18 @@ function wireNormalizeButton(btn){
     let bars = Array.from(target.querySelectorAll('.bar'));
     if (bars.length >= 16) return bars;
     target.innerHTML = '';
-    for (let i=0;i<20;i++){ const b=document.createElement('div'); b.className='bar'; target.appendChild(b); }
+    const total = 20;
+    for (let i=0;i<total;i++){
+      const b=document.createElement('div');
+      b.className='bar';
+      const ratio = i/(total-1); // 0 (left) -> 1 (right)
+      // Interpolate hue 120 (green) -> 0 (red)
+      const hue = 120 - (120 * ratio);
+      const sat = 70; // percent
+      const light = 30 + (ratio*25); // brighten a bit toward red end
+      b.style.setProperty('--bar-color', `hsl(${hue}deg ${sat}% ${light}%)`);
+      target.appendChild(b);
+    }
     // Peak marker
     const peak = document.createElement('div'); peak.className='peak-marker'; peak.style.transform='translateX(0)'; target.appendChild(peak);
     // Scale ticks (every 5 bars) – positioned absolutely
