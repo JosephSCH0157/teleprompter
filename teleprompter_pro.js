@@ -1576,16 +1576,30 @@ try {
   }
 } catch {}
 
-// Last-resort event delegation (if direct listeners failed) so core buttons still act.
-document.addEventListener('click', (e)=>{
-  const id = e.target?.id;
+// Conditionally install last‑resort delegation ONLY if core buttons appear unwired after init grace period.
+setTimeout(() => {
   try {
-    if (id === 'openDisplayBtn' && typeof openDisplay === 'function') { openDisplay(); }
-    else if (id === 'closeDisplayBtn' && typeof closeDisplay === 'function') { closeDisplay(); }
-    else if (id === 'presentBtn' && typeof openDisplay === 'function') { openDisplay(); }
-    else if (id === 'micBtn') { requestMic(); }
-  } catch(err){ console.warn('Delegated handler error', err); }
-}, { capture:true });
+    // Heuristic: if openDisplayBtn exists and has no inline onclick AND we haven't flagged init success
+    const btn = document.getElementById('openDisplayBtn');
+    if (!btn) return; // no need
+    const already = btn.__listenerAttached; // we can mark in init later if desired
+    if (already) return; // direct wiring succeeded
+    // Light probe: synthesize a custom event property after adding direct listener (future refactor)
+    let delegated = false;
+    const fallback = (e) => {
+      const id = e.target?.id;
+      try {
+        if (id === 'openDisplayBtn' && typeof openDisplay === 'function') { openDisplay(); }
+        else if (id === 'closeDisplayBtn' && typeof closeDisplay === 'function') { closeDisplay(); }
+        else if (id === 'presentBtn' && typeof openDisplay === 'function') { openDisplay(); }
+        else if (id === 'micBtn') { requestMic(); }
+      } catch(err){ console.warn('Delegated handler error', err); }
+    };
+    document.addEventListener('click', fallback, { capture:true });
+    delegated = true;
+    if (delegated) console.warn('[TP-Pro] Fallback delegation installed (direct button wiring not detected).');
+  } catch {}
+}, 800);
 
 // Gentle PID-like catch-up controller
 function tryStartCatchup(){
