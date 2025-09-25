@@ -1204,6 +1204,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // Run tiny self-checks to catch regressions fast
     try { setTimeout(runSelfChecks, 0); } catch {}
+
+    // Keep bottom padding responsive to viewport changes
+    try { window.addEventListener('resize', applyBottomPad, { passive: true }); } catch {}
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -1602,8 +1605,10 @@ function advanceByTranscript(transcript, isFinal){
     }
     const paragraphs = outParts.filter(Boolean).join('');
 
-    scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
+  scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
     applyTypography();
+  // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
+  applyBottomPad();
   // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
     // Mirror to display
@@ -1617,6 +1622,14 @@ function advanceByTranscript(transcript, isFinal){
       paraIndex.push({ el, start: acc, end: acc + wc - 1 });
       acc += wc;
     }
+  }
+
+  // Dynamic bottom padding so the marker can sit over the final paragraphs
+  function applyBottomPad(){
+    try {
+      const pad = Math.max(window.innerHeight * 0.5, 320);
+      if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
+    } catch {}
   }
 
   // call this whenever you actually advance or scroll due to a match
