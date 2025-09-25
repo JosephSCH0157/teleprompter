@@ -1379,6 +1379,28 @@ let MAX_BACK_STEP_PX = 140;     // clamp backward step size
 // Anti-jitter: remember last move direction (+1 fwd, -1 back, 0 none)
 let _lastMoveDir = 0;
 
+// Quick fuzzy contain check (Unicode-aware normalization)
+function _normQuick(s){
+  try { return String(s||'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(); }
+  catch { // fallback for engines lacking Unicode property escapes
+    return String(s||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+  }
+}
+function fuzzyAdvance(textSlice, spoken){
+  const A = _normQuick(textSlice);
+  const rawB = _normQuick(spoken);
+  const B = rawB.length > 80 ? rawB.slice(-80) : rawB; // focus on tail
+  return A.indexOf(B); // >= 0 if found
+}
+function getUpcomingTextSlice(maxWords = 120){
+  try {
+    const end = Math.min(scriptWords.length, currentIndex + Math.max(1, maxWords));
+    return (scriptWords.slice(currentIndex, end) || []).join(' ');
+  } catch { return ''; }
+}
+// expose for quick experiments in console/debug tools
+try { Object.assign(window, { fuzzyAdvance, getUpcomingTextSlice }); } catch {}
+
 // Fast overlap score: count of shared tokens (case-normalized by normTokens already)
 function _overlap(a, b){
   if (!a?.length || !b?.length) return 0;
