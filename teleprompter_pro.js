@@ -1301,9 +1301,9 @@ function tryStartCatchup(){
   const getAnchorY = () => {
     try {
       // Find active paragraph (as set in scrollToCurrentIndex)
-      const active = viewer.querySelector('.para.active') || viewer.querySelector('.script .para') || null;
-      if (active) {
-        const rect = active.getBoundingClientRect();
+      const activeP = (scriptEl || viewer)?.querySelector('p.active') || null;
+      if (activeP) {
+        const rect = activeP.getBoundingClientRect();
         const vRect = viewer.getBoundingClientRect();
         return rect.top - vRect.top; // Y relative to viewer
       }
@@ -1822,7 +1822,7 @@ function stopAutoScroll(){
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
       let anchorY = 0;
-      const active = viewer.querySelector('.para.active');
+      const active = (scriptEl || viewer)?.querySelector('p.active');
       const el = active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
       if (el){ const r = el.getBoundingClientRect(); anchorY = r.top - vRect.top; }
       maybeCatchupByAnchor(anchorY, viewer.clientHeight);
