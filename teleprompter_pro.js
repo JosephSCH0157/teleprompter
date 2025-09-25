@@ -447,12 +447,12 @@ function wireNormalizeButton(btn){
       nameS1, colorS1, wrapS1, nameS2, colorS2, wrapS2, nameG1, colorG1, wrapG1, nameG2, colorG2, wrapG2,
       camWrap, camVideo, startCamBtn, stopCamBtn, camDeviceSel, camSize, camOpacity, camMirror, camPiP,
       prerollInput, countOverlay, countNum,
-      dbMeter, dbMeterTop,
+  dbMeterTop,
       toggleSpeakersBtn, speakersBody;
 
   // TP: meter-audio
   // ───────────────────────────────────────────────────────────────
-  // dB meter utilities (build bars, start/stop, mirror to top bar)
+  // dB meter utilities (single source of truth: top bar only)
   // ───────────────────────────────────────────────────────────────
   function buildDbBars(target){
     if (!target) return [];
@@ -471,7 +471,7 @@ function wireNormalizeButton(btn){
     if (dbAnim) cancelAnimationFrame(dbAnim); dbAnim = null;
     try{ if (audioStream) audioStream.getTracks().forEach(t=>t.stop()); }catch{}
     audioStream = null; analyser = null;
-    try { clearBars(dbMeter); clearBars(dbMeterTop); } catch {}
+  try { clearBars(dbMeterTop); } catch {}
   }
 
   async function startDbMeter(stream){
@@ -483,15 +483,12 @@ function wireNormalizeButton(btn){
     analyser.fftSize = 2048;
     src.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
-    const sideBars = buildDbBars(dbMeter);
-    const topBars  = buildDbBars(dbMeterTop);
+  const topBars  = buildDbBars(dbMeterTop);
     const draw = () => {
       analyser.getByteFrequencyData(data);
       const avg = data.reduce((a,b)=>a+b,0)/data.length; // 0..255
-      const bars = Math.max(0, Math.min(sideBars.length, Math.round((avg/255)*sideBars.length)));
-      // update both meters
-      for (let i=0;i<sideBars.length;i++) sideBars[i].classList.toggle('on', i < bars);
-      for (let i=0;i<topBars.length;i++)  topBars[i].classList.toggle('on', i < bars);
+  const bars = Math.max(0, Math.min(topBars.length, Math.round((avg/255)*topBars.length)));
+  for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i < bars);
       dbAnim = requestAnimationFrame(draw);
     };
     draw();
@@ -537,12 +534,10 @@ function wireNormalizeButton(btn){
     micBtn = document.getElementById('micBtn');
     micDeviceSel = document.getElementById('micDeviceSel');
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
-    dbMeter = document.getElementById('dbMeter');
     dbMeterTop = document.getElementById('dbMeterTop');
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
 
     // Build both meters
-    buildDbBars(dbMeter);
     buildDbBars(dbMeterTop);
 
   // TP: mic-wire
@@ -1089,8 +1084,6 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   const settingsOverlay = document.getElementById('settingsOverlay');
   const settingsClose = document.getElementById('settingsClose');
   const settingsBody  = document.getElementById('settingsBody');
-
-  dbMeter = document.getElementById('dbMeter'); // ← required by startDbMeter()
 
   // Speakers toggle bits
   toggleSpeakersBtn = document.getElementById('toggleSpeakers');
@@ -2401,27 +2394,6 @@ function toggleRec(){
 }
 
 
-  /* ──────────────────────────────────────────────────────────────
-   * Devices + Mic + dB meter
-   * ────────────────────────────────────────────────────────────── */
-  function buildDbBars(){ if (!dbMeter) return; dbMeter.innerHTML=''; for (let i=0;i<20;i++){ const b=document.createElement('div'); b.className='bar'+(i>12? ' yellow': (i>16? ' red':'')); dbMeter.appendChild(b); } }
-  function clearBars(){ if (!dbMeter) return; dbMeter.querySelectorAll('.bar').forEach(b=>b.classList.remove('on')); }
-  function stopDbMeter(){ if (dbAnim) cancelAnimationFrame(dbAnim); dbAnim=null; try{ if (audioStream) audioStream.getTracks().forEach(t=>t.stop()); }catch{} audioStream=null; analyser=null; }
-
-  async function startDbMeter(stream){
-    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) { warn('AudioContext unavailable'); return; }
-    const ctx = new AC(); const src = ctx.createMediaStreamSource(stream); analyser = ctx.createAnalyser(); analyser.fftSize=2048; src.connect(analyser);
-    const bars = Array.from(dbMeter.querySelectorAll('.bar'));
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    const draw = () => {
-      analyser.getByteFrequencyData(data);
-      const avg = data.reduce((a,b)=>a+b,0)/data.length; // 0..255
-      const level = Math.floor((avg/255)*bars.length);
-      bars.forEach((b,i)=> b.classList.toggle('on', i<level));
-      dbAnim = requestAnimationFrame(draw);
-    };
-    draw();
-  }
 
   async function populateDevices(){
     try {
@@ -2709,19 +2681,17 @@ function runSelfChecks(){
     checks.push({ name:'Top Normalize button wired', pass: wired, info: wired ? 'OK' : 'missing' });
   } catch { checks.push({ name:'Top Normalize button wired', pass:false, info:'error' }); }
 
-  // 6) Mic bars drawing (side meter)
+  // 6) Mic bars drawing (top bar meter)
   try {
-    const meter = document.getElementById('dbMeter');
+    const meter = document.getElementById('dbMeterTop');
     const bars = meter ? meter.querySelectorAll('.bar').length : 0;
-    // Consider pass if bars are present; if a stream is active, also check if any bar turns on shortly
     let pass = bars >= 8; let info = `${bars} bars`;
     if (audioStream && analyser){
-      // Sample once after a short delay to see if at least one bar lights
       setTimeout(()=>{
         try {
           const on = meter.querySelectorAll('.bar.on').length;
           const row = checks.find(c=>c.name==='Mic bars drawing');
-          if (row){ row.pass = row.pass && on > 0; row.info = `${bars} bars, ${on} on`; renderSelfChecks(checks); }
+            if (row){ row.pass = row.pass && on > 0; row.info = `${bars} bars, ${on} on`; renderSelfChecks(checks); }
         } catch {}
       }, 300);
       info += ', sampling…';
