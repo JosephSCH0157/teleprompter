@@ -147,6 +147,8 @@ function setStatus(msg){
       apply(last);
     }
     // (Removed stray recorder settings snippet accidentally injected here)
+    // Kick self-checks if available (guard so we only run once)
+    try { if (typeof runSelfChecks === 'function' && !window.__selfChecksRan) { window.__selfChecksRan = true; setTimeout(()=>{ try{ runSelfChecks(); }catch{} }, 120); } } catch {}
 
   // TP: normalize-fallback
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
