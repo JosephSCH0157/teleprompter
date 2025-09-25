@@ -1125,7 +1125,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           const sc = getScroller();
           const offset = Math.round(sc.clientHeight * 0.40);
           // Prefer currentEl, else the paragraph for currentIndex, else most-visible
-          let el = currentEl || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || _ioMostVisible || null;
+          const vis = __anchorObs?.mostVisibleEl?.() || null;
+          let el = currentEl || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || vis || null;
           if (!el && Array.isArray(lineEls)) el = lineEls[0] || null;
           if (el) {
             scrollToEl(el, offset);
@@ -1361,7 +1362,7 @@ function tryStartCatchup(){
   const getAnchorY = () => {
     try {
       // Prefer most-visible paragraph from IntersectionObserver
-      const vis = _ioMostVisible || null;
+  const vis = __anchorObs?.mostVisibleEl?.() || null;
       if (vis) {
         const rect = vis.getBoundingClientRect();
         const vRect = viewer.getBoundingClientRect();
@@ -1581,7 +1582,7 @@ function advanceByTranscript(transcript, isFinal){
   try {
     const vRect = viewer.getBoundingClientRect();
     // Prefer the most visible element if available; else current paragraph
-    const anchorEl = _ioMostVisible || targetPara.el;
+  const anchorEl = (__anchorObs?.mostVisibleEl?.() || null) || targetPara.el;
     const pRect = anchorEl.getBoundingClientRect();
     const anchorY = pRect.top - vRect.top; // anchor relative to viewer
     maybeCatchupByAnchor(anchorY, viewer.clientHeight);
@@ -1924,7 +1925,8 @@ function openDisplay(){
       const vH = Math.max(1, viewer.clientHeight || 1);
       // Choose an anchor element: IO best, then active, then currentIndex
       const active = (scriptEl || viewer)?.querySelector('p.active');
-      const el = _ioMostVisible || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
+      const vis = __anchorObs?.mostVisibleEl?.() || null;
+      const el = vis || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
       let pct = 0;
       if (el){
         const vRect = viewer.getBoundingClientRect();
@@ -1937,28 +1939,6 @@ function openDisplay(){
     } catch {}
   }
 
-  // Dense-threshold IntersectionObserver to monitor paragraph visibility within the scroller
-  const IO_THRESHOLDS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
-  let _io = null;                    // IntersectionObserver instance
-  let _ioVis = new Map();            // Map<Element, number> — latest intersectionRatio
-  let _ioMostVisible = null;         // best current anchor candidate (Element)
-  function _ensureObserver(){
-    const sc = getScroller();
-    if (!sc) return;
-    if (_io) _io.disconnect();
-    _ioVis.clear(); _ioMostVisible = null;
-    const cb = (entries) => {
-      let bestEl = _ioMostVisible, bestR = bestEl ? (_ioVis.get(bestEl)||0) : 0;
-      for (const e of entries){
-        _ioVis.set(e.target, e.intersectionRatio || 0);
-        if ((e.intersectionRatio||0) > bestR){ bestR = e.intersectionRatio||0; bestEl = e.target; }
-      }
-      _ioMostVisible = bestEl;
-      // Update debug chip when IO changes
-      try { updateDebugPosChip(); } catch {}
-    };
-    try { _io = new IntersectionObserver(cb, { root: sc, threshold: IO_THRESHOLDS }); } catch { _io = null; }
-  }
 
   // Dead-man timer: if HUD index advances but scrollTop doesn’t, force a catch-up jump
   let _wdLastIdx = -1, _wdLastTop = 0, _wdLastT = 0;
@@ -2022,9 +2002,9 @@ function stopAutoScroll(){
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
       let anchorY = 0;
-      // Prefer most-visible from IO, then active/current paragraph
+  // Prefer most-visible from IO module, then active/current paragraph
       const active = (scriptEl || viewer)?.querySelector('p.active');
-      const el = _ioMostVisible || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
+  const el = (__anchorObs?.mostVisibleEl?.() || null) || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
       if (el){ const r = el.getBoundingClientRect(); anchorY = r.top - vRect.top; }
       maybeCatchupByAnchor(anchorY, viewer.clientHeight);
     } catch { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} }
