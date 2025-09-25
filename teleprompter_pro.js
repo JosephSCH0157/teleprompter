@@ -1206,9 +1206,30 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   // TP: matcher-tunables
   function applyAggro(){
       const v = (matchAggroSel?.value || '2');
-      if (v === '1'){ SIM_THRESHOLD = 0.60; MATCH_WINDOW_AHEAD = 140; }
-      else if (v === '3'){ SIM_THRESHOLD = 0.50; MATCH_WINDOW_AHEAD = 220; }
-      else { SIM_THRESHOLD = 0.48; MATCH_WINDOW_AHEAD = 200; }
+      if (v === '1'){
+        // Conservative: require higher similarity, smaller search windows, stricter forward jumping
+        SIM_THRESHOLD = 0.62;
+        MATCH_WINDOW_AHEAD = 140;
+        MATCH_WINDOW_BACK  = 20;
+        STRICT_FORWARD_SIM = 0.82;
+        MAX_JUMP_AHEAD_WORDS = 8;
+      }
+      else if (v === '3'){
+        // Aggressive: lower similarity bar, broader windows, allow larger forward nudges
+        SIM_THRESHOLD = 0.48;
+        MATCH_WINDOW_AHEAD = 240;
+        MATCH_WINDOW_BACK  = 40;
+        STRICT_FORWARD_SIM = 0.65;
+        MAX_JUMP_AHEAD_WORDS = 18;
+      }
+      else {
+        // Normal/balanced defaults
+        SIM_THRESHOLD = 0.55;
+        MATCH_WINDOW_AHEAD = 200;
+        MATCH_WINDOW_BACK  = 30;
+        STRICT_FORWARD_SIM = 0.72;
+        MAX_JUMP_AHEAD_WORDS = 12;
+      }
     }
     applyAggro();
     matchAggroSel?.addEventListener('change', (e)=>{
@@ -2325,9 +2346,12 @@ function runSelfChecks(){
 
   // 3) Matcher constants defined and sane
   try {
-    const a = (typeof SIM_THRESHOLD === 'number' && SIM_THRESHOLD > 0 && SIM_THRESHOLD < 1);
-    const b = (typeof MATCH_WINDOW_AHEAD === 'number' && MATCH_WINDOW_AHEAD >= 60 && MATCH_WINDOW_AHEAD <= 1000);
-    checks.push({ name:'Matcher constants', pass: a && b, info:`SIM=${typeof SIM_THRESHOLD==='number'?SIM_THRESHOLD:'?'} WIN=${typeof MATCH_WINDOW_AHEAD==='number'?MATCH_WINDOW_AHEAD:'?'}` });
+  const a = (typeof SIM_THRESHOLD === 'number' && SIM_THRESHOLD > 0 && SIM_THRESHOLD < 1);
+  const b = (typeof MATCH_WINDOW_AHEAD === 'number' && MATCH_WINDOW_AHEAD >= 60 && MATCH_WINDOW_AHEAD <= 1000);
+  const c = (typeof MATCH_WINDOW_BACK === 'number' && MATCH_WINDOW_BACK >= 0 && MATCH_WINDOW_BACK <= 500);
+  const d = (typeof STRICT_FORWARD_SIM === 'number' && STRICT_FORWARD_SIM > 0 && STRICT_FORWARD_SIM < 1);
+  const e = (typeof MAX_JUMP_AHEAD_WORDS === 'number' && MAX_JUMP_AHEAD_WORDS >= 1 && MAX_JUMP_AHEAD_WORDS <= 200);
+  checks.push({ name:'Matcher constants', pass: a && b && c && d && e, info:`SIM=${typeof SIM_THRESHOLD==='number'?SIM_THRESHOLD:'?'} WIN_F=${typeof MATCH_WINDOW_AHEAD==='number'?MATCH_WINDOW_AHEAD:'?'} WIN_B=${typeof MATCH_WINDOW_BACK==='number'?MATCH_WINDOW_BACK:'?'} STRICT=${typeof STRICT_FORWARD_SIM==='number'?STRICT_FORWARD_SIM:'?'} JUMP=${typeof MAX_JUMP_AHEAD_WORDS==='number'?MAX_JUMP_AHEAD_WORDS:'?'}` });
   } catch { checks.push({ name:'Matcher constants', pass:false, info:'not defined' }); }
 
   // 4) Display handshake wiring present (openDisplay + sendToDisplay)
