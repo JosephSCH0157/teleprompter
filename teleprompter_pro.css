@@ -87,12 +87,10 @@ select { font-size: 14px; }
     /* Segmented LED dB meter */
     /* Top-bar dB meter (primary) */
     #dbMeterTop{display:flex;gap:2px;height:14px;align-items:flex-end;margin-left:12px;position:relative;padding:0 2px;border:1px solid var(--edge);border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#124,#124 5%,#135 5%,#135 20%,#145 20%,#145 40%,#254 40%,#352 60%,#542 80%,#731 90%,#921 95%,#b11);background-size:100% 100%;}
-    /* (Deprecated / legacy sidebar meter kept for backwards compatibility if still in DOM) */
-    #dbMeter{display:flex;gap:2px;height:14px;align-items:flex-end;margin-left:12px;position:relative;padding:0 2px;border:1px solid var(--edge);border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#124,#124 5%,#135 5%,#135 20%,#145 20%,#145 40%,#254 40%,#352 60%,#542 80%,#731 90%,#921 95%,#b11);background-size:100% 100%;}
     .bar{width:6px;height:100%;background:linear-gradient(to top,var(--bar-color,#175030),var(--bar-color,#175030));flex:0 0 auto;opacity:.25;border-radius:2px;position:relative;transition:opacity .12s linear, filter .2s ease}
     .bar.on{opacity:1;filter:brightness(1.15)}
-    /* Peak hold indicator: thin overlay segment at top of bar stack */
-    #dbMeterTop .peak-marker, #dbMeter .peak-marker{position:absolute;top:-3px;height:3px;width:6px;background:#fff;border-radius:1px;box-shadow:0 0 4px rgba(255,255,255,.6);opacity:.85;transition:transform .08s linear, opacity .3s ease, background-color .15s linear, box-shadow .15s linear;}
+    /* Peak hold indicator */
+    #dbMeterTop .peak-marker{position:absolute;top:-3px;height:3px;width:6px;background:#fff;border-radius:1px;box-shadow:0 0 4px rgba(255,255,255,.6);opacity:.85;transition:transform .08s linear, opacity .3s ease, background-color .15s linear, box-shadow .15s linear;}
 
     .app{display:grid;grid-template-columns:320px 1fr;flex:1 1 auto;min-height:0}
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
