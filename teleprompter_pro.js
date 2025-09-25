@@ -1344,8 +1344,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const camOpacityS = document.getElementById('settingsCamOpacity');
       const camMirrorS  = document.getElementById('settingsCamMirror');
       if (camSelS && camDeviceSel){
-        // Mirror camera selection both ways only on change (device list is populated centrally)
-        camSelS.addEventListener('change', ()=>{ camDeviceSel.value = camSelS.value; });
+        camSelS.addEventListener('change', async ()=>{
+          camDeviceSel.value = camSelS.value;
+          // If camera already active, hot-swap without full restart
+          if (camVideo?.srcObject && camSelS.value) {
+            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
+          }
+        });
       }
   startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
   stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
@@ -2770,6 +2775,42 @@ function toggleRec(){
       await pc.setLocalDescription(offer);
       sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
     } catch (e) { warn('ensureCamPeer failed', e); }
+  }
+
+  // Hot-swap camera device without renegotiation when possible
+  async function switchCamera(deviceId){
+    try {
+      if (!deviceId) return;
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+        audio: false
+      });
+      const newTrack = newStream.getVideoTracks()[0];
+      const oldTracks = camStream?.getVideoTracks?.() || [];
+      // Update local preview
+      camStream = newStream;
+      camVideo.srcObject = newStream;
+      // Replace outbound track if we have a sender
+      const sender = camPC?.getSenders?.().find(s => s.track && s.track.kind === 'video');
+      if (sender && newTrack){
+        await sender.replaceTrack(newTrack);
+        oldTracks.forEach(t => { try { t.stop(); } catch {} });
+      } else {
+        // No sender yet → build peer
+        await ensureCamPeer();
+      }
+      // Re-apply presentation props to display
+      try {
+        const pct = Math.max(15, Math.min(60, Number(camSize.value)||28));
+        const op  = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100));
+        sendToDisplay({ type:'cam-sizing', pct });
+        sendToDisplay({ type:'cam-opacity', opacity: op });
+        sendToDisplay({ type:'cam-mirror', on: !!camMirror.checked });
+      } catch {}
+    } catch (e) {
+      warn('switchCamera failed', e);
+      throw e;
+    }
   }
   async function togglePiP(){ try{ if (document.pictureInPictureElement){ await document.exitPictureInPicture(); } else { await camVideo.requestPictureInPicture(); } } catch(e){ warn('PiP failed', e); } }
 
