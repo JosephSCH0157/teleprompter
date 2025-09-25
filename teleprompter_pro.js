@@ -1564,6 +1564,29 @@ function scrollToCurrentIndex(){
   }
 }
 
+// Ensure init runs (was previously implicit). Guard against double-run.
+try {
+  if (!window.__tpInitScheduled) {
+    window.__tpInitScheduled = true;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => { try { init(); } catch(e){ console.error('init failed', e); } });
+    } else {
+      Promise.resolve().then(()=>{ try { init(); } catch(e){ console.error('init failed', e); } });
+    }
+  }
+} catch {}
+
+// Last-resort event delegation (if direct listeners failed) so core buttons still act.
+document.addEventListener('click', (e)=>{
+  const id = e.target?.id;
+  try {
+    if (id === 'openDisplayBtn' && typeof openDisplay === 'function') { openDisplay(); }
+    else if (id === 'closeDisplayBtn' && typeof closeDisplay === 'function') { closeDisplay(); }
+    else if (id === 'presentBtn' && typeof openDisplay === 'function') { openDisplay(); }
+    else if (id === 'micBtn') { requestMic(); }
+  } catch(err){ console.warn('Delegated handler error', err); }
+}, { capture:true });
+
 // Gentle PID-like catch-up controller
 function tryStartCatchup(){
   if (!__scrollCtl?.startAutoCatchup || !viewer) return;
