@@ -1825,6 +1825,27 @@ function openDisplay(){
   function sendToDisplay(payload){ if(displayWin && !displayWin.closed) displayWin.postMessage(payload, '*'); }
   window.sendToDisplay = sendToDisplay;
 
+  // Centralized scroll target + helpers (always scroll the same container, not window)
+  function getScroller(){ return viewer; }
+  function clampScrollTop(y){
+    const sc = getScroller(); if (!sc) return 0;
+    const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+    return Math.max(0, Math.min(y, max));
+  }
+  function scrollByPx(px){
+    const sc = getScroller(); if (!sc) return;
+    sc.scrollTop = clampScrollTop(sc.scrollTop + (Number(px)||0));
+  }
+  function scrollToY(y){
+    const sc = getScroller(); if (!sc) return;
+    sc.scrollTop = clampScrollTop(Number(y)||0);
+  }
+  function scrollToEl(el, offset=0){
+    const sc = getScroller(); if (!sc || !el) return;
+    const y = (el.offsetTop||0) - (Number(offset)||0);
+    sc.scrollTop = clampScrollTop(y);
+  }
+
   /* ──────────────────────────────────────────────────────────────
    * Typography + Auto‑scroll + Timer
    * ────────────────────────────────────────────────────────────── */
