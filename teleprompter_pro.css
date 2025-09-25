@@ -105,7 +105,7 @@ select { font-size: 14px; }
     .script{max-width:900px;margin:0 auto;padding:40px}
     .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
     .u{ text-decoration: underline; }
-.note{ color: var(--muted); font-style: italic; }
+.note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 
     .marker{position:sticky;top:40%;height:2px;background:var(--accent);box-shadow:0 0 6px var(--accent)}
 
