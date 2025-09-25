@@ -55,55 +55,93 @@ function setStatus(msg){
 }
 
 // Tiny toast utility (optional) for subtle pings
-window.toast = (msg) => {
-  try {
-    const t = document.createElement('div');
-    t.textContent = String(msg || '');
-    t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);' +
-      'background:#0e141b;border:1px solid var(--edge);padding:8px 12px;border-radius:10px;color:#c8d2dc;z-index:99999;opacity:0;pointer-events:none;';
-    document.body.appendChild(t);
-    requestAnimationFrame(()=>{ t.style.transition='opacity .2s ease, transform .2s ease'; t.style.opacity='1'; });
-    setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(8px)'; }, 1400);
-    setTimeout(()=> t.remove(), 1800);
-  } catch {}
-};
+    // Incremental build only once; subsequent opens just sync values
+    let _settingsBuilt = false;
+    function buildSettingsContent(){
+      if (!settingsBody) return;
+      if (_settingsBuilt){ syncSettingsValues(); return; }
+      _settingsBuilt = true;
+      const frag = document.createDocumentFragment();
+      const card = (id, title, tab, innerHtml) => {
+        const d = document.createElement('div');
+        d.className = 'settings-card';
+        d.dataset.tab = tab;
+        d.id = id;
+        d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
+        return d;
+      };
+      frag.appendChild(card('cardMic','Microphone','media',`
+        <div class="settings-inline-row">
+          <button id="settingsReqMic" class="btn-chip">Request mic</button>
+          <select id="settingsMicSel" class="select-md"></select>
+        </div>
+        <div class="settings-small">Select input and grant permission for speech sync & dB meter.</div>`));
+      frag.appendChild(card('cardCam','Camera','media',`
+        <div class="settings-inline-row">
+          <button id="settingsStartCam" class="btn-chip">Start</button>
+          <button id="settingsStopCam" class="btn-chip">Stop</button>
+          <select id="settingsCamSel" class="select-md"></select>
+        </div>
+        <div class="settings-inline-row">
+          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${camSize?.value||28}" style="width:70px"></label>
+          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${camOpacity?.value||100}" style="width:80px"></label>
+          <label><input id="settingsCamMirror" type="checkbox" ${camMirror?.checked? 'checked':''}/> Mirror</label>
+        </div>
+        <div class="settings-small">Camera overlay floats over the script.</div>`));
+      frag.appendChild(card('cardSpeakers','Speakers','general',`
+        <div class="settings-inline-row">
+          <button id="settingsShowSpeakers" class="btn-chip">${speakersBody?.classList.contains('hidden')?'Show':'Hide'} List</button>
+          <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
+        </div>
+        <div class="settings-small">Manage speaker tags & quick normalization.</div>`));
+      frag.appendChild(card('cardRecording','Recording','recording',`
+        <div class="settings-inline-row">
+          <label><input type="checkbox" id="settingsEnableObs" ${enableObsChk?.checked?'checked':''}/> Enable OBS</label>
+          <input id="settingsObsUrl" class="obs-url" type="text" value="${obsUrlInput?.value||'ws://127.0.0.1:4455'}" placeholder="ws://host:port" />
+          <input id="settingsObsPass" class="obs-pass" type="password" value="${obsPassInput?.value||''}" placeholder="password" />
+          <button id="settingsObsTest" class="btn-chip">Test</button>
+        </div>
+        <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`));
+      settingsBody.appendChild(frag);
+      wireSettingsDynamic();
+      syncSettingsValues();
+      setupSettingsTabs();
+    }
 
-// ⬇️ this line was missing; without it, nothing gets wired
-document.addEventListener('DOMContentLoaded', init);
+    function syncSettingsValues(){
+      // Mic devices
+      const micSel    = document.getElementById('settingsMicSel');
+      if (micSel && micDeviceSel){
+        if (micSel.innerHTML !== micDeviceSel.innerHTML) micSel.innerHTML = micDeviceSel.innerHTML;
+        micSel.value = micDeviceSel.value;
+      }
+      const camSelS = document.getElementById('settingsCamSel');
+      if (camSelS && camDeviceSel){
+        if (camSelS.innerHTML !== camDeviceSel.innerHTML) camSelS.innerHTML = camDeviceSel.innerHTML;
+        camSelS.value = camDeviceSel.value;
+      }
+      const showSpk = document.getElementById('settingsShowSpeakers');
+      if (showSpk) showSpk.textContent = speakersBody?.classList.contains('hidden') ? 'Show List' : 'Hide List';
+      const obsEnable = document.getElementById('settingsEnableObs');
+      if (obsEnable && enableObsChk) obsEnable.checked = enableObsChk.checked;
+      const obsUrlS = document.getElementById('settingsObsUrl');
+      if (obsUrlS && obsUrlInput) obsUrlS.value = obsUrlInput.value;
+      const obsPassS = document.getElementById('settingsObsPass');
+      if (obsPassS && obsPassInput) obsPassS.value = obsPassInput.value;
+    }
 
-// Lightweight modular imports (browser native via type="module" in HTML)
-import('./eggs.js').then(mod => { window.__eggs = mod; }).catch(()=>{});
-// Optional debug HUD (toggle with ~) — already imported earlier
-try { import('./debug-tools.js').then(m => m.installDebugHud?.()).catch(()=>{}); } catch {}
-// New: scroll helpers and anchor observer
-let __scrollHelpers = null;
-let __anchorObs = null;
-// Optional debug HUD (toggle with ~)
-try { import('./debug-tools.js').then(m => m.installDebugHud?.()).catch(()=>{}); } catch {}
-import('./help.js').then(mod => {
-  window.__help = mod;
-  // Expose/override public helpers for callers already using window.*
-  window.showValidation = mod.showValidation;
-  window.validateStandardTags = mod.validateStandardTags;
-}).catch(()=>{});
-// Scroll control (gentle PID-like catch-up)
-let __scrollCtl = null;
-try { import('./scroll-control.js').then(mod => { __scrollCtl = mod; }).catch(()=>{}); } catch {}
-// Recorder registry (optional). If missing, calls will be no-ops.
-let __recorder = null;
-try {
-  import('./recorders.js').then(mod => {
-    __recorder = mod;
-    // Initialize built-in adapters inside recorders module (idempotent)
-    try { mod.initBuiltIns?.(); } catch {}
-    // Seed defaults if nothing saved yet
-    try {
-      const hasSaved = localStorage.getItem('tp_rec_settings_v1');
-      if (!hasSaved && mod.setSettings) {
-        mod.setSettings({
-          mode: 'multi',
-          selected: ['obs','descript'],
-          configs: {
+    function setupSettingsTabs(){
+      const tabs = document.querySelectorAll('#settingsTabs .settings-tab');
+      const apply = (name) => {
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+        settingsBody.querySelectorAll('.settings-card').forEach(c => {
+          const show = c.dataset.tab === name || (name === 'advanced' && c.dataset.tab === 'advanced');
+          c.style.display = show ? 'flex' : 'none';
+        });
+      };
+      tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
+      apply('general');
+    }
             obs: { url:'ws://127.0.0.1:4455', password:'' },
             companion: { url:'http://127.0.0.1:8000', buttonId:'1.1' },
             bridge: { startUrl:'http://127.0.0.1:5723/record/start', stopUrl:'' },
@@ -1108,7 +1146,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         micSel.value = micDeviceSel.value;
         micSel.addEventListener('change', ()=>{ micDeviceSel.value = micSel.value; });
       }
-      reqMicBtn?.addEventListener('click', ()=> micBtn?.click());
+  reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
       // Camera
       const startCamS = document.getElementById('settingsStartCam');
       const stopCamS  = document.getElementById('settingsStopCam');
@@ -1117,8 +1155,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const camOpacityS = document.getElementById('settingsCamOpacity');
       const camMirrorS  = document.getElementById('settingsCamMirror');
       if (camSelS && camDeviceSel){ camSelS.innerHTML = camDeviceSel.innerHTML; camSelS.value = camDeviceSel.value; camSelS.addEventListener('change', ()=>{ camDeviceSel.value = camSelS.value; }); }
-      startCamS?.addEventListener('click', ()=> startCamBtn?.click());
-      stopCamS?.addEventListener('click', ()=> stopCamBtn?.click());
+  startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
+  stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
       camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
       camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
       camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
@@ -1134,7 +1172,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
       obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
       obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
-      obsTestS?.addEventListener('click', ()=> obsTestBtn?.click());
+  obsTestS?.addEventListener('click', async ()=> { obsTestBtn?.click(); setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600); });
     }
 
     // OBS URL/password change persistence (debounced lightweight)

@@ -136,6 +136,10 @@ select { font-size: 14px; }
 .settings-card h4{margin:0 0 4px;font-size:15px}
 .settings-small{font-size:12px;color:var(--muted)}
 .settings-inline-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.settings-tabs{display:flex;gap:6px;margin:4px 0 4px;flex-wrap:wrap}
+.settings-tab{background:#0e141b;border:1px solid var(--edge);padding:6px 10px;border-radius:20px;font-size:12px;cursor:pointer}
+.settings-tab.active{background:#12202a;color:var(--accent);border-color:var(--accent)}
+.settings-footer{margin-top:8px;opacity:.7;text-align:right}
 
 /* Disable browser smooth scrolling for live-follow (always snap immediately) */
 #viewer, #scriptScrollContainer { scroll-behavior: auto !important; }
