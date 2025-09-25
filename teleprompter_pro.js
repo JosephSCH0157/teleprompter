@@ -587,31 +587,39 @@ function wireNormalizeButton(btn){
   async function populateDevices(){
     try {
       if (!navigator.mediaDevices?.enumerateDevices) return;
-      const list = await navigator.mediaDevices.enumerateDevices();
-      const audios = list.filter(d => d.kind === 'audioinput');
-      const videos = list.filter(d => d.kind === 'videoinput');
-      const micSel = document.getElementById('settingsMicSel');
-      if (micSel){
-        const cur = micSel.value;
-        micSel.innerHTML = '';
-        for (const d of audios){
-          const opt = document.createElement('option');
-          opt.value = d.deviceId; opt.textContent = d.label || 'Microphone';
-          micSel.appendChild(opt);
-        }
-        // Restore selection if still present
-        if (cur && Array.from(micSel.options).some(o=>o.value===cur)) micSel.value = cur;
-      }
-      if (camDeviceSel){
-        const curC = camDeviceSel.value;
-        camDeviceSel.innerHTML = '';
-        for (const d of videos){
-          const opt = document.createElement('option');
-          opt.value = d.deviceId; opt.textContent = d.label || 'Camera';
-          camDeviceSel.appendChild(opt);
-        }
-        if (curC && Array.from(camDeviceSel.options).some(o=>o.value===curC)) camDeviceSel.value = curC;
-      }
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const aud = devs.filter(d => d.kind === 'audioinput');
+      const cams = devs.filter(d => d.kind === 'videoinput');
+
+      const micSelA = (typeof micDeviceSel !== 'undefined') ? micDeviceSel : null;
+      const micSelB = document.getElementById('settingsMicSel');
+      [micSelA, micSelB].filter(Boolean).forEach(sel => {
+        try {
+          const cur = sel.value;
+          sel.innerHTML = '';
+            aud.forEach(d => {
+              const o = document.createElement('option');
+              o.value = d.deviceId; o.textContent = d.label || 'Microphone';
+              sel.appendChild(o);
+            });
+          if (cur && Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur;
+        } catch {}
+      });
+
+      const camSelA = (typeof camDeviceSel !== 'undefined') ? camDeviceSel : null;
+      const camSelB = document.getElementById('settingsCamSel');
+      [camSelA, camSelB].filter(Boolean).forEach(sel => {
+        try {
+          const cur = sel.value;
+          sel.innerHTML = '';
+            cams.forEach(d => {
+              const o = document.createElement('option');
+              o.value = d.deviceId; o.textContent = d.label || 'Camera';
+              sel.appendChild(o);
+            });
+          if (cur && Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur;
+        } catch {}
+      });
     } catch (e) { /* ignore */ }
   }
 
