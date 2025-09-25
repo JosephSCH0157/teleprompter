@@ -382,6 +382,9 @@ function wireNormalizeButton(btn){
   let displayWin = null;
   let displayReady = false;
   let dbAnim = null, analyser = null, audioStream = null;
+  let peakHold = { value:0, decay:0.005, lastUpdate:0 };
+  const DEVICE_KEY = 'tp_last_input_device_v1';
+  let pendingAutoStart = false;
   let recActive = false;          // you already have this
   let recog = null;               // SpeechRecognition instance
   let recAutoRestart = true;      // keep recognition alive while active
@@ -462,6 +465,8 @@ function wireNormalizeButton(btn){
     if (bars.length >= 16) return bars;
     target.innerHTML = '';
     for (let i=0;i<20;i++){ const b=document.createElement('div'); b.className='bar'; target.appendChild(b); }
+    // Peak marker
+    const peak = document.createElement('div'); peak.className='peak-marker'; peak.style.transform='translateX(0)'; target.appendChild(peak);
     return Array.from(target.querySelectorAll('.bar'));
   }
 
@@ -483,12 +488,33 @@ function wireNormalizeButton(btn){
     analyser.fftSize = 2048;
     src.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
-  const topBars  = buildDbBars(dbMeterTop);
+    const topBars  = buildDbBars(dbMeterTop);
+    const peakEl = dbMeterTop?.querySelector('.peak-marker');
+    peakHold.value = 0; peakHold.lastUpdate = performance.now();
     const draw = () => {
       analyser.getByteFrequencyData(data);
-      const avg = data.reduce((a,b)=>a+b,0)/data.length; // 0..255
-  const bars = Math.max(0, Math.min(topBars.length, Math.round((avg/255)*topBars.length)));
-  for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i < bars);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length; // 0..255 average magnitude
+      const rms = Math.sqrt(data.reduce((a,b)=>a + b*b, 0) / data.length) / 255; // 0..1
+      const dbfs = (rms>0 ? (20 * Math.log10(rms)) : -Infinity); // approximate dBFS
+      const bars = Math.max(0, Math.min(topBars.length, Math.round((avg/255)*topBars.length)));
+      for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i < bars);
+      // Peak hold: keep highest bar for a short decay
+      const now = performance.now();
+      if (bars > peakHold.value) { peakHold.value = bars; peakHold.lastUpdate = now; }
+      else if (now - peakHold.lastUpdate > 350) { // start decay after hold period
+        peakHold.value = Math.max(0, peakHold.value - peakHold.decay * ( (now - peakHold.lastUpdate) / 16 ));
+      }
+      const peakIndex = Math.max(0, Math.min(topBars.length-1, Math.floor(peakHold.value-1)));
+      if (peakEl){
+        const bar = topBars[peakIndex];
+        if (bar){
+          const x = bar.offsetLeft;
+          peakEl.style.transform = `translateX(${x}px)`;
+          peakEl.style.opacity = peakHold.value>0?'.9':'0';
+        }
+        // Tooltip stats (rounded)
+        peakEl.title = `Approx RMS: ${(rms*100).toFixed(0)}%\nApprox dBFS: ${dbfs===-Infinity?'–∞':dbfs.toFixed(1)} dB`;
+      }
       dbAnim = requestAnimationFrame(draw);
     };
     draw();
@@ -501,6 +527,8 @@ function wireNormalizeButton(btn){
       audioStream = stream;
       try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
       startDbMeter(stream);
+      // Persist chosen device
+      try { if (micDeviceSel?.value) localStorage.setItem(DEVICE_KEY, micDeviceSel.value); } catch {}
     } catch(e){
       warn('Mic denied or failed', e);
       try { permChip && (permChip.textContent = 'Mic: denied'); } catch {}
@@ -544,7 +572,21 @@ function wireNormalizeButton(btn){
   // Wire mic + devices
     micBtn?.addEventListener('click', requestMic);
     refreshDevicesBtn?.addEventListener('click', populateDevices);
-    try { populateDevices(); } catch {}
+    try {
+      await populateDevices();
+      // Pre-select last device if present
+      try {
+        const last = localStorage.getItem(DEVICE_KEY);
+        if (last && micDeviceSel && Array.from(micDeviceSel.options).some(o=>o.value===last)) {
+          micDeviceSel.value = last;
+          pendingAutoStart = true;
+        }
+      } catch {}
+      if (pendingAutoStart) {
+        // Attempt auto-start (user gesture may still be required in some browsers)
+        requestMic();
+      }
+    } catch {}
 
   // TP: normalize-top-btn
   // Wire Top-bar Normalize button

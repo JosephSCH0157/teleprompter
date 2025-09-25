@@ -85,11 +85,13 @@ select { font-size: 14px; }
 .tag .dot{width:10px;height:10px;border-radius:50%}
 
     /* Segmented LED dB meter */
-    #dbMeter{display:flex;gap:2px;height:14px;align-items:flex-end;margin-left:12px}
-    .bar{width:6px;height:100%;background:#1a3;flex:0 0 auto;opacity:.35;border-radius:2px}
+    #dbMeter{display:flex;gap:2px;height:14px;align-items:flex-end;margin-left:12px;position:relative}
+    .bar{width:6px;height:100%;background:#1a3;flex:0 0 auto;opacity:.35;border-radius:2px;position:relative}
     .bar.on{opacity:1}
     .bar.yellow{background:#cc3}
     .bar.red{background:#c33}
+    /* Peak hold indicator: thin overlay segment at top of bar stack */
+    #dbMeter .peak-marker{position:absolute;top:-3px;height:3px;width:6px;background:#fff;border-radius:1px;box-shadow:0 0 4px rgba(255,255,255,.6);opacity:.85;transition:transform .08s linear, opacity .3s ease;}
 
     .app{display:grid;grid-template-columns:320px 1fr;flex:1 1 auto;min-height:0}
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
