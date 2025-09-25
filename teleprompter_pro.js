@@ -2795,6 +2795,29 @@ function toggleRec(){
       if (sender && newTrack){
         await sender.replaceTrack(newTrack);
         oldTracks.forEach(t => { try { t.stop(); } catch {} });
+        // Some browsers might require renegotiation if capabilities changed (rare)
+        try {
+          if (camPC && camPC.signalingState === 'stable') {
+            // Heuristic: if connectionState not 'connected' shortly after swap, force new offer
+            setTimeout(async () => {
+              try {
+                if (!camPC) return;
+                const st = camPC.connectionState;
+                if (st === 'failed' || st === 'disconnected') {
+                  // Tear down and rebuild cleanly
+                  try { camPC.close(); } catch {}
+                  camPC = null;
+                  await ensureCamPeer();
+                } else if (st !== 'connected') {
+                  // Attempt proactive re-offer without full teardown
+                  const offer = await camPC.createOffer();
+                  await camPC.setLocalDescription(offer);
+                  sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
+                }
+              } catch {}
+            }, 400);
+          }
+        } catch {}
       } else {
         // No sender yet → build peer
         await ensureCamPeer();
