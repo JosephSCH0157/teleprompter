@@ -9,17 +9,6 @@
 <script defer src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
 <link href="teleprompter_pro.css" rel="stylesheet"/>
-<style>
-.hidden{ display:none !important; }
-.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); -webkit-backdrop-filter:saturate(1.2) blur(2px); backdrop-filter:saturate(1.2) blur(2px);
-  z-index:9999; display:flex; align-items:center; justify-content:center; }
-.sheet{ width:min(820px,92vw); max-height:85vh; overflow:auto; background:#0e141b; border:1px solid var(--edge);
-  border-radius:16px; padding:20px; }
-.sheet header{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
-.hr{ border:0; border-top:1px solid var(--edge); margin:12px 0; }
-.shortcuts-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-.btn-chip{ background:#0e141b; border:1px solid var(--edge); padding:8px 10px; border-radius:10px; cursor:pointer; }
-</style>
 </head>
 <body>
 <div class="topbar">
