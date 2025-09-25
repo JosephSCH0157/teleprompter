@@ -123,11 +123,11 @@ function wireNormalizeButton(btn){
     }
 
     function syncSettingsValues(){
-      // Mic devices
-      const micSel    = document.getElementById('settingsMicSel');
-      if (micSel && micDeviceSel){
-        if (micSel.innerHTML !== micDeviceSel.innerHTML) micSel.innerHTML = micDeviceSel.innerHTML;
-        micSel.value = micDeviceSel.value;
+      // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
+      const micSel = document.getElementById('settingsMicSel');
+      if (micSel && !micSel.options.length) {
+        // If not yet populated, attempt populateDevices (async, fire and forget)
+        try { populateDevices(); } catch {}
       }
       const camSelS = document.getElementById('settingsCamSel');
       if (camSelS && camDeviceSel){
@@ -570,13 +570,15 @@ function wireNormalizeButton(btn){
 
   async function requestMic(){
     try {
-      const constraints = { audio: { deviceId: micDeviceSel?.value ? { exact: micDeviceSel.value } : undefined } };
+      const sel = document.getElementById('settingsMicSel');
+      const chosen = sel?.value;
+      const constraints = { audio: { deviceId: chosen ? { exact: chosen } : undefined } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       audioStream = stream;
       try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
       startDbMeter(stream);
       // Persist chosen device
-      try { if (micDeviceSel?.value) localStorage.setItem(DEVICE_KEY, micDeviceSel.value); } catch {}
+      try { if (chosen) localStorage.setItem(DEVICE_KEY, chosen); } catch {}
     } catch(e){
       warn('Mic denied or failed', e);
       try { permChip && (permChip.textContent = 'Mic: denied'); } catch {}
@@ -588,12 +590,13 @@ function wireNormalizeButton(btn){
       if (!navigator.mediaDevices?.enumerateDevices) return;
       const list = await navigator.mediaDevices.enumerateDevices();
       const audios = list.filter(d => d.kind === 'audioinput');
-      if (micDeviceSel){
-        micDeviceSel.innerHTML = '';
+      const micSel = document.getElementById('settingsMicSel');
+      if (micSel){
+        micSel.innerHTML = '';
         for (const d of audios){
           const opt = document.createElement('option');
           opt.value = d.deviceId; opt.textContent = d.label || 'Microphone';
-          micDeviceSel.appendChild(opt);
+          micSel.appendChild(opt);
         }
       }
     } catch (e) { /* ignore */ }
@@ -608,7 +611,7 @@ function wireNormalizeButton(btn){
     // Query essentials
     permChip = document.getElementById('permChip');
     micBtn = document.getElementById('micBtn');
-    micDeviceSel = document.getElementById('micDeviceSel');
+  micDeviceSel = document.getElementById('settingsMicSel'); // legacy var now points to settings selector
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
     dbMeterTop = document.getElementById('dbMeterTop');
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
@@ -625,8 +628,11 @@ function wireNormalizeButton(btn){
       // Pre-select last device if present
       try {
         const last = localStorage.getItem(DEVICE_KEY);
-        if (last && micDeviceSel && Array.from(micDeviceSel.options).some(o=>o.value===last)) {
-          micDeviceSel.value = last;
+        if (last) {
+          const sel = document.getElementById('settingsMicSel');
+          if (sel && Array.from(sel.options).some(o=>o.value===last)) {
+            sel.value = last;
+          }
           pendingAutoStart = true;
         }
       } catch {}
@@ -1266,10 +1272,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       // Mic
       const reqMicBtn = document.getElementById('settingsReqMic');
       const micSel    = document.getElementById('settingsMicSel');
-      if (micSel && micDeviceSel){
-        micSel.innerHTML = micDeviceSel.innerHTML;
-        micSel.value = micDeviceSel.value;
-        micSel.addEventListener('change', ()=>{ micDeviceSel.value = micSel.value; });
+      if (micSel){
+        micSel.addEventListener('change', ()=>{ try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {}; });
       }
   reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
       // Camera
