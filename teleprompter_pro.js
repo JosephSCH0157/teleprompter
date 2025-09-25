@@ -1294,7 +1294,11 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const reqMicBtn = document.getElementById('settingsReqMic');
       const micSel    = document.getElementById('settingsMicSel');
       if (micSel){
-        micSel.addEventListener('change', ()=>{ try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {}; });
+        micSel.addEventListener('change', ()=>{
+          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
+          // Mirror value into legacy micDeviceSel element if it still exists
+          try { if (typeof micDeviceSel !== 'undefined' && micDeviceSel && micDeviceSel !== micSel) micDeviceSel.value = micSel.value; } catch {}
+        });
       }
   reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
       // Camera
@@ -1304,7 +1308,10 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const camSizeS  = document.getElementById('settingsCamSize');
       const camOpacityS = document.getElementById('settingsCamOpacity');
       const camMirrorS  = document.getElementById('settingsCamMirror');
-      if (camSelS && camDeviceSel){ camSelS.innerHTML = camDeviceSel.innerHTML; camSelS.value = camDeviceSel.value; camSelS.addEventListener('change', ()=>{ camDeviceSel.value = camSelS.value; }); }
+      if (camSelS && camDeviceSel){
+        // Mirror camera selection both ways only on change (device list is populated centrally)
+        camSelS.addEventListener('change', ()=>{ camDeviceSel.value = camSelS.value; });
+      }
   startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
   stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
       camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
