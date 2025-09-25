@@ -1248,10 +1248,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     } catch(e) { console.warn('io-anchor load failed', e); }
     try {
       const scMod = await import('./scroll-control.js');
-      if (scMod?.createScrollController) {
-        __scrollCtl = scMod.createScrollController(() => viewer);
-      }
-    } catch(e) { console.warn('scroll-control load failed', e); }
+      __scrollCtl = scMod.createScrollController(() => viewer);
+    } catch (e) { console.warn('scroll-control load failed', e); }
   // …keep the rest of your init() as-is…
 
     // Wire UI
