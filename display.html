@@ -44,7 +44,7 @@
             </div>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
-          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button></div>
+          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button></div>
           <div id="preRoll"><div class="card"><div class="hint">Begin speaking in</div><div class="num" id="preRollNum">3</div></div></div>
           <script>
             const scriptEl = document.getElementById('script');
@@ -99,6 +99,30 @@
               if(!document.body.dataset.inv){ document.body.dataset.inv=1; document.body.style.background = '#f4f7fb'; document.body.style.color = '#0b0d10'; }
               else { delete document.body.dataset.inv; document.body.style.background = '#000'; document.body.style.color = '#e7ebf0'; }
             }
+            function ensureMirrorWrap(){
+              let wrap = document.getElementById('mirrorCamWrap');
+              if (!wrap){
+                wrap = document.createElement('div');
+                wrap.id = 'mirrorCamWrap';
+                wrap.style.cssText = 'position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;z-index:1200;';
+                document.body.appendChild(wrap);
+              }
+              return wrap;
+            }
+            function showCamLoading(msg){
+              let ld = document.getElementById('mirrorCamLoading');
+              if (!msg){ if (ld) ld.style.display='none'; return; }
+              if (!ld){
+                const wrap = ensureMirrorWrap();
+                ld = document.createElement('div');
+                ld.id = 'mirrorCamLoading';
+                ld.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px system-ui;color:#9ba7b2;background:rgba(0,0,0,.55);border:1px solid var(--edge);border-radius:12px;backdrop-filter:blur(2px);';
+                wrap.appendChild(ld);
+              }
+              ld.textContent = msg;
+              ld.style.display='flex';
+            }
+            showCamLoading('Connecting camera…');
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // WebRTC camera offer/candidate handling
@@ -107,15 +131,20 @@
                   const pc = new RTCPeerConnection({ iceServers: [] });
                   window.__camPC = pc;
                   pc.ontrack = (e) => {
+                    const wrap = ensureMirrorWrap();
                     let v = document.getElementById('mirrorCam');
                     if (!v){
                       v = document.createElement('video');
                       v.id = 'mirrorCam';
                       v.autoplay = true; v.playsInline = true; v.muted = true;
-                      v.style.cssText = 'position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;z-index:1200;';
-                      document.body.appendChild(v);
+                      v.style.cssText = 'width:100%;max-width:100%;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;display:block;';
+                      wrap.appendChild(v);
+                      v.addEventListener('playing', ()=> showCamLoading(''));
+                      v.addEventListener('loadeddata', ()=> { if (!v.paused) showCamLoading(''); });
+                      v.addEventListener('waiting', ()=> showCamLoading('Reconnecting…'));
+                      v.addEventListener('emptied', ()=> showCamLoading('Connecting camera…'));
                     }
-                    if (e.streams && e.streams[0]) v.srcObject = e.streams[0];
+                    if (e.streams && e.streams[0]) { v.srcObject = e.streams[0]; }
                   };
                   pc.onicecandidate = (e) => { if (e.candidate) { try { window.opener && window.opener.postMessage({ type:'cam-ice', candidate:e.candidate }, '*'); } catch {} } };
                   pc.setRemoteDescription({ type:'offer', sdp: d.sdp }).then(async ()=>{
@@ -149,6 +178,20 @@
             });
             document.getElementById('flip').onclick = flip;
             document.getElementById('invert').onclick = invert;
+            const camPiPBtn = document.getElementById('camPiP');
+            if (camPiPBtn){
+              camPiPBtn.onclick = async () => {
+                try {
+                  const v = document.getElementById('mirrorCam');
+                  if (!v) { showCamLoading('No camera'); return; }
+                  if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                  } else if (v.requestPictureInPicture) {
+                    await v.requestPictureInPicture();
+                  }
+                } catch (e){ console.warn('PiP failed', e); }
+              };
+            }
             window.addEventListener('keydown', (e)=>{
               const k = (e.key||'').toLowerCase();
               if (k === 'f'){ e.preventDefault(); flip(); }
