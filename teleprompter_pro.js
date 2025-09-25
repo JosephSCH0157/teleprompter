@@ -520,12 +520,24 @@ function wireNormalizeButton(btn){
     const topBars  = buildDbBars(dbMeterTop);
     const peakEl = dbMeterTop?.querySelector('.peak-marker');
     peakHold.value = 0; peakHold.lastUpdate = performance.now();
+    // Log scaling configuration
+    const dBFloor = -60;  // anything quieter treated as silence
+    const attack = 0.55;  // 0..1 (higher = faster rise)
+    const release = 0.15; // 0..1 (higher = faster fall)
+    let levelSmooth = 0;  // smoothed 0..1 level after log mapping
     const draw = () => {
       analyser.getByteFrequencyData(data);
-      const avg = data.reduce((a,b)=>a+b,0)/data.length; // 0..255 average magnitude
-      const rms = Math.sqrt(data.reduce((a,b)=>a + b*b, 0) / data.length) / 255; // 0..1
-      const dbfs = (rms>0 ? (20 * Math.log10(rms)) : -Infinity); // approximate dBFS
-      const bars = Math.max(0, Math.min(topBars.length, Math.round((avg/255)*topBars.length)));
+      // Root-mean-square amplitude 0..1
+      const rms = Math.sqrt(data.reduce((a,b)=>a + b*b, 0) / data.length) / 255;
+      // Convert to approximate dBFS
+      const dbfs = rms>0 ? (20 * Math.log10(rms)) : -Infinity;
+      // Clamp & normalize to 0..1 based on floor
+      const dB = dbfs === -Infinity ? dBFloor : Math.max(dBFloor, Math.min(0, dbfs));
+      let level = (dB - dBFloor) / (0 - dBFloor); // linear 0..1 after log compress
+      if (!isFinite(level) || level < 0) level = 0; else if (level > 1) level = 1;
+      // Smooth (different attack/release)
+      if (level > levelSmooth) levelSmooth = levelSmooth + (level - levelSmooth) * attack; else levelSmooth = levelSmooth + (level - levelSmooth) * release;
+      const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth * topBars.length)));
       for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i < bars);
       // Peak hold: keep highest bar for a short decay
       const now = performance.now();
@@ -541,7 +553,7 @@ function wireNormalizeButton(btn){
           peakEl.style.transform = `translateX(${x}px)`;
           peakEl.style.opacity = peakHold.value>0?'.9':'0';
           // Color shift based on level percentage
-          const pct = peakIndex / (topBars.length-1);
+          const pct = levelSmooth; // use smoothed 0..1 level for color classification
           let color = '#2eff7d'; // green
           if (pct > 0.85) color = '#ff3131';
           else if (pct > 0.65) color = '#ffb347';
