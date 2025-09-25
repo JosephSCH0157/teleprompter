@@ -2091,6 +2091,8 @@ function toggleRec(){
     // Reset logical position and scroll to the very top
     currentIndex = 0;
     viewer.scrollTop = 0;
+    // Reset dead-man timer state
+    _wdLastIdx = -1; _wdLastTop = 0; _wdLastT = 0;
     try {
       sendToDisplay({ type:'scroll', top: 0, ratio: 0 });
     } catch {}
