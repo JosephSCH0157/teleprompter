@@ -94,19 +94,8 @@ let __recorder = null;
 try {
   import('./recorders.js').then(mod => {
     __recorder = mod;
-    // Register built-in adapters
-    (async () => {
-      try {
-        const { register, applyConfigs } = mod || {};
-        const bridge = await import('./adapters/bridge.js').then(m=>m.createBridgeAdapter?.()).catch(()=>null);
-        const obs    = await import('./adapters/obs.js').then(m=>m.createOBSAdapter?.()).catch(()=>null);
-        if (register) {
-          if (bridge) register(bridge);
-          if (obs) register(obs);
-        }
-        if (applyConfigs) applyConfigs();
-      } catch {}
-    })();
+    // Initialize built-in adapters inside recorders module (idempotent)
+    try { mod.initBuiltIns?.(); } catch {}
     // Seed defaults if nothing saved yet
     try {
       const hasSaved = localStorage.getItem('tp_rec_settings_v1');
@@ -2029,9 +2018,7 @@ function toggleRec(){
     recChip.textContent = 'Speech: idle';
     recBtn.textContent = 'Start speech sync';
     // Try to stop external recorders per settings
-    try {
-      if (__recorder?.stopSelected) __recorder.stopSelected();
-    } catch {}
+    try { __recorder?.stop?.(); } catch {}
     return;
   }
 
@@ -2046,9 +2033,7 @@ function toggleRec(){
     startTimer();
     startSpeechSync();
     // Try to start external recorders per settings
-    try {
-      if (__recorder?.startSelected) __recorder.startSelected();
-    } catch {}
+    try { __recorder?.start?.(); } catch {}
   });
 }
 
