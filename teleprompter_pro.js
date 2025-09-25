@@ -392,6 +392,10 @@ function wireNormalizeButton(btn){
    * ────────────────────────────────────────────────────────────── */
   let displayWin = null;
   let displayReady = false;
+  // Handshake retry: if display opens but READY message never arrives (popup timing race),
+  // we ping it a few times with a lightweight hello. Stops early if READY received.
+  let displayHelloTimer = null;      // interval id
+  let displayHelloDeadline = 0;      // timestamp (ms) when we stop retrying
   let dbAnim = null, analyser = null, audioStream = null;
   let peakHold = { value:0, decay:0.005, lastUpdate:0 };
   const DEVICE_KEY = 'tp_last_input_device_v1';
@@ -1546,6 +1550,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
         displayReady = true;
+        // Stop any outstanding hello ping loop
+        if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
         displayChip.textContent = 'Display: ready';
         // push initial state
         sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
@@ -2472,6 +2478,20 @@ function openDisplay(){
     displayReady = false;
     displayChip.textContent = 'Display: open';
     closeDisplayBtn.disabled = true;  // will be enabled by global DISPLAY_READY handler
+    // Kick off handshake retry pings: every 300ms up to ~3s or until READY.
+    if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
+    displayHelloDeadline = performance.now() + 3000; // 3s window
+    displayHelloTimer = setInterval(()=>{
+      // If closed or already ready, stop.
+      if (!displayWin || displayWin.closed || displayReady) {
+        clearInterval(displayHelloTimer); displayHelloTimer = null; return;
+      }
+      // If deadline passed, stop trying.
+      if (performance.now() > displayHelloDeadline) {
+        clearInterval(displayHelloTimer); displayHelloTimer = null; return;
+      }
+      try { sendToDisplay({ type:'hello' }); } catch {}
+    }, 300);
   } catch (e) {
     setStatus('Unable to open display window: ' + e.message);
   }
