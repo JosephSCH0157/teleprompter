@@ -405,6 +405,7 @@ function wireNormalizeButton(btn){
   // WebRTC (camera mirroring to display window)
   let camPC = null;       // RTCPeerConnection for camera
   let camStream = null;   // Local camera MediaStream reference
+  let wantCamRTC = false; // Intent flag: user wants camera mirrored via WebRTC
   let peakHold = { value:0, decay:0.005, lastUpdate:0 };
   const DEVICE_KEY = 'tp_last_input_device_v1';
   let pendingAutoStart = false;
@@ -1603,8 +1604,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
         }
         closeDisplayBtn.disabled = false;
-        // If camera already running, start peer connection
-        try { if (camStream) ensureCamPeer(); } catch {}
+        // If user intended camera mirroring, (re)establish
+        try { if (wantCamRTC && camStream) ensureCamPeer(); } catch {}
       } else if (e.data?.type === 'cam-answer' && camPC) {
         try { const desc = { type:'answer', sdp: e.data.sdp }; camPC.setRemoteDescription(desc); } catch {}
       } else if (e.data?.type === 'cam-ice' && camPC) {
@@ -2364,6 +2365,17 @@ function advanceByTranscript(transcript, isFinal){
   function markAdvance(){ _lastAdvanceAt = performance.now(); }
   window.renderScript = renderScript; // for any external callers
 
+  // Camera/WebRTC keepalive: periodically attempt reconnection if user intends camera mirroring
+  setInterval(() => {
+    try {
+      if (!displayWin || displayWin.closed) { displayReady = false; return; }
+      const st = camPC?.connectionState;
+      if (wantCamRTC && camStream && (!st || st === 'failed' || st === 'disconnected')) {
+        ensureCamPeer();
+      }
+    } catch {}
+  }, 1500);
+
   // --- Token normalization (used by DOCX import, renderScript, and matcher) ---
 function normTokens(text){
   let t = String(text).toLowerCase()
@@ -2742,12 +2754,21 @@ function toggleRec(){
       }
       camWrap.style.display = 'block'; startCamBtn.disabled=true; stopCamBtn.disabled=false; applyCamSizing(); applyCamOpacity(); applyCamMirror();
       camStream = stream;
+      wantCamRTC = true;
       // Kick off WebRTC mirroring if display is open/ready
       try { if (displayWin && !displayWin.closed && displayReady) await ensureCamPeer(); } catch {}
       populateDevices();
     } catch(e){ warn('startCamera failed', e); }
   }
-  function stopCamera(){ try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{} camVideo.srcObject=null; camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true; camStream=null; try{ sendToDisplay({ type:'camera-stop' }); }catch{} try{ if (camPC){ camPC.close(); camPC=null; } }catch{} }
+  function stopCamera(){
+    wantCamRTC = false;
+    try{ const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); }catch{}
+    camVideo.srcObject=null;
+    camWrap.style.display='none'; startCamBtn.disabled=false; stopCamBtn.disabled=true;
+    camStream=null;
+    try{ sendToDisplay({ type:'webrtc-stop' }); }catch{}
+    try{ if (camPC){ camPC.close(); camPC=null; } }catch{}
+  }
   function applyCamSizing(){ const pct = Math.max(15, Math.min(60, Number(camSize.value)||28)); camWrap.style.width = pct+'%'; try{ sendToDisplay({ type:'cam-sizing', pct }); }catch{} }
   function applyCamOpacity(){ const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100)); camWrap.style.opacity = String(op); try{ sendToDisplay({ type:'cam-opacity', opacity: op }); }catch{} }
   function applyCamMirror(){ camWrap.classList.toggle('mirrored', !!camMirror.checked); try{ sendToDisplay({ type:'cam-mirror', on: !!camMirror.checked }); }catch{} }
