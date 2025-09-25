@@ -1525,6 +1525,15 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Recognition on/off (placeholder toggle)
     recBtn?.addEventListener('click', toggleRec);
 
+    // Speech availability hint: disable if unsupported
+    try {
+      const SRAvail = (window.SpeechRecognition || window.webkitSpeechRecognition);
+      if (!SRAvail) {
+        if (recBtn) { recBtn.disabled = true; recBtn.title = 'Speech recognition not supported in this browser'; }
+        if (recChip) { recChip.textContent = 'Speech: unsupported'; }
+      }
+    } catch {}
+
     // Tiny wink: Shift+click Rec to hint at future calibration
     if (recBtn){
       recBtn.addEventListener('click', (e)=>{
