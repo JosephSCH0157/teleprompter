@@ -889,6 +889,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   lineHeightInput = document.getElementById('lineHeight');
   autoToggle      = document.getElementById('autoToggle');
   autoSpeed       = document.getElementById('autoSpeed');
+  const catchUpBtn   = document.getElementById('catchUpBtn');
   const matchAggroSel = document.getElementById('matchAggro');
   const motionSmoothSel = document.getElementById('motionSmooth');
 
@@ -1088,6 +1089,28 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // Reset Script -> clear draft, clear editor, reset view and sync
     resetScriptBtn?.addEventListener('click', resetScript);
+
+    // Catch Up button: snap immediately to current line at 40% viewport height
+    if (catchUpBtn && !catchUpBtn.dataset.wired){
+      catchUpBtn.dataset.wired = '1';
+      catchUpBtn.addEventListener('click', () => {
+        try {
+          // Stop auto-catchup momentarily to avoid contention
+          __scrollCtl?.stopAutoCatchup?.();
+          const sc = getScroller();
+          const offset = Math.round(sc.clientHeight * 0.40);
+          // Prefer currentEl, else the paragraph for currentIndex, else most-visible
+          let el = currentEl || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || _ioMostVisible || null;
+          if (!el && Array.isArray(lineEls)) el = lineEls[0] || null;
+          if (el) {
+            scrollToEl(el, offset);
+            const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+            const ratio = max ? (sc.scrollTop / max) : 0;
+            sendToDisplay({ type:'scroll', top: sc.scrollTop, ratio });
+          }
+        } catch {}
+      });
+    }
 
 
     // Mic and devices
