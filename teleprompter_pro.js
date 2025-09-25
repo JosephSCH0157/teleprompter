@@ -417,6 +417,7 @@ function wireNormalizeButton(btn){
   // Safe placeholders for optional modules to prevent ReferenceError when dynamic import fails
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null;     // set after io-anchor.js loads
+  let __scrollCtl = null;     // set after scroll-control.js loads
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
   // Hard-bound current line tracking
@@ -1233,6 +1234,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const ioMod = await import('./io-anchor.js');
       __anchorObs = ioMod.createAnchorObserver(() => viewer, () => { try{ updateDebugPosChip(); }catch{} });
     } catch(e) { console.warn('io-anchor load failed', e); }
+    try {
+      const scMod = await import('./scroll-control.js');
+      if (scMod?.createScrollController) {
+        __scrollCtl = scMod.createScrollController(() => viewer);
+      }
+    } catch(e) { console.warn('scroll-control load failed', e); }
   // …keep the rest of your init() as-is…
 
     // Wire UI
