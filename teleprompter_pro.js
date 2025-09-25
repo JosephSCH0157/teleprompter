@@ -282,6 +282,7 @@ try {
   // DOM (late‑bound during init)
   let editor, scriptEl, viewer, legendEl,
       permChip, displayChip, recChip,
+    debugPosChip,
       openDisplayBtn, closeDisplayBtn, presentBtn,
       micBtn, recBtn, micDeviceSel, refreshDevicesBtn,
       fontSizeInput, lineHeightInput,
@@ -871,6 +872,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   scriptEl = document.getElementById('script');
   viewer   = document.getElementById('viewer');
   legendEl = document.getElementById('legend');
+  debugPosChip = document.getElementById('debugPosChip');
 
   permChip    = document.getElementById('permChip');
   displayChip = document.getElementById('displayChip');
@@ -1235,6 +1237,10 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // Keep bottom padding responsive to viewport changes
     try { window.addEventListener('resize', applyBottomPad, { passive: true }); } catch {}
+    // Update debug chip on scroll
+    try { viewer?.addEventListener('scroll', () => { updateDebugPosChip(); }, { passive:true }); } catch {}
+    // Initial debug chip paint
+    try { updateDebugPosChip(); } catch {}
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -1670,6 +1676,7 @@ function advanceByTranscript(transcript, isFinal){
       try { paras.forEach(p => _io.observe(p)); } catch {}
     }
     lineEls = paras;
+    try { updateDebugPosChip(); } catch {}
     paraIndex = []; let acc = 0;
     for (const el of paras){
       const wc = normTokens(el.textContent || '').length || 1;
@@ -1893,15 +1900,38 @@ function openDisplay(){
   function scrollByPx(px){
     const sc = getScroller(); if (!sc) return;
     sc.scrollTop = clampScrollTop(sc.scrollTop + (Number(px)||0));
+    try { updateDebugPosChip(); } catch {}
   }
   function scrollToY(y){
     const sc = getScroller(); if (!sc) return;
     sc.scrollTop = clampScrollTop(Number(y)||0);
+    try { updateDebugPosChip(); } catch {}
   }
   function scrollToEl(el, offset=0){
     const sc = getScroller(); if (!sc || !el) return;
     const y = (el.offsetTop||0) - (Number(offset)||0);
     sc.scrollTop = clampScrollTop(y);
+    try { updateDebugPosChip(); } catch {}
+  }
+
+  // Debug chip updater: shows anchor percentage within viewport and scrollTop
+  function updateDebugPosChip(){
+    try {
+      if (!debugPosChip || !viewer) return;
+      const vH = Math.max(1, viewer.clientHeight || 1);
+      // Choose an anchor element: IO best, then active, then currentIndex
+      const active = (scriptEl || viewer)?.querySelector('p.active');
+      const el = _ioMostVisible || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
+      let pct = 0;
+      if (el){
+        const vRect = viewer.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        const anchorY = r.top - vRect.top; // relative to viewer
+        pct = Math.round(Math.max(0, Math.min(100, (anchorY / vH) * 100)));
+      }
+      const topStr = (viewer.scrollTop||0).toLocaleString();
+      debugPosChip.textContent = `Anchor ${pct}% • scrollTop ${topStr}`;
+    } catch {}
   }
 
   // Dense-threshold IntersectionObserver to monitor paragraph visibility within the scroller
@@ -1921,6 +1951,8 @@ function openDisplay(){
         if ((e.intersectionRatio||0) > bestR){ bestR = e.intersectionRatio||0; bestEl = e.target; }
       }
       _ioMostVisible = bestEl;
+      // Update debug chip when IO changes
+      try { updateDebugPosChip(); } catch {}
     };
     try { _io = new IntersectionObserver(cb, { root: sc, threshold: IO_THRESHOLDS }); } catch { _io = null; }
   }
