@@ -1418,13 +1418,13 @@ let _lastAdvanceAt = performance.now(); // stall-recovery timestamp
 const MATCH_INTERVAL_MS = 120;
 const SPOKEN_N = 8;
 // Window relative to currentIndex to search
-  const MATCH_WINDOW_BACK = 30;
   // Tunables (let so we can adjust via the “Match aggressiveness” select)
-  let MATCH_WINDOW_AHEAD = 200;
-  let SIM_THRESHOLD      = 0.48;
+  let MATCH_WINDOW_BACK  = 30;   // how far back we search around the current index
+  let MATCH_WINDOW_AHEAD = 200;  // how far forward we search
+  let SIM_THRESHOLD      = 0.55; // minimum similarity to accept a match (0..1)
 // Similarity thresholds and motion clamps
-const STRICT_FORWARD_SIM = 0.72;
-const MAX_JUMP_AHEAD_WORDS = 12;
+let STRICT_FORWARD_SIM = 0.72;   // extra gate when skipping forward a lot
+let MAX_JUMP_AHEAD_WORDS = 12;   // max words to bump when pushing forward
 // Scroll correction tuning
 // TP: marker-percent — forward bias the reading line slightly to reduce lag
 const MARKER_PCT = 0.36;
