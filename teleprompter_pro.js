@@ -248,6 +248,9 @@ try {
   const MATCH_WINDOW = 6;         // how far ahead we’ll look for the next word
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
+  // Hard-bound current line tracking
+  let currentEl = null;               // currently active <p> element
+  let lineEls = [];                   // array of <p> elements in script order
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
 
 
@@ -1476,8 +1479,13 @@ function advanceByTranscript(transcript, isFinal){
   // Scroll toward the paragraph that contains currentIndex, gently clamped
   if (!paraIndex.length) return;
   const targetPara = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
+  // Maintain a persistent pointer to the current line element
+  try { if (currentEl && currentEl !== targetPara.el) { currentEl.classList.remove('active'); currentEl.classList.remove('current'); } } catch {}
+  currentEl = targetPara.el;
+  try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
+
   const maxTop     = Math.max(0, scriptEl.scrollHeight - viewer.clientHeight);
-  const markerTop  = viewer.clientHeight * MARKER_PCT;
+  const markerTop  = Math.round(viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
   const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
 
   const err = desiredTop - viewer.scrollTop;
@@ -1493,16 +1501,20 @@ function advanceByTranscript(transcript, isFinal){
   // Scale steps based on whether this came from a final (more confident) match
   const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
   const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
-  let next;
-  if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
-  else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-
-  viewer.scrollTop = next;
+  // Prefer element-anchored scrolling so we always target the same line element
+  try {
+    scrollToEl(currentEl, markerTop);
+  } catch {
+    let next;
+    if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
+    else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
+    viewer.scrollTop = next;
+  }
   if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
   {
     const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const ratio = max ? (next / max) : 0;
-    sendToDisplay({ type:'scroll', top: next, ratio });
+    const ratio = max ? (viewer.scrollTop / max) : 0;
+    sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
   }
   // Evaluate whether to run the gentle catch-up loop based on anchor position
   try {
@@ -1616,12 +1628,17 @@ function advanceByTranscript(transcript, isFinal){
 
     // Build paragraph index
     const paras = Array.from(scriptEl.querySelectorAll('p'));
+    lineEls = paras;
     paraIndex = []; let acc = 0;
     for (const el of paras){
       const wc = normTokens(el.textContent || '').length || 1;
       paraIndex.push({ el, start: acc, end: acc + wc - 1 });
       acc += wc;
     }
+    // Initialize current element pointer
+    try { currentEl?.classList.remove('active'); } catch {}
+    currentEl = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end)?.el || paraIndex[0]?.el || null;
+    if (currentEl) currentEl.classList.add('active');
   }
 
   // Dynamic bottom padding so the marker can sit over the final paragraphs
