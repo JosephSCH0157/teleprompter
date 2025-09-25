@@ -549,23 +549,26 @@ function ensureHelpUI(){
     document.body.appendChild(overlay);
   }
 
-  // If we reused an existing overlay (from HTML), ensure the Tag Guide with Normalize/Validate exists
+  // If we reused an existing overlay, inject Tag Guide only if a Tags heading is NOT already present
   if (overlay && !overlay.querySelector('#normalizeBtn') && !overlay.querySelector('#guideNormalize')){
     const sheet = overlay.querySelector('.sheet') || overlay;
-    const container = document.createElement('div');
-    container.innerHTML = `
-      <hr class="hr" />
-      <div>
-        <h4 style="margin:8px 0 6px">Official Teleprompter Tags</h4>
-        <p style="margin:0 0 8px; color:#96a0aa">
-          Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.
-        </p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
-          <button id="normalizeBtn" class="btn-chip">Normalize current script</button>
-          <button id="validateBtn" class="btn-chip">Validate markup</button>
-        </div>
-      </div>`;
-    sheet.appendChild(container);
+    const hasTagsHeading = !!sheet.querySelector('h4') && Array.from(sheet.querySelectorAll('h4')).some(h=>/Official\s+Teleprompter\s+Tags/i.test(h.textContent||''));
+    if (!hasTagsHeading){
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <hr class="hr" />
+        <div class="tp-tags-block">
+          <h4 style="margin:8px 0 6px">Official Teleprompter Tags</h4>
+          <p style="margin:0 0 8px; color:#96a0aa">
+            Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
+            <button id="normalizeBtn" class="btn-chip">Normalize current script</button>
+            <button id="validateBtn" class="btn-chip">Validate markup</button>
+          </div>
+        </div>`;
+      sheet.appendChild(container);
+    }
   }
 
   // If missing, append the optional Advanced section (hidden by default)
