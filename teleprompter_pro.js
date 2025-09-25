@@ -1878,37 +1878,21 @@ function normTokens(text){
 // TP: display-open
 function openDisplay(){
   try {
+    // Always use the standalone external display for production
     displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
     if (!displayWin) {
       setStatus('Pop-up blocked. Allow pop-ups and try again.');
       displayChip.textContent = 'Display: blocked';
       return;
     }
+    displayReady = false;
     displayChip.textContent = 'Display: open';
-    closeDisplayBtn.disabled = true;  // enable once it’s ready
-
-    // Handshake: wait until the display window signals it’s ready
-    const readyListener = (ev) => {
-      if (!displayWin || displayWin.closed) return;
-      if (ev.source !== displayWin || ev.data !== 'DISPLAY_READY') return;
-      window.removeEventListener('message', readyListener);
-
-      // Send initial state
-      sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
-      sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
-      {
-        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-        const ratio = max ? (viewer.scrollTop / max) : 0;
-        sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-      }
-      closeDisplayBtn.disabled = false;
-    };
-    window.addEventListener('message', readyListener);
+    closeDisplayBtn.disabled = true;  // will be enabled by global DISPLAY_READY handler
   } catch (e) {
     setStatus('Unable to open display window: ' + e.message);
   }
 }
-  function closeDisplay(){ if(displayWin && !displayWin.closed) displayWin.close(); displayWin=null; closeDisplayBtn.disabled=true; displayChip.textContent='Display: closed'; }
+  function closeDisplay(){ if(displayWin && !displayWin.closed) displayWin.close(); displayWin=null; displayReady=false; closeDisplayBtn.disabled=true; displayChip.textContent='Display: closed'; }
   // TP: display-send
   function sendToDisplay(payload){ if(displayWin && !displayWin.closed) displayWin.postMessage(payload, '*'); }
   window.sendToDisplay = sendToDisplay;
