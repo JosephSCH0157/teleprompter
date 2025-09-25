@@ -1574,6 +1574,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         if (savedLH && lineHeightInput) lineHeightInput.value = savedLH;
       } catch {}
     const AGGRO_KEY = 'tp_match_aggro_v1';
+  // Dev tuning persistence keys
+  const TUNE_KEY = 'tp_match_tuning_v1';
+  const TUNE_ENABLE_KEY = 'tp_match_tuning_enabled_v1';
+  let _tunePanelEl = null;
+  let _tuneInputs = {};
+  const DEV_MODE = /[?&]dev=1/.test(location.search) || location.hash.includes('dev') || (()=>{ try { return localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
     try {
       const savedAggro = localStorage.getItem(AGGRO_KEY);
       if (savedAggro && matchAggroSel) matchAggroSel.value = savedAggro;
@@ -1624,12 +1630,148 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         STRICT_FORWARD_SIM = 0.72;
         MAX_JUMP_AHEAD_WORDS = 12;
       }
+      // After applying preset, optionally override with custom tuning profile if enabled
+      try {
+        if (localStorage.getItem(TUNE_ENABLE_KEY)==='1') {
+          const raw = localStorage.getItem(TUNE_KEY);
+          if (raw) {
+            const cfg = JSON.parse(raw);
+            if (cfg && typeof cfg==='object') {
+              const n = (x)=> typeof x === 'number' && !isNaN(x);
+              if (n(cfg.SIM_THRESHOLD)) SIM_THRESHOLD = cfg.SIM_THRESHOLD;
+              if (n(cfg.MATCH_WINDOW_AHEAD)) MATCH_WINDOW_AHEAD = cfg.MATCH_WINDOW_AHEAD;
+              if (n(cfg.MATCH_WINDOW_BACK)) MATCH_WINDOW_BACK = cfg.MATCH_WINDOW_BACK;
+              if (n(cfg.STRICT_FORWARD_SIM)) STRICT_FORWARD_SIM = cfg.STRICT_FORWARD_SIM;
+              if (n(cfg.MAX_JUMP_AHEAD_WORDS)) MAX_JUMP_AHEAD_WORDS = cfg.MAX_JUMP_AHEAD_WORDS;
+            }
+          }
+        }
+      } catch {}
+      // Reflect live constants in panel if open
+      if (_tunePanelEl) populateTuningInputs();
     }
     applyAggro();
     matchAggroSel?.addEventListener('change', (e)=>{
       applyAggro();
       try { localStorage.setItem(AGGRO_KEY, matchAggroSel.value || '2'); } catch {}
     });
+
+    // --- Dev-only tuning panel -------------------------------------------------
+    function populateTuningInputs(){
+      if (!_tuneInputs) return;
+      const setV = (k,v)=>{ if(_tuneInputs[k]) _tuneInputs[k].value = String(v); };
+      setV('SIM_THRESHOLD', SIM_THRESHOLD);
+      setV('MATCH_WINDOW_AHEAD', MATCH_WINDOW_AHEAD);
+      setV('MATCH_WINDOW_BACK', MATCH_WINDOW_BACK);
+      setV('STRICT_FORWARD_SIM', STRICT_FORWARD_SIM);
+      setV('MAX_JUMP_AHEAD_WORDS', MAX_JUMP_AHEAD_WORDS);
+    }
+    function applyFromInputs(){
+      const getNum = (k)=>{ const v = parseFloat(_tuneInputs[k]?.value); return isFinite(v)?v:undefined; };
+      const newVals = {
+        SIM_THRESHOLD: getNum('SIM_THRESHOLD'),
+        MATCH_WINDOW_AHEAD: getNum('MATCH_WINDOW_AHEAD'),
+        MATCH_WINDOW_BACK: getNum('MATCH_WINDOW_BACK'),
+        STRICT_FORWARD_SIM: getNum('STRICT_FORWARD_SIM'),
+        MAX_JUMP_AHEAD_WORDS: getNum('MAX_JUMP_AHEAD_WORDS')
+      };
+      if (typeof newVals.SIM_THRESHOLD==='number') SIM_THRESHOLD = newVals.SIM_THRESHOLD;
+      if (typeof newVals.MATCH_WINDOW_AHEAD==='number') MATCH_WINDOW_AHEAD = newVals.MATCH_WINDOW_AHEAD;
+      if (typeof newVals.MATCH_WINDOW_BACK==='number') MATCH_WINDOW_BACK = newVals.MATCH_WINDOW_BACK;
+      if (typeof newVals.STRICT_FORWARD_SIM==='number') STRICT_FORWARD_SIM = newVals.STRICT_FORWARD_SIM;
+      if (typeof newVals.MAX_JUMP_AHEAD_WORDS==='number') MAX_JUMP_AHEAD_WORDS = newVals.MAX_JUMP_AHEAD_WORDS;
+    }
+    function saveTuningProfile(){
+      try {
+        const payload = {
+          SIM_THRESHOLD, MATCH_WINDOW_AHEAD, MATCH_WINDOW_BACK, STRICT_FORWARD_SIM, MAX_JUMP_AHEAD_WORDS,
+          savedAt: Date.now()
+        };
+        localStorage.setItem(TUNE_KEY, JSON.stringify(payload));
+        const stamp = _tunePanelEl?.querySelector('[data-tune-status]');
+        if (stamp) { stamp.textContent = 'Saved'; setTimeout(()=>{ if(stamp.textContent==='Saved') stamp.textContent=''; }, 1500); }
+      } catch {}
+    }
+    function loadTuningProfile(){
+      try {
+        const raw = localStorage.getItem(TUNE_KEY);
+        if (!raw) return false;
+        const cfg = JSON.parse(raw);
+        if (cfg && typeof cfg==='object') {
+          const n=(x)=> typeof x==='number' && !isNaN(x);
+          if (n(cfg.SIM_THRESHOLD)) SIM_THRESHOLD = cfg.SIM_THRESHOLD;
+          if (n(cfg.MATCH_WINDOW_AHEAD)) MATCH_WINDOW_AHEAD = cfg.MATCH_WINDOW_AHEAD;
+          if (n(cfg.MATCH_WINDOW_BACK)) MATCH_WINDOW_BACK = cfg.MATCH_WINDOW_BACK;
+          if (n(cfg.STRICT_FORWARD_SIM)) STRICT_FORWARD_SIM = cfg.STRICT_FORWARD_SIM;
+          if (n(cfg.MAX_JUMP_AHEAD_WORDS)) MAX_JUMP_AHEAD_WORDS = cfg.MAX_JUMP_AHEAD_WORDS;
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+    function toggleCustomEnabled(on){
+      try { localStorage.setItem(TUNE_ENABLE_KEY, on?'1':'0'); } catch {}
+      if (on) {
+        if (!loadTuningProfile()) saveTuningProfile();
+      } else {
+        // Reapply preset to revert
+        applyAggro();
+      }
+    }
+    function ensureTuningPanel(){
+      if (!DEV_MODE) return;
+      if (_tunePanelEl) { _tunePanelEl.style.display='block'; populateTuningInputs(); return; }
+      const div = document.createElement('div');
+      div.id = 'tuningPanel';
+      div.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:9999;background:#111c;border:1px solid #444;padding:8px 10px;font:12px system-ui;color:#eee;box-shadow:0 2px 8px #0009;backdrop-filter:blur(4px);max-width:240px;line-height:1.3;border-radius:6px;';
+      div.innerHTML = `\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>\n          <label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>\n          <label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>\n        </div>\n        <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">\n          <button data-apply style="flex:1 1 auto;">Apply</button>\n          <button data-save style="flex:1 1 auto;">Save</button>\n        </div>\n        <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">\n          <input data-enable type="checkbox"> Override presets\n        </label>\n        <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>\n        <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>\n      `;
+      document.body.appendChild(div);
+      _tunePanelEl = div;
+      _tuneInputs = {};
+      [...div.querySelectorAll('input[data-k]')].forEach(inp=>{ _tuneInputs[inp.getAttribute('data-k')] = inp; });
+      populateTuningInputs();
+      // Load existing saved (but don't auto-enable)
+      try {
+        const raw = localStorage.getItem(TUNE_KEY);
+        if (raw) {
+          const cfg = JSON.parse(raw);
+          if (cfg && typeof cfg==='object') {
+            for (const k of Object.keys(_tuneInputs)) if (k in cfg && typeof cfg[k]==='number') _tuneInputs[k].value = cfg[k];
+          }
+        }
+      } catch {}
+      // Reflect enabled
+      try { const en = localStorage.getItem(TUNE_ENABLE_KEY)==='1'; const cb = div.querySelector('input[data-enable]'); if (cb) cb.checked = en; } catch {}
+      div.addEventListener('click', (e)=>{
+        const t = e.target;
+        if (!(t instanceof HTMLElement)) return;
+        if (t.matches('[data-close]')) { div.style.display='none'; }
+        else if (t.matches('[data-apply]')) { applyFromInputs(); populateTuningInputs(); }
+        else if (t.matches('[data-save]')) { applyFromInputs(); saveTuningProfile(); }
+      });
+      const enableCb = div.querySelector('input[data-enable]');
+      if (enableCb) enableCb.addEventListener('change', ()=>{ toggleCustomEnabled(enableCb.checked); if (enableCb.checked){ applyFromInputs(); saveTuningProfile(); } });
+      // Live update on input (without saving)
+      div.querySelectorAll('input[data-k]').forEach(inp=>{
+        inp.addEventListener('input', ()=>{ applyFromInputs(); });
+      });
+    }
+    // Keybinding to toggle panel (dev mode only)
+    window.addEventListener('keydown', (e)=>{
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase()==='t') { if (DEV_MODE){ ensureTuningPanel(); e.preventDefault(); } }
+    });
+    // Auto-create if dev hash present
+    if (DEV_MODE && (location.hash.includes('devtune') || location.search.includes('devtune=1'))) setTimeout(()=> ensureTuningPanel(), 300);
+
+    // If override enabled on load, ensure it applies AFTER initial preset
+    setTimeout(()=>{
+      try {
+        if (localStorage.getItem(TUNE_ENABLE_KEY)==='1') {
+          // Re-run applyAggro to force preset then override
+          applyAggro();
+        }
+      } catch {}
+    }, 50);
 
     // Apply motion smoothness mapping now and on change
   // TP: motion-smoothness
