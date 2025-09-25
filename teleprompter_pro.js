@@ -403,6 +403,9 @@ function wireNormalizeButton(btn){
   } catch {}
   let recBackoffMs   = 300;       // grows on repeated failures
   const MATCH_WINDOW = 6;         // how far ahead we’ll look for the next word
+  // Safe placeholders for optional modules to prevent ReferenceError when dynamic import fails
+  let __scrollHelpers = null; // set after scroll-helpers.js loads
+  let __anchorObs = null;     // set after io-anchor.js loads
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
   // Hard-bound current line tracking
@@ -1175,6 +1178,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     openDisplayBtn.addEventListener('click', openDisplay);
     closeDisplayBtn.addEventListener('click', closeDisplay);
     presentBtn.addEventListener('click', openDisplay);
+  // Mark that core buttons have direct listeners (used by delegation heuristic)
+  try { openDisplayBtn.__listenerAttached = true; closeDisplayBtn.__listenerAttached = true; presentBtn.__listenerAttached = true; } catch {}
+  window.__tpInitSuccess = true;
 
     fontSizeInput.addEventListener('input', applyTypography);
     lineHeightInput.addEventListener('input', applyTypography);
@@ -1733,6 +1739,7 @@ try {
 // Conditionally install last‑resort delegation ONLY if core buttons appear unwired after init grace period.
 setTimeout(() => {
   try {
+    if (window.__tpInitSuccess) return; // direct wiring succeeded, skip fallback
     // Heuristic: if openDisplayBtn exists and has no inline onclick AND we haven't flagged init success
     const btn = document.getElementById('openDisplayBtn');
     if (!btn) return; // no need
