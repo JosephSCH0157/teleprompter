@@ -79,6 +79,49 @@ import('./help.js').then(mod => {
   window.showValidation = mod.showValidation;
   window.validateStandardTags = mod.validateStandardTags;
 }).catch(()=>{});
+// Scroll control (gentle PID-like catch-up)
+let __scrollCtl = null;
+try { import('./scroll-control.js').then(mod => { __scrollCtl = mod; }).catch(()=>{}); } catch {}
+// Recorder registry (optional). If missing, calls will be no-ops.
+let __recorder = null;
+try {
+  import('./recorders.js').then(mod => {
+    __recorder = mod;
+    // Register built-in adapters
+    (async () => {
+      try {
+        const { register, applyConfigs } = mod || {};
+        const bridge = await import('./adapters/bridge.js').then(m=>m.createBridgeAdapter?.()).catch(()=>null);
+        const obs    = await import('./adapters/obs.js').then(m=>m.createOBSAdapter?.()).catch(()=>null);
+        if (register) {
+          if (bridge) register(bridge);
+          if (obs) register(obs);
+        }
+        if (applyConfigs) applyConfigs();
+      } catch {}
+    })();
+    // Seed defaults if nothing saved yet
+    try {
+      const hasSaved = localStorage.getItem('tp_rec_settings_v1');
+      if (!hasSaved && mod.setSettings) {
+        mod.setSettings({
+          mode: 'multi',
+          selected: ['obs','descript'],
+          configs: {
+            obs: { url:'ws://127.0.0.1:4455', password:'' },
+            companion: { url:'http://127.0.0.1:8000', buttonId:'1.1' },
+            bridge: { startUrl:'http://127.0.0.1:5723/record/start', stopUrl:'' },
+            descript: { startHotkey:'Ctrl+R', via:'bridge' },
+            capcut: { startHotkey:'Ctrl+R', via:'companion' },
+            winmedia: { startHotkey:'Ctrl+R', via:'bridge' }
+          },
+          timeouts: { start: 3000, stop: 3000 },
+          failPolicy: 'continue'
+        });
+      }
+    } catch {}
+  }).catch(()=>{});
+} catch {}
 
   // TP: normalize-fallback
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
@@ -217,6 +260,21 @@ import('./help.js').then(mod => {
     g2: { name: 'Guest 2',   color: '#f472b6' }
   };
   let ROLES = loadRoles();
+  // Broadcast channel to keep display colors in sync with Settings
+  let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
+  function applyRoleCssVars(){
+    try {
+      const r = document.documentElement;
+      if (ROLES?.s1?.color) r.style.setProperty('--s1-color', ROLES.s1.color);
+      if (ROLES?.s2?.color) r.style.setProperty('--s2-color', ROLES.s2.color);
+    } catch {}
+  }
+  function broadcastSpeakerColors(){
+    try { bc && bc.postMessage({ type:'SPEAKER_COLORS', s1: ROLES?.s1?.color, s2: ROLES?.s2?.color }); } catch {}
+  }
+  function broadcastSpeakerNames(){
+    try { bc && bc.postMessage({ type:'SPEAKER_NAMES', s1Name: ROLES?.s1?.name, s2Name: ROLES?.s2?.name }); } catch {}
+  }
 
   // DOM (late‑bound during init)
   let editor, scriptEl, viewer, legendEl,
@@ -1162,6 +1220,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     if (nameS2) nameS2.value = ROLES.s2.name; if (colorS2) colorS2.value = ROLES.s2.color;
     if (nameG1) nameG1.value = ROLES.g1.name; if (colorG1) colorG1.value = ROLES.g1.color;
     if (nameG2) nameG2.value = ROLES.g2.name; if (colorG2) colorG2.value = ROLES.g2.color;
+    applyRoleCssVars();
+    broadcastSpeakerColors();
+    broadcastSpeakerNames();
   }
   function onRoleChange(){
     ROLES.s1.name = nameS1?.value || ROLES.s1.name; ROLES.s1.color = colorS1?.value || ROLES.s1.color;
@@ -1171,6 +1232,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     saveRoles(ROLES);
     updateLegend();
     renderScript(editor.value);
+    applyRoleCssVars();
+    broadcastSpeakerColors();
+    broadcastSpeakerNames();
   }
   function updateLegend(){
     if (!legendEl) return; legendEl.innerHTML = '';
@@ -1225,6 +1289,67 @@ function scrollToCurrentIndex(){
     const ratio = max ? (viewer.scrollTop / max) : 0;
     sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
   }
+}
+
+// Gentle PID-like catch-up controller
+function tryStartCatchup(){
+  if (!__scrollCtl?.startAutoCatchup || !viewer) return;
+  // If auto-scroll is running, skip catch-up to avoid conflicts
+  if (autoTimer) return;
+  const markerTop = () => (viewer?.clientHeight || 0) * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+  const getTargetY = () => markerTop();
+  const getAnchorY = () => {
+    try {
+      // Find active paragraph (as set in scrollToCurrentIndex)
+      const active = viewer.querySelector('.para.active') || viewer.querySelector('.script .para') || null;
+      if (active) {
+        const rect = active.getBoundingClientRect();
+        const vRect = viewer.getBoundingClientRect();
+        return rect.top - vRect.top; // Y relative to viewer
+      }
+      // Fallback: approximate using currentIndex paragraph element if available
+      const p = (paraIndex || []).find(p => currentIndex >= p.start && currentIndex <= p.end) || (paraIndex||[])[0];
+      if (p?.el) {
+        const rect = p.el.getBoundingClientRect();
+        const vRect = viewer.getBoundingClientRect();
+        return rect.top - vRect.top;
+      }
+    } catch {}
+    return markerTop();
+  };
+  const scrollBy = (dy) => {
+    try {
+      viewer.scrollTop = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+    } catch {}
+  };
+  try { __scrollCtl.stopAutoCatchup(); } catch {}
+  __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
+}
+
+// Heuristic gate: only run catch-up if the anchor (current line) sits low in the viewport
+let _lowStartTs = 0;
+function maybeCatchupByAnchor(anchorY, viewportH){
+  try {
+    if (!__scrollCtl?.startAutoCatchup || !viewer) return;
+    // Don't start while auto-scroll is active
+    if (autoTimer) { _lowStartTs = 0; try{ __scrollCtl.stopAutoCatchup(); }catch{}; return; }
+    const h = Math.max(1, Number(viewportH)||viewer.clientHeight||1);
+    const ratio = anchorY / h; // 0=top, 1=bottom
+    if (ratio > 0.65){
+      if (!_lowStartTs) _lowStartTs = performance.now();
+      if (performance.now() - _lowStartTs > 500){
+        // Start (or keep) the catch-up loop with our standard closures
+        tryStartCatchup();
+      }
+    } else {
+      _lowStartTs = 0;
+      // Save CPU/jitter when we don't need it
+      try { __scrollCtl.stopAutoCatchup(); } catch {}
+    }
+  } catch {}
 }
 
 
@@ -1354,6 +1479,13 @@ function advanceByTranscript(transcript, isFinal){
     const ratio = max ? (next / max) : 0;
     sendToDisplay({ type:'scroll', top: next, ratio });
   }
+  // Evaluate whether to run the gentle catch-up loop based on anchor position
+  try {
+    const vRect = viewer.getBoundingClientRect();
+    const pRect = targetPara.el.getBoundingClientRect();
+    const anchorY = pRect.top - vRect.top; // anchor relative to viewer
+    maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+  } catch {}
   // mark progress for stall-recovery
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   _lastCorrectionAt = tNow;
@@ -1410,6 +1542,8 @@ function advanceByTranscript(transcript, isFinal){
   // TP: typography-apply
   function applyTypography(){
     scriptEl.querySelectorAll('p, .note').forEach(el => {
+     
+     
       el.style.fontSize  = String(fontSizeInput.value) + 'px';
       el.style.lineHeight= String(lineHeightInput.value);
     });
@@ -1435,7 +1569,7 @@ function advanceByTranscript(transcript, isFinal){
       const html = formatInlineMarkup(b).replace(/\n/g,'<br>');
       // If there are one or more note divs inside, split them out to standalone entries
       if (/<div class=\"note\"[\s\S]*?<\/div>/i.test(html)){
-        const pieces = html.split(/(?=<div class=\"note\")|(?<=<\/div>)/i).filter(Boolean);
+        const pieces = html.split(/(?=<div class=\"note")|(?<=<\/div>)/i).filter(Boolean);
         for (const piece of pieces){
           if (/^\s*<div class=\"note\"/i.test(piece)) outParts.push(piece);
           else if (piece.trim()) outParts.push(`<p>${piece}</p>`);
@@ -1661,6 +1795,8 @@ function openDisplay(){
    * ────────────────────────────────────────────────────────────── */
 function startAutoScroll(){
   if (autoTimer) return;
+  // Pause catch-up controller while auto-scroll is active
+  try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   const step = () => {
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
     viewer.scrollTop += (pxPerSec / 60);
@@ -1680,6 +1816,18 @@ function stopAutoScroll(){
   clearInterval(autoTimer);
   autoTimer = null;
   autoToggle.textContent = 'Auto-scroll: Off';
+  // Resume catch-up controller if speech sync is active — via heuristic gate
+  if (recActive) {
+    try {
+      const vRect = viewer.getBoundingClientRect();
+      // Compute current anchor from active paragraph or currentIndex
+      let anchorY = 0;
+      const active = viewer.querySelector('.para.active');
+      const el = active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
+      if (el){ const r = el.getBoundingClientRect(); anchorY = r.top - vRect.top; }
+      maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+    } catch { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} }
+  }
 }
 
 // ⬇️ keep this OUTSIDE stopAutoScroll
@@ -1715,6 +1863,10 @@ function toggleRec(){
     stopSpeechSync();
     recChip.textContent = 'Speech: idle';
     recBtn.textContent = 'Start speech sync';
+    // Try to stop external recorders per settings
+    try {
+      if (__recorder?.stopSelected) __recorder.stopSelected();
+    } catch {}
     return;
   }
 
@@ -1728,6 +1880,10 @@ function toggleRec(){
     recBtn.textContent = 'Stop speech sync';
     startTimer();
     startSpeechSync();
+    // Try to start external recorders per settings
+    try {
+      if (__recorder?.startSelected) __recorder.startSelected();
+    } catch {}
   });
 }
 
@@ -1919,12 +2075,14 @@ function toggleRec(){
     };
 
     try { recog.start(); } catch(e){ console.warn('speech start failed', e); }
+    // Don't start catch-up unconditionally; the heuristic will kick it in when needed
   }
 
   // TP: speech-stop
   function stopSpeechSync(){
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
+    try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   }
 
   // TP: docx-mammoth
@@ -2122,6 +2280,7 @@ function renderSelfChecks(checks){
       panel.innerHTML = '<div style="margin:4px 0 6px; opacity:.8">Quick startup checks</div><div id="selfChecksList"></div>';
       document.body.appendChild(panel);
       document.addEventListener('click', (e)=>{ if (e.target !== bar && !panel.contains(e.target)) panel.classList.add('hidden'); });
+      panel.querySelector('#aboutClose').onclick = () => panel.classList.add('hidden');
     }
 
     const list = panel.querySelector('#selfChecksList');

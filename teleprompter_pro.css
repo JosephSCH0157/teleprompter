@@ -73,7 +73,7 @@ select { font-size: 14px; }
 .inl-10{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
 
 
-    :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; }
+    :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
