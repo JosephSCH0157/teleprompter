@@ -575,7 +575,7 @@ function wireNormalizeButton(btn){
 
   // TP: init-minimal
   // Minimal init to wire the meter pieces and help overlay (internal helper)
-  function __initMinimal(){
+  async function __initMinimal(){
     // Help UI
     try { ensureHelpUI(); } catch {}
 
