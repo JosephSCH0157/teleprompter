@@ -288,10 +288,88 @@ function wireNormalizeButton(btn){
 
   window.validateStandardTags = function validateStandardTags(silent=false) {
     if (window.__help?.validateStandardTags) return window.__help.validateStandardTags(silent);
-    const t = String(document.getElementById('editor')?.value || '');
-    const count = (re) => (t.match(re)||[]).length;
-    const ok = count(/\[s1\]/gi)===count(/\[\/s1\]/gi) && count(/\[s2\]/gi)===count(/\[\/s2\]/gi) && count(/\[note\]/gi)===count(/\[\/note\]/gi);
-    const msg = ok ? 'Markup looks consistent.' : 'Markup issues (basic count mismatch).';
+    const src = String(document.getElementById('editor')?.value || '');
+    const lines = src.split(/\r?\n/);
+    const allowed = new Set(['s1','s2','note']);
+    const speakerTags = new Set(['s1','s2']);
+    const stack = []; // {tag, line}
+    let s1Blocks=0, s2Blocks=0, noteBlocks=0;
+    let unknownCount = 0;
+    const issues = [];
+
+    function addIssue(line, msg){ issues.push(`line ${line}: ${msg}`); }
+
+    const tagRe = /\[(\/)?([a-z0-9]+)(?:=[^\]]+)?\]/gi;
+    for (let i=0;i<lines.length;i++) {
+      const rawLine = lines[i];
+      const lineNum = i+1;
+      let m;
+      tagRe.lastIndex = 0;
+      while ((m = tagRe.exec(rawLine))){
+        const closing = !!m[1];
+        const nameRaw = m[2];
+        const name = nameRaw.toLowerCase();
+        if (!allowed.has(name)) { unknownCount++; addIssue(lineNum, `unsupported tag [${closing?'/':''}${nameRaw}]`); continue; }
+        if (!closing) {
+          if (name === 'note') {
+            if (stack.length) {
+              addIssue(lineNum, `[note] must not appear inside [${stack[stack.length-1].tag}] block opened on line ${stack[stack.length-1].line}`);
+            }
+            stack.push({tag:name,line:lineNum});
+          } else if (speakerTags.has(name)) {
+            // if another speaker still open, that's improper nesting
+            if (stack.length && speakerTags.has(stack[stack.length-1].tag)) {
+              addIssue(lineNum, `[${name}] opened before closing previous [${stack[stack.length-1].tag}] (opened line ${stack[stack.length-1].line})`);
+            }
+            stack.push({tag:name,line:lineNum});
+          } else {
+            stack.push({tag:name,line:lineNum});
+          }
+        } else { // closing
+          if (!stack.length) {
+            addIssue(lineNum, `stray closing tag [/${name}]`);
+            continue;
+          }
+            // find nearest same tag from top
+          const top = stack[stack.length-1];
+          if (top.tag === name) {
+            stack.pop();
+            if (name === 's1') s1Blocks++; else if (name==='s2') s2Blocks++; else if (name==='note') noteBlocks++;
+          } else {
+            // mismatch
+            addIssue(lineNum, `mismatched closing [/${name}] – expected [/${top.tag}] for opening on line ${top.line}`);
+            // attempt recovery: pop until match or empty
+            let poppedAny = false;
+            while (stack.length && stack[stack.length-1].tag !== name){ stack.pop(); poppedAny = true; }
+            if (stack.length && stack[stack.length-1].tag === name){
+              const opener = stack.pop();
+              if (name === 's1') s1Blocks++; else if (name==='s2') s2Blocks++; else if (name==='note') noteBlocks++;
+              if (poppedAny) addIssue(lineNum, `auto-recovered by closing [/${name}] (opened line ${opener.line}) after mismatches`);
+            } else {
+              addIssue(lineNum, `no matching open tag for [/${name}]`);
+            }
+          }
+        }
+      }
+      // Additional rule: a [note] block should occupy its own logical paragraph.
+      // If a line contains a [note] opening and additional non-tag text before another closing, that's fine; we enforce only not inside speaker.
+    }
+
+    // Any unclosed tags
+    for (const open of stack){
+      addIssue(open.line, `unclosed [${open.tag}] opened here`);
+    }
+
+    // Count completed speaker blocks manually in case they never closed (already handled above) – already incremented when closed.
+    const summaryParts = [`s1 blocks: ${s1Blocks}`, `s2 blocks: ${s2Blocks}`, `notes: ${noteBlocks}`];
+    if (unknownCount) summaryParts.push(`unsupported tags: ${unknownCount}`);
+
+    let msg;
+    if (!issues.length) {
+      msg = `No issues found. (${summaryParts.join(', ')})`;
+    } else {
+      msg = `Validation issues (${issues.length}):\n- ` + issues.join('\n- ') + `\n\nSummary: ${summaryParts.join(', ')}`;
+    }
     if (!silent) showCopyDialog(msg, 'Validator');
     return msg;
   };
@@ -686,24 +764,9 @@ function ensureHelpUI(){
     };
 
     validateBtn.onclick = () => {
-      // Build validation message using strict validator if present
-      let msg = '';
-      if (typeof window.validateStandardTags === 'function') {
-        try { msg = window.validateStandardTags(true); } catch { msg = 'Validation failed to run.'; }
-      } else {
-        // fallback: simple counts
-        const ta = document.getElementById('editor');
-        const t = String(ta?.value || '');
-        const count = (re) => (t.match(re) || []).length;
-        const s1 = count(/\[s1\]/gi), e1 = count(/\[\/s1\]/gi);
-        const s2 = count(/\[s2\]/gi), e2 = count(/\[\/s2\]/gi);
-        const sn = count(/\[note\]/gi), en = count(/\[\/note\]/gi);
-        const problems = [];
-        if (s1 !== e1) problems.push(`[s1] open ${s1} ≠ close ${e1}`);
-        if (s2 !== e2) problems.push(`[s2] open ${s2} ≠ close ${e2}`);
-        if (sn !== en) problems.push(`[note] open ${sn} ≠ close ${en}`);
-        msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup looks consistent.';
-      }
+      let msg;
+      try { msg = window.validateStandardTags ? window.validateStandardTags(true) : 'Validator missing.'; }
+      catch(e){ msg = 'Validation error: ' + (e?.message||e); }
       try { window.showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); }
     };
   }
