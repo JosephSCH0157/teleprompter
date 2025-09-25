@@ -54,17 +54,6 @@
 <button id="micBtn">Request mic</button>
 <button disabled="" id="recBtn">Start speech sync</button>
 </div>
-<div class="row" id="obsToggleRow">
-  <label class="obs-toggle-label">
-    <input type="checkbox" id="enableObs" /> Enable OBS
-  </label>
-  <span class="chip obs-status" id="obsStatus">OBS: —</span>
-</div>
-<div class="row" id="obsConfigRow">
-  <label>OBS URL <input id="obsUrl" class="obs-url" type="text" placeholder="ws://127.0.0.1:4455"></label>
-  <label>Password <input id="obsPassword" class="obs-pass" type="password" placeholder="(optional)"></label>
-  <button id="obsTestBtn">Test OBS</button>
-</div>
 <div class="row" id="dbRow">
   <div id="dbMeter" class="db-bars" aria-label="Microphone level">
     <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
@@ -73,12 +62,7 @@
     <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
   </div>
 </div>
-<div class="row">
-<label>Mic device
-          <select id="micDeviceSel" class="select-md" ></select>
-</label>
-<button id="refreshDevicesBtn" title="Refresh devices">Refresh</button>
-</div>
+<!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
 <div class="row">
 <button id="startCam">Start camera</button>
