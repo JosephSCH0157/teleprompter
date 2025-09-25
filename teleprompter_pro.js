@@ -73,6 +73,13 @@ document.addEventListener('DOMContentLoaded', init);
 
 // Lightweight modular imports (browser native via type="module" in HTML)
 import('./eggs.js').then(mod => { window.__eggs = mod; }).catch(()=>{});
+// Optional debug HUD (toggle with ~) — already imported earlier
+try { import('./debug-tools.js').then(m => m.installDebugHud?.()).catch(()=>{}); } catch {}
+// New: scroll helpers and anchor observer
+let __scrollHelpers = null;
+let __anchorObs = null;
+// Optional debug HUD (toggle with ~)
+try { import('./debug-tools.js').then(m => m.installDebugHud?.()).catch(()=>{}); } catch {}
 import('./help.js').then(mod => {
   window.__help = mod;
   // Expose/override public helpers for callers already using window.*
@@ -972,6 +979,22 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   speakersBody      = document.getElementById('speakersBody');
 
   if (!openDisplayBtn) { setStatus('Boot: DOM not ready / IDs missing'); return; }
+    // Initialize modular helpers now that viewer exists
+    try {
+      const shMod = await import('./scroll-helpers.js');
+      const sh = shMod.createScrollerHelpers(() => viewer);
+      __scrollHelpers = sh;
+      // bind local refs used throughout
+      clampScrollTop = sh.clampScrollTop;
+      scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
+      scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
+      scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
+    } catch {}
+
+    try {
+      const ioMod = await import('./io-anchor.js');
+      __anchorObs = ioMod.createAnchorObserver(() => viewer, () => { try{ updateDebugPosChip(); }catch{} });
+    } catch {}
   // …keep the rest of your init() as-is…
 
     // Wire UI
@@ -1670,11 +1693,10 @@ function advanceByTranscript(transcript, isFinal){
 
     // Build paragraph index
     // Rebuild IntersectionObserver and (re)observe visible paragraphs
-    _ensureObserver();
+    // Rebuild IntersectionObserver via modular anchor observer
+    try { __anchorObs?.ensure?.(); } catch {}
     const paras = Array.from(scriptEl.querySelectorAll('p'));
-    if (_io) {
-      try { paras.forEach(p => _io.observe(p)); } catch {}
-    }
+    try { __anchorObs?.observeAll?.(paras); } catch {}
     lineEls = paras;
     try { updateDebugPosChip(); } catch {}
     paraIndex = []; let acc = 0;
@@ -1891,28 +1913,9 @@ function openDisplay(){
   window.sendToDisplay = sendToDisplay;
 
   // Centralized scroll target + helpers (always scroll the same container, not window)
+  // Installed later once viewer is bound
   function getScroller(){ return viewer; }
-  function clampScrollTop(y){
-    const sc = getScroller(); if (!sc) return 0;
-    const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-    return Math.max(0, Math.min(y, max));
-  }
-  function scrollByPx(px){
-    const sc = getScroller(); if (!sc) return;
-    sc.scrollTop = clampScrollTop(sc.scrollTop + (Number(px)||0));
-    try { updateDebugPosChip(); } catch {}
-  }
-  function scrollToY(y){
-    const sc = getScroller(); if (!sc) return;
-    sc.scrollTop = clampScrollTop(Number(y)||0);
-    try { updateDebugPosChip(); } catch {}
-  }
-  function scrollToEl(el, offset=0){
-    const sc = getScroller(); if (!sc || !el) return;
-    const y = (el.offsetTop||0) - (Number(offset)||0);
-    sc.scrollTop = clampScrollTop(y);
-    try { updateDebugPosChip(); } catch {}
-  }
+  let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
 
   // Debug chip updater: shows anchor percentage within viewport and scrollTop
   function updateDebugPosChip(){
@@ -2341,40 +2344,7 @@ function toggleRec(){
     reader.readAsText(file, 'utf-8');
   }
 
-// --- Debug HUD (toggle with `~`) ---
-(() => {
-  let on = false, el = null;
-  function ensureBox() {
-    if (el) return el;
-    el = document.createElement('div');
-    el.id = 'debugHud';
-    el.style.cssText = `
-      position:fixed; right:10px; bottom:10px; z-index:99999;
-      max-width:42vw; min-width:260px; max-height:40vh; overflow:auto;
-      background:#0e141b; border:1px solid var(--edge); border-radius:10px;
-      font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      padding:10px; color:#c8d2dc; box-shadow:0 6px 24px rgba(0,0,0,.4)`;
-    document.body.appendChild(el);
-    return el;
-  }
-  window.debug = function debug(line) {
-    if (!on) return;
-    const box = ensureBox();
-    const msg = (typeof line === 'string') ? line : JSON.stringify(line);
-    const row = document.createElement('div');
-    row.textContent = msg;
-    box.appendChild(row);
-    while (box.childElementCount > 120) box.removeChild(box.firstChild);
-    box.scrollTop = box.scrollHeight;
-  };
-  window.debugClear = () => { if (el) el.innerHTML = ''; };
-  window.addEventListener('keydown', (e) => {
-    if (e.key === '`' || e.key === '~') {
-      on = !on;
-      if (!on) debugClear(); else ensureBox();
-    }
-  });
-})();
+// Debug HUD moved to debug-tools.js
 
 // ───────────────────────────────────────────────────────────────
 // Self-checks: quick asserts at load, with a small pass/fail bar
