@@ -951,6 +951,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   prerollInput = document.getElementById('preroll');
   countOverlay = document.getElementById('countOverlay');
   countNum     = document.getElementById('countNum');
+  // OBS toggle UI
+  const enableObsChk = document.getElementById('enableObs');
+  const obsStatus    = document.getElementById('obsStatus');
 
   dbMeter = document.getElementById('dbMeter'); // ← required by startDbMeter()
 
@@ -987,6 +990,37 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     autoToggle.addEventListener('click', () => {
       if (autoTimer) stopAutoScroll(); else startAutoScroll();
     });
+
+    // OBS enable toggle wiring (after recorder module possibly loaded)
+    if (enableObsChk) {
+      const applyFromSettings = () => {
+        try {
+          if (!__recorder?.getSettings) return;
+            const s = __recorder.getSettings();
+            const has = s.selected.includes('obs');
+            enableObsChk.checked = has;
+            if (obsStatus) obsStatus.textContent = has ? 'OBS: enabled' : 'OBS: disabled';
+        } catch {}
+      };
+      applyFromSettings();
+      enableObsChk.addEventListener('change', async ()=>{
+        try {
+          if (!__recorder?.getSettings || !__recorder?.setSettings) return;
+          const s = __recorder.getSettings();
+          let sel = s.selected.filter(id => id !== 'obs');
+          if (enableObsChk.checked) sel.push('obs');
+          __recorder.setSettings({ selected: sel });
+          if (obsStatus) obsStatus.textContent = enableObsChk.checked ? 'OBS: enabled' : 'OBS: disabled';
+          // Optionally check availability quickly
+          if (enableObsChk.checked && __recorder.get('obs')?.isAvailable) {
+            try {
+              const ok = await __recorder.get('obs').isAvailable();
+              if (obsStatus) obsStatus.textContent = ok ? 'OBS: ready' : 'OBS: offline';
+            } catch { if (obsStatus) obsStatus.textContent = 'OBS: offline'; }
+          }
+        } catch {}
+      });
+    }
 
     resetBtn.addEventListener('click', resetTimer);
 

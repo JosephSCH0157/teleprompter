@@ -122,6 +122,10 @@ select { font-size: 14px; }
     .toolbar{display:flex;gap:6px;flex-wrap:wrap}
 .toolbar button{font-size:6px;padding:6px 8px}
 
+/* OBS toggle */
+.obs-toggle-label{display:flex;align-items:center;gap:6px}
+.obs-status{opacity:.75}
+
 /* Disable browser smooth scrolling for live-follow (always snap immediately) */
 #viewer, #scriptScrollContainer { scroll-behavior: auto !important; }
 
