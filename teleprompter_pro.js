@@ -504,16 +504,7 @@ function ensureHelpUI(){
           <p style="margin:0 0 8px; color:#96a0aa">
             Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.
           </p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
-            <button id="normalizeBtn" class="btn-chip">Normalize current script</button>
-            <button id="validateBtn" class="btn-chip">Validate markup</button>
-          </div>
-        </div>
-
-        <div id="helpAdvanced" class="hidden" style="margin-top:12px">
-          <h4 style="margin:0 0 6px">Advanced</h4>
-          <div class="shortcuts-grid">
-            <div><strong>Alt-click title</strong></div><div>Toggle this section</div>
+          <!-- (docx import pipeline code removed: was accidentally injected here) -->
             <div><strong>~</strong></div><div>Debug HUD</div>
             <div><strong>?v=clear</strong></div><div>Force refresh</div>
           </div>
@@ -2294,15 +2285,15 @@ function toggleRec(){
         const arrayBuffer = await file.arrayBuffer();
         const { value } = await mammoth.extractRawText({ arrayBuffer });
         const text = String(value||'').replace(/\r\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
-        editor.value = text; renderScript(text); setStatus(`Loaded “${file.name}” (.docx).`);
-        // Gently normalize to our exact standard so it’s ready to present
+        // Pipeline: raw (Mammoth) -> Normalize (if available) -> render normalized
+        editor.value = text;
+        let normalized = false;
         try {
-          if (typeof window.normalizeToStandard === 'function') {
-            window.normalizeToStandard();
-          } else if (typeof window.fallbackNormalize === 'function') {
-            window.fallbackNormalize();
-          }
+          if (typeof window.normalizeToStandard === 'function') { window.normalizeToStandard(); normalized = true; }
+          else if (typeof window.fallbackNormalize === 'function') { window.fallbackNormalize(); normalized = true; }
         } catch {}
+        renderScript(editor.value);
+        setStatus(`Loaded "${file.name}" (.docx)${normalized ? ' and normalized' : ''}.`);
       } catch(e){ err(e); setStatus('Failed to read .docx: ' + (e?.message||e)); }
       return;
     }
