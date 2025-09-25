@@ -853,6 +853,8 @@ function init() {
       }catch{}
       _lastAdvanceAt = now;
       if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: viewer.scrollTop, idx: currentIndex });
+      // dead-man watchdog after logical index adjustment
+      try { deadmanWatchdog(currentIndex); } catch {}
     }
   }, 250);
 
@@ -1527,6 +1529,8 @@ function advanceByTranscript(transcript, isFinal){
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   _lastCorrectionAt = tNow;
   if (dir !== 0) _lastMoveDir = dir;
+  // Dead-man timer: ensure scroll keeps up with HUD index
+  try { deadmanWatchdog(currentIndex); } catch {}
 }
 
   function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
@@ -1861,6 +1865,36 @@ function openDisplay(){
     const sc = getScroller(); if (!sc || !el) return;
     const y = (el.offsetTop||0) - (Number(offset)||0);
     sc.scrollTop = clampScrollTop(y);
+  }
+
+  // Dead-man timer: if HUD index advances but scrollTop doesn’t, force a catch-up jump
+  let _wdLastIdx = -1, _wdLastTop = 0, _wdLastT = 0;
+  function deadmanWatchdog(idx){
+    try {
+      const sc = getScroller(); if (!sc) return;
+      // Don’t fight auto-scroll
+      if (autoTimer) return;
+      const now = performance.now();
+      const top = sc.scrollTop;
+      if (idx > _wdLastIdx && (now - _wdLastT) > 600 && Math.abs(top - _wdLastTop) < 4){
+        // Force a catch-up jump to the current element/paragraph under idx
+        let el = null;
+        try {
+          const p = (paraIndex||[]).find(p => idx >= p.start && idx <= p.end);
+          el = p?.el || null;
+          if (!el && Array.isArray(lineEls)) el = lineEls[Math.min(idx, lineEls.length-1)] || null; // best-effort fallback
+        } catch {}
+        if (el){
+          const offset = Math.round(sc.clientHeight * 0.40);
+          scrollToEl(el, offset);
+          // mirror to display
+          const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+          const ratio = max ? (sc.scrollTop / max) : 0;
+          sendToDisplay({ type:'scroll', top: sc.scrollTop, ratio });
+        }
+      }
+      if (idx > _wdLastIdx){ _wdLastIdx = idx; _wdLastT = now; _wdLastTop = top; }
+    } catch {}
   }
 
   /* ──────────────────────────────────────────────────────────────
