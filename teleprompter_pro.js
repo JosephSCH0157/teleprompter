@@ -590,14 +590,28 @@ function wireNormalizeButton(btn){
       if (!navigator.mediaDevices?.enumerateDevices) return;
       const list = await navigator.mediaDevices.enumerateDevices();
       const audios = list.filter(d => d.kind === 'audioinput');
+      const videos = list.filter(d => d.kind === 'videoinput');
       const micSel = document.getElementById('settingsMicSel');
       if (micSel){
+        const cur = micSel.value;
         micSel.innerHTML = '';
         for (const d of audios){
           const opt = document.createElement('option');
           opt.value = d.deviceId; opt.textContent = d.label || 'Microphone';
           micSel.appendChild(opt);
         }
+        // Restore selection if still present
+        if (cur && Array.from(micSel.options).some(o=>o.value===cur)) micSel.value = cur;
+      }
+      if (camDeviceSel){
+        const curC = camDeviceSel.value;
+        camDeviceSel.innerHTML = '';
+        for (const d of videos){
+          const opt = document.createElement('option');
+          opt.value = d.deviceId; opt.textContent = d.label || 'Camera';
+          camDeviceSel.appendChild(opt);
+        }
+        if (curC && Array.from(camDeviceSel.options).some(o=>o.value===curC)) camDeviceSel.value = curC;
       }
     } catch (e) { /* ignore */ }
   }
@@ -2593,23 +2607,7 @@ function toggleRec(){
 
 
 
-  async function populateDevices(){
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      updateMicDevices(devices); updateCamDevices(devices);
-    } catch(e){ warn('enumerateDevices failed', e); }
-  }
-
-  function updateMicDevices(devices){ if (!micDeviceSel) return; const opts = devices.filter(d=>d.kind==='audioinput'); micDeviceSel.innerHTML=''; for (const d of opts){ const o=document.createElement('option'); o.value=d.deviceId||''; o.textContent=d.label||('Mic '+(micDeviceSel.length+1)); micDeviceSel.appendChild(o);} }
-  function updateCamDevices(devices){ if (!camDeviceSel) return; const opts = devices.filter(d=>d.kind==='videoinput'); camDeviceSel.innerHTML=''; for (const d of opts){ const o=document.createElement('option'); o.value=d.deviceId||''; o.textContent=d.label||('Camera '+(camDeviceSel.length+1)); camDeviceSel.appendChild(o);} }
-
-  async function requestMic(){
-    try {
-      const id = micDeviceSel?.value || undefined;
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: id? {deviceId: {exact:id}} : true, video: false });
-      audioStream = stream; permChip.textContent = 'Mic: granted'; recBtn.disabled = false; startDbMeter(stream); populateDevices();
-    } catch(e){ permChip.textContent = 'Mic: denied'; warn('getUserMedia failed', e); }
-  }
+  // (Removed duplicate populateDevices/requestMic/updateMicDevices/updateCamDevices — consolidated earlier.)
 
   /* ──────────────────────────────────────────────────────────────
    * Camera overlay
