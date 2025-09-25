@@ -189,3 +189,31 @@ export function get(id){ return registry.get(id); }
  * @returns {RecorderAdapter[]}
  */
 export function all(){ return [...registry.values()]; }
+
+// --- Built-in adapters (OBS, Bridge) registration ---
+let _builtInsInit = false;
+export async function initBuiltIns(){
+	if (_builtInsInit) return;
+	_builtInsInit = true;
+	try {
+		// Attempt to load and register built-in adapters. Each is optional.
+		const adapters = [];
+		try {
+			const m = await import('./adapters/bridge.js');
+			const a = m?.createBridgeAdapter?.(); if (a) adapters.push(a);
+		} catch {}
+		try {
+			const m = await import('./adapters/obs.js');
+			const a = m?.createOBSAdapter?.(); if (a) adapters.push(a);
+		} catch {}
+		for (const a of adapters){ try { register(a); } catch {} }
+		applyConfigs();
+	} catch {}
+}
+
+// Fire-and-forget initialization on module load (safe if ignored)
+try { initBuiltIns(); } catch {}
+
+// Simple aliases for consumers that prefer start/stop terminology
+export async function start(){ return startSelected(); }
+export async function stop(){ return stopSelected(); }
