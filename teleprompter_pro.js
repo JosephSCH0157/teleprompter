@@ -1526,8 +1526,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       }
     });
 
-    // Build dB meter bars
-    buildDbBars();
+  // (Removed stray buildDbBars() call without target; meter already built earlier.)
 
     // Restore UI prefs from localStorage (if any)
       const FONT_KEY = 'tp_font_size_v1';
