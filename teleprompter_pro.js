@@ -833,7 +833,7 @@ function init() {
   const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
   const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-      viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight);
+      try { scrollByPx(FALLBACK_STEP_PX); } catch { viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight); }
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? (viewer.scrollTop / max) : 0;
@@ -1855,7 +1855,7 @@ function startAutoScroll(){
   try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   const step = () => {
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
-    viewer.scrollTop += (pxPerSec / 60);
+    try { scrollByPx(pxPerSec / 60); } catch { viewer.scrollTop += (pxPerSec / 60); }
     {
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const ratio = max ? (viewer.scrollTop / max) : 0;
