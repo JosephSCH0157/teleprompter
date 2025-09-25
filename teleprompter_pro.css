@@ -40,12 +40,11 @@ select { font-size: 14px; }
     .select-md { font-size: 14px; }  /* tweak to taste */
     .hidden { display: none !important; }
 
-/* Inline style extractions (pass) */
-.inl-x3{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
-/* Inline style extractions (pass) */
-.inl-x2{font-size:14px;color:#96a0aa}
-/* Inline style extractions (pass) */
-.inl-x1{min-width:200px}
+/* Inline utility classes (deduped & merged) */
+.inl-x3{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px;min-width:200px}
+.inl-x2{font-size:14px;color:#96a0aa;margin-top:16px}
+/* For .inl-x1 two different min-widths appeared (200px, 240px); using the larger for layout safety */
+.inl-x1{min-width:240px}
 /* Inline style extractions (pass) */
 .inl-x7{font-size:14px;color:#96a0aa}
 /* Inline style extractions (pass) */
@@ -54,12 +53,7 @@ select { font-size: 14px; }
 .inl-x5{min-width:200px}
 /* Inline style extractions (pass) */
 .inl-x4{display:none}
-/* Inline style extractions (pass) */
-.inl-x3{min-width:200px}
-/* Inline style extractions (pass) */
-.inl-x2{margin-top:16px}
-/* Inline style extractions (pass) */
-.inl-x1{min-width:240px}
+/* (Removed duplicate .inl-x1/.inl-x2/.inl-x3 definitions) */
 /* Inline style extractions */
 .inl-1{border:1px solid var(--edge); padding:4px 10px; border-radius:10px; background:#0e141b; color:var(--fg); margin-left:auto}
 .inl-2{min-width:240px}
