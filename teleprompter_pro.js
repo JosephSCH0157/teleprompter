@@ -467,6 +467,21 @@ function wireNormalizeButton(btn){
     for (let i=0;i<20;i++){ const b=document.createElement('div'); b.className='bar'; target.appendChild(b); }
     // Peak marker
     const peak = document.createElement('div'); peak.className='peak-marker'; peak.style.transform='translateX(0)'; target.appendChild(peak);
+    // Scale ticks (every 5 bars) – positioned absolutely
+    const ticks = document.createElement('div');
+    ticks.style.cssText='position:absolute;inset:0;pointer-events:none;font:8px/1 ui-monospace,monospace;color:#fff5;display:flex;';
+    for (let i=0;i<20;i++){
+      if (i % 5 === 0){
+        const t = document.createElement('div');
+        t.style.cssText='flex:1;position:relative;';
+        const line = document.createElement('div'); line.style.cssText='position:absolute;top:0;bottom:0;left:0;width:1px;background:#ffffff22';
+        const lbl = document.createElement('div'); lbl.textContent = (i===0?'-∞': `-${(20 - i)}dB`).replace('--','-'); lbl.style.cssText='position:absolute;bottom:100%;left:0;transform:translate(-2px,-2px);white-space:nowrap;';
+        t.appendChild(line); t.appendChild(lbl); ticks.appendChild(t);
+      } else {
+        const spacer = document.createElement('div'); spacer.style.flex='1'; ticks.appendChild(spacer);
+      }
+    }
+    target.appendChild(ticks);
     return Array.from(target.querySelectorAll('.bar'));
   }
 
@@ -511,6 +526,13 @@ function wireNormalizeButton(btn){
           const x = bar.offsetLeft;
           peakEl.style.transform = `translateX(${x}px)`;
           peakEl.style.opacity = peakHold.value>0?'.9':'0';
+          // Color shift based on level percentage
+          const pct = peakIndex / (topBars.length-1);
+          let color = '#2eff7d'; // green
+          if (pct > 0.85) color = '#ff3131';
+          else if (pct > 0.65) color = '#ffb347';
+          peakEl.style.backgroundColor = color;
+          peakEl.style.boxShadow = `0 0 4px ${color}aa`;
         }
         // Tooltip stats (rounded)
         peakEl.title = `Approx RMS: ${(rms*100).toFixed(0)}%\nApprox dBFS: ${dbfs===-Infinity?'–∞':dbfs.toFixed(1)} dB`;
