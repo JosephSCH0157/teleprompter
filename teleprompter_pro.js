@@ -2320,8 +2320,12 @@ function advanceByTranscript(transcript, isFinal){
   applyBottomPad();
   // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
-    // Mirror to display
-    sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+    // Mirror to display (only if open & ready)
+    try {
+      if (displayWin && !displayWin.closed && displayReady) {
+        sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+      }
+    } catch {}
 
     // Build paragraph index
     // Rebuild IntersectionObserver and (re)observe visible paragraphs
