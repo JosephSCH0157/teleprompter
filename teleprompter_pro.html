@@ -37,6 +37,7 @@
 <div id="dbMeterTop" title="Input level"></div>
 <!-- Present Mode (top bar) -->
 <button class="inl-1 chip" id="presentBtn">Present Mode</button>
+<button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
 <!-- Help/Shortcuts Button -->
 <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
 <!-- Speakers legend -->
@@ -236,6 +237,16 @@
       <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
     </div>
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
+  </div>
+</div>
+<!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
+<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="sheet settings-sheet">
+    <header class="sheet-head">
+      <h3 id="settingsTitle" class="settings-title">Settings</h3>
+      <button id="settingsClose" class="btn-chip">Close</button>
+    </header>
+    <div id="settingsBody" class="settings-body"></div>
   </div>
 </div>
 <script type="module">

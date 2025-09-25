@@ -957,6 +957,10 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   const obsUrlInput  = document.getElementById('obsUrl');
   const obsPassInput = document.getElementById('obsPassword');
   const obsTestBtn   = document.getElementById('obsTestBtn');
+  const settingsBtn  = document.getElementById('settingsBtn');
+  const settingsOverlay = document.getElementById('settingsOverlay');
+  const settingsClose = document.getElementById('settingsClose');
+  const settingsBody  = document.getElementById('settingsBody');
 
   dbMeter = document.getElementById('dbMeter'); // ← required by startDbMeter()
 
@@ -1030,6 +1034,107 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           }
         } catch {}
       });
+    }
+
+    // Settings overlay wiring
+    if (settingsBtn && settingsOverlay && settingsClose && settingsBody){
+      const openSettings = () => { try { buildSettingsContent(); } catch(e){} settingsOverlay.classList.remove('hidden'); settingsBtn.setAttribute('aria-expanded','true'); };
+      const closeSettings = () => { settingsOverlay.classList.add('hidden'); settingsBtn.setAttribute('aria-expanded','false'); };
+      settingsBtn.addEventListener('click', openSettings);
+      settingsClose.addEventListener('click', closeSettings);
+      settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
+      window.addEventListener('keydown', e => { if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) closeSettings(); });
+    }
+
+    function buildSettingsContent(){
+      if (!settingsBody) return;
+      settingsBody.innerHTML = '';
+      // Helper to create a card
+      const card = (title, innerHtml) => {
+        const d = document.createElement('div');
+        d.className = 'settings-card';
+        d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
+        return d;
+      };
+      // Microphone
+      settingsBody.appendChild(card('Microphone', `
+        <div class="settings-inline-row">
+          <button id="settingsReqMic" class="btn-chip">Request mic</button>
+          <select id="settingsMicSel" class="select-md"></select>
+        </div>
+        <div class="settings-small">Select input and grant permission for speech sync & dB meter.</div>
+      `));
+      // Camera
+      settingsBody.appendChild(card('Camera', `
+        <div class="settings-inline-row">
+          <button id="settingsStartCam" class="btn-chip">Start</button>
+          <button id="settingsStopCam" class="btn-chip">Stop</button>
+          <select id="settingsCamSel" class="select-md"></select>
+        </div>
+        <div class="settings-inline-row">
+          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${camSize?.value||28}" style="width:70px"></label>
+          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${camOpacity?.value||100}" style="width:80px"></label>
+          <label><input id="settingsCamMirror" type="checkbox" ${camMirror?.checked? 'checked':''}/> Mirror</label>
+        </div>
+        <div class="settings-small">Camera overlay floats over the script.</div>
+      `));
+      // Speakers
+      settingsBody.appendChild(card('Speakers', `
+        <div class="settings-inline-row">
+          <button id="settingsShowSpeakers" class="btn-chip">${speakersBody?.classList.contains('hidden')?'Show':'Hide'} List</button>
+          <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
+        </div>
+        <div class="settings-small">Manage speaker tags & quick normalization.</div>
+      `));
+      // Recording / OBS
+      settingsBody.appendChild(card('Recording', `
+        <div class="settings-inline-row">
+          <label><input type="checkbox" id="settingsEnableObs" ${enableObsChk?.checked?'checked':''}/> Enable OBS</label>
+          <input id="settingsObsUrl" class="obs-url" type="text" value="${obsUrlInput?.value||'ws://127.0.0.1:4455'}" placeholder="ws://host:port" />
+          <input id="settingsObsPass" class="obs-pass" type="password" value="${obsPassInput?.value||''}" placeholder="password" />
+          <button id="settingsObsTest" class="btn-chip">Test</button>
+        </div>
+        <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
+      `));
+      wireSettingsDynamic();
+    }
+
+    function wireSettingsDynamic(){
+      // Mic
+      const reqMicBtn = document.getElementById('settingsReqMic');
+      const micSel    = document.getElementById('settingsMicSel');
+      if (micSel && micDeviceSel){
+        micSel.innerHTML = micDeviceSel.innerHTML;
+        micSel.value = micDeviceSel.value;
+        micSel.addEventListener('change', ()=>{ micDeviceSel.value = micSel.value; });
+      }
+      reqMicBtn?.addEventListener('click', ()=> micBtn?.click());
+      // Camera
+      const startCamS = document.getElementById('settingsStartCam');
+      const stopCamS  = document.getElementById('settingsStopCam');
+      const camSelS   = document.getElementById('settingsCamSel');
+      const camSizeS  = document.getElementById('settingsCamSize');
+      const camOpacityS = document.getElementById('settingsCamOpacity');
+      const camMirrorS  = document.getElementById('settingsCamMirror');
+      if (camSelS && camDeviceSel){ camSelS.innerHTML = camDeviceSel.innerHTML; camSelS.value = camDeviceSel.value; camSelS.addEventListener('change', ()=>{ camDeviceSel.value = camSelS.value; }); }
+      startCamS?.addEventListener('click', ()=> startCamBtn?.click());
+      stopCamS?.addEventListener('click', ()=> stopCamBtn?.click());
+      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
+      // Speakers
+      const showSpk = document.getElementById('settingsShowSpeakers');
+      showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); buildSettingsContent(); });
+      document.getElementById('settingsNormalize')?.addEventListener('click', ()=> normalizeTopBtn?.click());
+      // Recording / OBS
+      const obsEnable = document.getElementById('settingsEnableObs');
+      const obsUrlS = document.getElementById('settingsObsUrl');
+      const obsPassS = document.getElementById('settingsObsPass');
+      const obsTestS = document.getElementById('settingsObsTest');
+      obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
+      obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      obsTestS?.addEventListener('click', ()=> obsTestBtn?.click());
     }
 
     // OBS URL/password change persistence (debounced lightweight)
