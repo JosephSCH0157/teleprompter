@@ -72,12 +72,18 @@ function wireNormalizeButton(btn){
     // Incremental build only once; subsequent opens just sync values
     let _settingsBuilt = false;
     function buildSettingsContent(){
-      if (!settingsBody) return;
+      const body = document.getElementById('settingsBody');
+      if (!body) return;
       if (_settingsBuilt){
-        // If somehow ended up empty (e.g., previous error), allow one forced rebuild
-        if (!settingsBody.querySelector('.settings-card')) { _settingsBuilt = false; }
+        if (!body.querySelector('.settings-card')) { _settingsBuilt = false; }
         else { syncSettingsValues(); return; }
       }
+      const getVal = (id, fallback='') => {
+        try { const el = document.getElementById(id); return (el && 'value' in el && el.value !== undefined) ? el.value : fallback; } catch { return fallback; }
+      };
+      const isChecked = (id) => { try { const el = document.getElementById(id); return !!el?.checked; } catch { return false; } };
+      const speakersHidden = !!document.getElementById('speakersBody')?.classList.contains('hidden');
+
       const frag = document.createDocumentFragment();
       const card = (id, title, tab, innerHtml) => {
         const d = document.createElement('div');
@@ -100,34 +106,32 @@ function wireNormalizeButton(btn){
           <select id="settingsCamSel" class="select-md"></select>
         </div>
         <div class="settings-inline-row">
-          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${camSize?.value||28}" style="width:70px"></label>
-          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${camOpacity?.value||100}" style="width:80px"></label>
-          <label><input id="settingsCamMirror" type="checkbox" ${camMirror?.checked? 'checked':''}/> Mirror</label>
+          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${getVal('camSize',28)}" style="width:70px"></label>
+          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${getVal('camOpacity',100)}" style="width:80px"></label>
+          <label><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror')? 'checked':''}/> Mirror</label>
         </div>
         <div class="settings-small">Camera overlay floats over the script.</div>`));
       frag.appendChild(card('cardSpeakers','Speakers','general',`
         <div class="settings-inline-row">
-          <button id="settingsShowSpeakers" class="btn-chip">${speakersBody?.classList.contains('hidden')?'Show':'Hide'} List</button>
+          <button id="settingsShowSpeakers" class="btn-chip">${speakersHidden?'Show':'Hide'} List</button>
           <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
         </div>
         <div class="settings-small">Manage speaker tags & quick normalization.</div>`));
       frag.appendChild(card('cardRecording','Recording','recording',`
         <div class="settings-inline-row">
-          <label><input type="checkbox" id="settingsEnableObs" ${enableObsChk?.checked?'checked':''}/> Enable OBS</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" value="${obsUrlInput?.value||'ws://127.0.0.1:4455'}" placeholder="ws://host:port" />
-          <input id="settingsObsPass" class="obs-pass" type="password" value="${obsPassInput?.value||''}" placeholder="password" />
+          <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs')?'checked':''}/> Enable OBS</label>
+          <input id="settingsObsUrl" class="obs-url" type="text" value="${getVal('obsUrl','ws://127.0.0.1:4455')}" placeholder="ws://host:port" />
+          <input id="settingsObsPass" class="obs-pass" type="password" value="${getVal('obsPassword','')}" placeholder="password" />
           <button id="settingsObsTest" class="btn-chip">Test</button>
         </div>
         <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`));
       try {
-        settingsBody.appendChild(frag);
+        body.appendChild(frag);
         wireSettingsDynamic();
         syncSettingsValues();
         setupSettingsTabs();
-        // Only mark built if cards actually present
-        if (settingsBody.querySelector('.settings-card')) _settingsBuilt = true;
+        if (body.querySelector('.settings-card')) _settingsBuilt = true;
       } catch (e) {
-        // Failed; allow retry on next open
         console.warn('Settings build failed, will retry', e);
         _settingsBuilt = false;
       }
@@ -1305,7 +1309,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // Settings overlay wiring
     if (settingsBtn && settingsOverlay && settingsClose && settingsBody){
-      const openSettings = () => { try { buildSettingsContent(); } catch(e){} settingsOverlay.classList.remove('hidden'); settingsBtn.setAttribute('aria-expanded','true'); };
+      const openSettings = () => {
+        try { buildSettingsContent(); } catch(e){}
+        settingsOverlay.classList.remove('hidden');
+        settingsBtn.setAttribute('aria-expanded','true');
+      };
+      // Prebuild asynchronously after main init so first open isn't empty if user opens quickly
+      setTimeout(()=>{ try { buildSettingsContent(); } catch{} }, 0);
       const closeSettings = () => { settingsOverlay.classList.add('hidden'); settingsBtn.setAttribute('aria-expanded','false'); };
       settingsBtn.addEventListener('click', openSettings);
       settingsClose.addEventListener('click', closeSettings);
