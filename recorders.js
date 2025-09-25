@@ -53,6 +53,9 @@ try {
 	if (raw) {
 		const parsed = JSON.parse(raw);
 		if (parsed && typeof parsed === 'object') settings = { ...settings, ...parsed };
+	} else {
+		// First run: persist the defaults exactly once so future merges have a stored baseline
+		try { localStorage.setItem(LS_KEY, JSON.stringify(settings)); } catch {}
 	}
 } catch {}
 
