@@ -2777,9 +2777,37 @@ function toggleRec(){
   function applyCamOpacity(){ const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100)); camWrap.style.opacity = String(op); try{ sendToDisplay({ type:'cam-opacity', opacity: op }); }catch{} }
   function applyCamMirror(){ camWrap.classList.toggle('mirrored', !!camMirror.checked); try{ sendToDisplay({ type:'cam-mirror', on: !!camMirror.checked }); }catch{} }
 
+  // Simple fallback: draw current video frame to a hidden canvas and postImage (future implementation placeholder)
+  function enableCanvasMirrorFallback(reswitch){
+    try {
+      // Avoid reinitializing if already active
+      if (window.__camCanvasFallback && !reswitch) return;
+      const cvs = window.__camCanvasFallback || document.createElement('canvas');
+      window.__camCanvasFallback = cvs;
+      const ctx = cvs.getContext('2d');
+      function pump(){
+        try {
+          if (!camVideo || !camVideo.videoWidth) { requestAnimationFrame(pump); return; }
+          cvs.width = camVideo.videoWidth; cvs.height = camVideo.videoHeight;
+          ctx.drawImage(camVideo, 0, 0);
+          // Potential: send via postMessage with cvs.toDataURL('image/webp',0.6) throttled
+          // For now: only keep canvas for possible local preview tools
+        } catch {}
+        requestAnimationFrame(pump);
+      }
+      requestAnimationFrame(pump);
+      updateCamRtcChip('CamRTC: fallback');
+    } catch {}
+  }
+
   // ── WebRTC camera mirroring (simple in-window signaling) ──
   async function ensureCamPeer(){
     if (!camStream) return;
+    // Fallback: if RTCPeerConnection not supported (locked-down environment), drop to canvas mirror path
+    if (typeof window.RTCPeerConnection === 'undefined') {
+      try { enableCanvasMirrorFallback(); } catch {}
+      return;
+    }
     if (camPC) return; // already active
     try {
       const pc = new RTCPeerConnection({ iceServers: [] });
@@ -2825,6 +2853,7 @@ function toggleRec(){
   async function switchCamera(deviceId){
     try {
       if (!deviceId) return;
+      const rtcOK = typeof window.RTCPeerConnection !== 'undefined';
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
         audio: false
@@ -2834,6 +2863,7 @@ function toggleRec(){
       // Update local preview
       camStream = newStream;
       camVideo.srcObject = newStream;
+      if (!rtcOK) { try { enableCanvasMirrorFallback(true); } catch {} return; }
       // Replace outbound track if we have a sender
       const sender = camPC?.getSenders?.().find(s => s.track && s.track.kind === 'video');
       if (sender && newTrack){
