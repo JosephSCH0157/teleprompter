@@ -122,6 +122,9 @@ select { font-size: 14px; }
     .toolbar{display:flex;gap:6px;flex-wrap:wrap}
 .toolbar button{font-size:6px;padding:6px 8px}
 
+/* Disable browser smooth scrolling for live-follow (always snap immediately) */
+#viewer, #scriptScrollContainer { scroll-behavior: auto !important; }
+
 /* Subtle CK watermark */
 body.ck::after{
     content:"CK";
