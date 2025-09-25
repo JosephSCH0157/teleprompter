@@ -54,6 +54,20 @@ function setStatus(msg){
   }
 }
 
+// Shared Normalize wiring helper
+function wireNormalizeButton(btn){
+  try {
+    if (!btn || btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', () => {
+      try {
+        if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
+        else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
+      } catch(e){ try { alert('Normalize error: '+(e?.message||e)); } catch {} }
+    });
+  } catch {}
+}
+
 // Tiny toast utility (optional) for subtle pings
     // Incremental build only once; subsequent opens just sync values
     let _settingsBuilt = false;
@@ -426,15 +440,7 @@ function setStatus(msg){
 
   // TP: normalize-top-btn
   // Wire Top-bar Normalize button
-    if (normalizeTopBtn && !normalizeTopBtn.dataset.wired){
-      normalizeTopBtn.dataset.wired = '1';
-      normalizeTopBtn.addEventListener('click', () => {
-        try {
-          if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
-          else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-        } catch (e) { try { alert('Normalize error: ' + (e?.message||e)); } catch {} }
-      });
-    }
+    wireNormalizeButton(normalizeTopBtn);
   }
 
   /* ────────────────────────────────────────────────────────────── */
@@ -587,18 +593,8 @@ function ensureHelpUI(){
   overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeHelp(); });
   document.addEventListener('keydown', (e)=>{ if(e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) { e.preventDefault(); openHelp(); } });
 
-  // --- Normalize (uses your function if present; else safe fallback) ---
-  const normalizeBtn = overlay.querySelector('#normalizeBtn');
-  if (normalizeBtn) {
-    normalizeBtn.onclick = () => {
-      if (typeof window.normalizeToStandard === 'function') {
-        try { window.normalizeToStandard(); } catch (e) { alert('Normalize error: ' + e.message); }
-        return;
-      }
-      // Shared fallback
-      fallbackNormalize();
-    };
-  }
+  // --- Normalize button wiring ---
+  wireNormalizeButton(overlay.querySelector('#normalizeBtn'));
 
   // --- Validate tags quickly ---
   const validateBtn = overlay.querySelector('#validateBtn');
