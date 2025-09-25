@@ -2640,6 +2640,22 @@ function renderSelfChecks(checks){
 
     bar.onclick = () => { panel.classList.toggle('hidden'); };
   } catch (e) { try { console.warn('Self-checks UI failed:', e); } catch {} }
+
+  // Ensure a top Normalize button exists for self-checks (in case HTML removed it)
+  try {
+    let topNorm = document.getElementById('normalizeTopBtn');
+    if (!topNorm) {
+      const targetRow = document.querySelector('.panel .row');
+      if (targetRow) {
+        topNorm = document.createElement('button');
+        topNorm.id = 'normalizeTopBtn';
+        topNorm.className = 'btn-chip';
+        topNorm.textContent = 'Normalize';
+        topNorm.title = 'Normalize current script tags';
+        targetRow.appendChild(topNorm);
+      }
+    }
+  } catch {}
 }
 
 // ───────────────────────────────────────────────────────────────
