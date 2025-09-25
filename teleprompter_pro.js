@@ -142,20 +142,7 @@ function setStatus(msg){
       tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
       apply('general');
     }
-            obs: { url:'ws://127.0.0.1:4455', password:'' },
-            companion: { url:'http://127.0.0.1:8000', buttonId:'1.1' },
-            bridge: { startUrl:'http://127.0.0.1:5723/record/start', stopUrl:'' },
-            descript: { startHotkey:'Ctrl+R', via:'bridge' },
-            capcut: { startHotkey:'Ctrl+R', via:'companion' },
-            winmedia: { startHotkey:'Ctrl+R', via:'bridge' }
-          },
-          timeouts: { start: 3000, stop: 3000 },
-          failPolicy: 'continue'
-        });
-      }
-    } catch {}
-  }).catch(()=>{});
-} catch {}
+    // (Removed stray recorder settings snippet accidentally injected here)
 
   // TP: normalize-fallback
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
