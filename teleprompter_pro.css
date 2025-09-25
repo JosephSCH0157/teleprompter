@@ -140,6 +140,11 @@ select { font-size: 14px; }
 .settings-tab{background:#0e141b;border:1px solid var(--edge);padding:6px 10px;border-radius:20px;font-size:12px;cursor:pointer}
 .settings-tab.active{background:#12202a;color:var(--accent);border-color:var(--accent)}
 .settings-footer{margin-top:8px;opacity:.7;text-align:right}
+/* Settings card animations */
+@keyframes cardFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+@keyframes cardFadeOut { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(4px); } }
+.anim-in{animation:cardFadeIn .22s ease-out;}
+.anim-out{animation:cardFadeOut .18s ease-in;}
 
 /* Sidebar hint for relocated media/OBS controls */
 .sidebar-hint{flex:1 1 100%;text-align:left;opacity:.75}

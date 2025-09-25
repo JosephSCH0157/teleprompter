@@ -145,19 +145,52 @@ function wireNormalizeButton(btn){
     }
 
     function setupSettingsTabs(){
-      const tabs = document.querySelectorAll('#settingsTabs .settings-tab');
+      const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
+      const cards = Array.from(settingsBody.querySelectorAll('.settings-card'));
+      // Hide tabs with no cards lazily
+      tabs.forEach(tab => {
+        const tabName = tab.dataset.tab;
+        const hasCard = cards.some(c => c.dataset.tab === tabName);
+        if (!hasCard) tab.style.display = 'none';
+      });
+
+      // Animation helpers
+      const ANIM_IN = 'anim-in';
+      const ANIM_OUT = 'anim-out';
+      function showCard(c){
+        if (c._visible) return; // already visible
+        c._visible = true;
+        c.style.display = 'flex';
+        c.classList.remove(ANIM_OUT);
+        // force reflow for animation restart
+        void c.offsetWidth;
+        c.classList.add(ANIM_IN);
+        c.addEventListener('animationend', (e)=>{ if(e.animationName==='cardFadeIn') c.classList.remove(ANIM_IN); }, { once:true });
+      }
+      function hideCard(c){
+        if (!c._visible) return; // already hidden
+        c._visible = false;
+        c.classList.remove(ANIM_IN);
+        c.classList.add(ANIM_OUT);
+        c.addEventListener('animationend', (e)=>{
+          if (e.animationName==='cardFadeOut') { c.classList.remove(ANIM_OUT); c.style.display='none'; }
+        }, { once:true });
+      }
+
       const apply = (name) => {
         const sel = name || 'general';
         try { localStorage.setItem('tp_settings_tab', sel); } catch {}
         tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === sel));
-        settingsBody.querySelectorAll('.settings-card').forEach(c => {
-          const show = c.dataset.tab === sel || (sel === 'advanced' && c.dataset.tab === 'advanced');
-          c.style.display = show ? 'flex' : 'none';
+        cards.forEach(c => {
+          const show = c.dataset.tab === sel;
+            if (show) showCard(c); else hideCard(c);
         });
       };
       tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
       let last = 'general';
       try { last = localStorage.getItem('tp_settings_tab') || 'general'; } catch {}
+      // Initialize visibility (no animation on first render)
+      cards.forEach(c => { c._visible = false; c.style.display='none'; });
       apply(last);
     }
     // (Removed stray recorder settings snippet accidentally injected here)
