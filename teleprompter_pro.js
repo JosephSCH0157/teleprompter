@@ -8,7 +8,7 @@
    - NEW: Speakers section hide/show with persistence
 */
 
-(() => {
+(function(){
   'use strict';
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
@@ -3304,11 +3304,7 @@ function roarOverlay(){
 // About popover (Ctrl+Alt+K)
 // ───────────────────────────────────────────────────────────────
 // About popover IIFE
-// Close main app scope before standalone about popover IIFE
-} // <-- close roarOverlay enclosing scope (app)
-
-// About popover IIFE (standalone)
-(function(){
+// About popover (inline inside main scope)
   let about;
   function showAbout(){
     if (!about){
@@ -3336,6 +3332,6 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   window.addEventListener('keydown', (e)=>{
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
-})(); // end about popover
-
-})(); // end main IIFE
+// end about popover
+// Close main IIFE
+}})(); // end main IIFE
