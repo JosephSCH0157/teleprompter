@@ -2184,7 +2184,11 @@ let MAX_JUMP_AHEAD_WORDS = 12;   // max words to bump when pushing forward
 const MARKER_PCT = 0.36;
 // Gentler motion to avoid jumpiness
 let DEAD_BAND_PX = 18;          // ignore small errors
+// NOTE: Historical naming mismatch: some earlier code / docs referenced CORRECTION_MIN_INTERVAL_MS.
+// We keep the original internal name CORRECTION_MIN_MS and provide an alias to avoid ReferenceErrors.
 let CORRECTION_MIN_MS = 240;    // throttle corrections
+// Backwards-compatible alias (do NOT reassign directly elsewhere)
+try { Object.defineProperty(window, 'CORRECTION_MIN_INTERVAL_MS', { get(){ return CORRECTION_MIN_MS; }, set(v){ CORRECTION_MIN_MS = Number(v)||CORRECTION_MIN_MS; } }); } catch {}
 let MAX_FWD_STEP_PX = 96;       // clamp forward step size
 let MAX_BACK_STEP_PX = 140;     // clamp backward step size
 // Anti-jitter: remember last move direction (+1 fwd, -1 back, 0 none)
