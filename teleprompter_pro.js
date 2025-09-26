@@ -2777,6 +2777,17 @@ async function init(){
   } catch(e){
     console.error('[TP-Pro] init() failed:', e);
     try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m: 'init-failed:'+ (e?.message||e) }); } catch {}
+    // Emergency minimal fallback to at least render placeholder + meter
+    try {
+      if (!window.__tpInitSuccess) {
+        console.warn('[TP-Pro] Running emergency fallback init');
+        const ed = document.getElementById('editor');
+        const sc = document.getElementById('script');
+        if (sc && !sc.innerHTML) sc.innerHTML = '<p><em>Paste text in the editor to begin… (fallback)</em></p>';
+        try { buildDbBars(document.getElementById('dbMeterTop')); } catch {}
+        window.__tpInitSuccess = true;
+      }
+    } catch(err2){ console.error('[TP-Pro] fallback init failed', err2); }
     throw e;
   }
 }
