@@ -22,6 +22,15 @@
     window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
     document.addEventListener('readystatechange', ()=>{ __tpBootPush('rs:' + document.readyState); });
   } catch {}
+  // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
+  setTimeout(()=>{
+    try {
+      if (!window.__tpInitSuccess && typeof init === 'function') {
+        console.warn('[TP-Pro] Early zero-time force init attempt');
+        init();
+      }
+    } catch(e){ console.error('[TP-Pro] early force init error', e); }
+  }, 0);
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
   /* ──────────────────────────────────────────────────────────────
@@ -1069,7 +1078,8 @@ function injectHelpPanel(){
   }catch(err){ console.error('Help injection failed', err); }
 }
 
-async function init() {
+// Wrap the original init logic so we can capture early failures.
+async function _initCore() {
   // Run minimal wiring first (meters, help overlay, normalize button)
   try { __initMinimal(); } catch(e) { console.warn('Minimal init failed', e); }
   // ⬇️ grab these *first*
@@ -1084,6 +1094,19 @@ async function init() {
     shortcutsBtn?.setAttribute('aria-expanded','true');
     setTimeout(()=>shortcutsClose?.focus(), 0);
   }
+
+// Diagnostic wrapper
+async function init(){
+  console.log('[TP-Pro] init() wrapper start');
+  try {
+    await _initCore();
+    console.log('[TP-Pro] init() wrapper end (success)');
+  } catch(e){
+    console.error('[TP-Pro] init() failed:', e);
+    try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m: 'init-failed:'+ (e?.message||e) }); } catch {}
+    throw e;
+  }
+}
   function closeShortcuts(){
     if (!shortcutsOverlay) return;
     shortcutsOverlay.classList.add('hidden');
