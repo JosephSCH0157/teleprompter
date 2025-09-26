@@ -16,7 +16,7 @@
     window.__TP_BOOT_TRACE = [];
     const _origLog = console.log.bind(console);
     const tag = (m)=> `[TP-BOOT ${Date.now()%100000}] ${m}`;
-    window.__tpBootPush = (m)=>{ try { window.__TP_BOOT_TRACE.push({ t: Date.now(), m }); } catch {} };
+  window.__tpBootPush = (m)=>{ try { const rec = { t: Date.now(), m }; window.__TP_BOOT_TRACE.push(rec); console.log('[TP-TRACE]', rec.m); } catch(e){ try { console.warn('[TP-TRACE-FAIL]', e); } catch {} } };
     __tpBootPush('script-enter');
     _origLog(tag('entered main IIFE'));
     window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
@@ -81,7 +81,7 @@
           } catch(e){ console.warn('Mini normalize failed', e); }
         });
       }
-      try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m:'minimal-boot' }); } catch {}
+      try { __tpBootPush('minimal-boot'); } catch {}
     } catch (e){ console.warn('[TP-Pro] minimalBoot error', e); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', minimalBoot);
