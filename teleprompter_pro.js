@@ -108,6 +108,15 @@
 
   // Missing constants / safe fallbacks (restored)
   const DEVICE_KEY = 'tp_mic_device_v1';
+  // Define globals used later to avoid early ReferenceErrors halting script
+  let dbAnim = null;          // requestAnimationFrame id for dB meter
+  let audioStream = null;     // MediaStream for mic
+  let analyser = null;        // AnalyserNode
+  let audioCtx = null;        // AudioContext
+  // Peak hold state for dB meter
+  const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
+  // Default for recAutoRestart until init wires it; exposed via defineProperty later
+  let recAutoRestart = false;
   function _toast(msg, opts){
     // Lightweight fallback if the richer toast system was not injected
     try { console.debug('[toast]', msg, opts||''); } catch {}
