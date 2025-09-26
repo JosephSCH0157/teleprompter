@@ -3341,6 +3341,10 @@ function roarOverlay(){
 // About popover (Ctrl+Alt+K)
 // ───────────────────────────────────────────────────────────────
 // About popover IIFE
+// Close main app scope before standalone about popover IIFE
+} // <-- close roarOverlay enclosing scope (app)
+
+// About popover IIFE (standalone)
 (function(){
   let about;
   function showAbout(){
@@ -3371,5 +3375,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   });
 })(); // end about popover
 
-// Close main application IIFE (was accidentally removed during previous edits)
 })(); // end main IIFE
