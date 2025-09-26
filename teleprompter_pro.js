@@ -1861,7 +1861,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       document.body.appendChild(div);
       _tunePanelEl = div;
       _tuneInputs = {};
-      [...div.querySelectorAll('input[data-k]')].forEach(inp=>{ _tuneInputs[inp.getAttribute('data-k')] = inp; });
+      Array.from(div.querySelectorAll('input[data-k]')).forEach(inp => {
+        _tuneInputs[inp.getAttribute('data-k')] = inp;
+      });
       populateTuningInputs();
       // Load existing saved (but don't auto-enable)
       try {
