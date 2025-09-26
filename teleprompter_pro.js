@@ -117,6 +117,8 @@
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
   let recAutoRestart = false;
+  // Auto-start mic if previously chosen device is present
+  let pendingAutoStart = false;
   function _toast(msg, opts){
     // Lightweight fallback if the richer toast system was not injected
     try { console.debug('[toast]', msg, opts||''); } catch {}
