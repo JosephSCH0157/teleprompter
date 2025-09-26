@@ -22,6 +22,30 @@
     window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
     document.addEventListener('readystatechange', ()=>{ __tpBootPush('rs:' + document.readyState); });
   } catch {}
+  // Early minimal init safety net: builds placeholder + dB meter if deep init stalls.
+  (function earlyInitFallback(){
+    try {
+      if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
+      // Defer a tick so DOM is definitely present
+      requestAnimationFrame(()=>{
+        try {
+          if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
+          const scriptEl = document.getElementById('script');
+          const editorEl = document.getElementById('editor');
+          if (scriptEl && !scriptEl.innerHTML) {
+            scriptEl.innerHTML = '<p><em>Paste text in the editor to begin… (early)</em></p>';
+          }
+          // Build minimal dB meter bars if missing
+          const meter = document.getElementById('dbMeterTop');
+          if (meter && !meter.querySelector('.bar')) {
+            try { (typeof buildDbBars === 'function') ? buildDbBars(meter) : (function(m){ for(let i=0;i<10;i++){ const b=document.createElement('div'); b.className='bar'; m.appendChild(b);} })(meter); } catch {}
+          }
+          window.__tpEarlyInitRan = true;
+          try { __tpBootPush && __tpBootPush('early-init-fallback'); } catch {}
+        } catch (e) { console.warn('[TP-Pro] earlyInitFallback error', e); }
+      });
+    } catch {}
+  })();
   // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
   setTimeout(()=>{
     try {
