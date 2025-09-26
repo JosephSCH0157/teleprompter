@@ -71,6 +71,57 @@ function wireNormalizeButton(btn){
 // Tiny toast utility (optional) for subtle pings
     // Incremental build only once; subsequent opens just sync values
     let _settingsBuilt = false;
+
+    // Dynamic wiring helper must exist before buildSettingsContent uses it
+    function wireSettingsDynamic(){
+      // Mic
+      const reqMicBtn = document.getElementById('settingsReqMic');
+      const micSel    = document.getElementById('settingsMicSel');
+      if (micSel){
+        micSel.addEventListener('change', ()=>{
+          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
+        });
+      }
+      reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
+      // Camera
+      const startCamS = document.getElementById('settingsStartCam');
+      const stopCamS  = document.getElementById('settingsStopCam');
+      const camSelS   = document.getElementById('settingsCamSel');
+      const camSizeS  = document.getElementById('settingsCamSize');
+      const camOpacityS = document.getElementById('settingsCamOpacity');
+      const camMirrorS  = document.getElementById('settingsCamMirror');
+      if (camSelS && camDeviceSel){
+        camSelS.addEventListener('change', async ()=>{
+          camDeviceSel.value = camSelS.value;
+          if (camVideo?.srcObject && camSelS.value) {
+            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
+          }
+        });
+      }
+      startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
+      stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
+      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
+      // OBS
+      const obsEnableS = document.getElementById('settingsEnableObs');
+      const obsUrlS = document.getElementById('settingsObsUrl');
+      const obsPassS= document.getElementById('settingsObsPass');
+      const obsTestS= document.getElementById('settingsObsTest');
+      if (obsEnableS && enableObsChk){
+        obsEnableS.addEventListener('change', ()=>{ enableObsChk.checked = obsEnableS.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); });
+      }
+      if (obsUrlS && obsUrlInput){ obsUrlS.addEventListener('change', ()=>{ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }); }
+      if (obsPassS && obsPassInput){ obsPassS.addEventListener('change', ()=>{ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }); }
+      obsTestS?.addEventListener('click', ()=>{ obsTestBtn?.click(); });
+      // Speakers toggle
+      const showSpk = document.getElementById('settingsShowSpeakers');
+      showSpk?.addEventListener('click', ()=>{ try { toggleSpeakersBtn?.click(); } catch {}; syncSettingsValues(); });
+      // Normalize
+      const normBtn = document.getElementById('settingsNormalize');
+      wireNormalizeButton(normBtn);
+    }
+
     function buildSettingsContent(){
       const body = document.getElementById('settingsBody');
       if (!body) return;
@@ -368,55 +419,24 @@ function wireNormalizeButton(btn){
         // Build spans aligned via line height approximation
         const style = getComputedStyle(ta); const lh = parseFloat(style.lineHeight)||16; const padTop = ta.scrollTop; // will adjust on scroll
         function rebuild(){
-          overlay.innerHTML='';
-          const scrollTop = ta.scrollTop; const firstVisible = Math.floor(scrollTop / lh)-1; const linesVisible = Math.ceil(ta.clientHeight / lh)+2;
-          for (let i=0;i<linesVisible;i++){
-            const lineIdx = firstVisible + i; if (lineIdx <0) continue; const lineNumber=lineIdx+1; if(!badLines.has(lineNumber)) continue;
-            const issue = issueObjs.find(o=>o.line===lineNumber);
-            const bar = document.createElement('div');
-            bar.title = issue.message;
-            bar.style.cssText = `position:absolute;left:0;right:0;top:${lineIdx*lh}px;height:${lh}px;background:linear-gradient(90deg,${colors[issue.type]||'#c30'}22,transparent 80%);pointer-events:none;`;
-            overlay.appendChild(bar);
-          }
+          try {
+            overlay.innerHTML='';
+            const scrollTop = ta.scrollTop; const firstVisible = Math.floor(scrollTop / lh)-1; const linesVisible = Math.ceil(ta.clientHeight / lh)+2;
+            for (let i=0;i<linesVisible;i++){
+              const lineIdx = firstVisible + i; if (lineIdx <0) continue; const lineNumber=lineIdx+1; if(!badLines.has(lineNumber)) continue;
+              const issue = issueObjs.find(o=>o.line===lineNumber);
+              const bar = document.createElement('div');
+              bar.title = issue.message;
+              bar.style.cssText = `position:absolute;left:0;right:0;top:${lineIdx*lh}px;height:${lh}px;background:linear-gradient(90deg,${colors[issue.type]||'#c30'}22,transparent 80%);pointer-events:none;`;
+              overlay.appendChild(bar);
+            }
+          } catch {}
         }
         rebuild();
         ta.addEventListener('scroll', rebuild, { passive:true });
-        // cleanup on next validation run handled by removal above
         wrap.appendChild(overlay);
       }
     } catch {}
-    if (!silent) showCopyDialog(msg, 'Validator');
-    return msg;
-  };
-  window.extendValidatorTags = function(tags){ if(!Array.isArray(tags)) return; if(!window.validatorConfig) window.validatorConfig={allowedTags:new Set(['s1','s2','note'])}; tags.forEach(t=>{ if(t) window.validatorConfig.allowedTags.add(String(t).toLowerCase()); }); };
-  window.setValidatorAllowedTags = function(tags){ if(!Array.isArray(tags)) return; window.validatorConfig={allowedTags:new Set(tags.map(t=>String(t).toLowerCase()))}; };
-
-  /* ──────────────────────────────────────────────────────────────
-   * Globals and state
-   * ────────────────────────────────────────────────────────────── */
-  let displayWin = null;
-  let displayReady = false;
-  // Handshake retry: if display opens but READY message never arrives (popup timing race),
-  // we ping it a few times with a lightweight hello. Stops early if READY received.
-  let displayHelloTimer = null;      // interval id
-  let displayHelloDeadline = 0;      // timestamp (ms) when we stop retrying
-  let dbAnim = null, analyser = null, audioStream = null;
-  let audioCtx = null; // global reference to AudioContext for suspend/resume
-  // WebRTC (camera mirroring to display window)
-  let camPC = null;       // RTCPeerConnection for camera
-  let camStream = null;   // Local camera MediaStream reference
-  let wantCamRTC = false; // Intent flag: user wants camera mirrored via WebRTC
-  let peakHold = { value:0, decay:0.005, lastUpdate:0 };
-  const DEVICE_KEY = 'tp_last_input_device_v1';
-  let pendingAutoStart = false;
-  let recActive = false;          // you already have this
-  let recog = null;               // SpeechRecognition instance
-  let recAutoRestart = true;      // keep recognition alive while active
-  // Persisted preference (default ON)
-  try {
-    const v = localStorage.getItem('tp_rec_autorestart_v1');
-    if (v === '0' || v === 'false') recAutoRestart = false;
-  } catch {}
   // Expose a live getter/setter for Help → Advanced to toggle at runtime
   try {
     Object.defineProperty(window, 'recAutoRestart', {
@@ -3320,6 +3340,7 @@ function roarOverlay(){
 // ───────────────────────────────────────────────────────────────
 // About popover (Ctrl+Alt+K)
 // ───────────────────────────────────────────────────────────────
+// About popover IIFE
 (function(){
   let about;
   function showAbout(){
@@ -3348,6 +3369,5 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   window.addEventListener('keydown', (e)=>{
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
-})();
-
-})();
+})(); // end about popover
+// Main IIFE closing brace was earlier; remove stray extra closer
