@@ -11,6 +11,17 @@
 // Reinstate IIFE wrapper (was removed causing brace imbalance)
 (function(){
   'use strict';
+  // Boot instrumentation (added)
+  try {
+    window.__TP_BOOT_TRACE = [];
+    const _origLog = console.log.bind(console);
+    const tag = (m)=> `[TP-BOOT ${Date.now()%100000}] ${m}`;
+    window.__tpBootPush = (m)=>{ try { window.__TP_BOOT_TRACE.push({ t: Date.now(), m }); } catch {} };
+    __tpBootPush('script-enter');
+    _origLog(tag('entered main IIFE'));
+    window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
+    document.addEventListener('readystatechange', ()=>{ __tpBootPush('rs:' + document.readyState); });
+  } catch {}
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
   /* ──────────────────────────────────────────────────────────────
@@ -1959,6 +1970,23 @@ try {
     }
   }
 } catch {}
+
+// Hard fallback: if init hasn't marked success soon, force-call it (guards against missed events or earlier silent exceptions)
+setTimeout(()=>{
+  try {
+    if (!window.__tpInitSuccess) {
+      console.warn('[TP-Pro] Late init fallback firing');
+      if (typeof init === 'function') init();
+    }
+  } catch (e) { console.error('[TP-Pro] Late init fallback failed', e); }
+}, 1500);
+
+// Dump boot trace if user presses Ctrl+Alt+B (debug aid)
+window.addEventListener('keydown', (e)=>{
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'b') {
+    try { console.log('[TP-Pro] Boot trace:', (window.__TP_BOOT_TRACE||[]).map(x=>x.m)); } catch {}
+  }
+});
 
 // Conditionally install last‑resort delegation ONLY if core buttons appear unwired after init grace period.
 setTimeout(() => {
