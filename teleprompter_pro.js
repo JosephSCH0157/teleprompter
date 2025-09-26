@@ -1094,19 +1094,7 @@ async function _initCore() {
     shortcutsBtn?.setAttribute('aria-expanded','true');
     setTimeout(()=>shortcutsClose?.focus(), 0);
   }
-
-// Diagnostic wrapper
-async function init(){
-  console.log('[TP-Pro] init() wrapper start');
-  try {
-    await _initCore();
-    console.log('[TP-Pro] init() wrapper end (success)');
-  } catch(e){
-    console.error('[TP-Pro] init() failed:', e);
-    try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m: 'init-failed:'+ (e?.message||e) }); } catch {}
-    throw e;
-  }
-}
+  // (rest of init logic continues below ... existing code ...)
   function closeShortcuts(){
     if (!shortcutsOverlay) return;
     shortcutsOverlay.classList.add('hidden');
@@ -2767,6 +2755,21 @@ function toggleRec(){
     // Try to start external recorders per settings
     try { __recorder?.start?.(); } catch {}
   });
+  // ...existing code...
+  // NOTE: _initCore continues far below; do not prematurely close earlier.
+}
+
+// Diagnostic wrapper (placed AFTER full _initCore definition)
+async function init(){
+  console.log('[TP-Pro] init() wrapper start');
+  try {
+    await _initCore();
+    console.log('[TP-Pro] init() wrapper end (success)');
+  } catch(e){
+    console.error('[TP-Pro] init() failed:', e);
+    try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m: 'init-failed:'+ (e?.message||e) }); } catch {}
+    throw e;
+  }
 }
 
 
