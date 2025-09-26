@@ -46,6 +46,41 @@
       });
     } catch {}
   })();
+
+  // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
+  function minimalBoot(){
+    try {
+      if (window.__tpInitSuccess || window.__tpMinimalBootRan) return;
+      window.__tpMinimalBootRan = true;
+      const scriptEl = document.getElementById('script');
+      const editorEl = document.getElementById('editor');
+      if (scriptEl && (!scriptEl.textContent || !scriptEl.textContent.trim())) {
+        scriptEl.innerHTML = '<p><em>Paste text in the editor to begin…</em></p>';
+      }
+      // Build meter bars (lightweight fallback if buildDbBars not yet defined)
+      const meter = document.getElementById('dbMeterTop');
+      if (meter && !meter.querySelector('.bar')) {
+        if (typeof buildDbBars === 'function') { try { buildDbBars(meter); } catch {} }
+        else {
+          for (let i=0;i<12;i++){ const b=document.createElement('div'); b.className='bar'; meter.appendChild(b); }
+        }
+      }
+      // Wire top normalize button minimally (may be overwritten by full init later)
+      const nbtn = document.getElementById('normalizeTopBtn');
+      if (nbtn && !nbtn.__mini){
+        nbtn.__mini = true;
+        nbtn.addEventListener('click', ()=>{
+          try {
+            if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
+            else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
+          } catch(e){ console.warn('Mini normalize failed', e); }
+        });
+      }
+      try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m:'minimal-boot' }); } catch {}
+    } catch (e){ console.warn('[TP-Pro] minimalBoot error', e); }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', minimalBoot);
+  else minimalBoot();
   // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
   setTimeout(()=>{
     try {
