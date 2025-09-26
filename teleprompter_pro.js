@@ -458,6 +458,10 @@ function wireNormalizeButton(btn){
   // Hard-bound current line tracking
   let currentEl = null;               // currently active <p> element
   let lineEls = [];                   // array of <p> elements in script order
+  // Recording / speech state flags
+  let recActive = false;              // true when speech recognition session is active
+  // Display window handle
+  let displayWin = null;              // popup window reference for mirrored display
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
 
 
