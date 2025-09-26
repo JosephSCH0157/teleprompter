@@ -8,6 +8,7 @@
    - NEW: Speakers section hide/show with persistence
 */
 
+// Reinstate IIFE wrapper (was removed causing brace imbalance)
 (function(){
   'use strict';
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
@@ -18,6 +19,13 @@
   const log = (...a) => console.log('[TP‑Pro]', ...a);
   const warn = (...a) => console.warn('[TP‑Pro]', ...a);
   const err  = (...a) => console.error('[TP‑Pro]', ...a);
+
+  // Missing constants / safe fallbacks (restored)
+  const DEVICE_KEY = 'tp_mic_device_v1';
+  function _toast(msg, opts){
+    // Lightweight fallback if the richer toast system was not injected
+    try { console.debug('[toast]', msg, opts||''); } catch {}
+  }
 
   window.addEventListener('error', e => setStatus('Boot error: ' + (e?.message || e)));
   window.addEventListener('unhandledrejection', e => setStatus('Promise rejection: ' + (e?.reason?.message || e?.reason || e)));
@@ -3277,6 +3285,8 @@ function installEasterEggs(){
     });
   }
 
+} // <-- close installEasterEggs properly
+
   // ---- :roar in editor -> quick emoji confetti
   const ed = document.getElementById('editor');
   if (ed){
@@ -3289,7 +3299,6 @@ function installEasterEggs(){
       }
     });
   }
-}
 
 function roarOverlay(){
   const o = document.createElement('div');
@@ -3338,5 +3347,5 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 // end about popover
-// Close main IIFE
-}})(); // end main IIFE
+} 
+})(); // end main IIFE (restored)
