@@ -131,6 +131,7 @@
       }
     }, { capture: true });
   } catch {}
+  try { __tpBootPush('after-zoom-guard'); } catch {}
 
 
 
@@ -161,6 +162,7 @@ function wireNormalizeButton(btn){
     });
   } catch {}
 }
+try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
 // Tiny toast utility (optional) for subtle pings
     // Incremental build only once; subsequent opens just sync values
@@ -234,6 +236,7 @@ function wireNormalizeButton(btn){
         _settingsBuilt = false;
       }
     }
+  try { __tpBootPush('after-buildSettingsContent-def'); } catch {}
 
     function syncSettingsValues(){
       // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
@@ -262,6 +265,7 @@ function wireNormalizeButton(btn){
       const obsPassS = document.getElementById('settingsObsPass');
       if (obsPassS && obsPassInput) obsPassS.value = obsPassInput.value;
     }
+  try { __tpBootPush('after-syncSettingsValues-def'); } catch {}
 
     function setupSettingsTabs(){
       const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
@@ -312,6 +316,7 @@ function wireNormalizeButton(btn){
       cards.forEach(c => { c._visible = false; c.style.display='none'; });
       apply(last);
     }
+  try { __tpBootPush('after-setupSettingsTabs-def'); } catch {}
     // (Removed stray recorder settings snippet accidentally injected here)
     // Kick self-checks if available (guard so we only run once)
     try { if (typeof runSelfChecks === 'function' && !window.__selfChecksRan) { window.__selfChecksRan = true; setTimeout(()=>{ try{ runSelfChecks(); }catch{} }, 120); } } catch {}
@@ -2048,6 +2053,7 @@ function scrollToCurrentIndex(){
 }
 
 // Ensure init runs (was previously implicit). Guard against double-run.
+try { __tpBootPush('pre-init-scheduling'); } catch {}
 try {
   if (!window.__tpInitScheduled) {
     window.__tpInitScheduled = true;
