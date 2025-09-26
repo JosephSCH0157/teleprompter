@@ -73,54 +73,7 @@ function wireNormalizeButton(btn){
     let _settingsBuilt = false;
 
     // Dynamic wiring helper must exist before buildSettingsContent uses it
-    function wireSettingsDynamic(){
-      // Mic
-      const reqMicBtn = document.getElementById('settingsReqMic');
-      const micSel    = document.getElementById('settingsMicSel');
-      if (micSel){
-        micSel.addEventListener('change', ()=>{
-          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
-        });
-      }
-      reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
-      // Camera
-      const startCamS = document.getElementById('settingsStartCam');
-      const stopCamS  = document.getElementById('settingsStopCam');
-      const camSelS   = document.getElementById('settingsCamSel');
-      const camSizeS  = document.getElementById('settingsCamSize');
-      const camOpacityS = document.getElementById('settingsCamOpacity');
-      const camMirrorS  = document.getElementById('settingsCamMirror');
-      if (camSelS && camDeviceSel){
-        camSelS.addEventListener('change', async ()=>{
-          camDeviceSel.value = camSelS.value;
-          if (camVideo?.srcObject && camSelS.value) {
-            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
-          }
-        });
-      }
-      startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
-      stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
-      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
-      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
-      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
-      // OBS
-      const obsEnableS = document.getElementById('settingsEnableObs');
-      const obsUrlS = document.getElementById('settingsObsUrl');
-      const obsPassS= document.getElementById('settingsObsPass');
-      const obsTestS= document.getElementById('settingsObsTest');
-      if (obsEnableS && enableObsChk){
-        obsEnableS.addEventListener('change', ()=>{ enableObsChk.checked = obsEnableS.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); });
-      }
-      if (obsUrlS && obsUrlInput){ obsUrlS.addEventListener('change', ()=>{ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }); }
-      if (obsPassS && obsPassInput){ obsPassS.addEventListener('change', ()=>{ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }); }
-      obsTestS?.addEventListener('click', ()=>{ obsTestBtn?.click(); });
-      // Speakers toggle
-      const showSpk = document.getElementById('settingsShowSpeakers');
-      showSpk?.addEventListener('click', ()=>{ try { toggleSpeakersBtn?.click(); } catch {}; syncSettingsValues(); });
-      // Normalize
-      const normBtn = document.getElementById('settingsNormalize');
-      wireNormalizeButton(normBtn);
-    }
+    // (Removed duplicate wireSettingsDynamic definition; primary is declared near top.)
 
     function buildSettingsContent(){
       const body = document.getElementById('settingsBody');
@@ -197,8 +150,14 @@ function wireNormalizeButton(btn){
       }
       const camSelS = document.getElementById('settingsCamSel');
       if (camSelS && camDeviceSel){
-        if (camSelS.innerHTML !== camDeviceSel.innerHTML) camSelS.innerHTML = camDeviceSel.innerHTML;
-        camSelS.value = camDeviceSel.value;
+        if (camSelS){
+          camSelS.addEventListener('change', async ()=>{
+            try { if (typeof camDeviceSel !== 'undefined' && camDeviceSel) camDeviceSel.value = camSelS.value; } catch {}
+            if (camVideo?.srcObject && camSelS.value) {
+              try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
+            }
+          });
+        }
       }
       const showSpk = document.getElementById('settingsShowSpeakers');
       if (showSpk) showSpk.textContent = speakersBody?.classList.contains('hidden') ? 'Show List' : 'Hide List';
