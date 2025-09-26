@@ -36,3 +36,12 @@ export function stopAutoCatchup() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
 }
+
+// Factory so caller can treat this as a controller instance
+export function createScrollController(){
+  return {
+    startAutoCatchup,
+    stopAutoCatchup,
+    isActive: () => active
+  };
+}
