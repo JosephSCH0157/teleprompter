@@ -21,7 +21,12 @@
     _origLog(tag('entered main IIFE'));
     window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
     document.addEventListener('readystatechange', ()=>{ __tpBootPush('rs:' + document.readyState); });
+    // Global error hooks (diagnostic): capture earliest uncaught issues
+    window.addEventListener('error', ev => { try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'onerror:'+ (ev?.error?.message||ev?.message) }); } catch {}; });
+    window.addEventListener('unhandledrejection', ev => { try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'unhandled:'+ (ev?.reason?.message||ev?.reason) }); } catch {}; });
+    _origLog(tag('installed global error hooks'));
   } catch {}
+  try { __tpBootPush('after-boot-block'); } catch {}
   // Early minimal init safety net: builds placeholder + dB meter if deep init stalls.
   (function earlyInitFallback(){
     try {
@@ -81,6 +86,7 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', minimalBoot);
   else minimalBoot();
+  try { __tpBootPush('post-minimalBoot'); } catch {}
   // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
   setTimeout(()=>{
     try {
@@ -90,6 +96,7 @@
       }
     } catch(e){ console.error('[TP-Pro] early force init error', e); }
   }, 0);
+  try { __tpBootPush('after-zero-time-init-attempt-scheduled'); } catch {}
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
   /* ──────────────────────────────────────────────────────────────
@@ -2051,6 +2058,7 @@ try {
     }
   }
 } catch {}
+try { __tpBootPush('init-scheduling-exited'); } catch {}
 
 // Hard fallback: if init hasn't marked success soon, force-call it (guards against missed events or earlier silent exceptions)
 setTimeout(()=>{
@@ -2061,6 +2069,7 @@ setTimeout(()=>{
     }
   } catch (e) { console.error('[TP-Pro] Late init fallback failed', e); }
 }, 1500);
+try { __tpBootPush('late-init-fallback-scheduled'); } catch {}
 
 // Dump boot trace if user presses Ctrl+Alt+B (debug aid)
 window.addEventListener('keydown', (e)=>{
