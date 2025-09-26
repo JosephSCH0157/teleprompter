@@ -1167,8 +1167,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   lineHeightInput = document.getElementById('lineHeight');
   autoToggle      = document.getElementById('autoToggle');
   autoSpeed       = document.getElementById('autoSpeed');
-  const catchUpBtn   = document.getElementById('catchUpBtn');
-  const matchAggroSel = document.getElementById('matchAggro');
+  const catchUpBtn      = document.getElementById('catchUpBtn');
+  const matchAggroSel   = document.getElementById('matchAggro');
   const motionSmoothSel = document.getElementById('motionSmooth');
 
   timerEl     = document.getElementById('timer');
@@ -3370,4 +3370,6 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 })(); // end about popover
-// Main IIFE closing brace was earlier; remove stray extra closer
+
+// Close main application IIFE (was accidentally removed during previous edits)
+})(); // end main IIFE
