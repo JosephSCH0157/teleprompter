@@ -1080,6 +1080,7 @@ function injectHelpPanel(){
 
 // Wrap the original init logic so we can capture early failures.
 async function _initCore() {
+  console.log('[TP-Pro] _initCore start');
   // Run minimal wiring first (meters, help overlay, normalize button)
   try { __initMinimal(); } catch(e) { console.warn('Minimal init failed', e); }
   // ⬇️ grab these *first*
@@ -1326,6 +1327,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   // Mark that core buttons have direct listeners (used by delegation heuristic)
   try { openDisplayBtn.__listenerAttached = true; closeDisplayBtn.__listenerAttached = true; presentBtn.__listenerAttached = true; } catch {}
   window.__tpInitSuccess = true;
+  console.log('[TP-Pro] _initCore mid (core UI wired)');
 
     fontSizeInput.addEventListener('input', applyTypography);
     lineHeightInput.addEventListener('input', applyTypography);
@@ -1884,6 +1886,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Initial debug chip paint
     try { updateDebugPosChip(); } catch {}
   }
+  // Ensure placeholder render if script empty
+  try {
+    if (scriptEl && !scriptEl.innerHTML) {
+      renderScript(editor?.value || '');
+    }
+  } catch {}
+  console.log('[TP-Pro] _initCore end');
 
   /* ──────────────────────────────────────────────────────────────
    * Roles + Legend
