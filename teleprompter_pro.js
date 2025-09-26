@@ -222,6 +222,55 @@ function wireNormalizeButton(btn){
     // Kick self-checks if available (guard so we only run once)
     try { if (typeof runSelfChecks === 'function' && !window.__selfChecksRan) { window.__selfChecksRan = true; setTimeout(()=>{ try{ runSelfChecks(); }catch{} }, 120); } } catch {}
 
+    // NOTE: wireSettingsDynamic previously lived inside init(), making it inaccessible
+    // to buildSettingsContent() (which resides at top scope) and causing a ReferenceError
+    // when settings were first opened. We hoist it to top-level scope so the call inside
+    // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
+    function wireSettingsDynamic(){
+      // Mic
+      const reqMicBtn = document.getElementById('settingsReqMic');
+      const micSel    = document.getElementById('settingsMicSel');
+      if (micSel){
+        micSel.addEventListener('change', ()=>{
+          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
+        });
+      }
+      reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
+      // Camera
+      const startCamS = document.getElementById('settingsStartCam');
+      const stopCamS  = document.getElementById('settingsStopCam');
+      const camSelS   = document.getElementById('settingsCamSel');
+      const camSizeS  = document.getElementById('settingsCamSize');
+      const camOpacityS = document.getElementById('settingsCamOpacity');
+      const camMirrorS  = document.getElementById('settingsCamMirror');
+      if (camSelS && camDeviceSel){
+        camSelS.addEventListener('change', async ()=>{
+          camDeviceSel.value = camSelS.value;
+          if (camVideo?.srcObject && camSelS.value) {
+            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
+          }
+        });
+      }
+      startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
+      stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
+      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
+      // Speakers
+      const showSpk = document.getElementById('settingsShowSpeakers');
+      showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); buildSettingsContent(); });
+      document.getElementById('settingsNormalize')?.addEventListener('click', ()=> normalizeTopBtn?.click());
+      // Recording / OBS
+      const obsEnable = document.getElementById('settingsEnableObs');
+      const obsUrlS = document.getElementById('settingsObsUrl');
+      const obsPassS = document.getElementById('settingsObsPass');
+      const obsTestS = document.getElementById('settingsObsTest');
+      obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
+      obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      obsTestS?.addEventListener('click', async ()=> { obsTestBtn?.click(); setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600); });
+    }
+
   // TP: normalize-fallback
   // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
   function fallbackNormalize(){
@@ -1311,51 +1360,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     // (Removed duplicate simple buildSettingsContent; using tabbed version defined earlier.)
 
-    function wireSettingsDynamic(){
-      // Mic
-      const reqMicBtn = document.getElementById('settingsReqMic');
-      const micSel    = document.getElementById('settingsMicSel');
-      if (micSel){
-        micSel.addEventListener('change', ()=>{
-          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
-        });
-      }
-  reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
-      // Camera
-      const startCamS = document.getElementById('settingsStartCam');
-      const stopCamS  = document.getElementById('settingsStopCam');
-      const camSelS   = document.getElementById('settingsCamSel');
-      const camSizeS  = document.getElementById('settingsCamSize');
-      const camOpacityS = document.getElementById('settingsCamOpacity');
-      const camMirrorS  = document.getElementById('settingsCamMirror');
-      if (camSelS && camDeviceSel){
-        camSelS.addEventListener('change', async ()=>{
-          camDeviceSel.value = camSelS.value;
-          // If camera already active, hot-swap without full restart
-          if (camVideo?.srcObject && camSelS.value) {
-            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
-          }
-        });
-      }
-  startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
-  stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
-      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
-      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
-      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
-      // Speakers
-      const showSpk = document.getElementById('settingsShowSpeakers');
-      showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); buildSettingsContent(); });
-      document.getElementById('settingsNormalize')?.addEventListener('click', ()=> normalizeTopBtn?.click());
-      // Recording / OBS
-      const obsEnable = document.getElementById('settingsEnableObs');
-      const obsUrlS = document.getElementById('settingsObsUrl');
-      const obsPassS = document.getElementById('settingsObsPass');
-      const obsTestS = document.getElementById('settingsObsTest');
-      obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
-      obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
-      obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
-  obsTestS?.addEventListener('click', async ()=> { obsTestBtn?.click(); setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600); });
-    }
+    // wireSettingsDynamic moved to top-level (see earlier definition)
 
     // OBS URL/password change persistence (debounced lightweight)
     const saveObsConfig = () => {
