@@ -38,10 +38,18 @@
     if (typeof window._initCore !== 'function') {
       window._initCore = async function __initCoreStub(){
         try { __tpBootPush('initCore-stub-wait'); } catch {}
+        // If the hoisted function declaration exists, call it immediately
+        try {
+          if (typeof _initCore === 'function') {
+            try { __tpBootPush('initCore-stub-direct-call'); } catch {}
+            return _initCore();
+          }
+        } catch {}
         const core = await new Promise((res)=>{
           let tries = 0; const id = setInterval(()=>{
-            if (typeof window.__tpRealCore === 'function') { clearInterval(id); res(window.__tpRealCore); }
-            else if (++tries > 600) { clearInterval(id); res(null); } // ~6s
+            if (typeof _initCore === 'function') { clearInterval(id); res(_initCore); }
+            else if (typeof window.__tpRealCore === 'function') { clearInterval(id); res(window.__tpRealCore); }
+            else if (++tries > 2000) { clearInterval(id); res(null); } // ~20s
           }, 10);
         });
         if (typeof core === 'function') return core();
