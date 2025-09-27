@@ -22,8 +22,14 @@
     window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
     document.addEventListener('readystatechange', ()=>{ __tpBootPush('rs:' + document.readyState); });
     // Global error hooks (diagnostic): capture earliest uncaught issues
-    window.addEventListener('error', ev => { try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'onerror:'+ (ev?.error?.message||ev?.message) }); } catch {}; });
-    window.addEventListener('unhandledrejection', ev => { try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'unhandled:'+ (ev?.reason?.message||ev?.reason) }); } catch {}; });
+    window.addEventListener('error', ev => {
+      try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'onerror:'+ (ev?.error?.message||ev?.message) }); } catch {}
+      try { console.error('[TP-BOOT onerror]', ev?.error || ev?.message || ev); } catch {}
+    });
+    window.addEventListener('unhandledrejection', ev => {
+      try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'unhandled:'+ (ev?.reason?.message||ev?.reason) }); } catch {}
+      try { console.error('[TP-BOOT unhandled]', ev?.reason); } catch {}
+    });
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
