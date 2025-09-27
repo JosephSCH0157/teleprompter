@@ -432,18 +432,30 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       }
       const showSpk = document.getElementById('settingsShowSpeakers');
       if (showSpk) showSpk.textContent = speakersBody?.classList.contains('hidden') ? 'Show List' : 'Hide List';
-      const obsEnable = document.getElementById('settingsEnableObs');
-      if (obsEnable && enableObsChk) obsEnable.checked = enableObsChk.checked;
-      const obsUrlS = document.getElementById('settingsObsUrl');
-      if (obsUrlS && obsUrlInput) obsUrlS.value = obsUrlInput.value;
-      const obsPassS = document.getElementById('settingsObsPass');
-      if (obsPassS && obsPassInput) obsPassS.value = obsPassInput.value;
+      // Mirror OBS fields from main panel to Settings overlay (query directly; avoid non-global vars)
+      try {
+        const obsEnable = document.getElementById('settingsEnableObs');
+        const mainEnable = document.getElementById('enableObs');
+        if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
+      } catch {}
+      try {
+        const obsUrlS = document.getElementById('settingsObsUrl');
+        const mainUrl = document.getElementById('obsUrl');
+        if (obsUrlS && mainUrl && typeof mainUrl.value === 'string') obsUrlS.value = mainUrl.value;
+      } catch {}
+      try {
+        const obsPassS = document.getElementById('settingsObsPass');
+        const mainPass = document.getElementById('obsPassword');
+        if (obsPassS && mainPass && typeof mainPass.value === 'string') obsPassS.value = mainPass.value;
+      } catch {}
     }
   try { __tpBootPush('after-syncSettingsValues-def'); } catch {}
 
     function setupSettingsTabs(){
       const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
-      const cards = Array.from(settingsBody.querySelectorAll('.settings-card'));
+      // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
+      const sb = document.getElementById('settingsBody');
+      const cards = sb ? Array.from(sb.querySelectorAll('.settings-card')) : [];
       // Hide tabs with no cards lazily
       tabs.forEach(tab => {
         const tabName = tab.dataset.tab;
