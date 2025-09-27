@@ -16,9 +16,11 @@
     window.__TP_BOOT_TRACE = [];
     const _origLog = console.log.bind(console);
     const tag = (m)=> `[TP-BOOT ${Date.now()%100000}] ${m}`;
+    // Dev flag for verbose boot tracing (hash, query, or localStorage)
+    try { window.__TP_DEV = /[?&]dev=1/.test(location.search) || location.hash.includes('dev') || (localStorage.getItem('tp_dev_mode')==='1'); } catch { window.__TP_DEV = false; }
     // Publish build version for About panel and diagnostics
     try { window.APP_VERSION = '1.5.7'; } catch {}
-  window.__tpBootPush = (m)=>{ try { const rec = { t: Date.now(), m }; window.__TP_BOOT_TRACE.push(rec); console.log('[TP-TRACE]', rec.m); } catch(e){ try { console.warn('[TP-TRACE-FAIL]', e); } catch {} } };
+  window.__tpBootPush = (m)=>{ try { const rec = { t: Date.now(), m }; const T = window.__TP_BOOT_TRACE; T.push(rec); if (window.__TP_DEV) console.log('[TP-TRACE]', rec.m); if (T.length>500) T.shift(); } catch(e){ try { if (window.__TP_DEV) console.warn('[TP-TRACE-FAIL]', e); } catch {} } };
     __tpBootPush('script-enter');
     _origLog(tag('entered main IIFE'));
     window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
@@ -35,27 +37,7 @@
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
-  // Early real-core waiter: provides a stable entry that will call the real core once it appears
-  try {
-    if (typeof window.__tpRealCore !== 'function') {
-      window.__tpRealCore = async function __coreWaiter(){
-        const self = window.__tpRealCore;
-        for (let i = 0; i < 2000; i++) { // ~20s
-          try {
-            if (typeof _initCore === 'function' && _initCore !== self && _initCore !== window._initCore) {
-              return _initCore();
-            }
-          } catch {}
-          if (typeof window._initCore === 'function' && window._initCore !== self) {
-            return window._initCore();
-          }
-          await new Promise(r => setTimeout(r, 10));
-        }
-        throw new Error('Core waiter timeout');
-      };
-      try { window.__tpRealCore.__tpWaiter = true; } catch {}
-    }
-  } catch {}
+  // (Legacy __tpRealCore waiter removed — simplified init path)
   // Install an early stub for core init that queues until the real core is defined
   try {
     if (typeof window._initCore !== 'function') {
@@ -71,13 +53,11 @@
         } catch {}
         const core = await new Promise((res)=>{
           let tries = 0; const id = setInterval(()=>{
-            // Prefer explicitly published real core ONLY if it's not just the early waiter
-            if (typeof window.__tpRealCore === 'function' && !window.__tpRealCore.__tpWaiter) { clearInterval(id); return res(window.__tpRealCore); }
-            // Or if window._initCore has been swapped to a different function, use that
+            // If window._initCore has been swapped to a different function, use that
             if (typeof window._initCore === 'function' && window._initCore !== self) { clearInterval(id); return res(window._initCore); }
             // Or if the hoisted real function has appeared, use it directly
             try { if (typeof _initCore === 'function' && _initCore !== self) { clearInterval(id); return res(_initCore); } } catch {}
-            if (++tries > 2000) { clearInterval(id); return res(null); } // ~20s
+            if (++tries > 500) { clearInterval(id); return res(null); } // ~5s
           }, 10);
         });
         if (typeof core === 'function') return core();
@@ -87,7 +67,7 @@
   } catch {}
   // Watchdog: if the real core is not defined soon, dump boot trace for diagnosis
   try {
-    setTimeout(()=>{
+    if (window.__TP_DEV) setTimeout(()=>{
       try {
         const trace = (window.__TP_BOOT_TRACE||[]);
         const hasCoreDef = trace.some(r => r && r.m === 'after-_initCore-def');
@@ -99,20 +79,7 @@
       } catch {}
     }, 3000);
   } catch {}
-    // Establish a stable core runner that waits until core is ready
-    try {
-      if (!window._initCoreRunner) {
-        let __resolveCoreRunner;
-        const __coreRunnerReady = new Promise(r => { __resolveCoreRunner = r; });
-        window._initCoreRunner = async function(){
-          try { await __coreRunnerReady; } catch {}
-          if (typeof window._initCore === 'function') return window._initCore();
-          if (typeof _initCore === 'function') return _initCore();
-          throw new Error('Core not ready');
-        };
-        window.__tpSetCoreRunnerReady = () => { try { __resolveCoreRunner && __resolveCoreRunner(); } catch {} };
-      }
-    } catch {}
+  // (Removed _initCoreRunner — direct init scheduling is sufficient)
   // Provide a safe early init proxy on window that forwards to core when available
   try {
     // Promise that resolves when core initializer becomes available
@@ -139,9 +106,7 @@
           ]);
           if (typeof core === 'function') { return core(); }
           console.warn('[TP-Pro] window.init proxy: core not ready after wait');
-            // Use the stable runner which waits until core is ready
-            try { __tpBootPush('window-init-proxy-waiting-core'); } catch {}
-            return await window._initCoreRunner();
+          return; // minimalBoot keeps UI sane; later scheduler will retry
         } catch(e){ console.error('[TP-Pro] window.init proxy error', e); }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -207,62 +172,18 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', minimalBoot);
   else minimalBoot();
   try { __tpBootPush('post-minimalBoot'); } catch {}
-  // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
-  setTimeout(()=>{
-    try {
-      if (!window.__tpInitSuccess && typeof init === 'function') {
-        console.warn('[TP-Pro] Early zero-time force init attempt');
-        init();
-      }
-    } catch(e){ console.error('[TP-Pro] early force init error', e); }
-  }, 0);
-  try { __tpBootPush('after-zero-time-init-attempt-scheduled'); } catch {}
+  // (Removed zero-time force init attempt)
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
-  // Early redundant init scheduling (safety net): wait for init to be defined, then call once
-  try { __tpBootPush('pre-init-scheduling-early'); } catch {}
+  // Single predictable init schedule: call window.init once after DOM is ready
   try {
-    const callInitOnce = () => {
-      if (window.__tpInitCalled) return;
-      if (typeof init === 'function') {
-        window.__tpInitCalled = true;
-        try { __tpBootPush('early-init-invoking'); } catch {}
-        try { init(); } catch(e){ console.error('init failed (early)', e); }
-      } else if (typeof window._initCore === 'function') {
-        window.__tpInitCalled = true;
-        try { __tpBootPush('early-core-invoking'); } catch {}
-        (async ()=>{
-          try {
-            await window._initCore();
-            console.log('[TP-Pro] _initCore early path end (success)');
-          } catch(e){
-            console.error('[TP-Pro] _initCore failed (early path):', e);
-          }
-        })();
-      } else {
-        // Shouldn’t happen due to guard, but reset flag to allow later retry
-        window.__tpInitCalled = false;
-      }
-    };
-    const whenInitReady = () => {
-      if (typeof init === 'function') { callInitOnce(); return; }
-      try { __tpBootPush('early-waiting-for-init'); } catch {}
-      let tries = 0;
-      const id = setInterval(() => {
-        if (typeof init === 'function' || typeof window._initCore === 'function') { clearInterval(id); callInitOnce(); }
-        else if (++tries > 300) { clearInterval(id); console.warn('[TP-Pro] init not defined after wait'); }
-      }, 10);
-    };
     if (!window.__tpInitScheduled) {
       window.__tpInitScheduled = true;
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', whenInitReady, { once: true });
-      } else {
-        Promise.resolve().then(whenInitReady);
-      }
+      const run = ()=>{ try { __tpBootPush('early-init-invoking'); init(); } catch(e){ console.error('init failed (early)', e); } };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once:true });
+      else Promise.resolve().then(run);
     }
-  } catch(e){ console.warn('early init scheduling error', e); }
-  try { __tpBootPush('init-scheduling-early-exited'); } catch {}
+  } catch(e){ if (window.__TP_DEV) console.warn('init scheduling error', e); }
 
   /* ──────────────────────────────────────────────────────────────
    * Boot diagnostics
