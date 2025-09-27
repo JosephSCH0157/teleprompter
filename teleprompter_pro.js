@@ -99,6 +99,20 @@
   try { __tpBootPush('after-zero-time-init-attempt-scheduled'); } catch {}
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
+  // Early redundant init scheduling (safety net): runs before heavy sections
+  try { __tpBootPush('pre-init-scheduling-early'); } catch {}
+  try {
+    if (!window.__tpInitScheduled) {
+      window.__tpInitScheduled = true;
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => { try { init(); } catch(e){ console.error('init failed (early)', e); } });
+      } else {
+        Promise.resolve().then(()=>{ try { init(); } catch(e){ console.error('init failed (early)', e); } });
+      }
+    }
+  } catch(e){ console.warn('early init scheduling error', e); }
+  try { __tpBootPush('init-scheduling-early-exited'); } catch {}
+
   /* ──────────────────────────────────────────────────────────────
    * Boot diagnostics
    * ────────────────────────────────────────────────────────────── */
@@ -404,6 +418,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       alert('Normalize fallback failed: ' + e.message);
     }
   }
+  try { __tpBootPush('after-fallbackNormalize-def'); } catch {}
 
   // TP: normalize-strict
   // Strict normalizer (single source of truth)
@@ -456,6 +471,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     if (typeof saveDraft === 'function') saveDraft();
     if (typeof setStatus === 'function') setStatus('Normalized to standard.');
   };
+  try { __tpBootPush('after-normalizeToStandard-def'); } catch {}
 
   // Validator (quick “am I standard?” check)
   function showCopyDialog(text, title='Validation Results'){
@@ -563,6 +579,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       set(v){ recAutoRestart = !!v; try{ localStorage.setItem('tp_rec_autorestart_v1', recAutoRestart ? '1' : '0'); } catch {} }
     });
   } catch {}
+  try { __tpBootPush('after-validateStandardTags-def'); } catch {}
   let recBackoffMs   = 300;       // grows on repeated failures
   const MATCH_WINDOW = 6;         // how far ahead we’ll look for the next word
   // Safe placeholders for optional modules to prevent ReferenceError when dynamic import fails
@@ -1055,6 +1072,7 @@ function ensureHelpUI(){
     };
   }
 }
+try { __tpBootPush('after-ensureHelpUI-def'); } catch {}
 
 function injectHelpPanel(){
   try{
