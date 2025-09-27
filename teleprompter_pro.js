@@ -248,9 +248,9 @@
   /* ──────────────────────────────────────────────────────────────
    * Boot diagnostics
    * ────────────────────────────────────────────────────────────── */
-  const log = (...a) => console.log('[TP‑Pro]', ...a);
-  const warn = (...a) => console.warn('[TP‑Pro]', ...a);
-  const err  = (...a) => console.error('[TP‑Pro]', ...a);
+  const log  = (...a) => console.log('[TP-Pro]', ...a);
+  const warn = (...a) => console.warn('[TP-Pro]', ...a);
+  const err  = (...a) => console.error('[TP-Pro]', ...a);
 
   // Missing constants / safe fallbacks (restored)
   const DEVICE_KEY = 'tp_mic_device_v1';
