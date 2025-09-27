@@ -99,15 +99,30 @@
   try { __tpBootPush('after-zero-time-init-attempt-scheduled'); } catch {}
   // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
 
-  // Early redundant init scheduling (safety net): runs before heavy sections
+  // Early redundant init scheduling (safety net): wait for init to be defined, then call once
   try { __tpBootPush('pre-init-scheduling-early'); } catch {}
   try {
+    const callInitOnce = () => {
+      if (window.__tpInitCalled) return;
+      try { __tpBootPush('early-init-invoking'); } catch {}
+      window.__tpInitCalled = true;
+      try { init(); } catch(e){ console.error('init failed (early)', e); }
+    };
+    const whenInitReady = () => {
+      if (typeof init === 'function') { callInitOnce(); return; }
+      try { __tpBootPush('early-waiting-for-init'); } catch {}
+      let tries = 0;
+      const id = setInterval(() => {
+        if (typeof init === 'function') { clearInterval(id); callInitOnce(); }
+        else if (++tries > 300) { clearInterval(id); console.warn('[TP-Pro] init not defined after wait'); }
+      }, 10);
+    };
     if (!window.__tpInitScheduled) {
       window.__tpInitScheduled = true;
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { try { init(); } catch(e){ console.error('init failed (early)', e); } });
+        document.addEventListener('DOMContentLoaded', whenInitReady, { once: true });
       } else {
-        Promise.resolve().then(()=>{ try { init(); } catch(e){ console.error('init failed (early)', e); } });
+        Promise.resolve().then(whenInitReady);
       }
     }
   } catch(e){ console.warn('early init scheduling error', e); }
