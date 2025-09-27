@@ -695,7 +695,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       else if(iss.type==='stray-close'){ fixes.push({type:'remove-line',line:iss.line,label:`Remove stray closing tag on line ${iss.line}`,apply:(text)=> text.split(/\r?\n/).filter((_,i)=>i!==iss.line-1).join('\n')}); }
       else if(iss.type==='mismatch'){ const found=iss.message.match(/mismatched closing \[\/(\w+)\]/i)?.[1]; const expected=iss.message.match(/expected \[\/(\w+)\]/i)?.[1]; if(found&&expected&&found!==expected) fixes.push({type:'replace-tag',line:iss.line,from:found,to:expected,label:`Replace [\/${found}] with [\/${expected}] on line ${iss.line}`,apply:(text)=>{ const arr=text.split(/\r?\n/); const ln=arr[iss.line-1]; if(ln) arr[iss.line-1]=ln.replace(new RegExp(`\[\/${found}\]`,'i'),`[\/${expected}]`); return arr.join('\n'); }}); }
     }
-    let msg = !issues.length ? `No issues found. (${summaryParts.join(', ')})` : `Validation issues (${issues.length}):\n- ${issues.join('\n- ')}\n\nSummary: ${summaryParts.join(', ')}`;
+  let msg = !issues.length ? `No issues found. (${summaryParts.join(', ')})` : `Validation issues (${issues.length}):\n- ${issues.join('\n- ')}\n\nSummary: ${summaryParts.join(', ')}`;
     window.__lastValidation={ issues: issueObjs, summary: summaryParts, fixes };
     // Inline highlighting
     try {
@@ -732,7 +732,13 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         wrap.appendChild(overlay);
       }
     } catch {}
+
+    // Return the textual report for callers (e.g., Help overlay validate button)
+    return msg;
   // Expose a live getter/setter for Help → Advanced to toggle at runtime
+  } // <-- end validateStandardTags
+
+  // Expose a live getter/setter for Help → Advanced to toggle at runtime (top-level)
   try {
     Object.defineProperty(window, 'recAutoRestart', {
       configurable: true,
@@ -3715,5 +3721,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 // end about popover
-} 
 })(); // end main IIFE (restored)
