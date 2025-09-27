@@ -29,12 +29,30 @@
   try { __tpBootPush('after-boot-block'); } catch {}
   // Provide a safe early init proxy on window that forwards to core when available
   try {
+    // Promise that resolves when core initializer becomes available
+    if (!window.__tpCoreReady) {
+      window.__tpCoreReady = new Promise((resolve) => { window.__tpResolveCoreReady = resolve; });
+    }
     if (typeof window.init !== 'function') {
       window.init = async function(){
         try {
-          if (typeof _initCore === 'function') { return _initCore(); }
-          if (typeof window._initCore === 'function') { return window._initCore(); }
-          console.warn('[TP-Pro] window.init proxy: core not ready');
+          // If core is already available, run immediately
+          if (typeof _initCore === 'function' || typeof window._initCore === 'function') {
+            return (window._initCore || _initCore)();
+          }
+          try { __tpBootPush('window-init-proxy-waiting-core'); } catch {}
+          // Wait briefly for core to appear (either via assignment or resolve hook)
+          const core = await Promise.race([
+            new Promise((res)=>{
+              let tries = 0; const id = setInterval(()=>{
+                if (typeof _initCore === 'function' || typeof window._initCore === 'function') { clearInterval(id); res(window._initCore || _initCore); }
+                else if (++tries > 300) { clearInterval(id); res(null); }
+              }, 10);
+            }),
+            (window.__tpCoreReady?.then(()=> (window._initCore || _initCore)).catch(()=>null))
+          ]);
+          if (typeof core === 'function') { return core(); }
+          console.warn('[TP-Pro] window.init proxy: core not ready after wait');
         } catch(e){ console.error('[TP-Pro] window.init proxy error', e); }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -2123,7 +2141,7 @@ function scrollToCurrentIndex(){
     sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
   }
 }
-try { window._initCore = _initCore; } catch {}
+try { window._initCore = _initCore; window.__tpResolveCoreReady && window.__tpResolveCoreReady(); } catch {}
 
 // Ensure init runs (was previously implicit). Guard against double-run.
 try { __tpBootPush('pre-init-scheduling'); } catch {}
