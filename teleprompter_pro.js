@@ -33,12 +33,39 @@
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
+  // Early real-core waiter: provides a stable entry that will call the real core once it appears
+  try {
+    if (typeof window.__tpRealCore !== 'function') {
+      window.__tpRealCore = async function __coreWaiter(){
+        const self = window.__tpRealCore;
+        for (let i = 0; i < 2000; i++) { // ~20s
+          try {
+            if (typeof _initCore === 'function' && _initCore !== self && _initCore !== window._initCore) {
+              return _initCore();
+            }
+          } catch {}
+          if (typeof window._initCore === 'function' && window._initCore !== self) {
+            return window._initCore();
+          }
+          await new Promise(r => setTimeout(r, 10));
+        }
+        throw new Error('Core waiter timeout');
+      };
+    }
+  } catch {}
   // Install an early stub for core init that queues until the real core is defined
   try {
     if (typeof window._initCore !== 'function') {
       window._initCore = async function __initCoreStub(){
         try { __tpBootPush('initCore-stub-wait'); } catch {}
         const self = window._initCore;
+        // If the hoisted function exists and is not this stub, call it immediately
+        try {
+          if (typeof _initCore === 'function' && _initCore !== self && _initCore !== window._initCore) {
+            try { __tpBootPush('initCore-stub-direct-call'); } catch {}
+            return _initCore();
+          }
+        } catch {}
         const core = await new Promise((res)=>{
           let tries = 0; const id = setInterval(()=>{
             // Prefer explicitly published real core
