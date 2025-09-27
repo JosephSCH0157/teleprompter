@@ -104,16 +104,31 @@
   try {
     const callInitOnce = () => {
       if (window.__tpInitCalled) return;
-      try { __tpBootPush('early-init-invoking'); } catch {}
       window.__tpInitCalled = true;
-      try { init(); } catch(e){ console.error('init failed (early)', e); }
+      if (typeof init === 'function') {
+        try { __tpBootPush('early-init-invoking'); } catch {}
+        try { init(); } catch(e){ console.error('init failed (early)', e); }
+      } else if (typeof _initCore === 'function') {
+        try { __tpBootPush('early-core-invoking'); } catch {}
+        (async ()=>{
+          try {
+            await _initCore();
+            console.log('[TP-Pro] _initCore early path end (success)');
+          } catch(e){
+            console.error('[TP-Pro] _initCore failed (early path):', e);
+          }
+        })();
+      } else {
+        // Shouldn’t happen due to guard, but reset flag to allow later retry
+        window.__tpInitCalled = false;
+      }
     };
     const whenInitReady = () => {
       if (typeof init === 'function') { callInitOnce(); return; }
       try { __tpBootPush('early-waiting-for-init'); } catch {}
       let tries = 0;
       const id = setInterval(() => {
-        if (typeof init === 'function') { clearInterval(id); callInitOnce(); }
+        if (typeof init === 'function' || typeof _initCore === 'function') { clearInterval(id); callInitOnce(); }
         else if (++tries > 300) { clearInterval(id); console.warn('[TP-Pro] init not defined after wait'); }
       }, 10);
     };
