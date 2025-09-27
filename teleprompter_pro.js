@@ -1,4 +1,4 @@
-/* Teleprompter Pro — JS CLEAN (v1.5.6)
+/* Teleprompter Pro — JS CLEAN (v1.5.7)
    - Display handshake + retry pump
    - SmartTag supports: Name:, Name —, Name >, and block headers >> NAME:
    - DOCX import via Mammoth (auto‑loads on demand)
@@ -16,6 +16,8 @@
     window.__TP_BOOT_TRACE = [];
     const _origLog = console.log.bind(console);
     const tag = (m)=> `[TP-BOOT ${Date.now()%100000}] ${m}`;
+    // Publish build version for About panel and diagnostics
+    try { window.APP_VERSION = '1.5.7'; } catch {}
   window.__tpBootPush = (m)=>{ try { const rec = { t: Date.now(), m }; window.__TP_BOOT_TRACE.push(rec); console.log('[TP-TRACE]', rec.m); } catch(e){ try { console.warn('[TP-TRACE-FAIL]', e); } catch {} } };
     __tpBootPush('script-enter');
     _origLog(tag('entered main IIFE'));

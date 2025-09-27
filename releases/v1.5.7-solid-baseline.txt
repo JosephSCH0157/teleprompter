@@ -1,0 +1,12 @@
+Teleprompter Pro v1.5.7 — Solid baseline (2025-09-27)
+
+Includes:
+- Boot/init restoration and tracing
+- Minimal UI fallback
+- Settings tabs and wiring
+- Display handshake and WebRTC guards
+- dB meter and mic selector
+- DOCX import via Mammoth
+- Normalization + validation helpers
+
+Source of truth: teleprompter_pro.js (header indicates version)
