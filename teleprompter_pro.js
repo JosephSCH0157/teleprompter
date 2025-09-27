@@ -51,6 +51,7 @@
         }
         throw new Error('Core waiter timeout');
       };
+      try { window.__tpRealCore.__tpWaiter = true; } catch {}
     }
   } catch {}
   // Install an early stub for core init that queues until the real core is defined
@@ -68,10 +69,12 @@
         } catch {}
         const core = await new Promise((res)=>{
           let tries = 0; const id = setInterval(()=>{
-            // Prefer explicitly published real core
-            if (typeof window.__tpRealCore === 'function') { clearInterval(id); return res(window.__tpRealCore); }
+            // Prefer explicitly published real core ONLY if it's not just the early waiter
+            if (typeof window.__tpRealCore === 'function' && !window.__tpRealCore.__tpWaiter) { clearInterval(id); return res(window.__tpRealCore); }
             // Or if window._initCore has been swapped to a different function, use that
             if (typeof window._initCore === 'function' && window._initCore !== self) { clearInterval(id); return res(window._initCore); }
+            // Or if the hoisted real function has appeared, use it directly
+            try { if (typeof _initCore === 'function' && _initCore !== self) { clearInterval(id); return res(_initCore); } } catch {}
             if (++tries > 2000) { clearInterval(id); return res(null); } // ~20s
           }, 10);
         });
@@ -79,6 +82,20 @@
         throw new Error('Core not ready after stub wait');
       };
     }
+  } catch {}
+  // Watchdog: if the real core is not defined soon, dump boot trace for diagnosis
+  try {
+    setTimeout(()=>{
+      try {
+        const trace = (window.__TP_BOOT_TRACE||[]);
+        const hasCoreDef = trace.some(r => r && r.m === 'after-_initCore-def');
+        if (!hasCoreDef) {
+          console.warn('[TP-Pro] Core definition not reached yet; dumping boot trace tail…');
+          const tail = trace.slice(-50).map(x=>x && x.m);
+          console.log('[TP-Pro] Boot tail:', tail);
+        }
+      } catch {}
+    }, 3000);
   } catch {}
     // Establish a stable core runner that waits until core is ready
     try {
