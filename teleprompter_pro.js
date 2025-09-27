@@ -27,6 +27,19 @@
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
+  // Provide a safe early init proxy on window that forwards to core when available
+  try {
+    if (typeof window.init !== 'function') {
+      window.init = async function(){
+        try {
+          if (typeof _initCore === 'function') { return _initCore(); }
+          if (typeof window._initCore === 'function') { return window._initCore(); }
+          console.warn('[TP-Pro] window.init proxy: core not ready');
+        } catch(e){ console.error('[TP-Pro] window.init proxy error', e); }
+      };
+      __tpBootPush('window-init-proxy-installed');
+    }
+  } catch {}
   // Early minimal init safety net: builds placeholder + dB meter if deep init stalls.
   (function earlyInitFallback(){
     try {
@@ -2110,6 +2123,7 @@ function scrollToCurrentIndex(){
     sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
   }
 }
+try { window._initCore = _initCore; } catch {}
 
 // Ensure init runs (was previously implicit). Guard against double-run.
 try { __tpBootPush('pre-init-scheduling'); } catch {}
