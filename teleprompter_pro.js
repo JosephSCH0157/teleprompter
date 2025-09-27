@@ -284,6 +284,7 @@
   let wantCamRTC = false;             // user intent to mirror cam to display
   let camPC = null;                   // RTCPeerConnection for camera
   let recog = null;                   // SpeechRecognition instance
+  let camAwaitingAnswer = false;      // negotiation flag to gate remote answers
   // Peak hold state for dB meter
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
@@ -1898,7 +1899,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
   // TP: display-handshake
   // Display handshake: accept either a string ping or a typed object
-    window.addEventListener('message', (e) => {
+  window.addEventListener('message', async (e) => {
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
         displayReady = true;
@@ -1918,9 +1919,26 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         // If user intended camera mirroring, (re)establish
         try { if (wantCamRTC && camStream) ensureCamPeer(); } catch {}
       } else if (e.data?.type === 'cam-answer' && camPC) {
-        try { const desc = { type:'answer', sdp: e.data.sdp }; camPC.setRemoteDescription(desc); } catch {}
+        try {
+          const st = camPC.signalingState;
+          if (st !== 'have-local-offer') {
+            // Ignore late/duplicate answers; we're either already stable or in an unexpected state
+            camAwaitingAnswer = false;
+            return;
+          }
+          const desc = { type:'answer', sdp: e.data.sdp };
+          await camPC.setRemoteDescription(desc);
+          camAwaitingAnswer = false;
+        } catch {}
       } else if (e.data?.type === 'cam-ice' && camPC) {
-        try { camPC.addIceCandidate(e.data.candidate); } catch {}
+        try {
+          // Only add ICE candidates once we have a remote description, else some browsers throw
+          if (camPC.remoteDescription && camPC.remoteDescription.type) {
+            await camPC.addIceCandidate(e.data.candidate);
+          } else {
+            // Buffer or drop silently; for simplicity, drop to avoid complex buffering here
+          }
+        } catch {}
       }
     });
 
@@ -3221,9 +3239,10 @@ async function init(){
           camPC = null;
         }
       };
-      const offer = await pc.createOffer({ offerToReceiveVideo: false });
-      await pc.setLocalDescription(offer);
-      sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
+  const offer = await pc.createOffer({ offerToReceiveVideo: false });
+  await pc.setLocalDescription(offer);
+  camAwaitingAnswer = true;
+      // offer already sent above
     } catch (e) { warn('ensureCamPeer failed', e); }
   }
 
@@ -3271,10 +3290,13 @@ async function init(){
                   await ensureCamPeer();
                 } else if (st !== 'connected') {
                   // Attempt proactive re-offer without full teardown
-                  const offer = await camPC.createOffer();
-                  await camPC.setLocalDescription(offer);
-                  sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
-                  updateCamRtcChip('CamRTC: renegotiate…');
+                  if (camPC.signalingState === 'stable') {
+                    const offer = await camPC.createOffer();
+                    await camPC.setLocalDescription(offer);
+                    camAwaitingAnswer = true;
+                    sendToDisplay({ type:'cam-offer', sdp: offer.sdp });
+                    updateCamRtcChip('CamRTC: renegotiate…');
+                  }
                 }
               } catch {}
             }, 400);
