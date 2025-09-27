@@ -33,6 +33,20 @@
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
+    // Establish a stable core runner that waits until core is ready
+    try {
+      if (!window._initCoreRunner) {
+        let __resolveCoreRunner;
+        const __coreRunnerReady = new Promise(r => { __resolveCoreRunner = r; });
+        window._initCoreRunner = async function(){
+          try { await __coreRunnerReady; } catch {}
+          if (typeof window._initCore === 'function') return window._initCore();
+          if (typeof _initCore === 'function') return _initCore();
+          throw new Error('Core not ready');
+        };
+        window.__tpSetCoreRunnerReady = () => { try { __resolveCoreRunner && __resolveCoreRunner(); } catch {} };
+      }
+    } catch {}
   // Provide a safe early init proxy on window that forwards to core when available
   try {
     // Promise that resolves when core initializer becomes available
@@ -59,6 +73,9 @@
           ]);
           if (typeof core === 'function') { return core(); }
           console.warn('[TP-Pro] window.init proxy: core not ready after wait');
+            // Use the stable runner which waits until core is ready
+            try { __tpBootPush('window-init-proxy-waiting-core'); } catch {}
+            return await window._initCoreRunner();
         } catch(e){ console.error('[TP-Pro] window.init proxy error', e); }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -141,11 +158,12 @@
   try {
     const callInitOnce = () => {
       if (window.__tpInitCalled) return;
-      window.__tpInitCalled = true;
       if (typeof init === 'function') {
+        window.__tpInitCalled = true;
         try { __tpBootPush('early-init-invoking'); } catch {}
         try { init(); } catch(e){ console.error('init failed (early)', e); }
       } else if (typeof _initCore === 'function') {
+        window.__tpInitCalled = true;
         try { __tpBootPush('early-core-invoking'); } catch {}
         (async ()=>{
           try {
@@ -2147,6 +2165,10 @@ function scrollToCurrentIndex(){
     sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
   }
 }
+// Signal that core init function is now defined
+try { __tpBootPush('after-_initCore-def'); } catch {}
+try { window.__tpResolveCoreReady && window.__tpResolveCoreReady(); } catch {}
+try { window.__tpSetCoreRunnerReady && window.__tpSetCoreRunnerReady(); } catch {}
 try { window._initCore = _initCore; window.__tpResolveCoreReady && window.__tpResolveCoreReady(); } catch {}
 
 // Ensure init runs (was previously implicit). Guard against double-run.
