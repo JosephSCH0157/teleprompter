@@ -1329,6 +1329,21 @@ function injectHelpPanel(){
 
 // Wrap the original init logic so we can capture early failures.
 async function _initCore() {
+  // Make the real core visible to the stub/runner and resolve any waiters
+  try {
+    // publish the real core so window.init and the stub can find it
+    window._initCore = _initCore;
+
+    // wake the stable runner promise (defined earlier)
+    if (typeof window.__tpSetCoreRunnerReady === 'function') {
+      window.__tpSetCoreRunnerReady();
+    }
+
+    // also resolve the simple "core ready" latch, if present
+    if (typeof window.__tpResolveCoreReady === 'function') {
+      window.__tpResolveCoreReady();
+    }
+  } catch {}
   console.log('[TP-Pro] _initCore start');
   // Run minimal wiring first (meters, help overlay, normalize button)
   try { __initMinimal(); } catch(e) { console.warn('Minimal init failed', e); }
