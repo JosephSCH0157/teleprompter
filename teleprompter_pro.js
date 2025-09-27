@@ -276,6 +276,14 @@
   let audioStream = null;     // MediaStream for mic
   let analyser = null;        // AnalyserNode
   let audioCtx = null;        // AudioContext
+  // Display & camera/session globals (avoid ReferenceErrors during early handlers)
+  let displayReady = false;           // display window handshake state
+  let displayHelloTimer = null;       // hello ping interval id
+  let displayHelloDeadline = 0;       // cutoff for hello pings
+  let camStream = null;               // active camera MediaStream
+  let wantCamRTC = false;             // user intent to mirror cam to display
+  let camPC = null;                   // RTCPeerConnection for camera
+  let recog = null;                   // SpeechRecognition instance
   // Peak hold state for dB meter
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
