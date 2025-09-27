@@ -33,6 +33,22 @@
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
+  // Install an early stub for core init that queues until the real core is defined
+  try {
+    if (typeof window._initCore !== 'function') {
+      window._initCore = async function __initCoreStub(){
+        try { __tpBootPush('initCore-stub-wait'); } catch {}
+        const core = await new Promise((res)=>{
+          let tries = 0; const id = setInterval(()=>{
+            if (typeof window.__tpRealCore === 'function') { clearInterval(id); res(window.__tpRealCore); }
+            else if (++tries > 600) { clearInterval(id); res(null); } // ~6s
+          }, 10);
+        });
+        if (typeof core === 'function') return core();
+        throw new Error('Core not ready after stub wait');
+      };
+    }
+  } catch {}
     // Establish a stable core runner that waits until core is ready
     try {
       if (!window._initCoreRunner) {
@@ -162,12 +178,12 @@
         window.__tpInitCalled = true;
         try { __tpBootPush('early-init-invoking'); } catch {}
         try { init(); } catch(e){ console.error('init failed (early)', e); }
-      } else if (typeof _initCore === 'function') {
+      } else if (typeof window._initCore === 'function') {
         window.__tpInitCalled = true;
         try { __tpBootPush('early-core-invoking'); } catch {}
         (async ()=>{
           try {
-            await _initCore();
+            await window._initCore();
             console.log('[TP-Pro] _initCore early path end (success)');
           } catch(e){
             console.error('[TP-Pro] _initCore failed (early path):', e);
@@ -183,7 +199,7 @@
       try { __tpBootPush('early-waiting-for-init'); } catch {}
       let tries = 0;
       const id = setInterval(() => {
-        if (typeof init === 'function' || typeof _initCore === 'function') { clearInterval(id); callInitOnce(); }
+        if (typeof init === 'function' || typeof window._initCore === 'function') { clearInterval(id); callInitOnce(); }
         else if (++tries > 300) { clearInterval(id); console.warn('[TP-Pro] init not defined after wait'); }
       }, 10);
     };
@@ -2165,11 +2181,15 @@ function scrollToCurrentIndex(){
     sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
   }
 }
-// Signal that core init function is now defined
-try { __tpBootPush('after-_initCore-def'); } catch {}
-try { window.__tpResolveCoreReady && window.__tpResolveCoreReady(); } catch {}
-try { window.__tpSetCoreRunnerReady && window.__tpSetCoreRunnerReady(); } catch {}
-try { window._initCore = _initCore; window.__tpResolveCoreReady && window.__tpResolveCoreReady(); } catch {}
+// Signal that core init function is now defined; publish to a temp handle, then swap stub
+try {
+  window.__tpRealCore = _initCore;
+  __tpBootPush('after-_initCore-def');
+  window.__tpResolveCoreReady && window.__tpResolveCoreReady();
+  window.__tpSetCoreRunnerReady && window.__tpSetCoreRunnerReady();
+  // Replace stub with the real core
+  window._initCore = _initCore;
+} catch {}
 
 // Ensure init runs (was previously implicit). Guard against double-run.
 try { __tpBootPush('pre-init-scheduling'); } catch {}
