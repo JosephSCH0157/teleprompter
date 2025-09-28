@@ -703,6 +703,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   function collectDisplayState(reason = 'manual') {
     try {
       const scriptElLocal = document.getElementById('script');
+      try { ensureParaIds(scriptElLocal); } catch {}
       const html = scriptElLocal ? scriptElLocal.innerHTML : '';
       // Build from current role map (fallbacks included)
       const s1Name = (ROLES?.s1?.name) || 'S1';
