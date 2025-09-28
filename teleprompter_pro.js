@@ -2647,10 +2647,26 @@ function advanceByTranscript(transcript, isFinal){
   // Scale steps based on whether this came from a final (more confident) match
   const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
   const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
-  // Prefer element-anchored scrolling so we always target the same line element
-  try {
-    scrollToEl(currentEl, markerTop);
-  } catch {
+
+  // Only snap directly to the element when confidence is strong and it's a final result.
+  // Otherwise, move in small pixel steps to avoid whole-paragraph jumps.
+  const strongMatch = (typeof bestScore === 'number' && bestScore >= STRICT_FORWARD_SIM);
+  const smallWordDelta = (typeof delta === 'number' && Math.abs(delta) <= 2);
+  const largeErr = Math.abs(err) > (DEAD_BAND_PX * 3);
+  const shouldSnapToEl = isFinal && (strongMatch || smallWordDelta) && largeErr;
+
+  if (shouldSnapToEl) {
+    try {
+      scrollToEl(currentEl, markerTop);
+    } catch {
+      // Fallback to clamped pixel scroll
+      let next;
+      if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
+      else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
+      viewer.scrollTop = next;
+    }
+  } else {
+    // Gentle, clamped pixel scrolling
     let next;
     if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
     else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
