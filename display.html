@@ -30,6 +30,7 @@
           .marker{position:sticky;top:40%;height:2px;background:#7cc4ff;box-shadow:0 0 6px #7cc4ff}
           .hud{position:fixed;right:12px;bottom:12px;font:12px/1.2 system-ui;color:#9ba7b2;opacity:.7}
           .btn{cursor:pointer;border:1px solid var(--edge);padding:6px 8px;border-radius:8px;background:#0e141b;color:#e7ebf0;margin-left:8px}
+          #camRtcStatus{margin-left:8px;opacity:.9}
           #preRoll{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999}
           #preRoll .card{background:#0e141b;border:1px solid var(--edge);padding:24px 32px;border-radius:16px;text-align:center}
           #preRoll .hint{font-size:14px;color:#9ba7b2}
@@ -49,7 +50,7 @@
             </div>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
-          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button></div>
+          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button> <span id="camRtcStatus">CamRTC: idle</span></div>
           <div id="mirrorCamWrap" hidden>
             <video id="mirrorCamVideo" autoplay muted></video>
             <div id="mirrorCamLoading">Connecting camera…</div>
@@ -113,6 +114,8 @@
             const camWrap = document.getElementById('mirrorCamWrap');
             const camPiP  = document.getElementById('camPiP');
             const camLoad = document.getElementById('mirrorCamLoading');
+            const camStatusEl = document.getElementById('camRtcStatus');
+            const setCamStatus = (msg) => { try { if (camStatusEl) camStatusEl.textContent = msg; } catch {} };
             // PiP toggle
             if (camPiP) {
               camPiP.onclick = async () => {
@@ -165,6 +168,7 @@
                   // Prep UI immediately in case metadata events race
                   if (camWrap) { camWrap.removeAttribute('hidden'); camWrap.style.display = 'block'; }
                   if (camLoad) { camLoad.textContent = 'Connecting camera…'; camLoad.style.display = 'flex'; }
+                  setCamStatus('CamRTC: connecting…');
                   const pc = window.__camPC || new RTCPeerConnection({ iceServers: [] });
                   if (!window.__camPC) window.__camPC = pc;
                   pc.ontrack = (e) => {
@@ -174,6 +178,16 @@
                       if (camWrap) { camWrap.removeAttribute('hidden'); camWrap.style.display = 'block'; }
                       if (camLoad) camLoad.style.display = 'none';
                     }
+                  };
+                  pc.onconnectionstatechange = () => {
+                    try {
+                      const st = pc.connectionState;
+                      if (st === 'connected') setCamStatus('CamRTC: connected');
+                      else if (st === 'connecting') setCamStatus('CamRTC: connecting…');
+                      else if (st === 'disconnected') setCamStatus('CamRTC: disconnected');
+                      else if (st === 'failed') setCamStatus('CamRTC: failed');
+                      else if (st === 'closed') setCamStatus('CamRTC: closed');
+                    } catch {}
                   };
                   pc.onicecandidate = (e) => { if (e.candidate) { try { window.opener && window.opener.postMessage({ type:'cam-ice', candidate:e.candidate }, '*'); } catch {} } };
                   pc.setRemoteDescription({ type:'offer', sdp: d.sdp }).then(async ()=>{
@@ -187,7 +201,7 @@
                 try { if (window.__camPC.remoteDescription) window.__camPC.addIceCandidate(d.candidate); } catch {}
                 return;
               }
-              if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; return; }
+              if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; setCamStatus('CamRTC: idle'); return; }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
               if(d.type==='scroll'){
