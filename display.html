@@ -168,7 +168,12 @@
                   const pc = window.__camPC || new RTCPeerConnection({ iceServers: [] });
                   if (!window.__camPC) window.__camPC = pc;
                   pc.ontrack = (e) => {
-                    if (camVid && e.streams && e.streams[0]) { camVid.srcObject = e.streams[0]; try { camVid.play().catch(()=>{}); } catch{} }
+                    if (camVid && e.streams && e.streams[0]) {
+                      camVid.srcObject = e.streams[0];
+                      try { camVid.play().catch(()=>{}); } catch {}
+                      if (camWrap) { camWrap.removeAttribute('hidden'); camWrap.style.display = 'block'; }
+                      if (camLoad) camLoad.style.display = 'none';
+                    }
                   };
                   pc.onicecandidate = (e) => { if (e.candidate) { try { window.opener && window.opener.postMessage({ type:'cam-ice', candidate:e.candidate }, '*'); } catch {} } };
                   pc.setRemoteDescription({ type:'offer', sdp: d.sdp }).then(async ()=>{
