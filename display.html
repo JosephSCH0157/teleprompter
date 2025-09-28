@@ -154,6 +154,11 @@
             }
             window.addEventListener('message', ev => {
               const d = ev.data||{};
+              // Answer handshake pings from opener to avoid race conditions
+              if (d.type === 'hello') {
+                try { window.opener && window.opener.postMessage({ type:'display-ready' }, '*'); } catch {}
+                return;
+              }
               // WebRTC camera offer/candidate handling
               if (d.type === 'cam-offer') {
                 try {
