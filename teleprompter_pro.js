@@ -208,6 +208,8 @@
   let camPC = null;                   // RTCPeerConnection for camera
   let recog = null;                   // SpeechRecognition instance
   let camAwaitingAnswer = false;      // negotiation flag to gate remote answers
+  // Buffer for ICE candidates arriving before we have a remoteDescription
+  let __pendingDisplayICE = [];
   // Peak hold state for dB meter
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
@@ -1849,14 +1851,23 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           const desc = { type:'answer', sdp: e.data.sdp };
           await camPC.setRemoteDescription(desc);
           camAwaitingAnswer = false;
+          // Flush any ICE candidates that arrived early
+          try {
+            if (camPC.remoteDescription && camPC.remoteDescription.type && __pendingDisplayICE.length) {
+              for (const c of __pendingDisplayICE) {
+                try { await camPC.addIceCandidate(c); } catch {}
+              }
+              __pendingDisplayICE = [];
+            }
+          } catch {}
         } catch {}
       } else if (e.data?.type === 'cam-ice' && camPC) {
         try {
-          // Only add ICE candidates once we have a remote description, else some browsers throw
+          // Only add ICE candidates once we have a remote description; otherwise buffer
           if (camPC.remoteDescription && camPC.remoteDescription.type) {
             await camPC.addIceCandidate(e.data.candidate);
           } else {
-            // Buffer or drop silently; for simplicity, drop to avoid complex buffering here
+            __pendingDisplayICE.push(e.data.candidate);
           }
         } catch {}
       }
