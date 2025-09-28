@@ -1851,13 +1851,10 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           const desc = { type:'answer', sdp: e.data.sdp };
           await camPC.setRemoteDescription(desc);
           camAwaitingAnswer = false;
-          // Flush any ICE candidates that arrived early
+          // Flush any ICE that arrived early
           try {
-            if (camPC.remoteDescription && camPC.remoteDescription.type && __pendingDisplayICE.length) {
-              for (const c of __pendingDisplayICE) {
-                try { await camPC.addIceCandidate(c); } catch {}
-              }
-              __pendingDisplayICE = [];
+            for (const c of __pendingDisplayICE.splice(0)) {
+              await camPC.addIceCandidate(c);
             }
           } catch {}
         } catch {}
