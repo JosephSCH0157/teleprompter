@@ -696,7 +696,46 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Recording / speech state flags
   let recActive = false;              // true when speech recognition session is active
   // Display window handle
-  let displayWin = null;              // popup window reference for mirrored display
+  let displayWin = window.__displayWin || null;              // popup window reference for mirrored display (reuse if present)
+  // --- Live Display Sync ---------------------------------------
+  let __displaySyncDebounce = null;
+  function collectDisplayState(reason = 'manual') {
+    try {
+      const scriptElLocal = document.getElementById('script');
+      const html = scriptElLocal ? scriptElLocal.innerHTML : '';
+      // Build from current role map (fallbacks included)
+      const s1Name = (ROLES?.s1?.name) || 'S1';
+      const s2Name = (ROLES?.s2?.name) || 'S2';
+      const s1Color = (ROLES?.s1?.color) || '#6fc';
+      const s2Color = (ROLES?.s2?.color) || '#fc6';
+      return {
+        type: 'display-update',
+        reason,
+        scriptHTML: html,
+        speakers: {
+          s1: { name: s1Name, color: s1Color },
+          s2: { name: s2Name, color: s2Color }
+        },
+        // Optional extras if your display uses them:
+        theme: window.currentTheme || 'Savanna',
+        mirror: !!(window.settings && window.settings.mirrorText),
+        scale: Number((window.settings && window.settings.displayScale) || 1)
+      };
+    } catch { return { type:'display-update', reason, scriptHTML:'', speakers:{ s1:{name:'S1',color:'#6fc'}, s2:{name:'S2',color:'#fc6'} } }; }
+  }
+  function pushDisplayUpdate(reason = 'manual') {
+    if (!displayWin || displayWin.closed) return;
+    try {
+      const payload = collectDisplayState(reason);
+      displayWin.postMessage(payload, '*');
+    } catch (e) {
+      try { if (window.__TP_DEV) console.warn('[DISPLAY] postMessage failed', e); } catch {}
+    }
+  }
+  function debounceDisplayUpdate(reason, ms = 200) {
+    try { if (__displaySyncDebounce) clearTimeout(__displaySyncDebounce); } catch {}
+    __displaySyncDebounce = setTimeout(() => pushDisplayUpdate(reason), ms);
+  }
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
 
 
@@ -1837,6 +1876,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           const ratio = max ? (viewer.scrollTop / max) : 0;
           sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
         }
+        // Also push a compact display-update payload for future compatibility
+        try { pushDisplayUpdate('hello'); } catch {}
         closeDisplayBtn.disabled = false;
         // If user intended camera mirroring, (re)establish
         try { if (wantCamRTC && camStream) ensureCamPeer(); } catch {}
@@ -2837,7 +2878,8 @@ function openDisplay(){
       displayChip.textContent = 'Display: blocked';
       return;
     }
-    displayReady = false;
+  displayReady = false;
+  try { window.__displayWin = displayWin; } catch {}
     displayChip.textContent = 'Display: open';
     closeDisplayBtn.disabled = true;  // will be enabled by global DISPLAY_READY handler
     // Kick off handshake retry pings: every 300ms up to ~3s or until READY.
