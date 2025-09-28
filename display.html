@@ -169,6 +169,23 @@
                 try { window.opener && window.opener.postMessage({ type:'display-ready' }, '*'); } catch {}
                 return;
               }
+              // Content-aware scroller: align to pid + fraction within the wrap container
+              const scrollToAnchor = (pid, frac = 0) => {
+                try {
+                  const host = scriptEl || document.getElementById('displayScript');
+                  if (!host || !wrap || !pid) return;
+                  let el = host.querySelector(`[data-pid="${pid}"]`);
+                  if (!el) el = host.querySelector(`[id="${pid}"]`) || host.querySelector('[data-pid]');
+                  if (!el) return;
+                  const hostRect = wrap.getBoundingClientRect();
+                  const elRect = el.getBoundingClientRect();
+                  const offsetInWrap = (elRect.top - hostRect.top) + wrap.scrollTop;
+                  const target = offsetInWrap + (el.offsetHeight * (Number(frac)||0)) - (wrap.clientHeight * 0.5);
+                  const y = Math.max(0, Math.min(target, Math.max(0, wrap.scrollHeight - wrap.clientHeight)));
+                  wrap.scrollTo({ top: y, behavior: 'auto' });
+                } catch {}
+              };
+              if (d.type === 'display-scroll') { scrollToAnchor(d.pid, d.frac); return; }
               // Lightweight content/theme sync from controller
               if (d.type === 'display-update') {
                 const scriptHost = document.getElementById('script') || document.getElementById('displayScript');
@@ -203,9 +220,9 @@
                 // 3) Swap markup and ensure current scaling is applied
                 try {
                   if (scriptHost && typeof d.scriptHTML === 'string') {
-                    // Reset scroll to top for brand-new scripts
+                    // Reset wrap scroll to top for brand-new scripts (not the document scroll)
                     if (d.reason === 'script-change') {
-                      try { const w = document.getElementById('wrap'); if (w) w.scrollTop = 0; } catch {}
+                      try { if (wrap) wrap.scrollTop = 0; } catch {}
                     }
                     scriptHost.innerHTML = d.scriptHTML;
                     // Re-apply font scaling to new nodes
