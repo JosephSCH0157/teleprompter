@@ -162,6 +162,9 @@
               // WebRTC camera offer/candidate handling
               if (d.type === 'cam-offer') {
                 try {
+                  // Prep UI immediately in case metadata events race
+                  if (camWrap) { camWrap.removeAttribute('hidden'); camWrap.style.display = 'block'; }
+                  if (camLoad) { camLoad.textContent = 'Connecting camera…'; camLoad.style.display = 'flex'; }
                   const pc = window.__camPC || new RTCPeerConnection({ iceServers: [] });
                   if (!window.__camPC) window.__camPC = pc;
                   pc.ontrack = (e) => {
