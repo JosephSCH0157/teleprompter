@@ -116,6 +116,8 @@
             const camLoad = document.getElementById('mirrorCamLoading');
             const camStatusEl = document.getElementById('camRtcStatus');
             const setCamStatus = (msg) => { try { if (camStatusEl) camStatusEl.textContent = msg; } catch {} };
+            // Buffer for early ICE candidates from controller until remoteDescription (offer) is set
+            let __pendingControllerICE = [];
             // PiP toggle
             if (camPiP) {
               camPiP.onclick = async () => {
@@ -191,17 +193,23 @@
                   };
                   pc.onicecandidate = (e) => { if (e.candidate) { try { window.opener && window.opener.postMessage({ type:'cam-ice', candidate:e.candidate }, '*'); } catch {} } };
                   pc.setRemoteDescription({ type:'offer', sdp: d.sdp }).then(async ()=>{
+                    // Flush any early ICE candidates now that the offer is set
+                    try { for (const c of __pendingControllerICE.splice(0)) { await pc.addIceCandidate(c); } } catch {}
                     const ans = await pc.createAnswer();
                     await pc.setLocalDescription(ans);
                     window.opener && window.opener.postMessage({ type:'cam-answer', sdp: ans.sdp }, '*');
                   });
                 } catch (err) { console.warn('Display cam-offer handling failed', err); }
                 return; // stop further processing of this message
-              } else if (window.__camPC && d.type === 'cam-ice' && d.candidate) {
-                try { if (window.__camPC.remoteDescription) window.__camPC.addIceCandidate(d.candidate); } catch {}
+              } else if (d.type === 'cam-ice' && d.candidate) {
+                try {
+                  const pc = window.__camPC;
+                  if (pc && pc.remoteDescription) pc.addIceCandidate(d.candidate);
+                  else __pendingControllerICE.push(d.candidate);
+                } catch {}
                 return;
               }
-              if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; setCamStatus('CamRTC: idle'); return; }
+              if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; __pendingControllerICE = []; setCamStatus('CamRTC: idle'); return; }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
               if(d.type==='scroll'){

@@ -3096,6 +3096,8 @@ async function init(){
     updateCamRtcChip('CamRTC: idle');
     try{ sendToDisplay({ type:'webrtc-stop' }); }catch{}
     try{ if (camPC){ camPC.close(); camPC=null; } }catch{}
+    // Clear any pending ICE candidates from display
+    try { __pendingDisplayICE = []; } catch {}
   }
   function applyCamSizing(){ const pct = Math.max(15, Math.min(60, Number(camSize.value)||28)); camWrap.style.width = pct+'%'; try{ sendToDisplay({ type:'cam-sizing', pct }); }catch{} }
   function applyCamOpacity(){ const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value)||100)/100)); camWrap.style.opacity = String(op); try{ sendToDisplay({ type:'cam-opacity', opacity: op }); }catch{} }
@@ -3134,6 +3136,8 @@ async function init(){
     }
     if (camPC) return; // already active
     try {
+      // New negotiation path — clear any stale buffered ICE
+      __pendingDisplayICE = [];
       const pc = new RTCPeerConnection({ iceServers: [] });
       camPC = pc;
       updateCamRtcChip('CamRTC: negotiating…');
