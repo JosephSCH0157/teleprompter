@@ -739,6 +739,66 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
   // Call this after loading/replacing the entire script content
   function onScriptLoaded(){ try { pushDisplayUpdate('script-change'); } catch {} }
+  // ------- Content-Anchor Sync -------
+  // Give each top-level script block a stable pid (p0, p1, ...)
+  function ensureParaIds(root = document.getElementById('script')) {
+    try {
+      if (!root) return;
+      const blocks = Array.from(root.querySelectorAll('[data-pid], p, .line, .seg, .role-s1, .role-s2, .script-line'));
+      let i = 0;
+      for (const el of blocks) {
+        // only assign pids to real lines/blocks (skip legends, headers if they have a class)
+        if (!el.closest('.legend, .speakers, .controls') && !el.dataset.pid) {
+          el.dataset.pid = 'p' + (i++);
+        }
+      }
+    } catch {}
+  }
+
+  // Find the block nearest the viewport center, plus fraction through it (0..1)
+  function getAnchorAndFrac(root = document.getElementById('script')) {
+    try {
+      const blocks = root ? Array.from(root.querySelectorAll('[data-pid]')) : [];
+      if (!blocks.length) return null;
+      const midY = window.innerHeight * 0.5;
+      let best = null, bestDist = Infinity;
+      for (const el of blocks) {
+        const r = el.getBoundingClientRect();
+        const center = r.top + r.height * 0.5;
+        const dist = Math.abs(center - midY);
+        if (dist < bestDist) { best = { el, r }; bestDist = dist; }
+      }
+      if (!best) return null;
+      const frac = Math.min(1, Math.max(0, (midY - best.r.top) / Math.max(1, best.r.height)));
+      return { pid: best.el.dataset.pid, frac: Number(frac.toFixed(3)) };
+    } catch { return null; }
+  }
+
+  let __scrollSendRAF = 0;
+  function sendScrollPosition() {
+    try {
+      if (!displayWin || displayWin.closed) return;
+      const root = document.getElementById('script');
+      const anchor = getAnchorAndFrac(root);
+      if (!anchor) return;
+      displayWin.postMessage({ type: 'display-scroll', ...anchor }, '*');
+    } catch {}
+  }
+
+  // Throttle via rAF so we don’t spam
+  function wireAnchorBroadcast() {
+    const onScroll = () => {
+      if (__scrollSendRAF) return;
+      __scrollSendRAF = requestAnimationFrame(() => {
+        __scrollSendRAF = 0;
+        sendScrollPosition();
+      });
+    };
+    try { window.addEventListener('scroll', onScroll, { passive: true }); } catch {}
+    try { if (typeof viewer !== 'undefined' && viewer) viewer.addEventListener('scroll', onScroll, { passive: true }); } catch {}
+    // Also broadcast when auto-scroller nudges (optional custom event)
+    try { document.addEventListener('anvil:autoscroll', onScroll); } catch {}
+  }
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
 
 
@@ -2675,6 +2735,8 @@ function advanceByTranscript(transcript, isFinal){
     const paragraphs = outParts.filter(Boolean).join('');
 
   scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
+    // Assign stable paragraph IDs for anchor sync
+    try { ensureParaIds(scriptEl); } catch {}
     applyTypography();
   // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
   applyBottomPad();
@@ -2690,7 +2752,7 @@ function advanceByTranscript(transcript, isFinal){
     // Build paragraph index
     // Rebuild IntersectionObserver and (re)observe visible paragraphs
     // Rebuild IntersectionObserver via modular anchor observer
-    try { __anchorObs?.ensure?.(); } catch {}
+  try { __anchorObs?.ensure?.(); } catch {}
     const paras = Array.from(scriptEl.querySelectorAll('p'));
     try { __anchorObs?.observeAll?.(paras); } catch {}
     lineEls = paras;
@@ -3000,6 +3062,8 @@ function startAutoScroll(){
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const ratio = max ? (viewer.scrollTop / max) : 0;
       sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+      // Also publish anchor position for fine-grained sync
+      try { sendScrollPosition(); } catch {}
     }
     // keep label updated with live speed
     autoToggle.textContent = `Auto-scroll: On (${pxPerSec}px/s)`;
@@ -3087,7 +3151,8 @@ async function init(){
   console.log('[TP-Pro] init() wrapper start');
   try {
     await _initCore();
-    console.log('[TP-Pro] init() wrapper end (success)');
+  try { wireAnchorBroadcast(); } catch {}
+  console.log('[TP-Pro] init() wrapper end (success)');
   } catch(e){
     console.error('[TP-Pro] init() failed:', e);
     try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m: 'init-failed:'+ (e?.message||e) }); } catch {}
