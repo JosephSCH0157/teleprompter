@@ -3152,7 +3152,8 @@ async function init(){
   console.log('[TP-Pro] init() wrapper start');
   try {
     await _initCore();
-  try { wireAnchorBroadcast(); } catch {}
+    // After core init, finalize anchor wiring and push initial position
+    try { initAfterBoot(); } catch {}
   console.log('[TP-Pro] init() wrapper end (success)');
   } catch(e){
     console.error('[TP-Pro] init() failed:', e);
@@ -3170,6 +3171,13 @@ async function init(){
     } catch(err2){ console.error('[TP-Pro] fallback init failed', err2); }
     throw e;
   }
+}
+
+// One-time wiring after boot completes
+function initAfterBoot(){
+  try { ensureParaIds(); } catch {}
+  try { wireAnchorBroadcast(); } catch {}
+  try { sendScrollPosition(); } catch {}
 }
 
 
