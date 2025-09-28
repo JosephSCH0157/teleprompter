@@ -1912,6 +1912,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       if (!SRAvail) {
         if (recBtn) { recBtn.disabled = true; recBtn.title = 'Speech recognition not supported in this browser'; }
         if (recChip) { recChip.textContent = 'Speech: unsupported'; }
+      } else {
+        // Supported: ensure the control is enabled (HTML starts disabled)
+        if (recBtn) { recBtn.disabled = false; recBtn.title = 'Start speech sync'; }
+        if (recChip && (!recChip.textContent || /unsupported/i.test(recChip.textContent))) {
+          recChip.textContent = 'Speech: idle';
+        }
       }
     } catch {}
 
