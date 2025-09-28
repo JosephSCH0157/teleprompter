@@ -212,8 +212,7 @@
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
   let recAutoRestart = false;
-  // Auto-start mic if previously chosen device is present
-  let pendingAutoStart = false;
+  // Removed mic auto-start on load to avoid grabbing input without user action
   function _toast(msg, opts){
     // Lightweight fallback if the richer toast system was not injected
     try { console.debug('[toast]', msg, opts||''); } catch {}
@@ -923,8 +922,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     dbMeterTop = document.getElementById('dbMeterTop');
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
 
-    // Build both meters
+  // Build both meters
     buildDbBars(dbMeterTop);
+  // Show idle mic status by default
+  try { if (permChip) permChip.textContent = 'Mic: idle'; } catch {}
 
   // TP: mic-wire
   // Wire mic + devices
@@ -932,7 +933,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     refreshDevicesBtn?.addEventListener('click', populateDevices);
     try {
       await populateDevices();
-      // Pre-select last device if present
+      // Pre-select last device if present (but do NOT auto-start mic)
       try {
         const last = localStorage.getItem(DEVICE_KEY);
         if (last) {
@@ -940,13 +941,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
           if (sel && Array.from(sel.options).some(o=>o.value===last)) {
             sel.value = last;
           }
-          pendingAutoStart = true;
         }
       } catch {}
-      if (pendingAutoStart) {
-        // Attempt auto-start (user gesture may still be required in some browsers)
-        requestMic();
-      }
     } catch {}
 
   // TP: normalize-top-btn
@@ -1410,6 +1406,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   displayChip = document.getElementById('displayChip');
   recChip     = document.getElementById('recChip');
   camRtcChip  = document.getElementById('camRtcChip');
+  try { if (permChip && (!permChip.textContent || /Mic:\s*(allowed|denied)/i.test(permChip.textContent))) permChip.textContent = 'Mic: idle'; } catch {}
 
   openDisplayBtn  = document.getElementById('openDisplayBtn');
   closeDisplayBtn = document.getElementById('closeDisplayBtn');
