@@ -739,7 +739,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     __displaySyncDebounce = setTimeout(() => pushDisplayUpdate(reason), ms);
   }
   // Call this after loading/replacing the entire script content
-  function onScriptLoaded(){ try { pushDisplayUpdate('script-change'); } catch {} }
+  function onScriptLoaded(){
+    try { ensureParaIds(); } catch {}
+    try { pushDisplayUpdate('script-change'); } catch {}
+    try { sendScrollPosition(); } catch {}
+  }
   // ------- Content-Anchor Sync -------
   // Give each top-level script block a stable pid (p0, p1, ...)
   function ensureParaIds(root = document.getElementById('script')) {
