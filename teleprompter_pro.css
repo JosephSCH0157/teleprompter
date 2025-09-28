@@ -110,6 +110,12 @@ select { font-size: 14px; }
 
     @supports(height: 100dvh){ body{ min-height:100dvh; } }
 
+    /* Role color hooks (used if script spans include role classes) */
+    .role-s1 { color: var(--s1-color); }
+    .role-s2 { color: var(--s2-color); }
+    /* Light fade mask for content swaps */
+    .updating { opacity: 0.6; transition: opacity 120ms ease; }
+
     /* Camera overlay */
     .camWrap{ position:absolute; right:16px; bottom:16px; width:280px; aspect-ratio:16/9; border:1px solid var(--edge); border-radius:12px; overflow:hidden; box-shadow:0 6px 22px rgba(0,0,0,.45); background:#000; opacity:1; z-index:20; display:none; }
     .camWrap.mirrored video{ transform: scaleX(-1); }

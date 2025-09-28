@@ -2606,12 +2606,12 @@ function advanceByTranscript(transcript, isFinal){
     });
   // roles (standardized: only s1/s2 are colorized; g1/g2 and guest wrappers are stripped)
     // Colorize s1 and s2
-    s = s.replace(/\[s1\]([\s\S]+?)\[\/s1\]/gi, (_, inner) => `<span style="${roleStyle('s1')}">${inner}<\/span>`);
-    s = s.replace(/\[s2\]([\s\S]+?)\[\/s2\]/gi, (_, inner) => `<span style="${roleStyle('s2')}">${inner}<\/span>`);
+  s = s.replace(/\[s1\]([\s\S]+?)\[\/s1\]/gi, (_, inner) => `<span class="role-s1" style="${roleStyle('s1')}">${inner}<\/span>`);
+  s = s.replace(/\[s2\]([\s\S]+?)\[\/s2\]/gi, (_, inner) => `<span class="role-s2" style="${roleStyle('s2')}">${inner}<\/span>`);
     // Strip g1/g2 wrappers, keep content
     s = s.replace(/\[(g1|g2)\]([\s\S]+?)\[\/\1\]/gi, '$2');
     // Map [speaker=1|2] to s1/s2 styling; strip [guest=*]
-    s = s.replace(/\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi, (_, idx, inner) => `<span style="${roleStyle('s'+idx)}">${inner}<\/span>`);
+  s = s.replace(/\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi, (_, idx, inner) => `<span class="role-s${idx}" style="${roleStyle('s'+idx)}">${inner}<\/span>`);
     s = s.replace(/\[guest\s*=\s*(1|2)\]([\s\S]+?)\[\/guest\]/gi, '$2');
     // final scrub: remove any stray speaker tags that slipped into inline text (notes are handled as blocks)
     s = s.replace(/\[\/?(?:s1|s2|g1|g2)\]/gi, '');
