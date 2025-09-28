@@ -564,6 +564,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     ta.dispatchEvent(new Event('input', { bubbles:true }));
     if (typeof saveDraft === 'function') saveDraft();
     if (typeof setStatus === 'function') setStatus('Normalized to standard.');
+    try { pushDisplayUpdate('normalize'); } catch {}
   };
   try { __tpBootPush('after-normalizeToStandard-def'); } catch {}
 
@@ -736,6 +737,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     try { if (__displaySyncDebounce) clearTimeout(__displaySyncDebounce); } catch {}
     __displaySyncDebounce = setTimeout(() => pushDisplayUpdate(reason), ms);
   }
+  // Call this after loading/replacing the entire script content
+  function onScriptLoaded(){ try { pushDisplayUpdate('script-change'); } catch {} }
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
 
 
@@ -1683,8 +1686,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     loadSample.addEventListener('click', () => {
       editor.value = 'Welcome to [b]Teleprompter Pro[/b].\n\nUse [s1]roles[/s1], [note]notes[/note], and colors like [color=#ff0]this[/color].';
       renderScript(editor.value);
+      try { onScriptLoaded(); } catch {}
     });
-    clearText.addEventListener('click', () => { editor.value=''; renderScript(''); });
+    clearText.addEventListener('click', () => { editor.value=''; renderScript(''); try { onScriptLoaded(); } catch {} });
 
     // Top-bar Normalize button (near Load sample)
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
@@ -1692,11 +1696,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       normalizeTopBtn.dataset.wired = '1';
       normalizeTopBtn.addEventListener('click', () => {
         if (typeof window.normalizeToStandard === 'function') {
-          try { window.normalizeToStandard(); } catch (e) { alert('Normalize error: ' + e.message); }
+          try { window.normalizeToStandard(); try { pushDisplayUpdate('normalize'); } catch {} } catch (e) { alert('Normalize error: ' + e.message); }
           return;
         }
         // Shared fallback
         fallbackNormalize();
+        try { pushDisplayUpdate('normalize'); } catch {}
       });
     }
 
@@ -1737,6 +1742,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     uploadFileInput?.addEventListener('change', async (e) => {
       const f = e.target.files?.[0]; if (!f) return;
       await uploadFromFile(f);
+      try { onScriptLoaded(); } catch {}
       uploadFileInput.value = '';
     });
 
@@ -2162,6 +2168,14 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     try { window.addEventListener('resize', applyBottomPad, { passive: true }); } catch {}
     // Update debug chip on scroll
     try { viewer?.addEventListener('scroll', () => { updateDebugPosChip(); }, { passive:true }); } catch {}
+    // Live display sync: watch script DOM for changes and debounce updates
+    try {
+      if (scriptEl && !scriptEl.__mo) {
+        const mo = new MutationObserver(() => debounceDisplayUpdate('edit', 250));
+        mo.observe(scriptEl, { subtree: true, childList: true, characterData: true });
+        scriptEl.__mo = mo;
+      }
+    } catch {}
     // Initial debug chip paint
     try { updateDebugPosChip(); } catch {}
   }
@@ -3300,7 +3314,7 @@ async function init(){
    * ────────────────────────────────────────────────────────────── */
   const LS_KEY = 'tp_script_v1';
   function saveToLocal(){ try{ localStorage.setItem(LS_KEY, editor.value||''); setStatus('Saved to browser.'); }catch(e){ setStatus('Save failed.'); } }
-  function loadFromLocal(){ try{ const v = localStorage.getItem(LS_KEY)||''; editor.value=v; renderScript(v); setStatus('Loaded from browser.'); }catch(e){ setStatus('Load failed.'); } }
+  function loadFromLocal(){ try{ const v = localStorage.getItem(LS_KEY)||''; editor.value=v; renderScript(v); try { onScriptLoaded(); } catch {} setStatus('Loaded from browser.'); }catch(e){ setStatus('Load failed.'); } }
   function scheduleAutosave(){ /* optional: attach a debounce here */ }
 
   // TP: reset-script
@@ -3460,14 +3474,15 @@ async function init(){
           else if (typeof window.fallbackNormalize === 'function') { window.fallbackNormalize(); normalized = true; }
         } catch {}
         renderScript(editor.value);
-        setStatus(`Loaded "${file.name}" (.docx)${normalized ? ' and normalized' : ''}.`);
+  setStatus(`Loaded "${file.name}" (.docx)${normalized ? ' and normalized' : ''}.`);
+  try { onScriptLoaded(); } catch {}
       } catch(e){ err(e); setStatus('Failed to read .docx: ' + (e?.message||e)); }
       return;
     }
 
     // Plain text / md / rtf / .text → read as text (RTF will include markup)
     const reader = new FileReader();
-    reader.onload = () => { editor.value = reader.result || ''; renderScript(editor.value); setStatus(`Loaded “${file.name}”.`); };
+  reader.onload = () => { editor.value = reader.result || ''; renderScript(editor.value); try { onScriptLoaded(); } catch {} setStatus(`Loaded “${file.name}”.`); };
     reader.onerror = () => setStatus('Failed to read file.');
     reader.readAsText(file, 'utf-8');
   }
