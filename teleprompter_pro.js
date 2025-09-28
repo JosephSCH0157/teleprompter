@@ -2894,6 +2894,10 @@ function openDisplay(){
     }
   displayReady = false;
   try { window.__displayWin = displayWin; } catch {}
+    // Gentle hello ping shortly after open, so the display can respond with display-ready
+    setTimeout(() => {
+      try { displayWin && displayWin.postMessage({ type: 'hello' }, '*'); } catch {}
+    }, 250);
     displayChip.textContent = 'Display: open';
     closeDisplayBtn.disabled = true;  // will be enabled by global DISPLAY_READY handler
     // Kick off handshake retry pings: every 300ms up to ~3s or until READY.
