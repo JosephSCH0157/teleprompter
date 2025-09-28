@@ -55,7 +55,7 @@
             </div>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
-          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button> <span id="camRtcStatus">CamRTC: idle</span></div>
+          <div class="hud">Display <button class="btn" id="followToggle" title="Toggle follow mode">Follow: On</button> <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button> <span id="camRtcStatus">CamRTC: idle</span></div>
           <div id="mirrorCamWrap" hidden>
             <video id="mirrorCamVideo" autoplay muted></video>
             <div id="mirrorCamLoading">Connecting camera…</div>
@@ -66,6 +66,21 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
+            const followBtn = document.getElementById('followToggle');
+            let followMode = true;         // master toggle
+            let followPaused = false;      // transient pause after user scrolls
+            let followResumeTimer = null;  // timer to auto-resume
+            let lastAnchor = null;         // remember last pid/frac
+            const updateFollowLabel = () => { if (!followBtn) return; followBtn.textContent = followMode ? (followPaused ? 'Follow: Paused' : 'Follow: On') : 'Follow: Off'; };
+            if (followBtn) followBtn.onclick = () => { followMode = !followMode; if (followMode && lastAnchor) { // resume and snap to last known
+                  try { requestAnimationFrame(() => scrollToAnchor(lastAnchor.pid, lastAnchor.frac)); } catch {}
+                } updateFollowLabel(); };
+            function pauseFollow(ms = 5000){
+              if (!followMode) return; // already off
+              followPaused = true; updateFollowLabel();
+              if (followResumeTimer) { clearTimeout(followResumeTimer); followResumeTimer = null; }
+              followResumeTimer = setTimeout(() => { followPaused = false; updateFollowLabel(); if (followMode && lastAnchor) { try { scrollToAnchor(lastAnchor.pid, lastAnchor.frac); } catch {} } }, ms);
+            }
             // Color sync via BroadcastChannel
             let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
             if (bc) {
@@ -185,7 +200,7 @@
                   wrap.scrollTo({ top: y, behavior: 'auto' });
                 } catch {}
               };
-              if (d.type === 'display-scroll') { scrollToAnchor(d.pid, d.frac); return; }
+              if (d.type === 'display-scroll') { lastAnchor = { pid: d.pid, frac: d.frac }; if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac); return; }
               // Lightweight content/theme sync from controller
               if (d.type === 'display-update') {
                 const scriptHost = document.getElementById('script') || document.getElementById('displayScript');
@@ -234,6 +249,15 @@
                 try { requestAnimationFrame(() => scriptHost?.classList.remove('updating')); } catch {}
                 return;
               }
+              // Pause follow on manual interactions, resume after 5s
+              try {
+                const manualPause = () => pauseFollow(5000);
+                if (wrap) {
+                  wrap.addEventListener('wheel', manualPause, { passive: true });
+                  wrap.addEventListener('pointerdown', manualPause, { passive: true });
+                  wrap.addEventListener('touchstart', manualPause, { passive: true });
+                }
+              } catch {}
               // WebRTC camera offer/candidate handling
               if (d.type === 'cam-offer') {
                 try {
