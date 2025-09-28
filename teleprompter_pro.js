@@ -910,11 +910,15 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     if (!AC) { warn('AudioContext unavailable'); return; }
   const ctx = new AC();
   audioCtx = ctx; // retain for suspend/resume when tab visibility changes
+    // Some browsers start in 'suspended' until an explicit resume; make sure we're running
+    try { if (ctx.state === 'suspended') { await ctx.resume(); } } catch(e) { warn('AudioContext resume failed', e); }
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     src.connect(analyser);
-    const data = new Uint8Array(analyser.frequencyBinCount);
+    // Prefer time-domain data for a stable RMS level meter
+    const timeFloat = (typeof analyser.getFloatTimeDomainData === 'function') ? new Float32Array(analyser.fftSize) : null;
+    const timeByte  = timeFloat ? null : new Uint8Array(analyser.fftSize);
     const topBars  = buildDbBars(dbMeterTop);
     const peakEl = dbMeterTop?.querySelector('.peak-marker');
     peakHold.value = 0; peakHold.lastUpdate = performance.now();
@@ -924,9 +928,17 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     const release = 0.15; // 0..1 (higher = faster fall)
     let levelSmooth = 0;  // smoothed 0..1 level after log mapping
     const draw = () => {
-      analyser.getByteFrequencyData(data);
-      // Root-mean-square amplitude 0..1
-      const rms = Math.sqrt(data.reduce((a,b)=>a + b*b, 0) / data.length) / 255;
+      // Pull time-domain samples and compute RMS
+      let rms = 0;
+      if (timeFloat) {
+        analyser.getFloatTimeDomainData(timeFloat);
+        let sum = 0; for (let i=0;i<timeFloat.length;i++){ const v=timeFloat[i]; sum += v*v; }
+        rms = Math.sqrt(sum / timeFloat.length);
+      } else {
+        analyser.getByteTimeDomainData(timeByte);
+        let sum = 0; for (let i=0;i<timeByte.length;i++){ const v=(timeByte[i]-128)/128; sum += v*v; }
+        rms = Math.sqrt(sum / timeByte.length);
+      }
       // Convert to approximate dBFS
       const dbfs = rms>0 ? (20 * Math.log10(rms)) : -Infinity;
       // Clamp & normalize to 0..1 based on floor
@@ -971,8 +983,12 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const chosenId = getMicSel()?.value || undefined;
       const constraints = { audio: { deviceId: chosenId ? { exact: chosenId } : undefined } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Stop any prior meter before starting a new one
+      try { stopDbMeter(); } catch {}
       audioStream = stream;
       try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
+      // Kick the AudioContext to running state if needed then start metering
+      try { if (audioCtx?.state === 'suspended') await audioCtx.resume(); } catch {}
       startDbMeter(stream);
       // Persist chosen device
       try { if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId); } catch {}
