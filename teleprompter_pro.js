@@ -749,10 +749,14 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   function ensureParaIds(root = document.getElementById('script')) {
     try {
       if (!root) return;
-      const blocks = Array.from(root.querySelectorAll('[data-pid], p, .line, .seg, .role-s1, .role-s2, .script-line'));
+      // Prefer a canonical line node if present; else gracefully fall back
+      const candidates = ['.tp-line', '.script-line', '.line', '.seg', 'p'];
+      let selector = 'p';
+      for (const sel of candidates) { if (root.querySelector(sel)) { selector = sel; break; } }
+      const blocks = Array.from(root.querySelectorAll(selector));
       let i = 0;
       for (const el of blocks) {
-        // only assign pids to real lines/blocks (skip legends, headers if they have a class)
+        // only assign pids to real lines/blocks (skip legends/controls)
         if (!el.closest('.legend, .speakers, .controls') && !el.dataset.pid) {
           el.dataset.pid = 'p' + (i++);
         }
