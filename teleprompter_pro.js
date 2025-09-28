@@ -3145,7 +3145,7 @@ async function init(){
           try { sendToDisplay({ type:'cam-ice', candidate: e.candidate }); } catch {}
         }
       };
-      pc.onconnectionstatechange = () => {
+  pc.onconnectionstatechange = () => {
         try {
           const st = pc.connectionState;
           if (st === 'connected')      updateCamRtcChip('CamRTC: connected');
@@ -3162,7 +3162,7 @@ async function init(){
   const offer = await pc.createOffer({ offerToReceiveVideo: false });
   await pc.setLocalDescription(offer);
   camAwaitingAnswer = true;
-      // offer already sent above
+  try { sendToDisplay({ type:'cam-offer', sdp: offer.sdp }); } catch {}
     } catch (e) { warn('ensureCamPeer failed', e); }
   }
 

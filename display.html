@@ -137,10 +137,10 @@
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // WebRTC camera offer/candidate handling
-              if (!window.__camPC && (d.type === 'cam-offer')) {
+              if (d.type === 'cam-offer') {
                 try {
-                  const pc = new RTCPeerConnection({ iceServers: [] });
-                  window.__camPC = pc;
+                  const pc = window.__camPC || new RTCPeerConnection({ iceServers: [] });
+                  if (!window.__camPC) window.__camPC = pc;
                   pc.ontrack = (e) => {
                     if (camVid && e.streams && e.streams[0]) { camVid.srcObject = e.streams[0]; try { camVid.play().catch(()=>{}); } catch{} }
                   };
@@ -153,9 +153,10 @@
                 } catch (err) { console.warn('Display cam-offer handling failed', err); }
                 return; // stop further processing of this message
               } else if (window.__camPC && d.type === 'cam-ice' && d.candidate) {
-                try { window.__camPC.addIceCandidate(d.candidate); } catch {}
+                try { if (window.__camPC.remoteDescription) window.__camPC.addIceCandidate(d.candidate); } catch {}
                 return;
               }
+              if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; return; }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
               if(d.type==='scroll'){
