@@ -164,6 +164,54 @@
                 try { window.opener && window.opener.postMessage({ type:'display-ready' }, '*'); } catch {}
                 return;
               }
+              // Lightweight content/theme sync from controller
+              if (d.type === 'display-update') {
+                const scriptHost = document.getElementById('script') || document.getElementById('displayScript');
+                // Optional: add a brief class to allow CSS fade during swap
+                try { scriptHost?.classList.add('updating'); } catch {}
+
+                // 1) Speaker colors and (optional) names
+                try {
+                  const r = document.documentElement;
+                  const s1 = d?.speakers?.s1, s2 = d?.speakers?.s2;
+                  if (s1?.color) r.style.setProperty('--s1-color', s1.color);
+                  if (s2?.color) r.style.setProperty('--s2-color', s2.color);
+                  const n1 = document.getElementById('lbl-s1');
+                  const n2 = document.getElementById('lbl-s2');
+                  if (n1 && typeof s1?.name === 'string') n1.textContent = s1.name;
+                  if (n2 && typeof s2?.name === 'string') n2.textContent = s2.name;
+                } catch {}
+
+                // 2) Theme/mirror/scale hooks
+                try {
+                  if (typeof d.mirror === 'boolean') {
+                    // expose an attribute (CSS may choose to mirror)
+                    if (d.mirror) document.body.setAttribute('data-mirror','1');
+                    else document.body.removeAttribute('data-mirror');
+                  }
+                  if (typeof d.scale === 'number' && isFinite(d.scale)) {
+                    // integrate with existing scaling logic
+                    dispScale = Math.max(0.5, Math.min(2.5, d.scale));
+                  }
+                } catch {}
+
+                // 3) Swap markup and ensure current scaling is applied
+                try {
+                  if (scriptHost && typeof d.scriptHTML === 'string') {
+                    // Reset scroll to top for brand-new scripts
+                    if (d.reason === 'script-change') {
+                      try { const w = document.getElementById('wrap'); if (w) w.scrollTop = 0; } catch {}
+                    }
+                    scriptHost.innerHTML = d.scriptHTML;
+                    // Re-apply font scaling to new nodes
+                    applyScaled();
+                  }
+                } catch {}
+
+                // 4) Remove the mask class on next frame
+                try { requestAnimationFrame(() => scriptHost?.classList.remove('updating')); } catch {}
+                return;
+              }
               // WebRTC camera offer/candidate handling
               if (d.type === 'cam-offer') {
                 try {
