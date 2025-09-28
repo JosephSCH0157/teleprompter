@@ -2607,13 +2607,15 @@ function advanceByTranscript(transcript, isFinal){
 
   // Soften big forward jumps unless similarity is very strong
   const delta = bestIdx - currentIndex;
-  debug({
-    tag: 'match',
-    spokenTail: spoken.join(' '),
-    bestIdx,
-    bestScore: Number(bestScore.toFixed(3)),
-    delta
-  });
+  if (typeof debug === 'function') {
+    debug({
+      tag: 'match',
+      spokenTail: spoken.join(' '),
+      bestIdx,
+      bestScore: Number(bestScore.toFixed(3)),
+      delta
+    });
+  }
   if (delta > MAX_JUMP_AHEAD_WORDS && bestScore < STRICT_FORWARD_SIM){
     currentIndex += MAX_JUMP_AHEAD_WORDS;
   } else {
