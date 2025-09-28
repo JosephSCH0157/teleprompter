@@ -128,12 +128,12 @@
             // Loading state until first frame
             let firstFrame = false;
             if (camVid) {
-              const showWrap = () => { if (camWrap) { camWrap.hidden = false; camWrap.style.display = 'block'; } };
+              const showWrap = () => { if (camWrap) { camWrap.removeAttribute('hidden'); camWrap.style.display = 'block'; } };
+              // With MediaStream srcObject, loadedmetadata is the reliable gate
               camVid.addEventListener('loadedmetadata', showWrap, { once:true });
-              camVid.addEventListener('canplay', showWrap, { once:true });
               camVid.addEventListener('waiting', () => { if (firstFrame && camLoad) { camLoad.textContent='Reconnecting…'; camLoad.style.display='flex'; } });
               camVid.addEventListener('playing', () => { firstFrame = true; if (camLoad) camLoad.style.display='none'; showWrap(); });
-              camVid.addEventListener('emptied', () => { firstFrame=false; if (camLoad){ camLoad.textContent='Connecting camera…'; camLoad.style.display='flex'; } if (camWrap){ camWrap.style.display='none'; camWrap.hidden = true; } });
+              camVid.addEventListener('emptied', () => { firstFrame=false; if (camLoad){ camLoad.textContent='Connecting camera…'; camLoad.style.display='flex'; } if (camWrap){ camWrap.style.display='none'; camWrap.setAttribute('hidden',''); } });
             }
             window.addEventListener('message', ev => {
               const d = ev.data||{};
