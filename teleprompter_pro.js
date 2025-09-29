@@ -1607,7 +1607,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       camVideo.controls = false;
       camVideo.removeAttribute('controls');
       camVideo.removeAttribute('controlsList');
-      camVideo.disablePictureInPicture = true;
+  // Do not disable PiP; allow user to toggle it later
+  try { camVideo.disablePictureInPicture = false; camVideo.removeAttribute('disablePictureInPicture'); } catch {}
       camVideo.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
       // Then mirror as attributes for broader compatibility
       camVideo.setAttribute('playsinline', '');
@@ -3249,11 +3250,12 @@ function initAfterBoot(){
       const id = camDeviceSel?.value || undefined;
       const stream = await navigator.mediaDevices.getUserMedia({ video: id? {deviceId:{exact:id}} : true, audio:false });
       // Order matters: set properties/attributes first, then assign stream, then play()
-      camVideo.muted = true;            // required for mobile autoplay
+    camVideo.muted = true;            // required for mobile autoplay
       camVideo.autoplay = true;
       camVideo.playsInline = true;
   camVideo.controls = false; camVideo.removeAttribute('controls'); camVideo.removeAttribute('controlsList');
-  camVideo.disablePictureInPicture = true;
+  // Allow Picture-in-Picture via our toggle; do not disable it on the element
+  try { camVideo.disablePictureInPicture = false; camVideo.removeAttribute('disablePictureInPicture'); } catch {}
   camVideo.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
       camVideo.setAttribute('playsinline','');
       camVideo.setAttribute('webkit-playsinline','');
@@ -3458,7 +3460,23 @@ function initAfterBoot(){
       throw e;
     }
   }
-  async function togglePiP(){ try{ if (document.pictureInPictureElement){ await document.exitPictureInPicture(); } else { await camVideo.requestPictureInPicture(); } } catch(e){ warn('PiP failed', e); } }
+  async function togglePiP(){
+    try{
+      const v = camVideo;
+      if (!v) return;
+      if (document.pictureInPictureElement){
+        await document.exitPictureInPicture();
+        return;
+      }
+      // Ensure the element is allowed to enter PiP even if attributes were previously set
+      try { v.disablePictureInPicture = false; v.removeAttribute && v.removeAttribute('disablePictureInPicture'); } catch {}
+      if (typeof v.requestPictureInPicture === 'function') {
+        await v.requestPictureInPicture();
+      } else {
+        setStatus && setStatus('Picture-in-Picture not supported');
+      }
+    } catch(e){ warn('PiP failed', e); }
+  }
 
   /* ──────────────────────────────────────────────────────────────
    * Local storage + File I/O (DOCX supported)
