@@ -74,6 +74,15 @@ select { font-size: 14px; }
     .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10}
     .topbar strong{letter-spacing:.2px}
     .chip{font-size:12px;color:var(--muted)}
+    .menu-btn{font-size:16px;line-height:1;padding:6px 10px}
+    .menu-dropdown{position:fixed;top:42px;left:12px;z-index:10000;background:#0e141b;border:1px solid var(--edge);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);min-width:260px;padding:10px}
+    .menu-dropdown.hidden{display:none}
+    .menu-group{padding:8px 8px;border-top:1px solid var(--edge)}
+    .menu-group:first-child{border-top:none}
+    .menu-label{display:block;font-size:12px;color:var(--muted);margin:4px 0 6px}
+    .menu-row{display:flex;gap:8px;align-items:center}
+    .menu-item{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:10px}
+    .menu-item:hover{background:#10161d}
 .legend{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
 .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--edge);border-radius:999px;font-size:12px;background:#0e141b}
 .tag .dot{width:10px;height:10px;border-radius:50%}

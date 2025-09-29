@@ -12,6 +12,7 @@
 </head>
 <body>
 <div class="topbar">
+<button id="menuBtn" class="chip menu-btn" aria-haspopup="true" aria-expanded="false" title="File menu">☰</button>
 <strong>Teleprompter_Pro</strong>
 <span class="chip" id="saveChip">Draft: —</span>
 <span class="chip" id="permChip">Mic: unknown</span>
@@ -28,6 +29,29 @@
 <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
 <!-- Speakers legend -->
 <div class="legend" id="legend"></div>
+</div>
+<!-- File menu dropdown (hamburger) -->
+<div id="menuDropdown" class="menu-dropdown hidden" aria-labelledby="menuBtn">
+  <div class="menu-group">
+  <button id="uploadFileBtn" class="menu-item">Upload file…</button>
+    <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
+  </div>
+  <div class="menu-group">
+    <label class="menu-label" for="scriptSelect">Saved drafts</label>
+    <div class="menu-row">
+      <select id="scriptSelect" class="select-md" aria-label="Saved drafts"></select>
+  <button id="loadBtn" class="btn-chip">Load</button>
+    </div>
+  </div>
+  <!-- Optional future: Save As / Delete / Download can live here if desired -->
+  <!-- <div class="menu-group">
+    <div class="menu-row">
+      <button id="saveAsBtn" class="btn-chip">Save As</button>
+      <button id="deleteBtn" class="btn-chip">Delete</button>
+      <button id="downloadFile" class="btn-chip">Download</button>
+    </div>
+  </div> -->
+  
 </div>
 <div class="app">
 <aside class="panel">
@@ -145,28 +169,7 @@
     <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
   </div>
 </div>
-<div class="row">
-<label>Format
-  <select id="downloadFormat" class="select-sm">
-    <option value="txt" selected>.txt</option>
-    <option value="md">.md</option>
-    <option value="rtf">.rtf</option>
-    <option value="text">.text</option>
-    <option value="docx" disabled>.docx (soon)</option>
-  </select>
-  </label>
-<button id="downloadFile">Download</button>
-<button id="uploadFileBtn">Upload file</button>
-<input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
-</div>
-<div class="row">
-<label>Script
-          <select id="scriptSelect" class="select-md" ></select>
-</label>
-<button id="saveAsBtn">Save As</button>
-<button id="loadBtn">Load</button>
-<button id="deleteBtn">Delete</button>
-</div>
+<!-- File controls moved into the top-left hamburger menu -->
 <div class="row">
 <button id="resetScriptBtn">Reset Script</button>
 </div>

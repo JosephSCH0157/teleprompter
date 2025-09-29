@@ -839,7 +839,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
 
   // DOM (late‑bound during init)
-  let editor, scriptEl, viewer, legendEl,
+  let editor, scriptEl, viewer, legendEl, normalizeTopBtn;
     permChip, displayChip, recChip, camRtcChip,
     debugPosChip,
       openDisplayBtn, closeDisplayBtn, presentBtn,
@@ -3236,7 +3236,77 @@ function initAfterBoot(){
   try { ensureParaIds(); } catch {}
   try { wireAnchorBroadcast(); } catch {}
   try { sendScrollPosition(); } catch {}
+  try { wireHamburger(); } catch {}
 }
+
+  // Simple hamburger menu wiring for file actions
+  function wireHamburger(){
+    try {
+      const btn = document.getElementById('menuBtn');
+      const dd  = document.getElementById('menuDropdown');
+      if (!btn || !dd) return;
+      const toggle = (open) => {
+        const on = (open===undefined) ? dd.classList.contains('hidden') : !!open;
+        if (on) { dd.classList.remove('hidden'); btn.setAttribute('aria-expanded','true'); }
+        else { dd.classList.add('hidden'); btn.setAttribute('aria-expanded','false'); }
+      };
+      if (!btn.__wired){
+        btn.__wired = true;
+        btn.addEventListener('click', (e)=>{ e.stopPropagation(); toggle(); });
+        document.addEventListener('click', (e)=>{ if (!dd.classList.contains('hidden')) toggle(false); });
+        // keep menu open if clicking inside
+        dd.addEventListener('click', (e)=> e.stopPropagation());
+      }
+      // Reuse existing upload and load hooks
+      const uploadBtn = document.getElementById('uploadFileBtn');
+      const uploadInp = document.getElementById('uploadFile');
+      if (uploadBtn && uploadInp && !uploadBtn.__wired){
+        uploadBtn.__wired = true;
+        uploadBtn.addEventListener('click', ()=> uploadInp.click());
+        uploadInp.addEventListener('change', async () => {
+          try {
+            const f = uploadInp.files && uploadInp.files[0]; if (!f) return;
+            const buf = await f.arrayBuffer();
+            if (/\.docx$/i.test(f.name)){
+              // DOCX via Mammoth
+              const { value } = await window.mammoth.convertToHtml({ arrayBuffer: buf });
+              const text = value.replace(/<[^>]+>/g,'\n').replace(/\n{3,}/g,'\n\n');
+              editor.value = text; renderScript(text); onScriptLoaded(); setStatus(`Loaded "${f.name}" (.docx)`);
+            } else {
+              const reader = new FileReader();
+              reader.onload = () => { editor.value = reader.result || ''; renderScript(editor.value); onScriptLoaded(); setStatus(`Loaded "${f.name}".`); };
+              reader.readAsText(f);
+            }
+          } catch(e){ setStatus('Upload failed.'); }
+          toggle(false);
+        });
+      }
+      const loadBtn = document.getElementById('loadBtn');
+      if (loadBtn && !loadBtn.__wired){
+        loadBtn.__wired = true;
+        loadBtn.addEventListener('click', ()=>{ try{ loadFromLocal(); }catch{} toggle(false); });
+      }
+      // Populate saved-drafts select
+      try {
+        const scriptSelect = document.getElementById('scriptSelect');
+        if (scriptSelect && !scriptSelect.__wired){
+          scriptSelect.__wired = true;
+          const refresh = () => {
+            // Existing refresh logic (mirrored)
+            const v = localStorage.getItem('tp_script_v1') || '';
+            scriptSelect.innerHTML = '';
+            if (!v) {
+              const o = document.createElement('option'); o.value=''; o.textContent='— No saved draft —'; scriptSelect.appendChild(o);
+            } else {
+              const o = document.createElement('option'); o.value='tp_script_v1'; o.textContent='Current Draft'; scriptSelect.appendChild(o);
+              scriptSelect.value = 'tp_script_v1';
+            }
+          };
+          refresh();
+        }
+      } catch {}
+    } catch {}
+  }
 
 
 
