@@ -5,10 +5,11 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   if (active) return;
   active = true;
   prevErr = 0;
-  const kP = 0.12;      // proportional gain (gentle)
-  const kD = 0.10;      // derivative gain (damping)
-  const vMin = 0.2;     // px/frame (deadzone)
-  const vMax = 12;      // px/frame cap
+  // Slightly softer, more damped profile to reduce jitter
+  const kP = 0.09;      // proportional gain (gentler)
+  const kD = 0.12;      // derivative gain (more damping)
+  const vMin = 0.3;     // px/frame (deadzone)
+  const vMax = 8;       // px/frame cap
   const bias = 0;       // baseline offset
 
   function tick() {

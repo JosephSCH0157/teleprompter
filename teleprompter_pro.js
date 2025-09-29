@@ -769,7 +769,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     try {
       const blocks = root ? Array.from(root.querySelectorAll('[data-pid]')) : [];
       if (!blocks.length) return null;
-      const midY = window.innerHeight * 0.5;
+      // Align to the same visual marker used for reading to keep main/display in sync
+      const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+      const midY = window.innerHeight * markerPct;
       let best = null, bestDist = Infinity;
       for (const el of blocks) {
         const r = el.getBoundingClientRect();
@@ -779,7 +781,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       }
       if (!best) return null;
       const frac = Math.min(1, Math.max(0, (midY - best.r.top) / Math.max(1, best.r.height)));
-      return { pid: best.el.dataset.pid, frac: Number(frac.toFixed(3)) };
+      return { pid: best.el.dataset.pid, frac: Number(frac.toFixed(3)), markerPct };
     } catch { return null; }
   }
 
@@ -2229,13 +2231,14 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const v = (motionSmoothSel?.value || 'balanced');
       // adjust soft scroll tunables used in advanceByTranscript and scrollToCurrentIndex
       if (v === 'stable'){
-        window.__TP_SCROLL = { DEAD: 22, THROTTLE: 280, FWD: 80, BACK: 30, EASE_STEP: 60, EASE_MIN: 12 };
+        // Prioritize calm behavior: bigger deadband/throttle, smaller steps
+        window.__TP_SCROLL = { DEAD: 28, THROTTLE: 340, FWD: 68, BACK: 28, EASE_STEP: 56, EASE_MIN: 14 };
       } else if (v === 'responsive'){
-        // less jitter: higher deadband/throttle, smaller back steps
-        window.__TP_SCROLL = { DEAD: 20, THROTTLE: 240, FWD: 110, BACK: 50, EASE_STEP: 96, EASE_MIN: 6 };
+        // Faster reaction but with some damping
+        window.__TP_SCROLL = { DEAD: 20, THROTTLE: 240, FWD: 104, BACK: 46, EASE_STEP: 92, EASE_MIN: 8 };
       } else {
-        // balanced
-        window.__TP_SCROLL = { DEAD: 22, THROTTLE: 260, FWD: 96, BACK: 40, EASE_STEP: 80, EASE_MIN: 10 };
+        // Balanced default
+        window.__TP_SCROLL = { DEAD: 24, THROTTLE: 280, FWD: 88, BACK: 36, EASE_STEP: 76, EASE_MIN: 10 };
       }
     }
     applySmooth();
@@ -2484,9 +2487,9 @@ function maybeCatchupByAnchor(anchorY, viewportH){
     if (autoTimer) { _lowStartTs = 0; try{ __scrollCtl.stopAutoCatchup(); }catch{}; return; }
     const h = Math.max(1, Number(viewportH)||viewer.clientHeight||1);
     const ratio = anchorY / h; // 0=top, 1=bottom
-    if (ratio > 0.65){
+    if (ratio > 0.7){
       if (!_lowStartTs) _lowStartTs = performance.now();
-      if (performance.now() - _lowStartTs > 500){
+      if (performance.now() - _lowStartTs > 650){
         // Start (or keep) the catch-up loop with our standard closures
         tryStartCatchup();
       }
@@ -2652,10 +2655,14 @@ function advanceByTranscript(transcript, isFinal){
   // Otherwise, move in small pixel steps to avoid whole-paragraph jumps.
   const strongMatch = (typeof bestScore === 'number' && bestScore >= STRICT_FORWARD_SIM);
   const smallWordDelta = (typeof delta === 'number' && Math.abs(delta) <= 2);
-  const largeErr = Math.abs(err) > (DEAD_BAND_PX * 3);
+  const largeErr = Math.abs(err) > (DEAD_BAND_PX * 3.5);
   const shouldSnapToEl = isFinal && (strongMatch || smallWordDelta) && largeErr;
 
-  if (shouldSnapToEl) {
+  // If the auto catch-up controller is running, let it steer to avoid tug-of-war
+  const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
+  if (catchupActive) {
+    // Defer to controller; just mark timestamps and broadcast anchor for display
+  } else if (shouldSnapToEl) {
     try {
       scrollToEl(currentEl, markerTop);
     } catch {
@@ -2672,11 +2679,13 @@ function advanceByTranscript(transcript, isFinal){
     else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
     viewer.scrollTop = next;
   }
-  if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
-  {
-    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const ratio = max ? (viewer.scrollTop / max) : 0;
-    sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+  if (!catchupActive) {
+    if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
+    {
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+    }
   }
   // Evaluate whether to run the gentle catch-up loop based on anchor position
   try {

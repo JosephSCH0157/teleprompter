@@ -185,7 +185,7 @@
                 return;
               }
               // Content-aware scroller: align to pid + fraction within the wrap container
-              const scrollToAnchor = (pid, frac = 0) => {
+              const scrollToAnchor = (pid, frac = 0, markerPct = 0.36) => {
                 try {
                   const host = scriptEl || document.getElementById('displayScript');
                   if (!host || !wrap || !pid) return;
@@ -195,12 +195,13 @@
                   const hostRect = wrap.getBoundingClientRect();
                   const elRect = el.getBoundingClientRect();
                   const offsetInWrap = (elRect.top - hostRect.top) + wrap.scrollTop;
-                  const target = offsetInWrap + (el.offsetHeight * (Number(frac)||0)) - (wrap.clientHeight * 0.5);
+                  const mp = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : 0.36;
+                  const target = offsetInWrap + (el.offsetHeight * (Number(frac)||0)) - (wrap.clientHeight * mp);
                   const y = Math.max(0, Math.min(target, Math.max(0, wrap.scrollHeight - wrap.clientHeight)));
                   wrap.scrollTo({ top: y, behavior: 'auto' });
                 } catch {}
               };
-              if (d.type === 'display-scroll') { lastAnchor = { pid: d.pid, frac: d.frac }; if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac); return; }
+              if (d.type === 'display-scroll') { lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct }; if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct); return; }
               // Lightweight content/theme sync from controller
               if (d.type === 'display-update') {
                 const scriptHost = document.getElementById('script') || document.getElementById('displayScript');
@@ -313,8 +314,12 @@
               if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; __pendingControllerICE = []; setCamStatus('CamRTC: idle'); return; }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
+              // Prefer anchor-based scrolls for alignment; ignore raw pixel scroll when we have a recent anchor
               if(d.type==='scroll'){
-                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
+                if (lastAnchor && followMode && !followPaused) {
+                  // We already have an anchor; re-apply for consistency
+                  scrollToAnchor(lastAnchor.pid, lastAnchor.frac, lastAnchor.markerPct);
+                } else if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                   wrap.scrollTop = Math.round(d.ratio * max);
                 } else {
