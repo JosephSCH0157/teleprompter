@@ -267,6 +267,13 @@
                   setCamStatus('CamRTC: connecting…');
                   const pc = window.__camPC || new RTCPeerConnection({ iceServers: [] });
                   if (!window.__camPC) window.__camPC = pc;
+                  // Be explicit: ensure a recvonly video transceiver exists so some engines wire tracks reliably
+                  try {
+                    const hasTransceivers = typeof pc.getTransceivers === 'function' && pc.getTransceivers().length > 0;
+                    if (!hasTransceivers && typeof pc.addTransceiver === 'function') {
+                      pc.addTransceiver('video', { direction: 'recvonly' });
+                    }
+                  } catch {}
                   pc.ontrack = (e) => {
                     if (camVid && e.streams && e.streams[0]) {
                       camVid.srcObject = e.streams[0];

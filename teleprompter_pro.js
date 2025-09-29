@@ -3357,6 +3357,22 @@ function initAfterBoot(){
   await pc.setLocalDescription(offer);
   camAwaitingAnswer = true;
   try { sendToDisplay({ type:'cam-offer', sdp: offer.sdp }); } catch {}
+  // If no answer arrives within a few seconds, retry once to break potential stalls
+  try {
+    const expectedSignaling = pc; // capture
+    setTimeout(async () => {
+      try {
+        if (!camAwaitingAnswer) return; // already answered
+        if (camPC !== expectedSignaling) return; // replaced
+        if (!wantCamRTC || !camStream) return; // user stopped
+        // Re-send offer
+        const reoffer = await pc.createOffer({ offerToReceiveVideo: false });
+        await pc.setLocalDescription(reoffer);
+        sendToDisplay({ type:'cam-offer', sdp: reoffer.sdp });
+        updateCamRtcChip('CamRTC: negotiating…');
+      } catch {}
+    }, 2500);
+  } catch {}
     } catch (e) { warn('ensureCamPeer failed', e); }
   }
 
