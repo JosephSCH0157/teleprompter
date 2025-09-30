@@ -1561,6 +1561,27 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   legendEl = document.getElementById('legend');
   debugPosChip = document.getElementById('debugPosChip');
 
+  // Hook viewer.scrollTop setter once to warn on resets to 0
+  (function hookScrollTopWriteOnce(){
+    try {
+      const sc = viewer;
+      if (!sc) return;
+      const proto = Object.getPrototypeOf(sc);
+      const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'scrollTop') : null;
+      if (!desc || !desc.set) return; // environment fallback
+      const origSet = desc.set.bind(sc);
+      Object.defineProperty(sc, 'scrollTop', {
+        get: desc.get ? desc.get.bind(sc) : function(){ return 0; },
+        set(v){
+          if (v === 0) {
+            console.warn('[TP] scrollTop being set to 0! stack:\n' + (new Error().stack || ''));
+          }
+          return origSet(v);
+        }
+      });
+    } catch {}
+  })();
+
   permChip    = document.getElementById('permChip');
   displayChip = document.getElementById('displayChip');
   recChip     = document.getElementById('recChip');
