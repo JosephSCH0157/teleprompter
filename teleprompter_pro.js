@@ -3330,6 +3330,22 @@ function initAfterBoot(){
           toggle(false);
         });
       }
+      const validateBtn = document.getElementById('menuValidateBtn');
+      if (validateBtn && !validateBtn.__wired){
+        validateBtn.__wired = true;
+        validateBtn.addEventListener('click', ()=>{
+          try {
+            const msg = (typeof window.validateStandardTags === 'function')
+              ? window.validateStandardTags(true)
+              : 'Validator not available.';
+            if (typeof window.showValidation === 'function') window.showValidation(msg);
+            else alert(String(msg));
+          } catch (e) {
+            try { alert('Validation failed: ' + (e?.message||e)); } catch {}
+          }
+          toggle(false);
+        });
+      }
       // Populate saved-drafts select
       try {
         const scriptSelect = document.getElementById('scriptSelect');
