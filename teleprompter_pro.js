@@ -2716,6 +2716,12 @@ function advanceByTranscript(transcript, isFinal){
     }
   } else {
     // Accept best match
+    // Suppress large backward rewinds on final matches to avoid violent jumps
+    const BACK_HARD_LIMIT = 40; // tokens
+    if (isFinal && lastFinalIndex >= 0 && bestIdx < (lastFinalIndex - BACK_HARD_LIMIT)) {
+      // treat as noise; keep us near our last committed position
+      bestIdx = Math.max(currentIndex, lastFinalIndex - Math.floor(BACK_HARD_LIMIT / 2));
+    }
     const delta = bestIdx - currentIndex;
     if (typeof debug === 'function') {
       debug({
