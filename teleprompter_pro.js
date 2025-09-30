@@ -3308,6 +3308,28 @@ function initAfterBoot(){
         loadBtn.__wired = true;
         loadBtn.addEventListener('click', ()=>{ try{ loadFromLocal(); }catch{} toggle(false); });
       }
+      const saveBtn = document.getElementById('menuSaveBtn');
+      if (saveBtn && !saveBtn.__wired){
+        saveBtn.__wired = true;
+        saveBtn.addEventListener('click', ()=>{
+          try { saveToLocal(); } catch {}
+          // refresh the select
+          try {
+            const scriptSelect = document.getElementById('scriptSelect');
+            if (scriptSelect){
+              scriptSelect.innerHTML = '';
+              const v = localStorage.getItem('tp_script_v1') || '';
+              if (!v) {
+                const o = document.createElement('option'); o.value=''; o.textContent='— No saved draft —'; scriptSelect.appendChild(o);
+              } else {
+                const o = document.createElement('option'); o.value='tp_script_v1'; o.textContent='Current Draft'; scriptSelect.appendChild(o);
+                scriptSelect.value = 'tp_script_v1';
+              }
+            }
+          } catch {}
+          toggle(false);
+        });
+      }
       // Populate saved-drafts select
       try {
         const scriptSelect = document.getElementById('scriptSelect');
