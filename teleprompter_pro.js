@@ -2733,6 +2733,8 @@ function advanceByTranscript(transcript, isFinal){
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const ratio = max ? (viewer.scrollTop / max) : 0;
       sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+      // Also publish an anchor-based update so the display can align by content
+      try { sendScrollPosition(); } catch {}
     }
   }
   // Evaluate whether to run the gentle catch-up loop based on anchor position
@@ -2790,8 +2792,8 @@ function advanceByTranscript(transcript, isFinal){
     s = s.replace(/\[note\][\s\S]*?\[\/note\]/gi, '');
     // Keep spoken content; drop wrappers
     s = s.replace(/\[(?:s1|s2)\]([\s\S]+?)\[\/(?:s1|s2)\]/gi, '$1');
-    // Drop g1/g2 and guest wrappers entirely (content kept by previous rules if needed)
-    s = s.replace(/\[(?:g1|g2)\][\s\S]*?\[\/(?:g1|g2)\]/gi, '');
+    // Keep content inside g1/g2 too (they are spoken), just drop the wrappers
+    s = s.replace(/\[(?:g1|g2)\]([\s\S]+?)\[\/(?:g1|g2)\]/gi, '$1');
     s = s.replace(/\[(?:guest|speaker)\s*=\s*(?:1|2)\]([\s\S]+?)\[\/(?:guest|speaker)\]/gi, '$1');
     s = s.replace(/\[color=[^\]]+\]([\s\S]+?)\[\/color\]/gi, '$1');
     s = s.replace(/\[bg=[^\]]+\]([\s\S]+?)\[\/bg\]/gi, '$1');
