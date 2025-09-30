@@ -1911,15 +1911,16 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           __scrollCtl?.stopAutoCatchup?.();
           const sc = getScroller();
           const offset = Math.round(sc.clientHeight * 0.40);
-          // Prefer last confirmed spoken index (finals), then currentIndex, then currentEl, then most-visible
+          // Prefer the most-visible paragraph first, then last confirmed idx/currentIndex, then currentEl
           const vis = __anchorObs?.mostVisibleEl?.() || null;
           const idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
-          let el = (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
+          let el = vis
+                 || (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
                  || currentEl
-                 || vis
                  || null;
-          if (!el && Array.isArray(lineEls)) el = lineEls[0] || null;
-          if (el) {
+          // If we still couldn't resolve a target, bail (don't snap to top)
+          if (!el) return;
+          {
             scrollToEl(el, offset);
             const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
             const ratio = max ? (sc.scrollTop / max) : 0;
