@@ -24,7 +24,7 @@ export function installEasterEggs(){
   });
 
   // dB meter party mode (5 clicks within 1.2s)
-  const meter = document.getElementById('dbMeter');
+  const meter = document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
   if (meter){
     let clicks = 0, t0 = 0;
     meter.addEventListener('click', () => {

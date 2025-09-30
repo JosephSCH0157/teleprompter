@@ -27,7 +27,7 @@ body.savanna::after{
 }
 
 /* dB meter party mode */
-#dbMeter.party .bar { animation: meterPulse 900ms linear infinite alternate; }
+#dbMeter.party .bar, #dbMeterTop.party .bar { animation: meterPulse 900ms linear infinite alternate; }
 @keyframes meterPulse { from { opacity:.6 } to { opacity:1 } }
 .section-title {
     display: flex;

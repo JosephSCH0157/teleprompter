@@ -3977,7 +3977,8 @@ function installEasterEggs(){
   });
 
   // ---- dB meter party mode (5 clicks within 1.2s)
-  const meter = document.getElementById('dbMeter');
+  // Support both legacy #dbMeter and current #dbMeterTop locations
+  const meter = document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
   if (meter){
     let clicks = 0, t0 = 0;
     meter.addEventListener('click', () => {
