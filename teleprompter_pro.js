@@ -788,25 +788,27 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     } catch {}
   }
 
-  // Find the block nearest the viewport center, plus fraction through it (0..1)
+  // Find the block nearest the viewer's marker line, plus fraction through it (0..1)
   function getAnchorAndFrac(root = document.getElementById('script')) {
     try {
       const blocks = root ? Array.from(root.querySelectorAll('[data-pid]')) : [];
       if (!blocks.length) return null;
-      // Align to the same visual marker used for reading to keep main/display in sync
-      const markerPct = getMarkerPct();
-      const sc = (typeof getScroller === 'function') ? getScroller() : null;
-      const vRect = sc ? sc.getBoundingClientRect() : { top: 0, height: window.innerHeight };
-      const midY = vRect.top + (vRect.height * markerPct);
+
+      const v = (typeof viewer !== 'undefined' && viewer) ? viewer : document.documentElement;
+      const vRect = v && v.getBoundingClientRect ? v.getBoundingClientRect() : { top: 0, height: (window.innerHeight || 1) };
+      const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+      const markerAbsY = vRect.top + (vRect.height * markerPct);
+
       let best = null, bestDist = Infinity;
       for (const el of blocks) {
         const r = el.getBoundingClientRect();
         const center = r.top + r.height * 0.5;
-        const dist = Math.abs(center - midY);
+        const dist = Math.abs(center - markerAbsY);
         if (dist < bestDist) { best = { el, r }; bestDist = dist; }
       }
       if (!best) return null;
-      const frac = Math.min(1, Math.max(0, (midY - best.r.top) / Math.max(1, best.r.height)));
+
+      const frac = Math.min(1, Math.max(0, (markerAbsY - best.r.top) / Math.max(1, best.r.height)));
       return { pid: best.el.dataset.pid, frac: Number(frac.toFixed(3)), markerPct };
     } catch { return null; }
   }
