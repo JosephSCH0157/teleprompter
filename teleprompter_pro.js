@@ -2751,11 +2751,11 @@ function advanceByTranscript(transcript, isFinal){
   const largeErr = Math.abs(err) > (DEAD_BAND_PX * 3.5);
   const shouldSnapToEl = isFinal && (strongMatch || smallWordDelta) && largeErr;
 
-  // If the auto catch-up controller is running, let it steer to avoid tug-of-war
+  // If the auto catch-up controller is running, let it steer unless we have a strong/final speech match
   const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
-  if (catchupActive) {
-    // Defer to controller; just mark timestamps and broadcast anchor for display
-  } else if (shouldSnapToEl) {
+  const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
+  if (!catchupActive || allowSpeechOverride) {
+    // Speech-driven snap takes precedence on confident/final matches or when controller is idle
     try {
       scrollToEl(currentEl, markerTop);
     } catch {
