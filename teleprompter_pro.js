@@ -829,6 +829,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       __scrollSendRAF = requestAnimationFrame(() => {
         __scrollSendRAF = 0;
         sendScrollPosition();
+        try { updateDebugPosChip(); } catch {}
       });
     };
     try { window.addEventListener('scroll', onScroll, { passive: true }); } catch {}
@@ -3178,23 +3179,28 @@ function openDisplay(){
     } catch {}
   }
 
-  // Debug chip updater (throttled via rAF): shows anchor percentage within viewport and scrollTop
+  // Debug chip updater: show Δ to marker using the element center (active > visible > index)
   function updateDebugPosChipImmediate(){
     try {
       if (!debugPosChip || !viewer) return;
       const vH = Math.max(1, viewer.clientHeight || 1);
+      const markerY = Math.round(vH * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
+
+      // Prefer our reading pointer first, then IO anchor, then index lookup
       const active = (scriptEl || viewer)?.querySelector('p.active');
-      const vis = __anchorObs?.mostVisibleEl?.() || null;
-      const el = vis || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
-      let pct = 0;
+      const vis    = __anchorObs?.mostVisibleEl?.() || null;
+      const el     = active || vis || (paraIndex.find(p => currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
+
+      let deltaPct = 0;
       if (el){
         const vRect = viewer.getBoundingClientRect();
         const r = el.getBoundingClientRect();
-        const anchorY = r.top - vRect.top;
-        pct = Math.round(Math.max(0, Math.min(100, (anchorY / vH) * 100)));
+        // Use the element’s center, not its top; clamp center within a 90% window for stability
+        const anchorCenter = (r.top - vRect.top) + Math.min(r.height, vH * 0.9) / 2;
+        deltaPct = Math.round(((anchorCenter - markerY) / vH) * 100);
       }
-      const topStr = (viewer.scrollTop||0).toLocaleString();
-      debugPosChip.textContent = `Anchor ${pct}% • scrollTop ${topStr}`;
+      const topStr = (viewer.scrollTop || 0).toLocaleString();
+      debugPosChip.textContent = `Δ ${deltaPct >= 0 ? '+' : ''}${deltaPct}% • scrollTop ${topStr}`;
     } catch {}
   }
   let __debugPosRaf = 0; let __debugPosPending = false;
@@ -3202,7 +3208,7 @@ function openDisplay(){
     if (__debugPosPending) return; // already scheduled
     __debugPosPending = true;
     __debugPosRaf && cancelAnimationFrame(__debugPosRaf);
-    __debugPosRaf = requestAnimationFrame(()=>{ __debugPosPending = false; updateDebugPosChipImmediate(); });
+  __debugPosRaf = requestAnimationFrame(()=>{ __debugPosPending = false; updateDebugPosChipImmediate(); });
   }
 
   // Broadcast scrolls triggered by the user (ignore our own programmatic moves)
