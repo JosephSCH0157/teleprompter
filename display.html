@@ -208,6 +208,18 @@
                 return;
               }
 
+              // Legacy fallback: accept raw pixel/ratio scrolls
+              if (d.type === 'scroll') {
+                try {
+                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                  const y = (typeof d.top === 'number' && isFinite(d.top))
+                              ? d.top
+                              : (typeof d.ratio === 'number' ? Math.max(0, Math.min(1, d.ratio)) * max : wrap.scrollTop);
+                  wrap.scrollTo({ top: Math.max(0, Math.min(y, max)), behavior: 'auto' });
+                } catch {}
+                return;
+              }
+
               // Back-compat: follow legacy scroll payloads { type:'scroll', top, ratio }
               if (d.type === 'scroll') {
                 const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
