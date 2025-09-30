@@ -2044,7 +2044,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
         { try { broadcastScroll(); } catch {} }
         // Also push a compact display-update payload for future compatibility
-        try { pushDisplayUpdate('hello'); } catch {}
+  try { pushDisplayUpdate('hello'); } catch {}
+  // Immediately post an anchor after initial payloads
+  try { sendScrollPosition(); } catch {}
         closeDisplayBtn.disabled = false;
         // If user intended camera mirroring, (re)establish
         try { if (wantCamRTC && camStream) ensureCamPeer(); } catch {}
