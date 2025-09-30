@@ -3163,13 +3163,7 @@ function openDisplay(){
 
   // Unified broadcaster: always mirror to Display with an anchor-aware payload
   function broadcastScroll(){
-    try {
-      if (!viewer) return;
-      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      const anchor = getAnchorAndFrac(document.getElementById('script')) || {};
-      sendToDisplay({ type: 'display-scroll', top: viewer.scrollTop, ratio, ...anchor });
-    } catch {}
+    try { sendScrollPosition(); } catch {}
   }
 
   // Helper: only allow home-to-top on explicit user reset
