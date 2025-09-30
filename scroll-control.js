@@ -1,33 +1,49 @@
-let rafId = null, prevErr = 0, active = false;
+// Minimal PID-like auto catch-up scroll controller
+let rafId, prevErr = 0, active = false;
 
-export function startAutoCatchup(getAnchorY, getTargetY, scrollByPx) {
+export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   if (active) return;
-  active = true; prevErr = 0;
+  active = true;
+  prevErr = 0;
 
-  const kP = 0.09, kD = 0.12; // gentle + damped
-  const vMin = 0.3, vMax = 8, bias = 0;
+  // Dampened PD tuning
+  const kP = 0.09;    // proportional gain
+  const kD = 0.12;    // derivative gain
+  const vMin = 0.3;   // px/frame deadzone
+  const vMax = 8;     // px/frame cap
+  const bias = 0;     // baseline offset
 
-  function tick(){
-    if (!active) return;
+  function tick() {
     try {
-      const anchorY = Number(getAnchorY?.() ?? 0);
-      const targetY = Number(getTargetY?.() ?? 0);
-      const err = targetY - anchorY;
-      const dErr = err - prevErr; prevErr = err;
+      const anchorY = Number(getAnchorY?.()||0);
+      const targetY = Number(getTargetY?.()||0);
+      let err = targetY - anchorY;
 
-      let v = (kP * err) + (kD * dErr) + bias;
+      const deriv = err - prevErr;
+      prevErr = err;
+
+      let v = (kP * err) + (kD * deriv) + bias;
       if (Math.abs(v) < vMin) v = 0;
-      if (v >  vMax) v =  vMax;
-      if (v < -vMax) v = -vMax;
+      v = Math.max(-vMax, Math.min(vMax, v));
 
-      if (v) scrollByPx?.(v);
-    } catch {
-      active = false; if (rafId) cancelAnimationFrame(rafId); rafId = null; return;
-    }
-    rafId = requestAnimationFrame(tick);
+      if (v !== 0) scrollBy(v);
+    } catch {}
+    if (active) rafId = requestAnimationFrame(tick);
   }
+
   rafId = requestAnimationFrame(tick);
 }
 
-export function stopAutoCatchup(){ active = false; if (rafId) cancelAnimationFrame(rafId); rafId = null; }
-export function createScrollController(){ return { startAutoCatchup, stopAutoCatchup, isActive: () => active }; }
+export function stopAutoCatchup() {
+  active = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+}
+
+export function createScrollController(){
+  return {
+    startAutoCatchup,
+    stopAutoCatchup,
+    isActive: () => active
+  };
+}
