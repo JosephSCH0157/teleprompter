@@ -13,10 +13,16 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   const bias = 0;       // baseline offset
 
   function tick() {
+    if (!active) return;
     try {
-      const anchorY = getAnchorY();     // current line Y within viewport
-      const targetY = getTargetY();     // desired Y (e.g., 0.4 * viewportHeight)
-      let err = targetY - anchorY;      // positive => line is below target (we need to scroll down)
+      const anchorY = getAnchorY?.();     // current line Y within viewport
+      const targetY = getTargetY?.();     // desired Y (e.g., 0.4 * viewportHeight)
+      if (typeof anchorY !== 'number' || typeof targetY !== 'number') {
+        // If inputs aren’t ready yet, try again next frame
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      let err = targetY - anchorY;        // positive => line is below target (we need to scroll down)
       const deriv = err - prevErr;
       let v = (kP*err) + (kD*deriv) + bias;
 
@@ -24,10 +30,12 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
       if (Math.abs(v) < vMin) v = 0;
       v = Math.max(-vMax, Math.min(vMax, v));
 
-      if (v !== 0) scrollBy(v);
+      if (v !== 0) {
+        try { scrollBy?.(v); } catch {}
+      }
       prevErr = err;
     } catch {}
-    if (active) rafId = requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(tick);
   }
   rafId = requestAnimationFrame(tick);
 }
