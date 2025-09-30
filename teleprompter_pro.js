@@ -839,11 +839,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
 
   // DOM (late‑bound during init)
-  let editor, scriptEl, viewer, legendEl, normalizeTopBtn;
-    permChip, displayChip, recChip, camRtcChip,
-    debugPosChip,
+  let editor, scriptEl, viewer, legendEl, normalizeTopBtn,
+      permChip, displayChip, recChip, camRtcChip,
+      debugPosChip,
       openDisplayBtn, closeDisplayBtn, presentBtn,
-  micBtn, recBtn, refreshDevicesBtn,
+      micBtn, recBtn, refreshDevicesBtn,
       fontSizeInput, lineHeightInput,
       autoToggle, autoSpeed,
       timerEl, resetBtn, loadSample, clearText,
@@ -852,7 +852,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       nameS1, colorS1, wrapS1, nameS2, colorS2, wrapS2, nameG1, colorG1, wrapG1, nameG2, colorG2, wrapG2,
       camWrap, camVideo, startCamBtn, stopCamBtn, camDeviceSel, camSize, camOpacity, camMirror, camPiP,
       prerollInput, countOverlay, countNum,
-  dbMeterTop,
+      dbMeterTop,
       toggleSpeakersBtn, speakersBody;
 
   // TP: meter-audio
