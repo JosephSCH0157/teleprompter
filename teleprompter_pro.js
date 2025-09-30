@@ -3702,6 +3702,7 @@ function initAfterBoot(){
     // Reset backoff on a good start and reflect UI state
     recog.onstart = () => {
       recBackoffMs = 300;
+      try { window.__REC_START_AT = performance.now(); } catch {}
       document.body.classList.add('listening');
       try { recChip.textContent = 'Speech: listening…'; } catch {}
     };
