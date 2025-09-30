@@ -2756,24 +2756,32 @@ function advanceByTranscript(transcript, isFinal){
 
   // Scale steps based on whether this came from a final (more confident) match
   const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
-  const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
+  const backStep = isFinal ? Math.min(MAX_BACK_STEP_PX, 40) : Math.round(Math.min(MAX_BACK_STEP_PX, 40) * 0.6);
 
   // Only snap directly to the element when confidence is strong and it's a final result.
   // Otherwise, move in small pixel steps to avoid whole-paragraph jumps.
   const strongMatch = (typeof bestScore === 'number' && bestScore >= STRICT_FORWARD_SIM);
   const smallWordDelta = (typeof delta === 'number' && Math.abs(delta) <= 2);
   const largeErr = Math.abs(err) > (DEAD_BAND_PX * 3.5);
-  const shouldSnapToEl = isFinal && (strongMatch || smallWordDelta) && largeErr;
+  // Only snap hard when moving forward; backward moves stay gentle
+  const shouldSnapToEl = isFinal && (dir > 0) && (strongMatch || smallWordDelta) && largeErr;
 
   // If the auto catch-up controller is running, let it steer unless we have a strong/final speech match
   const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
-    // Speech-driven snap takes precedence on confident/final matches or when controller is idle
-    try {
-      scrollToEl(currentEl, markerTop);
-    } catch {
-      // Fallback to clamped pixel scroll
+    // When controller is idle or speech is confident: snap only for forward moves; otherwise be gentle
+    if (shouldSnapToEl) {
+      try {
+        scrollToEl(currentEl, markerTop);
+      } catch {
+        let next;
+        if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
+        else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
+        viewer.scrollTop = next;
+      }
+    } else {
+      // Gentle, clamped pixel scrolling
       let next;
       if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
       else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
