@@ -1927,6 +1927,21 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           }
         } catch {}
       });
+      // Keyboard shortcut: press 'C' to catch up (ignored while typing in inputs/textareas)
+      document.addEventListener('keydown', (e) => {
+        try {
+          if (e.defaultPrevented) return;
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          const k = e.key;
+          if (k !== 'c' && k !== 'C') return;
+          const t = e.target;
+          const tag = (t && t.tagName ? t.tagName.toLowerCase() : '');
+          const isForm = (tag === 'input' || tag === 'textarea' || (t && t.isContentEditable));
+          if (isForm) return;
+          e.preventDefault();
+          catchUpBtn.click();
+        } catch {}
+      });
     }
 
 
