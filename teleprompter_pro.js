@@ -2911,12 +2911,11 @@ function advanceByTranscript(transcript, isFinal){
     } catch {}
 
     // Build paragraph index
-    // Rebuild IntersectionObserver and (re)observe visible paragraphs
-    // Rebuild IntersectionObserver via modular anchor observer
-  try { __anchorObs?.ensure?.(); } catch {}
+    // Rebuild IntersectionObserver via modular anchor observer (re-root on the new scroller)
+    try { __anchorObs?.ensure?.(); } catch {}
     const paras = Array.from(scriptEl.querySelectorAll('p'));
-    try { __anchorObs?.observeAll?.(paras); } catch {}
     lineEls = paras;
+    try { __anchorObs?.observeAll?.(paras); } catch {}
     try { updateDebugPosChip(); } catch {}
     paraIndex = []; let acc = 0;
     for (const el of paras){
