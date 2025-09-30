@@ -2628,9 +2628,29 @@ function advanceByTranscript(transcript, isFinal){
   const spoken    = spokenAll.slice(-SPOKEN_N);
   if (!spoken.length) return;
 
+  // Early-session grace window: relax thresholds and widen search so we move off the top quickly
+  const recStart = (typeof window.__REC_START_AT === 'number') ? window.__REC_START_AT : 0;
+  const sinceStart = recStart ? (now - recStart) : Infinity;
+  const GRACE_MS = (typeof window.__MATCH_GRACE_MS === 'number') ? window.__MATCH_GRACE_MS : 6000;
+  const inGrace = (sinceStart < GRACE_MS) || (currentIndex < 5);
+
+  // Use local tunables that can be relaxed during grace instead of mutating globals
+  let winBack = MATCH_WINDOW_BACK;
+  let winAhead = MATCH_WINDOW_AHEAD;
+  let simThresh = SIM_THRESHOLD;
+  let strictGate = STRICT_FORWARD_SIM;
+  let maxJump = MAX_JUMP_AHEAD_WORDS;
+  if (inGrace) {
+    winBack  = Math.min(60, winBack + 20);
+    winAhead = Math.min(1000, winAhead + 120);
+    simThresh = Math.max(0.35, simThresh - 0.10);
+    strictGate = Math.max(0.50, strictGate - 0.10);
+    maxJump = Math.max(maxJump, 16); // allow slightly larger nudges if we’re clearly behind
+  }
+
   // Search a band around currentIndex
-  const start = Math.max(0, currentIndex - MATCH_WINDOW_BACK);
-  const end   = Math.min(scriptWords.length, currentIndex + MATCH_WINDOW_AHEAD);
+  const start = Math.max(0, currentIndex - winBack);
+  const end   = Math.min(scriptWords.length, currentIndex + winAhead);
 
   // Build candidates with a fast overlap filter first
   const candidates = [];
@@ -2639,7 +2659,25 @@ function advanceByTranscript(transcript, isFinal){
     const fast = _overlap(spoken, win);
     if (fast > 0) candidates.push({ i, win, fast });
   }
-  if (!candidates.length) return;
+  // If nothing overlaps during grace, attempt a fuzzy substring alignment to kickstart progress
+  if (!candidates.length) {
+    if (inGrace) {
+      try {
+        const slice = getUpcomingTextSlice(140);
+        const idx = fuzzyAdvance(slice, spoken.join(' '));
+        if (idx >= 0) {
+          // Gentle forward nudge proportional to spoken length
+          const step = Math.min(maxJump, Math.max(1, Math.floor(spoken.length * (isFinal ? 0.8 : 0.5))));
+          currentIndex = Math.min(scriptWords.length - 1, currentIndex + step);
+          if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
+        } else {
+          return;
+        }
+      } catch { return; }
+    } else {
+      return;
+    }
+  }
 
   candidates.sort((a,b)=>b.fast - a.fast);
   const top = candidates.slice(0, 8);
@@ -2650,28 +2688,34 @@ function advanceByTranscript(transcript, isFinal){
     const score = _sim(spoken, c.win);
     if (score > bestScore){ bestScore = score; bestIdx = c.i; }
   }
-  if (bestScore < SIM_THRESHOLD) return;
-
-  // Soften big forward jumps unless similarity is very strong
-  const delta = bestIdx - currentIndex;
-  if (typeof debug === 'function') {
-    debug({
-      tag: 'match',
-      spokenTail: spoken.join(' '),
-      bestIdx,
-      bestScore: Number(bestScore.toFixed(3)),
-      delta
-    });
-  }
-  if (delta > MAX_JUMP_AHEAD_WORDS && bestScore < STRICT_FORWARD_SIM){
-    currentIndex += MAX_JUMP_AHEAD_WORDS;
+  if (bestScore < simThresh) {
+    // Near-miss: if we’re close and moving forward, allow a tiny push rather than stalling
+    if (inGrace && bestScore >= (simThresh - 0.06)) {
+      currentIndex = Math.min(scriptWords.length - 1, currentIndex + 1);
+      if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
+    } else {
+      return;
+    }
   } else {
-    currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
-    // Record last confirmed index when this is a final result
-    if (isFinal) {
-      try { lastFinalIndex = currentIndex; } catch {}
+    // Accept best match
+    const delta = bestIdx - currentIndex;
+    if (typeof debug === 'function') {
+      debug({
+        tag: 'match',
+        spokenTail: spoken.join(' '),
+        bestIdx,
+        bestScore: Number(bestScore.toFixed(3)),
+        delta
+      });
+    }
+    if (delta > maxJump && bestScore < strictGate){
+      currentIndex += maxJump;
+    } else {
+      currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
+      if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
     }
   }
+
 
   // Scroll toward the paragraph that contains currentIndex, gently clamped
   if (!paraIndex.length) return;
