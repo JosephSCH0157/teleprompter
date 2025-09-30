@@ -794,7 +794,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const blocks = root ? Array.from(root.querySelectorAll('[data-pid]')) : [];
       if (!blocks.length) return null;
       // Align to the same visual marker used for reading to keep main/display in sync
-      const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+      const markerPct = getMarkerPct();
       const sc = (typeof getScroller === 'function') ? getScroller() : null;
       const vRect = sc ? sc.getBoundingClientRect() : { top: 0, height: window.innerHeight };
       const midY = vRect.top + (vRect.height * markerPct);
@@ -835,6 +835,12 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     try { if (typeof viewer !== 'undefined' && viewer) viewer.addEventListener('scroll', onScroll, { passive: true }); } catch {}
     // Also broadcast when auto-scroller nudges (optional custom event)
     try { document.addEventListener('anvil:autoscroll', onScroll); } catch {}
+  }
+
+  // Safe accessor to avoid temporal-dead-zone on MARKER_PCT and keep one default
+  function getMarkerPct(){
+    try { if (typeof MARKER_PCT === 'number' && isFinite(MARKER_PCT)) return MARKER_PCT; } catch {}
+    return 0.36;
   }
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
 
@@ -1531,7 +1537,7 @@ async function _initCore() {
       // also advance logical index to the paragraph under the marker
       try{
         if (Array.isArray(paraIndex) && paraIndex.length){
-          const markerY = viewer.scrollTop + (viewer.clientHeight * (MARKER_PCT || 0.33));
+          const markerY = viewer.scrollTop + (viewer.clientHeight * getMarkerPct());
           let target = paraIndex[0];
           for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
           if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
@@ -2485,7 +2491,7 @@ function tryStartCatchup(){
   if (!__scrollCtl?.startAutoCatchup || !viewer) return;
   // If auto-scroll is running, skip catch-up to avoid conflicts
   if (autoTimer) return;
-  const markerTop = () => (viewer?.clientHeight || 0) * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+  const markerTop = () => (viewer?.clientHeight || 0) * getMarkerPct();
   const getTargetY = () => markerTop();
   const getAnchorY = () => {
     try {
@@ -2729,7 +2735,7 @@ function advanceByTranscript(transcript, isFinal){
   try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
 
   const maxTop     = Math.max(0, scriptEl.scrollHeight - viewer.clientHeight);
-  const markerTop  = Math.round(viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
+  const markerTop  = Math.round(viewer.clientHeight * getMarkerPct());
   const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
 
   const err = desiredTop - viewer.scrollTop;
