@@ -795,7 +795,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       if (!blocks.length) return null;
       // Align to the same visual marker used for reading to keep main/display in sync
       const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
-      const midY = window.innerHeight * markerPct;
+      const sc = (typeof getScroller === 'function') ? getScroller() : null;
+      const vRect = sc ? sc.getBoundingClientRect() : { top: 0, height: window.innerHeight };
+      const midY = vRect.top + (vRect.height * markerPct);
       let best = null, bestDist = Infinity;
       for (const el of blocks) {
         const r = el.getBoundingClientRect();
@@ -3184,11 +3186,17 @@ function openDisplay(){
         // Force a catch-up jump to the current element/paragraph under idx
         let el = null;
         try {
-          const p = (paraIndex||[]).find(p => idx >= p.start && idx <= p.end);
-          el = p?.el || null;
-          if (!el && Array.isArray(lineEls)) el = lineEls[Math.min(idx, lineEls.length-1)] || null; // best-effort fallback
+          // Prefer most-visible anchor, then paragraph by idx, then currentEl; do NOT default to first line
+          el = (__anchorObs?.mostVisibleEl?.() || null);
+          if (!el){
+            const p = (paraIndex||[]).find(p => idx >= p.start && idx <= p.end);
+            el = p?.el || null;
+          }
+          if (!el && currentEl) el = currentEl;
         } catch {}
-        if (el){
+        // If we still couldn't resolve a target, bail (avoid snap to top)
+        if (!el) return;
+        {
           const offset = Math.round(sc.clientHeight * 0.40);
           scrollToEl(el, offset);
           // mirror to display
