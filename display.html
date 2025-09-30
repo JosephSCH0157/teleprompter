@@ -204,7 +204,7 @@
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
                 lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct };
-                if (!followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct);
+                if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct);
                 return;
               }
 
