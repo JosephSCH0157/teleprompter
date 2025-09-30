@@ -1529,11 +1529,7 @@ async function _initCore() {
   const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
       try { scrollByPx(FALLBACK_STEP_PX); } catch { viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight); }
-      {
-        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-        const ratio = max ? (viewer.scrollTop / max) : 0;
-        sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-      }
+      { try { broadcastScroll(); } catch {} }
       // also advance logical index to the paragraph under the marker
       try{
         if (Array.isArray(paraIndex) && paraIndex.length){
@@ -1677,12 +1673,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Initialize modular helpers now that viewer exists
     try {
       const shMod = await import('./scroll-helpers.js');
-      const sh = shMod.createScrollerHelpers(() => viewer);
-      __scrollHelpers = sh;
-      clampScrollTop = sh.clampScrollTop;
-      scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
-      scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
-      scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
+  const sh = shMod.createScrollerHelpers(() => viewer);
+  __scrollHelpers = sh;
+  clampScrollTop = sh.clampScrollTop;
+  scrollByPx     = (px)=>{ __programmaticScroll = true; try { sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} } finally { __programmaticScroll = false; try{ broadcastScroll(); }catch{} } };
+  scrollToY      = (y)=>{ __programmaticScroll = true; try { sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} } finally { __programmaticScroll = false; try{ broadcastScroll(); }catch{} } };
+  scrollToEl     = (el,off=0)=>{ __programmaticScroll = true; try { sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} } finally { __programmaticScroll = false; try{ broadcastScroll(); }catch{} } };
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
@@ -1928,12 +1924,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
                  || null;
           // If we still couldn't resolve a target, bail (don't snap to top)
           if (!el) return;
-          {
-            scrollToEl(el, offset);
-            const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-            const ratio = max ? (sc.scrollTop / max) : 0;
-            sendToDisplay({ type:'scroll', top: sc.scrollTop, ratio });
-          }
+          { scrollToEl(el, offset); }
         } catch {}
       });
       // Keyboard shortcut: press 'C' to catch up (ignored while typing in inputs/textareas)
@@ -2023,11 +2014,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
         // also push explicit typography in case display needs to apply restored prefs
         sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
-        {
-          const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-          const ratio = max ? (viewer.scrollTop / max) : 0;
-          sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-        }
+        { try { broadcastScroll(); } catch {} }
         // Also push a compact display-update payload for future compatibility
         try { pushDisplayUpdate('hello'); } catch {}
         closeDisplayBtn.disabled = false;
@@ -2415,7 +2402,7 @@ function scrollToCurrentIndex(){
   {
     const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
     const ratio = max ? (viewer.scrollTop / max) : 0;
-    sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+  try { broadcastScroll(); } catch {}
   }
 }
 // Signal that core init function is now defined; publish to a temp handle, then swap stub
@@ -2522,9 +2509,7 @@ function tryStartCatchup(){
   const scrollBy = (dy) => {
     try {
       viewer.scrollTop = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+      try { broadcastScroll(); } catch {}
     } catch {}
   };
   try { __scrollCtl.stopAutoCatchup(); } catch {}
@@ -2782,13 +2767,7 @@ function advanceByTranscript(transcript, isFinal){
   }
   if (!catchupActive) {
     if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
-    {
-      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-      // Also publish an anchor-based update so the display can align by content
-      try { sendScrollPosition(); } catch {}
-    }
+    try { broadcastScroll(); } catch {}
   }
   // Evaluate whether to run the gentle catch-up loop based on anchor position
   try {
@@ -3150,6 +3129,20 @@ function openDisplay(){
   function getScroller(){ return viewer; }
   let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
 
+  // Guard flag to avoid echo loops when our own code scrolls the viewer
+  let __programmaticScroll = false;
+
+  // Unified broadcaster: always mirror to Display with an anchor-aware payload
+  function broadcastScroll(){
+    try {
+      if (!viewer) return;
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      const anchor = getAnchorAndFrac(document.getElementById('script')) || {};
+      sendToDisplay({ type: 'display-scroll', top: viewer.scrollTop, ratio, ...anchor });
+    } catch {}
+  }
+
   // Helper: only allow home-to-top on explicit user reset
   // Do NOT call forceTopReset anywhere else.
   function forceTopReset(reason){
@@ -3157,10 +3150,8 @@ function openDisplay(){
     try {
       if (!viewer) return;
       viewer.scrollTop = 0;
-      // Mirror to display for consistency
-      sendToDisplay({ type:'scroll', top: 0, ratio: 0 });
-      // Also broadcast an anchor-based update so the display can align by content
-      try { sendScrollPosition(); } catch {}
+  // Mirror to display for consistency via unified broadcaster
+  try { broadcastScroll(); } catch {}
     } catch {}
   }
 
@@ -3191,6 +3182,13 @@ function openDisplay(){
     __debugPosRaf = requestAnimationFrame(()=>{ __debugPosPending = false; updateDebugPosChipImmediate(); });
   }
 
+  // Broadcast scrolls triggered by the user (ignore our own programmatic moves)
+  try {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('scroll', () => { if (!__programmaticScroll) { try { broadcastScroll(); } catch {} } }, { passive: true });
+    }
+  } catch {}
+
 
   // Dead-man timer: if HUD index advances but scrollTop doesn’t, force a catch-up jump
   let _wdLastIdx = -1, _wdLastTop = 0, _wdLastT = 0;
@@ -3218,10 +3216,7 @@ function openDisplay(){
         {
           const offset = Math.round(sc.clientHeight * 0.40);
           scrollToEl(el, offset);
-          // mirror to display
-          const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-          const ratio = max ? (sc.scrollTop / max) : 0;
-          sendToDisplay({ type:'scroll', top: sc.scrollTop, ratio });
+          try { broadcastScroll(); } catch {}
         }
       }
       if (idx > _wdLastIdx){ _wdLastIdx = idx; _wdLastT = now; _wdLastTop = top; }
@@ -3239,9 +3234,7 @@ function startAutoScroll(){
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
     try { scrollByPx(pxPerSec / 60); } catch { viewer.scrollTop += (pxPerSec / 60); }
     {
-      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+  try { broadcastScroll(); } catch {}
       // Also publish anchor position for fine-grained sync
       try { sendScrollPosition(); } catch {}
     }
@@ -3262,9 +3255,9 @@ function stopAutoScroll(){
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
       let anchorY = 0;
-  // Prefer most-visible from IO module, then active/current paragraph
+      // Prefer most-visible from IO module, then active/current paragraph
       const active = (scriptEl || viewer)?.querySelector('p.active');
-  const el = (__anchorObs?.mostVisibleEl?.() || null) || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
+      const el = (__anchorObs?.mostVisibleEl?.() || null) || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
       if (el){ const r = el.getBoundingClientRect(); anchorY = r.top - vRect.top; }
       maybeCatchupByAnchor(anchorY, viewer.clientHeight);
     } catch { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} }
@@ -3475,19 +3468,27 @@ function initAfterBoot(){
    * Camera overlay
    * ────────────────────────────────────────────────────────────── */
   async function startCamera(){
-    try{
-      const id = camDeviceSel?.value || undefined;
-      const stream = await navigator.mediaDevices.getUserMedia({ video: id? {deviceId:{exact:id}} : true, audio:false });
+    try {
+      // Acquire selected device if available
+      let deviceId = null;
+      try { deviceId = camDeviceSel?.value || null; } catch {}
+      const video = deviceId
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+
       // Order matters: set properties/attributes first, then assign stream, then play()
-    camVideo.muted = true;            // required for mobile autoplay
+      camVideo.muted = true;            // required for mobile autoplay
       camVideo.autoplay = true;
       camVideo.playsInline = true;
-  camVideo.controls = false; camVideo.removeAttribute('controls'); camVideo.removeAttribute('controlsList');
-  // Allow Picture-in-Picture via our toggle; do not disable it on the element
-  try { camVideo.disablePictureInPicture = false; camVideo.removeAttribute('disablePictureInPicture'); } catch {}
-  camVideo.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+      camVideo.controls = false; camVideo.removeAttribute('controls'); camVideo.removeAttribute('controlsList');
+      // Allow Picture-in-Picture via our toggle; do not disable it on the element
+      try { camVideo.disablePictureInPicture = false; camVideo.removeAttribute('disablePictureInPicture'); } catch {}
+      camVideo.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
       camVideo.setAttribute('playsinline','');
       camVideo.setAttribute('webkit-playsinline','');
+
       camVideo.srcObject = stream;
       try {
         await camVideo.play();
@@ -3500,13 +3501,19 @@ function initAfterBoot(){
         };
         camVideo.addEventListener('click', onTap, { once: true });
       }
-      camWrap.style.display = 'block'; startCamBtn.disabled=true; stopCamBtn.disabled=false; applyCamSizing(); applyCamOpacity(); applyCamMirror();
+
+      camWrap.style.display = 'block';
+      startCamBtn.disabled = true; stopCamBtn.disabled = false;
+      applyCamSizing(); applyCamOpacity(); applyCamMirror();
+
       camStream = stream;
       wantCamRTC = true;
+
       // Kick off WebRTC mirroring if display is open/ready
       try { if (displayWin && !displayWin.closed && displayReady) await ensureCamPeer(); } catch {}
+
       populateDevices();
-    } catch(e){ warn('startCamera failed', e); }
+    } catch(e){ warn('startCamera failed', e); try { setStatus('Camera failed: ' + (e?.message||e)); } catch {} }
   }
   function updateCamRtcChip(msg){ try { if (camRtcChip) camRtcChip.textContent = msg; } catch {} }
   function stopCamera(){
