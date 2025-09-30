@@ -3151,6 +3151,20 @@ function openDisplay(){
   function getScroller(){ return viewer; }
   let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
 
+  // Helper: only allow home-to-top on explicit user reset
+  // Do NOT call forceTopReset anywhere else.
+  function forceTopReset(reason){
+    try { console.debug('[TP] forceTopReset', reason); } catch {}
+    try {
+      if (!viewer) return;
+      viewer.scrollTop = 0;
+      // Mirror to display for consistency
+      sendToDisplay({ type:'scroll', top: 0, ratio: 0 });
+      // Also broadcast an anchor-based update so the display can align by content
+      try { sendScrollPosition(); } catch {}
+    } catch {}
+  }
+
   // Debug chip updater (throttled via rAF): shows anchor percentage within viewport and scrollTop
   function updateDebugPosChipImmediate(){
     try {
@@ -3711,12 +3725,9 @@ function initAfterBoot(){
     renderScript(editor?.value || '');
     // Reset logical position and scroll to the very top
     currentIndex = 0;
-    viewer.scrollTop = 0;
+    forceTopReset('user-reset-script');
     // Reset dead-man timer state
     _wdLastIdx = -1; _wdLastTop = 0; _wdLastT = 0;
-    try {
-      sendToDisplay({ type:'scroll', top: 0, ratio: 0 });
-    } catch {}
     setStatus('Script reset to top for new take.');
   }
 
