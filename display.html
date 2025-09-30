@@ -201,7 +201,23 @@
                   wrap.scrollTo({ top: y, behavior: 'auto' });
                 } catch {}
               };
-              if (d.type === 'display-scroll') { lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct }; if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct); return; }
+              // Follow anchor updates from the controller (preferred)
+              if (d.type === 'display-scroll') {
+                lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct };
+                if (!followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct);
+                return;
+              }
+
+              // Back-compat: follow legacy scroll payloads { type:'scroll', top, ratio }
+              if (d.type === 'scroll') {
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                let y = 0;
+                if (typeof d.top === 'number' && isFinite(d.top)) y = d.top;
+                else if (typeof d.ratio === 'number' && isFinite(d.ratio)) y = d.ratio * max;
+                y = Math.max(0, Math.min(y, max));
+                wrap.scrollTo({ top: y, behavior: 'auto' });
+                return;
+              }
               // Lightweight content/theme sync from controller
               if (d.type === 'display-update') {
                 const scriptHost = document.getElementById('script') || document.getElementById('displayScript');
@@ -314,18 +330,7 @@
               if (d.type === 'webrtc-stop') { try { window.__camPC && window.__camPC.close(); } catch {} window.__camPC = null; if (camVid) camVid.srcObject=null; __pendingControllerICE = []; setCamStatus('CamRTC: idle'); return; }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
-              // Prefer anchor-based scrolls for alignment; ignore raw pixel scroll when we have a recent anchor
-              if(d.type==='scroll'){
-                if (lastAnchor && followMode && !followPaused) {
-                  // We already have an anchor; re-apply for consistency
-                  scrollToAnchor(lastAnchor.pid, lastAnchor.frac, lastAnchor.markerPct);
-                } else if (typeof d.ratio === 'number' && isFinite(d.ratio)){
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  wrap.scrollTop = Math.round(d.ratio * max);
-                } else {
-                  wrap.scrollTop = d.top||0;
-                }
-              }
+              // (Legacy 'scroll' handled above for back-compat)
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
                 else{ preRoll.style.display='none'; }
