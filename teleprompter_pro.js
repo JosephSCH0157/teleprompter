@@ -713,6 +713,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   const getMicSel = () => document.getElementById('settingsMicSel');
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
+  // Last confirmed (final) spoken word index from speech recognition
+  let lastFinalIndex = -1;
   // Hard-bound current line tracking
   let currentEl = null;               // currently active <p> element
   let lineEls = [];                   // array of <p> elements in script order
@@ -1909,9 +1911,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           __scrollCtl?.stopAutoCatchup?.();
           const sc = getScroller();
           const offset = Math.round(sc.clientHeight * 0.40);
-          // Prefer currentEl, else the paragraph for currentIndex, else most-visible
+          // Prefer last confirmed spoken index (finals), then currentIndex, then currentEl, then most-visible
           const vis = __anchorObs?.mostVisibleEl?.() || null;
-          let el = currentEl || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || vis || null;
+          const idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
+          let el = (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
+                 || currentEl
+                 || vis
+                 || null;
           if (!el && Array.isArray(lineEls)) el = lineEls[0] || null;
           if (el) {
             scrollToEl(el, offset);
@@ -2646,6 +2652,10 @@ function advanceByTranscript(transcript, isFinal){
     currentIndex += MAX_JUMP_AHEAD_WORDS;
   } else {
     currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
+    // Record last confirmed index when this is a final result
+    if (isFinal) {
+      try { lastFinalIndex = currentIndex; } catch {}
+    }
   }
 
   // Scroll toward the paragraph that contains currentIndex, gently clamped
