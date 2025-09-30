@@ -2504,17 +2504,17 @@ function tryStartCatchup(){
   const getTargetY = () => markerTop();
   const getAnchorY = () => {
     try {
-      // Prefer most-visible paragraph from IntersectionObserver
-  const vis = __anchorObs?.mostVisibleEl?.() || null;
-      if (vis) {
-        const rect = vis.getBoundingClientRect();
-        const vRect = viewer.getBoundingClientRect();
-        return rect.top - vRect.top; // Y relative to viewer
-      }
-      // Otherwise, find active paragraph (as set in scrollToCurrentIndex)
+      // Prefer the current active paragraph first
       const activeP = (scriptEl || viewer)?.querySelector('p.active') || null;
       if (activeP) {
         const rect = activeP.getBoundingClientRect();
+        const vRect = viewer.getBoundingClientRect();
+        return rect.top - vRect.top; // Y relative to viewer
+      }
+      // Then most-visible per IO
+      const vis = __anchorObs?.mostVisibleEl?.() || null;
+      if (vis) {
+        const rect = vis.getBoundingClientRect();
         const vRect = viewer.getBoundingClientRect();
         return rect.top - vRect.top; // Y relative to viewer
       }
