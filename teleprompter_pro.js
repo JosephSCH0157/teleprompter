@@ -1943,13 +1943,18 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           __scrollCtl?.stopAutoCatchup?.();
           const sc = getScroller();
           const offset = Math.round(sc.clientHeight * 0.40);
-          // Prefer the most-visible paragraph first, then last confirmed idx/currentIndex, then currentEl
-          const vis = __anchorObs?.mostVisibleEl?.() || null;
-          const idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
-          let el = vis
-                 || (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
-                 || currentEl
-                 || null;
+     // Prefer current index mapping; fallback to currentEl, then most-visible.
+     const vis = __anchorObs?.mostVisibleEl?.() || null;
+     let idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
+     // If we still look like index 0 but we have a visible para, use it
+     if (idx < 2 && vis) {
+       const p = (paraIndex||[]).find(p => p.el === vis);
+       if (p) idx = p.start;
+     }
+     let el = (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
+       || currentEl
+       || vis
+       || (Array.isArray(lineEls) ? lineEls[0] : null);
           // If we still couldn't resolve a target, bail (don't snap to top)
           if (!el) return;
           { scrollToEl(el, offset); }
