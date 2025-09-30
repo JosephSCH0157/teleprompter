@@ -3182,21 +3182,20 @@ function openDisplay(){
   function updateDebugPosChipImmediate(){
     try {
       if (!debugPosChip || !viewer) return;
-      const vH = Math.max(1, viewer.clientHeight || 1);
-      const markerY = Math.round(vH * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
+      const vRect = viewer.getBoundingClientRect();
+      const vH = Math.max(1, vRect.height || 1);
+      const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+      const markerY = vH * markerPct;
 
-      // Prefer our reading pointer first, then IO anchor, then index lookup
       const active = (scriptEl || viewer)?.querySelector('p.active');
       const vis    = __anchorObs?.mostVisibleEl?.() || null;
       const el     = active || vis || (paraIndex.find(p => currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
 
       let deltaPct = 0;
       if (el){
-        const vRect = viewer.getBoundingClientRect();
         const r = el.getBoundingClientRect();
-        // Use the element’s center, not its top; clamp center within a 90% window for stability
-        const anchorCenter = (r.top - vRect.top) + Math.min(r.height, vH * 0.9) / 2;
-        deltaPct = Math.round(((anchorCenter - markerY) / vH) * 100);
+        const centerY = (r.top - vRect.top) + Math.min(r.height, vH * 0.9) / 2;
+        deltaPct = Math.round(((centerY - markerY) / vH) * 100);
       }
       const topStr = (viewer.scrollTop || 0).toLocaleString();
       debugPosChip.textContent = `Δ ${deltaPct >= 0 ? '+' : ''}${deltaPct}% • scrollTop ${topStr}`;
