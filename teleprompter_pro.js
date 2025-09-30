@@ -788,28 +788,32 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     } catch {}
   }
 
-  // Find the block nearest the viewer's marker line, plus fraction through it (0..1)
-  function getAnchorAndFrac(root = document.getElementById('script')) {
-    try {
-      const blocks = root ? Array.from(root.querySelectorAll('[data-pid]')) : [];
+  // Viewer-relative anchor: nearest paragraph center to viewer marker line
+  function getAnchorAndFrac(root){
+    try{
+      const host = root || document.getElementById('script');
+      const sc   = viewer || document.getElementById('viewer');
+      if (!host || !sc) return null;
+      const blocks = host.querySelectorAll('p');
       if (!blocks.length) return null;
 
-      const v = (typeof viewer !== 'undefined' && viewer) ? viewer : document.documentElement;
-      const vRect = v && v.getBoundingClientRect ? v.getBoundingClientRect() : { top: 0, height: (window.innerHeight || 1) };
-      const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
-      const markerAbsY = vRect.top + (vRect.height * markerPct);
+      const vRect = sc.getBoundingClientRect();
+      const markerPct = (typeof MARKER_PCT === 'number') ? MARKER_PCT : 0.36;
+      const markerY = vRect.top + (vRect.height * markerPct);
 
       let best = null, bestDist = Infinity;
-      for (const el of blocks) {
+      for (const el of blocks){
         const r = el.getBoundingClientRect();
-        const center = r.top + r.height * 0.5;
-        const dist = Math.abs(center - markerAbsY);
-        if (dist < bestDist) { best = { el, r }; bestDist = dist; }
+        const cy = (r.top + r.bottom) / 2;
+        const d = Math.abs(cy - markerY);
+        if (d < bestDist) { bestDist = d; best = el; }
       }
       if (!best) return null;
 
-      const frac = Math.min(1, Math.max(0, (markerAbsY - best.r.top) / Math.max(1, best.r.height)));
-      return { pid: best.el.dataset.pid, frac: Number(frac.toFixed(3)), markerPct };
+      const r = best.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (markerY - r.top) / Math.max(1, r.height)));
+      const pid  = best.getAttribute('data-pid') || best.id || null;
+      return { pid, frac, markerPct };
     } catch { return null; }
   }
 
