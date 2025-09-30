@@ -324,6 +324,19 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
           <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
         </div>
         <div class="settings-small">Manage speaker tags & quick normalization.</div>`));
+      // Typography and auto-scroll moved into Settings > General
+      frag.appendChild(card('cardTypography','Typography & Scrolling','general',`
+        <div class="settings-grid">
+          <div class="settings-inline-row">
+            <label>Font size <input id="settingsFontSize" type="number" min="16" max="96" step="2" value="${getVal('fontSize',48)}" style="width:80px"></label>
+            <label>Line height <input id="settingsLineHeight" type="number" min="1.1" max="2" step="0.05" value="${getVal('lineHeight',1.35)}" style="width:80px"></label>
+          </div>
+          <div class="settings-inline-row">
+            <label>Auto-scroll (px/s) <input id="settingsAutoSpeed" type="number" min="0" max="300" step="5" value="${getVal('autoSpeed',0)}" style="width:90px"></label>
+            <button id="settingsAutoToggle" class="btn-chip">${(document.getElementById('autoToggle')?.textContent)||'Auto-scroll'}</button>
+          </div>
+        </div>
+        <div class="settings-small">Changes apply immediately.</div>`));
       frag.appendChild(card('cardRecording','Recording','recording',`
         <div class="settings-inline-row">
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs')?'checked':''}/> Enable OBS</label>
@@ -469,6 +482,15 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
           }
         });
       }
+  // Typography
+  const fsS = document.getElementById('settingsFontSize');
+  const lhS = document.getElementById('settingsLineHeight');
+  const asS = document.getElementById('settingsAutoSpeed');
+  const atS = document.getElementById('settingsAutoToggle');
+  if (fsS) fsS.addEventListener('input', ()=>{ if (fontSizeInput){ fontSizeInput.value = fsS.value; try { applyTypography(); } catch {} } });
+  if (lhS) lhS.addEventListener('input', ()=>{ if (lineHeightInput){ lineHeightInput.value = lhS.value; try { applyTypography(); } catch {} } });
+  if (asS) asS.addEventListener('input', ()=>{ if (autoSpeed){ autoSpeed.value = asS.value; } });
+  if (atS) atS.addEventListener('click', ()=>{ try { autoToggle?.click(); atS.textContent = document.getElementById('autoToggle')?.textContent || 'Auto-scroll'; } catch {} });
       startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
       stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
       camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});

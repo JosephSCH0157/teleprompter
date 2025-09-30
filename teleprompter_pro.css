@@ -99,6 +99,8 @@ select { font-size: 14px; }
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
     .panel h2{margin:0 0 12px;font-size:18px}
     .panel .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .panel .row[data-moved="typography"],
+    .panel .row[data-moved="autoscroll"]{ display:none; }
     button,select,input[type="number"],input[type="text"]{background:#0e141b;color:var(--fg);border:1px solid var(--edge);padding:8px 10px;border-radius:10px;cursor:pointer}
     button:disabled{opacity:.5;cursor:not-allowed}
     textarea{width:100%;min-height:160px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px}
