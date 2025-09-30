@@ -2789,11 +2789,8 @@ function advanceByTranscript(transcript, isFinal){
       viewer.scrollTop = next;
     }
   } else {
-    // Gentle, clamped pixel scrolling
-    let next;
-    if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
-    else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-    viewer.scrollTop = next;
+    // Controller stays in charge; do not adjust scroll here.
+    // Speech still updates timestamps and downstream broadcasts below.
   }
   if (!catchupActive) {
     if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
