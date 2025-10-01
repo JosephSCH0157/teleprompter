@@ -769,6 +769,22 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       } catch {}
     }
   };
+
+  // If indices advance but scroll doesn't move, periodically nudge to avoid stalls
+  (function stallWatch() {
+    const sc = SCROLLER.get();
+    let lastIdx = -1, lastTop = -1;
+
+    setInterval(() => {
+      const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
+      const top = sc.scrollTop | 0;
+      if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
+        SCROLLER.toAbs(top + Math.round(sc.clientHeight * 0.20), 'stall-nudge');
+        console.warn('[TP] Stall nudge', { idx, top });
+      }
+      lastIdx = idx; lastTop = top;
+    }, 400);
+  })();
   function collectDisplayState(reason = 'manual') {
     try {
       const scriptElLocal = document.getElementById('script');
