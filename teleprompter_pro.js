@@ -864,7 +864,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
 
   // --- commit smoothing ---
-  const FORWARD_DEBOUNCE_MS = 220;
+  const FORWARD_DEBOUNCE_MS = 120; // was 220ms; shorter to avoid starving commits
   let pendingForward = null; // { idx, score, due, raf }
   function clearPendingForward(){
     try { if (pendingForward?.raf) cancelAnimationFrame(pendingForward.raf); } catch {}
