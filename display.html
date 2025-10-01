@@ -106,6 +106,9 @@
                 return Math.max(0, Math.min(Math.round(ratio * max), max));
               } catch { return 0; }
             }
+            function applyRawScroll(top, ratio){
+              try { scheduleScroll(computeTop({ top, ratio })); } catch {}
+            }
             // Configurable marker line percentage (defaults to ~40% to match main)
             let markerLinePct = 0.40;
             const updateMarker = () => {
@@ -249,17 +252,16 @@
                 if (d.seq < lastSeq) return;
                 lastSeq = d.seq;
               }
-              // Follow anchor updates from the controller (preferred)
+              // Follow anchor updates from the controller
               if (d.type === 'display-scroll') {
                 lastAnchorTs = (typeof d.ts === 'number' && isFinite(d.ts)) ? d.ts : Date.now();
                 lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct, ts: lastAnchorTs };
-                requestAnimationFrame(() => scrollToAnchor(d.pid, d.frac, d.markerPct));
-              } else if (d.type === 'scroll') {
-                // Ignore raw scroll right after an anchor packet
-                if ((Date.now() - lastAnchorTs) < 500) return;
-                requestAnimationFrame(() => {
-                  try { if (wrap) wrap.scrollTop = computeTop(d); } catch {}
-                });
+                scrollToAnchor(d.pid, d.frac, d.markerPct);
+                return;
+              }
+              if (d.type === 'scroll') {
+                applyRawScroll(d.top, d.ratio);
+                return;
               }
 
               // Lightweight content/theme sync from controller
