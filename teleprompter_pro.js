@@ -4088,6 +4088,13 @@ function initAfterBoot(){
     // Don’t fight with auto-scroll
     if (autoTimer) stopAutoScroll();
 
+    // Mark the beginning of a speech session and start the short hold window
+    try {
+      const now = performance.now();
+      lastSpeechMs = now;
+      speechStartHoldUntil = now + SPEECH_HOLD_MS;
+    } catch {}
+
     recog = new SR();
     recog.continuous = true;
     recog.interimResults = true;
