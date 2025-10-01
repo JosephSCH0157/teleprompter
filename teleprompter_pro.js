@@ -1746,28 +1746,33 @@ async function _initCore() {
       const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
       const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
       if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-        try { scrollByPx(FALLBACK_STEP_PX); } catch {
-          const sc = (__scrollHelpers?.getScroller?.() || viewer);
-          const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
-          if (typeof scrollToY === 'function') scrollToY(next); else {
-            if (!pendingNudgeRaf) pendingNudgeRaf = requestAnimationFrame(() => { try { SCROLLER.toTop(next, 'nudge'); } finally { pendingNudgeRaf = 0; } });
-          }
+        if (!pendingNudgeRaf) {
+          pendingNudgeRaf = requestAnimationFrame(() => {
+            try {
+              try { scrollByPx(FALLBACK_STEP_PX); }
+              catch {
+                const sc = (__scrollHelpers?.getScroller?.() || viewer);
+                const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
+                if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next, 'nudge');
+              }
+              try { broadcastScroll(); } catch {}
+              // also advance logical index to the paragraph under the marker
+              try{
+                if (Array.isArray(paraIndex) && paraIndex.length){
+                  const sc2 = SCROLLER.get();
+                  const markerY = sc2.scrollTop + (sc2.clientHeight * getMarkerPct());
+                  let target = paraIndex[0];
+                  for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
+                  if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
+                }
+              }catch{}
+              _lastAdvanceAt = performance.now();
+              if (typeof debug === 'function') { const sc = (__scrollHelpers?.getScroller?.() || viewer); debug({ tag:'fallback-nudge', top: sc.scrollTop, idx: currentIndex }); }
+              // dead-man watchdog after logical index adjustment
+              try { deadmanWatchdog(currentIndex); } catch {}
+            } finally { pendingNudgeRaf = 0; }
+          });
         }
-        { try { broadcastScroll(); } catch {} }
-        // also advance logical index to the paragraph under the marker
-        try{
-          if (Array.isArray(paraIndex) && paraIndex.length){
-            const sc2 = SCROLLER.get();
-            const markerY = sc2.scrollTop + (sc2.clientHeight * getMarkerPct());
-            let target = paraIndex[0];
-            for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
-            if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
-          }
-        }catch{}
-        _lastAdvanceAt = now;
-        if (typeof debug === 'function') { const sc = (__scrollHelpers?.getScroller?.() || viewer); debug({ tag:'fallback-nudge', top: sc.scrollTop, idx: currentIndex }); }
-        // dead-man watchdog after logical index adjustment
-        try { deadmanWatchdog(currentIndex); } catch {}
       }
     } catch {}
   }
