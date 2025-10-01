@@ -836,7 +836,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
       try { if (currentEl && currentEl !== p.el) { currentEl.classList.remove('active'); currentEl.classList.remove('current'); } } catch {}
       currentEl = p.el; try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
-      SCROLLER.toEl(currentEl, 0.40, 'speech');
+  // Snap to paragraph with small-move clamp to avoid breathing jitter
+  toElClamped(currentEl, 'speech', 0.40);
       try { broadcastScroll(); } catch {}
       // Evaluate anchor-based catch-up heuristics
       try {
@@ -1000,6 +1001,36 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       get
     };
   })();
+
+  // --- line-height metrics and clamped element scroll (anti-breathing jitter) ---
+  let lineHeightPx = 24;           // updated from computed styles
+  let MIN_PIXEL_MOVE = Math.round(lineHeightPx * 0.6);
+  function refreshLineMetrics(){
+    try {
+      const root = document.getElementById('script');
+      if (!root) return;
+      // Prefer an actual content line
+      const p = root.querySelector('.tp-line, .script-line, .line, .seg, p');
+      if (!p) return;
+      const lh = parseFloat(getComputedStyle(p).lineHeight) || lineHeightPx;
+      if (lh && isFinite(lh)) {
+        lineHeightPx = lh;
+        MIN_PIXEL_MOVE = Math.max(1, Math.round(lineHeightPx * 0.6));
+      }
+    } catch {}
+  }
+  function toElClamped(el, who = 'speech', markerPct = 0.40){
+    try {
+      if (!el) return false;
+      const sc = SCROLLER.get();
+      if (!sc) return false;
+      const targetY = el.offsetTop - Math.round(sc.clientHeight * markerPct);
+      const dy = Math.abs((targetY|0) - (sc.scrollTop|0));
+      if (dy < MIN_PIXEL_MOVE) return false;
+      SCROLLER.toTop(targetY, who);
+      return true;
+    } catch { return false; }
+  }
 
   // Cancel any queued nudge rAF (outer) and SCROLLER-level pending 'nudge'
   let pendingNudgeRaf = 0;
@@ -2785,7 +2816,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     try { setTimeout(runSelfChecks, 0); } catch {}
 
     // Keep bottom padding responsive to viewport changes
-    try { window.addEventListener('resize', applyBottomPad, { passive: true }); } catch {}
+  try { window.addEventListener('resize', applyBottomPad, { passive: true }); } catch {}
+  try { window.addEventListener('resize', () => { try { refreshLineMetrics(); } catch {} }, { passive: true }); } catch {}
     // Update debug chip on scroll
     try { viewer?.addEventListener('scroll', () => { updateDebugPosChip(); }, { passive:true }); } catch {}
     // Live display sync: watch script DOM for changes and debounce updates
@@ -3292,7 +3324,7 @@ function advanceByTranscript(transcript, isFinal){
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
     // Force scrolling via centralized scroller to align anchor and raw scroll broadcasts
-  try { SCROLLER.toEl(currentEl, 0.40, 'speech'); } catch {}
+  try { toElClamped(currentEl, 'speech', 0.40); } catch {}
   } else {
     // Controller stays in charge; do not adjust scroll here.
     // Speech still updates timestamps and downstream broadcasts below.
@@ -3373,6 +3405,8 @@ function advanceByTranscript(transcript, isFinal){
       el.style.fontSize  = String(fontSizeInput.value) + 'px';
       el.style.lineHeight= String(lineHeightInput.value);
     });
+    // Refresh measured line-height for scroll clamping
+    try { refreshLineMetrics(); } catch {}
     // Persist preferences
     try { localStorage.setItem('tp_font_size_v1', String(fontSizeInput.value||'')); } catch {}
     try { localStorage.setItem('tp_line_height_v1', String(lineHeightInput.value||'')); } catch {}
@@ -3412,6 +3446,8 @@ function advanceByTranscript(transcript, isFinal){
     applyTypography();
   // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
   applyBottomPad();
+  // Update line-height metrics once content is in the DOM
+  try { refreshLineMetrics(); } catch {}
   // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
     // Mirror to display (only if open & ready)
