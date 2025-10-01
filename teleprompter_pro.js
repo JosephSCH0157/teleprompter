@@ -777,10 +777,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
     function get() {
       if (el) return el;
-      const script = document.getElementById('script');
       el = document.getElementById('viewer')
-        || document.querySelector('.viewer,#wrap,main,#content')
-        || (script && script.parentElement)
+        || document.querySelector('#wrap,.viewer,main,#content')
         || document.scrollingElement;
       try { el.style.overflowY ||= 'auto'; el.style.height ||= '100vh'; } catch {}
       return el;
