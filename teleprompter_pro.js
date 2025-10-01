@@ -137,6 +137,48 @@
     } catch {}
   })();
 
+  // --- speech micro-drift within long paragraphs ---
+  let lastCommitIdx = -1;
+  let lastCommitTime = 0;
+  let lastDriftTickMs = 0;
+  const MICRO_DRIFT_LINES_PER_S = 0.6; // ~0.6 lines / second while speaking
+  function speechActive(){
+    try { return !!recognizerActive; } catch { return !!window._speechListening; }
+  }
+  function computeMarkerY(){
+    try { const sc = SCROLLER.get(); return (sc?.scrollTop || 0) + Math.round((sc?.clientHeight || 0) * getMarkerPct()); }
+    catch { return 0; }
+  }
+  function tickMicroDrift(now){
+    try {
+      if (!speechActive() || lastCommitIdx < 0) { lastDriftTickMs = 0; return; }
+      if (typeof currentIndex !== 'number' || currentIndex !== lastCommitIdx) { lastDriftTickMs = 0; return; }
+      const sc = SCROLLER.get(); if (!sc) return;
+      // Paragraph element and bottom
+      let pEl = currentEl;
+      if (!pEl) {
+        try { const p = paraIndex?.find(p => currentIndex >= p.start && currentIndex <= p.end); pEl = p?.el; } catch {}
+      }
+      if (!pEl) return;
+      const bottom = (pEl.offsetTop || 0) + (pEl.offsetHeight || 0);
+      const markerY = computeMarkerY();
+      // Stop drifting once marker ~80px from paragraph bottom
+      if (markerY >= (bottom - 80)) { lastDriftTickMs = now; return; }
+      const prev = lastDriftTickMs || lastCommitTime || now;
+      const dt = Math.max(0, now - prev);
+      if (dt < 50) return; // avoid ultra-high frequency
+      const perS = MICRO_DRIFT_LINES_PER_S * (lineHeightPx || 20);
+      const step = (perS * dt) / 1000;
+      const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+      const next = Math.min(maxTop, Math.max(0, (sc.scrollTop || 0) + step));
+      if ((next - (sc.scrollTop||0)) >= 2) {
+        SCROLLER.toTop(next, 'speech-micro');
+      }
+      lastDriftTickMs = now;
+    } catch {}
+  }
+  ;(function microLoop(){ try { requestAnimationFrame((t)=>{ tickMicroDrift(t||performance.now?.()||Date.now()); microLoop(); }); } catch {} })();
+
   // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
   function minimalBoot(){
     try {
@@ -831,6 +873,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   function doCommitIndex(idx, score){
     // Directly apply the index commit and minimal scroll/broadcast as speech
     try { currentIndex = idx; } catch {}
+    // Track for micro-drift within the same paragraph while speaking
+    try { lastCommitIdx = idx; lastCommitTime = performance.now(); lastDriftTickMs = 0; } catch {}
     try {
       if (!paraIndex.length) return true;
       const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
@@ -954,7 +998,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     return { start, poke };
   })();
 
-  const SCROLL_PRIORITY = { speech: 3, catchup: 2, nudge: 1, other: 0 };
+  const SCROLL_PRIORITY = { speech: 3, 'speech-micro': 2, catchup: 2, nudge: 1, other: 0 };
   const SCROLLER = (() => {
     let el, pending = null, raf = 0;
 
