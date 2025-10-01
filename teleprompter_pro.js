@@ -1962,28 +1962,28 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Reset Script -> clear draft, clear editor, reset view and sync
     resetScriptBtn?.addEventListener('click', resetScript);
 
-    // Catch Up button: snap immediately to current line at 40% viewport height
+    // Catch Up button: prefer anchor-based jump with top reset defense
     if (catchUpBtn && !catchUpBtn.dataset.wired){
       catchUpBtn.dataset.wired = '1';
       catchUpBtn.addEventListener('click', () => {
         try {
           // Stop auto-catchup momentarily to avoid contention
           __scrollCtl?.stopAutoCatchup?.();
+          // Try anchor-based path first
+          if (catchUpNow()) return;
+          // Fallback to element heuristics
           const sc = getScroller();
           const offset = Math.round(sc.clientHeight * 0.40);
-     // Prefer current index mapping; fallback to currentEl, then most-visible.
-     const vis = __anchorObs?.mostVisibleEl?.() || null;
-     let idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
-     // If we still look like index 0 but we have a visible para, use it
-     if (idx < 2 && vis) {
-       const p = (paraIndex||[]).find(p => p.el === vis);
-       if (p) idx = p.start;
-     }
-     let el = (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
-       || currentEl
-       || vis
-       || (Array.isArray(lineEls) ? lineEls[0] : null);
-          // If we still couldn't resolve a target, bail (don't snap to top)
+          const vis = __anchorObs?.mostVisibleEl?.() || null;
+          let idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
+          if (idx < 2 && vis) {
+            const p = (paraIndex||[]).find(p => p.el === vis);
+            if (p) idx = p.start;
+          }
+          let el = (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
+            || currentEl
+            || vis
+            || (Array.isArray(lineEls) ? lineEls[0] : null);
           if (!el) return;
           { scrollToEl(el, offset); }
         } catch {}
@@ -2003,6 +2003,27 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           catchUpBtn.click();
         } catch {}
       });
+    }
+
+    // Anchor-based Catch Up with top-anchor defense
+    function catchUpNow(){
+      try {
+        const a = getAnchorAndFrac() || lastGoodAnchor;
+        if (!a) return false;
+        // Identify top-like anchor: pid refers to first paragraph or 0/p0 and frac ~ 0
+        let isTopPid = false;
+        try {
+          const host = document.getElementById('script');
+          const first = host?.querySelector('p');
+          const firstPid = first?.dataset?.pid || first?.id || null;
+          isTopPid = (a.pid === 0 || a.pid === '0' || a.pid === 'p0' || (firstPid && String(a.pid) === String(firstPid)));
+        } catch {}
+        const zeroFrac = Math.abs(Number(a.frac)||0) < 1e-3;
+        if (isTopPid && zeroFrac && lastGoodAnchor) {
+          return scrollToAnchor(lastGoodAnchor, { behavior: 'instant' });
+        }
+        return scrollToAnchor(a, { behavior: 'instant' });
+      } catch { return false; }
     }
 
 
@@ -3202,6 +3223,32 @@ function openDisplay(){
   // Installed later once viewer is bound
   function getScroller(){ return viewer; }
   let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
+
+  // Anchor scroller: align the given pid/frac to the marker line in the viewer
+  function scrollToAnchor(anchor, opts){
+    try {
+      if (!anchor) return false;
+      const host = document.getElementById('script');
+      const sc = getScroller();
+      if (!host || !sc) return false;
+      const pid = anchor.pid;
+      if (typeof pid === 'undefined' || pid === null) return false;
+      let el = host.querySelector(`[data-pid="${pid}"]`);
+      if (!el) el = host.querySelector(`[id="${pid}"]`);
+      if (!el) return false;
+      const markerTop = Math.round(sc.clientHeight * getMarkerPct());
+      const frac = Math.max(0, Math.min(1, Number(anchor.frac)||0));
+      const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+      const target = Math.max(0, Math.min((el.offsetTop + (el.offsetHeight * frac) - markerTop), maxTop));
+      if (typeof scrollToY === 'function') {
+        scrollToY(target);
+      } else {
+        sc.scrollTop = target;
+        try { broadcastScroll(); } catch {}
+      }
+      return true;
+    } catch { return false; }
+  }
 
   // Guard flag to avoid echo loops when our own code scrolls the viewer
   let __programmaticScroll = false;
