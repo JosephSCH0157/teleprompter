@@ -797,13 +797,21 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     let lastIdx = -1, lastTop = -1;
 
     setInterval(() => {
-      const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
-      const top = sc.scrollTop | 0;
-      if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
-  SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20));
-        console.warn('[TP] Stall nudge', { idx, top });
-      }
-      lastIdx = idx; lastTop = top;
+      try {
+        // Do not fight speech or auto controllers
+        const now = performance.now();
+        if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+        if (typeof autoTimer !== 'undefined' && autoTimer) return;
+        if (__scrollCtl?.isActive && __scrollCtl.isActive()) return;
+
+        const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
+        const top = sc.scrollTop | 0;
+        if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
+          SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20));
+          try { console.warn('[TP] Stall nudge', { idx, top }); } catch {}
+        }
+        lastIdx = idx; lastTop = top;
+      } catch {}
     }, 400);
   })();
   function collectDisplayState(reason = 'manual') {
