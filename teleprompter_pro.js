@@ -823,6 +823,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     function schedule(top, who) {
       const pri = (SCROLL_PRIORITY && (SCROLL_PRIORITY[who] ?? 0)) || 0;
       if (!pending || pri > pending.pri) pending = { top, who, pri };
+      try { if (who && who !== 'other') OwnerHUD?.set?.(who); } catch {}
       if (!raf) raf = requestAnimationFrame(() => {
         raf = 0;
         if (!pending) return;
