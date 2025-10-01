@@ -938,13 +938,13 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     const sc = SCROLLER.get();
     let lastIdx = -1, lastTop = -1;
     function stallWatchTick(){
-      // Do not fight speech or auto controllers
+      // Hard gate: do not fight speech or controllers
+      if (speechGateActive()) return;
       const now = performance.now();
       if (now < stallWatchPauseUntil) return;
-  if (awaitingFirstCommit) return;
-  if (speechGateActive()) return;
+      if (awaitingFirstCommit) return;
       if (typeof autoTimer !== 'undefined' && autoTimer) return;
-      if (catchupControllerIsActive()) return;
+      if (__scrollCtl?.isActive?.()) return;
 
       const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
       const top = sc.scrollTop | 0;
@@ -1827,14 +1827,22 @@ async function _initCore() {
     }
   });
 
+  // Optional debug helper for nudge decisions
+  function debugNudge(tag, reason){
+    try { if (window.__TP_DEV) console.log('[NUDGE]', tag, reason||''); } catch {}
+  }
+
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
-  function maybeFallbackNudge(){
+  function maybeFallbackNudge(reason){
+    // Hard speech gate at the very top
+    if (speechGateActive()) { try { debugNudge('MUTED', reason); } catch {} return; }
+    // Yield to catch-up controller if it is steering
+    if (__scrollCtl?.isActive?.()) return;
     try {
-  if (!recActive || !viewer) return; // only when speech sync is active
+      if (!recActive || !viewer) return; // only when speech sync is active
       if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
       if (awaitingFirstCommit) return;         // don’t nudge before first commit
-  if (speechGateActive()) return;          // hard mute while speech is hot
-      if (catchupControllerIsActive()) return; // let controller drive
+      // keep hard gate above; here only auxiliary checks remain
       const now = performance.now();
       const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
       const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
@@ -1869,7 +1877,7 @@ async function _initCore() {
       }
     } catch {}
   }
-  setInterval(maybeFallbackNudge, 250);
+  setInterval(() => maybeFallbackNudge('interval'), 250);
 
   // After wiring open/close for the overlay:
   (window.__help?.ensureHelpUI || ensureHelpUI)();  // <- renames “Shortcuts” to “Help” and injects Normalize + Validate
