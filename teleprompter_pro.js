@@ -882,7 +882,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       currentEl = p.el; try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
   // Snap to paragraph with small-move clamp to avoid breathing jitter
   toElClamped(currentEl, 'speech', 0.40);
-      try { broadcastScroll(); } catch {}
+    try { sendScrollPosition(); } catch {}
       // Evaluate anchor-based catch-up heuristics
       try {
         const vRect = SCROLLER.get().getBoundingClientRect();
