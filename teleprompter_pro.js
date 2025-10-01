@@ -2610,8 +2610,8 @@ function tryStartCatchup(){
         const vRect = viewer.getBoundingClientRect();
         return rect.top - vRect.top; // Y relative to viewer
       }
-      // Fallback: approximate using currentIndex paragraph element if available
-      const p = (paraIndex || []).find(p => currentIndex >= p.start && currentIndex <= p.end) || (paraIndex||[])[0];
+  // Fallback: approximate using currentIndex paragraph element if available (do not default to first line)
+  const p = (paraIndex || []).find(p => currentIndex >= p.start && currentIndex <= p.end);
       if (p?.el) {
         const rect = p.el.getBoundingClientRect();
         const vRect = viewer.getBoundingClientRect();
@@ -3319,9 +3319,9 @@ function openDisplay(){
       const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
       const markerY = vH * markerPct;
 
-      const active = (scriptEl || viewer)?.querySelector('p.active');
-      const vis    = __anchorObs?.mostVisibleEl?.() || null;
-      const el     = active || vis || (paraIndex.find(p => currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
+  const active = (scriptEl || viewer)?.querySelector('p.active');
+  const vis    = __anchorObs?.mostVisibleEl?.() || null;
+  const el     = active || vis || (paraIndex.find(p => currentIndex>=p.start && currentIndex<=p.end)?.el) || null;
 
       let deltaPct = 0;
       if (el){
@@ -3416,7 +3416,9 @@ function stopAutoScroll(){
       let anchorY = 0;
       // Prefer most-visible from IO module, then active/current paragraph
       const active = (scriptEl || viewer)?.querySelector('p.active');
-      const el = (__anchorObs?.mostVisibleEl?.() || null) || active || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
+      const el = active
+        || (__anchorObs?.mostVisibleEl?.() || null)
+        || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el);
       if (el){ const r = el.getBoundingClientRect(); anchorY = r.top - vRect.top; }
       maybeCatchupByAnchor(anchorY, viewer.clientHeight);
     } catch { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} }
