@@ -3181,7 +3181,9 @@ function advanceByTranscript(transcript, isFinal){
   // Dynamic bottom padding so the marker can sit over the final paragraphs
   function applyBottomPad(){
     try {
-      const pad = Math.max(window.innerHeight * 0.5, 320);
+      const sc = SCROLLER.get();
+      const vh = (sc?.clientHeight ?? 0) || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
+      const pad = Math.max(vh * 0.5, 320);
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
     } catch {}
   }
