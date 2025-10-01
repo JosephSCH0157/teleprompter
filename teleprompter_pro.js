@@ -731,6 +731,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Speech activity + scroll batching
   let lastSpeechMs = 0;
   const NUDGE_IDLE_MS = 900; // don't nudge for ~1s after any speech
+  // Short grace window after speech session starts: keep hops extra conservative
+  let speechStartHoldUntil = 0;  // ms timestamp
+  const SPEECH_HOLD_MS = 600;    // short grace window at start
+  const HOP_LIMIT_START = 6;     // extra conservative hop size during hold
   // Commit gating for index/paragraph jumps
   const IDX_SLOP        = 6;    // ignore tiny backward wiggles (<6 tokens)
   const HOP_LIMIT       = 25;   // never advance more than 25 tokens in one frame
