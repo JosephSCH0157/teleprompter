@@ -2924,6 +2924,9 @@ function advanceByTranscript(transcript, isFinal){
       });
     }
 
+    // Mark recent speech activity for scheduling/watchdogs
+    try { lastSpeechMs = performance.now(); } catch {}
+
     // ---- anti-skip (drop right before committing the jump) ----
     try {
       const PARA_JUMP_LIMIT = 1;      // never commit >1 para ahead in one frame
