@@ -814,6 +814,64 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     return true;
   }
 
+  // --- commit smoothing ---
+  const FORWARD_DEBOUNCE_MS = 220;
+  let pendingForward = null; // { idx, score, due, raf }
+  function clearPendingForward(){
+    try { if (pendingForward?.raf) cancelAnimationFrame(pendingForward.raf); } catch {}
+    pendingForward = null;
+  }
+  function doCommitIndex(idx, score){
+    // Perform the gated commit and minimal scroll/broadcast as speech
+    const committed = commitBestIndex(idx, score);
+    if (!committed) return false;
+    try {
+      if (!paraIndex.length) return true;
+      const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
+      try { if (currentEl && currentEl !== p.el) { currentEl.classList.remove('active'); currentEl.classList.remove('current'); } } catch {}
+      currentEl = p.el; try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
+      SCROLLER.toEl(currentEl, 0.40, 'speech');
+      try { broadcastScroll(); } catch {}
+      // Evaluate anchor-based catch-up heuristics
+      try {
+        const vRect = SCROLLER.get().getBoundingClientRect();
+        const anchorEl = (__anchorObs?.mostVisibleEl?.() || null) || currentEl;
+        const r = anchorEl.getBoundingClientRect();
+        const anchorY = r.top - vRect.top;
+        maybeCatchupByAnchor(anchorY, SCROLLER.get().clientHeight);
+      } catch {}
+      if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
+      OwnerHUD?.set?.('speech');
+    } catch {}
+    return true;
+  }
+  function scheduleForwardCommit(idx, score){
+    // never schedule backwards/equal
+    if (idx <= currentIndex) return false;
+    const start = performance.now();
+    const due = start + FORWARD_DEBOUNCE_MS;
+    if (pendingForward && idx <= pendingForward.idx) {
+      // keep the farther one; but refresh the due time
+      pendingForward.due = due;
+      return true;
+    }
+    clearPendingForward();
+    pendingForward = { idx, score, due, raf: 0 };
+    const tick = () => {
+      if (!pendingForward) return;
+      if (performance.now() >= pendingForward.due) {
+        if (pendingForward.idx >= currentIndex) {
+          doCommitIndex(pendingForward.idx, pendingForward.score);
+        }
+        clearPendingForward();
+      } else {
+        pendingForward.raf = requestAnimationFrame(tick);
+      }
+    };
+    pendingForward.raf = requestAnimationFrame(tick);
+    return true;
+  }
+
   // ---- central scroller (rAF-batched writes; viewer-only; priority-aware) ----
   // Debug HUD to show who last owned the scroll (speech/catchup/nudge/other)
   const OwnerHUD = (() => {
@@ -3171,10 +3229,24 @@ function advanceByTranscript(transcript, isFinal){
     if (delta > maxJump && bestScore < strictGate) {
       targetIdx = Math.min(scriptWords.length - 1, currentIndex + maxJump);
     }
-    const committed = commitBestIndex(targetIdx, bestScore);
-    if (!committed) {
-      // Defer committing and scrolling until confirmation criteria are met
-      return;
+    // Forward commit smoothing: for forward moves, debounce ~220ms to allow a better index
+    if (targetIdx > currentIndex) {
+      // If we have a strong final or a tiny forward hop, commit directly; else schedule
+      const tiny = (targetIdx - currentIndex) <= 2;
+      const strongFinal = isFinal && (bestScore >= STRICT_FORWARD_SIM);
+      if (strongFinal || tiny) {
+        clearPendingForward();
+        const committed = commitBestIndex(targetIdx, bestScore);
+        if (!committed) return; // wait for next
+      } else {
+        scheduleForwardCommit(targetIdx, bestScore);
+        return; // defer commit and scroll until debounce fires
+      }
+    } else {
+      // backward or equal → drop any pending forward and rely on commit gate directly
+      clearPendingForward();
+      const committed = commitBestIndex(targetIdx, bestScore);
+      if (!committed) return;
     }
     if (awaitingFirstCommit) { try { awaitingFirstCommit = false; } catch {} }
     if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
