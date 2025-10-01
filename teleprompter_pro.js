@@ -742,7 +742,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // --- Speech gating ---
   let recognizerActive = false;        // true between onstart→onend
   let nudgeDisabledUntil = 0;          // wallclock ms until which nudges are muted
-  const SPEECH_HOLD_MS = 600;         // extra conservative window at start
+  const START_HOLD_MS = 700;           // extra conservative window at start (~0.7s)
   const NUDGE_IDLE_MS  = 3000;        // mute nudges this long after any speech (was 1200)
   const HOP_LIMIT_START = 6;          // extra conservative hop size during hold
   // One-time: inhibit stall/nudges until we get the first committed match
@@ -778,6 +778,20 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Two-tap confirmation index for small backward steps
   let backSeenIdx = -1;
 
+  // Optional: ignore single-token stopword commits (to prevent minor steering)
+  function isLikelyStopwordCommit(bestIdx) {
+    try {
+      if (!Array.isArray(scriptWords) || !scriptWords.length) return false;
+      const delta = Math.abs((bestIdx|0) - (currentIndex|0));
+      if (delta !== 1) return false;
+      const w = String(scriptWords[Math.max(0, Math.min(bestIdx, scriptWords.length-1))] || '').toLowerCase();
+      if (!w) return false;
+      // Small, conservative set of high-frequency English stopwords
+      const S = new Set(['and','the','in','of','to','a','an','for','on','at','by','from','or','as','is','are','be','was','were','it','that','this','with','if','not']);
+      return S.has(w);
+    } catch { return false; }
+  }
+
   function commitBestIndex(bestIdx, bestScore) {
     const now = performance.now();
     // 2-tap confirmation for small backward steps
@@ -794,6 +808,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       bestIdx = currentIndex + hopLimit;
     }
 
+    // Ignore trivial single-stopword nudges to reduce micro-oscillation
+    if (bestIdx !== currentIndex && isLikelyStopwordCommit(bestIdx)) return false;
     currentIndex = bestIdx;
     return true;
   }
@@ -4251,7 +4267,7 @@ function initAfterBoot(){
     try {
       const now = performance.now();
       lastSpeechMs = now;
-      speechStartHoldUntil = now + SPEECH_HOLD_MS;
+      speechStartHoldUntil = now + START_HOLD_MS;
       recognizerActive = true;
       onAnySpeechActivity();
       awaitingFirstCommit = true;
