@@ -819,8 +819,14 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     };
   })();
 
-  // Cancel any in-flight nudge write scheduled for this frame
-  function cancelPendingNudge(){ try { SCROLLER?.cancel?.('nudge'); } catch {} }
+  // Cancel any queued nudge rAF (outer) and SCROLLER-level pending 'nudge'
+  let pendingNudgeRaf = 0;
+  function cancelPendingNudge(){
+    try {
+      if (pendingNudgeRaf) { cancelAnimationFrame(pendingNudgeRaf); pendingNudgeRaf = 0; }
+    } catch {}
+    try { SCROLLER?.cancel?.('nudge'); } catch {}
+  }
 
   // Temporarily suppress the stall watchdog for a duration
   let stallWatchPauseUntil = 0;
@@ -850,8 +856,12 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
       const top = sc.scrollTop | 0;
       if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
-        SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20), 'nudge');
-        try { console.warn('[TP] Stall nudge', { idx, top }); } catch {}
+        if (!pendingNudgeRaf) {
+          pendingNudgeRaf = requestAnimationFrame(() => {
+            try { SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20), 'nudge'); } finally { pendingNudgeRaf = 0; }
+            try { console.warn('[TP] Stall nudge', { idx, top }); } catch {}
+          });
+        }
       }
       lastIdx = idx; lastTop = top;
     }
@@ -1739,7 +1749,9 @@ async function _initCore() {
         try { scrollByPx(FALLBACK_STEP_PX); } catch {
           const sc = (__scrollHelpers?.getScroller?.() || viewer);
           const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
-  if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next, 'nudge');
+          if (typeof scrollToY === 'function') scrollToY(next); else {
+            if (!pendingNudgeRaf) pendingNudgeRaf = requestAnimationFrame(() => { try { SCROLLER.toTop(next, 'nudge'); } finally { pendingNudgeRaf = 0; } });
+          }
         }
         { try { broadcastScroll(); } catch {} }
         // also advance logical index to the paragraph under the marker
