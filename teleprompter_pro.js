@@ -779,6 +779,34 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
 
   // ---- central scroller (rAF-batched writes; viewer-only; priority-aware) ----
+  // Debug HUD to show who last owned the scroll (speech/catchup/nudge/other)
+  const OwnerHUD = (() => {
+    let el, last = '';
+    function ensure(){
+      if (el) return el;
+      try {
+        el = document.createElement('div');
+        Object.assign(el.style, {
+          position:'fixed', right:'8px', bottom:'8px', zIndex:99999,
+          padding:'4px 8px', font:'12px/16px system-ui, sans-serif',
+          background:'rgba(0,0,0,.6)', color:'#fff', borderRadius:'6px'
+        });
+        el.textContent = 'idle';
+        (document.body || document.documentElement).appendChild(el);
+      } catch {}
+      return el;
+    }
+    function set(who){
+      try {
+        const node = ensure();
+        if (!node) return;
+        if (who !== last) { node.textContent = String(who||'other'); last = who; }
+        clearTimeout(set.t); set.t = setTimeout(() => { try { node.textContent='idle'; last=''; } catch {} }, 400);
+      } catch {}
+    }
+    return { set };
+  })();
+
   const SCROLL_PRIORITY = { speech: 3, catchup: 2, nudge: 1, other: 0 };
   const SCROLLER = (() => {
     let el, pending = null, raf = 0;
@@ -802,6 +830,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
         const topClamped = Math.max(0, Math.min(pending.top, max));
         sc.scrollTop = topClamped;
+        try { OwnerHUD && OwnerHUD.set && OwnerHUD.set(pending.who || 'other'); } catch {}
         pending = null;
       });
     }
