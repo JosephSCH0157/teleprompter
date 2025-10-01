@@ -2238,11 +2238,14 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   const sh = shMod.createScrollerHelpers(() => viewer);
   __scrollHelpers = sh;
   clampScrollTop = sh.clampScrollTop;
+  const logMove = (op, before, after) => { try { if (after !== before) console.debug(`[SCROLL:${op}] ${before} → ${after}`); } catch {} };
   // --- scroller wrappers (must pass `viewer` as first arg) ---
   scrollByPx = (px) => {
     __programmaticScroll = true;
     try {
+      const before = viewer?.scrollTop|0;
       sh.scrollByPx(viewer, px);
+      logMove('by', before, viewer?.scrollTop|0);
       try { updateDebugPosChip(); } catch {}
     } finally {
       __programmaticScroll = false;
@@ -2252,7 +2255,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   scrollToY = (y) => {
     __programmaticScroll = true;
     try {
+      const before = viewer?.scrollTop|0;
       sh.scrollToY(viewer, y);
+      logMove('toY', before, viewer?.scrollTop|0);
       try { updateDebugPosChip(); } catch {}
     } finally {
       __programmaticScroll = false;
@@ -2262,7 +2267,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   scrollToEl = (el, off = 0) => {
     __programmaticScroll = true;
     try {
+      const before = viewer?.scrollTop|0;
       sh.scrollToEl(viewer, el, off);
+      logMove('toEl', before, viewer?.scrollTop|0);
       try { updateDebugPosChip(); } catch {}
     } finally {
       __programmaticScroll = false;
