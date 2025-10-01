@@ -726,6 +726,46 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let __displaySyncDebounce = null;
   // Sticky anchor: remember last good (non-glitch) anchor we sent to the display
   let lastGoodAnchor = null;
+
+  // --- central scroller + broadcast ---
+  const SCROLLER = {
+    get() {
+      return document.getElementById('viewer') || document.scrollingElement;
+    },
+    maxTop(el) {
+      return Math.max(0, el.scrollHeight - el.clientHeight);
+    },
+    toAbs(y, reason = 'unknown') {
+      try {
+        const sc = this.get();
+        if (!sc) return;
+        const max = this.maxTop(sc);
+        const top = Math.max(0, Math.min(y, max));
+        sc.scrollTop = top; // always the viewer, never window
+
+        // keep display in sync (anchor + absolute)
+        try {
+          const a = getAnchorAndFrac(document.getElementById('script'));
+          if (a && displayWin && !displayWin.closed) {
+            displayWin.postMessage({ type:'display-scroll', ...a }, '*');
+          }
+          const ratio = max ? (top / max) : 0;
+          if (displayWin && !displayWin.closed) {
+            displayWin.postMessage({ type:'scroll', top, ratio }, '*');
+          }
+        } catch {}
+      } catch {}
+    },
+    toEl(el, markerPct = 0.40, reason = 'toEl') {
+      try {
+        if (!el) return;
+        const sc = this.get();
+        if (!sc) return;
+        const y  = el.offsetTop - Math.round(sc.clientHeight * markerPct);
+        this.toAbs(y, reason);
+      } catch {}
+    }
+  };
   function collectDisplayState(reason = 'manual') {
     try {
       const scriptElLocal = document.getElementById('script');
@@ -1575,7 +1615,7 @@ async function _initCore() {
       try { scrollByPx(FALLBACK_STEP_PX); } catch {
         const sc = (__scrollHelpers?.getScroller?.() || viewer);
         const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
-        if (typeof scrollToY === 'function') scrollToY(next); else sc.scrollTop = next;
+        if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toAbs(next, 'fallback-nudge');
       }
       { try { broadcastScroll(); } catch {} }
       // also advance logical index to the paragraph under the marker
@@ -2526,9 +2566,9 @@ function scrollToCurrentIndex(){
   const dy = target - sc.scrollTop;
   if (Math.abs(dy) > S.EASE_MIN) {
     const next = sc.scrollTop + Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
-    if (typeof scrollToY === 'function') scrollToY(next); else sc.scrollTop = next;
+    if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toAbs(next, 'scrollToCurrentIndex-step');
   } else {
-    if (typeof scrollToY === 'function') scrollToY(target); else sc.scrollTop = target;
+    if (typeof scrollToY === 'function') scrollToY(target); else SCROLLER.toAbs(target, 'scrollToCurrentIndex-target');
   }
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   if (typeof debug === 'function') debug({ tag:'scroll', top: sc.scrollTop });
@@ -2641,7 +2681,7 @@ function tryStartCatchup(){
   };
   const scrollBy = (dy) => {
     try {
-      viewer.scrollTop = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+  SCROLLER.toAbs(Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight)), 'catchup-loop');
       try { broadcastScroll(); } catch {}
     } catch {}
   };
@@ -2895,18 +2935,18 @@ function advanceByTranscript(transcript, isFinal){
         scrollToEl(currentEl, markerTop);
       } catch {
         let next;
-        if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
-        else         next = Math.max(sc.scrollTop - backStep, desiredTop);
-        if (typeof scrollToY === 'function') scrollToY(next);
-        else sc.scrollTop = next;
+  if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
+  else         next = Math.max(sc.scrollTop - backStep, desiredTop);
+  if (typeof scrollToY === 'function') scrollToY(next);
+  else SCROLLER.toAbs(next, 'speech-snap-fallback');
       }
     } else {
       // Gentle, clamped pixel scrolling
       let next;
-      if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
-      else         next = Math.max(sc.scrollTop - backStep, desiredTop);
-      if (typeof scrollToY === 'function') scrollToY(next);
-      else sc.scrollTop = next;
+  if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
+  else         next = Math.max(sc.scrollTop - backStep, desiredTop);
+  if (typeof scrollToY === 'function') scrollToY(next);
+  else SCROLLER.toAbs(next, 'speech-gentle');
     }
   } else {
     // Controller stays in charge; do not adjust scroll here.
@@ -3302,8 +3342,7 @@ function openDisplay(){
       if (typeof scrollToY === 'function') {
         scrollToY(target);
       } else {
-        sc.scrollTop = target;
-        try { broadcastScroll(); } catch {}
+        SCROLLER.toAbs(target, 'scrollToAnchor');
       }
       return true;
     } catch { return false; }
@@ -3322,10 +3361,7 @@ function openDisplay(){
   function forceTopReset(reason){
     try { console.debug('[TP] forceTopReset', reason); } catch {}
     try {
-      if (!viewer) return;
-      viewer.scrollTop = 0;
-  // Mirror to display for consistency via unified broadcaster
-  try { broadcastScroll(); } catch {}
+      SCROLLER.toAbs(0, 'forceTopReset');
     } catch {}
   }
 
