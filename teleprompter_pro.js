@@ -801,10 +801,26 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const y = node.offsetTop - Math.round(sc.clientHeight * markerPct);
         schedule(y, who);
       },
+      cancel(who){
+        try {
+          if (!who) { pending = null; return; }
+          if (pending && pending.who === who) pending = null;
+        } catch {}
+      },
       el: () => get(),
       get
     };
   })();
+
+  // Cancel any in-flight nudge write scheduled for this frame
+  function cancelPendingNudge(){ try { SCROLLER?.cancel?.('nudge'); } catch {} }
+
+  // Temporarily suppress the stall watchdog for a duration
+  let __stallWatchBlockedUntil = 0;
+  function stopStallWatchFor(ms){
+    try { __stallWatchBlockedUntil = performance.now() + Math.max(0, Number(ms)||0); }
+    catch { __stallWatchBlockedUntil = Date.now() + Math.max(0, Number(ms)||0); }
+  }
 
   // If indices advance but scroll doesn't move, periodically nudge to avoid stalls
   (function stallWatch() {
@@ -814,8 +830,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     setInterval(() => {
       try {
         // Do not fight speech or auto controllers
-        const now = performance.now();
-  if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+    const now = performance.now();
+    if (now < __stallWatchBlockedUntil) return;
+    if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
   if (awaitingFirstCommit) return;
         if (typeof autoTimer !== 'undefined' && autoTimer) return;
         if (__scrollCtl?.isActive && __scrollCtl.isActive()) return;
@@ -4108,6 +4125,8 @@ function initAfterBoot(){
       lastSpeechMs = now;
       speechStartHoldUntil = now + SPEECH_HOLD_MS;
       awaitingFirstCommit = true;
+      cancelPendingNudge();
+      stopStallWatchFor(NUDGE_IDLE_MS);
     } catch {}
 
     recog = new SR();
