@@ -22,7 +22,11 @@ export function createAnchorObserver(getRoot, onUpdate){
       if (io) io.disconnect();
       ratios.clear(); most = null;
       io = new IntersectionObserver((entries)=>{
-        for (const e of entries){ ratios.set(e.target, e.intersectionRatio || 0); }
+        for (const e of entries){
+          // Ignore zero-ratio events (element just left viewport) so we keep last good measurement
+          if (e && typeof e.intersectionRatio === 'number' && e.intersectionRatio === 0) continue;
+          ratios.set(e.target, e.intersectionRatio || 0);
+        }
         computeMostVisible();
         try { onUpdate && onUpdate(most); } catch {}
       }, { root, threshold: IO_THRESHOLDS });
