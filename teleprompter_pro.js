@@ -728,6 +728,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let lastGoodAnchor = null;
   // Most recent anchor actually sent to display (for Catch Up targeting)
   let __lastSentAnchor = null;
+  // Speech activity + scroll scheduling
+  let lastSpeechMs = 0;
+  let scrollRAF = 0;
 
   // ---- central scroller + broadcast (drop-in) ----
   const SCROLLER = (() => {
