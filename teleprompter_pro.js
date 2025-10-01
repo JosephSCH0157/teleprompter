@@ -842,12 +842,26 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         // keep last valid anchor instead of snapping up
         if (lastGoodAnchor) {
           displayWin.postMessage({ type: 'display-scroll', ...lastGoodAnchor }, '*');
+          // Also send absolute scroll as a dumb-but-reliable fallback
+          try {
+            const max = Math.max(0, (sc?.scrollHeight || 0) - (sc?.clientHeight || 0));
+            const top = Math.max(0, sc?.scrollTop || 0);
+            const ratio = max > 0 ? (top / max) : 0;
+            displayWin.postMessage({ type: 'scroll', top, ratio }, '*');
+          } catch {}
         }
         return;
       }
 
       lastGoodAnchor = anchor;
       displayWin.postMessage({ type: 'display-scroll', ...anchor }, '*');
+      // Always accompany with a raw absolute scroll packet for robustness
+      try {
+        const max = Math.max(0, (sc?.scrollHeight || 0) - (sc?.clientHeight || 0));
+        const top = Math.max(0, sc?.scrollTop || 0);
+        const ratio = max > 0 ? (top / max) : 0;
+        displayWin.postMessage({ type: 'scroll', top, ratio }, '*');
+      } catch {}
     } catch {}
   }
 
