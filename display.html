@@ -81,6 +81,7 @@
             let followPaused = false;      // transient pause after user scrolls
             let followResumeTimer = null;  // timer to auto-resume
             let lastAnchor = null;         // remember last pid/frac (+ ts)
+            let lastAnchorTs = 0;          // ms timestamp of last anchor packet
             // Defer final scroll application to next frame to avoid layout thrash
             let pendingScroll = null;
             let scrollScheduled = false;
@@ -93,6 +94,17 @@
                   scrollScheduled = false;
                 });
               }
+            }
+            // Compute absolute scrollTop from a raw scroll packet
+            function computeTop(msg){
+              try {
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                if (typeof msg.top === 'number' && isFinite(msg.top)) {
+                  return Math.max(0, Math.min(Math.round(msg.top), max));
+                }
+                const ratio = Number(msg.ratio) || 0;
+                return Math.max(0, Math.min(Math.round(ratio * max), max));
+              } catch { return 0; }
             }
             // Configurable marker line percentage (defaults to ~40% to match main)
             let markerLinePct = 0.40;
@@ -233,17 +245,15 @@
               }
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
-                lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct, ts: Date.now() };
-                scrollToAnchor(d.pid, d.frac, d.markerPct);
+                lastAnchorTs = (typeof d.ts === 'number' && isFinite(d.ts)) ? d.ts : Date.now();
+                lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct, ts: lastAnchorTs };
+                requestAnimationFrame(() => scrollToAnchor(d.pid, d.frac, d.markerPct));
               } else if (d.type === 'scroll') {
-                // Only apply raw if no good anchor was just received (within ~500ms)
-                try {
-                  if (!lastAnchor || (Date.now() - (lastAnchor.ts || 0) > 500)) {
-                    const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                    const y = Math.round((Number(d.ratio) || 0) * max);
-                    scheduleScroll(Math.max(0, Math.min(y, max)));
-                  }
-                } catch {}
+                // Ignore raw scroll right after an anchor packet
+                if ((Date.now() - lastAnchorTs) < 500) return;
+                requestAnimationFrame(() => {
+                  try { if (wrap) wrap.scrollTop = computeTop(d); } catch {}
+                });
               }
 
               // Lightweight content/theme sync from controller
