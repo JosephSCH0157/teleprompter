@@ -960,7 +960,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
     function get() {
       if (el) return el;
+      // Prefer explicit IDs first, then common fallbacks
       el = document.getElementById('viewer')
+        || document.getElementById('wrap')
         || document.querySelector('#wrap,.viewer,main,#content')
         || document.scrollingElement;
       try { el.style.overflowY ||= 'auto'; el.style.height ||= '100vh'; } catch {}
@@ -1214,7 +1216,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const anchor = getAnchorAndFrac();
       if (!anchor) return;
       // Ignore spurious resets unless we truly are at the top
-      const sc = viewer || document.getElementById('viewer');
+  const sc = SCROLLER.get();
       const atTop = ((sc?.scrollTop ?? 0) < 5);
       // Consider "top" if pid matches first paragraph id/pid or is 0/'0'/'p0'
       let isTopPid = false;
