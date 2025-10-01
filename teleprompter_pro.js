@@ -794,8 +794,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
   function commitBestIndex(bestIdx, bestScore) {
     const now = performance.now();
-    // 2-tap confirmation for small backward steps
+    // Back step: clear any pending forward and require two hits
     if (bestIdx < currentIndex) {
+      clearPendingForward();
       if (backSeenIdx !== bestIdx) { backSeenIdx = bestIdx; return false; }
       backSeenIdx = -1; // confirmed
     } else {
@@ -808,10 +809,16 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       bestIdx = currentIndex + hopLimit;
     }
 
-    // Ignore trivial single-stopword nudges to reduce micro-oscillation
+    // Optional micro-jitter filter
     if (bestIdx !== currentIndex && isLikelyStopwordCommit(bestIdx)) return false;
-    currentIndex = bestIdx;
-    return true;
+
+    // Debounce forward moves: schedule and defer commit
+    if (bestIdx > currentIndex) {
+      if (scheduleForwardCommit(bestIdx, bestScore)) return false;
+    }
+
+    // Equal or allowed back step → immediate apply
+    return doCommitIndex(bestIdx, bestScore);
   }
 
   // --- commit smoothing ---
@@ -822,9 +829,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     pendingForward = null;
   }
   function doCommitIndex(idx, score){
-    // Perform the gated commit and minimal scroll/broadcast as speech
-    const committed = commitBestIndex(idx, score);
-    if (!committed) return false;
+    // Directly apply the index commit and minimal scroll/broadcast as speech
+    try { currentIndex = idx; } catch {}
     try {
       if (!paraIndex.length) return true;
       const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
@@ -845,6 +851,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     } catch {}
     return true;
   }
+  
   function scheduleForwardCommit(idx, score){
     // never schedule backwards/equal
     if (idx <= currentIndex) return false;
@@ -3229,25 +3236,9 @@ function advanceByTranscript(transcript, isFinal){
     if (delta > maxJump && bestScore < strictGate) {
       targetIdx = Math.min(scriptWords.length - 1, currentIndex + maxJump);
     }
-    // Forward commit smoothing: for forward moves, debounce ~220ms to allow a better index
-    if (targetIdx > currentIndex) {
-      // If we have a strong final or a tiny forward hop, commit directly; else schedule
-      const tiny = (targetIdx - currentIndex) <= 2;
-      const strongFinal = isFinal && (bestScore >= STRICT_FORWARD_SIM);
-      if (strongFinal || tiny) {
-        clearPendingForward();
-        const committed = commitBestIndex(targetIdx, bestScore);
-        if (!committed) return; // wait for next
-      } else {
-        scheduleForwardCommit(targetIdx, bestScore);
-        return; // defer commit and scroll until debounce fires
-      }
-    } else {
-      // backward or equal → drop any pending forward and rely on commit gate directly
-      clearPendingForward();
-      const committed = commitBestIndex(targetIdx, bestScore);
-      if (!committed) return;
-    }
+    // Let commitBestIndex handle forward debounce / back confirmation
+    const committed = commitBestIndex(targetIdx, bestScore);
+    if (!committed) return;
     if (awaitingFirstCommit) { try { awaitingFirstCommit = false; } catch {} }
     if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
   }
@@ -4418,6 +4409,7 @@ function initAfterBoot(){
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
     try { recognizerActive = false; } catch {}
+    try { clearPendingForward(); } catch {}
     try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   }
 
