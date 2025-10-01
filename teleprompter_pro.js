@@ -2805,9 +2805,9 @@ function scrollToCurrentIndex(){
   const dy = target - sc.scrollTop;
   if (Math.abs(dy) > S.EASE_MIN) {
     const next = sc.scrollTop + Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
-  if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next, 'nudge');
+    SCROLLER.toTop(next, 'nudge');
   } else {
-  if (typeof scrollToY === 'function') scrollToY(target); else SCROLLER.toTop(target, 'nudge');
+    SCROLLER.toTop(target, 'nudge');
   }
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   if (typeof debug === 'function') debug({ tag:'scroll', top: sc.scrollTop });
@@ -3611,11 +3611,7 @@ function openDisplay(){
       const frac = Math.max(0, Math.min(1, Number(anchor.frac)||0));
       const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
       const target = Math.max(0, Math.min((el.offsetTop + (el.offsetHeight * frac) - markerTop), maxTop));
-      if (typeof scrollToY === 'function') {
-        scrollToY(target);
-      } else {
-  SCROLLER.toTop(target, 'other');
-      }
+      SCROLLER.toTop(target, 'other');
       return true;
     } catch { return false; }
   }
@@ -3700,8 +3696,8 @@ function openDisplay(){
         // If we still couldn't resolve a target, bail (avoid snap to top)
         if (!el) return;
         {
-          const offset = Math.round(sc.clientHeight * 0.40);
-          scrollToEl(el, offset);
+          // Align via central SCROLLER to avoid double writes
+          SCROLLER.toEl(el, 0.40, 'catchup');
           try { broadcastScroll(); } catch {}
         }
       }
