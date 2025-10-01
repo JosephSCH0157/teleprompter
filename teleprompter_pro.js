@@ -2230,6 +2230,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   speakersBody      = document.getElementById('speakersBody');
 
   if (!openDisplayBtn) { setStatus('Boot: DOM not ready / IDs missing'); return; }
+    // Defensive: ensure viewer is bound before wiring helpers
+    if (!viewer) viewer = document.getElementById('viewer');
     // Initialize modular helpers now that viewer exists
     try {
       const shMod = await import('./scroll-helpers.js');
