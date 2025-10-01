@@ -2236,9 +2236,37 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   const sh = shMod.createScrollerHelpers(() => viewer);
   __scrollHelpers = sh;
   clampScrollTop = sh.clampScrollTop;
-  scrollByPx     = (px)=>{ __programmaticScroll = true; try { sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} } finally { __programmaticScroll = false; try{ broadcastScroll(); }catch{} } };
-  scrollToY      = (y)=>{ __programmaticScroll = true; try { sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} } finally { __programmaticScroll = false; try{ broadcastScroll(); }catch{} } };
-  scrollToEl     = (el,off=0)=>{ __programmaticScroll = true; try { sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} } finally { __programmaticScroll = false; try{ broadcastScroll(); }catch{} } };
+  // --- scroller wrappers (must pass `viewer` as first arg) ---
+  scrollByPx = (px) => {
+    __programmaticScroll = true;
+    try {
+      sh.scrollByPx(viewer, px);
+      try { updateDebugPosChip(); } catch {}
+    } finally {
+      __programmaticScroll = false;
+      try { broadcastScroll(); } catch {}
+    }
+  };
+  scrollToY = (y) => {
+    __programmaticScroll = true;
+    try {
+      sh.scrollToY(viewer, y);
+      try { updateDebugPosChip(); } catch {}
+    } finally {
+      __programmaticScroll = false;
+      try { broadcastScroll(); } catch {}
+    }
+  };
+  scrollToEl = (el, off = 0) => {
+    __programmaticScroll = true;
+    try {
+      sh.scrollToEl(viewer, el, off);
+      try { updateDebugPosChip(); } catch {}
+    } finally {
+      __programmaticScroll = false;
+      try { broadcastScroll(); } catch {}
+    }
+  };
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
