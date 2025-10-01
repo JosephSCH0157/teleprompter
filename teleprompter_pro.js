@@ -1981,26 +1981,38 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     if (catchUpBtn && !catchUpBtn.dataset.wired){
       catchUpBtn.dataset.wired = '1';
       catchUpBtn.addEventListener('click', () => {
+        try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
         try {
-          // Stop auto-catchup momentarily to avoid contention
-          __scrollCtl?.stopAutoCatchup?.();
-          // Try anchor-based path first
-          if (catchUpNow()) return;
-          // Fallback to element heuristics
-          const sc = getScroller();
-          const offset = Math.round(sc.clientHeight * 0.40);
-          const vis = __anchorObs?.mostVisibleEl?.() || null;
-          let idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
-          if (idx < 2 && vis) {
-            const p = (paraIndex||[]).find(p => p.el === vis);
-            if (p) idx = p.start;
+          const vRect = viewer.getBoundingClientRect();
+          const markerTop = Math.round(vRect.height * getMarkerPct());
+
+          let el = null;
+
+          // 1) Prefer the last final match (most reliable)
+          try {
+            const pf = (paraIndex||[]).find(p => lastFinalIndex >= p.start && lastFinalIndex <= p.end);
+            if (pf) el = pf.el;
+          } catch {}
+
+          // 2) Then the current working index
+          if (!el) {
+            try {
+              const pc = (paraIndex||[]).find(p => currentIndex >= p.start && currentIndex <= p.end);
+              if (pc) el = pc.el;
+            } catch {}
           }
-          let el = (paraIndex.find(p=>idx>=p.start && idx<=p.end)?.el)
-            || currentEl
-            || vis
-            || (Array.isArray(lineEls) ? lineEls[0] : null);
-          if (!el) return;
-          { scrollToEl(el, offset); }
+
+          // 3) Then the most visible paragraph by IO
+          if (!el) el = __anchorObs?.mostVisibleEl?.() || null;
+
+          // 4) Only as a last resort do we allow top
+          if (!el) el = (Array.isArray(lineEls) ? (lineEls[0] || null) : null);
+
+          if (el) {
+            scrollToEl(el, markerTop);
+            try { updateDebugPosChip(); } catch {}
+            // scrollToEl broadcasts; no need for extra display message here
+          }
         } catch {}
       });
       // Keyboard shortcut: press 'C' to catch up (ignored while typing in inputs/textareas)
