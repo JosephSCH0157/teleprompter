@@ -931,10 +931,18 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const node = ensure(); if (!node) return;
         const now = performance.now();
         const remainMs = Math.max(0, (nudgeDisabledUntil||0) - now);
-        const active = !!recognizerActive || remainMs > 0;
+        // Forward-hold: show pending forward delta if any
+        const holdDelta = (pendingForward && typeof pendingForward.idx==='number' && typeof currentIndex==='number' && pendingForward.idx > currentIndex)
+          ? (pendingForward.idx - currentIndex)
+          : 0;
+        // Visible if gate is hot OR we have a pending forward commit
+        const active = (!!recognizerActive || remainMs > 0 || holdDelta > 0);
         if (!active) { node.style.display='none'; lastTxt=''; return; }
         const secs = remainMs > 0 ? (remainMs/1000).toFixed(1) : '';
-        const txt = recognizerActive ? `gate: ON${secs?` ${secs}s`:''}` : `gate: ${secs}s`;
+        const holdTxt = holdDelta > 0 ? ` • hold +${holdDelta}` : '';
+        const txt = recognizerActive
+          ? `gate: ON${secs?` ${secs}s`:''}${holdTxt}`
+          : `gate: ${secs}${secs? 's':''}${holdTxt}`;
         if (txt !== lastTxt) { node.textContent = txt; lastTxt = txt; }
         node.style.display = 'block';
       } catch {}
