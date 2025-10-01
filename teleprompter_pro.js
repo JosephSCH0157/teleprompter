@@ -2881,6 +2881,13 @@ function _sim(a, b){
 // Advance currentIndex by trying to align recognized words to the upcoming script words
 // TP: advance-by-transcript
 function advanceByTranscript(transcript, isFinal){
+  // On every recognition event (interim & final), refresh timestamps and neutralize timers
+  try {
+    const nowEvt = performance.now();
+    lastSpeechMs = nowEvt;
+    stopStallWatchFor(NUDGE_IDLE_MS);
+    cancelPendingNudge();
+  } catch {}
   // Adopt current smoothness settings if provided
   const SC = (window.__TP_SCROLL || { DEAD: DEAD_BAND_PX, THROTTLE: CORRECTION_MIN_MS, FWD: MAX_FWD_STEP_PX, BACK: MAX_BACK_STEP_PX });
   DEAD_BAND_PX = SC.DEAD; CORRECTION_MIN_MS = SC.THROTTLE; MAX_FWD_STEP_PX = SC.FWD; MAX_BACK_STEP_PX = SC.BACK;
@@ -2953,8 +2960,7 @@ function advanceByTranscript(transcript, isFinal){
     const score = _sim(spoken, c.win);
     if (score > bestScore){ bestScore = score; bestIdx = c.i; }
   }
-  // Speech just happened — own the scroll briefly regardless of acceptance
-  try { lastSpeechMs = performance.now(); } catch {}
+  // Speech just happened — timestamps already refreshed at function entry
   if (bestScore < simThresh) {
     // Near-miss: if we’re close and moving forward, allow a tiny push rather than stalling
     if (inGrace && bestScore >= (simThresh - 0.06)) {
