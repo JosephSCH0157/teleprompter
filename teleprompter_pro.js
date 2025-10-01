@@ -970,7 +970,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       });
     };
   // Removed window-level scroll listener to avoid page scroll broadcasts
-    try { if (typeof viewer !== 'undefined' && viewer) viewer.addEventListener('scroll', onScroll, { passive: true }); } catch {}
+    try {
+      const sc = SCROLLER.get();
+      if (sc) sc.addEventListener('scroll', onScroll, { passive: true });
+    } catch {}
     // Also broadcast when auto-scroller nudges (optional custom event)
     try { document.addEventListener('anvil:autoscroll', onScroll); } catch {}
   }
