@@ -2882,6 +2882,40 @@ function advanceByTranscript(transcript, isFinal){
         delta
       });
     }
+
+    // --- anti-skip policy ---
+    try {
+      const PARA_JUMP_LIMIT = 1;      // never skip more than 1 paragraph in one commit
+      const BIG_JUMP_TOKENS = 40;     // or ~40 tokens at once
+      const STRONG_SCORE    = 0.98;   // only allow large jumps if score is ultra strong
+
+      const idxToPara = (idx) => {
+        if (!Array.isArray(paraIndex) || !paraIndex.length) return 0;
+        for (let i = 0; i < paraIndex.length; i++) {
+          const p = paraIndex[i];
+          if (idx >= p.start && idx <= p.end) return i;
+        }
+        return paraIndex.length - 1;
+      };
+      const targetPara = idxToPara(bestIdx);
+      const nowPara = idxToPara((lastFinalIndex >= 0 ? lastFinalIndex : currentIndex));
+      const bigTokenJump = (bestIdx - (lastFinalIndex || 0)) > BIG_JUMP_TOKENS;
+
+      if ((targetPara - nowPara) > PARA_JUMP_LIMIT || (bigTokenJump && bestScore < STRONG_SCORE)) {
+        if (!window.__pendingAdvance || window.__pendingAdvance.pid !== targetPara) {
+          window.__pendingAdvance = { pid: targetPara, hits: 1 };
+          // gentle nudge forward only
+          const nextPara = Math.min(nowPara + PARA_JUMP_LIMIT, targetPara);
+          const nextEl = paraIndex[nextPara]?.el;
+          if (nextEl) SCROLLER.toEl(nextEl, 0.40, 'soft-advance');
+          return; // don't commit yet
+        } else if (++window.__pendingAdvance.hits < 2) {
+          return; // require two consecutive confirmations
+        }
+      }
+      // ok to commit; clear pending and proceed
+      window.__pendingAdvance = null;
+    } catch {}
     if (delta > maxJump && bestScore < strictGate){
       currentIndex += maxJump;
     } else {
