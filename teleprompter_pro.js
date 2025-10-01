@@ -2858,11 +2858,11 @@ function advanceByTranscript(transcript, isFinal){
       });
     }
 
-    // --- anti-skip policy ---
+    // ---- anti-skip (drop right before committing the jump) ----
     try {
-      const PARA_JUMP_LIMIT = 1;      // never skip more than 1 paragraph in one commit
-      const BIG_JUMP_TOKENS = 40;     // or ~40 tokens at once
-      const STRONG_SCORE    = 0.98;   // only allow large jumps if score is ultra strong
+      const PARA_JUMP_LIMIT = 1;      // never commit >1 para ahead in one frame
+      const BIG_JUMP_TOKENS = 40;     // or ~40 tokens
+      const STRONG_SCORE     = 0.98;
 
       const idxToPara = (idx) => {
         if (!Array.isArray(paraIndex) || !paraIndex.length) return 0;
@@ -2872,23 +2872,26 @@ function advanceByTranscript(transcript, isFinal){
         }
         return paraIndex.length - 1;
       };
-      const targetPara = idxToPara(bestIdx);
-      const nowPara = idxToPara((lastFinalIndex >= 0 ? lastFinalIndex : currentIndex));
-      const bigTokenJump = (bestIdx - (lastFinalIndex || 0)) > BIG_JUMP_TOKENS;
 
-      if ((targetPara - nowPara) > PARA_JUMP_LIMIT || (bigTokenJump && bestScore < STRONG_SCORE)) {
-        if (!window.__pendingAdvance || window.__pendingAdvance.pid !== targetPara) {
-          window.__pendingAdvance = { pid: targetPara, hits: 1 };
-          // gentle nudge forward only
-          const nextPara = Math.min(nowPara + PARA_JUMP_LIMIT, targetPara);
-          const nextEl = paraIndex[nextPara]?.el;
+      const nowPara    = idxToPara(((lastFinalIndex >= 0 ? lastFinalIndex : currentIndex) || 0));
+      const targetPara = idxToPara(bestIdx);
+
+      if (targetPara - nowPara > PARA_JUMP_LIMIT ||
+          (bestIdx - (lastFinalIndex || 0) > BIG_JUMP_TOKENS && bestScore < STRONG_SCORE)) {
+        // require two consecutive confirmations
+        const pend = (window.__pendingAdvance && window.__pendingAdvance.pid === targetPara)
+                     ? ++window.__pendingAdvance.hits
+                     : (window.__pendingAdvance = { pid: targetPara, hits: 1 }).hits;
+
+        // soft nudge at most one paragraph while we wait
+        const nextPara = Math.min(nowPara + PARA_JUMP_LIMIT, targetPara);
+        const nextEl = paraIndex[nextPara]?.el;
+        if (pend < 2) {
           if (nextEl) SCROLLER.toEl(nextEl, 0.40, 'soft-advance');
-          return; // don't commit yet
-        } else if (++window.__pendingAdvance.hits < 2) {
-          return; // require two consecutive confirmations
+          return; // do not commit yet
         }
       }
-      // ok to commit; clear pending and proceed
+      // ok to commit
       window.__pendingAdvance = null;
     } catch {}
     if (delta > maxJump && bestScore < strictGate){
