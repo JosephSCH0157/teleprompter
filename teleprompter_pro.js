@@ -1848,8 +1848,12 @@ async function _initCore() {
   });
 
   // Optional debug helper for nudge decisions
-  function debugNudge(tag, reason){
-    try { if (window.__TP_DEV) console.log('[NUDGE]', tag, reason||''); } catch {}
+  function debugNudge(state, why){
+    try {
+      if (!(window.__TP_DEV)) return; // only when dev/debug is enabled
+      const leftMs = Math.max(0, (nudgeDisabledUntil||0) - performance.now());
+      console.debug('[Nudge]', state, 'reason=', why, { recognizerActive, leftMs });
+    } catch {}
   }
 
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
