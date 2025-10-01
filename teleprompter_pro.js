@@ -726,6 +726,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let __displaySyncDebounce = null;
   // Sticky anchor: remember last good (non-glitch) anchor we sent to the display
   let lastGoodAnchor = null;
+  // Most recent anchor actually sent to display (for Catch Up targeting)
+  let __lastSentAnchor = null;
 
   // --- central scroller + broadcast ---
   const SCROLLER = {
@@ -747,6 +749,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         try {
           const a = getAnchorAndFrac(document.getElementById('script'));
           if (a && displayWin && !displayWin.closed) {
+            __lastSentAnchor = a;
             displayWin.postMessage({ type:'display-scroll', ...a }, '*');
           }
           const ratio = max ? (top / max) : 0;
@@ -857,6 +860,29 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     } catch { return null; }
   }
 
+  // Best-guess for currently active/visible line element
+  function activeLineEl() {
+    try {
+      return (
+        currentEl ||
+        document.querySelector('p.current, p.active, .tp-line.current, .tp-line.active') ||
+        null
+      );
+    } catch { return null; }
+  }
+
+  // Map word-index to its paragraph index in paraIndex
+  function idxToPara(idx) {
+    try {
+      if (!Array.isArray(paraIndex) || !paraIndex.length) return 0;
+      for (let i = 0; i < paraIndex.length; i++) {
+        const p = paraIndex[i];
+        if (idx >= p.start && idx <= p.end) return i;
+      }
+      return paraIndex.length - 1;
+    } catch { return 0; }
+  }
+
   let __scrollSendRAF = 0;
   function sendScrollPosition(force = false) {
     try {
@@ -882,6 +908,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       if (!force && !atTop && isTopPid && nearZeroFrac) {
         // keep last valid anchor instead of snapping up
         if (lastGoodAnchor) {
+          __lastSentAnchor = lastGoodAnchor;
           displayWin.postMessage({ type: 'display-scroll', ...lastGoodAnchor }, '*');
           // Also send absolute scroll as a dumb-but-reliable fallback
           try {
@@ -895,6 +922,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       }
 
       lastGoodAnchor = anchor;
+      __lastSentAnchor = anchor;
       displayWin.postMessage({ type: 'display-scroll', ...anchor }, '*');
       // Always accompany with a raw absolute scroll packet for robustness
       try {
@@ -2029,17 +2057,22 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Reset Script -> clear draft, clear editor, reset view and sync
     resetScriptBtn?.addEventListener('click', resetScript);
 
-    // Catch Up button: prefer anchor-based jump with top reset defense
+    // Catch Up button: prefer last sent anchor-based jump
     if (catchUpBtn && !catchUpBtn.dataset.wired){
       catchUpBtn.dataset.wired = '1';
       catchUpBtn.addEventListener('click', () => {
         try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
         requestAnimationFrame(() => {
           try {
+            const elFromAnchor = __lastSentAnchor
+              ? document.querySelector(`[data-pid="${__lastSentAnchor.pid}"]`)
+              : null;
             const idx = (lastFinalIndex >= 0) ? lastFinalIndex : currentIndex;
-            const el  = (paraIndex.find(p => idx >= p.start && idx <= p.end)?.el)
+            const el  = elFromAnchor
+                     || activeLineEl()
+                     || (paraIndex[idxToPara(idx)]?.el)
                      || (__anchorObs?.mostVisibleEl?.() || null)
-                     || ((scriptEl || viewer)?.querySelector('p.active') || null)
+                     || ((scriptEl || viewer)?.querySelector('[data-pid]') || null)
                      || (Array.isArray(lineEls) ? (lineEls[0] || null) : null);
             if (el) SCROLLER.toEl(el, 0.40, 'catch-up');
           } catch {}
