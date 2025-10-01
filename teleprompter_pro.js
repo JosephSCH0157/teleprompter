@@ -1563,7 +1563,11 @@ async function _initCore() {
   const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
   const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-      try { scrollByPx(FALLBACK_STEP_PX); } catch { viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight); }
+      try { scrollByPx(FALLBACK_STEP_PX); } catch {
+        const sc = (__scrollHelpers?.getScroller?.() || viewer);
+        const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
+        if (typeof scrollToY === 'function') scrollToY(next); else sc.scrollTop = next;
+      }
       { try { broadcastScroll(); } catch {} }
       // also advance logical index to the paragraph under the marker
       try{
@@ -1575,7 +1579,7 @@ async function _initCore() {
         }
       }catch{}
       _lastAdvanceAt = now;
-      if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: viewer.scrollTop, idx: currentIndex });
+  if (typeof debug === 'function') { const sc = (__scrollHelpers?.getScroller?.() || viewer); debug({ tag:'fallback-nudge', top: sc.scrollTop, idx: currentIndex }); }
       // dead-man watchdog after logical index adjustment
       try { deadmanWatchdog(currentIndex); } catch {}
     }
@@ -2472,20 +2476,22 @@ function scrollToCurrentIndex(){
   // Highlight active paragraph (optional)
   paraIndex.forEach(pi => pi.el.classList.toggle('active', pi === p));
   // Center-ish scroll
-  const target = Math.max(0, p.el.offsetTop - (viewer.clientHeight * 0.40));
+  const sc = (__scrollHelpers?.getScroller?.() || viewer);
+  const target = Math.max(0, p.el.offsetTop - (sc.clientHeight * 0.40));
   // gentle ease towards target (use smoothness prefs if present)
   const S = (window.__TP_SCROLL || { EASE_STEP: 80, EASE_MIN: 10 });
-  const dy = target - viewer.scrollTop;
+  const dy = target - sc.scrollTop;
   if (Math.abs(dy) > S.EASE_MIN) {
-    viewer.scrollTop += Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
+    const next = sc.scrollTop + Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
+    if (typeof scrollToY === 'function') scrollToY(next); else sc.scrollTop = next;
   } else {
-    viewer.scrollTop = target;
+    if (typeof scrollToY === 'function') scrollToY(target); else sc.scrollTop = target;
   }
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
-  if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
+  if (typeof debug === 'function') debug({ tag:'scroll', top: sc.scrollTop });
   {
-    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const ratio = max ? (viewer.scrollTop / max) : 0;
+    const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+    const ratio = max ? (sc.scrollTop / max) : 0;
   try { broadcastScroll(); } catch {}
   }
 }
@@ -2809,11 +2815,12 @@ function advanceByTranscript(transcript, isFinal){
   currentEl = targetPara.el;
   try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
 
-  const maxTop     = Math.max(0, scriptEl.scrollHeight - viewer.clientHeight);
-  const markerTop  = Math.round(viewer.clientHeight * getMarkerPct());
+  const sc = (__scrollHelpers?.getScroller?.() || viewer);
+  const maxTop     = Math.max(0, scriptEl.scrollHeight - sc.clientHeight);
+  const markerTop  = Math.round(sc.clientHeight * getMarkerPct());
   const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
 
-  const err = desiredTop - viewer.scrollTop;
+  const err = desiredTop - sc.scrollTop;
   const tNow = performance.now();
   if (Math.abs(err) < DEAD_BAND_PX || (tNow - _lastCorrectionAt) < CORRECTION_MIN_MS) return;
 
@@ -2845,23 +2852,25 @@ function advanceByTranscript(transcript, isFinal){
         scrollToEl(currentEl, markerTop);
       } catch {
         let next;
-        if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
-        else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-        viewer.scrollTop = next;
+        if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
+        else         next = Math.max(sc.scrollTop - backStep, desiredTop);
+        if (typeof scrollToY === 'function') scrollToY(next);
+        else sc.scrollTop = next;
       }
     } else {
       // Gentle, clamped pixel scrolling
       let next;
-      if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
-      else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-      viewer.scrollTop = next;
+      if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
+      else         next = Math.max(sc.scrollTop - backStep, desiredTop);
+      if (typeof scrollToY === 'function') scrollToY(next);
+      else sc.scrollTop = next;
     }
   } else {
     // Controller stays in charge; do not adjust scroll here.
     // Speech still updates timestamps and downstream broadcasts below.
   }
   if (!catchupActive) {
-    if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
+    if (typeof debug === 'function') debug({ tag:'scroll', top: sc.scrollTop });
     try { broadcastScroll(); } catch {}
   }
   // Evaluate whether to run the gentle catch-up loop based on anchor position
