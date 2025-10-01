@@ -1199,9 +1199,18 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
 
   let __scrollSendRAF = 0;
+  const SEND_MIN_MS = 45; // coalesce display packets
+  let lastSendMs = 0;
+  let sendSeq = 0;
   function sendScrollPosition(force = false) {
     try {
       if (!displayWin || displayWin.closed) return;
+      // lightweight time-based throttle to avoid flooding display
+      let nowMs = 0;
+      try { nowMs = performance.now(); } catch { nowMs = Date.now(); }
+      if ((nowMs - lastSendMs) < SEND_MIN_MS) return;
+      lastSendMs = nowMs;
+      const seq = (++sendSeq);
       const anchor = getAnchorAndFrac();
       if (!anchor) return;
       // Ignore spurious resets unless we truly are at the top
@@ -1224,13 +1233,13 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         // keep last valid anchor instead of snapping up
         if (lastGoodAnchor) {
           __lastSentAnchor = lastGoodAnchor;
-          displayWin.postMessage({ type: 'display-scroll', ts: Date.now(), ...lastGoodAnchor }, '*');
+          displayWin.postMessage({ type: 'display-scroll', seq, ts: Date.now(), ...lastGoodAnchor }, '*');
           // Also send absolute scroll as a dumb-but-reliable fallback
           try {
             const max = Math.max(0, (sc?.scrollHeight || 0) - (sc?.clientHeight || 0));
             const top = Math.max(0, sc?.scrollTop || 0);
             const ratio = max > 0 ? (top / max) : 0;
-            displayWin.postMessage({ type: 'scroll', top, ratio }, '*');
+            displayWin.postMessage({ type: 'scroll', seq, top, ratio }, '*');
           } catch {}
         }
         return;
@@ -1238,13 +1247,13 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
   lastGoodAnchor = anchor;
   __lastSentAnchor = anchor;
-  displayWin.postMessage({ type: 'display-scroll', ts: Date.now(), ...anchor }, '*');
+  displayWin.postMessage({ type: 'display-scroll', seq, ts: Date.now(), ...anchor }, '*');
       // Always accompany with a raw absolute scroll packet for robustness
       try {
         const max = Math.max(0, (sc?.scrollHeight || 0) - (sc?.clientHeight || 0));
         const top = Math.max(0, sc?.scrollTop || 0);
         const ratio = max > 0 ? (top / max) : 0;
-        displayWin.postMessage({ type: 'scroll', top, ratio }, '*');
+        displayWin.postMessage({ type: 'scroll', seq, top, ratio }, '*');
       } catch {}
     } catch {}
   }

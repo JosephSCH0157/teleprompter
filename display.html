@@ -236,12 +236,18 @@
               camVid.addEventListener('playing', () => { if (camLoad) camLoad.style.display='none'; if (camWrap){ camWrap.removeAttribute('hidden'); camWrap.style.display='block'; } });
               camVid.addEventListener('emptied', () => { firstFrame=false; if (camLoad){ camLoad.textContent='Connecting camera…'; camLoad.style.display='flex'; } if (camWrap){ camWrap.style.display='none'; camWrap.setAttribute('hidden',''); } });
             }
+            let lastSeq = 0;
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // Answer handshake pings from opener to avoid race conditions
               if (d.type === 'hello') {
                 try { window.opener && window.opener.postMessage({ type:'display-ready' }, '*'); } catch {}
                 return;
+              }
+              // Drop out-of-order or stale packets (monotonic sequence)
+              if (typeof d.seq === 'number') {
+                if (d.seq < lastSeq) return;
+                lastSeq = d.seq;
               }
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
