@@ -735,7 +735,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Commit gating for index/paragraph jumps
   const IDX_SLOP        = 6;    // ignore tiny backward wiggles (<6 tokens)
   const HOP_LIMIT       = 25;   // never advance more than 25 tokens in one frame
-  const STRONG_SCORE_IDX = 0.985;
+  const STRONG_SCORE = 0.985; // "very confident" threshold for commit gating
   let   confirmIdx      = -1;
   let   confirmHits     = 0;
 
@@ -743,13 +743,13 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // small backward oscillations: require 2 hits
     if (bestIdx < currentIndex - IDX_SLOP) {
       if (confirmIdx === bestIdx) confirmHits++; else { confirmIdx = bestIdx; confirmHits = 1; }
-      if (confirmHits < 2 || bestScore < STRONG_SCORE_IDX) return false; // don't move yet
+  if (confirmHits < 2 || bestScore < STRONG_SCORE) return false; // don't move yet
     } else {
       confirmIdx = -1; confirmHits = 0; // reset confirmation on normal forward flow
     }
 
     // huge forward leap? clamp unless ultra-confident
-    if (bestIdx > currentIndex + HOP_LIMIT && bestScore < STRONG_SCORE_IDX) {
+  if (bestIdx > currentIndex + HOP_LIMIT && bestScore < STRONG_SCORE) {
       bestIdx = currentIndex + HOP_LIMIT;
     }
 
