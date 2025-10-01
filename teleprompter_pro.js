@@ -736,6 +736,13 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   const HOP_LIMIT_START = 6;          // extra conservative hop size during hold
   // One-time: inhibit stall/nudges until we get the first committed match
   let awaitingFirstCommit = false;
+  // Helpers to gate background motion while speech is active
+  function speechIsHot(){
+    try { return (performance.now() - (lastSpeechMs || 0)) < NUDGE_IDLE_MS; } catch { return false; }
+  }
+  function catchupControllerIsActive(){
+    try { return !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive()); } catch { return false; }
+  }
   // Commit gating for index/paragraph jumps (conservative start)
   const IDX_SLOP        = 10;    // ignore tiny backward wiggles (<10 tokens)
   const HOP_LIMIT       = 12;    // never advance more than 12 tokens in one frame
@@ -816,36 +823,39 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   function cancelPendingNudge(){ try { SCROLLER?.cancel?.('nudge'); } catch {} }
 
   // Temporarily suppress the stall watchdog for a duration
-  let __stallWatchBlockedUntil = 0;
+  let stallWatchPauseUntil = 0;
   function stopStallWatchFor(ms){
-    try { __stallWatchBlockedUntil = performance.now() + Math.max(0, Number(ms)||0); }
-    catch { __stallWatchBlockedUntil = Date.now() + Math.max(0, Number(ms)||0); }
+    try {
+      const until = performance.now() + Math.max(0, Number(ms) || 0);
+      stallWatchPauseUntil = Math.max(stallWatchPauseUntil, until);
+    } catch {
+      const until = Date.now() + Math.max(0, Number(ms) || 0);
+      stallWatchPauseUntil = Math.max(stallWatchPauseUntil, until);
+    }
   }
 
   // If indices advance but scroll doesn't move, periodically nudge to avoid stalls
   (function stallWatch() {
     const sc = SCROLLER.get();
     let lastIdx = -1, lastTop = -1;
+    function stallWatchTick(){
+      // Do not fight speech or auto controllers
+      const now = performance.now();
+      if (now < stallWatchPauseUntil) return;
+      if (awaitingFirstCommit) return;
+      if (speechIsHot()) return;
+      if (typeof autoTimer !== 'undefined' && autoTimer) return;
+      if (catchupControllerIsActive()) return;
 
-    setInterval(() => {
-      try {
-        // Do not fight speech or auto controllers
-    const now = performance.now();
-    if (now < __stallWatchBlockedUntil) return;
-    if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
-  if (awaitingFirstCommit) return;
-        if (typeof autoTimer !== 'undefined' && autoTimer) return;
-        if (__scrollCtl?.isActive && __scrollCtl.isActive()) return;
-
-        const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
-        const top = sc.scrollTop | 0;
-        if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
-          SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20), 'nudge');
-          try { console.warn('[TP] Stall nudge', { idx, top }); } catch {}
-        }
-        lastIdx = idx; lastTop = top;
-      } catch {}
-    }, 400);
+      const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
+      const top = sc.scrollTop | 0;
+      if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
+        SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20), 'nudge');
+        try { console.warn('[TP] Stall nudge', { idx, top }); } catch {}
+      }
+      lastIdx = idx; lastTop = top;
+    }
+    setInterval(() => { try { stallWatchTick(); } catch {} }, 400);
   })();
   function collectDisplayState(reason = 'manual') {
     try {
@@ -1719,10 +1729,10 @@ async function _initCore() {
     try {
       if (!recActive || !viewer) return; // only when speech sync is active
       if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
+      if (awaitingFirstCommit) return;         // don’t nudge before first commit
+      if (speechIsHot()) return;               // hard mute while speech is hot
+      if (catchupControllerIsActive()) return; // let controller drive
       const now = performance.now();
-  // Speech activity owns the scroll; skip fallback nudges while speech is active or before first commit
-  if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
-  if (awaitingFirstCommit) return;
       const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
       const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
       if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
