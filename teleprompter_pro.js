@@ -747,20 +747,20 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   const IDX_SLOP        = 10;    // ignore tiny backward wiggles (<10 tokens)
   const HOP_LIMIT       = 12;    // never advance more than 12 tokens in one frame
   const STRONG_SCORE    = 0.99;  // very confident threshold for commit gating
-  let   confirmIdx      = -1;
-  let   confirmHits     = 0;
+  // Two-tap confirmation index for small backward steps
+  let backSeenIdx = -1;
 
   function commitBestIndex(bestIdx, bestScore) {
     const now = performance.now();
-    // small backward oscillations: require 2 hits
-    if (bestIdx < currentIndex - IDX_SLOP) {
-      if (confirmIdx === bestIdx) confirmHits++; else { confirmIdx = bestIdx; confirmHits = 1; }
-  if (confirmHits < 2 || bestScore < STRONG_SCORE) return false; // don't move yet
+    // 2-tap confirmation for small backward steps
+    if (bestIdx < currentIndex) {
+      if (backSeenIdx !== bestIdx) { backSeenIdx = bestIdx; return false; }
+      backSeenIdx = -1; // confirmed
     } else {
-      confirmIdx = -1; confirmHits = 0; // reset confirmation on normal forward flow
+      backSeenIdx = -1;
     }
 
-    // huge forward leap? clamp unless ultra-confident
+    // Clamp forward hops; extra strict during start hold
     const hopLimit = (now < speechStartHoldUntil) ? HOP_LIMIT_START : HOP_LIMIT;
     if (bestIdx > currentIndex + hopLimit && bestScore < STRONG_SCORE) {
       bestIdx = currentIndex + hopLimit;
