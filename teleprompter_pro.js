@@ -2598,7 +2598,7 @@ function scrollToCurrentIndex(){
   // Highlight active paragraph (optional)
   paraIndex.forEach(pi => pi.el.classList.toggle('active', pi === p));
   // Center-ish scroll
-  const sc = (__scrollHelpers?.getScroller?.() || viewer);
+  const sc = SCROLLER.get();
   const target = Math.max(0, p.el.offsetTop - (sc.clientHeight * 0.40));
   // gentle ease towards target (use smoothness prefs if present)
   const S = (window.__TP_SCROLL || { EASE_STEP: 80, EASE_MIN: 10 });
@@ -3005,25 +3005,8 @@ function advanceByTranscript(transcript, isFinal){
   const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
-    // When controller is idle or speech is confident: snap only for forward moves; otherwise be gentle
-    if (shouldSnapToEl) {
-      try {
-        scrollToEl(currentEl, markerTop);
-      } catch {
-        let next;
-  if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
-  else         next = Math.max(sc.scrollTop - backStep, desiredTop);
-  if (typeof scrollToY === 'function') scrollToY(next);
-  else SCROLLER.toAbs(next, 'speech-snap-fallback');
-      }
-    } else {
-      // Gentle, clamped pixel scrolling
-      let next;
-  if (err > 0) next = Math.min(sc.scrollTop + fwdStep, desiredTop);
-  else         next = Math.max(sc.scrollTop - backStep, desiredTop);
-  if (typeof scrollToY === 'function') scrollToY(next);
-  else SCROLLER.toAbs(next, 'speech-gentle');
-    }
+    // Force scrolling via centralized scroller to align anchor and raw scroll broadcasts
+    try { SCROLLER.toEl(currentEl, 0.40, 'speech-sync'); } catch {}
   } else {
     // Controller stays in charge; do not adjust scroll here.
     // Speech still updates timestamps and downstream broadcasts below.
@@ -3034,12 +3017,12 @@ function advanceByTranscript(transcript, isFinal){
   }
   // Evaluate whether to run the gentle catch-up loop based on anchor position
   try {
-    const vRect = viewer.getBoundingClientRect();
+    const vRect = SCROLLER.get().getBoundingClientRect();
     // Prefer the most visible element if available; else current paragraph
   const anchorEl = (__anchorObs?.mostVisibleEl?.() || null) || targetPara.el;
     const pRect = anchorEl.getBoundingClientRect();
     const anchorY = pRect.top - vRect.top; // anchor relative to viewer
-    maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+  maybeCatchupByAnchor(anchorY, SCROLLER.get().clientHeight);
   } catch {}
   // mark progress for stall-recovery
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
