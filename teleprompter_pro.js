@@ -1665,35 +1665,41 @@ async function _initCore() {
   });
 
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
-  setInterval(() => {
-    if (!recActive || !viewer) return; // only when speech sync is active
-    if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
-    const now = performance.now();
-  const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
-  const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
-    if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-      try { scrollByPx(FALLBACK_STEP_PX); } catch {
-        const sc = (__scrollHelpers?.getScroller?.() || viewer);
-        const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
-        if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toAbs(next, 'fallback-nudge');
-      }
-      { try { broadcastScroll(); } catch {} }
-      // also advance logical index to the paragraph under the marker
-      try{
-        if (Array.isArray(paraIndex) && paraIndex.length){
-          const sc2 = SCROLLER.get();
-          const markerY = sc2.scrollTop + (sc2.clientHeight * getMarkerPct());
-          let target = paraIndex[0];
-          for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
-          if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
+  const NUDGE_IDLE_MS = 900; // only nudge if we've been quiet for ~1s
+  function maybeFallbackNudge(){
+    try {
+      if (!recActive || !viewer) return; // only when speech sync is active
+      if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
+      const now = performance.now();
+      // Speech activity owns the scroll; skip fallback nudges while speech is active
+      if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+      const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
+      const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
+      if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
+        try { scrollByPx(FALLBACK_STEP_PX); } catch {
+          const sc = (__scrollHelpers?.getScroller?.() || viewer);
+          const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
+          if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toAbs(next, 'fallback-nudge');
         }
-      }catch{}
-      _lastAdvanceAt = now;
-  if (typeof debug === 'function') { const sc = (__scrollHelpers?.getScroller?.() || viewer); debug({ tag:'fallback-nudge', top: sc.scrollTop, idx: currentIndex }); }
-      // dead-man watchdog after logical index adjustment
-      try { deadmanWatchdog(currentIndex); } catch {}
-    }
-  }, 250);
+        { try { broadcastScroll(); } catch {} }
+        // also advance logical index to the paragraph under the marker
+        try{
+          if (Array.isArray(paraIndex) && paraIndex.length){
+            const sc2 = SCROLLER.get();
+            const markerY = sc2.scrollTop + (sc2.clientHeight * getMarkerPct());
+            let target = paraIndex[0];
+            for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
+            if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
+          }
+        }catch{}
+        _lastAdvanceAt = now;
+        if (typeof debug === 'function') { const sc = (__scrollHelpers?.getScroller?.() || viewer); debug({ tag:'fallback-nudge', top: sc.scrollTop, idx: currentIndex }); }
+        // dead-man watchdog after logical index adjustment
+        try { deadmanWatchdog(currentIndex); } catch {}
+      }
+    } catch {}
+  }
+  setInterval(maybeFallbackNudge, 250);
 
   // After wiring open/close for the overlay:
   (window.__help?.ensureHelpUI || ensureHelpUI)();  // <- renames “Shortcuts” to “Help” and injects Normalize + Validate
