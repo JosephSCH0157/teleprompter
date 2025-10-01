@@ -735,10 +735,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let speechStartHoldUntil = 0;  // ms timestamp
   const SPEECH_HOLD_MS = 600;    // short grace window at start
   const HOP_LIMIT_START = 6;     // extra conservative hop size during hold
-  // Commit gating for index/paragraph jumps
-  const IDX_SLOP        = 6;    // ignore tiny backward wiggles (<6 tokens)
-  const HOP_LIMIT       = 25;   // never advance more than 25 tokens in one frame
-  const STRONG_SCORE = 0.985; // "very confident" threshold for commit gating
+  // Commit gating for index/paragraph jumps (conservative start)
+  const IDX_SLOP        = 10;    // ignore tiny backward wiggles (<10 tokens)
+  const HOP_LIMIT       = 12;    // never advance more than 12 tokens in one frame
+  const STRONG_SCORE    = 0.99;  // very confident threshold for commit gating
   let   confirmIdx      = -1;
   let   confirmHits     = 0;
 
