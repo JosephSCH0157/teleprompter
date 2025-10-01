@@ -760,6 +760,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     }
     try { stopStallWatchFor(NUDGE_IDLE_MS); } catch {}
     try { cancelPendingNudge && cancelPendingNudge(); } catch {}
+    try { GateHUD && GateHUD.poke && GateHUD.poke(); } catch {}
   }
   function speechGateActive(){
     try { return recognizerActive || (performance.now() < nudgeDisabledUntil); }
@@ -824,6 +825,43 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       } catch {}
     }
     return { set };
+  })();
+
+  // Debug HUD: shows when the unified speech gate is active and remaining countdown
+  const GateHUD = (() => {
+    let el, raf = 0, lastTxt = '';
+    function ensure(){
+      if (el) return el;
+      try {
+        el = document.createElement('div');
+        Object.assign(el.style, {
+          position:'fixed', left:'8px', bottom:'8px', zIndex:99999,
+          padding:'4px 8px', font:'12px/16px system-ui, sans-serif',
+          background:'rgba(20,20,20,.6)', color:'#fff', borderRadius:'6px',
+          display:'none'
+        });
+        el.textContent = 'gate: idle';
+        (document.body || document.documentElement).appendChild(el);
+      } catch {}
+      return el;
+    }
+    function render(){
+      try {
+        const node = ensure(); if (!node) return;
+        const now = performance.now();
+        const remainMs = Math.max(0, (nudgeDisabledUntil||0) - now);
+        const active = !!recognizerActive || remainMs > 0;
+        if (!active) { node.style.display='none'; lastTxt=''; return; }
+        const secs = remainMs > 0 ? (remainMs/1000).toFixed(1) : '';
+        const txt = recognizerActive ? `gate: ON${secs?` ${secs}s`:''}` : `gate: ${secs}s`;
+        if (txt !== lastTxt) { node.textContent = txt; lastTxt = txt; }
+        node.style.display = 'block';
+      } catch {}
+    }
+    function tick(){ render(); raf = requestAnimationFrame(tick); }
+    function start(){ if (!raf) raf = requestAnimationFrame(tick); }
+    function poke(){ render(); }
+    return { start, poke };
   })();
 
   const SCROLL_PRIORITY = { speech: 3, catchup: 2, nudge: 1, other: 0 };
@@ -2671,6 +2709,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     }
   } catch {}
   console.log('[TP-Pro] _initCore end');
+  try { GateHUD && GateHUD.start && GateHUD.start(); } catch {}
 
   /* ──────────────────────────────────────────────────────────────
    * Roles + Legend
