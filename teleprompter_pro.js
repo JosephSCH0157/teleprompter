@@ -729,46 +729,55 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Most recent anchor actually sent to display (for Catch Up targeting)
   let __lastSentAnchor = null;
 
-  // --- central scroller + broadcast ---
-  const SCROLLER = {
-    get() {
-      return document.getElementById('viewer') || document.scrollingElement;
-    },
-    maxTop(el) {
-      return Math.max(0, el.scrollHeight - el.clientHeight);
-    },
-    toAbs(y, reason = 'unknown') {
-      try {
+  // ---- central scroller + broadcast (drop-in) ----
+  const SCROLLER = (() => {
+    let node = null;
+
+    function findScroller() {
+      const script = document.getElementById('script');
+      const candidates = [
+        document.getElementById('viewer'),
+        script?.parentElement,
+        ...Array.from(document.querySelectorAll('main,#wrap,#content,#container,.viewer,.scroll,.scroller'))
+                 .filter(el => script && el.contains(script)),
+        document.scrollingElement
+      ].filter(Boolean);
+
+      for (const el of candidates) {
+        const cs = getComputedStyle(el);
+        const canScroll = /(auto|scroll)/.test(cs.overflowY);
+        if (canScroll || (el.scrollHeight - el.clientHeight) > 2) return el;
+      }
+      // last resort: make #viewer the scroller
+      const v = document.getElementById('viewer') || document.body;
+      try { v.style.overflowY = 'auto'; v.style.height = '100vh'; } catch {}
+      return v;
+    }
+
+    return {
+      get() { return node || (node = findScroller()); },
+      maxTop(el) { return Math.max(0, el.scrollHeight - el.clientHeight); },
+      toAbs(y, reason = 'unknown') {
         const sc = this.get();
-        if (!sc) return;
         const max = this.maxTop(sc);
         const top = Math.max(0, Math.min(y, max));
-        sc.scrollTop = top; // always the viewer, never window
+        sc.scrollTop = top;
 
-        // keep display in sync (anchor + absolute)
-        try {
-          const a = getAnchorAndFrac(document.getElementById('script'));
-          if (a && displayWin && !displayWin.closed) {
-            __lastSentAnchor = a;
-            displayWin.postMessage({ type:'display-scroll', ...a }, '*');
-          }
-          const ratio = max ? (top / max) : 0;
-          if (displayWin && !displayWin.closed) {
-            displayWin.postMessage({ type:'scroll', top, ratio }, '*');
-          }
-        } catch {}
-      } catch {}
-    },
-    toEl(el, markerPct = 0.40, reason = 'toEl') {
-      try {
+        const a = getAnchorAndFrac(document.getElementById('script'));
+        if (a) { try { __lastSentAnchor = a; } catch {} try { displayWin?.postMessage({ type: 'display-scroll', ...a }, '*'); } catch {} }
+
+        const ratio = max ? (top / max) : 0;
+        try { displayWin?.postMessage({ type:'scroll', top, ratio }, '*'); } catch {}
+        // console.debug('[SCROLLER]', reason, {top, max});
+      },
+      toEl(el, markerPct = 0.40, reason = 'toEl') {
         if (!el) return;
         const sc = this.get();
-        if (!sc) return;
         const y  = el.offsetTop - Math.round(sc.clientHeight * markerPct);
         this.toAbs(y, reason);
-      } catch {}
-    }
-  };
+      }
+    };
+  })();
 
   // If indices advance but scroll doesn't move, periodically nudge to avoid stalls
   (function stallWatch() {
