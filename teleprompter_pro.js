@@ -762,9 +762,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     return true;
   }
 
-  // ---- central scroller (rAF-batched writes; viewer-only) ----
+  // ---- central scroller (rAF-batched writes; viewer-only; priority-aware) ----
+  const SCROLL_PRIORITY = { speech: 3, catchup: 2, nudge: 1, other: 0 };
   const SCROLLER = (() => {
-    let el, pendingTop = null, raf = 0;
+    let el, pending = null, raf = 0;
 
     function get() {
       if (el) return el;
@@ -776,21 +777,28 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       try { el.style.overflowY ||= 'auto'; el.style.height ||= '100vh'; } catch {}
       return el;
     }
-    function flush() {
-      raf = 0;
-      if (pendingTop == null) return;
-      const sc = get();
-      const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-      sc.scrollTop = Math.max(0, Math.min(pendingTop, max));
-      pendingTop = null;
+
+    function schedule(top, who) {
+      const pri = (SCROLL_PRIORITY && (SCROLL_PRIORITY[who] ?? 0)) || 0;
+      if (!pending || pri > pending.pri) pending = { top, who, pri };
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (!pending) return;
+        const sc = get();
+        const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+        const topClamped = Math.max(0, Math.min(pending.top, max));
+        sc.scrollTop = topClamped;
+        pending = null;
+      });
     }
+
     return {
-      toTop(y) { pendingTop = y; if (!raf) raf = requestAnimationFrame(flush); },
-      toEl(node, markerPct = 0.40) {
+      toTop(y, who = 'other') { schedule(y, who); },
+      toEl(node, markerPct = 0.40, who = 'other') {
         if (!node) return;
         const sc = get();
         const y = node.offsetTop - Math.round(sc.clientHeight * markerPct);
-        this.toTop(y);
+        schedule(y, who);
       },
       el: () => get(),
       get
@@ -813,7 +821,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
         const top = sc.scrollTop | 0;
         if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
-          SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20));
+          SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20), 'nudge');
           try { console.warn('[TP] Stall nudge', { idx, top }); } catch {}
         }
         lastIdx = idx; lastTop = top;
@@ -1701,7 +1709,7 @@ async function _initCore() {
         try { scrollByPx(FALLBACK_STEP_PX); } catch {
           const sc = (__scrollHelpers?.getScroller?.() || viewer);
           const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
-    if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next);
+  if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next, 'nudge');
         }
         { try { broadcastScroll(); } catch {} }
         // also advance logical index to the paragraph under the marker
@@ -2134,7 +2142,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
                      || (__anchorObs?.mostVisibleEl?.() || null)
                      || ((scriptEl || viewer)?.querySelector('[data-pid]') || null)
                      || (Array.isArray(lineEls) ? (lineEls[0] || null) : null);
-            if (el) SCROLLER.toEl(el, 0.40);
+            if (el) SCROLLER.toEl(el, 0.40, 'catchup');
           } catch {}
         });
       });
@@ -2636,9 +2644,9 @@ function scrollToCurrentIndex(){
   const dy = target - sc.scrollTop;
   if (Math.abs(dy) > S.EASE_MIN) {
     const next = sc.scrollTop + Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
-  if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next);
+  if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next, 'nudge');
   } else {
-  if (typeof scrollToY === 'function') scrollToY(target); else SCROLLER.toTop(target);
+  if (typeof scrollToY === 'function') scrollToY(target); else SCROLLER.toTop(target, 'nudge');
   }
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   if (typeof debug === 'function') debug({ tag:'scroll', top: sc.scrollTop });
@@ -2751,7 +2759,7 @@ function tryStartCatchup(){
   };
   const scrollBy = (dy) => {
     try {
-  { const sc = SCROLLER.get(); SCROLLER.toTop(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight))); }
+  { const sc = SCROLLER.get(); SCROLLER.toTop(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight)), 'other'); }
       try { broadcastScroll(); } catch {}
     } catch {}
   };
@@ -2983,7 +2991,7 @@ function advanceByTranscript(transcript, isFinal){
         const nextPara = Math.min(nowPara + PARA_JUMP_LIMIT, targetPara);
         const nextEl = paraIndex[nextPara]?.el;
         if (pend < 2) {
-          if (nextEl) SCROLLER.toEl(nextEl, 0.40);
+          if (nextEl) SCROLLER.toEl(nextEl, 0.40, 'nudge');
           return; // do not commit yet
         }
       }
@@ -3044,7 +3052,7 @@ function advanceByTranscript(transcript, isFinal){
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
     // Force scrolling via centralized scroller to align anchor and raw scroll broadcasts
-  try { SCROLLER.toEl(currentEl, 0.40); } catch {}
+  try { SCROLLER.toEl(currentEl, 0.40, 'speech'); } catch {}
   } else {
     // Controller stays in charge; do not adjust scroll here.
     // Speech still updates timestamps and downstream broadcasts below.
@@ -3441,7 +3449,7 @@ function openDisplay(){
       if (typeof scrollToY === 'function') {
         scrollToY(target);
       } else {
-  SCROLLER.toTop(target);
+  SCROLLER.toTop(target, 'other');
       }
       return true;
     } catch { return false; }
@@ -3460,7 +3468,7 @@ function openDisplay(){
   function forceTopReset(reason){
     try { console.debug('[TP] forceTopReset', reason); } catch {}
     try {
-  SCROLLER.toTop(0);
+  SCROLLER.toTop(0, 'other');
     } catch {}
   }
 
@@ -3548,7 +3556,7 @@ function startAutoScroll(){
     try { scrollByPx(pxPerSec / 60); } catch {
       try {
         const sc = SCROLLER.get();
-  SCROLLER.toTop(sc.scrollTop + (pxPerSec / 60));
+  SCROLLER.toTop(sc.scrollTop + (pxPerSec / 60), 'other');
       } catch {}
     }
     {
