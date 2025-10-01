@@ -1003,21 +1003,34 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       get
     };
   })();
+  // Attempt an early refresh once scroller is known
+  try { refreshLineMetrics(); } catch {}
 
   // --- line-height metrics and clamped element scroll (anti-breathing jitter) ---
-  let lineHeightPx = 24;           // updated from computed styles
-  let MIN_PIXEL_MOVE = Math.round(lineHeightPx * 0.6);
+  let lineHeightPx = 20;           // will be updated from computed styles
+  // permissive threshold: ~25% of line height, with a 3px floor
+  let MIN_PIXEL_MOVE = Math.max(3, Math.round(lineHeightPx * 0.25));
   function refreshLineMetrics(){
     try {
       const root = document.getElementById('script');
-      if (!root) return;
-      // Prefer an actual content line
-      const p = root.querySelector('.tp-line, .script-line, .line, .seg, p');
-      if (!p) return;
-      const lh = parseFloat(getComputedStyle(p).lineHeight) || lineHeightPx;
+      // Prefer an actual content line if present; else fall back to scroller element
+      const probe = (root && (root.querySelector('.tp-line, .script-line, .line, .seg, p') || null))
+        || SCROLLER.get();
+      if (!probe) return;
+      const cs = getComputedStyle(probe);
+      let lhStr = cs?.lineHeight;
+      let lhNum;
+      if (!lhStr || lhStr === 'normal') {
+        const fs = parseFloat(cs?.fontSize) || 16;
+        lhNum = fs * 1.35; // typical default for 'normal'
+      } else {
+        lhNum = parseFloat(lhStr);
+      }
+      const lh = Math.max(14, Math.round(lhNum || lineHeightPx));
       if (lh && isFinite(lh)) {
         lineHeightPx = lh;
-        MIN_PIXEL_MOVE = Math.max(1, Math.round(lineHeightPx * 0.6));
+        // smaller motion threshold to prevent over-filtering
+        MIN_PIXEL_MOVE = Math.max(3, Math.round(lineHeightPx * 0.25));
       }
     } catch {}
   }
