@@ -110,7 +110,7 @@ select { font-size: 14px; }
 
     .viewer{position:relative;overflow:auto;min-height:0}
     /* prevent wheel/touch from bubbling and nudging the page */
-    #viewer{ overscroll-behavior: contain; }
+    #viewer{ height:100vh; overflow:auto; overscroll-behavior:contain; }
     .script{max-width:900px;margin:0 auto;padding:40px}
     .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
     .u{ text-decoration: underline; }
