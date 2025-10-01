@@ -728,8 +728,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let lastGoodAnchor = null;
   // Most recent anchor actually sent to display (for Catch Up targeting)
   let __lastSentAnchor = null;
-  // Speech activity + scroll scheduling
+  // Speech activity + scroll batching
   let lastSpeechMs = 0;
+  const NUDGE_IDLE_MS = 900; // don't nudge for ~1s after any speech
   let scrollRAF = 0;
   // Commit gating for index/paragraph jumps
   const IDX_SLOP        = 6;    // ignore tiny backward wiggles (<6 tokens)
@@ -1679,7 +1680,6 @@ async function _initCore() {
   });
 
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
-  const NUDGE_IDLE_MS = 900; // only nudge if we've been quiet for ~1s
   function maybeFallbackNudge(){
     try {
       if (!recActive || !viewer) return; // only when speech sync is active
