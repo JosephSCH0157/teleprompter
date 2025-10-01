@@ -2917,6 +2917,8 @@ function advanceByTranscript(transcript, isFinal){
     const score = _sim(spoken, c.win);
     if (score > bestScore){ bestScore = score; bestIdx = c.i; }
   }
+  // Speech just happened — own the scroll briefly regardless of acceptance
+  try { lastSpeechMs = performance.now(); } catch {}
   if (bestScore < simThresh) {
     // Near-miss: if we’re close and moving forward, allow a tiny push rather than stalling
     if (inGrace && bestScore >= (simThresh - 0.06)) {
@@ -2943,9 +2945,6 @@ function advanceByTranscript(transcript, isFinal){
         delta
       });
     }
-
-    // Mark recent speech activity for scheduling/watchdogs
-    try { lastSpeechMs = performance.now(); } catch {}
 
     // ---- anti-skip (drop right before committing the jump) ----
     try {
