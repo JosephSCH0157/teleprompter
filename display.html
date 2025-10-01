@@ -80,7 +80,7 @@
             let followMode = true;         // master toggle
             let followPaused = false;      // transient pause after user scrolls
             let followResumeTimer = null;  // timer to auto-resume
-            let lastAnchor = null;         // remember last pid/frac
+            let lastAnchor = null;         // remember last pid/frac (+ ts)
             // Configurable marker line percentage (defaults to ~40% to match main)
             let markerLinePct = 0.40;
             const updateMarker = () => {
@@ -220,20 +220,17 @@
               }
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
-                lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct };
+                lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct, ts: Date.now() };
                 scrollToAnchor(d.pid, d.frac, d.markerPct);
-                return;
-              }
-              // Fallback: accept absolute scroll from controller
-              if (d.type === 'scroll') {
+              } else if (d.type === 'scroll') {
+                // Only apply raw if no good anchor was just received (within ~500ms)
                 try {
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  const y = (typeof d.top === 'number' && isFinite(d.top)) ? d.top
-                          : (typeof d.ratio === 'number' && isFinite(d.ratio)) ? (d.ratio * max)
-                          : 0;
-                  wrap.scrollTop = Math.max(0, Math.min(y, max));
+                  if (!lastAnchor || (Date.now() - (lastAnchor.ts || 0) > 500)) {
+                    const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                    const y = Math.round((Number(d.ratio) || 0) * max);
+                    wrap.scrollTop = Math.max(0, Math.min(y, max));
+                  }
                 } catch {}
-                return;
               }
 
               // Lightweight content/theme sync from controller
