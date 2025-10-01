@@ -64,6 +64,7 @@
           <script>
             const scriptEl = document.getElementById('script');
             const wrap = document.getElementById('wrap');
+            const markerEl = document.querySelector('.marker');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
             const followBtn = document.getElementById('followToggle');
@@ -71,6 +72,17 @@
             let followPaused = false;      // transient pause after user scrolls
             let followResumeTimer = null;  // timer to auto-resume
             let lastAnchor = null;         // remember last pid/frac
+            // Configurable marker line percentage (defaults to ~40% to match main)
+            let markerLinePct = 0.40;
+            const updateMarker = () => {
+              try {
+                if (!markerEl) return;
+                const pct = Math.max(0, Math.min(1, Number(markerLinePct)||0.40));
+                markerEl.style.top = (pct * 100) + '%';
+              } catch {}
+            };
+            // Initialize marker position once
+            try { updateMarker(); } catch {}
             const updateFollowLabel = () => { if (!followBtn) return; followBtn.textContent = followMode ? (followPaused ? 'Follow: Paused' : 'Follow: On') : 'Follow: Off'; };
             if (followBtn) followBtn.onclick = () => { followMode = !followMode; if (followMode && lastAnchor) { // resume and snap to last known
                   try { requestAnimationFrame(() => scrollToAnchor(lastAnchor.pid, lastAnchor.frac)); } catch {}
@@ -195,7 +207,7 @@
                   const hostRect = wrap.getBoundingClientRect();
                   const elRect = el.getBoundingClientRect();
                   const offsetInWrap = (elRect.top - hostRect.top) + wrap.scrollTop;
-                  const mp = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : 0.36;
+                  const mp = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : (Math.max(0, Math.min(1, Number(markerLinePct)||0.40)));
                   const target = offsetInWrap + (el.offsetHeight * (Number(frac)||0)) - (wrap.clientHeight * mp);
                   const y = Math.max(0, Math.min(target, Math.max(0, wrap.scrollHeight - wrap.clientHeight)));
                   wrap.scrollTo({ top: y, behavior: 'auto' });
@@ -204,32 +216,32 @@
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
                 lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct };
+                // Update marker position if provided
+                if (typeof d.markerPct === 'number' && isFinite(d.markerPct)) {
+                  markerLinePct = Math.max(0, Math.min(1, d.markerPct));
+                  try { requestAnimationFrame(updateMarker); } catch {}
+                }
                 if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct);
                 return;
               }
 
-              // Legacy fallback: accept raw pixel/ratio scrolls
+              // Legacy/raw fallback: accept raw absolute top and optional marker ratio
               if (d.type === 'scroll') {
                 try {
+                  // Update marker line if provided
+                  if (typeof d.ratio === 'number' && isFinite(d.ratio)) {
+                    markerLinePct = Math.max(0, Math.min(1, d.ratio));
+                    try { requestAnimationFrame(updateMarker); } catch {}
+                  }
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  const y = (typeof d.top === 'number' && isFinite(d.top))
-                              ? d.top
-                              : (typeof d.ratio === 'number' ? Math.max(0, Math.min(1, d.ratio)) * max : wrap.scrollTop);
-                  wrap.scrollTo({ top: Math.max(0, Math.min(y, max)), behavior: 'auto' });
+                  let y = wrap.scrollTop;
+                  if (typeof d.top === 'number' && isFinite(d.top)) y = d.top;
+                  else if (typeof d.ratio === 'number' && isFinite(d.ratio)) y = Math.max(0, Math.min(1, d.ratio)) * max;
+                  wrap.scrollTop = Math.max(0, Math.min(y, max));
                 } catch {}
                 return;
               }
 
-              // Back-compat: follow legacy scroll payloads { type:'scroll', top, ratio }
-              if (d.type === 'scroll') {
-                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                let y = 0;
-                if (typeof d.top === 'number' && isFinite(d.top)) y = d.top;
-                else if (typeof d.ratio === 'number' && isFinite(d.ratio)) y = d.ratio * max;
-                y = Math.max(0, Math.min(y, max));
-                wrap.scrollTo({ top: y, behavior: 'auto' });
-                return;
-              }
               // Lightweight content/theme sync from controller
               if (d.type === 'display-update') {
                 const scriptHost = document.getElementById('script') || document.getElementById('displayScript');
