@@ -728,13 +728,14 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let lastGoodAnchor = null;
   // Most recent anchor actually sent to display (for Catch Up targeting)
   let __lastSentAnchor = null;
-  // Speech activity + scroll batching
-  let lastSpeechMs = 0;
-  const NUDGE_IDLE_MS = 900; // don't nudge for ~1s after any speech
-  // Short grace window after speech session starts: keep hops extra conservative
-  let speechStartHoldUntil = 0;  // ms timestamp
-  const SPEECH_HOLD_MS = 600;    // short grace window at start
-  const HOP_LIMIT_START = 6;     // extra conservative hop size during hold
+  // --- Speech activity windows ---
+  let speechStartHoldUntil = 0;       // ms wallclock
+  let lastSpeechMs = 0;               // update on every interim + final
+  const SPEECH_HOLD_MS = 600;         // extra conservative window at start
+  const NUDGE_IDLE_MS  = 1200;        // mute nudges this long after any speech
+  const HOP_LIMIT_START = 6;          // extra conservative hop size during hold
+  // One-time: inhibit stall/nudges until we get the first committed match
+  let awaitingFirstCommit = false;
   // Commit gating for index/paragraph jumps (conservative start)
   const IDX_SLOP        = 10;    // ignore tiny backward wiggles (<10 tokens)
   const HOP_LIMIT       = 12;    // never advance more than 12 tokens in one frame
@@ -814,7 +815,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       try {
         // Do not fight speech or auto controllers
         const now = performance.now();
-        if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+  if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+  if (awaitingFirstCommit) return;
         if (typeof autoTimer !== 'undefined' && autoTimer) return;
         if (__scrollCtl?.isActive && __scrollCtl.isActive()) return;
 
@@ -1701,8 +1703,9 @@ async function _initCore() {
       if (!recActive || !viewer) return; // only when speech sync is active
       if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
       const now = performance.now();
-      // Speech activity owns the scroll; skip fallback nudges while speech is active
-      if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+  // Speech activity owns the scroll; skip fallback nudges while speech is active or before first commit
+  if ((now - (lastSpeechMs || 0)) < NUDGE_IDLE_MS) return;
+  if (awaitingFirstCommit) return;
       const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
       const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
       if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
@@ -3008,6 +3011,7 @@ function advanceByTranscript(transcript, isFinal){
       // Defer committing and scrolling until confirmation criteria are met
       return;
     }
+    if (awaitingFirstCommit) { try { awaitingFirstCommit = false; } catch {} }
     if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
   }
 
@@ -4103,6 +4107,7 @@ function initAfterBoot(){
       const now = performance.now();
       lastSpeechMs = now;
       speechStartHoldUntil = now + SPEECH_HOLD_MS;
+      awaitingFirstCommit = true;
     } catch {}
 
     recog = new SR();
