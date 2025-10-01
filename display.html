@@ -81,6 +81,19 @@
             let followPaused = false;      // transient pause after user scrolls
             let followResumeTimer = null;  // timer to auto-resume
             let lastAnchor = null;         // remember last pid/frac (+ ts)
+            // Defer final scroll application to next frame to avoid layout thrash
+            let pendingScroll = null;
+            let scrollScheduled = false;
+            function scheduleScroll(top) {
+              pendingScroll = top;
+              if (!scrollScheduled) {
+                scrollScheduled = true;
+                requestAnimationFrame(() => {
+                  try { if (wrap) wrap.scrollTop = pendingScroll|0; } catch {}
+                  scrollScheduled = false;
+                });
+              }
+            }
             // Configurable marker line percentage (defaults to ~40% to match main)
             let markerLinePct = 0.40;
             const updateMarker = () => {
@@ -228,7 +241,7 @@
                   if (!lastAnchor || (Date.now() - (lastAnchor.ts || 0) > 500)) {
                     const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                     const y = Math.round((Number(d.ratio) || 0) * max);
-                    wrap.scrollTop = Math.max(0, Math.min(y, max));
+                    scheduleScroll(Math.max(0, Math.min(y, max)));
                   }
                 } catch {}
               }
@@ -269,7 +282,7 @@
                   if (scriptHost && typeof d.scriptHTML === 'string') {
                     // Reset wrap scroll to top for brand-new scripts (not the document scroll)
                     if (d.reason === 'script-change') {
-                      try { if (wrap) wrap.scrollTop = 0; } catch {}
+                      try { if (wrap) scheduleScroll(0); } catch {}
                     }
                     scriptHost.innerHTML = d.scriptHTML;
                     // Re-apply font scaling to new nodes
