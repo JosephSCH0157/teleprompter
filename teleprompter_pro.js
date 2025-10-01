@@ -724,6 +724,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let displayWin = window.__displayWin || null;              // popup window reference for mirrored display (reuse if present)
   // --- Live Display Sync ---------------------------------------
   let __displaySyncDebounce = null;
+  // Sticky anchor: remember last good (non-glitch) anchor we sent to the display
+  let lastGoodAnchor = null;
   function collectDisplayState(reason = 'manual') {
     try {
       const scriptElLocal = document.getElementById('script');
@@ -766,6 +768,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   function onScriptLoaded(){
     try { ensureParaIds(); } catch {}
     try { pushDisplayUpdate('script-change'); } catch {}
+    // Reset sticky anchor on a brand-new script so we don't reuse stale pids
+    try { lastGoodAnchor = null; } catch {}
     try { sendScrollPosition(); } catch {}
   }
   // ------- Content-Anchor Sync -------
@@ -818,13 +822,39 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   }
 
   let __scrollSendRAF = 0;
+  // Guard against transient IO/geometry glitches that would erroneously point to the very top
+  function isResetToTopAnchor(anchor){
+    try {
+      if (!anchor || !anchor.pid) return true; // missing pid is not usable
+      const sc = viewer || document.getElementById('viewer');
+      const host = document.getElementById('script');
+      if (!sc || !host) return false; // don't over-block when we can't evaluate
+      // If we're actually near the very top, allow top anchors through
+      const nearTop = (sc.scrollTop || 0) < 8;
+      if (nearTop) return false;
+      const first = host.querySelector('p');
+      const firstPid = first?.dataset?.pid || first?.id || null;
+      if (!firstPid) return false;
+      const isFirst = String(anchor.pid) === String(firstPid);
+      const zeroFrac = Math.abs(Number(anchor.frac)||0) < 1e-3;
+      return isFirst && zeroFrac;
+    } catch { return false; }
+  }
   function sendScrollPosition() {
     try {
       if (!displayWin || displayWin.closed) return;
       const root = document.getElementById('script');
       const anchor = getAnchorAndFrac(root);
       if (!anchor) return;
-      displayWin.postMessage({ type: 'display-scroll', ...anchor }, '*');
+      // If this looks like a spurious "reset to top" during fast scroll/relayout, stick to last good
+      let payload = anchor;
+      if (isResetToTopAnchor(anchor)) {
+        if (lastGoodAnchor) payload = lastGoodAnchor; else return; // nothing solid yet → skip
+      } else {
+        // Accept this as the latest good anchor
+        lastGoodAnchor = anchor;
+      }
+      displayWin.postMessage({ type: 'display-scroll', ...payload }, '*');
     } catch {}
   }
 
