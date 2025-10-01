@@ -968,7 +968,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         // keep last valid anchor instead of snapping up
         if (lastGoodAnchor) {
           __lastSentAnchor = lastGoodAnchor;
-          displayWin.postMessage({ type: 'display-scroll', ...lastGoodAnchor }, '*');
+          displayWin.postMessage({ type: 'display-scroll', ts: Date.now(), ...lastGoodAnchor }, '*');
           // Also send absolute scroll as a dumb-but-reliable fallback
           try {
             const max = Math.max(0, (sc?.scrollHeight || 0) - (sc?.clientHeight || 0));
@@ -980,9 +980,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         return;
       }
 
-      lastGoodAnchor = anchor;
-      __lastSentAnchor = anchor;
-      displayWin.postMessage({ type: 'display-scroll', ...anchor }, '*');
+  lastGoodAnchor = anchor;
+  __lastSentAnchor = anchor;
+  displayWin.postMessage({ type: 'display-scroll', ts: Date.now(), ...anchor }, '*');
       // Always accompany with a raw absolute scroll packet for robustness
       try {
         const max = Math.max(0, (sc?.scrollHeight || 0) - (sc?.clientHeight || 0));
