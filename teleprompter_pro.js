@@ -1272,7 +1272,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       // lightweight time-based throttle to avoid flooding display
       let nowMs = 0;
       try { nowMs = performance.now(); } catch { nowMs = Date.now(); }
-      if ((nowMs - lastSendMs) < SEND_MIN_MS) return;
+  if (!force && (nowMs - lastSendMs) < SEND_MIN_MS) return;
       lastSendMs = nowMs;
       const seq = (++sendSeq);
       const anchor = getAnchorAndFrac();
@@ -3907,7 +3907,7 @@ function startAutoScroll(){
     {
   try { broadcastScroll(); } catch {}
       // Also publish anchor position for fine-grained sync
-      try { sendScrollPosition(); } catch {}
+  try { sendScrollPosition(true); } catch {}
     }
     // keep label updated with live speed
     autoToggle.textContent = `Auto-scroll: On (${pxPerSec}px/s)`;
