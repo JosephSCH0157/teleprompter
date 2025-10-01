@@ -743,6 +743,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let   confirmHits     = 0;
 
   function commitBestIndex(bestIdx, bestScore) {
+    const now = performance.now();
     // small backward oscillations: require 2 hits
     if (bestIdx < currentIndex - IDX_SLOP) {
       if (confirmIdx === bestIdx) confirmHits++; else { confirmIdx = bestIdx; confirmHits = 1; }
@@ -752,8 +753,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     }
 
     // huge forward leap? clamp unless ultra-confident
-  if (bestIdx > currentIndex + HOP_LIMIT && bestScore < STRONG_SCORE) {
-      bestIdx = currentIndex + HOP_LIMIT;
+    const hopLimit = (now < speechStartHoldUntil) ? HOP_LIMIT_START : HOP_LIMIT;
+    if (bestIdx > currentIndex + hopLimit && bestScore < STRONG_SCORE) {
+      bestIdx = currentIndex + hopLimit;
     }
 
     currentIndex = bestIdx;
