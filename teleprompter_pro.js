@@ -1595,15 +1595,17 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   legendEl = document.getElementById('legend');
   debugPosChip = document.getElementById('debugPosChip');
 
-  // Seatbelt: keep the outer page pinned at top so only the viewer scrolls
+  // Seatbelt disabled while we debug page jumps.
+  // It’s safe to rely on css: html,body {overflow:hidden} and #viewer {overflow:auto}
   try {
-    if (!window.__tpPinWindowScroll) {
-      window.__tpPinWindowScroll = true;
-      window.scrollTo(0, 0);
-      window.addEventListener('scroll', () => {
-        if (window.scrollY !== 0) window.scrollTo(0, 0);
-      }, { passive: true });
-    }
+    // (disabled)
+    // if (!window.__tpPinWindowScroll) {
+    //   window.__tpPinWindowScroll = true;
+    //   window.scrollTo(0, 0);
+    //   window.addEventListener('scroll', () => {
+    //     if (window.scrollY !== 0) window.scrollTo(0, 0);
+    //   }, { passive: true });
+    // }
   } catch {}
 
   // Hook viewer.scrollTop setter once to warn on resets to 0
