@@ -739,15 +739,34 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // --- Speech activity windows ---
   let speechStartHoldUntil = 0;       // ms wallclock
   let lastSpeechMs = 0;               // update on every interim + final
+  // --- Speech gating ---
+  let recognizerActive = false;        // true between onstart→onend
+  let nudgeDisabledUntil = 0;          // wallclock ms until which nudges are muted
   const SPEECH_HOLD_MS = 600;         // extra conservative window at start
-  const NUDGE_IDLE_MS  = 1200;        // mute nudges this long after any speech
+  const NUDGE_IDLE_MS  = 3000;        // mute nudges this long after any speech (was 1200)
   const HOP_LIMIT_START = 6;          // extra conservative hop size during hold
   // One-time: inhibit stall/nudges until we get the first committed match
   let awaitingFirstCommit = false;
   // Helpers to gate background motion while speech is active
-  function speechIsHot(){
-    try { return (performance.now() - (lastSpeechMs || 0)) < NUDGE_IDLE_MS; } catch { return false; }
+  function onAnySpeechActivity() {
+    try {
+      const now = performance.now();
+      lastSpeechMs = now;
+      nudgeDisabledUntil = now + NUDGE_IDLE_MS;
+    } catch {
+      const now = Date.now();
+      lastSpeechMs = now;
+      nudgeDisabledUntil = now + NUDGE_IDLE_MS;
+    }
+    try { stopStallWatchFor(NUDGE_IDLE_MS); } catch {}
+    try { cancelPendingNudge && cancelPendingNudge(); } catch {}
   }
+  function speechGateActive(){
+    try { return recognizerActive || (performance.now() < nudgeDisabledUntil); }
+    catch { return recognizerActive || (Date.now() < nudgeDisabledUntil); }
+  }
+  // Backward-compat alias used elsewhere
+  function speechIsHot(){ return speechGateActive(); }
   function catchupControllerIsActive(){
     try { return !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive()); } catch { return false; }
   }
@@ -884,8 +903,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       // Do not fight speech or auto controllers
       const now = performance.now();
       if (now < stallWatchPauseUntil) return;
-      if (awaitingFirstCommit) return;
-      if (speechIsHot()) return;
+  if (awaitingFirstCommit) return;
+  if (speechGateActive()) return;
       if (typeof autoTimer !== 'undefined' && autoTimer) return;
       if (catchupControllerIsActive()) return;
 
@@ -1773,10 +1792,10 @@ async function _initCore() {
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   function maybeFallbackNudge(){
     try {
-      if (!recActive || !viewer) return; // only when speech sync is active
+  if (!recActive || !viewer) return; // only when speech sync is active
       if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
       if (awaitingFirstCommit) return;         // don’t nudge before first commit
-      if (speechIsHot()) return;               // hard mute while speech is hot
+  if (speechGateActive()) return;          // hard mute while speech is hot
       if (catchupControllerIsActive()) return; // let controller drive
       const now = performance.now();
       const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
@@ -2946,10 +2965,7 @@ function _sim(a, b){
 function advanceByTranscript(transcript, isFinal){
   // On every recognition event (interim & final), refresh timestamps and neutralize timers
   try {
-    const nowEvt = performance.now();
-    lastSpeechMs = nowEvt;
-    stopStallWatchFor(NUDGE_IDLE_MS);
-    cancelPendingNudge();
+    onAnySpeechActivity();
   } catch {}
   // Adopt current smoothness settings if provided
   const SC = (window.__TP_SCROLL || { DEAD: DEAD_BAND_PX, THROTTLE: CORRECTION_MIN_MS, FWD: MAX_FWD_STEP_PX, BACK: MAX_BACK_STEP_PX });
@@ -4193,9 +4209,9 @@ function initAfterBoot(){
       const now = performance.now();
       lastSpeechMs = now;
       speechStartHoldUntil = now + SPEECH_HOLD_MS;
+      recognizerActive = true;
+      onAnySpeechActivity();
       awaitingFirstCommit = true;
-      cancelPendingNudge();
-      stopStallWatchFor(NUDGE_IDLE_MS);
     } catch {}
 
     recog = new SR();
@@ -4207,6 +4223,8 @@ function initAfterBoot(){
     recog.onstart = () => {
       recBackoffMs = 300;
       try { window.__REC_START_AT = performance.now(); } catch {}
+      recognizerActive = true;
+      onAnySpeechActivity();
       document.body.classList.add('listening');
       try { recChip.textContent = 'Speech: listening…'; } catch {}
     };
@@ -4232,14 +4250,21 @@ function initAfterBoot(){
     };
 
     recog.onerror = (e) => { console.warn('speech error', e.error); };
+    try {
+      recog.onspeechstart = () => { recognizerActive = true; onAnySpeechActivity(); };
+      recog.onspeechend   = () => { /* keep gate by idle window; do not force false here */ };
+    } catch {}
     recog.onend = () => {
       document.body.classList.remove('listening');
       try { recChip.textContent = 'Speech: idle'; } catch {}
+      recognizerActive = false;
       // If user didn't stop it, try to bring it back with backoff
       if (recAutoRestart && recActive) {
         setTimeout(() => {
           try {
             recog.start();
+            recognizerActive = true;
+            onAnySpeechActivity();
             try { recChip.textContent = 'Speech: listening…'; } catch {}
             document.body.classList.add('listening');
           } catch (e) {
@@ -4258,6 +4283,7 @@ function initAfterBoot(){
   function stopSpeechSync(){
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
+    try { recognizerActive = false; } catch {}
     try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   }
 
