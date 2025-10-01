@@ -1034,12 +1034,17 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       }
     } catch {}
   }
-  function toElClamped(el, who = 'speech', markerPct = 0.40){
+  function computeTargetY(el, markerPct){
+    const sc = SCROLLER.get();
+    const pct = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : getMarkerPct();
+    return el.offsetTop - Math.round((sc?.clientHeight || 0) * pct);
+  }
+  function toElClamped(el, who = 'speech', markerPct){
     try {
       if (!el) return false;
       const sc = SCROLLER.get();
       if (!sc) return false;
-      const targetY = el.offsetTop - Math.round(sc.clientHeight * markerPct);
+      const targetY = computeTargetY(el, markerPct);
       const dy = Math.abs((targetY|0) - (sc.scrollTop|0));
       if (dy < MIN_PIXEL_MOVE) return false;
       SCROLLER.toTop(targetY, who);
