@@ -2759,7 +2759,7 @@ function tryStartCatchup(){
   };
   const scrollBy = (dy) => {
     try {
-  { const sc = SCROLLER.get(); SCROLLER.toTop(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight)), 'other'); }
+  { const sc = SCROLLER.get(); SCROLLER.toTop(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight)), 'catchup'); }
       try { broadcastScroll(); } catch {}
     } catch {}
   };
