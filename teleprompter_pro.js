@@ -4231,6 +4231,8 @@ function initAfterBoot(){
 
     let _lastInterimAt = 0;
     recog.onresult = (e) => {
+      // Refresh gate immediately on any result
+      try { onAnySpeechActivity(); } catch {}
       let interim = '';
       let finals  = '';
       for (let i = e.resultIndex; i < e.results.length; i++){
@@ -4251,8 +4253,9 @@ function initAfterBoot(){
 
     recog.onerror = (e) => { console.warn('speech error', e.error); };
     try {
-      recog.onspeechstart = () => { recognizerActive = true; onAnySpeechActivity(); };
-      recog.onspeechend   = () => { /* keep gate by idle window; do not force false here */ };
+      recog.onspeechstart = () => { try { onAnySpeechActivity(); } catch {} };
+      recog.onsoundstart  = () => { try { onAnySpeechActivity(); } catch {} };
+      recog.onspeechend   = () => { try { recognizerActive = false; nudgeDisabledUntil = performance.now() + 800; } catch {} };
     } catch {}
     recog.onend = () => {
       document.body.classList.remove('listening');
