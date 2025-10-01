@@ -241,6 +241,14 @@
   try { __tpBootPush('after-zoom-guard'); } catch {}
 
 
+  // TP: window-scroll-guard — prevent accidental page scrolling (viewer should own scroll)
+  try {
+    window.addEventListener('scroll', () => {
+      try { if (window.scrollY !== 0) window.scrollTo(0, 0); } catch {}
+    }, { passive: true });
+  } catch {}
+
+
 
 function setStatus(msg){
   try {
