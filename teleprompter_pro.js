@@ -832,21 +832,22 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     } catch {}
   }
 
-  // Viewer-relative anchor: nearest block center to viewer's marker line
+  // Viewer-relative anchor: nearest block center to viewer's marker line (no window metrics)
   function getAnchorAndFrac(root = document.getElementById('script')) {
     try {
       const blocks = root ? Array.from(root.querySelectorAll('[data-pid]')) : [];
       if (!blocks.length) return null;
-      const v = window.viewer || document.getElementById('viewer') || document.documentElement;
-      const vRect = v.getBoundingClientRect ? v.getBoundingClientRect() : { top: 0, height: window.innerHeight || 1 };
-      const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
-      const markerAbsY = vRect.top + (vRect.height * markerPct);
+
+      const sc = SCROLLER.get();
+      const v  = sc.getBoundingClientRect();
+      const markerPct  = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.40);
+      const markerAbsY = v.top + v.height * markerPct;
 
       let best = null, bestDist = Infinity;
       for (const el of blocks) {
         const r = el.getBoundingClientRect();
         const center = r.top + r.height * 0.5;
-        const dist = Math.abs(center - markerAbsY);
+        const dist   = Math.abs(center - markerAbsY);
         if (dist < bestDist) { best = { el, r }; bestDist = dist; }
       }
       if (!best) return null;
