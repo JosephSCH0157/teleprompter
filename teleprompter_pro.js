@@ -731,7 +731,6 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Speech activity + scroll batching
   let lastSpeechMs = 0;
   const NUDGE_IDLE_MS = 900; // don't nudge for ~1s after any speech
-  let scrollRAF = 0;
   // Commit gating for index/paragraph jumps
   const IDX_SLOP        = 6;    // ignore tiny backward wiggles (<6 tokens)
   const HOP_LIMIT       = 25;   // never advance more than 25 tokens in one frame
@@ -757,43 +756,38 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     return true;
   }
 
-  // ---- central scroller (rAF-batched writes) ----
+  // ---- central scroller (rAF-batched writes; viewer-only) ----
   const SCROLLER = (() => {
-    let el = null, pendingTop = null;
+    let el, pendingTop = null, raf = 0;
 
-    function find() {
+    function get() {
+      if (el) return el;
       const script = document.getElementById('script');
-      // Prefer scripted viewer; fall back to any container that actually scrolls
-      const v = document.getElementById('viewer')
-        || (script && (script.parentElement))
-        || document.querySelector('.viewer,#wrap,main,#content,#container,.scroll,.scroller')
-        || document.scrollingElement
-        || document.body;
-      try { v.style.overflowY ||= 'auto'; v.style.height ||= '100vh'; } catch {}
-      return v;
+      el = document.getElementById('viewer')
+        || document.querySelector('.viewer,#wrap,main,#content')
+        || (script && script.parentElement)
+        || document.scrollingElement;
+      try { el.style.overflowY ||= 'auto'; el.style.height ||= '100vh'; } catch {}
+      return el;
     }
-
     function flush() {
-      scrollRAF = 0;
+      raf = 0;
       if (pendingTop == null) return;
-      try { el.scrollTop = pendingTop; } catch {}
+      const sc = get();
+      const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+      sc.scrollTop = Math.max(0, Math.min(pendingTop, max));
       pendingTop = null;
     }
-
     return {
-      get() { return el || (el = find()); },
-      toTop(y) {
-        const sc = this.get();
-        const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-        pendingTop = Math.max(0, Math.min(y, max));
-        if (!scrollRAF) scrollRAF = requestAnimationFrame(flush);
-      },
+      toTop(y) { pendingTop = y; if (!raf) raf = requestAnimationFrame(flush); },
       toEl(node, markerPct = 0.40) {
         if (!node) return;
-        const sc = this.get();
-        const y  = node.offsetTop - Math.round(sc.clientHeight * markerPct);
+        const sc = get();
+        const y = node.offsetTop - Math.round(sc.clientHeight * markerPct);
         this.toTop(y);
-      }
+      },
+      el: () => get(),
+      get
     };
   })();
 
