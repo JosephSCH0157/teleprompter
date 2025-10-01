@@ -2109,6 +2109,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         displayChip.textContent = 'Display: ready';
         // push initial state
         sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+        // Immediately send the current scroll position so display isn't waiting on first nudge
+        try {
+          const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+          const ratio = max ? (viewer.scrollTop / max) : 0;
+          sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+        } catch {}
         // also push explicit typography in case display needs to apply restored prefs
         sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
         { try { broadcastScroll(); } catch {} }
@@ -3001,6 +3007,13 @@ function advanceByTranscript(transcript, isFinal){
     try {
       if (displayWin && !displayWin.closed && displayReady) {
         sendToDisplay({ type:'render', html: scriptEl.innerHTML, fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
+        // Also send immediate scroll state for legacy fallback
+        try {
+          const sc = (__scrollHelpers?.getScroller?.() || viewer);
+          const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+          const ratio = max ? (sc.scrollTop / max) : 0;
+          sendToDisplay({ type: 'scroll', top: sc.scrollTop, ratio });
+        } catch {}
       }
     } catch {}
 
