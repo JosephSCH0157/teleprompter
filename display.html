@@ -1,16 +1,21 @@
-<script>
-  // … your existing code …
-  document.addEventListener('DOMContentLoaded', function() {
-    window.opener && window.opener.postMessage('DISPLAY_READY', '*');
-  });
-</script>
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Display</title>
+
+  <script>
+    // tell opener we're ready (after DOM is constructed)
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.opener) window.opener.postMessage('DISPLAY_READY', '*');
+    });
+  </script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e141b'/%3E%3Ctext x='50%25' y='58%25' font-family='system-ui,Segoe UI,Arial' font-size='34' text-anchor='middle' fill='%23e7ebf0'%3ETP%3C/text%3E%3C/svg%3E" />
   <style>
           :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#2ea8ff;--s2-color:#ff6b6b}
-          html,body{height:100%}
+          html,body{height:100%;margin:0;overflow:hidden} /* page never scrolls */
+          #wrap{height:100%;overflow:auto;overscroll-behavior:contain} /* only wrap scrolls */
           body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
           .wrap{height:100%;overflow:auto}
           /* Top bar legend */
@@ -46,15 +51,19 @@
           #mirrorCamWrap{position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;z-index:1200;}
           #mirrorCamVideo{width:100%;max-width:100%;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;display:block;}
           #mirrorCamLoading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px system-ui;color:#9ba7b2;background:rgba(0,0,0,.55);border:1px solid var(--edge);border-radius:12px;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}
-        </style></head>
+        </style>
+</head>
         <body>
-          <header id="displayTopbar">
-            <div id="legend">
-              <span class="dot s1"></span><span class="lbl" id="lbl-s1">Joe</span>
-              <span class="dot s2"></span><span class="lbl" id="lbl-s2">Brad</span>
-            </div>
-          </header>
-          <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
+          <div class="wrap" id="wrap">
+            <header id="displayTopbar">
+              <div id="legend">
+                <span class="dot s1"></span><span class="lbl" id="lbl-s1">Joe</span>
+                <span class="dot s2"></span><span class="lbl" id="lbl-s2">Brad</span>
+              </div>
+            </header>
+            <div class="marker"></div>
+            <div class="script" id="script"></div>
+          </div>
           <div class="hud">Display <button class="btn" id="followToggle" title="Toggle follow mode">Follow: On</button> <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button> <span id="camRtcStatus">CamRTC: idle</span></div>
           <div id="mirrorCamWrap" hidden>
             <video id="mirrorCamVideo" autoplay muted></video>
@@ -92,6 +101,19 @@
               followPaused = true; updateFollowLabel();
               if (followResumeTimer) { clearTimeout(followResumeTimer); followResumeTimer = null; }
               followResumeTimer = setTimeout(() => { followPaused = false; updateFollowLabel(); if (followMode && lastAnchor) { try { scrollToAnchor(lastAnchor.pid, lastAnchor.frac); } catch {} } }, ms);
+            }
+            // Anchor-based scroller for display window
+            function scrollToAnchor(pid, frac = 0.5, markerPct = 0.36) {
+              try {
+                if (!wrap || !pid) return;
+                const el = document.querySelector(`[data-pid="${pid}"]`);
+                if (!el) return;
+                const markerY = wrap.clientHeight * (isFinite(markerPct) ? markerPct : 0.36);
+                const span = Math.min(el.offsetHeight, wrap.clientHeight * 0.9);
+                const target = el.offsetTop + Math.round(span * (Number(frac) || 0)) - markerY;
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                wrap.scrollTo({ top: Math.max(0, Math.min(target, max)), behavior: 'auto' });
+              } catch {}
             }
             // Color sync via BroadcastChannel
             let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
@@ -196,48 +218,20 @@
                 try { window.opener && window.opener.postMessage({ type:'display-ready' }, '*'); } catch {}
                 return;
               }
-              // Content-aware scroller: align to pid + fraction within the wrap container
-              const scrollToAnchor = (pid, frac = 0, markerPct = 0.36) => {
-                try {
-                  const host = scriptEl || document.getElementById('displayScript');
-                  if (!host || !wrap || !pid) return;
-                  let el = host.querySelector(`[data-pid="${pid}"]`);
-                  if (!el) el = host.querySelector(`[id="${pid}"]`) || host.querySelector('[data-pid]');
-                  if (!el) return;
-                  const hostRect = wrap.getBoundingClientRect();
-                  const elRect = el.getBoundingClientRect();
-                  const offsetInWrap = (elRect.top - hostRect.top) + wrap.scrollTop;
-                  const mp = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : (Math.max(0, Math.min(1, Number(markerLinePct)||0.40)));
-                  const target = offsetInWrap + (el.offsetHeight * (Number(frac)||0)) - (wrap.clientHeight * mp);
-                  const y = Math.max(0, Math.min(target, Math.max(0, wrap.scrollHeight - wrap.clientHeight)));
-                  wrap.scrollTo({ top: y, behavior: 'auto' });
-                } catch {}
-              };
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
                 lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct };
-                // Update marker position if provided
-                if (typeof d.markerPct === 'number' && isFinite(d.markerPct)) {
-                  markerLinePct = Math.max(0, Math.min(1, d.markerPct));
-                  try { requestAnimationFrame(updateMarker); } catch {}
-                }
                 if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct);
                 return;
               }
-
-              // Legacy/raw fallback: accept raw absolute top and optional marker ratio
+              // Fallback: accept absolute scroll from controller
               if (d.type === 'scroll') {
                 try {
-                  // Update marker line if provided
-                  if (typeof d.ratio === 'number' && isFinite(d.ratio)) {
-                    markerLinePct = Math.max(0, Math.min(1, d.ratio));
-                    try { requestAnimationFrame(updateMarker); } catch {}
-                  }
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  let y = wrap.scrollTop;
+                  let y = 0;
                   if (typeof d.top === 'number' && isFinite(d.top)) y = d.top;
-                  else if (typeof d.ratio === 'number' && isFinite(d.ratio)) y = Math.max(0, Math.min(1, d.ratio)) * max;
-                  wrap.scrollTop = Math.max(0, Math.min(y, max));
+                  else if (typeof d.ratio === 'number' && isFinite(d.ratio)) y = d.ratio * max;
+                  wrap.scrollTo({ top: Math.max(0, Math.min(y, max)), behavior: 'auto' });
                 } catch {}
                 return;
               }
