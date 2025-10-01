@@ -731,6 +731,30 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Speech activity + scroll scheduling
   let lastSpeechMs = 0;
   let scrollRAF = 0;
+  // Commit gating for index/paragraph jumps
+  const IDX_SLOP        = 6;    // ignore tiny backward wiggles (<6 tokens)
+  const HOP_LIMIT       = 25;   // never advance more than 25 tokens in one frame
+  const STRONG_SCORE_IDX = 0.985;
+  let   confirmIdx      = -1;
+  let   confirmHits     = 0;
+
+  function commitBestIndex(bestIdx, bestScore) {
+    // small backward oscillations: require 2 hits
+    if (bestIdx < currentIndex - IDX_SLOP) {
+      if (confirmIdx === bestIdx) confirmHits++; else { confirmIdx = bestIdx; confirmHits = 1; }
+      if (confirmHits < 2 || bestScore < STRONG_SCORE_IDX) return false; // don't move yet
+    } else {
+      confirmIdx = -1; confirmHits = 0; // reset confirmation on normal forward flow
+    }
+
+    // huge forward leap? clamp unless ultra-confident
+    if (bestIdx > currentIndex + HOP_LIMIT && bestScore < STRONG_SCORE_IDX) {
+      bestIdx = currentIndex + HOP_LIMIT;
+    }
+
+    currentIndex = bestIdx;
+    return true;
+  }
 
   // ---- central scroller + broadcast (drop-in) ----
   const SCROLLER = (() => {
@@ -2969,12 +2993,17 @@ function advanceByTranscript(transcript, isFinal){
       // ok to commit
       window.__pendingAdvance = null;
     } catch {}
-    if (delta > maxJump && bestScore < strictGate){
-      currentIndex += maxJump;
-    } else {
-      currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
-      if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
+    // Commit gating for index/paragraph jumps
+    let targetIdx = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
+    if (delta > maxJump && bestScore < strictGate) {
+      targetIdx = Math.min(scriptWords.length - 1, currentIndex + maxJump);
     }
+    const committed = commitBestIndex(targetIdx, bestScore);
+    if (!committed) {
+      // Defer committing and scrolling until confirmation criteria are met
+      return;
+    }
+    if (isFinal) { try { lastFinalIndex = currentIndex; } catch {} }
   }
 
 
