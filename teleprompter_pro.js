@@ -1675,7 +1675,8 @@ async function _initCore() {
       // also advance logical index to the paragraph under the marker
       try{
         if (Array.isArray(paraIndex) && paraIndex.length){
-          const markerY = viewer.scrollTop + (viewer.clientHeight * getMarkerPct());
+          const sc2 = SCROLLER.get();
+          const markerY = sc2.scrollTop + (sc2.clientHeight * getMarkerPct());
           let target = paraIndex[0];
           for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
           if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
@@ -2212,8 +2213,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         // Immediately send the current scroll position so display isn't waiting on first nudge
         try {
           const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-          const ratio = max ? (viewer.scrollTop / max) : 0;
-          sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+          const scd = SCROLLER.get();
+          const ratio = max ? (scd.scrollTop / max) : 0;
+          sendToDisplay({ type: 'scroll', top: scd.scrollTop, ratio });
         } catch {}
         // also push explicit typography in case display needs to apply restored prefs
         sendToDisplay({ type:'typography', fontSize: fontSizeInput.value, lineHeight: lineHeightInput.value });
@@ -2715,7 +2717,7 @@ function tryStartCatchup(){
   };
   const scrollBy = (dy) => {
     try {
-  SCROLLER.toAbs(Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight)), 'catchup-loop');
+  { const sc = SCROLLER.get(); SCROLLER.toAbs(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight)), 'catchup-loop'); }
       try { broadcastScroll(); } catch {}
     } catch {}
   };
@@ -3455,7 +3457,7 @@ function openDisplay(){
         const centerY = (r.top - vRect.top) + Math.min(r.height, vH * 0.9) / 2;
         deltaPct = Math.round(((centerY - markerY) / vH) * 100);
       }
-      const topStr = (viewer.scrollTop || 0).toLocaleString();
+  const topStr = ((SCROLLER.get()?.scrollTop || 0)).toLocaleString();
       debugPosChip.textContent = `Δ ${deltaPct >= 0 ? '+' : ''}${deltaPct}% • scrollTop ${topStr}`;
     } catch {}
   }
@@ -3517,7 +3519,12 @@ function startAutoScroll(){
   try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   const step = () => {
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
-    try { scrollByPx(pxPerSec / 60); } catch { viewer.scrollTop += (pxPerSec / 60); }
+    try { scrollByPx(pxPerSec / 60); } catch {
+      try {
+        const sc = SCROLLER.get();
+        SCROLLER.toAbs(sc.scrollTop + (pxPerSec / 60), 'auto-scroll');
+      } catch {}
+    }
     {
   try { broadcastScroll(); } catch {}
       // Also publish anchor position for fine-grained sync
