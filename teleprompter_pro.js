@@ -756,52 +756,42 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     return true;
   }
 
-  // ---- central scroller + broadcast (drop-in) ----
+  // ---- central scroller (rAF-batched writes) ----
   const SCROLLER = (() => {
-    let node = null;
+    let el = null, pendingTop = null;
 
-    function findScroller() {
+    function find() {
       const script = document.getElementById('script');
-      const candidates = [
-        document.getElementById('viewer'),
-        script?.parentElement,
-        ...Array.from(document.querySelectorAll('main,#wrap,#content,#container,.viewer,.scroll,.scroller'))
-                 .filter(el => script && el.contains(script)),
-        document.scrollingElement
-      ].filter(Boolean);
-
-      for (const el of candidates) {
-        const cs = getComputedStyle(el);
-        const canScroll = /(auto|scroll)/.test(cs.overflowY);
-        if (canScroll || (el.scrollHeight - el.clientHeight) > 2) return el;
-      }
-      // last resort: make #viewer the scroller
-      const v = document.getElementById('viewer') || document.body;
-      try { v.style.overflowY = 'auto'; v.style.height = '100vh'; } catch {}
+      // Prefer scripted viewer; fall back to any container that actually scrolls
+      const v = document.getElementById('viewer')
+        || (script && (script.parentElement))
+        || document.querySelector('.viewer,#wrap,main,#content,#container,.scroll,.scroller')
+        || document.scrollingElement
+        || document.body;
+      try { v.style.overflowY ||= 'auto'; v.style.height ||= '100vh'; } catch {}
       return v;
     }
 
+    function flush() {
+      scrollRAF = 0;
+      if (pendingTop == null) return;
+      try { el.scrollTop = pendingTop; } catch {}
+      pendingTop = null;
+    }
+
     return {
-      get() { return node || (node = findScroller()); },
-      maxTop(el) { return Math.max(0, el.scrollHeight - el.clientHeight); },
-      toAbs(y, reason = 'unknown') {
+      get() { return el || (el = find()); },
+      toTop(y) {
         const sc = this.get();
-        const max = this.maxTop(sc);
-        const top = Math.max(0, Math.min(y, max));
-        sc.scrollTop = top;
-
-        const a = getAnchorAndFrac(document.getElementById('script'));
-        if (a) { try { __lastSentAnchor = a; } catch {} try { displayWin?.postMessage({ type: 'display-scroll', ...a }, '*'); } catch {} }
-
-        const ratio = max ? (top / max) : 0;
-        try { displayWin?.postMessage({ type:'scroll', top, ratio }, '*'); } catch {}
-        // console.debug('[SCROLLER]', reason, {top, max});
+        const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+        pendingTop = Math.max(0, Math.min(y, max));
+        if (!scrollRAF) scrollRAF = requestAnimationFrame(flush);
       },
-      toEl(el, markerPct = 0.40, reason = 'toEl') {
-        if (!el) return;
+      toEl(node, markerPct = 0.40) {
+        if (!node) return;
         const sc = this.get();
-        const y  = el.offsetTop - Math.round(sc.clientHeight * markerPct);
-        this.toAbs(y, reason);
+        const y  = node.offsetTop - Math.round(sc.clientHeight * markerPct);
+        this.toTop(y);
       }
     };
   })();
@@ -815,7 +805,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
       const top = sc.scrollTop | 0;
       if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
-        SCROLLER.toAbs(top + Math.round(sc.clientHeight * 0.20), 'stall-nudge');
+  SCROLLER.toTop(top + Math.round(sc.clientHeight * 0.20));
         console.warn('[TP] Stall nudge', { idx, top });
       }
       lastIdx = idx; lastTop = top;
@@ -1703,7 +1693,7 @@ async function _initCore() {
         try { scrollByPx(FALLBACK_STEP_PX); } catch {
           const sc = (__scrollHelpers?.getScroller?.() || viewer);
           const next = Math.min(sc.scrollTop + FALLBACK_STEP_PX, sc.scrollHeight);
-          if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toAbs(next, 'fallback-nudge');
+    if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next);
         }
         { try { broadcastScroll(); } catch {} }
         // also advance logical index to the paragraph under the marker
@@ -2136,7 +2126,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
                      || (__anchorObs?.mostVisibleEl?.() || null)
                      || ((scriptEl || viewer)?.querySelector('[data-pid]') || null)
                      || (Array.isArray(lineEls) ? (lineEls[0] || null) : null);
-            if (el) SCROLLER.toEl(el, 0.40, 'catch-up');
+            if (el) SCROLLER.toEl(el, 0.40);
           } catch {}
         });
       });
@@ -2638,9 +2628,9 @@ function scrollToCurrentIndex(){
   const dy = target - sc.scrollTop;
   if (Math.abs(dy) > S.EASE_MIN) {
     const next = sc.scrollTop + Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
-    if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toAbs(next, 'scrollToCurrentIndex-step');
+  if (typeof scrollToY === 'function') scrollToY(next); else SCROLLER.toTop(next);
   } else {
-    if (typeof scrollToY === 'function') scrollToY(target); else SCROLLER.toAbs(target, 'scrollToCurrentIndex-target');
+  if (typeof scrollToY === 'function') scrollToY(target); else SCROLLER.toTop(target);
   }
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   if (typeof debug === 'function') debug({ tag:'scroll', top: sc.scrollTop });
@@ -2753,7 +2743,7 @@ function tryStartCatchup(){
   };
   const scrollBy = (dy) => {
     try {
-  { const sc = SCROLLER.get(); SCROLLER.toAbs(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight)), 'catchup-loop'); }
+  { const sc = SCROLLER.get(); SCROLLER.toTop(Math.max(0, Math.min(sc.scrollTop + dy, sc.scrollHeight))); }
       try { broadcastScroll(); } catch {}
     } catch {}
   };
@@ -2986,7 +2976,7 @@ function advanceByTranscript(transcript, isFinal){
         const nextPara = Math.min(nowPara + PARA_JUMP_LIMIT, targetPara);
         const nextEl = paraIndex[nextPara]?.el;
         if (pend < 2) {
-          if (nextEl) SCROLLER.toEl(nextEl, 0.40, 'soft-advance');
+          if (nextEl) SCROLLER.toEl(nextEl, 0.40);
           return; // do not commit yet
         }
       }
@@ -3047,7 +3037,7 @@ function advanceByTranscript(transcript, isFinal){
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
     // Force scrolling via centralized scroller to align anchor and raw scroll broadcasts
-    try { SCROLLER.toEl(currentEl, 0.40, 'speech-sync'); } catch {}
+  try { SCROLLER.toEl(currentEl, 0.40); } catch {}
   } else {
     // Controller stays in charge; do not adjust scroll here.
     // Speech still updates timestamps and downstream broadcasts below.
@@ -3444,7 +3434,7 @@ function openDisplay(){
       if (typeof scrollToY === 'function') {
         scrollToY(target);
       } else {
-        SCROLLER.toAbs(target, 'scrollToAnchor');
+  SCROLLER.toTop(target);
       }
       return true;
     } catch { return false; }
@@ -3463,7 +3453,7 @@ function openDisplay(){
   function forceTopReset(reason){
     try { console.debug('[TP] forceTopReset', reason); } catch {}
     try {
-      SCROLLER.toAbs(0, 'forceTopReset');
+  SCROLLER.toTop(0);
     } catch {}
   }
 
@@ -3551,7 +3541,7 @@ function startAutoScroll(){
     try { scrollByPx(pxPerSec / 60); } catch {
       try {
         const sc = SCROLLER.get();
-        SCROLLER.toAbs(sc.scrollTop + (pxPerSec / 60), 'auto-scroll');
+  SCROLLER.toTop(sc.scrollTop + (pxPerSec / 60));
       } catch {}
     }
     {
