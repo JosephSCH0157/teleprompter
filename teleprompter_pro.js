@@ -1977,38 +1977,41 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       catchUpBtn.dataset.wired = '1';
       catchUpBtn.addEventListener('click', () => {
         try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
-        try {
-          const vRect = viewer.getBoundingClientRect();
-          const markerTop = Math.round(vRect.height * getMarkerPct());
-
-          let el = null;
-
-          // 1) Prefer the last final match (most reliable)
+        // Defer layout-heavy measurements to the next frame for smoother click handling
+        requestAnimationFrame(() => {
           try {
-            const pf = (paraIndex||[]).find(p => lastFinalIndex >= p.start && lastFinalIndex <= p.end);
-            if (pf) el = pf.el;
-          } catch {}
+            const vRect = viewer.getBoundingClientRect();
+            const markerTop = Math.round(vRect.height * getMarkerPct());
 
-          // 2) Then the current working index
-          if (!el) {
+            let el = null;
+
+            // 1) Prefer the last final match (most reliable)
             try {
-              const pc = (paraIndex||[]).find(p => currentIndex >= p.start && currentIndex <= p.end);
-              if (pc) el = pc.el;
+              const pf = (paraIndex||[]).find(p => lastFinalIndex >= p.start && lastFinalIndex <= p.end);
+              if (pf) el = pf.el;
             } catch {}
-          }
 
-          // 3) Then the most visible paragraph by IO
-          if (!el) el = __anchorObs?.mostVisibleEl?.() || null;
+            // 2) Then the current working index
+            if (!el) {
+              try {
+                const pc = (paraIndex||[]).find(p => currentIndex >= p.start && currentIndex <= p.end);
+                if (pc) el = pc.el;
+              } catch {}
+            }
 
-          // 4) Only as a last resort do we allow top
-          if (!el) el = (Array.isArray(lineEls) ? (lineEls[0] || null) : null);
+            // 3) Then the most visible paragraph by IO
+            if (!el) el = __anchorObs?.mostVisibleEl?.() || null;
 
-          if (el) {
-            scrollToEl(el, markerTop);
-            try { updateDebugPosChip(); } catch {}
-            // scrollToEl broadcasts; no need for extra display message here
-          }
-        } catch {}
+            // 4) Only as a last resort do we allow top
+            if (!el) el = (Array.isArray(lineEls) ? (lineEls[0] || null) : null);
+
+            if (el) {
+              scrollToEl(el, markerTop);
+              try { updateDebugPosChip(); } catch {}
+              // scrollToEl broadcasts; no need for extra display message here
+            }
+          } catch {}
+        });
       });
       // Keyboard shortcut: press 'C' to catch up (ignored while typing in inputs/textareas)
       document.addEventListener('keydown', (e) => {

@@ -221,17 +221,17 @@
               // Follow anchor updates from the controller (preferred)
               if (d.type === 'display-scroll') {
                 lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct };
-                if (followMode && !followPaused) scrollToAnchor(d.pid, d.frac, d.markerPct);
+                scrollToAnchor(d.pid, d.frac, d.markerPct);
                 return;
               }
               // Fallback: accept absolute scroll from controller
               if (d.type === 'scroll') {
                 try {
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  let y = 0;
-                  if (typeof d.top === 'number' && isFinite(d.top)) y = d.top;
-                  else if (typeof d.ratio === 'number' && isFinite(d.ratio)) y = d.ratio * max;
-                  wrap.scrollTo({ top: Math.max(0, Math.min(y, max)), behavior: 'auto' });
+                  const y = (typeof d.top === 'number' && isFinite(d.top)) ? d.top
+                          : (typeof d.ratio === 'number' && isFinite(d.ratio)) ? (d.ratio * max)
+                          : 0;
+                  wrap.scrollTop = Math.max(0, Math.min(y, max));
                 } catch {}
                 return;
               }
