@@ -985,6 +985,54 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     return { set };
   })();
 
+  // Tiny overlay: show lastOwner ('speech' | 'fallback' | 'catchup' | 'none') and current viewer.scrollTop
+  const MoveHUD = (() => {
+    let el, last = 'none', clearT = 0, raf = 0;
+    const mapWho = (who) => {
+      if (who === 'speech' || who === 'speech-micro') return 'speech';
+      if (who === 'catchup') return 'catchup';
+      if (who === 'nudge' || who === 'fallback') return 'fallback';
+      return 'none';
+    };
+    function ensure(){
+      if (el) return el;
+      try {
+        el = document.createElement('div');
+        Object.assign(el.style, {
+          position:'fixed', left:'8px', bottom:'34px', zIndex:99999,
+          padding:'3px 6px', font:'11px/14px system-ui, sans-serif',
+          background:'rgba(0,0,0,.55)', color:'#fff', borderRadius:'5px',
+          pointerEvents:'none'
+        });
+        el.textContent = 'owner: none • top 0';
+        (document.body || document.documentElement).appendChild(el);
+      } catch {}
+      return el;
+    }
+    function render(){
+      try {
+        const node = ensure(); if (!node) return;
+        const sc = (typeof SCROLLER?.el === 'function' ? SCROLLER.el() : null) || SCROLLER.get?.() || null;
+        const top = sc ? (sc.scrollTop|0) : (document.scrollingElement?.scrollTop|0) || 0;
+        node.textContent = `owner: ${last} • top ${top.toLocaleString()}`;
+      } catch {}
+    }
+    function tick(){ if (raf) cancelAnimationFrame(raf); raf = requestAnimationFrame(()=>{ raf = 0; render(); }); }
+    function set(who){
+      try {
+        last = mapWho(who);
+        tick();
+        if (clearT) clearTimeout(clearT);
+        clearT = setTimeout(()=>{ last = 'none'; tick(); }, 800);
+      } catch {}
+    }
+    // Keep top part live on scrolls
+    try {
+      window.addEventListener('scroll', () => { tick(); }, { passive:true });
+    } catch {}
+    return { set, render: tick };
+  })();
+
   // Debug HUD: shows when the unified speech gate is active and remaining countdown
   const GateHUD = (() => {
     let el, raf = 0, lastTxt = '';
@@ -1059,6 +1107,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const topClamped = Math.max(0, Math.min(pending.top, max));
         sc.scrollTop = topClamped;
         try { OwnerHUD && OwnerHUD.set && OwnerHUD.set(pending.who || 'other'); } catch {}
+        try { MoveHUD && MoveHUD.set && MoveHUD.set(pending.who || 'other'); } catch {}
         pending = null;
         try { window.__rafScheduled = false; } catch {}
       });
