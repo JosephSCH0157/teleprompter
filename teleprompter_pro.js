@@ -1148,6 +1148,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     const sc = SCROLLER.get();
     let lastIdx = -1, lastTop = -1;
     function stallWatchTick(){
+      // Speech owns scroll briefly after activity
+      try { if ((performance.now() - (lastSpeechMs||0)) < (SPEECH_GRACE_MS||0)) return; } catch {}
       // Hard gate: do not fight speech or controllers
       if (speechGateActive()) return;
       const now = performance.now();
@@ -2053,6 +2055,8 @@ async function _initCore() {
 
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   function maybeFallbackNudge(reason){
+    // Speech owns scroll briefly after activity
+    try { if ((performance.now() - (lastSpeechMs||0)) < (SPEECH_GRACE_MS||0)) return; } catch {}
     // Hard speech gate at the very top
     if (speechGateActive()) { try { debugNudge('MUTED', reason); } catch {} return; }
     // Yield to catch-up controller if it is steering
