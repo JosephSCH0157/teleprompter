@@ -2376,40 +2376,51 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     }
   };
   // --- additional anchor helpers ---
-  function getLineHeightPx() {
+  function getLineHeightPx(el = (viewer || document.getElementById('viewer'))) {
     try {
-      const v = viewer || document.getElementById('viewer');
-      const lh = parseFloat(getComputedStyle(v).lineHeight);
+      const target = el || (viewer || document.getElementById('viewer'));
+      const lh = parseFloat(getComputedStyle(target).lineHeight);
       return Number.isFinite(lh) ? lh : 24;
     } catch { return 24; }
   }
 
+  // robust position relative to the scroller (not the page)
+  function elTopRelativeTo(el, scroller){
+    try {
+      const r = el.getBoundingClientRect();
+      const vr = scroller.getBoundingClientRect();
+      return (r.top - vr.top) + (scroller.scrollTop||0);
+    } catch { return 0; }
+  }
+  // line-based marker Y to ensure gentle progress even for tall paragraphs
+  function computeLineMarkerY(el, scroller){
+    try {
+      const line = getLineHeightPx(scroller);
+      const aboveLines = 4; // keep ~4 lines above
+      const maxByViewport = (scroller?.clientHeight||0) * 0.22; // cap ~22% viewport
+      return Math.min(aboveLines * line, maxByViewport);
+    } catch { return Math.round((viewer?.clientHeight||0) * 0.22); }
+  }
+
   function commitAnchorSmooth(anchor) {
     try {
-      const v = viewer || document.getElementById('viewer');
-      if (!v || !anchor || !anchor.el) return;
-      const markerY = Math.round(v.clientHeight * 0.33); // keep target ~1/3 from top
-      const elTop = anchor.el.offsetTop;
-      const elH   = anchor.el.offsetHeight || getLineHeightPx();
-      const targetTop = Math.max(0, Math.round(elTop + elH * anchor.frac - markerY));
-      const nowTop = v.scrollTop | 0;
-      let dy = targetTop - nowTop;
+      const scroller = (typeof SCROLLER?.el === 'function' ? SCROLLER.el() : null) || viewer || document.getElementById('viewer');
+      if (!scroller || !anchor || !anchor.el) return;
 
-      // ignore micro-tweaks
-      if (Math.abs(dy) < (MIN_COMMIT_DELTA || 8)) return;
+      const markerY = computeLineMarkerY(anchor.el, scroller);
+      const elTop   = elTopRelativeTo(anchor.el, scroller);
+      const elH     = anchor.el.offsetHeight || getLineHeightPx(scroller);
 
-      // clamp per frame to avoid leap/snap
-      const maxStep = Math.max(getLineHeightPx() * 1.25, 32);
+      const targetTop = Math.max(0, Math.round(elTop + elH * (Number(anchor.frac)||0) - markerY));
+      const nowTop    = scroller.scrollTop | 0;
+      let dy          = targetTop - nowTop;
+
+      // allow tiny moves; cap per-frame to ~1.2 lines
+      const maxStep   = Math.max(getLineHeightPx(scroller) * 1.2, 24);
       if (dy >  maxStep) dy =  maxStep;
       if (dy < -maxStep) dy = -maxStep;
-
-      // rAF-batch the write; piggyback on shared flag
-      if (window.__rafScheduled || __rafScheduled) return;
-      __rafScheduled = true; try { window.__rafScheduled = true; } catch {}
-      requestAnimationFrame(() => {
-        __rafScheduled = false; try { window.__rafScheduled = false; } catch {}
-        scrollByPx(dy); // uses the fixed wrapper that passes `viewer`
-      });
+      if (!dy) return;
+      requestAnimationFrame(() => { try { scroller.scrollTop = (scroller.scrollTop|0) + dy; } catch {} });
     } catch {}
   }
     } catch(e) { console.warn('scroll-helpers load failed', e); }
