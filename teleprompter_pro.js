@@ -1079,7 +1079,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
           if (pending && pending.who === who) pending = null;
         } catch {}
       },
-      el: () => get(),
+      el: (node) => { if (node) el = node; return el || get(); },
       get
     };
   })();
@@ -2127,6 +2127,16 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   viewer   = document.getElementById('viewer');
   legendEl = document.getElementById('legend');
   debugPosChip = document.getElementById('debugPosChip');
+
+  // Hard-bind SCROLLER to the main viewer (single source of truth)
+  try {
+    if (viewer) {
+      SCROLLER.el(viewer);
+      if (viewer.scrollHeight <= viewer.clientHeight) {
+        console.warn('[viewer] not scrollable – check height/overflow styles');
+      }
+    }
+  } catch {}
 
   // Seatbelt disabled while we debug page jumps.
   // It’s safe to rely on css: html,body {overflow:hidden} and #viewer {overflow:auto}
