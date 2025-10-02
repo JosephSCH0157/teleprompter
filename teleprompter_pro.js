@@ -786,6 +786,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let nudgeDisabledUntil = 0;          // wallclock ms until which nudges are muted
   // rAF-batch state flag for scroll writes (mirrored to window.__rafScheduled)
   let __rafScheduled = false;
+  // Cache viewer height to stabilize marker math against transient layout changes
+  let VIEWER_HEIGHT_BASE = 0;
   const START_HOLD_MS = 700;           // extra conservative window at start (~0.7s)
   const NUDGE_IDLE_MS  = 3000;        // mute nudges this long after any speech (was 1200)
   const SPEECH_GRACE_MS = 900;        // brief grace after speech end to avoid fighting UI
@@ -1166,7 +1168,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   function computeTargetY(el, markerPct){
     const sc = SCROLLER.get();
     const pct = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : getMarkerPct();
-    return el.offsetTop - Math.round((sc?.clientHeight || 0) * pct);
+    const vh = VIEWER_HEIGHT_BASE || (sc?.clientHeight || 0);
+    return el.offsetTop - Math.round(vh * pct);
   }
   function toElClamped(el, who = 'speech', markerPct){
     try {
@@ -1316,7 +1319,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const sc = SCROLLER.get();
       const v  = sc.getBoundingClientRect();
       const markerPct  = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.40);
-      const markerAbsY = v.top + v.height * markerPct;
+      const vh = VIEWER_HEIGHT_BASE || v.height;
+      const markerAbsY = v.top + vh * markerPct;
 
       let best = null, bestDist = Infinity;
       for (const el of blocks) {
@@ -2152,7 +2156,8 @@ async function _initCore() {
         try{
           if (Array.isArray(paraIndex) && paraIndex.length){
             const sc2 = SCROLLER.get();
-            const markerY = sc2.scrollTop + (sc2.clientHeight * getMarkerPct());
+            const vh2 = VIEWER_HEIGHT_BASE || sc2.clientHeight || 0;
+            const markerY = sc2.scrollTop + (vh2 * getMarkerPct());
             let target = paraIndex[0];
             for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
             if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
@@ -2186,6 +2191,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   try {
     if (viewer) {
       SCROLLER.el(viewer);
+      // Cache viewer height once for stable marker calculations
+      try { VIEWER_HEIGHT_BASE = viewer?.clientHeight || 0; } catch {}
       // Assert a single scroller bound to #viewer
       try {
         const bound = (SCROLLER && typeof SCROLLER.el === 'function') ? SCROLLER.el() : null;
@@ -3678,7 +3685,7 @@ function advanceByTranscript(transcript, isFinal){
 
   const sc = (__scrollHelpers?.getScroller?.() || viewer);
   const maxTop     = Math.max(0, scriptEl.scrollHeight - sc.clientHeight);
-  const markerTop  = Math.round(sc.clientHeight * getMarkerPct());
+  const markerTop  = Math.round((VIEWER_HEIGHT_BASE || sc.clientHeight || 0) * getMarkerPct());
   const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
 
   const err = desiredTop - sc.scrollTop;
@@ -4134,7 +4141,7 @@ function openDisplay(){
       let el = host.querySelector(`[data-pid="${pid}"]`);
       if (!el) el = host.querySelector(`[id="${pid}"]`);
       if (!el) return false;
-      const markerTop = Math.round(sc.clientHeight * getMarkerPct());
+  const markerTop = Math.round((VIEWER_HEIGHT_BASE || sc.clientHeight || 0) * getMarkerPct());
       const frac = Math.max(0, Math.min(1, Number(anchor.frac)||0));
       const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
       const target = Math.max(0, Math.min((el.offsetTop + (el.offsetHeight * frac) - markerTop), maxTop));
@@ -4165,7 +4172,7 @@ function openDisplay(){
     try {
       if (!debugPosChip || !viewer) return;
       const vRect = viewer.getBoundingClientRect();
-      const vH = Math.max(1, vRect.height || 1);
+      const vH = Math.max(1, (VIEWER_HEIGHT_BASE || vRect.height || 1));
       const markerPct = (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
       const markerY = vH * markerPct;
 
