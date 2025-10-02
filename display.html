@@ -109,6 +109,44 @@
             function applyRawScroll(top, ratio){
               try { scheduleScroll(computeTop({ top, ratio })); } catch {}
             }
+            // Smooth anchor commit for display-side scroller
+            let __rafScheduled = false;
+            function getLineHeightPx(){
+              try {
+                const probe = scriptEl.querySelector('p') || scriptEl || wrap;
+                const lh = parseFloat(getComputedStyle(probe).lineHeight);
+                return Number.isFinite(lh) ? lh : 24;
+              } catch { return 24; }
+            }
+            function commitAnchorSmooth(anchor){
+              try {
+                if (!wrap || !anchor) return;
+                let el = anchor.el || null;
+                if (!el && anchor.pid != null) {
+                  el = document.querySelector(`[data-pid="${anchor.pid}"]`);
+                }
+                if (!el) return;
+                const markerY = Math.round(wrap.clientHeight * 0.33);
+                const elTop = el.offsetTop;
+                const elH = el.offsetHeight || getLineHeightPx();
+                const frac = Number(anchor.frac) || 0;
+                const targetTop = Math.max(0, Math.round(elTop + elH * frac - markerY));
+                const nowTop = wrap.scrollTop | 0;
+                let dy = targetTop - nowTop;
+                // ignore micro-tweaks
+                if (Math.abs(dy) < 8) return;
+                // clamp per frame to avoid leap/snap
+                const maxStep = Math.max(getLineHeightPx() * 1.25, 32);
+                if (dy >  maxStep) dy =  maxStep;
+                if (dy < -maxStep) dy = -maxStep;
+                if (__rafScheduled) return;
+                __rafScheduled = true;
+                requestAnimationFrame(()=>{
+                  __rafScheduled = false;
+                  try { wrap.scrollTop = (wrap.scrollTop|0) + dy; } catch {}
+                });
+              } catch {}
+            }
             // Configurable marker line percentage (defaults to ~40% to match main)
             let markerLinePct = 0.40;
             const updateMarker = () => {
@@ -240,6 +278,7 @@
               camVid.addEventListener('emptied', () => { firstFrame=false; if (camLoad){ camLoad.textContent='Connecting camera…'; camLoad.style.display='flex'; } if (camWrap){ camWrap.style.display='none'; camWrap.setAttribute('hidden',''); } });
             }
             let lastSeq = 0;
+            let lastDisplayFrame = 0;
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // Answer handshake pings from opener to avoid race conditions
@@ -252,15 +291,19 @@
                 if (d.seq < lastSeq) return;
                 lastSeq = d.seq;
               }
-              // Follow anchor updates from the controller
-              if (d.type === 'display-scroll') {
+              // Prefer anchor-based scroll; raw absolute only if no anchor this frame
+              const frame = performance.now();
+              if (d.type === 'display-scroll' && d.pid != null) {
                 lastAnchorTs = (typeof d.ts === 'number' && isFinite(d.ts)) ? d.ts : Date.now();
                 lastAnchor = { pid: d.pid, frac: d.frac, markerPct: d.markerPct, ts: lastAnchorTs };
-                scrollToAnchor(d.pid, d.frac, d.markerPct);
+                commitAnchorSmooth(d);
+                lastDisplayFrame = frame;
                 return;
               }
               if (d.type === 'scroll') {
-                applyRawScroll(d.top, d.ratio);
+                if ((frame - lastDisplayFrame) > 50) {
+                  applyRawScroll(d.top, d.ratio);
+                }
                 return;
               }
 
