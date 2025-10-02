@@ -2193,8 +2193,10 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           console.error('[SCROLLER] not bound to #viewer – main will not move.');
         }
       } catch {}
+      // Proactively add bottom pad to allow early scroll, then re-check
+      try { applyBottomPad && applyBottomPad(); } catch {}
       if (viewer.scrollHeight <= viewer.clientHeight) {
-        console.warn('[viewer] not scrollable – check height/overflow styles');
+        console.warn('[viewer] not scrollable – check height/overflow styles (or script content too short)');
       }
     }
   } catch {}
