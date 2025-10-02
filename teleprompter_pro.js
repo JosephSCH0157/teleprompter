@@ -2138,6 +2138,54 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     }
   } catch {}
 
+  // Dev guard: block stray page scroll calls and route interactions to #viewer only
+  (function devBlockPageScroll(){
+    try {
+      const v = document.getElementById('viewer');
+      if (!v) return;
+      // Block window.scrollTo (page should never move)
+      const origWinScrollTo = window.scrollTo;
+      window.scrollTo = function(...args){
+        try { console.warn('[BLOCK] window.scrollTo', args, new Error().stack); } catch {}
+        // no-op
+      };
+      // Route Element.scrollIntoView to the viewer if element is inside
+      const origSIV = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function(opts){
+        try {
+          if (this && typeof this.closest === 'function' && this.closest('#viewer')) {
+            const rect = this.getBoundingClientRect();
+            const vr = v.getBoundingClientRect();
+            const y = rect.top - vr.top + (v.scrollTop||0);
+            v.scrollTo({ top: y, behavior: 'auto' });
+            return;
+          }
+        } catch {}
+        try { console.warn('[BLOCK] scrollIntoView outside viewer', this); } catch {}
+      };
+      // Route wheel to viewer (prevents body scroll)
+      window.addEventListener('wheel', (e)=>{
+        try {
+          if (!e.defaultPrevented) {
+            v.scrollTop = (v.scrollTop||0) + (e.deltaY||0);
+            e.preventDefault();
+          }
+        } catch {}
+      }, { passive:false });
+      // Route space/PageUp/PageDown to viewer
+      window.addEventListener('keydown', (e)=>{
+        try {
+          const k = e.key || '';
+          if (k === ' ' || k === 'PageDown' || k === 'PageUp'){
+            const step = (k === 'PageUp' ? -1 : 1) * Math.round((v.clientHeight||0) * 0.85);
+            v.scrollTop = (v.scrollTop||0) + step;
+            e.preventDefault();
+          }
+        } catch {}
+      });
+    } catch {}
+  })();
+
   // Seatbelt disabled while we debug page jumps.
   // It’s safe to rely on css: html,body {overflow:hidden} and #viewer {overflow:auto}
   try {
