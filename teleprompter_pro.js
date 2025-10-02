@@ -291,6 +291,26 @@
   } catch {}
 
 
+  // Detect the actual scrollable container starting from a given element (run once at init)
+  function findScrollable(el){
+    try {
+      let node = el;
+      while (node && node !== document.body) {
+        try {
+          const sh = node.scrollHeight, ch = node.clientHeight;
+          const ov = getComputedStyle(node).overflowY;
+          if ((sh - ch) > 1 && (ov === 'auto' || ov === 'scroll')) return node;
+        } catch {}
+        node = node?.parentElement || null;
+      }
+    } catch {}
+    // Fallbacks in priority order
+    return document.getElementById('viewer')
+        || document.scrollingElement
+        || document.documentElement
+        || document.body;
+  }
+
 
 function setStatus(msg){
   try {
@@ -2192,19 +2212,22 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   // Hard-bind SCROLLER to the main viewer (single source of truth)
   try {
     if (viewer) {
-      SCROLLER.el(viewer);
-      // Cache viewer height once for stable marker calculations
-      try { VIEWER_HEIGHT_BASE = viewer?.clientHeight || 0; } catch {}
+      // Use real scroller ancestor when applicable
+      const _realScroller = findScrollable(viewer);
+      SCROLLER.el(_realScroller || viewer);
+      // Cache scroller height once for stable marker calculations
+      try { VIEWER_HEIGHT_BASE = (_realScroller?.clientHeight || viewer?.clientHeight || 0); } catch {}
       // Assert a single scroller bound to #viewer
       try {
         const bound = (SCROLLER && typeof SCROLLER.el === 'function') ? SCROLLER.el() : null;
         if (!bound || bound === document.scrollingElement) {
-          console.error('[SCROLLER] not bound to #viewer – main will not move.');
+          console.error('[SCROLLER] not bound to a content scroller – main will not move.');
         }
       } catch {}
       // Proactively add bottom pad to allow early scroll, then re-check
       try { applyBottomPad && applyBottomPad(); } catch {}
-      if (viewer.scrollHeight <= viewer.clientHeight) {
+      const _scProbe = (_realScroller || viewer);
+      if (_scProbe.scrollHeight <= _scProbe.clientHeight) {
         console.warn('[viewer] not scrollable – check height/overflow styles (or script content too short)');
       }
     }
