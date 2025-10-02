@@ -1224,6 +1224,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     const sc = SCROLLER.get();
     let lastIdx = -1, lastTop = -1;
     function stallWatchTick(){
+      return; // TEMP: disable stall nudge to isolate core scroll
       // Speech owns scroll briefly after activity
       try { if ((performance.now() - (lastSpeechMs||0)) < (SPEECH_GRACE_MS||0)) return; } catch {}
       // Hard gate: do not fight speech or controllers
@@ -2132,6 +2133,7 @@ async function _initCore() {
 
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   function maybeFallbackNudge(reason){
+    return; // TEMP: disable fallback nudge to isolate core scroll
     // Speech owns scroll briefly after activity
     try { if ((performance.now() - (lastSpeechMs||0)) < (SPEECH_GRACE_MS||0)) return; } catch {}
     // Hard speech gate at the very top
