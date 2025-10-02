@@ -1139,8 +1139,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
   // --- line-height metrics and clamped element scroll (anti-breathing jitter) ---
   let lineHeightPx = 20;           // will be updated from computed styles
-  // permissive threshold: ~25% of line height, with a 3px floor
-  let MIN_PIXEL_MOVE = Math.max(3, Math.round(lineHeightPx * 0.25));
+  // minimum motion threshold: ~15% of line height, 2px floor (tighter for small commits)
+  let MIN_PIXEL_MOVE = Math.max(2, Math.round(lineHeightPx * 0.15));
   function refreshLineMetrics(){
     try {
       const root = document.getElementById('script');
@@ -1160,8 +1160,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const lh = Math.max(14, Math.round(lhNum || lineHeightPx));
       if (lh && isFinite(lh)) {
         lineHeightPx = lh;
-        // smaller motion threshold to prevent over-filtering
-        MIN_PIXEL_MOVE = Math.max(3, Math.round(lineHeightPx * 0.25));
+  // tighter motion threshold so small committed moves still apply
+  MIN_PIXEL_MOVE = Math.max(2, Math.round(lineHeightPx * 0.15));
       }
     } catch {}
   }
