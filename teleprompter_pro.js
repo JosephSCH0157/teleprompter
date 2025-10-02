@@ -784,6 +784,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // --- Speech gating ---
   let recognizerActive = false;        // true between onstart→onend
   let nudgeDisabledUntil = 0;          // wallclock ms until which nudges are muted
+  // rAF-batch state flag for scroll writes (mirrored to window.__rafScheduled)
+  let __rafScheduled = false;
   const START_HOLD_MS = 700;           // extra conservative window at start (~0.7s)
   const NUDGE_IDLE_MS  = 3000;        // mute nudges this long after any speech (was 1200)
   const SPEECH_GRACE_MS = 900;        // brief grace after speech end to avoid fighting UI
@@ -2283,6 +2285,43 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       try { broadcastScroll(); } catch {}
     }
   };
+  // --- additional anchor helpers ---
+  function getLineHeightPx() {
+    try {
+      const v = viewer || document.getElementById('viewer');
+      const lh = parseFloat(getComputedStyle(v).lineHeight);
+      return Number.isFinite(lh) ? lh : 24;
+    } catch { return 24; }
+  }
+
+  function commitAnchorSmooth(anchor) {
+    try {
+      const v = viewer || document.getElementById('viewer');
+      if (!v || !anchor || !anchor.el) return;
+      const markerY = Math.round(v.clientHeight * 0.33); // keep target ~1/3 from top
+      const elTop = anchor.el.offsetTop;
+      const elH   = anchor.el.offsetHeight || getLineHeightPx();
+      const targetTop = Math.max(0, Math.round(elTop + elH * anchor.frac - markerY));
+      const nowTop = v.scrollTop | 0;
+      let dy = targetTop - nowTop;
+
+      // ignore micro-tweaks
+      if (Math.abs(dy) < (MIN_COMMIT_DELTA || 8)) return;
+
+      // clamp per frame to avoid leap/snap
+      const maxStep = Math.max(getLineHeightPx() * 1.25, 32);
+      if (dy >  maxStep) dy =  maxStep;
+      if (dy < -maxStep) dy = -maxStep;
+
+      // rAF-batch the write; piggyback on shared flag
+      if (window.__rafScheduled || __rafScheduled) return;
+      __rafScheduled = true; try { window.__rafScheduled = true; } catch {}
+      requestAnimationFrame(() => {
+        __rafScheduled = false; try { window.__rafScheduled = false; } catch {}
+        scrollByPx(dy); // uses the fixed wrapper that passes `viewer`
+      });
+    } catch {}
+  }
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
