@@ -311,6 +311,26 @@
         || document.body;
   }
 
+  // Central clamp + debug scroll using the locked scroller
+  function tpScrollTo(y){
+    try {
+      const sc = window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+      if (!sc) return;
+      const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+      const target = Math.round(Number(y) || 0);
+      const clamped = Math.min(Math.max(0, target), max);
+      if (clamped === 0 && max === 0) {
+        try { console.warn('[TP] No overflow: scrollHeight == clientHeight. Using PAGE scroller as fallback.'); } catch {}
+      }
+      if (clamped !== target) {
+        try { console.warn('[TP] Scroll target clamped', { y: target, clamped, max, sh: sc.scrollHeight, ch: sc.clientHeight }); } catch {}
+      }
+      sc.scrollTop = clamped;
+      // TEMP trace
+      try { console.log(JSON.stringify({ tag:'scroll', top: clamped })); } catch {}
+    } catch {}
+  }
+
 
 function setStatus(msg){
   try {
@@ -2472,9 +2492,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   scrollToY = (y) => {
     __programmaticScroll = true;
     try {
-      const before = viewer?.scrollTop|0;
-      sh.scrollToY(viewer, y);
-      logMove('toY', before, viewer?.scrollTop|0);
+      const sc = (window.__TP_SCROLLER || viewer);
+      const before = sc?.scrollTop|0;
+      // Centralized clamped scroll using locked scroller
+      tpScrollTo(y);
+      const after = sc?.scrollTop|0;
+      logMove('toY', before, after);
       try { updateDebugPosChip(); } catch {}
     } finally {
       __programmaticScroll = false;
