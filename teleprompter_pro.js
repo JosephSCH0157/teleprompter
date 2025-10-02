@@ -331,6 +331,19 @@
     } catch {}
   }
 
+  // Compute target Y for an element relative to the locked scroller using frozen height
+  function getYForElement(el, pct = 0.33){
+    try {
+      const sc = window.__TP_SCROLLER || SCROLLER.get?.() || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+      if (!el || !sc) return 0;
+      const vh = VIEWER_HEIGHT_BASE || sc.clientHeight || 0;
+      let y = 0, n = el;
+      // Accumulate offsetTop up to the scroller container
+      while (n && n !== sc) { y += (n.offsetTop || 0); n = n.offsetParent; }
+      return Math.max(0, Math.round(y - (vh * (Number.isFinite(pct)?pct:0.33))));
+    } catch { return 0; }
+  }
+
 
 function setStatus(msg){
   try {
@@ -1160,8 +1173,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       toTop(y, who = 'other') { schedule(y, who); },
       toEl(node, markerPct = 0.40, who = 'other') {
         if (!node) return;
-        const sc = get();
-        const y = node.offsetTop - Math.round(sc.clientHeight * markerPct);
+        const y = getYForElement(node, markerPct);
         schedule(y, who);
       },
       cancel(who){
@@ -1206,10 +1218,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     } catch {}
   }
   function computeTargetY(el, markerPct){
-    const sc = SCROLLER.get();
     const pct = (typeof markerPct === 'number' && isFinite(markerPct)) ? markerPct : getMarkerPct();
-    const vh = VIEWER_HEIGHT_BASE || (sc?.clientHeight || 0);
-    return el.offsetTop - Math.round(vh * pct);
+    return getYForElement(el, pct);
   }
   function toElClamped(el, who = 'speech', markerPct){
     try {
@@ -3341,7 +3351,7 @@ function scrollToCurrentIndex(){
   paraIndex.forEach(pi => pi.el.classList.toggle('active', pi === p));
   // Center-ish scroll
   const sc = SCROLLER.get();
-  const target = Math.max(0, p.el.offsetTop - (sc.clientHeight * 0.40));
+  const target = getYForElement(p.el, 0.40);
   // gentle ease towards target (use smoothness prefs if present)
   const S = (window.__TP_SCROLL || { EASE_STEP: 80, EASE_MIN: 10 });
   const dy = target - sc.scrollTop;
@@ -3748,8 +3758,7 @@ function advanceByTranscript(transcript, isFinal){
 
   const sc = (__scrollHelpers?.getScroller?.() || viewer);
   const maxTop     = Math.max(0, scriptEl.scrollHeight - sc.clientHeight);
-  const markerTop  = Math.round((VIEWER_HEIGHT_BASE || sc.clientHeight || 0) * getMarkerPct());
-  const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
+  const desiredTop = getYForElement(targetPara.el, getMarkerPct());
 
   const err = desiredTop - sc.scrollTop;
   const tNow = performance.now();
