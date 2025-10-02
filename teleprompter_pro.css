@@ -69,7 +69,7 @@ select { font-size: 14px; }
 
     :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; }
     /* keep the app fixed; only the #viewer should scroll */
-    html,body{height:100%; overflow:hidden !important}
+    html,body{height:100%; margin:0; overflow:hidden !important}
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
     .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10}
@@ -110,7 +110,10 @@ select { font-size: 14px; }
 
     .viewer{position:relative;overflow:auto;min-height:0}
     /* prevent wheel/touch from bubbling and nudging the page */
-    #viewer{ height:100vh; overflow:auto; overscroll-behavior:contain; scroll-behavior:auto; }
+    #viewer{ height:100vh; overflow:auto; overscroll-behavior:contain; scroll-behavior:auto; overflow-anchor:none; }
+    /* Prevent Chrome scroll-anchoring jitters on sticky UI */
+    header, aside, nav { overflow-anchor: none; }
+    .topbar { overflow-anchor: none; }
     .script{max-width:900px;margin:0 auto;padding:40px}
     .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
     .u{ text-decoration: underline; }
