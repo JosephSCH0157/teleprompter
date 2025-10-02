@@ -344,6 +344,15 @@
     } catch { return 0; }
   }
 
+  // Snap the scroller to the committed active element using frozen viewport metrics
+  function onSpeechCommit(activeEl){
+    try {
+      if (!activeEl) return;
+      const targetY = getYForElement(activeEl, 0.33);
+      tpScrollTo(targetY);
+    } catch {}
+  }
+
 
 function setStatus(msg){
   try {
@@ -967,6 +976,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       if ((performance.now() - __lastPidStamp) < 120) { __pendingCommitAnchor = anchor; return true; }
     }
   onSpeechProgress(anchor);
+    // Snap commit using locked scroller + frozen height
+    try { onSpeechCommit && onSpeechCommit(currentEl); } catch {}
     __pendingCommitAnchor = null;
   } catch {}
     try { sendScrollPosition(true); } catch {}
