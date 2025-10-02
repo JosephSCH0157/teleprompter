@@ -2995,6 +2995,21 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   // TP: initial-render
   // Initial render
     renderScript(editor.value || '');
+    // After paragraphs are in the DOM, lock onto the real scrollable container
+    try {
+      const firstPara = document.querySelector('.tp-para, .script p, [data-para], .tp-line, .script-line, .line, .seg, #script p')
+                       || document.querySelector('#script');
+      window.__TP_SCROLLER = findScrollable(firstPara || document.getElementById('viewer') || document.body);
+      // Freeze base height to avoid HUD breathing
+      VIEWER_HEIGHT_BASE = (window.__TP_SCROLLER?.clientHeight || 0);
+      // Rebind central SCROLLER to the chosen container
+      try { SCROLLER.el(window.__TP_SCROLLER); } catch {}
+      // Debug guard
+      try {
+        const sc = window.__TP_SCROLLER;
+        console.log('[TP] scroller chosen:', (sc?.id || sc?.tagName || 'unknown'), 'h=', sc?.clientHeight, 'sh=', sc?.scrollHeight);
+      } catch {}
+    } catch {}
     // Apply aggressiveness mapping now and on change
   // TP: matcher-tunables
   function applyAggro(){
