@@ -870,6 +870,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // --- commit smoothing ---
   const FORWARD_DEBOUNCE_MS = 120; // was 220ms; shorter to avoid starving commits
   let pendingForward = null; // { idx, score, due, raf }
+  // Acceptance guard state for large, low-confidence jumps
+  let __lastPidCandidate = null;
+  let __lastPidStamp = 0;
+  let __pendingCommitAnchor = null; // { el, pid, frac }
   function clearPendingForward(){
     try { if (pendingForward?.raf) cancelAnimationFrame(pendingForward.raf); } catch {}
     pendingForward = null;
@@ -887,13 +891,28 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Refresh speech timestamp and scroll smoothly toward the committed anchor
   try { lastSpeechMs = performance.now(); } catch { try { lastSpeechMs = Date.now(); } catch {} }
   try {
-    // Compute intra-paragraph fraction based on committed index
+    // Compute intra-paragraph fraction based on candidate index
     let frac = 0;
     if (p && typeof p.start==='number' && typeof p.end==='number' && p.end > p.start) {
       const span = Math.max(1, (p.end - p.start));
       frac = Math.min(1, Math.max(0, (idx - p.start) / span));
     }
-    commitAnchorSmooth({ el: currentEl, frac });
+    const pid = (currentEl?.dataset?.pid) || currentEl?.id || null;
+    const anchor = { el: currentEl, frac, pid };
+    // clamp acceptance when jump is large and not confident
+    const jump = Math.abs((idx|0) - (currentIndex|0));
+    const confident = (typeof score==='number') ? (score >= 0.98) : false;
+    if (jump >= 4 && !confident) {
+      if (anchor.pid !== __lastPidCandidate) {
+        __lastPidCandidate = anchor.pid;
+        __lastPidStamp = performance.now();
+        __pendingCommitAnchor = anchor;
+        return true; // hold this frame; commit on next confirmation
+      }
+      if ((performance.now() - __lastPidStamp) < 120) { __pendingCommitAnchor = anchor; return true; }
+    }
+    commitAnchorSmooth(anchor);
+    __pendingCommitAnchor = null;
   } catch {}
     try { sendScrollPosition(true); } catch {}
       // Evaluate anchor-based catch-up heuristics
@@ -3492,15 +3511,39 @@ function advanceByTranscript(transcript, isFinal){
   const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
-    // Smooth anchor commit on speech updates
+    // Smooth anchor commit on speech updates, with acceptance clamp for large jumps
     try { lastSpeechMs = performance.now(); } catch { try { lastSpeechMs = Date.now(); } catch {} }
     try {
-      let frac = 0;
-      if (targetPara && typeof targetPara.start==='number' && typeof targetPara.end==='number' && targetPara.end > targetPara.start) {
-        const span = Math.max(1, (targetPara.end - targetPara.start));
-        frac = Math.min(1, Math.max(0, (currentIndex - targetPara.start) / span));
+      const host = document.getElementById('script');
+      const el = (currentEl || targetPara?.el);
+      if (!el) { /* nothing to scroll */ }
+      else {
+        // Compute fraction within paragraph and build anchor
+        let frac = 0;
+        if (targetPara && typeof targetPara.start==='number' && typeof targetPara.end==='number' && targetPara.end > targetPara.start) {
+          const span = Math.max(1, (targetPara.end - targetPara.start));
+          frac = Math.min(1, Math.max(0, (currentIndex - targetPara.start) / span));
+        }
+        const pid = (el.dataset?.pid) || el.id || (()=>{ try{ ensureParaIds(host); return (el.dataset?.pid)||el.id; }catch{return null;} })();
+        const anchor = { el, frac, pid };
+
+        // clamp acceptance when jump is large and not confident
+        const jump = Math.abs(bestIdx - currentIndex);
+        const confident = bestScore >= 0.98;
+        if (jump >= 4 && !confident) {
+          if (anchor.pid !== __lastPidCandidate) {
+            __lastPidCandidate = anchor.pid;
+            __lastPidStamp = performance.now();
+            __pendingCommitAnchor = anchor;
+            return; // wait for the next confirmation tick
+          }
+          if ((performance.now() - __lastPidStamp) < 120) { __pendingCommitAnchor = anchor; return; }
+        }
+        // accept
+        currentIndex = bestIdx;
+        commitAnchorSmooth(anchor);
+        __pendingCommitAnchor = null;
       }
-      commitAnchorSmooth({ el: currentEl || targetPara.el, frac });
     } catch {}
   } else {
     // Controller stays in charge; do not adjust scroll here.
