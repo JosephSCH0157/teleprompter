@@ -884,8 +884,17 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
       try { if (currentEl && currentEl !== p.el) { currentEl.classList.remove('active'); currentEl.classList.remove('current'); } } catch {}
       currentEl = p.el; try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
-  // Snap to paragraph with small-move clamp to avoid breathing jitter
-  toElClamped(currentEl, 'speech', 0.40);
+  // Refresh speech timestamp and scroll smoothly toward the committed anchor
+  try { lastSpeechMs = performance.now(); } catch { try { lastSpeechMs = Date.now(); } catch {} }
+  try {
+    // Compute intra-paragraph fraction based on committed index
+    let frac = 0;
+    if (p && typeof p.start==='number' && typeof p.end==='number' && p.end > p.start) {
+      const span = Math.max(1, (p.end - p.start));
+      frac = Math.min(1, Math.max(0, (idx - p.start) / span));
+    }
+    commitAnchorSmooth({ el: currentEl, frac });
+  } catch {}
     try { sendScrollPosition(true); } catch {}
       // Evaluate anchor-based catch-up heuristics
       try {
@@ -3479,8 +3488,16 @@ function advanceByTranscript(transcript, isFinal){
   const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
   const allowSpeechOverride = isFinal && (strongMatch || smallWordDelta);
   if (!catchupActive || allowSpeechOverride) {
-    // Force scrolling via centralized scroller to align anchor and raw scroll broadcasts
-  try { toElClamped(currentEl, 'speech', 0.40); } catch {}
+    // Smooth anchor commit on speech updates
+    try { lastSpeechMs = performance.now(); } catch { try { lastSpeechMs = Date.now(); } catch {} }
+    try {
+      let frac = 0;
+      if (targetPara && typeof targetPara.start==='number' && typeof targetPara.end==='number' && targetPara.end > targetPara.start) {
+        const span = Math.max(1, (targetPara.end - targetPara.start));
+        frac = Math.min(1, Math.max(0, (currentIndex - targetPara.start) / span));
+      }
+      commitAnchorSmooth({ el: currentEl || targetPara.el, frac });
+    } catch {}
   } else {
     // Controller stays in charge; do not adjust scroll here.
     // Speech still updates timestamps and downstream broadcasts below.
