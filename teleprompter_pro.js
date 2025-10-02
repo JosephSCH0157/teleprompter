@@ -2147,6 +2147,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   // Dev guard: block stray page scroll calls and route interactions to #viewer only
   (function devBlockPageScroll(){
     try {
+      if (window.__DEV_BLOCK_SCROLL === false) return; // allow opt-out
+      if (window.__DEV_BLOCK_SCROLL_INSTALLED) return; // idempotent
+      window.__DEV_BLOCK_SCROLL_INSTALLED = true;
       const v = document.getElementById('viewer');
       if (!v) return;
       // Block window.scrollTo (page should never move)
