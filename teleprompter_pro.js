@@ -141,7 +141,7 @@
   let lastCommitIdx = -1;
   let lastCommitTime = 0;
   let lastDriftTickMs = 0;
-  const MICRO_DRIFT_LINES_PER_S = 0.6; // ~0.6 lines / second while speaking
+  const MICRO_DRIFT_LINES_PER_S = 0.38; // ~0.38 lines / second while speaking (reduced to avoid hops)
   function speechActive(){
     try { return !!recognizerActive; } catch { return !!window._speechListening; }
   }
@@ -162,8 +162,8 @@
       if (!pEl) return;
       const bottom = (pEl.offsetTop || 0) + (pEl.offsetHeight || 0);
       const markerY = computeMarkerY();
-      // Stop drifting once marker ~80px from paragraph bottom
-      if (markerY >= (bottom - 80)) { lastDriftTickMs = now; return; }
+  // Stop drifting once marker is close to the paragraph bottom (buffer ~140px)
+  if (markerY >= (bottom - 140)) { lastDriftTickMs = now; return; }
       const prev = lastDriftTickMs || lastCommitTime || now;
       const dt = Math.max(0, now - prev);
       if (dt < 50) return; // avoid ultra-high frequency
