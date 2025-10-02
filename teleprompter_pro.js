@@ -3529,6 +3529,27 @@ function advanceByTranscript(transcript, isFinal){
       // treat as noise; keep us near our last committed position
       bestIdx = Math.max(currentIndex, lastFinalIndex - Math.floor(BACK_HARD_LIMIT / 2));
     }
+    // Forward-jump governor (display open): cap large leaps and freeze rapid forward jumps briefly
+    try {
+      if (displayWin && !displayWin.closed && displayReady) {
+        const MAX_LEAP = 1;          // allow at most one token forward per update unless very confident
+        const LEAP_FREEZE_MS = 700;  // freeze further forward jumps briefly
+        const tNowGov = performance.now();
+        let bigLeap = bestIdx - currentIndex;
+        if (bigLeap > MAX_LEAP && bestScore < 0.98) {
+          bestIdx = currentIndex + MAX_LEAP;
+        }
+        if (bestIdx > currentIndex) {
+          const lastMs = window._lastForwardMs || 0;
+          if ((tNowGov - lastMs) < LEAP_FREEZE_MS) {
+            // too soon for another forward jump; hold position
+            bestIdx = currentIndex;
+          } else {
+            window._lastForwardMs = tNowGov;
+          }
+        }
+      }
+    } catch {}
     const delta = bestIdx - currentIndex;
     if (typeof debug === 'function') {
       debug({
