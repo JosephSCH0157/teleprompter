@@ -109,13 +109,17 @@ select { font-size: 14px; }
     .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:8px 0}
 
     .viewer{position:relative;overflow:auto;min-height:0}
-    /* prevent wheel/touch from bubbling and nudging the page */
+    /* prevent wheel/touch from bubbling and nudging the page; viewer is the only scroller */
     #viewer{ height:100vh; overflow:auto; overscroll-behavior:contain; scroll-behavior:auto; overflow-anchor:none; }
+    /* Guard against accidental 100% heights on inner content: ensure content exceeds viewport to allow scrolling */
+    #script, .script{ height:auto !important; min-height:101vh; }
     /* Prevent Chrome scroll-anchoring jitters on sticky UI */
     header, aside, nav { overflow-anchor: none; }
     .topbar { overflow-anchor: none; }
     .script{max-width:900px;margin:0 auto;padding:40px}
     .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
+    /* Active/current markers must not change layout; color/underline only */
+    .script p.active, .script p.current{ text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset:.15em; }
     .u{ text-decoration: underline; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 
