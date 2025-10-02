@@ -911,7 +911,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       }
       if ((performance.now() - __lastPidStamp) < 120) { __pendingCommitAnchor = anchor; return true; }
     }
-    commitAnchorSmooth(anchor);
+  onSpeechProgress(anchor);
     __pendingCommitAnchor = null;
   } catch {}
     try { sendScrollPosition(true); } catch {}
@@ -2423,6 +2423,26 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       requestAnimationFrame(() => { try { scroller.scrollTop = (scroller.scrollTop|0) + dy; } catch {} });
     } catch {}
   }
+
+  // Micro-stall guard (main-only): if anchor frac advances but scroll didn’t, gently nudge one line
+  let __ms_lastScrollTop = 0, __ms_lastScrollMs = 0, __ms_lastFrac = 0;
+  function onSpeechProgress(anchor){
+    try {
+      const scroller = (typeof SCROLLER?.el === 'function' ? SCROLLER.el() : null) || viewer;
+      if (!scroller) return;
+      const now = performance.now();
+      // normal commit first
+      commitAnchorSmooth(anchor);
+      // gentle keep-alive if we're stuck
+      const frac = Number(anchor?.frac)||0;
+      const scTop = scroller.scrollTop|0;
+      if (frac > (__ms_lastFrac + 0.05) && Math.abs(scTop - __ms_lastScrollTop) < 1 && (now - __ms_lastScrollMs) > 500) {
+        try { scroller.scrollTop = scTop + Math.round(getLineHeightPx(scroller) * 0.9); } catch {}
+      }
+      __ms_lastFrac = frac;
+      if (scTop !== __ms_lastScrollTop) { __ms_lastScrollTop = scTop; __ms_lastScrollMs = now; }
+    } catch {}
+  }
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
@@ -3609,8 +3629,8 @@ function advanceByTranscript(transcript, isFinal){
           if ((performance.now() - __lastPidStamp) < 120) { __pendingCommitAnchor = anchor; return; }
         }
         // accept
-        currentIndex = bestIdx;
-        commitAnchorSmooth(anchor);
+  currentIndex = bestIdx;
+  onSpeechProgress(anchor);
         __pendingCommitAnchor = null;
       }
     } catch {}
