@@ -2195,6 +2195,26 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     } catch {}
   })();
 
+  // Debug: verify page isn't scrolling (warn if body/document scrollTop moves)
+  (function pageScrollWatcher(){
+    try {
+      if (window.__DEV_PAGE_SCROLL_WATCH === false) return; // allow opt-out
+      if (window.__PAGE_SCROLL_WATCH_INSTALLED) return; // idempotent
+      window.__PAGE_SCROLL_WATCH_INSTALLED = true;
+      let lastBodyTop = (document.scrollingElement?.scrollTop|0) || 0;
+      setInterval(() => {
+        try {
+          const se = document.scrollingElement || document.documentElement;
+          const t = se.scrollTop | 0;
+          if (t !== lastBodyTop) {
+            console.warn('[WARN] PAGE SCROLLED', { from: lastBodyTop, to: t });
+            lastBodyTop = t;
+          }
+        } catch {}
+      }, 150);
+    } catch {}
+  })();
+
   // Seatbelt disabled while we debug page jumps.
   // It’s safe to rely on css: html,body {overflow:hidden} and #viewer {overflow:auto}
   try {
