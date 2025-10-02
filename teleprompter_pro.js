@@ -1135,7 +1135,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Cancel any queued nudge rAF (outer) and SCROLLER-level pending 'nudge'
   let pendingNudgeRaf = 0;
   function enqueueNudge(y, why='nudge'){
-    try { if (speechGateActive()) { try { debugNudge && debugNudge('MUTED', why); } catch {} return; } } catch {}
+    try {
+      // hard mute while speech is hot; also honor brief grace
+      if ((performance.now() - (lastSpeechMs||0)) < 900) return;
+      if (speechGateActive()) { try { debugNudge && debugNudge('MUTED', why); } catch {} return; }
+    } catch {}
     try { if (pendingNudgeRaf) cancelAnimationFrame(pendingNudgeRaf); } catch {}
     pendingNudgeRaf = requestAnimationFrame(() => {
       pendingNudgeRaf = 0;
@@ -1169,6 +1173,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     function stallWatchTick(){
       // Speech owns scroll briefly after activity
       try { if ((performance.now() - (lastSpeechMs||0)) < (SPEECH_GRACE_MS||0)) return; } catch {}
+  // brief grace after speech activity: speech owns scroll
+  try { if ((performance.now() - (lastSpeechMs||0)) < 900) return; } catch {}
       // Hard gate: do not fight speech or controllers
       if (speechGateActive()) return;
       const now = performance.now();
