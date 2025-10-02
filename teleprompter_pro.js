@@ -786,6 +786,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let nudgeDisabledUntil = 0;          // wallclock ms until which nudges are muted
   const START_HOLD_MS = 700;           // extra conservative window at start (~0.7s)
   const NUDGE_IDLE_MS  = 3000;        // mute nudges this long after any speech (was 1200)
+  const SPEECH_GRACE_MS = 900;        // brief grace after speech end to avoid fighting UI
+  const MIN_COMMIT_DELTA = 8;         // px: minimum scroll delta to treat as meaningful for stall
   const HOP_LIMIT_START = 6;          // extra conservative hop size during hold
   // One-time: inhibit stall/nudges until we get the first committed match
   let awaitingFirstCommit = false;
@@ -882,7 +884,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       currentEl = p.el; try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
   // Snap to paragraph with small-move clamp to avoid breathing jitter
   toElClamped(currentEl, 'speech', 0.40);
-    try { sendScrollPosition(); } catch {}
+    try { sendScrollPosition(true); } catch {}
       // Evaluate anchor-based catch-up heuristics
       try {
         const vRect = SCROLLER.get().getBoundingClientRect();
@@ -1017,7 +1019,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const pri = (SCROLL_PRIORITY && (SCROLL_PRIORITY[who] ?? 0)) || 0;
       if (!pending || pri > pending.pri) pending = { top, who, pri };
       try { if (who && who !== 'other') OwnerHUD?.set?.(who); } catch {}
-      if (!raf) raf = requestAnimationFrame(() => {
+      if (!raf) {
+        try { window.__rafScheduled = true; } catch {}
+        raf = requestAnimationFrame(() => {
         raf = 0;
         if (!pending) return;
         const sc = get();
@@ -1026,7 +1030,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         sc.scrollTop = topClamped;
         try { OwnerHUD && OwnerHUD.set && OwnerHUD.set(pending.who || 'other'); } catch {}
         pending = null;
+        try { window.__rafScheduled = false; } catch {}
       });
+      }
     }
 
     return {
@@ -1141,7 +1147,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
       const idx = (typeof currentIndex === 'number') ? currentIndex : -1;
       const top = sc.scrollTop | 0;
-      if (idx > lastIdx && Math.abs(top - lastTop) < 2) {
+      // Only nudge when scroll hasn't moved by at least MIN_COMMIT_DELTA
+      if (idx > lastIdx && Math.abs(top - lastTop) < (MIN_COMMIT_DELTA || 8)) {
         enqueueNudge(top + Math.round(sc.clientHeight * 0.20), 'stall');
       }
       lastIdx = idx; lastTop = top;
@@ -4531,7 +4538,7 @@ function initAfterBoot(){
     try {
       recog.onspeechstart = () => { try { onAnySpeechActivity(); } catch {} };
       recog.onsoundstart  = () => { try { onAnySpeechActivity(); } catch {} };
-      recog.onspeechend   = () => { try { recognizerActive = false; nudgeDisabledUntil = performance.now() + 800; } catch {} };
+  recog.onspeechend   = () => { try { recognizerActive = false; nudgeDisabledUntil = Math.max(nudgeDisabledUntil||0, performance.now() + SPEECH_GRACE_MS); } catch {} };
     } catch {}
     recog.onend = () => {
       document.body.classList.remove('listening');
