@@ -2137,6 +2137,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   try {
     if (viewer) {
       SCROLLER.el(viewer);
+      // Assert a single scroller bound to #viewer
+      try {
+        const bound = (SCROLLER && typeof SCROLLER.el === 'function') ? SCROLLER.el() : null;
+        if (!bound || bound === document.scrollingElement) {
+          console.error('[SCROLLER] not bound to #viewer – main will not move.');
+        }
+      } catch {}
       if (viewer.scrollHeight <= viewer.clientHeight) {
         console.warn('[viewer] not scrollable – check height/overflow styles');
       }
