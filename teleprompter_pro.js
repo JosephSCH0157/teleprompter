@@ -44,6 +44,31 @@
     _origLog(tag('installed global error hooks'));
   } catch {}
   try { __tpBootPush('after-boot-block'); } catch {}
+
+  // Calm Mode geometry helpers: unified target math and clamped scroll writes
+  // These are safe to define always; callers should only use them when CALM is enabled.
+  function getYForElInScroller(el, sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body), pct = 0.38) {
+    try {
+      if (!el || !sc) return 0;
+      const elR = el.getBoundingClientRect();
+      const scR = (typeof sc.getBoundingClientRect === 'function') ? sc.getBoundingClientRect() : { top: 0 };
+      const base = (typeof window.__TP_VIEWER_HEIGHT_BASE === 'number' && window.__TP_VIEWER_HEIGHT_BASE > 0) ? window.__TP_VIEWER_HEIGHT_BASE : (sc.clientHeight || 0);
+      const raw = (sc.scrollTop || 0) + (elR.top - scR.top) - Math.round(base * pct);
+      const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+      return Math.max(0, Math.min(raw | 0, max));
+    } catch { return 0; }
+  }
+  function tpScrollTo(y, sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body)) {
+    try {
+      const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+      const target = Math.min(Math.max(0, y | 0), max);
+      sc.scrollTop = target;
+      if (window.__TP_DEV) {
+        try { console.debug('[TP-Pro Calm] tpScrollTo', { y, target, max, scroller: sc.id || sc.tagName }); } catch {}
+      }
+    } catch {}
+  }
+
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
     if (typeof window.__tpRealCore !== 'function') {
