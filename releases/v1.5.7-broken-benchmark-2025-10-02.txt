@@ -1,0 +1,21 @@
+Teleprompter Pro v1.5.7 — Broken benchmark (2025-10-02)
+
+HEAD: 2cb7353
+Title: Enhance viewer scrolling behavior and layout stability with updated CSS rules
+
+Context:
+- Real scroller detector + lock (findScrollable) and frozen VIEWER_HEIGHT_BASE
+- Centralized tpScrollTo with clamping/logging
+- getYForElement for frozen-viewport target math
+- Speech commit onSpeechCommit() snap using locked scroller
+- Various guards (stall/fallback nudges temporarily disabled), HUDs present
+
+Why marked broken:
+- Repro case(s) under evaluation (scroll anchoring and geometry alignment tuning)
+- This benchmark intentionally captures current behavior for regression comparison
+
+How to compare:
+- Previous solid baseline: releases/v1.5.7-solid-baseline.txt
+- Diff: see releases/diff-HEAD_2cb7353_vs_b2e23a4.txt
+
+Source of truth: teleprompter_pro.js (header indicates version)
