@@ -2256,6 +2256,42 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   } catch {}
   console.log('[TP-Pro] _initCore end');
 
+  // Calm Mode: CSS + guardrails to stabilize geometry and suppress external scrolls
+  try {
+    if (window.__TP_CALM && !window.__TP_CALM_CSS_INJECTED) {
+      window.__TP_CALM_CSS_INJECTED = true;
+      try {
+        const st = document.createElement('style');
+        st.setAttribute('data-tp-calm', '1');
+        st.textContent = `
+          #viewer, html, body { scroll-behavior: auto !important; overscroll-behavior: contain; }
+          #viewer, #viewer * { scroll-snap-type: none !important; scroll-snap-align: none !important; }
+        `;
+        document.head.appendChild(st);
+      } catch {}
+
+      // Keep overlays from perturbing geometry
+      try {
+        ['#hud','#help','#debug','#devpanel','[data-tp-hud]'].forEach(sel => {
+          document.querySelectorAll(sel).forEach(n => { try { n.style.position = 'fixed'; } catch {} });
+        });
+      } catch {}
+
+      // Optional: neutralize external scrollIntoView while CALM
+      try {
+        if (!window.__TP_SCROLL_INTO_VIEW_ORIG && Element && Element.prototype && Element.prototype.scrollIntoView) {
+          window.__TP_SCROLL_INTO_VIEW_ORIG = Element.prototype.scrollIntoView;
+          Element.prototype.scrollIntoView = function(...args){
+            try {
+              if (!window.__TP_CALM) return window.__TP_SCROLL_INTO_VIEW_ORIG.apply(this, args);
+              if (window.__TP_DEV) console.debug('[TP-Pro Calm] scrollIntoView suppressed for', this);
+            } catch {}
+          };
+        }
+      } catch {}
+    }
+  } catch {}
+
   // Calm Mode: highlight observer as a second trigger for smooth anchoring
   try {
     if (window.__TP_CALM) {
