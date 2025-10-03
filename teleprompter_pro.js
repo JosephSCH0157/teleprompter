@@ -2544,6 +2544,19 @@ function _sim(a, b){
   return (2 * overlap) / (a.length + b.length);
 }
 
+// Speech commit hook: use geometry-based targeting only in Calm Mode
+function legacyOnSpeechCommit(activeEl){
+  // No-op by default: non-Calm keeps existing behavior already executed in advanceByTranscript
+}
+function onSpeechCommit(activeEl){
+  try {
+    if (!window.__TP_CALM) return legacyOnSpeechCommit(activeEl);
+    const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+    const y = getYForElInScroller(activeEl, sc, 0.38);
+    tpScrollTo(y, sc);
+  } catch {}
+}
+
 // Advance currentIndex by trying to align recognized words to the upcoming script words
 // TP: advance-by-transcript
 function advanceByTranscript(transcript, isFinal){
@@ -2610,47 +2623,66 @@ function advanceByTranscript(transcript, isFinal){
   const markerTop  = Math.round(viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
   const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
 
-  const err = desiredTop - viewer.scrollTop;
-  const tNow = performance.now();
-  if (Math.abs(err) < DEAD_BAND_PX || (tNow - _lastCorrectionAt) < CORRECTION_MIN_MS) return;
+  if (isFinal && window.__TP_CALM) {
+    // Calm Mode: snap using geometry-based targeting at commit time
+    try { onSpeechCommit(currentEl); } catch {}
+    if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop, mode:'calm-commit' });
+    {
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+    }
+    try {
+      const vRect = viewer.getBoundingClientRect();
+      const anchorEl = (__anchorObs?.mostVisibleEl?.() || null) || targetPara.el;
+      const pRect = anchorEl.getBoundingClientRect();
+      const anchorY = pRect.top - vRect.top;
+      maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+    } catch {}
+    if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
+  } else {
+    const err = desiredTop - viewer.scrollTop;
+    const tNow = performance.now();
+    if (Math.abs(err) < DEAD_BAND_PX || (tNow - _lastCorrectionAt) < CORRECTION_MIN_MS) return;
 
-  // Anti-jitter: for interim results, avoid backward corrections entirely
-  const dir = err > 0 ? 1 : (err < 0 ? -1 : 0);
-  if (!isFinal && dir < 0) return;
-  // Hysteresis: don’t change direction on interim unless the error is clearly large
-  if (!isFinal && _lastMoveDir !== 0 && dir !== 0 && dir !== _lastMoveDir && Math.abs(err) < (DEAD_BAND_PX * 2)) return;
+    // Anti-jitter: for interim results, avoid backward corrections entirely
+    const dir = err > 0 ? 1 : (err < 0 ? -1 : 0);
+    if (!isFinal && dir < 0) return;
+    // Hysteresis: don’t change direction on interim unless the error is clearly large
+    if (!isFinal && _lastMoveDir !== 0 && dir !== 0 && dir !== _lastMoveDir && Math.abs(err) < (DEAD_BAND_PX * 2)) return;
 
-  // Scale steps based on whether this came from a final (more confident) match
-  const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
-  const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
-  // Prefer element-anchored scrolling so we always target the same line element
-  try {
-    scrollToEl(currentEl, markerTop);
-  } catch {
-    let next;
-    if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
-    else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-    viewer.scrollTop = next;
+    // Scale steps based on whether this came from a final (more confident) match
+    const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
+    const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
+    // Prefer element-anchored scrolling so we always target the same line element
+    try {
+      scrollToEl(currentEl, markerTop);
+    } catch {
+      let next;
+      if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
+      else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
+      viewer.scrollTop = next;
+    }
+    if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
+    {
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? (viewer.scrollTop / max) : 0;
+      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+    }
+    // Evaluate whether to run the gentle catch-up loop based on anchor position
+    try {
+      const vRect = viewer.getBoundingClientRect();
+      // Prefer the most visible element if available; else current paragraph
+      const anchorEl = (__anchorObs?.mostVisibleEl?.() || null) || targetPara.el;
+      const pRect = anchorEl.getBoundingClientRect();
+      const anchorY = pRect.top - vRect.top; // anchor relative to viewer
+      maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+    } catch {}
+    // mark progress for stall-recovery
+    if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
+    _lastCorrectionAt = tNow;
+    if (dir !== 0) _lastMoveDir = dir;
   }
-  if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
-  {
-    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const ratio = max ? (viewer.scrollTop / max) : 0;
-    sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-  }
-  // Evaluate whether to run the gentle catch-up loop based on anchor position
-  try {
-    const vRect = viewer.getBoundingClientRect();
-    // Prefer the most visible element if available; else current paragraph
-  const anchorEl = (__anchorObs?.mostVisibleEl?.() || null) || targetPara.el;
-    const pRect = anchorEl.getBoundingClientRect();
-    const anchorY = pRect.top - vRect.top; // anchor relative to viewer
-    maybeCatchupByAnchor(anchorY, viewer.clientHeight);
-  } catch {}
-  // mark progress for stall-recovery
-  if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
-  _lastCorrectionAt = tNow;
-  if (dir !== 0) _lastMoveDir = dir;
   // Dead-man timer: ensure scroll keeps up with HUD index
   try { deadmanWatchdog(currentIndex); } catch {}
 }
