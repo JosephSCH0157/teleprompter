@@ -1915,6 +1915,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       if (!SRAvail) {
         if (recBtn) { recBtn.disabled = true; recBtn.title = 'Speech recognition not supported in this browser'; }
         if (recChip) { recChip.textContent = 'Speech: unsupported'; }
+      } else {
+        // Supported → ensure the button is enabled (HTML defaults to disabled)
+        if (recBtn) { recBtn.disabled = false; try { recBtn.removeAttribute('title'); } catch {} }
       }
     } catch {}
 
