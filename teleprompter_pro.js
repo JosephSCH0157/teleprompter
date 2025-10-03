@@ -17,6 +17,7 @@
     const DEV  = Q.has('dev')  || localStorage.getItem('tp_dev_mode') === '1';
     const CALM = Q.has('calm') || localStorage.getItem('tp_calm')    === '1';
     try { window.__TP_DEV = DEV; window.__TP_CALM = CALM; } catch {}
+    try { if (CALM) { window.__TP_DISABLE_NUDGES = true; } } catch {}
     try { if (DEV) console.info('[TP-Pro] DEV mode enabled'); } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
   } catch {}
@@ -1492,6 +1493,7 @@ async function _initCore() {
 
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   setInterval(() => {
+    if (window.__TP_DISABLE_NUDGES) return;
     if (!recActive || !viewer) return; // only when speech sync is active
     if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
     const now = performance.now();
