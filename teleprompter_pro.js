@@ -245,8 +245,9 @@
   // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
   setTimeout(()=>{
     try {
-      if (!window.__tpInitSuccess && typeof init === 'function') {
-        console.warn('[TP-Pro] Early zero-time force init attempt');
+      if (!window.__tpInitSuccess && !window.__tpInitCalled && typeof init === 'function') {
+        if (window.__TP_DEV) { try { console.info('[TP-Pro] Early zero-time force init attempt'); } catch {} }
+        window.__tpInitCalled = true;
         init();
       }
     } catch(e){ console.error('[TP-Pro] early force init error', e); }
