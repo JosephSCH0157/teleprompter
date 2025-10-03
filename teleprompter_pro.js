@@ -2256,6 +2256,36 @@ shortcutsClose   = document.getElementById('shortcutsClose');
   } catch {}
   console.log('[TP-Pro] _initCore end');
 
+  // Calm Mode: highlight observer as a second trigger for smooth anchoring
+  try {
+    if (window.__TP_CALM) {
+      const root = document.getElementById('script')
+        || document.querySelector('#viewer .script')
+        || document.getElementById('viewer')
+        || document.body;
+      const sc = (window.__TP_SCROLLER
+        || document.getElementById('viewer')
+        || document.scrollingElement
+        || document.documentElement
+        || document.body);
+
+      const isActive = (el) => !!(el && el.classList && (el.classList.contains('current') || el.classList.contains('active')))
+        || (el && typeof el.getAttribute === 'function' && (el.getAttribute('data-active') === '1' || el.getAttribute('aria-current') === 'true'));
+      const getActive = () => root && root.querySelector && root.querySelector('.current, .active, [data-active="1"], .tp-active, .spoken, [aria-current="true"]');
+      const anchor = (el) => { if (!el) return; try { const y = getYForElInScroller(el, sc, 0.38); tpScrollTo(y, sc); } catch {} };
+
+      try { anchor(getActive()); } catch {}
+      try {
+        new MutationObserver(() => {
+          try {
+            const cand = getActive();
+            if (cand) anchor(cand);
+          } catch {}
+        }).observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['class','data-active','aria-current'] });
+      } catch {}
+    }
+  } catch (e) { try { console.warn('[TP-Pro Calm] highlight observer failed', e); } catch {} }
+
   /* ──────────────────────────────────────────────────────────────
    * Roles + Legend
    * ────────────────────────────────────────────────────────────── */
