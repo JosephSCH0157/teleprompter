@@ -1383,6 +1383,22 @@ async function _initCore() {
     }
   } catch {}
   console.log('[TP-Pro] _initCore start');
+  // Calm Mode: lock scroller and freeze base viewport height early
+  try {
+    if (window.__TP_CALM) {
+      function chooseScroller() {
+        const v = document.getElementById('viewer');
+        if (v && (v.scrollHeight - v.clientHeight > 1)) return v;
+        return document.scrollingElement || document.documentElement || document.body;
+      }
+      const SCROLLER = chooseScroller();
+      const VIEWER_HEIGHT_BASE = SCROLLER?.clientHeight || 0;
+      // publish for other modules that may consult these
+      try { window.__TP_SCROLLER = SCROLLER; } catch {}
+      try { window.__TP_VIEWER_HEIGHT_BASE = VIEWER_HEIGHT_BASE; } catch {}
+      console.info('[TP-Pro Calm] Scroller locked:', SCROLLER?.id || SCROLLER?.tagName, 'vh_base=', VIEWER_HEIGHT_BASE);
+    }
+  } catch (e) { console.warn('[TP-Pro Calm] scroller lock failed', e); }
   // Run minimal wiring first (meters, help overlay, normalize button)
   try { __initMinimal(); } catch(e) { console.warn('Minimal init failed', e); }
   // ⬇️ grab these *first*
