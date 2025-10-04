@@ -91,6 +91,28 @@ export function createScrollController(){
     lastClampY: -1,
   };
 
+  // Commit hysteresis (stability + confidence)
+  const SIM_MIN = 0.80;
+  const STABLE_MS = 200;
+  const WINDOW = 3;
+  let simBuf = [];           // { t, sim, idx }
+  let lastCommit = { t: 0, idx: -1 };
+
+  function considerCommit(now, sim, idx){
+    try {
+      simBuf.push({ t: now, sim, idx });
+      if (simBuf.length > 12) simBuf.shift();
+      const recent = simBuf.filter(r => now - r.t <= STABLE_MS);
+      if (recent.length < WINDOW) return false;
+      const okSim = recent.every(r => r.sim >= SIM_MIN);
+      const monotonic = recent.every((r,i,arr) => !i || r.idx >= arr[i-1].idx);
+      if (!okSim || !monotonic) return false;
+      if (idx <= lastCommit.idx) return false; // forward-only commits
+      lastCommit = { t: now, idx };
+      return true;
+    } catch { return false; }
+  }
+
   function logEv(ev){ try { if (typeof debug==='function') debug(ev); else if (window?.HUD) HUD.log(ev.tag||'log', ev); } catch {} }
 
   // Helper to decide whether to commit a new index
@@ -154,8 +176,17 @@ export function createScrollController(){
           return;
         }
 
-        // Normal gated commit
+        // Normal gated commit (policy gate)
         if (!window.__tpShouldCommitIdx(bestIdx, sim)) return;
+
+        // Hysteresis gate (forward-only): require stable, confident window
+        if (bestIdx > S.committedIdx) {
+          const ok = considerCommit(now, sim, bestIdx);
+          if (!ok) {
+            logEv({ tag:'match:gate', reason:'hysteresis', bestIdx, committedIdx:S.committedIdx, sim, SIM_MIN, STABLE_MS, WINDOW });
+            return;
+          }
+        }
 
         _origScrollToCurrentIndex.apply(this, arguments);
         S.committedIdx = bestIdx;
