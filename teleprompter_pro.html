@@ -19,6 +19,29 @@
   // Note: teleprompter_pro.js will also set window.__TP_DEV
 </script>
 
+<!-- Safe requestScroll polyfill: defined early so callers can rely on it -->
+<script>
+  (function(){
+    try {
+      if (!window.requestScroll) {
+        window.requestScroll = function(arg){
+          try {
+            var top = (typeof arg === 'object') ? Number(arg && arg.top) : Number(arg);
+            if (!isFinite(top)) top = 0;
+            var behavior = (typeof arg === 'object' && arg && arg.behavior) ? String(arg.behavior) : 'smooth';
+            if (typeof window.scrollTo === 'function') {
+              window.scrollTo({ top: top, behavior: behavior });
+            } else {
+              (document.scrollingElement || document.documentElement || document.body).scrollTop = top;
+            }
+          } catch {}
+        };
+      }
+    } catch {}
+  })();
+  // In-app helpers will override this with a coalesced scroller scheduler when ready
+</script>
+
 <link href="teleprompter_pro.css" rel="stylesheet"/>
 <style>
   #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui, sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}

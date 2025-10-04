@@ -1747,11 +1747,11 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const shMod = await import('./scroll-helpers.js');
   const sh = shMod.createScrollerHelpers(() => viewer);
       __scrollHelpers = sh;
-      clampScrollTop = sh.clampScrollTop;
-      scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
-      scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
-      scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
-  requestScroll  = (y)=>{ sh.requestScroll(y); try{ updateDebugPosChip(); }catch{} };
+    clampScrollTop = sh.clampScrollTop;
+    scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
+    scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
+    scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
+    requestScroll  = (y)=>{ try{ sh.requestScroll(y); }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} } try{ updateDebugPosChip(); }catch{} };
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
