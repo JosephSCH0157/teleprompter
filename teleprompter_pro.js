@@ -1702,12 +1702,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Initialize modular helpers now that viewer exists
     try {
       const shMod = await import('./scroll-helpers.js');
-      const sh = shMod.createScrollerHelpers(() => viewer);
+  const sh = shMod.createScrollerHelpers(() => viewer);
       __scrollHelpers = sh;
       clampScrollTop = sh.clampScrollTop;
       scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
       scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
       scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
+  requestScroll  = (y)=>{ sh.requestScroll(y); try{ updateDebugPosChip(); }catch{} };
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
