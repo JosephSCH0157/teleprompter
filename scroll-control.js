@@ -179,12 +179,12 @@ export function createScrollController(){
           return;
         }
 
-        // Update stability confirmations for the current bestIdx
+        // Update stability confirmations for the current bestIdx, only when sim is decent (>= 0.72)
         if (bestIdx === S.lastBestIdx) {
-          S.stableHits++;
+          S.stableHits = (sim >= 0.72) ? (S.stableHits + 1) : 0;
         } else {
           S.lastBestIdx = bestIdx;
-          S.stableHits = 1;
+          S.stableHits = (sim >= 0.72) ? 1 : 0;
         }
 
         // New simplified gate:
@@ -195,7 +195,7 @@ export function createScrollController(){
           return;
         }
         const immediateOk = (sim >= SIM_IMMEDIATE);
-        const confirmationsOk = (S.stableHits >= STABLE_HITS);
+        const confirmationsOk = (sim >= 0.72) && (S.stableHits >= STABLE_HITS);
         if (!immediateOk && !confirmationsOk) {
           logEv({ tag:'match:gate', reason:'await-confirmations', bestIdx, committedIdx:S.committedIdx, sim, hits:S.stableHits, need:STABLE_HITS });
           return;

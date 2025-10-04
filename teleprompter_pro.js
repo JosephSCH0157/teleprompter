@@ -1614,7 +1614,16 @@ async function _initCore() {
     if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
     const now = performance.now();
   const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
+    // If similarity has been in the mid band (0.72–0.80) very recently, wait a couple frames (~300ms)
+    try {
+      const sim = (window.__lastSimScore ?? null);
+      if (sim !== null && sim >= 0.72 && sim < 0.80) {
+        window.__tpLastMidSimAt = now;
+      }
+    } catch {}
+    const recentMid = (typeof window.__tpLastMidSimAt === 'number') && ((now - window.__tpLastMidSimAt) < 300);
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
+      if (recentMid) { return; }
       try { window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0)); } catch {}
       _lastAdvanceAt = now; // cool-off gate for next nudge check
       // dead-man watchdog after logical index adjustment
