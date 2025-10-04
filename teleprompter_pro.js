@@ -2783,6 +2783,8 @@ let __tpStag = { vIdx: -1, since: performance.now() };
 const STALL_MS = 1800;       // ~1.8s feels good in speech
 const COV_THRESH = 0.82;     // % of tokens matched in order
 const NEXT_SIM_FLOOR = 0.68; // allow slightly lower sim to prime next line
+// Stall instrumentation state
+let __tpStall = { reported: false };
 
 function tokenCoverage(lineTokens, tailTokens){
   try {
@@ -3038,6 +3040,36 @@ function advanceByTranscript(transcript, isFinal){
   }
 
   // Coverage-based soft advance probe to prevent stalls
+  // Stall instrumentation: if we haven't advanced for >1s, emit a one-line summary
+  try {
+    const nowS = performance.now();
+    const idleMs = nowS - (_lastAdvanceAt || 0);
+    if (idleMs > 1000) {
+      const v = (__vParaIndex || []).find(v => currentIndex >= v.start && currentIndex <= v.end) || null;
+      const lineTokens = v ? scriptWords.slice(v.start, v.end + 1) : [];
+      const cov = tokenCoverage(lineTokens, spoken);
+      // probe next virtual line similarity (cheap local look-ahead)
+      let nextSim = 0;
+      try {
+        const vList = __vParaIndex || [];
+        const vIdx = vList.findIndex(x => currentIndex >= x.start && currentIndex <= x.end);
+        if (vIdx >= 0 && vIdx + 1 < vList.length){
+          const nxt = vList[vIdx + 1];
+          const win = scriptWords.slice(nxt.start, Math.min(nxt.start + spoken.length, nxt.end + 1));
+          nextSim = _sim(spoken, win);
+        }
+      } catch {}
+      const nearEnd = ((scriptWords.length - currentIndex) < 30);
+      let bottom = false; try { bottom = atBottom(document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body); } catch {}
+      if (!__tpStall?.reported){
+        try { if (typeof debug==='function') debug({ tag:'STALL', idx: currentIndex, cov: +cov.toFixed(2), nextSim: +nextSim.toFixed(2), time: +(idleMs/1000).toFixed(1), nearEnd, atBottom: bottom }); } catch {}
+        try { __tpStall.reported = true; } catch {}
+      }
+    } else {
+      try { __tpStall.reported = false; } catch {}
+    }
+  } catch {}
+
   try {
     const soft = maybeSoftAdvance(bestIdx, bestSim, spoken);
     if (soft && soft.soft) { bestIdx = soft.idx; bestSim = soft.sim; }
@@ -3380,7 +3412,10 @@ function advanceByTranscript(transcript, isFinal){
   }
 
   // call this whenever you actually advance or scroll due to a match
-  function markAdvance(){ _lastAdvanceAt = performance.now(); }
+  function markAdvance(){
+    _lastAdvanceAt = performance.now();
+    try { (__tpStall ||= {}).reported = false; } catch {}
+  }
   window.renderScript = renderScript; // for any external callers
 
   // Camera/WebRTC keepalive: periodically attempt reconnection if user intends camera mirroring
