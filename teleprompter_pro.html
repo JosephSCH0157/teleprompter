@@ -224,21 +224,7 @@
     <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
   </div>
 </div>
-<!-- Debug HUD loader (deferred) -->
-<script src="debug-tools.js" defer></script>
-<script>
-  // Auto-install HUD in DEV or when requested (?hud=1 or #hud)
-  document.addEventListener('DOMContentLoaded', function() {
-    try {
-      var wantDev = (window.__TP_DEV === true) || /[?&]dev=1/.test(location.search) || location.hash.indexOf('dev') !== -1;
-      var wantHud = /[?&]hud=1/.test(location.search) || location.hash.indexOf('hud') !== -1;
-      if (wantDev || wantHud) {
-        if (typeof window.__tpInstallHUD === 'function') window.__tpInstallHUD();
-      }
-    } catch (e) { /* noop */ }
-  });
-  // Tip: press "~" to toggle
-</script>
+<script src="./debug-tools.js" defer></script>
 <script src="teleprompter_pro.js" defer></script>
 
 </body>
