@@ -2961,6 +2961,17 @@ function advanceByTranscript(transcript, isFinal){
     spokenTail: spoken.join(' '),
     bestIdx,
     bestScore: Number(bestSim.toFixed(3)),
+    // Duplicate penalty visibility in HUD
+    ...(function(){
+      try {
+        const para = paraIndex.find(p => bestIdx >= p.start && bestIdx <= p.end) || null;
+        const key = para?.key || '';
+        const count = key ? (__lineFreq.get(key) || 0) : 0;
+        const dup = count > 1;
+        const dupPenalty = dup ? 0.08 : 0;
+        return { dup, dupCount: count, dupPenalty, lineKey: key?.slice(0,80) };
+      } catch { return {}; }
+    })(),
     delta
   });
   if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM){
