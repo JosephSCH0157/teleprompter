@@ -194,7 +194,14 @@ export function createScrollController(){
           logEv({ tag:'match:gate', reason:'no-idx-change', bestIdx, committedIdx:S.committedIdx, sim });
           return;
         }
-        const immediateOk = (sim >= SIM_IMMEDIATE);
+        // Respect temporary jitter elevation from main module if present
+        let simImmediateEff = SIM_IMMEDIATE;
+        try {
+          const J = (window.__tpJitter || {});
+          const elevated = (typeof J.spikeUntil === 'number') && (performance.now() < J.spikeUntil);
+          if (elevated) simImmediateEff = SIM_IMMEDIATE + 0.06;
+        } catch {}
+        const immediateOk = (sim >= simImmediateEff);
         const confirmationsOk = (sim >= 0.72) && (S.stableHits >= STABLE_HITS);
         if (!immediateOk && !confirmationsOk) {
           logEv({ tag:'match:gate', reason:'await-confirmations', bestIdx, committedIdx:S.committedIdx, sim, hits:S.stableHits, need:STABLE_HITS });

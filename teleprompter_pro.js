@@ -2803,6 +2803,7 @@ function advanceByTranscript(transcript, isFinal){
   const top = candidates.slice(0, 8);
 
   // Refine with Levenshtein similarity
+  const idxBefore = currentIndex; // for jitter metric
   let bestIdx = currentIndex, bestScore = -Infinity;
   for (const c of top){
     const score = _sim(spoken, c.win);
@@ -2813,18 +2814,48 @@ function advanceByTranscript(transcript, isFinal){
     window.__lastSimScore = Number(bestScore.toFixed(3));
     if (typeof debug === 'function') debug({ tag:'match:sim', idx: currentIndex, bestIdx, sim: window.__lastSimScore, windowAhead: MATCH_WINDOW_AHEAD });
   } catch {}
-  if (bestScore < SIM_THRESHOLD) return;
+
+  // Jitter meter: rolling std-dev of (bestIdx - idx)
+  try {
+    const J = (window.__tpJitter ||= { buf: [], max: 30, mean: 0, std: 0, spikeUntil: 0, lastLogAt: 0 });
+    const d = (bestIdx - idxBefore);
+    J.buf.push(d); if (J.buf.length > J.max) J.buf.shift();
+    if (J.buf.length >= 5){
+      const m = J.buf.reduce((a,b)=>a+b,0) / J.buf.length;
+      const v = J.buf.reduce((a,b)=>a + Math.pow(b - m, 2), 0) / J.buf.length;
+      J.mean = +(m.toFixed(2));
+      J.std  = +(Math.sqrt(v).toFixed(2));
+      const nowJ = performance.now();
+      const elevated = (nowJ < (J.spikeUntil||0));
+      // Emit at most ~3 times/sec
+      if (!J.lastLogAt || nowJ - J.lastLogAt > 330){
+        J.lastLogAt = nowJ;
+        try { if (typeof debug==='function') debug({ tag:'match:jitter', mean: J.mean, std: J.std, n: J.buf.length, elevated }); } catch {}
+      }
+      // Spike detector: if std-dev spikes past 7, raise thresholds for ~8s
+      if (J.std >= 7 && (!elevated)) {
+        J.spikeUntil = nowJ + 8000;
+        try { if (typeof debug==='function') debug({ tag:'match:jitter:spike', std: J.std, until: J.spikeUntil }); } catch {}
+      }
+    }
+  } catch {}
+  // Apply elevated thresholds during jitter spikes
+  const J = (window.__tpJitter || {});
+  const jitterElevated = (typeof J.spikeUntil === 'number') && (performance.now() < J.spikeUntil);
+  const EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
+  const EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
+  if (bestScore < EFF_SIM_THRESHOLD) return;
 
   // Soften big forward jumps unless similarity is very strong
   const delta = bestIdx - currentIndex;
   debug({
-    tag: 'match',
+    tag: 'match:candidate',
     spokenTail: spoken.join(' '),
     bestIdx,
     bestScore: Number(bestScore.toFixed(3)),
     delta
   });
-  if (delta > MAX_JUMP_AHEAD_WORDS && bestScore < STRICT_FORWARD_SIM){
+  if (delta > MAX_JUMP_AHEAD_WORDS && bestScore < EFF_STRICT_FWD_SIM){
     currentIndex += MAX_JUMP_AHEAD_WORDS;
   } else {
     currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
