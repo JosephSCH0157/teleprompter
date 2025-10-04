@@ -854,6 +854,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Lost-mode state
   let __tpLost = false; let __tpLowSimCount = 0;
   const __STOP = new Set(['the','and','a','an','to','of','in','on','for','with','as','at','by','is','are','was','were','be','been','being','or','but','if','then','that','this','these','those','you','your','yours','we','our','ours','they','their','them','it','its','he','she','his','her','hers','do','did','does','done','have','has','had']);
+  // Junk-anchor set: tokens that should not drive medium/long jumps on their own
+  const __JUNK = new Set(['so','and','but','the','a','an','to','of','in','on','for','with','or','is','are']);
   function extractHighIDFPhrases(tokens, n=3, topK=6){
     const out = [];
     if (!Array.isArray(tokens) || tokens.length < n) return out;
@@ -2938,6 +2940,11 @@ function advanceByTranscript(transcript, isFinal){
     // Require distinctive phrase for long jumps
     const needsRarity = dist > 20;
     if (needsRarity && phraseRarity < 8) { continue; }
+    // Junk-anchor gate v2: forbid >6-word jumps when spoken tail is all junk
+    try {
+      const allJunk = (spoken.length > 0) && spoken.every(t => __JUNK.has(t));
+      if (dist > 6 && allJunk) { continue; }
+    } catch {}
     // Distance penalty (~0 near, ~1 far)
     const distancePenalty = (function(){ try { return 1 / (1 + Math.exp(-(dist - 10))); } catch { return 0; } })();
     const lambda = 0.35;
