@@ -2412,6 +2412,8 @@ function scrollToCurrentIndex(){
     sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
   }
 }
+// Install HUD (tilde to toggle). Safe if file missing.
+try { window.__tpHud = window.__tpInstallHUD && window.__tpInstallHUD({ hotkey: '~' }); } catch {}
 // Signal that core init function is now defined; publish to a temp handle, then swap stub
 try {
   window.__tpRealCore = _initCore;
