@@ -190,10 +190,26 @@ export function createScrollController(){
         }
         S.stableHits = 0;
 
-        _origScrollToCurrentIndex.apply(this, arguments);
-        S.committedIdx = bestIdx;
+        // Apply backtrack cap to avoid ping-pong across big spans
+        let commitIdx = bestIdx;
+        if (bestIdx < S.committedIdx) {
+          const capped = Math.max(S.committedIdx - 2, bestIdx);
+          if (capped !== bestIdx) {
+            logEv({ tag:'match:back-cap', from: S.committedIdx, bestIdx, commitIdx: capped });
+          }
+          commitIdx = capped;
+        }
+        // Temporarily commit capped index to the underlying scroller
+        const __prev = window.currentIndex;
+        try {
+          window.currentIndex = commitIdx;
+          _origScrollToCurrentIndex.apply(this, arguments);
+        } finally {
+          window.currentIndex = __prev;
+        }
+        S.committedIdx = commitIdx;
         S.lastCommitAt = now;
-        S.lastCommitIdx = bestIdx;
+        S.lastCommitIdx = commitIdx;
         logEv({ tag:'match:commit', committedIdx:S.committedIdx, sim });
       } catch (e) {
         logEv({ tag:'match:gate:error', e:String(e) });
