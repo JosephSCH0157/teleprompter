@@ -1,0 +1,3 @@
+ANVIL build: 2025-10-03 21:15
+Baseline: fix/scroll-geometry
+Notes: HUD wired; Calm Mode geometry; dev toggle via URL/localStorage
