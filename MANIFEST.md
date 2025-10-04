@@ -1,3 +1,20 @@
+---
+build: anvil-baseline-1.5.7
+commit: b2e23a4
+date: 2025-10-03
+modules:
+	- teleprompter_pro.html
+	- teleprompter_pro.js
+	- teleprompter_pro.css
+	- display.html
+	- scroll-helpers.js
+	- scroll-control.js
+	- io-anchor.js
+	- recorders.js
+	- debug-tools.js
+	- debug-seed.js
+---
+
 # ANVIL Manifest
 
 **Build**: 2025-10-03 21:15  
@@ -30,4 +47,4 @@
 - HUD installer: ./debug-tools.js
 
 ## Test Content
-- Add your own script content in the editor; no separate debug seed file currently.
+- Add your own script content in the editor; debug seed file is included as ./debug-seed.js.

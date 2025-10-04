@@ -172,6 +172,17 @@
     // Optional: turn on aggressive wrapping by default in dev
     aggressiveOn = (function(){ try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })() || /([?#]).*dev=1/.test(location.href);
     if (aggressiveOn) wrapAllFunctions();
+    // Try to read MANIFEST.md front-matter and log to HUD
+    try {
+      fetch('./MANIFEST.md', { cache: 'no-store' })
+        .then(r=>r.text())
+        .then(txt=>{
+          const m = txt.match(/^---[\r\n]+([\s\S]*?)[\r\n]+---/);
+          if (m) log('boot:manifest', m[1]);
+        })
+        .catch(()=>{});
+    } catch {}
+
     log('boot:seed-complete', { aggressiveOn });
   }
 
