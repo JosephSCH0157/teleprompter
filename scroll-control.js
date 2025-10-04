@@ -144,6 +144,12 @@ export function createScrollController(){
     // Throttled applier to coalesce frequent commits
     const applyCommitThrottled = throttle((commitIdx)=>{
       try {
+        // End-of-script guard
+        try {
+          const sc = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+          const atBottom = (sc.scrollTop + sc.clientHeight) >= (sc.scrollHeight - 4);
+          if (atBottom) return;
+        } catch {}
         const __prev = window.currentIndex;
         window.currentIndex = commitIdx;
         _origScrollToCurrentIndex();

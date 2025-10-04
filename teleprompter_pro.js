@@ -2542,6 +2542,12 @@ function splitWords(t){ return String(t).toLowerCase().split(/\s+/).map(normWord
 // TP: scroll-current-index
 function scrollToCurrentIndex(){
   if (!paraIndex.length) return;
+  // End-of-script guard: stop further scrolling when at bottom
+  try {
+    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const atBottom = (viewer.scrollTop + viewer.clientHeight) >= (viewer.scrollHeight - 4);
+    if (atBottom) return;
+  } catch {}
   const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
   // Highlight active paragraph (optional)
   paraIndex.forEach(pi => pi.el.classList.toggle('active', pi === p));
