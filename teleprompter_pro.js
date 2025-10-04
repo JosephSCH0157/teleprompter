@@ -843,6 +843,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Virtual lines (merge short runts so matcher scores over real phrases)
   let __vParaIndex = [];           // merged paragraph index
   let __vLineFreq = new Map();     // virtual line frequencies (by merged key)
+  let __vSigCount = new Map();     // prefix signature counts (first 4 tokens) for virtual lines
   function normLineKey(text){
     // Build line keys from fully normalized tokens to ensure duplicate detection
     // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
@@ -2948,11 +2949,12 @@ function advanceByTranscript(transcript, isFinal){
     // Distance penalty (~0 near, ~1 far)
     const distancePenalty = (function(){ try { return 1 / (1 + Math.exp(-(dist - 10))); } catch { return 0; } })();
     const lambda = 0.35;
-    // Duplicate-line penalty: if the containing paragraph text appears multiple times, demand extra evidence
-  // Use virtual merged lines to assess duplication so short runts don't jitter
-  const v = (function(){ try { return (__vParaIndex || []).find(v => c.i >= v.start && c.i <= v.end) || null; } catch { return null; } })();
-  const dupPenalty = (function(){ try { return (v && v.key && (__vLineFreq.get(v.key) || 0) > 1) ? 0.08 : 0; } catch { return 0; } })();
-    const rank = (simRaw - dupPenalty) - lambda * distancePenalty;
+    // Duplicate-line penalty using virtual lines; avoid runts jitter
+    const v = (function(){ try { return (__vParaIndex || []).find(v => c.i >= v.start && c.i <= v.end) || null; } catch { return null; } })();
+    const dupPenalty = (function(){ try { return (v && v.key && (__vLineFreq.get(v.key) || 0) > 1) ? 0.08 : 0; } catch { return 0; } })();
+    // Cluster penalty: repeated prefix (first 4 tokens) disambiguation
+    const sigPenalty = (function(){ try { const n = v?.sig ? (__vSigCount.get(v.sig) || 0) : 0; return n > 1 ? 0.06 : 0; } catch { return 0; } })();
+    const rank = (simRaw - dupPenalty - sigPenalty) - lambda * distancePenalty;
     if (rank > bestRank){ bestRank = rank; bestIdx = c.i; bestSim = simRaw; }
   }
   if (!(bestRank > -Infinity)) return; // nothing acceptable
@@ -3046,8 +3048,11 @@ function advanceByTranscript(transcript, isFinal){
         const vKey = v?.key || '';
         const vCount = vKey ? (__vLineFreq.get(vKey) || 0) : 0;
         const vDup = vCount > 1;
+        const vSig = v?.sig || '';
+        const vSigCount = vSig ? (__vSigCount.get(vSig) || 0) : 0;
         const dupPenalty = vDup ? 0.08 : 0;
-        return { dup, dupCount: count, lineKey: key?.slice(0,80), vDup, vDupCount: vCount, vLineKey: vKey?.slice(0,80), dupPenalty };
+        const sigPenalty = vSigCount > 1 ? 0.06 : 0;
+        return { dup, dupCount: count, lineKey: key?.slice(0,80), vDup, vDupCount: vCount, vLineKey: vKey?.slice(0,80), vSig: vSig?.slice(0,80), vSigCount, dupPenalty, sigPenalty };
       } catch { return {}; }
     })(),
     delta
@@ -3282,7 +3287,7 @@ function advanceByTranscript(transcript, isFinal){
     try { updateDebugPosChip(); } catch {}
   paraIndex = []; let acc = 0;
   __lineFreq = new Map();
-  __vParaIndex = []; __vLineFreq = new Map();
+  __vParaIndex = []; __vLineFreq = new Map(); __vSigCount = new Map();
     // Prepare rarity stats structures
     __paraTokens = []; __dfMap = new Map();
     for (const el of paras){
@@ -3312,28 +3317,36 @@ function advanceByTranscript(transcript, isFinal){
           else { bufText = candidate; bufEnd = p.end; bufEls.push(p.el); }
           if (bufText.length >= MIN_LEN){
             const key = normLineKey(bufText);
-            __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, els: bufEls.slice() });
+            const sig = (function(){ try { return normTokens(bufText).slice(0,4).join(' '); } catch { return ''; } })();
+            __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, sig, els: bufEls.slice() });
             if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+            if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
             bufText = ''; bufStart = -1; bufEnd = -1; bufEls = [];
           }
         } else {
           // flush buffer if any
           if (bufText){
             const key = normLineKey(bufText);
-            __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, els: bufEls.slice() });
+            const sig = (function(){ try { return normTokens(bufText).slice(0,4).join(' '); } catch { return ''; } })();
+            __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, sig, els: bufEls.slice() });
             if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+            if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
             bufText = ''; bufStart = -1; bufEnd = -1; bufEls = [];
           }
           // push current as its own
           const key = normLineKey(text);
-          __vParaIndex.push({ text, start: p.start, end: p.end, key, els: [p.el] });
+          const sig = (function(){ try { return normTokens(text).slice(0,4).join(' '); } catch { return ''; } })();
+          __vParaIndex.push({ text, start: p.start, end: p.end, key, sig, els: [p.el] });
           if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
         }
       }
       if (bufText){
         const key = normLineKey(bufText);
-        __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, els: bufEls.slice() });
+        const sig = (function(){ try { return normTokens(bufText).slice(0,4).join(' '); } catch { return ''; } })();
+        __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, sig, els: bufEls.slice() });
         if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+        if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
       }
     } catch {}
     // Initialize current element pointer

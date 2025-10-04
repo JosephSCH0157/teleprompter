@@ -8,6 +8,7 @@ Stability and alignment improvements across matching, scrolling, and observabili
 	- Monotonic commit with hysteresis: require two stable hits before committing; per-commit step cap (max 6 indices); stricter backtracking (sim ≥ 0.86), forward sim ≥ 0.82; commit application throttled (~8/sec).
 	- Distance-penalized candidate ranking with rarity gating: long jumps only accepted when the spoken phrase is distinctive (IDF sum ≥ 8); closer candidates favored. Junk-anchor gate v2: forbid >6-word jumps when the spoken tail is entirely junk tokens (so/and/…); keep small +8 hops only when accompanied by a distinctive token.
 	- Duplicate-line disambiguation: subtract 0.08 from rank when paragraph text appears more than once; HUD shows dup, dupCount, dupPenalty.
+	- Line-cluster disambiguation: penalize repeated beginnings (first 4 tokens) by ~0.06 to avoid bouncing within phrase families (e.g., “exactly … they stop … they miss …”).
 	- Dynamic forward window shrink when tail tokens are common nearby to reduce far jumps in repetitive text.
 	- End-of-script guard: stop scrolling when viewer is at the bottom.
 	- Calm Mode: relax jump caps near end of script and increase ease step dynamically to avoid perceived slowdown.
