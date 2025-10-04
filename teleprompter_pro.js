@@ -1496,6 +1496,66 @@ async function _initCore() {
     }
   });
 
+  // ===== Progressive Fallback Nudge =====
+  (function(){
+    const F = {
+      stepPx: 18,            // small push
+      maxSmallPushes: 3,     // after this, try mini-seek
+      miniSeekIdxSpan: 6,    // try ±6 indices around bestIdx
+      coolDownMs: 900,       // don’t spam nudges
+    };
+    const S = { lastAt: 0, smallPushes: 0 };
+
+    window.__tpFallbackNudge = function(bestIdx){
+      const now = performance.now();
+      if (now - S.lastAt < F.coolDownMs) {
+        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge:cooldown' }); } catch {}
+        return;
+      }
+      S.lastAt = now;
+
+      const viewer = document.getElementById('viewer');
+      if (!viewer) return;
+
+      // 1) small push phase
+      if (S.smallPushes < F.maxSmallPushes) {
+        const to = viewer.scrollTop + F.stepPx;
+        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: to, idx: bestIdx, phase:'small' }); } catch {}
+        try { viewer.scrollTo({ top: to, behavior: 'instant' }); } catch { viewer.scrollTop = to; }
+        S.smallPushes++;
+        return;
+      }
+
+      // 2) mini-seek: try to locate an element around bestIdx
+      const tryIdxs = [];
+      for (let k = -F.miniSeekIdxSpan; k <= F.miniSeekIdxSpan; k++) tryIdxs.push(bestIdx + k);
+      const el = tryIdxs
+        .map(i => document.querySelector(`[data-idx="${i}"],[data-token-idx="${i}"],.line[data-i="${i}"]`))
+        .find(Boolean);
+
+      if (el) {
+        const y = (el.offsetTop || 0) - Math.floor((viewer.clientHeight || 0) * 0.33);
+        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: y, idx: bestIdx, phase:'mini-seek' }); } catch {}
+        try { viewer.scrollTo({ top: y, behavior: 'instant' }); } catch { viewer.scrollTop = y; }
+        S.smallPushes = 0; // reset after successful mini-seek
+        return;
+      }
+
+      // 3) anchor jump (last resort)
+      if (typeof window.scrollToCurrentIndex === 'function') {
+        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'anchor-jump' }); } catch {}
+        const prev = window.currentIndex;
+        window.currentIndex = bestIdx;
+        try { window.scrollToCurrentIndex(); } finally { window.currentIndex = prev; }
+        S.smallPushes = 0;
+        return;
+      }
+
+      // If nothing else, log and bail
+      try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'noop' }); } catch {}
+    };
+  })();
+
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   setInterval(() => {
     if (window.__TP_DISABLE_NUDGES) return;
@@ -1503,25 +1563,15 @@ async function _initCore() {
     if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
     const now = performance.now();
   const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
-  const FALLBACK_STEP_PX = 18;     // calmer nudge (50% of previous)
     if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-      try { scrollByPx(FALLBACK_STEP_PX); } catch { viewer.scrollTop = Math.min(viewer.scrollTop + FALLBACK_STEP_PX, viewer.scrollHeight); }
-      {
+      try { window.__tpFallbackNudge?.(currentIndex || 0); } catch {}
+      // sync display with new scrollTop
+      try {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? (viewer.scrollTop / max) : 0;
         sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-      }
-      // also advance logical index to the paragraph under the marker
-      try{
-        if (Array.isArray(paraIndex) && paraIndex.length){
-          const markerY = viewer.scrollTop + (viewer.clientHeight * (MARKER_PCT || 0.33));
-          let target = paraIndex[0];
-          for (const p of paraIndex){ if (p.el.offsetTop <= markerY) target = p; else break; }
-          if (target){ currentIndex = Math.min(Math.max(target.start, currentIndex + 3), target.end); }
-        }
-      }catch{}
-      _lastAdvanceAt = now;
-      if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: viewer.scrollTop, idx: currentIndex });
+      } catch {}
+      _lastAdvanceAt = now; // cool-off gate for next nudge check
       // dead-man watchdog after logical index adjustment
       try { deadmanWatchdog(currentIndex); } catch {}
     }
