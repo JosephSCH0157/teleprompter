@@ -92,8 +92,8 @@ export function createScrollController(){
   };
 
   // Commit hysteresis (stability + confidence)
-  const SIM_MIN = 0.80;
-  const STABLE_MS = 200;
+  const SIM_MIN = 0.80; // raised from 0.70 → 0.80 per request
+  const STABLE_MS = 200; // keep within 200–300ms; can tune if needed
   const WINDOW = 3;
   let simBuf = [];           // { t, sim, idx }
   let lastCommit = { t: 0, idx: -1 };

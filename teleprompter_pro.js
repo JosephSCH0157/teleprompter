@@ -2771,13 +2771,29 @@ function advanceByTranscript(transcript, isFinal){
   currentEl = targetPara.el;
   try { currentEl.classList.add('active'); currentEl.classList.add('current'); } catch {}
 
-  const maxTop     = Math.max(0, scriptEl.scrollHeight - viewer.clientHeight);
   const markerTop  = Math.round(viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
-  const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
-  // Breadcrumb: whenever we clamp/center the target
-  try { if (typeof debug === 'function') debug({ tag:'scroll:clamp', top: desiredTop, max: maxTop }); } catch {}
+  const desiredTop = (targetPara.el.offsetTop - markerTop); // let scheduler clamp
+  const capPx      = Math.floor((viewer.clientHeight || 0) * 0.60);
 
   if (isFinal && window.__TP_CALM) {
+    // If similarity isn't very high, cap the jump size to keep motion tame
+    try {
+      if ((Number.isFinite(bestScore) && bestScore < 0.90)){
+        const dTop = desiredTop - viewer.scrollTop;
+        if (Math.abs(dTop) > capPx){
+          const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
+          try { requestScroll(limitedTop); if (typeof debug === 'function') debug({ tag:'scroll', top: limitedTop, mode:'calm-cap' }); } catch {}
+          // sync display based on intended target (avoid read-after-write)
+          try {
+            const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+            const ratio = max ? (limitedTop / max) : 0;
+            sendToDisplay({ type:'scroll', top: limitedTop, ratio });
+          } catch {}
+          if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
+          return; // defer full commit until next cycle
+        }
+      }
+    } catch {}
     // Calm Mode: snap using geometry-based targeting at commit time
     try { onSpeechCommit(currentEl); } catch {}
     if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop, mode:'calm-commit' });
@@ -2795,7 +2811,7 @@ function advanceByTranscript(transcript, isFinal){
     } catch {}
     if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
   } else {
-    const err = desiredTop - viewer.scrollTop;
+  const err = desiredTop - viewer.scrollTop;
     const tNow = performance.now();
     if (Math.abs(err) < DEAD_BAND_PX || (tNow - _lastCorrectionAt) < CORRECTION_MIN_MS) return;
 
@@ -2808,20 +2824,33 @@ function advanceByTranscript(transcript, isFinal){
     // Scale steps based on whether this came from a final (more confident) match
     const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
     const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
-    // Prefer element-anchored scrolling so we always target the same line element
+    // Prefer element-anchored scrolling; apply jump cap unless similarity is very high
     try {
-      scrollToEl(currentEl, markerTop);
+      const dTop = desiredTop - viewer.scrollTop;
+      if ((Number.isFinite(bestScore) && bestScore < 0.90) && Math.abs(dTop) > capPx){
+        const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
+        requestScroll(limitedTop);
+      } else {
+        scrollToEl(currentEl, markerTop);
+      }
     } catch {
       let next;
       if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
       else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-      viewer.scrollTop = next;
+      try { requestScroll(next); } catch { viewer.scrollTop = next; }
     }
     if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
     {
+      // compute output from intended target if we just scheduled a write
+      const tTop = (()=>{
+        try{
+          const last = (typeof window.__lastScrollTarget === 'number') ? window.__lastScrollTarget : null;
+          return last ?? viewer.scrollTop;
+        }catch{return viewer.scrollTop}
+      })();
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+      const ratio = max ? (tTop / max) : 0;
+      sendToDisplay({ type:'scroll', top: tTop, ratio });
     }
     // Evaluate whether to run the gentle catch-up loop based on anchor position
     try {

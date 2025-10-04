@@ -15,10 +15,12 @@ export function createScrollerHelpers(getScroller){
   function requestScroll(top){
     const sc = getScroller(); if (!sc) return;
     _pendingTop = clampScrollTop(top);
+    try { window.__lastScrollTarget = _pendingTop; } catch {}
     if (_rafId) return;
     _rafId = requestAnimationFrame(() => {
       const t = _pendingTop; _pendingTop = null; _rafId = 0;
       try { sc.scrollTo({ top: t, behavior: 'auto' }); } catch { sc.scrollTop = t; }
+      try { window.__lastScrollTarget = null; } catch {}
       // Do NOT read layout here; defer reads to next frame.
     });
   }
