@@ -1,6 +1,9 @@
 (function(){
   'use strict';
 
+  // Bonus guard: never auto-start unless explicitly enabled
+  try { if (!localStorage.getItem('tp_sim')) return; } catch {}
+
   function log(tag, payload){ try { window.HUD && HUD.log(tag, payload); } catch {} }
 
   // -------------  A) Boot snapshot  -------------
