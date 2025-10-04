@@ -2672,8 +2672,11 @@ function advanceByTranscript(transcript, isFinal){
     const score = _sim(spoken, c.win);
     if (score > bestScore){ bestScore = score; bestIdx = c.i; }
   }
-  // Breadcrumb: report similarity outcome for this match step
-  try { if (typeof debug === 'function') debug({ tag:'match:sim', idx: currentIndex, bestIdx, sim: Number(bestScore.toFixed(3)), windowAhead: MATCH_WINDOW_AHEAD }); } catch {}
+  // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
+  try {
+    window.__lastSimScore = Number(bestScore.toFixed(3));
+    if (typeof debug === 'function') debug({ tag:'match:sim', idx: currentIndex, bestIdx, sim: window.__lastSimScore, windowAhead: MATCH_WINDOW_AHEAD });
+  } catch {}
   if (bestScore < SIM_THRESHOLD) return;
 
   // Soften big forward jumps unless similarity is very strong

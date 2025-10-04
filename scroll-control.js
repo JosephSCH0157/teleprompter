@@ -63,3 +63,121 @@ export function createScrollController(){
     isActive: () => active
   };
 }
+
+// ===== Scroll & Match Gate (anti-thrash) =====
+(function(){
+  const G = {
+    // index movement policy
+    deadbandIdx: 1,          // ignore |bestIdx - committedIdx| <= 1
+    forwardCommitStep: 2,    // allow forward jump if ahead by >= 2
+    backwardCommitStep: 2,   // allow backward only if behind by >= 2 AND stable twice
+    minSimForward: 0.70,     // sim threshold to allow forward commit
+    minSimBackward: 0.90,    // stricter to allow backwards (prevents “yo-yo”)
+    reCommitMs: 650,         // allow re-commit if no movement for this long and sim is high
+    minSimRecommit: 0.85,
+
+    // scroll/clamp policy
+    minClampDeltaPx: 24,     // don’t clamp if target Y changed less than this
+    bigGapIdx: 18,           // if gap >= this, do one-time fast catchup jump
+  };
+
+  const S = {
+    committedIdx: 0,
+    lastBestIdx: 0,
+    lastBestAt: 0,
+    lastCommitAt: 0,
+    lastCommitIdx: 0,
+    backStableCount: 0,
+    lastClampY: -1,
+  };
+
+  function logEv(ev){ try { if (typeof debug==='function') debug(ev); else if (window?.HUD) HUD.log(ev.tag||'log', ev); } catch {} }
+
+  // Helper to decide whether to commit a new index
+  window.__tpShouldCommitIdx = function(bestIdx, sim){
+    const now = performance.now();
+    const gap = bestIdx - S.committedIdx;
+    const absGap = Math.abs(gap);
+
+    // Deadband: ignore jitter within ±deadbandIdx if sim is confident
+    if (absGap <= G.deadbandIdx && sim >= 0.85) {
+      logEv({ tag:'match:gate', reason:'deadband', bestIdx, committedIdx:S.committedIdx, sim });
+      return false;
+    }
+
+    // Forward movement
+    if (gap >= G.forwardCommitStep && sim >= G.minSimForward) {
+      S.backStableCount = 0;
+      return true;
+    }
+
+    // Backward movement — require stability
+    if (gap <= -G.backwardCommitStep && sim >= G.minSimBackward) {
+      S.backStableCount++;
+      if (S.backStableCount >= 2) {
+        S.backStableCount = 0;
+        return true;
+      }
+      logEv({ tag:'match:gate', reason:'await-back-stability', bestIdx, committedIdx:S.committedIdx, sim });
+      return false;
+    } else if (gap > 0) {
+      // reset back stability if we moved forward or equal
+      S.backStableCount = 0;
+    }
+
+    // Staleness unlock: if we haven’t committed in a while and sim is solid, allow it
+    if ((now - S.lastCommitAt) > G.reCommitMs && sim >= G.minSimRecommit) {
+      return true;
+    }
+
+    logEv({ tag:'match:gate', reason:'no-policy-match', bestIdx, committedIdx:S.committedIdx, sim, gap });
+    return false;
+  };
+
+  // Wrap existing scrollToCurrentIndex if present on window
+  const _origScrollToCurrentIndex = window.scrollToCurrentIndex;
+  if (typeof _origScrollToCurrentIndex === 'function'){
+    window.scrollToCurrentIndex = function(){
+      try {
+        const bestIdx = window.currentIndex;
+        const sim = (window.__lastSimScore ?? 1);
+        const now = performance.now();
+
+        // One-time fast catchup for large gaps
+        if (Math.abs(bestIdx - S.committedIdx) >= G.bigGapIdx) {
+          logEv({ tag:'match:catchup:start', from:S.committedIdx, to:bestIdx });
+          _origScrollToCurrentIndex.apply(this, arguments);
+          S.committedIdx = bestIdx;
+          S.lastCommitAt = now;
+          S.lastCommitIdx = bestIdx;
+          logEv({ tag:'match:catchup:stop' });
+          return;
+        }
+
+        // Normal gated commit
+        if (!window.__tpShouldCommitIdx(bestIdx, sim)) return;
+
+        _origScrollToCurrentIndex.apply(this, arguments);
+        S.committedIdx = bestIdx;
+        S.lastCommitAt = now;
+        S.lastCommitIdx = bestIdx;
+        logEv({ tag:'match:commit', committedIdx:S.committedIdx, sim });
+      } catch (e) {
+        logEv({ tag:'match:gate:error', e:String(e) });
+      }
+    };
+  }
+
+  // Throttle identical clamps (call this inside your clamp function)
+  window.__tpClampGuard = function(targetY, maxY){
+    if (typeof targetY !== 'number') return true;
+    if (S.lastClampY < 0) { S.lastClampY = targetY; return true; }
+    const delta = Math.abs(targetY - S.lastClampY);
+    if (delta < G.minClampDeltaPx) {
+      logEv({ tag:'scroll:clamp-skip', targetY, last:S.lastClampY, delta });
+      return false;
+    }
+    S.lastClampY = targetY;
+    return true;
+  };
+})();
