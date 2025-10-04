@@ -30,6 +30,7 @@ Stability and alignment improvements across matching, scrolling, and observabili
 
 - Versioning
 	- Bump to 1.5.8; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. HUD version label reflects new version.
+ 	- Saved new baseline artifact: releases/v1.5.8-solid-baseline.txt
 
 ## v1.5.7 — 2025-09-27
 

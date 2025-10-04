@@ -1,0 +1,12 @@
+Teleprompter Pro v1.5.8 — Solid baseline (2025-10-04)
+
+Includes:
+- Virtual lines (merged short runts) with duplicate gating against merged keys
+- Coverage-based "soft advance" to prevent stalls once a line is consumed
+- Junk-anchor gate v2 to block medium jumps driven only by junk tokens
+- Line-cluster disambiguation (prefix signature penalty) to avoid bouncing
+- End-game easing (+0.03 sim near last ~30 tokens) and bottom guard helper
+- Better "lost/stall" instrumentation with one-line STALL summaries
+- Normalized line keys and HUD spoken tail; updated HUD diagnostics
+
+Source of truth: teleprompter_pro.js (header indicates version)
