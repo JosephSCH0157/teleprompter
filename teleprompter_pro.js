@@ -2946,22 +2946,7 @@ function advanceByTranscript(transcript, isFinal){
   const spoken    = spokenAll.slice(-SPOKEN_N);
   if (!spoken.length) return;
 
-  // Initialize/advance the per-line tracker (virtual line aware)
-  try {
-    const vList = __vParaIndex || [];
-    const vCur = vList.find(v => currentIndex >= v.start && currentIndex <= v.end) || null;
-    const vIdx = vCur ? vList.indexOf(vCur) : -1;
-    if (vIdx >= 0){
-      const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
-      if (__tpLineTracker.vIdx !== vIdx){
-        __resetLineTracker(vIdx, lineTokens);
-        __tpPrevTail = [];
-      }
-      const newTail = __tailDelta(__tpPrevTail, spoken);
-      if (newTail.length) __feedLineTracker(newTail);
-      __tpPrevTail = spoken.slice();
-    }
-  } catch {}
+  // (tracker feeding happens after selecting bestIdx)
 
   // Search a band around currentIndex with dynamic forward window if tail looks common
   let windowAhead = MATCH_WINDOW_AHEAD;
@@ -3037,6 +3022,20 @@ function advanceByTranscript(transcript, isFinal){
   try {
     window.__lastSimScore = Number(bestSim.toFixed(3));
     if (typeof debug === 'function') debug({ tag:'match:sim', idx: currentIndex, bestIdx, sim: window.__lastSimScore, windowAhead: MATCH_WINDOW_AHEAD });
+  } catch {}
+
+  // Ensure per-bestIdx line tracker is initialized and fed only new tokens
+  try {
+    const vList = __vParaIndex || [];
+    const vCur = vList.find(v => bestIdx >= v.start && bestIdx <= v.end) || null;
+    const vIdx = vCur ? vList.indexOf(vCur) : -1;
+    if (vIdx >= 0){
+      const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
+      if (__tpLineTracker.vIdx !== vIdx){ __resetLineTracker(vIdx, lineTokens); __tpPrevTail = []; }
+      const newTail = __tailDelta(__tpPrevTail, spoken);
+      if (newTail.length) __feedLineTracker(newTail);
+      __tpPrevTail = spoken.slice();
+    }
   } catch {}
 
   // Jitter meter: rolling std-dev of (bestIdx - idx)
