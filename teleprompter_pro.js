@@ -2887,8 +2887,9 @@ function advanceByTranscript(transcript, isFinal){
     const distancePenalty = (function(){ try { return 1 / (1 + Math.exp(-(dist - 10))); } catch { return 0; } })();
     const lambda = 0.35;
     // Duplicate-line penalty: if the containing paragraph text appears multiple times, demand extra evidence
-    const para = paraIndex.find(p => c.i >= p.start && c.i <= p.end) || null;
-    const dupPenalty = (function(){ try { return (para && para.key && (__lineFreq.get(para.key) || 0) > 1) ? 0.08 : 0; } catch { return 0; } })();
+  // Use virtual merged lines to assess duplication so short runts don't jitter
+  const v = (function(){ try { return (__vParaIndex || []).find(v => c.i >= v.start && c.i <= v.end) || null; } catch { return null; } })();
+  const dupPenalty = (function(){ try { return (v && v.key && (__vLineFreq.get(v.key) || 0) > 1) ? 0.08 : 0; } catch { return 0; } })();
     const rank = (simRaw - dupPenalty) - lambda * distancePenalty;
     if (rank > bestRank){ bestRank = rank; bestIdx = c.i; bestSim = simRaw; }
   }
@@ -2967,12 +2968,18 @@ function advanceByTranscript(transcript, isFinal){
     // Duplicate penalty visibility in HUD
     ...(function(){
       try {
+        // Original paragraph key context (for reference)
         const para = paraIndex.find(p => bestIdx >= p.start && bestIdx <= p.end) || null;
         const key = para?.key || '';
         const count = key ? (__lineFreq.get(key) || 0) : 0;
         const dup = count > 1;
-        const dupPenalty = dup ? 0.08 : 0;
-        return { dup, dupCount: count, dupPenalty, lineKey: key?.slice(0,80) };
+        // Virtual merged-line context (used for penalty)
+        const v = (__vParaIndex || []).find(v => bestIdx >= v.start && bestIdx <= v.end) || null;
+        const vKey = v?.key || '';
+        const vCount = vKey ? (__vLineFreq.get(vKey) || 0) : 0;
+        const vDup = vCount > 1;
+        const dupPenalty = vDup ? 0.08 : 0;
+        return { dup, dupCount: count, lineKey: key?.slice(0,80), vDup, vDupCount: vCount, vLineKey: vKey?.slice(0,80), dupPenalty };
       } catch { return {}; }
     })(),
     delta
