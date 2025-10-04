@@ -239,7 +239,7 @@
           // track writes per second via scheduler hint
           const origScrollTo = viewer.scrollTo?.bind(viewer);
           if (origScrollTo && !viewer.__hudWriteWrap) {
-            viewer.scrollTo = function(){ try { metrics.scrollWrites++; metrics.lastWriteTs = Date.now(); } catch{} return origScrollTo.apply(this, arguments); };
+            viewer.scrollTo = function(){ try { metrics.scrollWrites++; metrics.lastWriteTs = Date.now(); _wpsStartOnWrite(); } catch{} return origScrollTo.apply(this, arguments); };
             viewer.__hudWriteWrap = true;
           }
         }
@@ -261,7 +261,7 @@
           const orig = window[fn];
           window[fn] = function(){
             try { HUD.log('scroll:'+fn, Array.from(arguments)); } catch {}
-            try { metrics.scrollWrites++; metrics.lastWriteTs = Date.now(); } catch {}
+            try { metrics.scrollWrites++; metrics.lastWriteTs = Date.now(); _wpsStartOnWrite(); } catch {}
             return orig.apply(this, arguments);
           };
           window[fn].__hudWrapped = true;
@@ -350,19 +350,23 @@
 
     // Gate WPS to speech-sync state
     let wpsTimer = null, lastWrites = 0;
+    let speechOn = false;
     const startWps = () => {
       if (wpsTimer) return;
       wpsTimer = setInterval(() => {
         const writes = metrics.scrollWrites || 0;
         const wps = writes - lastWrites;
         lastWrites = writes;
-        if (Date.now() - (metrics.lastWriteTs || 0) < 5000 && wps > 0) {
+        if (speechOn && Date.now() - (metrics.lastWriteTs || 0) < 5000 && wps > 0) {
           HUD.log('scroll:wps', { writesPerSec: wps, writes });
         }
       }, 1000);
     };
     const stopWps = () => { if (wpsTimer) { clearInterval(wpsTimer); wpsTimer = null; } };
-    HUD.bus.on('speech:toggle', on => on ? startWps() : stopWps());
+    HUD.bus.on('speech:toggle', on => { speechOn = !!on; return on ? startWps() : stopWps(); });
+
+    // Also start WPS on first scroll write so we don't miss initial activity
+    function _wpsStartOnWrite(){ try { startWps(); } catch {} }
 
     // Reflow risk detection: if both writes and layout reads occur in same frame
     ;(function installReflowRisk(){
