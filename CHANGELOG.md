@@ -11,6 +11,7 @@ Stability and alignment improvements across matching, scrolling, and observabili
 	- Line-cluster disambiguation: penalize repeated beginnings (first 4 tokens) by ~0.06 to avoid bouncing within phrase families (e.g., “exactly … they stop … they miss …”).
 	- Dynamic forward window shrink when tail tokens are common nearby to reduce far jumps in repetitive text.
 	- End-of-script guard: stop scrolling when viewer is at the bottom.
+	- End-game easing: tiny sim boost near the last ~30 words to reduce stalls; recheck bottom guard to never continue scrolling when at/near bottom.
 	- Calm Mode: relax jump caps near end of script and increase ease step dynamically to avoid perceived slowdown.
 	- Lost Mode: after jitter spike or sustained low similarity, freeze commits and re-anchor using high‑IDF 3‑gram anchors (excluding stop-words) in a widened local band.
 	- Jitter meter: rolling std-dev of (bestIdx − idx) with temporary threshold elevation (~8s) on spikes.

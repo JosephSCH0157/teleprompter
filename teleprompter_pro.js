@@ -2559,11 +2559,7 @@ function splitWords(t){ return String(t).toLowerCase().split(/\s+/).map(normWord
 function scrollToCurrentIndex(){
   if (!paraIndex.length) return;
   // End-of-script guard: stop further scrolling when at bottom
-  try {
-    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const atBottom = (viewer.scrollTop + viewer.clientHeight) >= (viewer.scrollHeight - 4);
-    if (atBottom) return;
-  } catch {}
+  try { if (atBottom(viewer)) return; } catch {}
   const p = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length-1];
   // Highlight active paragraph (optional)
   paraIndex.forEach(pi => pi.el.classList.toggle('active', pi === p));
@@ -2765,6 +2761,22 @@ let MAX_FWD_STEP_PX = 96;       // clamp forward step size
 let MAX_BACK_STEP_PX = 140;     // clamp backward step size
 // Anti-jitter: remember last move direction (+1 fwd, -1 back, 0 none)
 let _lastMoveDir = 0;
+
+// Bottom guard helper: true if scroller is at/near bottom
+function atBottom(container){
+  try {
+    if (!container) return false;
+    return (container.scrollTop + container.clientHeight) >= (container.scrollHeight - 4);
+  } catch { return false; }
+}
+
+// End-game easing: slightly more permissive near the end of script
+function endGameAdjust(idx, sim){
+  try {
+    const nearEnd = ((scriptWords?.length || 0) - (idx || 0)) < 30;
+    return nearEnd ? Math.min(1, sim + 0.03) : sim;
+  } catch { return sim; }
+}
 
 // Coverage-based soft advance to avoid stalls when a short line is consumed
 let __tpStag = { vIdx: -1, since: performance.now() };
@@ -2991,8 +3003,12 @@ function advanceByTranscript(transcript, isFinal){
   // Apply elevated thresholds during jitter spikes
   const J = (window.__tpJitter || {});
   const jitterElevated = (typeof J.spikeUntil === 'number') && (performance.now() < J.spikeUntil);
-  const EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
-  const EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
+  let EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
+  let EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
+  // End-game easing: give bestSim a tiny boost near the end
+  const __adj = endGameAdjust(bestIdx, bestSim);
+  if (__adj !== bestSim){ try { if (typeof debug==='function') debug({ tag:'match:sim:end-ease', bestIdx, sim:Number(bestSim.toFixed(3)), adj:Number(__adj.toFixed(3)) }); } catch {}
+    bestSim = __adj; }
   if (bestSim < EFF_SIM_THRESHOLD) return;
 
   // Lost-mode tracker: increment low-sim runs and enter lost if jitter large
