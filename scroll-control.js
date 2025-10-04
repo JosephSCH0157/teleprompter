@@ -92,11 +92,30 @@ export function createScrollController(){
       stableHits: 0,
   };
 
-  // Commit hysteresis (stability + confidence)
   // Simple consecutive confirmations gate
-  const FWD_MIN_SIM = 0.80;
-  const BACK_MIN_SIM = 0.72;
-  const STABLE_HITS = 2;
+  const STABLE_HITS = 2;            // number of consecutive matches to same idx
+  const SIM_IMMEDIATE = 0.82;       // immediate commit if idx changed AND sim >= this
+
+  // Minimal throttle helper (~6-8 updates/sec @ 125ms)
+  function throttle(fn, wait){
+    let last = 0, tId = null, lastArgs = null, lastThis = null;
+    return function throttled(){
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      lastArgs = arguments; lastThis = this;
+      const remain = wait - (now - last);
+      if (remain <= 0){
+        if (tId) { clearTimeout(tId); tId = null; }
+        last = now;
+        try { return fn.apply(lastThis, lastArgs); } catch {}
+      } else if (!tId) {
+        tId = setTimeout(()=>{
+          last = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          tId = null;
+          try { fn.apply(lastThis, lastArgs); } catch {}
+        }, Math.max(0, remain));
+      }
+    };
+  }
 
   function considerCommit(now, sim, idx){
     try {
@@ -115,50 +134,34 @@ export function createScrollController(){
 
   function logEv(ev){ try { if (typeof debug==='function') debug(ev); else if (window?.HUD) HUD.log(ev.tag||'log', ev); } catch {} }
 
-  // Helper to decide whether to commit a new index
+  // Legacy policy helper retained for compatibility; not used by the new gate
   window.__tpShouldCommitIdx = function(bestIdx, sim){
-    const now = performance.now();
+    // New simplified rule is implemented in the wrapper below; we keep this to avoid breaking callers.
     const gap = bestIdx - S.committedIdx;
     const absGap = Math.abs(gap);
-
-    // Deadband: ignore jitter within ±deadbandIdx if sim is confident
-    if (absGap <= G.deadbandIdx && sim >= 0.85) {
-      logEv({ tag:'match:gate', reason:'deadband', bestIdx, committedIdx:S.committedIdx, sim });
-      return false;
-    }
-
-    // Forward movement
-    if (gap >= G.forwardCommitStep && sim >= G.minSimForward) {
-      S.backStableCount = 0;
-      return true;
-    }
-
-    // Backward movement — require stability
-    if (gap <= -G.backwardCommitStep && sim >= G.minSimBackward) {
-      S.backStableCount++;
-      if (S.backStableCount >= 2) {
-        S.backStableCount = 0;
-        return true;
-      }
-      logEv({ tag:'match:gate', reason:'await-back-stability', bestIdx, committedIdx:S.committedIdx, sim });
-      return false;
-    } else if (gap > 0) {
-      // reset back stability if we moved forward or equal
-      S.backStableCount = 0;
-    }
-
-    // Staleness unlock: if we haven’t committed in a while and sim is solid, allow it
-    if ((now - S.lastCommitAt) > G.reCommitMs && sim >= G.minSimRecommit) {
-      return true;
-    }
-
-    logEv({ tag:'match:gate', reason:'no-policy-match', bestIdx, committedIdx:S.committedIdx, sim, gap });
-    return false;
+    if (absGap <= G.deadbandIdx && sim >= 0.85) return false;
+    return true;
   };
 
   // Wrap existing scrollToCurrentIndex if present on window
   const _origScrollToCurrentIndex = window.scrollToCurrentIndex;
   if (typeof _origScrollToCurrentIndex === 'function'){
+    // Throttled applier to coalesce frequent commits
+    const applyCommitThrottled = throttle((commitIdx)=>{
+      try {
+        const __prev = window.currentIndex;
+        window.currentIndex = commitIdx;
+        _origScrollToCurrentIndex();
+      } catch {} finally {
+        try { window.currentIndex = window.currentIndex; } catch {}
+      }
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      S.committedIdx = commitIdx;
+      S.lastCommitAt = now;
+      S.lastCommitIdx = commitIdx;
+      logEv({ tag:'match:commit', committedIdx:S.committedIdx, sim: (window.__lastSimScore ?? 1) });
+    }, 125);
+
     window.scrollToCurrentIndex = function(){
       try {
         const bestIdx = window.currentIndex;
@@ -176,19 +179,27 @@ export function createScrollController(){
           return;
         }
 
-  // Normal gated commit (policy gate)
-        if (!window.__tpShouldCommitIdx(bestIdx, sim)) return;
+        // Update stability confirmations for the current bestIdx
+        if (bestIdx === S.lastBestIdx) {
+          S.stableHits++;
+        } else {
+          S.lastBestIdx = bestIdx;
+          S.stableHits = 1;
+        }
 
-
-        // Consecutive stable hits gate (forward and backward)
-        const forward = (bestIdx >= S.committedIdx);
-        const cond = forward ? (sim >= FWD_MIN_SIM) : (sim >= BACK_MIN_SIM);
-        if (cond) { S.stableHits++; } else { S.stableHits = 0; }
-        if (S.stableHits < STABLE_HITS) {
-          logEv({ tag:'match:gate', reason:'stable-hits', bestIdx, committedIdx:S.committedIdx, sim, hits:S.stableHits, need:STABLE_HITS, forward, FWD_MIN_SIM, BACK_MIN_SIM });
+        // New simplified gate:
+        // Only scroll when (idx changed && sim >= SIM_IMMEDIATE) OR after STABLE_HITS confirmations.
+        const idxChangedFromCommitted = (bestIdx !== S.committedIdx);
+        if (!idxChangedFromCommitted) {
+          logEv({ tag:'match:gate', reason:'no-idx-change', bestIdx, committedIdx:S.committedIdx, sim });
           return;
         }
-        S.stableHits = 0;
+        const immediateOk = (sim >= SIM_IMMEDIATE);
+        const confirmationsOk = (S.stableHits >= STABLE_HITS);
+        if (!immediateOk && !confirmationsOk) {
+          logEv({ tag:'match:gate', reason:'await-confirmations', bestIdx, committedIdx:S.committedIdx, sim, hits:S.stableHits, need:STABLE_HITS });
+          return;
+        }
 
         // Apply backtrack cap to avoid ping-pong across big spans
         let commitIdx = bestIdx;
@@ -199,18 +210,9 @@ export function createScrollController(){
           }
           commitIdx = capped;
         }
-        // Temporarily commit capped index to the underlying scroller
-        const __prev = window.currentIndex;
-        try {
-          window.currentIndex = commitIdx;
-          _origScrollToCurrentIndex.apply(this, arguments);
-        } finally {
-          window.currentIndex = __prev;
-        }
-        S.committedIdx = commitIdx;
-        S.lastCommitAt = now;
-        S.lastCommitIdx = commitIdx;
-        logEv({ tag:'match:commit', committedIdx:S.committedIdx, sim });
+
+        // Use throttled applier to coalesce high-frequency updates
+        applyCommitThrottled(commitIdx);
       } catch (e) {
         logEv({ tag:'match:gate:error', e:String(e) });
       }
