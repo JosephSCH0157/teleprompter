@@ -2750,9 +2750,36 @@ function advanceByTranscript(transcript, isFinal){
   const spoken    = spokenAll.slice(-SPOKEN_N);
   if (!spoken.length) return;
 
-  // Search a band around currentIndex
+  // Search a band around currentIndex with dynamic forward window if tail looks common
+  let windowAhead = MATCH_WINDOW_AHEAD;
+  try {
+    const TAIL_N = 3; // examine last 3 tokens for duplication nearby
+    if (spoken.length >= TAIL_N) {
+      const tail = spoken.slice(-TAIL_N);
+      const bStart = Math.max(0, currentIndex - 80);
+      const bEnd   = Math.min(scriptWords.length, currentIndex + Math.min(MATCH_WINDOW_AHEAD, 160));
+      let occ = 0; let lastPos = -9999; let tightSpan = 0;
+      for (let i = bStart; i <= bEnd - TAIL_N; i++){
+        if (scriptWords[i] === tail[0] && scriptWords[i+1] === tail[1] && scriptWords[i+2] === tail[2]){
+          occ++;
+          if (lastPos > 0) tightSpan += Math.min(200, i - lastPos);
+          lastPos = i;
+          if (occ >= 4) break; // enough evidence
+        }
+      }
+      if (occ >= 3) {
+        const avgGap = (occ > 1) ? (tightSpan / (occ - 1)) : 9999;
+        // Consider it “common nearby” if appears ≥3x and average gap is small
+        if (avgGap < 60) {
+          const prev = windowAhead;
+          windowAhead = Math.max(20, Math.min(windowAhead, 40));
+          try { if (typeof debug === 'function') debug({ tag:'match:window-tune', reason:'tail-common', tail: tail.join(' '), occ, avgGap, windowAheadPrev: prev, windowAhead }); } catch {}
+        }
+      }
+    }
+  } catch {}
   const start = Math.max(0, currentIndex - MATCH_WINDOW_BACK);
-  const end   = Math.min(scriptWords.length, currentIndex + MATCH_WINDOW_AHEAD);
+  const end   = Math.min(scriptWords.length, currentIndex + windowAhead);
 
   // Build candidates with a fast overlap filter first
   const candidates = [];
