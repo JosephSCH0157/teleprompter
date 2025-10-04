@@ -841,12 +841,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Duplicate-line disambiguation
   let __lineFreq = new Map();
   function normLineKey(text){
+    // Build line keys from fully normalized tokens to ensure duplicate detection
+    // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
     try {
-      return String(text||'')
-        .toLowerCase()
-        .replace(/\W+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const toks = normTokens(text || '');
+      return toks.join(' ');
     } catch { return ''; }
   }
   // Lost-mode state
@@ -2958,7 +2957,8 @@ function advanceByTranscript(transcript, isFinal){
   const delta = bestIdx - currentIndex;
   debug({
     tag: 'match:candidate',
-    spokenTail: spoken.join(' '),
+    // normalize spoken tail consistently with line keys and matcher
+    spokenTail: (function(){ try { return normTokens(spoken.join(' ')).join(' '); } catch { return spoken.join(' '); } })(),
     bestIdx,
     bestScore: Number(bestSim.toFixed(3)),
     // Duplicate penalty visibility in HUD
