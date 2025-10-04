@@ -833,6 +833,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   const getMicSel = () => document.getElementById('settingsMicSel');
   let autoTimer = null, chrono = null, chronoStart = 0;
   let scriptWords = [], paraIndex = [], currentIndex = 0;
+  // Paragraph token stats for rarity gating (computed on render)
+  let __paraTokens = [];           // Array<Array<string>> per paragraph
+  let __dfMap = new Map();         // token -> in how many paragraphs it appears
+  let __dfN = 0;                   // number of paragraphs
+  function __idf(t){ try { return Math.log(1 + (__dfN || 1) / ((__dfMap.get(t) || 0) || 1)); } catch { return 0; } }
   // Hard-bound current line tracking
   let currentEl = null;               // currently active <p> element
   let lineEls = [];                   // array of <p> elements in script order
@@ -2812,16 +2817,26 @@ function advanceByTranscript(transcript, isFinal){
   candidates.sort((a,b)=>b.fast - a.fast);
   const top = candidates.slice(0, 8);
 
-  // Refine with Levenshtein similarity
+  // Refine with similarity + distance-penalized scoring and rarity gating
   const idxBefore = currentIndex; // for jitter metric
-  let bestIdx = currentIndex, bestScore = -Infinity;
+  let bestIdx = currentIndex, bestRank = -Infinity, bestSim = -Infinity;
+  const phraseRarity = (()=>{ try { return spoken.reduce((s,t)=> s + __idf(t), 0); } catch { return 0; } })();
   for (const c of top){
-    const score = _sim(spoken, c.win);
-    if (score > bestScore){ bestScore = score; bestIdx = c.i; }
+    const simRaw = _sim(spoken, c.win);
+    const dist = Math.abs(c.i - currentIndex);
+    // Require distinctive phrase for long jumps
+    const needsRarity = dist > 20;
+    if (needsRarity && phraseRarity < 8) { continue; }
+    // Distance penalty (~0 near, ~1 far)
+    const distancePenalty = (function(){ try { return 1 / (1 + Math.exp(-(dist - 10))); } catch { return 0; } })();
+    const lambda = 0.35;
+    const rank = simRaw - lambda * distancePenalty;
+    if (rank > bestRank){ bestRank = rank; bestIdx = c.i; bestSim = simRaw; }
   }
+  if (!(bestRank > -Infinity)) return; // nothing acceptable
   // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
   try {
-    window.__lastSimScore = Number(bestScore.toFixed(3));
+    window.__lastSimScore = Number(bestSim.toFixed(3));
     if (typeof debug === 'function') debug({ tag:'match:sim', idx: currentIndex, bestIdx, sim: window.__lastSimScore, windowAhead: MATCH_WINDOW_AHEAD });
   } catch {}
 
@@ -2854,7 +2869,7 @@ function advanceByTranscript(transcript, isFinal){
   const jitterElevated = (typeof J.spikeUntil === 'number') && (performance.now() < J.spikeUntil);
   const EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
   const EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
-  if (bestScore < EFF_SIM_THRESHOLD) return;
+  if (bestSim < EFF_SIM_THRESHOLD) return;
 
   // Soften big forward jumps unless similarity is very strong
   const delta = bestIdx - currentIndex;
@@ -2862,10 +2877,10 @@ function advanceByTranscript(transcript, isFinal){
     tag: 'match:candidate',
     spokenTail: spoken.join(' '),
     bestIdx,
-    bestScore: Number(bestScore.toFixed(3)),
+    bestScore: Number(bestSim.toFixed(3)),
     delta
   });
-  if (delta > MAX_JUMP_AHEAD_WORDS && bestScore < EFF_STRICT_FWD_SIM){
+  if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM){
     currentIndex += MAX_JUMP_AHEAD_WORDS;
   } else {
     currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
@@ -3094,11 +3109,17 @@ function advanceByTranscript(transcript, isFinal){
     lineEls = paras;
     try { updateDebugPosChip(); } catch {}
     paraIndex = []; let acc = 0;
+    // Prepare rarity stats structures
+    __paraTokens = []; __dfMap = new Map();
     for (const el of paras){
-      const wc = normTokens(el.textContent || '').length || 1;
+      const toks = normTokens(el.textContent || '');
+      const wc = toks.length || 1;
       paraIndex.push({ el, start: acc, end: acc + wc - 1 });
       acc += wc;
+      __paraTokens.push(toks);
+      try { const uniq = new Set(toks); uniq.forEach(t => __dfMap.set(t, (__dfMap.get(t) || 0) + 1)); } catch {}
     }
+    __dfN = __paraTokens.length;
     // Initialize current element pointer
     try { currentEl?.classList.remove('active'); } catch {}
     currentEl = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end)?.el || paraIndex[0]?.el || null;
