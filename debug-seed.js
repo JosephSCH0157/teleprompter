@@ -183,6 +183,23 @@
         .catch(()=>{});
     } catch {}
 
+    // Optional: also fetch and log first ~2KB of manifest so it's visible in HUD
+    (async function logManifest(){
+      try {
+        const urls = ['./Manifest.md','./MANIFEST.md','./manifest.md'];
+        for (const u of urls){
+          try {
+            const r = await fetch(u, { cache: 'no-store' });
+            if (!r.ok) continue;
+            const t = await r.text();
+            const head = t.slice(0, 2000);
+            if (window.HUD) HUD.log('boot:manifest', head);
+            break;
+          } catch {}
+        }
+      } catch {}
+    })();
+
     log('boot:seed-complete', { aggressiveOn });
   }
 
