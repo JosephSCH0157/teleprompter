@@ -2763,6 +2763,61 @@ let MAX_BACK_STEP_PX = 140;     // clamp backward step size
 // Anti-jitter: remember last move direction (+1 fwd, -1 back, 0 none)
 let _lastMoveDir = 0;
 
+// Coverage-based soft advance to avoid stalls when a short line is consumed
+let __tpStag = { vIdx: -1, since: performance.now() };
+const STALL_MS = 1800;       // ~1.8s feels good in speech
+const COV_THRESH = 0.82;     // % of tokens matched in order
+const NEXT_SIM_FLOOR = 0.68; // allow slightly lower sim to prime next line
+
+function tokenCoverage(lineTokens, tailTokens){
+  try {
+    if (!Array.isArray(lineTokens) || !lineTokens.length) return 0;
+    if (!Array.isArray(tailTokens) || !tailTokens.length) return 0;
+    let i = 0, hit = 0;
+    for (const tok of lineTokens){
+      while (i < tailTokens.length && tailTokens[i] !== tok) i++;
+      if (i < tailTokens.length){ hit++; i++; }
+    }
+    return hit / Math.max(1, lineTokens.length);
+  } catch { return 0; }
+}
+
+function maybeSoftAdvance(bestIdx, bestSim, spoken){
+  try {
+    // Find current virtual line context
+    const vList = __vParaIndex && __vParaIndex.length ? __vParaIndex : null;
+    if (!vList) return { idx: bestIdx, sim: bestSim, soft: false };
+    const vIdx = vList.findIndex(v => bestIdx >= v.start && bestIdx <= v.end);
+    if (vIdx < 0) return { idx: bestIdx, sim: bestSim, soft: false };
+
+    // Update stagnation tracker (stagnant if staying within same virtual line)
+    const now = performance.now();
+    if (vIdx !== __tpStag.vIdx){ __tpStag = { vIdx, since: now }; }
+    const stagnantMs = now - __tpStag.since;
+
+    // Compute coverage of current virtual line by spoken tail
+    const lineTokens = scriptWords.slice(vList[vIdx].start, vList[vIdx].end + 1);
+    const cov = tokenCoverage(lineTokens, spoken);
+
+    if (stagnantMs >= STALL_MS && cov >= COV_THRESH){
+      // Probe the next few virtual lines for a prefix match
+      const maxProbe = Math.min(vList.length - 1, vIdx + 4);
+      for (let j = vIdx + 1; j <= maxProbe; j++){
+        const v = vList[j];
+        const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
+        const sim = _sim(spoken, win);
+        if (sim >= NEXT_SIM_FLOOR){
+          try { if (typeof debug==='function') debug({ tag:'match:soft-advance', from: bestIdx, to: v.start, cov: +cov.toFixed(2), sim: +sim.toFixed(3), stagnantMs: Math.floor(stagnantMs) }); } catch {}
+          // reset stagnation to the new virtual line
+          __tpStag = { vIdx: j, since: now };
+          return { idx: v.start, sim, soft: true };
+        }
+      }
+    }
+    return { idx: bestIdx, sim: bestSim, soft: false };
+  } catch { return { idx: bestIdx, sim: bestSim, soft: false }; }
+}
+
 // Quick fuzzy contain check (Unicode-aware normalization)
 function _normQuick(s){
   try { return String(s||'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(); }
@@ -2956,6 +3011,12 @@ function advanceByTranscript(transcript, isFinal){
       }
     } catch { return; }
   }
+
+  // Coverage-based soft advance probe to prevent stalls
+  try {
+    const soft = maybeSoftAdvance(bestIdx, bestSim, spoken);
+    if (soft && soft.soft) { bestIdx = soft.idx; bestSim = soft.sim; }
+  } catch {}
 
   // Soften big forward jumps unless similarity is very strong
   const delta = bestIdx - currentIndex;
