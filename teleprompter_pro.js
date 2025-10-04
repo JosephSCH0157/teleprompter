@@ -3729,6 +3729,24 @@ async function init(){
     recog.continuous = true;
     recog.interimResults = true;
     recog.lang = 'en-US';
+    // Light phrase bias for domain terms commonly misheard (small boost)
+    try {
+      recog.maxAlternatives = Math.max(2, recog.maxAlternatives || 0);
+      const SGL = (window.SpeechGrammarList || window.webkitSpeechGrammarList);
+      if (SGL && 'grammars' in recog) {
+        const list = new SGL();
+        const domainTerms = ['ban','confiscation','transfer','possession'];
+        const grammar = '#JSGF V1.0; grammar domain; public <term> = ' + domainTerms.join(' | ') + ' ;';
+        // Small weight to gently bias without overfitting
+        list.addFromString(grammar, 0.4);
+        recog.grammars = list;
+        try { if (typeof debug === 'function') debug({ tag:'speech:grammar', installed:true, terms:domainTerms, weight:0.4 }); } catch {}
+      } else {
+        try { if (typeof debug === 'function') debug({ tag:'speech:grammar', installed:false, reason:'no-SpeechGrammarList' }); } catch {}
+      }
+    } catch (e) {
+      try { if (typeof debug === 'function') debug({ tag:'speech:grammar:error', e:String(e) }); } catch {}
+    }
 
     // Reset backoff on a good start and reflect UI state
     recog.onstart = () => {
