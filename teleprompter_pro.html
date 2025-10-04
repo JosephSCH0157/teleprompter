@@ -7,10 +7,22 @@
 <title>Teleprompter — Pro v1_5_6</title>
 <link href="data:," rel="icon"/>
 <script defer src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+<script>
+  // DEV gating for build label: add a class on <html> if dev is enabled
+  (function(){
+    try {
+      var Q = new URLSearchParams(location.search);
+      var DEV = Q.has('dev') || (function(){ try { return localStorage.getItem('tp_dev_mode') === '1'; } catch(e){ return false; } })() || (location.hash||'').indexOf('dev') !== -1;
+      if (DEV) { document.documentElement.classList.add('tp-dev'); }
+    } catch {}
+  })();
+  // Note: teleprompter_pro.js will also set window.__TP_DEV
+</script>
 
 <link href="teleprompter_pro.css" rel="stylesheet"/>
 <style>
-  #anvil-build-label{position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui, sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
+  #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui, sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
+  html.tp-dev #anvil-build-label{display:block}
   @media print{#anvil-build-label{display:none}}
   @media (max-width: 420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
 </style>
