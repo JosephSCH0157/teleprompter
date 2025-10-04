@@ -838,6 +838,8 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let lineEls = [];                   // array of <p> elements in script order
   // Recording / speech state flags
   let recActive = false;              // true when speech recognition session is active
+  // Central gate so toggling Speech Sync truly quiets aligner and scroller
+  let speechOn = false;
   // Display window handle
   let displayWin = null;              // popup window reference for mirrored display
   let shortcutsBtn, shortcutsOverlay, shortcutsClose;
@@ -2581,7 +2583,8 @@ setTimeout(() => {
 }, 800);
 
 // Gentle PID-like catch-up controller
-function tryStartCatchup(){
+  function tryStartCatchup(){
+  if (!speechOn) { try{ __scrollCtl?.stopAutoCatchup?.(); }catch{} return; }
   if (!__scrollCtl?.startAutoCatchup || !viewer) return;
   // If auto-scroll is running, skip catch-up to avoid conflicts
   if (autoTimer) return;
@@ -2629,6 +2632,7 @@ function tryStartCatchup(){
 let _lowStartTs = 0;
 function maybeCatchupByAnchor(anchorY, viewportH){
   try {
+    if (!speechOn) { _lowStartTs = 0; try{ __scrollCtl?.stopAutoCatchup?.(); }catch{}; return; }
     if (!__scrollCtl?.startAutoCatchup || !viewer) return;
     // Don't start while auto-scroll is active
     if (autoTimer) { _lowStartTs = 0; try{ __scrollCtl.stopAutoCatchup(); }catch{}; return; }
@@ -2732,6 +2736,8 @@ function onSpeechCommit(activeEl){
 // Advance currentIndex by trying to align recognized words to the upcoming script words
 // TP: advance-by-transcript
 function advanceByTranscript(transcript, isFinal){
+  // Hard gate: no matching when speech sync is off
+  if (!speechOn) { try{ if (typeof debug==='function') debug({ tag:'match:gate', reason:'speech-off' }); }catch{} return; }
   // Adopt current smoothness settings if provided
   const SC = (window.__TP_SCROLL || { DEAD: DEAD_BAND_PX, THROTTLE: CORRECTION_MIN_MS, FWD: MAX_FWD_STEP_PX, BACK: MAX_BACK_STEP_PX });
   DEAD_BAND_PX = SC.DEAD; CORRECTION_MIN_MS = SC.THROTTLE; MAX_FWD_STEP_PX = SC.FWD; MAX_BACK_STEP_PX = SC.BACK;
@@ -3360,10 +3366,13 @@ function toggleRec(){
     // stopping (before calling recog.stop())
     recAutoRestart = false;
     recActive = false;
+    speechOn = false; try{ window.HUD?.bus?.emit('speech:toggle', false); }catch{}
     document.body.classList.remove('listening'); // when stopping
     stopSpeechSync();
     recChip.textContent = 'Speech: idle';
     recBtn.textContent = 'Start speech sync';
+    try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
+    try { window.matcher?.reset?.(); } catch {}
     // Try to stop external recorders per settings
     try { __recorder?.stop?.(); } catch {}
     return;
@@ -3699,6 +3708,7 @@ async function init(){
       recBackoffMs = 300;
       document.body.classList.add('listening');
       try { recChip.textContent = 'Speech: listening…'; } catch {}
+      speechOn = true; try{ window.HUD?.bus?.emit('speech:toggle', true); }catch{}
     };
 
     let _lastInterimAt = 0;
@@ -3725,6 +3735,8 @@ async function init(){
     recog.onend = () => {
       document.body.classList.remove('listening');
       try { recChip.textContent = 'Speech: idle'; } catch {}
+      speechOn = false; try{ window.HUD?.bus?.emit('speech:toggle', false); }catch{}
+      try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
       // If user didn't stop it, try to bring it back with backoff
       if (recAutoRestart && recActive) {
         setTimeout(() => {
