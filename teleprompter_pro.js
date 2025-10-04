@@ -2509,7 +2509,17 @@ function scrollToCurrentIndex(){
   const S = (window.__TP_SCROLL || { EASE_STEP: 80, EASE_MIN: 10 });
   const dy = target - viewer.scrollTop;
   if (Math.abs(dy) > S.EASE_MIN) {
-    viewer.scrollTop += Math.sign(dy) * Math.min(Math.abs(dy), S.EASE_STEP);
+    // Dynamic ease step: speed up when far or near the end to avoid perceived slowdown
+    let step = S.EASE_STEP;
+    const absdy = Math.abs(dy);
+    if (absdy > 400) step = Math.max(step, Math.min(160, Math.floor(absdy * 0.40)));
+    try {
+      const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = maxScroll ? (viewer.scrollTop / maxScroll) : 0;
+      if (ratio >= 0.75) step = Math.floor(step * 1.5);
+      else if (ratio >= 0.60) step = Math.floor(step * 1.25);
+    } catch {}
+    viewer.scrollTop += Math.sign(dy) * Math.min(absdy, step);
   } else {
     viewer.scrollTop = target;
   }
@@ -2871,14 +2881,19 @@ function advanceByTranscript(transcript, isFinal){
 
   const markerTop  = Math.round(viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
   const desiredTop = (targetPara.el.offsetTop - markerTop); // let scheduler clamp
-  const capPx      = Math.floor((viewer.clientHeight || 0) * 0.60);
+  // Base cap to keep motion tame; relax near the end to avoid slowdown perception
+  const maxScroll  = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+  const progress   = maxScroll ? (viewer.scrollTop / maxScroll) : 0;
+  let capPx        = Math.floor((viewer.clientHeight || 0) * 0.60);
+  if (progress >= 0.75) capPx = Math.floor((viewer.clientHeight || 0) * 0.90);
 
   if (isFinal && window.__TP_CALM) {
-    // If similarity isn't very high, cap the jump size to keep motion tame
+    // If similarity isn't very high, cap the jump size to keep motion tame (but relax near end)
     try {
       if ((Number.isFinite(bestScore) && bestScore < 0.90)){
         const dTop = desiredTop - viewer.scrollTop;
-        if (Math.abs(dTop) > capPx){
+        const inTail = progress >= 0.85; // last ~15%: no cap
+        if (!inTail && Math.abs(dTop) > capPx){
           const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
           try { requestScroll(limitedTop); if (typeof debug === 'function') debug({ tag:'scroll', top: limitedTop, mode:'calm-cap' }); } catch {}
           // sync display based on intended target (avoid read-after-write)
@@ -2925,7 +2940,8 @@ function advanceByTranscript(transcript, isFinal){
     // Prefer element-anchored scrolling; apply jump cap unless similarity is very high
     try {
       const dTop = desiredTop - viewer.scrollTop;
-      if ((Number.isFinite(bestScore) && bestScore < 0.90) && Math.abs(dTop) > capPx){
+      const inTail = progress >= 0.85; // last ~15%: no cap
+      if (!inTail && (Number.isFinite(bestScore) && bestScore < 0.90) && Math.abs(dTop) > capPx){
         const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
         requestScroll(limitedTop);
       } else {
