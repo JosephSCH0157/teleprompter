@@ -49,6 +49,20 @@
       autoscroll: !!opts.autoscroll,
       maxRows: opts.maxRows,
     };
+    const metrics = {
+      // commit metrics
+      lastCommitAt: 0,
+      commitIntervals: [], // ms buckets
+      simHist: { '<0.7':0, '0.7-0.8':0, '0.8-0.9':0, '>=0.9':0 },
+      // scroll metrics
+      writesInWindow: 0,
+      lastWritesTick: performance.now(),
+      writesPerSec: 0,
+      // reflow risk detection
+      frameReads: 0,
+      frameWrites: 0,
+      lastRAF: 0,
+    };
 
     // Styles (scoped)
     if (!document.getElementById('tp-hud-styles')) {
@@ -214,6 +228,12 @@
               HUD.log('scroll:viewer', { top: viewer.scrollTop, ratio: max ? +(viewer.scrollTop/max).toFixed(3) : 0 });
             }
           }, { passive:true });
+          // track writes per second via scheduler hint
+          const origScrollTo = viewer.scrollTo?.bind(viewer);
+          if (origScrollTo && !viewer.__hudWriteWrap) {
+            viewer.scrollTo = function(){ try { metrics.writesInWindow++; } catch{} return origScrollTo.apply(this, arguments); };
+            viewer.__hudWriteWrap = true;
+          }
         }
       } catch {}
 
@@ -228,11 +248,12 @@
       }
 
       // wrap scroll helpers
-      ['scrollByPx','scrollToY','scrollToEl'].forEach(fn=>{
+      ['scrollByPx','scrollToY','scrollToEl','requestScroll'].forEach(fn=>{
         if (typeof window[fn] === 'function' && !window[fn].__hudWrapped) {
           const orig = window[fn];
           window[fn] = function(){
             try { HUD.log('scroll:'+fn, Array.from(arguments)); } catch {}
+            try { metrics.writesInWindow++; } catch {}
             return orig.apply(this, arguments);
           };
           window[fn].__hudWrapped = true;
@@ -257,6 +278,21 @@
           const orig = window[fn];
           window[fn] = function(){
             try { HUD.log('match:'+fn, { currentIndex: window.currentIndex }); } catch {}
+            try {
+              const sim = (window.__lastSimScore ?? null);
+              // simAtCommit histogram
+              if (typeof sim === 'number'){
+                if (sim < 0.7) metrics.simHist['<0.7']++;
+                else if (sim < 0.8) metrics.simHist['0.7-0.8']++;
+                else if (sim < 0.9) metrics.simHist['0.8-0.9']++;
+                else metrics.simHist['>=0.9']++;
+              }
+              // time-between-commits
+              const now = performance.now();
+              if (metrics.lastCommitAt){ metrics.commitIntervals.push(now - metrics.lastCommitAt); }
+              metrics.lastCommitAt = now;
+              HUD.log('match:commit:metrics', { sim, simHist: metrics.simHist, lastIntervalMs: metrics.commitIntervals.at(-1) });
+            } catch {}
             return orig.apply(this, arguments);
           };
           window[fn].__hudWrapped = true;
@@ -298,6 +334,55 @@
     // Try wrapping periodically as pieces come online
     const wrapTimer = setInterval(lateWrap, 250);
     setTimeout(()=> clearInterval(wrapTimer), 15000); // stop polling after 15s
+
+    // Metrics tickers
+    setInterval(()=>{
+      try {
+        const now = performance.now();
+        const dt = now - metrics.lastWritesTick;
+        if (dt >= 1000) {
+          metrics.writesPerSec = Math.round((metrics.writesInWindow * 1000) / dt);
+          HUD.log('scroll:wps', { writesPerSec: metrics.writesPerSec, writes: metrics.writesInWindow });
+          metrics.writesInWindow = 0;
+          metrics.lastWritesTick = now;
+        }
+      } catch {}
+    }, 300);
+
+    // Reflow risk detection: if both writes and layout reads occur in same frame
+    ;(function installReflowRisk(){
+      try {
+        const doc = document;
+        const props = ['offsetTop','offsetLeft','offsetWidth','offsetHeight','clientTop','clientLeft','clientWidth','clientHeight','scrollTop','scrollLeft','scrollWidth','scrollHeight'];
+        const elProto = Element.prototype;
+        const rd = new WeakSet();
+        // track reads
+        props.forEach(p=>{
+          const d = Object.getOwnPropertyDescriptor(elProto, p);
+          if (d && typeof d.get === 'function'){
+            Object.defineProperty(elProto, p, {
+              configurable: true,
+              get: function(){ try { metrics.frameReads = (metrics.frameReads||0)+1; } catch {} return d.get.call(this); }
+            });
+          }
+        });
+        // track writes via style assignments
+        const origStyleSet = CSSStyleDeclaration.prototype.setProperty;
+        CSSStyleDeclaration.prototype.setProperty = function(){ try { metrics.frameWrites = (metrics.frameWrites||0)+1; } catch{} return origStyleSet.apply(this, arguments); };
+        // tick each rAF
+        const loop = ()=>{
+          try {
+            const had = { r: metrics.frameReads||0, w: metrics.frameWrites||0 };
+            if (had.r > 0 && had.w > 0) {
+              HUD.log('perf:reflow-risk', had);
+            }
+            metrics.frameReads = 0; metrics.frameWrites = 0;
+          } catch {}
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      } catch {}
+    })();
 
     return { toggle, show, hide, log: (...a)=>HUD.log(...a) };
   }

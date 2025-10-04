@@ -110,6 +110,31 @@
         } catch {}
         const core = await new Promise((res)=>{
           let tries = 0; const id = setInterval(()=>{
+  
+      // Tiny global commit/scroll scheduler to centralize writes and make metrics easier
+      ;(function installTinyScheduler(){
+        try {
+          if (window.__tpTinySchedulerInstalled) return;
+          window.__tpTinySchedulerInstalled = true;
+          let _pendingTop = null, _rafId = 0;
+          const getScroller = ()=> (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+          function clamp(y){ const sc = getScroller(); if (!sc) return 0; const max = Math.max(0, sc.scrollHeight - sc.clientHeight); return Math.max(0, Math.min(Number(y)||0, max)); }
+          function requestScrollTop(y){ const sc = getScroller(); if (!sc) return; _pendingTop = clamp(y); try{ window.__lastScrollTarget = _pendingTop; }catch{} if (_rafId) return; _rafId = requestAnimationFrame(()=>{ const t=_pendingTop; _pendingTop=null; _rafId=0; try{ sc.scrollTo({ top: t, behavior:'auto' }); } catch { sc.scrollTop = t; } try{ window.__lastScrollTarget=null; }catch{} }); }
+          // publish minimal API
+          window.__tpScrollWrite = requestScrollTop;
+          // optional: wrap viewer.scrollTop writes
+          const sc = getScroller();
+          if (sc && !sc.__tpWriteWrapped){
+            sc.__tpWriteWrapped = true;
+            try {
+              const origSet = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(sc), 'scrollTop')?.set;
+              if (origSet){
+                Object.defineProperty(sc, 'scrollTop', { configurable:true, set(v){ requestScrollTop(v); } });
+              }
+            } catch {}
+          }
+        } catch {}
+      })();
             // Prefer explicitly published real core ONLY if it's not just the early waiter
             if (typeof window.__tpRealCore === 'function' && !window.__tpRealCore.__tpWaiter) { clearInterval(id); return res(window.__tpRealCore); }
             // Or if window._initCore has been swapped to a different function, use that
