@@ -3253,7 +3253,8 @@ function normTokens(text){
     .replace(/’/g,"'")
     // expand common contractions
     .replace(/\b(won't)\b/g, 'will not')
-    .replace(/\b(can't)\b/g, 'cannot')
+    // generic n't expansion for common auxiliaries/verbs (avoid 'won't' which is handled above)
+    .replace(/\b(can|do|does|is|are|was|were|has|have|had|would|should|could|did)n['’]t\b/g, '$1 not')
     .replace(/\b(\w+)'re\b/g, '$1 are')
     .replace(/\b(\w+)'ll\b/g, '$1 will')
     .replace(/\b(\w+)'ve\b/g, '$1 have')
@@ -3271,9 +3272,12 @@ function normTokens(text){
   // split hyphenated words into what you actually say: matter-of-fact → matter of fact
   t = t.replace(/([a-z])[\u2010-\u2015-]([a-z])/gi, '$1 $2');
 
-  // strip general punctuation (also eat long dashes)
-  t = t.replace(/[.,!?;:()"\[\]`]/g, ' ')
-       .replace(/[\u2010-\u2015]/g, ' ');
+  // strip punctuation broadly (unicode-aware) + long dashes
+  try { t = t.replace(/[^\p{L}\p{N}\s]/gu, ' '); } catch { t = t.replace(/[.,!?;:()"\[\]`]/g, ' '); }
+  t = t.replace(/[\u2010-\u2015]/g, ' ');
+
+  // collapse whitespace (pre-tokenization)
+  t = t.replace(/\s+/g, ' ').trim();
 
   const raw = t.split(/\s+/).filter(Boolean);
 
