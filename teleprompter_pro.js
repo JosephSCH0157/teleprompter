@@ -2836,6 +2836,22 @@ function tokenCoverage(lineTokens, tailTokens){
   } catch { return 0; }
 }
 
+// Cheap suffix hit using last k tokens: Jaccard + substring containment
+function suffixHit(lineTokens, tailTokens, k = 6){
+  try {
+    const A = (Array.isArray(lineTokens) ? lineTokens : []).slice(-k);
+    const B = (Array.isArray(tailTokens) ? tailTokens : []).slice(-k);
+    if (!A.length || !B.length) return false;
+    const setA = new Set(A), setB = new Set(B);
+    let inter = 0; for (const t of setA) if (setB.has(t)) inter++;
+    const jacc = inter / Math.max(1, (setA.size + setB.size - inter));
+    if (jacc >= 0.8) return true;
+    const L = A.join(' '), T = B.join(' ');
+    if (!L || !T) return false;
+    return L.includes(T) || T.includes(L);
+  } catch { return false; }
+}
+
 function maybeSoftAdvance(bestIdx, bestSim, spoken){
   try {
     // Find current virtual line context
@@ -2859,8 +2875,12 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
         cov = tokenCoverage(lineTokens, spoken);
       }
     } catch { cov = tokenCoverage(lineTokens, spoken); }
-
-    if (stagnantMs >= STALL_MS && cov >= COV_THRESH){
+    // Early soft-advance window (≈700–900ms) based on coverage or suffix hit
+    const SOFT_EARLY_MS = 850;
+    const suffix = suffixHit(lineTokens, spoken, 6);
+    const earlyOk = (stagnantMs >= SOFT_EARLY_MS) && (cov >= COV_THRESH || suffix);
+    const lateOk  = (stagnantMs >= STALL_MS) && (cov >= COV_THRESH);
+    if (earlyOk || lateOk){
       // Probe the next few virtual lines for a prefix match
       const maxProbe = Math.min(vList.length - 1, vIdx + 4);
       for (let j = vIdx + 1; j <= maxProbe; j++){
@@ -2868,7 +2888,7 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
         const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
         const sim = _sim(spoken, win);
         if (sim >= NEXT_SIM_FLOOR){
-          try { if (typeof debug==='function') debug({ tag:'match:soft-advance', from: bestIdx, to: v.start, cov: +cov.toFixed(2), sim: +sim.toFixed(3), stagnantMs: Math.floor(stagnantMs) }); } catch {}
+          try { if (typeof debug==='function') debug({ tag:'match:soft-advance', from: bestIdx, to: v.start, cov: +cov.toFixed(2), suffix, sim: +sim.toFixed(3), stagnantMs: Math.floor(stagnantMs), early: earlyOk }); } catch {}
           // reset stagnation to the new virtual line
           __tpStag = { vIdx: j, since: now };
           return { idx: v.start, sim, soft: true };
