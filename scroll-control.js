@@ -83,18 +83,19 @@ export function createScrollController(){
 
   const S = {
     committedIdx: 0,
-    lastBestIdx: 0,
+    pendingIdx: 0,
+    stableHits: 0,
     lastBestAt: 0,
     lastCommitAt: 0,
     lastCommitIdx: 0,
-    backStableCount: 0,
     lastClampY: -1,
-      stableHits: 0,
   };
 
-  // Simple consecutive confirmations gate
-  const STABLE_HITS = 2;            // number of consecutive matches to same idx
-  const SIM_IMMEDIATE = 0.82;       // immediate commit if idx changed AND sim >= this
+  // Monotonic commit with hysteresis and per-commit jump cap
+  const STABLE_HITS = 2;            // require staying on candidate across frames
+  const FWD_SIM = 0.82;             // forward threshold
+  const BACK_SIM = 0.86;            // stricter to backtrack
+  const MAX_STEP = 6;               // cap per-commit move in indices
 
   // Minimal throttle helper (~6-8 updates/sec @ 125ms)
   function throttle(fn, wait){
@@ -134,14 +135,8 @@ export function createScrollController(){
 
   function logEv(ev){ try { if (typeof debug==='function') debug(ev); else if (window?.HUD) HUD.log(ev.tag||'log', ev); } catch {} }
 
-  // Legacy policy helper retained for compatibility; not used by the new gate
-  window.__tpShouldCommitIdx = function(bestIdx, sim){
-    // New simplified rule is implemented in the wrapper below; we keep this to avoid breaking callers.
-    const gap = bestIdx - S.committedIdx;
-    const absGap = Math.abs(gap);
-    if (absGap <= G.deadbandIdx && sim >= 0.85) return false;
-    return true;
-  };
+  // Legacy policy helper retained for compatibility; no-op gate now
+  window.__tpShouldCommitIdx = function(){ return true; };
 
   // Wrap existing scrollToCurrentIndex if present on window
   const _origScrollToCurrentIndex = window.scrollToCurrentIndex;
@@ -168,55 +163,29 @@ export function createScrollController(){
         const sim = (window.__lastSimScore ?? 1);
         const now = performance.now();
 
-        // One-time fast catchup for large gaps
-        if (Math.abs(bestIdx - S.committedIdx) >= G.bigGapIdx) {
-          logEv({ tag:'match:catchup:start', from:S.committedIdx, to:bestIdx });
-          _origScrollToCurrentIndex.apply(this, arguments);
-          S.committedIdx = bestIdx;
-          S.lastCommitAt = now;
-          S.lastCommitIdx = bestIdx;
-          logEv({ tag:'match:catchup:stop' });
-          return;
-        }
-
-        // Update stability confirmations for the current bestIdx, only when sim is decent (>= 0.72)
-        if (bestIdx === S.lastBestIdx) {
-          S.stableHits = (sim >= 0.72) ? (S.stableHits + 1) : 0;
-        } else {
-          S.lastBestIdx = bestIdx;
-          S.stableHits = (sim >= 0.72) ? 1 : 0;
-        }
-
-        // New simplified gate:
-        // Only scroll when (idx changed && sim >= SIM_IMMEDIATE) OR after STABLE_HITS confirmations.
-        const idxChangedFromCommitted = (bestIdx !== S.committedIdx);
-        if (!idxChangedFromCommitted) {
-          logEv({ tag:'match:gate', reason:'no-idx-change', bestIdx, committedIdx:S.committedIdx, sim });
-          return;
-        }
-        // Respect temporary jitter elevation from main module if present
-        let simImmediateEff = SIM_IMMEDIATE;
+        // Hysteresis commit: only commit after stability across frames, with direction-specific thresholds
+        // Respect jitter elevation from main module
+        let effFwd = FWD_SIM, effBack = BACK_SIM;
         try {
           const J = (window.__tpJitter || {});
-          const elevated = (typeof J.spikeUntil === 'number') && (performance.now() < J.spikeUntil);
-          if (elevated) simImmediateEff = SIM_IMMEDIATE + 0.06;
+          const elevated = (typeof J.spikeUntil === 'number') && (now < J.spikeUntil);
+          if (elevated) { effFwd += 0.06; effBack += 0.06; }
         } catch {}
-        const immediateOk = (sim >= simImmediateEff);
-        const confirmationsOk = (sim >= 0.72) && (S.stableHits >= STABLE_HITS);
-        if (!immediateOk && !confirmationsOk) {
-          logEv({ tag:'match:gate', reason:'await-confirmations', bestIdx, committedIdx:S.committedIdx, sim, hits:S.stableHits, need:STABLE_HITS });
-          return;
-        }
 
-        // Apply backtrack cap to avoid ping-pong across big spans
-        let commitIdx = bestIdx;
-        if (bestIdx < S.committedIdx) {
-          const capped = Math.max(S.committedIdx - 2, bestIdx);
-          if (capped !== bestIdx) {
-            logEv({ tag:'match:back-cap', from: S.committedIdx, bestIdx, commitIdx: capped });
-          }
-          commitIdx = capped;
-        }
+        const movingBack = bestIdx < S.committedIdx;
+        const ok = (!movingBack && sim >= effFwd) || (movingBack && sim >= effBack);
+        if (!ok) { S.stableHits = 0; logEv({ tag:'match:gate', reason:'sim-too-low', bestIdx, committedIdx:S.committedIdx, sim, effFwd, effBack, movingBack }); return; }
+
+        if (bestIdx === S.pendingIdx) S.stableHits++;
+        else { S.pendingIdx = bestIdx; S.stableHits = 1; }
+
+        if (S.stableHits < STABLE_HITS) { logEv({ tag:'match:gate', reason:'unstable', bestIdx, pendingIdx:S.pendingIdx, hits:S.stableHits, need:STABLE_HITS }); return; }
+
+        // Clamp commit to MAX_STEP towards pending index
+        const dir = Math.sign(S.pendingIdx - S.committedIdx) || 0;
+        if (dir === 0) { return; }
+        const step = Math.min(Math.abs(S.pendingIdx - S.committedIdx), MAX_STEP);
+        const commitIdx = S.committedIdx + (dir * step);
 
         // Use throttled applier to coalesce high-frequency updates
         applyCommitThrottled(commitIdx);
