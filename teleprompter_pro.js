@@ -2786,6 +2786,43 @@ const NEXT_SIM_FLOOR = 0.68; // allow slightly lower sim to prime next line
 // Stall instrumentation state
 let __tpStall = { reported: false };
 
+// Persistent spoken tail tracker and per-line progress tracker
+let __tpPrevTail = [];
+let __tpLineTracker = { vIdx: -1, pos: 0, len: 0, line: [] };
+function __resetLineTracker(vIdx, lineTokens){
+  try {
+    __tpLineTracker = { vIdx, pos: 0, len: (lineTokens?.length||0), line: Array.isArray(lineTokens)? lineTokens.slice() : [] };
+  } catch { __tpLineTracker = { vIdx, pos: 0, len: 0, line: [] }; }
+}
+function __feedLineTracker(newTokens){
+  try {
+    if (!Array.isArray(newTokens) || !newTokens.length) return;
+    const lookMax = 3;
+    for (const t of newTokens){
+      for (let look = 0; look < lookMax; look++){
+        const want = __tpLineTracker.line[__tpLineTracker.pos + look];
+        if (want === t){ __tpLineTracker.pos += (look + 1); break; }
+      }
+      if (__tpLineTracker.pos >= __tpLineTracker.len) { __tpLineTracker.pos = __tpLineTracker.len; break; }
+    }
+    if (__tpLineTracker.pos > __tpLineTracker.len) __tpLineTracker.pos = __tpLineTracker.len;
+  } catch {}
+}
+function __tailDelta(prev, cur){
+  try {
+    const max = Math.min(prev.length|0, cur.length|0);
+    let overlap = 0;
+    for (let r = max; r >= 0; r--){
+      let ok = true;
+      for (let i = 0; i < r; i++){
+        if (prev[prev.length - r + i] !== cur[i]){ ok = false; break; }
+      }
+      if (ok){ overlap = r; break; }
+    }
+    return cur.slice(overlap);
+  } catch { return cur || []; }
+}
+
 function tokenCoverage(lineTokens, tailTokens){
   try {
     if (!Array.isArray(lineTokens) || !lineTokens.length) return 0;
@@ -2814,7 +2851,14 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
 
     // Compute coverage of current virtual line by spoken tail
     const lineTokens = scriptWords.slice(vList[vIdx].start, vList[vIdx].end + 1);
-    const cov = tokenCoverage(lineTokens, spoken);
+    let cov = 0;
+    try {
+      if (__tpLineTracker.vIdx === vIdx){
+        cov = Math.min(1, (__tpLineTracker.pos || 0) / Math.max(1, __tpLineTracker.len || 1));
+      } else {
+        cov = tokenCoverage(lineTokens, spoken);
+      }
+    } catch { cov = tokenCoverage(lineTokens, spoken); }
 
     if (stagnantMs >= STALL_MS && cov >= COV_THRESH){
       // Probe the next few virtual lines for a prefix match
@@ -2901,6 +2945,23 @@ function advanceByTranscript(transcript, isFinal){
   const spokenAll = normTokens(transcript);
   const spoken    = spokenAll.slice(-SPOKEN_N);
   if (!spoken.length) return;
+
+  // Initialize/advance the per-line tracker (virtual line aware)
+  try {
+    const vList = __vParaIndex || [];
+    const vCur = vList.find(v => currentIndex >= v.start && currentIndex <= v.end) || null;
+    const vIdx = vCur ? vList.indexOf(vCur) : -1;
+    if (vIdx >= 0){
+      const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
+      if (__tpLineTracker.vIdx !== vIdx){
+        __resetLineTracker(vIdx, lineTokens);
+        __tpPrevTail = [];
+      }
+      const newTail = __tailDelta(__tpPrevTail, spoken);
+      if (newTail.length) __feedLineTracker(newTail);
+      __tpPrevTail = spoken.slice();
+    }
+  } catch {}
 
   // Search a band around currentIndex with dynamic forward window if tail looks common
   let windowAhead = MATCH_WINDOW_AHEAD;
@@ -3047,7 +3108,15 @@ function advanceByTranscript(transcript, isFinal){
     if (idleMs > 1000) {
       const v = (__vParaIndex || []).find(v => currentIndex >= v.start && currentIndex <= v.end) || null;
       const lineTokens = v ? scriptWords.slice(v.start, v.end + 1) : [];
-      const cov = tokenCoverage(lineTokens, spoken);
+      // Prefer accumulated tracker coverage when available; fallback to instantaneous coverage
+      let cov = 0;
+      try {
+        if (__tpLineTracker.vIdx === (__vParaIndex||[]).findIndex(x => currentIndex >= x.start && currentIndex <= x.end)){
+          cov = Math.min(1, (__tpLineTracker.pos || 0) / Math.max(1, __tpLineTracker.len || 1));
+        } else {
+          cov = tokenCoverage(lineTokens, spoken);
+        }
+      } catch { cov = tokenCoverage(lineTokens, spoken); }
       // probe next virtual line similarity (cheap local look-ahead)
       let nextSim = 0;
       try {
