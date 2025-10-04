@@ -2799,7 +2799,7 @@ function __resetLineTracker(vIdx, lineTokens){
 function __feedLineTracker(newTokens){
   try {
     if (!Array.isArray(newTokens) || !newTokens.length) return;
-    const lookMax = 3;
+    const lookMax = (typeof window.__tpLookaheadMax === 'number' ? window.__tpLookaheadMax : 3) || 3;
     for (const t of newTokens){
       for (let look = 0; look < lookMax; look++){
         const want = __tpLineTracker.line[__tpLineTracker.pos + look];
@@ -2838,6 +2838,28 @@ function tokenCoverage(lineTokens, tailTokens){
   } catch { return 0; }
 }
 
+// Detect enumeration "list mode": 3 consecutive content tokens (high-IDF, non-stop)
+function __isContentToken(t){
+  try {
+    if (!t) return false;
+    if (__STOP.has(t)) return false;
+    if (typeof __JUNK?.has === 'function' && __JUNK.has(t)) return false;
+    const idf = __idf(t);
+    return idf >= 1.2; // heuristic threshold for distinctiveness
+  } catch { return false; }
+}
+function detectListMode(tokens){
+  try {
+    if (!Array.isArray(tokens) || tokens.length < 3) return false;
+    let streak = 0;
+    for (const t of tokens){
+      if (__isContentToken(t)) { streak++; if (streak >= 3) return true; }
+      else streak = 0;
+    }
+    return false;
+  } catch { return false; }
+}
+
 // Cheap suffix hit using last k tokens: Jaccard + substring containment
 function suffixHit(lineTokens, tailTokens, k = 6){
   try {
@@ -2869,6 +2891,9 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
 
     // Compute coverage of current virtual line by spoken tail
     const lineTokens = scriptWords.slice(vList[vIdx].start, vList[vIdx].end + 1);
+    // List-mode detection from current spoken tail
+    const listMode = detectListMode(spoken.slice(-6));
+    try { window.__tpLookaheadMax = listMode ? 4 : 3; } catch { /* no-op */ }
     let cov = 0;
     try {
       if (__tpLineTracker.vIdx === vIdx){
@@ -2879,9 +2904,11 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
     } catch { cov = tokenCoverage(lineTokens, spoken); }
     // Early soft-advance window (≈700–900ms) based on coverage or suffix hit
     const SOFT_EARLY_MS = 850;
+    const COV_T   = listMode ? 0.65 : COV_THRESH;
+    const STALL_T = listMode ? 700  : STALL_MS;
     const suffix = suffixHit(lineTokens, spoken, 6);
-    const earlyOk = (stagnantMs >= SOFT_EARLY_MS) && (cov >= COV_THRESH || suffix);
-    const lateOk  = (stagnantMs >= STALL_MS) && (cov >= COV_THRESH);
+    const earlyOk = (stagnantMs >= SOFT_EARLY_MS) && (cov >= COV_T || suffix);
+    const lateOk  = (stagnantMs >= STALL_T)       && (cov >= COV_T);
     if (earlyOk || lateOk){
       // Probe the next few virtual lines for a prefix match
       const maxProbe = Math.min(vList.length - 1, vIdx + 4);
