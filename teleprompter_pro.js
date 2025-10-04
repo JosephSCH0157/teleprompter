@@ -2906,7 +2906,8 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
     const SOFT_EARLY_MS = 850;
     const COV_T   = listMode ? 0.65 : COV_THRESH;
     const STALL_T = listMode ? 700  : STALL_MS;
-    const suffix = suffixHit(lineTokens, spoken, 6);
+  const suffix = suffixHit(lineTokens, spoken, 6);
+  if (suffix) { try { if (typeof debug==='function') debug({ tag:'SUFFIX_HIT', idx: bestIdx, k: 6, ok: true }); } catch {} }
     const earlyOk = (stagnantMs >= SOFT_EARLY_MS) && (cov >= COV_T || suffix);
     const lateOk  = (stagnantMs >= STALL_T)       && (cov >= COV_T);
     if (earlyOk || lateOk){
@@ -2949,6 +2950,10 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
           }
           if (!gateOk) continue;
           // reset hop gate upon passing
+          try {
+            const hold = (__tpHopGate && __tpHopGate.firstAt) ? Math.floor(now - __tpHopGate.firstAt) : 0;
+            if (typeof debug==='function') debug({ tag:'LOOKAHEAD_LATCH', from: bestIdx, to: v.start, hold: hold + 'ms', sim: +sim.toFixed(2) });
+          } catch {}
           __tpHopGate = { idx: -1, hits: 0, firstAt: 0 };
           try { if (typeof debug==='function') debug({ tag:'match:soft-advance', from: bestIdx, to: v.start, cov: +cov.toFixed(2), suffix, sim: +sim.toFixed(3), stagnantMs: Math.floor(stagnantMs), early: earlyOk }); } catch {}
           // reset stagnation to the new virtual line
@@ -3115,7 +3120,10 @@ function advanceByTranscript(transcript, isFinal){
       const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
       if (__tpLineTracker.vIdx !== vIdx){ __resetLineTracker(vIdx, lineTokens); __tpPrevTail = []; }
       const newTail = __tailDelta(__tpPrevTail, spoken);
-      if (newTail.length) __feedLineTracker(newTail);
+      if (newTail.length) {
+        __feedLineTracker(newTail);
+        try { if (typeof debug==='function') debug({ tag:'COV_UPDATE', idx: bestIdx, pos: __tpLineTracker.pos, len: __tpLineTracker.len, tokens: newTail.slice() }); } catch {}
+      }
       __tpPrevTail = spoken.slice();
     }
   } catch {}
