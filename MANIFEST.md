@@ -48,3 +48,10 @@ modules:
 
 ## Test Content
 - Add your own script content in the editor; debug seed file is included as ./debug-seed.js.
+
+## Recent Dev Changes (Unreleased)
+- Monotonic commit with hysteresis and per-commit jump caps; throttled commit application.
+- Distance-penalized ranking with rarity gating; duplicate-line penalty (HUD visible).
+- Jitter meter with auto-elevated thresholds; Lost Mode with high‑IDF 3‑gram re-anchoring.
+- Calm Mode end-of-script cap relaxation; dynamic ease step to avoid late-script slowdown.
+- End-of-script guard to stop further scrolling at bottom.
