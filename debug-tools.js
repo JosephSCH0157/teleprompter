@@ -204,6 +204,21 @@
     };
     try { window.HUD = HUD; } catch {}
 
+    // Optional: quiet mode — filter noisy HUD tags to keep console readable during dev
+    (function(){
+      try {
+        const quiet = /([?#]).*quiet=1/.test(location.href) || (function(){ try { return localStorage.getItem('tp_quiet_hud')==='1'; } catch { return false; } })();
+        if (!quiet) return;
+        const orig = HUD.log;
+        const NOISY = /^(match(:sim|:catchup:stop)?|scroll:(tick|viewer|jump)|fallback-nudge)$/;
+        HUD.log = function(tag, payload){
+          try { if (NOISY.test(String(tag))) return; } catch {}
+          return orig(tag, payload);
+        };
+        try { console.info('[HUD] quiet mode enabled'); } catch {}
+      } catch {}
+    })();
+
     // Install default debug() bridge if missing
     if (typeof window.debug !== 'function') {
       window.debug = (evt) => {
