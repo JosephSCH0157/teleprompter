@@ -3266,6 +3266,23 @@ async function init(){
   try {
     await _initCore();
     console.log('[TP-Pro] init() wrapper end (success)');
+    // After DOM ready and core init, fetch and propagate the build version
+    (async function attachVersionEverywhere(){
+      try {
+        const res = await fetch('./VERSION.txt', { cache: 'no-store' });
+        const v = (await res.text()).trim();
+        if (!v) return;
+        // 1) Global
+        window.APP_VERSION = v;
+        // 2) Footer build label (support either #build-label or #anvil-build-label)
+        const el = document.getElementById('build-label') || document.getElementById('anvil-build-label');
+        if (el) el.textContent = v;
+        // 3) HUD header will pick up APP_VERSION automatically
+        if (window.HUD) HUD.log('boot:version', { v });
+      } catch (e) {
+        if (window.HUD) HUD.log('boot:version-error', String(e));
+      }
+    })();
   } catch(e){
     console.error('[TP-Pro] init() failed:', e);
     try { (window.__TP_BOOT_TRACE||[]).push({ t: Date.now(), m: 'init-failed:'+ (e?.message||e) }); } catch {}
