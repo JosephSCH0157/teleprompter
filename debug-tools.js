@@ -55,9 +55,8 @@
       commitIntervals: [], // ms buckets
       simHist: { '<0.7':0, '0.7-0.8':0, '0.8-0.9':0, '>=0.9':0 },
       // scroll metrics
-      writesInWindow: 0,
-      lastWritesTick: performance.now(),
-      writesPerSec: 0,
+      scrollWrites: 0,
+      lastWriteTs: 0,
       // reflow risk detection
       frameReads: 0,
       frameWrites: 0,
@@ -181,6 +180,14 @@
     });
 
     // Public log sink
+    // Simple event bus for HUD-local events
+    const listeners = Object.create(null);
+    const bus = {
+      on(evt, fn){ (listeners[evt] ||= []).push(fn); return () => bus.off(evt, fn); },
+      off(evt, fn){ const a = listeners[evt]; if (!a) return; const i = a.indexOf(fn); if (i>=0) a.splice(i,1); },
+      emit(evt, ...args){ const a = listeners[evt]; if (!a) return; a.slice().forEach(fn=>{ try{ fn(...args); }catch{} }); }
+    };
+
     const HUD = {
       log(tag, payload){
         try {
@@ -192,7 +199,8 @@
       },
       show, hide, toggle,
       setFilter(tag, on){ state.filters[tag] = !!on; if (filterChips[tag]) filterChips[tag].classList.toggle('on', !!on); },
-      setAutoscroll(on){ state.autoscroll = !!on; cbAuto.checked = !!on; }
+      setAutoscroll(on){ state.autoscroll = !!on; cbAuto.checked = !!on; },
+      bus
     };
     try { window.HUD = HUD; } catch {}
 
@@ -231,7 +239,7 @@
           // track writes per second via scheduler hint
           const origScrollTo = viewer.scrollTo?.bind(viewer);
           if (origScrollTo && !viewer.__hudWriteWrap) {
-            viewer.scrollTo = function(){ try { metrics.writesInWindow++; } catch{} return origScrollTo.apply(this, arguments); };
+            viewer.scrollTo = function(){ try { metrics.scrollWrites++; metrics.lastWriteTs = Date.now(); } catch{} return origScrollTo.apply(this, arguments); };
             viewer.__hudWriteWrap = true;
           }
         }
@@ -253,7 +261,7 @@
           const orig = window[fn];
           window[fn] = function(){
             try { HUD.log('scroll:'+fn, Array.from(arguments)); } catch {}
-            try { metrics.writesInWindow++; } catch {}
+            try { metrics.scrollWrites++; metrics.lastWriteTs = Date.now(); } catch {}
             return orig.apply(this, arguments);
           };
           window[fn].__hudWrapped = true;
@@ -325,6 +333,11 @@
               };
             };
             ['start','end','error','result','audiostart','audioend','soundstart','soundend','speechstart','speechend'].forEach(ev=>bind(ev, 'on'+ev));
+            // Gate WPS: toggle on speech start/end
+            const prevStart = r.onstart;
+            r.onstart = function(e){ try{ HUD.bus.emit('speech:toggle', true); }catch{} return typeof prevStart==='function'?prevStart.apply(this, arguments):undefined; };
+            const prevEnd = r.onend;
+            r.onend = function(e){ try{ HUD.bus.emit('speech:toggle', false); }catch{} return typeof prevEnd==='function'?prevEnd.apply(this, arguments):undefined; };
           }
         };
         setInterval(tryBindRecog, 300);
@@ -335,19 +348,21 @@
     const wrapTimer = setInterval(lateWrap, 250);
     setTimeout(()=> clearInterval(wrapTimer), 15000); // stop polling after 15s
 
-    // Metrics tickers
-    setInterval(()=>{
-      try {
-        const now = performance.now();
-        const dt = now - metrics.lastWritesTick;
-        if (dt >= 1000) {
-          metrics.writesPerSec = Math.round((metrics.writesInWindow * 1000) / dt);
-          HUD.log('scroll:wps', { writesPerSec: metrics.writesPerSec, writes: metrics.writesInWindow });
-          metrics.writesInWindow = 0;
-          metrics.lastWritesTick = now;
+    // Gate WPS to speech-sync state
+    let wpsTimer = null, lastWrites = 0;
+    const startWps = () => {
+      if (wpsTimer) return;
+      wpsTimer = setInterval(() => {
+        const writes = metrics.scrollWrites || 0;
+        const wps = writes - lastWrites;
+        lastWrites = writes;
+        if (Date.now() - (metrics.lastWriteTs || 0) < 5000 && wps > 0) {
+          HUD.log('scroll:wps', { writesPerSec: wps, writes });
         }
-      } catch {}
-    }, 300);
+      }, 1000);
+    };
+    const stopWps = () => { if (wpsTimer) { clearInterval(wpsTimer); wpsTimer = null; } };
+    HUD.bus.on('speech:toggle', on => on ? startWps() : stopWps());
 
     // Reflow risk detection: if both writes and layout reads occur in same frame
     ;(function installReflowRisk(){
