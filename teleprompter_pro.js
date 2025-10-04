@@ -2785,6 +2785,8 @@ const COV_THRESH = 0.82;     // % of tokens matched in order
 const NEXT_SIM_FLOOR = 0.68; // allow slightly lower sim to prime next line
 // Stall instrumentation state
 let __tpStall = { reported: false };
+// Lookahead hop stabilization state
+let __tpHopGate = { idx: -1, hits: 0, firstAt: 0 };
 
 // Persistent spoken tail tracker and per-line progress tracker
 let __tpPrevTail = [];
@@ -2888,6 +2890,39 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
         const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
         const sim = _sim(spoken, win);
         if (sim >= NEXT_SIM_FLOOR){
+          // Stabilize lookahead hop: for larger hops require two consecutive frames (>=250ms total) with high sim
+          const dist = Math.abs(v.start - bestIdx);
+          // Require at least one non-stopword among last-4 tail tokens for 1-4 word tails
+          const hasContent = (function(){
+            try {
+              const tail = spoken.slice(-4);
+              return tail.some(t => !__STOP.has(t) && !(__JUNK?.has?.(t)));
+            } catch { return true; }
+          })();
+          const nowMs = performance.now();
+          const highSim = sim >= 0.90;
+          let gateOk = true;
+          if (dist > 4){
+            gateOk = false;
+            if (!hasContent){
+              try { if (typeof debug==='function') debug({ tag:'match:soft-advance:gate', why:'no-content', to:v.start, sim:+sim.toFixed(3) }); } catch {}
+            } else if (__tpHopGate.idx === v.start && highSim){
+              if (__tpHopGate.hits >= 1 && (nowMs - __tpHopGate.firstAt) >= 250){ gateOk = true; }
+              else {
+                __tpHopGate.hits = Math.max(1, __tpHopGate.hits);
+                try { if (typeof debug==='function') debug({ tag:'match:soft-advance:gate', why:'wait', to:v.start, hits:__tpHopGate.hits, elapsed: Math.floor(nowMs - __tpHopGate.firstAt) }); } catch {}
+              }
+            } else if (highSim) {
+              __tpHopGate = { idx: v.start, hits: 1, firstAt: nowMs };
+              try { if (typeof debug==='function') debug({ tag:'match:soft-advance:gate', why:'start', to:v.start, sim:+sim.toFixed(3) }); } catch {}
+            } else {
+              // reset when not high-sim
+              __tpHopGate = { idx: -1, hits: 0, firstAt: 0 };
+            }
+          }
+          if (!gateOk) continue;
+          // reset hop gate upon passing
+          __tpHopGate = { idx: -1, hits: 0, firstAt: 0 };
           try { if (typeof debug==='function') debug({ tag:'match:soft-advance', from: bestIdx, to: v.start, cov: +cov.toFixed(2), suffix, sim: +sim.toFixed(3), stagnantMs: Math.floor(stagnantMs), early: earlyOk }); } catch {}
           // reset stagnation to the new virtual line
           __tpStag = { vIdx: j, since: now };
