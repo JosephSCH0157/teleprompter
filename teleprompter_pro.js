@@ -17,6 +17,10 @@
     const DEV  = Q.has('dev')  || localStorage.getItem('tp_dev_mode') === '1';
     const CALM = Q.has('calm') || localStorage.getItem('tp_calm')    === '1';
     try { window.__TP_DEV = DEV; window.__TP_CALM = CALM; } catch {}
+    // Ensure DEV-only UI (like build label) is gated by a class on <html>
+    try {
+      document.documentElement.classList.toggle('tp-dev', !!DEV);
+    } catch {}
     try { if (CALM) { window.__TP_DISABLE_NUDGES = true; } } catch {}
     try { if (DEV) console.info('[TP-Pro] DEV mode enabled'); } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
