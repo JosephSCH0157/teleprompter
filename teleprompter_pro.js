@@ -839,7 +839,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let __dfN = 0;                   // number of paragraphs
   function __idf(t){ try { return Math.log(1 + (__dfN || 1) / ((__dfMap.get(t) || 0) || 1)); } catch { return 0; } }
   // Duplicate-line disambiguation
-  let __lineFreq = new Map();
+  let __lineFreq = new Map();      // original paragraph line frequencies (by key)
+  // Virtual lines (merge short runts so matcher scores over real phrases)
+  let __vParaIndex = [];           // merged paragraph index
+  let __vLineFreq = new Map();     // virtual line frequencies (by merged key)
   function normLineKey(text){
     // Build line keys from fully normalized tokens to ensure duplicate detection
     // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
@@ -3202,8 +3205,9 @@ function advanceByTranscript(transcript, isFinal){
     try { __anchorObs?.observeAll?.(paras); } catch {}
     lineEls = paras;
     try { updateDebugPosChip(); } catch {}
-    paraIndex = []; let acc = 0;
-    __lineFreq = new Map();
+  paraIndex = []; let acc = 0;
+  __lineFreq = new Map();
+  __vParaIndex = []; __vLineFreq = new Map();
     // Prepare rarity stats structures
     __paraTokens = []; __dfMap = new Map();
     for (const el of paras){
@@ -3217,6 +3221,46 @@ function advanceByTranscript(transcript, isFinal){
       try { if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1); } catch {}
     }
     __dfN = __paraTokens.length;
+    // Build virtual merged lines for matcher duplicate disambiguation
+    try {
+      const MIN_LEN = 35, MAX_LEN = 120; // characters
+      let bufText = '';
+      let bufStart = -1;
+      let bufEnd = -1;
+      let bufEls = [];
+      for (const p of paraIndex){
+        const text = String(p.el?.textContent || '').trim();
+        const candidate = (bufText ? (bufText + ' ' + text) : text);
+        if (candidate.trim().length < MAX_LEN){
+          // absorb
+          if (!bufText){ bufStart = p.start; bufEnd = p.end; bufEls = [p.el]; bufText = text; }
+          else { bufText = candidate; bufEnd = p.end; bufEls.push(p.el); }
+          if (bufText.length >= MIN_LEN){
+            const key = normLineKey(bufText);
+            __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, els: bufEls.slice() });
+            if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+            bufText = ''; bufStart = -1; bufEnd = -1; bufEls = [];
+          }
+        } else {
+          // flush buffer if any
+          if (bufText){
+            const key = normLineKey(bufText);
+            __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, els: bufEls.slice() });
+            if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+            bufText = ''; bufStart = -1; bufEnd = -1; bufEls = [];
+          }
+          // push current as its own
+          const key = normLineKey(text);
+          __vParaIndex.push({ text, start: p.start, end: p.end, key, els: [p.el] });
+          if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+        }
+      }
+      if (bufText){
+        const key = normLineKey(bufText);
+        __vParaIndex.push({ text: bufText, start: bufStart, end: bufEnd, key, els: bufEls.slice() });
+        if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+      }
+    } catch {}
     // Initialize current element pointer
     try { currentEl?.classList.remove('active'); } catch {}
     currentEl = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end)?.el || paraIndex[0]?.el || null;
