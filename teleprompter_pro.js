@@ -838,6 +838,17 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let __dfMap = new Map();         // token -> in how many paragraphs it appears
   let __dfN = 0;                   // number of paragraphs
   function __idf(t){ try { return Math.log(1 + (__dfN || 1) / ((__dfMap.get(t) || 0) || 1)); } catch { return 0; } }
+  // Duplicate-line disambiguation
+  let __lineFreq = new Map();
+  function normLineKey(text){
+    try {
+      return String(text||'')
+        .toLowerCase()
+        .replace(/\W+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    } catch { return ''; }
+  }
   // Lost-mode state
   let __tpLost = false; let __tpLowSimCount = 0;
   const __STOP = new Set(['the','and','a','an','to','of','in','on','for','with','as','at','by','is','are','was','were','be','been','being','or','but','if','then','that','this','these','those','you','your','yours','we','our','ours','they','their','them','it','its','he','she','his','her','hers','do','did','does','done','have','has','had']);
@@ -2873,7 +2884,10 @@ function advanceByTranscript(transcript, isFinal){
     // Distance penalty (~0 near, ~1 far)
     const distancePenalty = (function(){ try { return 1 / (1 + Math.exp(-(dist - 10))); } catch { return 0; } })();
     const lambda = 0.35;
-    const rank = simRaw - lambda * distancePenalty;
+    // Duplicate-line penalty: if the containing paragraph text appears multiple times, demand extra evidence
+    const para = paraIndex.find(p => c.i >= p.start && c.i <= p.end) || null;
+    const dupPenalty = (function(){ try { return (para && para.key && (__lineFreq.get(para.key) || 0) > 1) ? 0.08 : 0; } catch { return 0; } })();
+    const rank = (simRaw - dupPenalty) - lambda * distancePenalty;
     if (rank > bestRank){ bestRank = rank; bestIdx = c.i; bestSim = simRaw; }
   }
   if (!(bestRank > -Infinity)) return; // nothing acceptable
@@ -3178,15 +3192,18 @@ function advanceByTranscript(transcript, isFinal){
     lineEls = paras;
     try { updateDebugPosChip(); } catch {}
     paraIndex = []; let acc = 0;
+    __lineFreq = new Map();
     // Prepare rarity stats structures
     __paraTokens = []; __dfMap = new Map();
     for (const el of paras){
       const toks = normTokens(el.textContent || '');
       const wc = toks.length || 1;
-      paraIndex.push({ el, start: acc, end: acc + wc - 1 });
+      const key = normLineKey(el.textContent || '');
+      paraIndex.push({ el, start: acc, end: acc + wc - 1, key });
       acc += wc;
       __paraTokens.push(toks);
       try { const uniq = new Set(toks); uniq.forEach(t => __dfMap.set(t, (__dfMap.get(t) || 0) + 1)); } catch {}
+      try { if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1); } catch {}
     }
     __dfN = __paraTokens.length;
     // Initialize current element pointer
