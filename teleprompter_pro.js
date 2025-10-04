@@ -838,6 +838,43 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   let __dfMap = new Map();         // token -> in how many paragraphs it appears
   let __dfN = 0;                   // number of paragraphs
   function __idf(t){ try { return Math.log(1 + (__dfN || 1) / ((__dfMap.get(t) || 0) || 1)); } catch { return 0; } }
+  // Lost-mode state
+  let __tpLost = false; let __tpLowSimCount = 0;
+  const __STOP = new Set(['the','and','a','an','to','of','in','on','for','with','as','at','by','is','are','was','were','be','been','being','or','but','if','then','that','this','these','those','you','your','yours','we','our','ours','they','their','them','it','its','he','she','his','her','hers','do','did','does','done','have','has','had']);
+  function extractHighIDFPhrases(tokens, n=3, topK=6){
+    const out = [];
+    if (!Array.isArray(tokens) || tokens.length < n) return out;
+    for (let i = 0; i <= tokens.length - n; i++){
+      const gram = tokens.slice(i, i+n);
+      if (gram.some(t => __STOP.has(t))) continue; // never on a stop-word
+      const rarity = gram.reduce((s,t)=> s + __idf(t), 0);
+      out.push({ gram, rarity });
+    }
+    out.sort((a,b)=> b.rarity - a.rarity);
+    return out.slice(0, topK);
+  }
+  function searchBand(anchors, startIdx, endIdx, spoken){
+    const hits = [];
+    if (!anchors?.length) return hits;
+    const n = anchors[0]?.gram?.length || 3;
+    const s = Math.max(0, startIdx|0), e = Math.min(scriptWords.length, endIdx|0);
+    for (let i = s; i <= e - n; i++){
+      const win = scriptWords.slice(i, i+n);
+      for (const a of anchors){
+        let match = true;
+        for (let k=0;k<n;k++){ if (win[k] !== a.gram[k]) { match = false; break; } }
+        if (match){
+          // Compute an overall score using the full spoken window similarity
+          const windowTokens = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
+          const sim = _sim(spoken, windowTokens);
+          const score = sim; // rarity was used to gate anchors; keep sim as score
+          hits.push({ idx: i, score });
+          break;
+        }
+      }
+    }
+    return hits;
+  }
   // Hard-bound current line tracking
   let currentEl = null;               // currently active <p> element
   let lineEls = [];                   // array of <p> elements in script order
@@ -2870,6 +2907,32 @@ function advanceByTranscript(transcript, isFinal){
   const EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
   const EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
   if (bestSim < EFF_SIM_THRESHOLD) return;
+
+  // Lost-mode tracker: increment low-sim runs and enter lost if jitter large
+  try {
+    if (bestSim < 0.6) __tpLowSimCount++; else __tpLowSimCount = 0;
+    if ((J.std || 0) > 12 || __tpLowSimCount >= 8) {
+      if (!__tpLost) { __tpLost = true; try { if (typeof debug==='function') debug({ tag:'match:lost:enter', std: J.std, lowSimCount: __tpLowSimCount }); } catch {} }
+    }
+  } catch {}
+
+  // If we’re lost, try to recover by widening a local search around current position on distinctive anchors
+  if (__tpLost) {
+    try {
+      const BAND_BEFORE = 35, BAND_AFTER = 120;
+      const anchors = extractHighIDFPhrases(spoken, 3);
+      const hits = searchBand(anchors, currentIndex - BAND_BEFORE, currentIndex + BAND_AFTER, spoken);
+      const best = (hits.sort((a,b)=> b.score - a.score)[0]) || null;
+      if (best && best.score > 0.78) {
+        currentIndex = Math.max(0, Math.min(best.idx, scriptWords.length - 1));
+        __tpLost = false; __tpLowSimCount = 0;
+        try { if (typeof debug==='function') debug({ tag:'match:lost:recover', idx: currentIndex, score: best.score }); } catch {}
+      } else {
+        // Defer normal motion until we recover
+        return;
+      }
+    } catch { return; }
+  }
 
   // Soften big forward jumps unless similarity is very strong
   const delta = bestIdx - currentIndex;
