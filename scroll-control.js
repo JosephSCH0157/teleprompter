@@ -71,8 +71,8 @@ export function createScrollController(){
     deadbandIdx: 1,          // ignore |bestIdx - committedIdx| <= 1
     forwardCommitStep: 2,    // allow forward jump if ahead by >= 2
     backwardCommitStep: 2,   // allow backward only if behind by >= 2 AND stable twice
-    minSimForward: 0.70,     // sim threshold to allow forward commit
-    minSimBackward: 0.90,    // stricter to allow backwards (prevents “yo-yo”)
+  minSimForward: 0.80,    // sim threshold to allow forward commit (raised)
+  minSimBackward: 0.72,   // allow backtrack with decent similarity
     reCommitMs: 650,         // allow re-commit if no movement for this long and sim is high
     minSimRecommit: 0.85,
 
@@ -89,14 +89,14 @@ export function createScrollController(){
     lastCommitIdx: 0,
     backStableCount: 0,
     lastClampY: -1,
+      stableHits: 0,
   };
 
   // Commit hysteresis (stability + confidence)
-  const SIM_MIN = 0.80; // raised from 0.70 → 0.80 per request
-  const STABLE_MS = 200; // keep within 200–300ms; can tune if needed
-  const WINDOW = 3;
-  let simBuf = [];           // { t, sim, idx }
-  let lastCommit = { t: 0, idx: -1 };
+  // Simple consecutive confirmations gate
+  const FWD_MIN_SIM = 0.80;
+  const BACK_MIN_SIM = 0.72;
+  const STABLE_HITS = 2;
 
   function considerCommit(now, sim, idx){
     try {
@@ -176,17 +176,19 @@ export function createScrollController(){
           return;
         }
 
-        // Normal gated commit (policy gate)
+  // Normal gated commit (policy gate)
         if (!window.__tpShouldCommitIdx(bestIdx, sim)) return;
 
-        // Hysteresis gate (forward-only): require stable, confident window
-        if (bestIdx > S.committedIdx) {
-          const ok = considerCommit(now, sim, bestIdx);
-          if (!ok) {
-            logEv({ tag:'match:gate', reason:'hysteresis', bestIdx, committedIdx:S.committedIdx, sim, SIM_MIN, STABLE_MS, WINDOW });
-            return;
-          }
+
+        // Consecutive stable hits gate (forward and backward)
+        const forward = (bestIdx >= S.committedIdx);
+        const cond = forward ? (sim >= FWD_MIN_SIM) : (sim >= BACK_MIN_SIM);
+        if (cond) { S.stableHits++; } else { S.stableHits = 0; }
+        if (S.stableHits < STABLE_HITS) {
+          logEv({ tag:'match:gate', reason:'stable-hits', bestIdx, committedIdx:S.committedIdx, sim, hits:S.stableHits, need:STABLE_HITS, forward, FWD_MIN_SIM, BACK_MIN_SIM });
+          return;
         }
+        S.stableHits = 0;
 
         _origScrollToCurrentIndex.apply(this, arguments);
         S.committedIdx = bestIdx;
