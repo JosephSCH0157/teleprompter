@@ -2668,6 +2668,8 @@ function advanceByTranscript(transcript, isFinal){
     const score = _sim(spoken, c.win);
     if (score > bestScore){ bestScore = score; bestIdx = c.i; }
   }
+  // Breadcrumb: report similarity outcome for this match step
+  try { if (typeof debug === 'function') debug({ tag:'match:sim', idx: currentIndex, bestIdx, sim: Number(bestScore.toFixed(3)), windowAhead: MATCH_WINDOW_AHEAD }); } catch {}
   if (bestScore < SIM_THRESHOLD) return;
 
   // Soften big forward jumps unless similarity is very strong
@@ -2696,6 +2698,8 @@ function advanceByTranscript(transcript, isFinal){
   const maxTop     = Math.max(0, scriptEl.scrollHeight - viewer.clientHeight);
   const markerTop  = Math.round(viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
   const desiredTop = Math.max(0, Math.min(maxTop, (targetPara.el.offsetTop - markerTop)));
+  // Breadcrumb: whenever we clamp/center the target
+  try { if (typeof debug === 'function') debug({ tag:'scroll:clamp', top: desiredTop, max: maxTop }); } catch {}
 
   if (isFinal && window.__TP_CALM) {
     // Calm Mode: snap using geometry-based targeting at commit time
