@@ -1,3 +1,4 @@
-ANVIL build: 2025-10-03 21:15
+1.5.8
+ANVIL build: 2025-10-04 00:00
 Baseline: fix/scroll-geometry
-Notes: HUD wired; Calm Mode geometry; dev toggle via URL/localStorage
+Notes: Virtual lines, soft advance, junk-anchor gate v2, cluster penalty, end-game easing, stall logs

@@ -28,6 +28,9 @@ Stability and alignment improvements across matching, scrolling, and observabili
 - Scheduling/Fallback
 	- Single-writer scroll scheduler; throttled commit applier and at-bottom guard; fallback nudge backoff; mid-band sim (0.72–0.80) patience (≈300ms) before nudging.
 
+- Versioning
+	- Bump to 1.5.8; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. HUD version label reflects new version.
+
 ## v1.5.7 — 2025-09-27
 
 Stability baseline after init/boot fixes and camera/display guards.

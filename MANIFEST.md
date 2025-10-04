@@ -1,7 +1,7 @@
 ---
-build: anvil-baseline-1.5.7
+build: anvil-baseline-1.5.8
 commit: b2e23a4
-date: 2025-10-03
+date: 2025-10-04
 modules:
 	- teleprompter_pro.html
 	- teleprompter_pro.js
