@@ -3326,8 +3326,24 @@ function advanceByTranscript(transcript, isFinal){
         const top = r.top - scTop; const bottom = r.bottom - scTop;
         const visible = (top >= 0 && bottom <= vh);
         if (!visible){
+          const getTop = ()=>{ try {
+            const se = document.scrollingElement || document.documentElement || document.body;
+            if (sc === se || sc === document.documentElement || sc === document.body) return (se?.scrollTop||document.documentElement?.scrollTop||document.body?.scrollTop||0);
+            return (sc?.scrollTop||0);
+          } catch { return 0; } };
+          const beforeTop = getTop();
           const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
           try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+          // Escalate if movement is <12px within ~150ms
+          setTimeout(()=>{
+            try {
+              const afterTop = getTop();
+              if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
+                try { nextPara.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); } catch { try { nextPara.el.scrollIntoView(true); } catch {} }
+                try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'scrollIntoView', block:'center' }); } catch {}
+              }
+            } catch {}
+          }, 160);
           try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
         }
       }
