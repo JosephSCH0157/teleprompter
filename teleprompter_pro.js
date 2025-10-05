@@ -236,6 +236,16 @@
       return true;
     } catch { return true; }
   }
+  // Hard-stable eligibility gate: freeze on low-sim/jitter or invisible anchor
+  function stableEligible({ sim, jitterStd, anchorVisible }){
+    try {
+      if (!anchorVisible || sim < SIM_OK || jitterStd > JITTER_HIGH){
+        try { __tpLowSimAt = performance.now(); } catch {}
+        return false;
+      }
+      return true;
+    } catch { return false; }
+  }
   function inBand(targetY, top, vh, band){
     try {
       const b0 = Array.isArray(band) ? band[0] : 0.28;
@@ -613,6 +623,16 @@
       let covActive = 0; try {
         const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
       } catch { covActive = 0; }
+      // Hard-stable eligibility check (applies before any catch-up/fallback)
+      try {
+        const jitterStd = (typeof window.__tpJitterEma === 'number') ? window.__tpJitterEma : 0;
+        if (!stableEligible({ sim: bestSim, jitterStd, anchorVisible })){
+          const ev = { tag:'catchup:stable:hold', sim:+Number(bestSim).toFixed(2), jitterStd:+Number(jitterStd).toFixed(2), anchorVisible, until: (__tpLowSimAt + LOWSIM_FREEZE) };
+          try { if (typeof debug==='function') debug(ev); } catch {}
+          try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:stable:hold', ev); } catch {}
+          return;
+        }
+      } catch {}
       // Dual thresholds + deadman probe
       const SIM_GO = 0.82;
       const SIM_PROBE = 0.60;
