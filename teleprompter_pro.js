@@ -3342,10 +3342,13 @@ function tokenCoverage(lineTokens, tailTokens){
   try {
     if (!Array.isArray(lineTokens) || !lineTokens.length) return 0;
     if (!Array.isArray(tailTokens) || !tailTokens.length) return 0;
+    // Gate short shards from tail to avoid fake coverage bumps
+    const tail = tailTokens.filter(t => t && t.length >= 3);
+    if (!tail.length) return 0;
     let i = 0, hit = 0;
     for (const tok of lineTokens){
-      while (i < tailTokens.length && tailTokens[i] !== tok) i++;
-      if (i < tailTokens.length){ hit++; i++; }
+      while (i < tail.length && tail[i] !== tok) i++;
+      if (i < tail.length){ hit++; i++; }
     }
     return hit / Math.max(1, lineTokens.length);
   } catch { return 0; }
@@ -3636,17 +3639,22 @@ function advanceByTranscript(transcript, isFinal){
     if (vIdx >= 0){
       const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
       if (__tpLineTracker.vIdx !== vIdx){ __resetLineTracker(vIdx, lineTokens); __tpPrevTail = []; }
-      const newTail = __tailDelta(__tpPrevTail, spoken);
+      let newTail = __tailDelta(__tpPrevTail, spoken);
+      // Ignore <3 char shards to avoid fake coverage bumps
+      try { newTail = Array.isArray(newTail) ? newTail.filter(t => t && t.length >= 3) : []; } catch {}
       if (newTail.length) {
         __feedLineTracker(newTail);
         // Debounce coverage update logs/UI to avoid flicker on partial tokens
         try {
           const buf = (window.__tpCovBuf ||= []);
-          buf.push(...newTail);
+          // Keep only clean tokens in buffer
+          const clean = newTail.filter(t => t && t.length >= 3);
+          if (clean.length) buf.push(...clean);
           clearTimeout(window.__tpCovT);
           window.__tpCovT = setTimeout(()=>{
             try {
-              const tokens = (window.__tpCovBuf||[]).slice(-24); // cap payload
+              // Final clean pass before commit
+              const tokens = (window.__tpCovBuf||[]).filter(t => t && t.length >= 3).slice(-24); // cap payload
               if (typeof debug==='function') debug({ tag:'COV_UPDATE', idx: bestIdx, pos: __tpLineTracker.pos, len: __tpLineTracker.len, tokens });
             } catch {}
             try { window.__tpCovBuf = []; } catch {}
