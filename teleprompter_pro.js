@@ -290,11 +290,35 @@
   // Oscillation breaker: detect A↔B↔A within 500ms and <=200px separation
   let __tpLastPosSamples = [];
   let __tpOscFreezeUntil = 0;
+  let __tpOscActive = false;
+  let __tpOscUntil = 0;
   function __tpRecordTopSample(top){
     try {
       const t = performance.now();
       __tpLastPosSamples.push({ top: Number(top)||0, t });
       if (__tpLastPosSamples.length > 6) __tpLastPosSamples.shift();
+    } catch {}
+  }
+  // Edge-triggered HUD helpers for oscillation hold/release
+  function onOscillationHold(untilMs){
+    try {
+      const bucketed = Math.round((Number(untilMs)||0) / 500) * 500;
+      if (!__tpOscActive){
+        __tpOscActive = true; __tpOscUntil = bucketed;
+        try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'INFO'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'INFO'); } catch {}
+      } else if (Math.abs(bucketed - __tpOscUntil) >= 1000){
+        __tpOscUntil = bucketed;
+        try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'INFO'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'INFO'); } catch {}
+      } else {
+        try { console.debug('catchup:hold:oscillation', { until: bucketed }); } catch {}
+      }
+    } catch {}
+  }
+  function onOscillationRelease(){
+    try {
+      if (!__tpOscActive) return;
+      __tpOscActive = false; __tpOscUntil = 0;
+      try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:release', {}, 'INFO'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:release', {}, 'INFO'); } catch {}
     } catch {}
   }
   function __tpIsOscillating(){
@@ -643,6 +667,8 @@
       let covActive = 0; try {
         const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
       } catch { covActive = 0; }
+      // Release oscillation hold when freeze window passes
+      try { if (__tpOscActive && performance.now() >= __tpOscFreezeUntil) onOscillationRelease(); } catch {}
       // Oscillation breaker: if ABAB toggling detected, mark low-sim freeze and hold for ~1s
       try {
         const topNow = currentScrollTop();
@@ -651,9 +677,7 @@
           const until = performance.now() + 1000;
           __tpLowSimAt = performance.now();
           __tpOscFreezeUntil = until;
-          const ev = { tag:'catchup:hold:oscillation', until };
-          try { if (typeof debug==='function') debug(ev); } catch {}
-          try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:hold:oscillation', ev); } catch {}
+          try { onOscillationHold(until); } catch {}
           try { window.__tpLastCatchupDecision = 'hold:oscillation'; } catch {}
           return;
         }

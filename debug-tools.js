@@ -100,6 +100,7 @@
     // DOM
     const hud = mkEl('div', null);
     hud.setAttribute('data-tp-hud', '1');
+  hud.id = 'tp-hud';
 
     // Header
     const head = mkEl('div', 'tp-hud-head');
@@ -161,21 +162,57 @@
     btnClose.addEventListener('click', hide);
     cbAuto.addEventListener('change', ()=> state.autoscroll = !!cbAuto.checked);
 
+    // Tiny dedup + rate-limit overlay API
+    const ROWS = new Map(); // key -> {el,count,last}
+    let lastPaint = 0;
+    const RATE_MS = 250, TTL_MS = 1500, MAX_ROWS = 8;
+    function pushHudRow(tag, data){
+      try {
+        const now = performance.now();
+        if (now - lastPaint < RATE_MS) return; // rate-limit HUD updates
+        lastPaint = now;
+        const until = (data && typeof data.until !== 'undefined') ? Math.round(Number(data.until||0)/500)*500 : '';
+        const key = String(tag)+':'+String(until);
+        const existing = ROWS.get(key) || createRow(tag);
+        existing.count = (existing.count||0) + 1; existing.last = now;
+        existing.el.querySelector('.label').textContent = String(tag);
+        if (tag === 'catchup:hold:oscillation'){
+          const secs = Math.max(0, ((Number(until)||0) - now)/1000);
+          existing.el.querySelector('.body').textContent = `hold ${secs.toFixed(1)}s`;
+        } else {
+          existing.el.querySelector('.body').textContent = typeof data === 'string' ? data : safeJson(data);
+        }
+        existing.el.querySelector('.meta').textContent = (existing.count>1) ? (`×${existing.count}`) : '';
+        ROWS.set(key, existing);
+        // Trim and expire
+        [...ROWS.entries()].sort((a,b)=>b[1].last-a[1].last).slice(MAX_ROWS).forEach(([k,v])=>{ try{ v.el.remove(); }catch{} ROWS.delete(k); });
+        for (const [k,v] of ROWS){ if (now - v.last > TTL_MS) { try{ v.el.remove(); }catch{} ROWS.delete(k); } }
+      } catch {}
+    }
+    function createRow(tag){
+      const el = document.createElement('div'); el.className = 'hud-row';
+      el.innerHTML = `<span class="label"></span><span class="meta"></span> <span class="body"></span>`;
+      (document.querySelector('#tp-hud .tp-hud-body') || body).prepend(el);
+      return { el, count:0, last:0 };
+    }
+
     function appendRow(tag, payload) {
       const norm = normalizeTag(tag);
       if (!state.filters[norm]) return;
-      const row = mkEl('div', 'tp-hud-row');
-      const ts = mkEl('div', 'tp-hud-ts', timeStamp());
-      const tg = mkEl('div', 'tp-hud-tag', String(tag));
-      const pl = mkEl('div', 'tp-hud-payload', typeof payload === 'string' ? payload : safeJson(payload));
-      row.append(ts, tg, pl);
-      body.appendChild(row);
-      // trim
-      const extra = body.children.length - state.maxRows;
-      if (extra > 0) {
-        for (let i=0;i<extra;i++) body.removeChild(body.firstChild);
-      }
-      if (state.autoscroll) body.scrollTop = body.scrollHeight;
+      // Use pushHudRow for new minimal overlay UX, but also keep the legacy table for broader logs
+      pushHudRow(tag, payload);
+      // legacy log row (kept for copy/export):
+      try {
+        const row = mkEl('div', 'tp-hud-row');
+        const ts = mkEl('div', 'tp-hud-ts', timeStamp());
+        const tg = mkEl('div', 'tp-hud-tag', String(tag));
+        const pl = mkEl('div', 'tp-hud-payload', typeof payload === 'string' ? payload : safeJson(payload));
+        row.append(ts, tg, pl);
+        body.appendChild(row);
+        const extra = body.children.length - state.maxRows;
+        if (extra > 0) { for (let i=0;i<extra;i++) body.removeChild(body.firstChild); }
+        if (state.autoscroll) body.scrollTop = body.scrollHeight;
+      } catch {}
     }
 
     // Keyboard toggle
