@@ -446,6 +446,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       frag.appendChild(card('cardMic','Microphone','media',`
         <div class="settings-inline-row">
           <button id="settingsReqMic" class="btn-chip">Request mic</button>
+          <button id="settingsRelMic" class="btn-chip">Release mic</button>
           <select id="settingsMicSel" class="select-md"></select>
         </div>
         <div class="settings-small">Select input and grant permission for speech sync & dB meter.</div>`));
@@ -589,14 +590,16 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
     function wireSettingsDynamic(){
       // Mic
-      const reqMicBtn = document.getElementById('settingsReqMic');
+  const reqMicBtn = document.getElementById('settingsReqMic');
+  const relMicBtn2 = document.getElementById('settingsRelMic');
       const micSel    = document.getElementById('settingsMicSel');
       if (micSel){
         micSel.addEventListener('change', ()=>{
           try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
         });
       }
-      reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
+  reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
+  relMicBtn2?.addEventListener('click', ()=> { try { releaseMic(); } finally { _toast('Mic released',{type:'ok'}); } });
       // Camera
       const startCamS = document.getElementById('settingsStartCam');
       const stopCamS  = document.getElementById('settingsStopCam');
@@ -997,6 +1000,20 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   try { clearBars(dbMeterTop); } catch {}
   }
 
+  // Explicitly release the microphone and audio resources
+  function releaseMic(){
+    try {
+      stopDbMeter();
+      if (audioCtx && typeof audioCtx.close === 'function') {
+        try { audioCtx.close(); } catch {}
+      }
+      audioCtx = null;
+      // Update UI chips
+      try { if (permChip) permChip.textContent = 'Mic: idle'; } catch {}
+      _toast('Mic released',{type:'ok'});
+    } catch(e){ warn('Release mic failed', e); }
+  }
+
   async function startDbMeter(stream){
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { warn('AudioContext unavailable'); return; }
@@ -1132,7 +1149,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
   // TP: mic-wire
   // Wire mic + devices
-    micBtn?.addEventListener('click', requestMic);
+  micBtn?.addEventListener('click', requestMic);
+  const relMicBtn = document.getElementById('relMicBtn');
+  relMicBtn?.addEventListener('click', releaseMic);
     refreshDevicesBtn?.addEventListener('click', populateDevices);
     try {
       await populateDevices();
