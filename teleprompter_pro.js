@@ -170,8 +170,16 @@
 
   // Activation helpers: tolerate jitter using EMA conf, suffix hits, and a timeout guard
   let __tpLowConfSince = 0;
+  let __tpLastAct = { idx: null, reason: null };
   function activateLine(idx, opts = {}){
     const payload = { idx, reason: opts.reason||'conf', sim: opts.sim, cov: opts.cov, conf: opts.conf, suffixHits: opts.suffixHits };
+    // Dedupe: if we already activated the same idx with the same reason, skip logging/hud spam but return true
+    try {
+      if (__tpLastAct && __tpLastAct.idx === idx && __tpLastAct.reason === payload.reason) {
+        return true;
+      }
+      __tpLastAct = { idx, reason: payload.reason };
+    } catch {}
     try { if (typeof debug === 'function') debug({ tag:'match:activate', ...payload }); } catch {}
     try { if (typeof HUD?.log === 'function') HUD.log('match:activate', payload); } catch {}
     try { window.__tpLastActivation = { idx, reason: payload.reason, t: performance.now() }; } catch {}
