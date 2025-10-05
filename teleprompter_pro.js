@@ -214,8 +214,28 @@
   function __nodeId(node){ try { return (node && (node.id || node.getAttribute?.('data-testid') || node.tagName)) || 'unknown'; } catch { return 'unknown'; } }
   // Tolerance + hysteresis for scroll targeting
   const MIN_NUDGE_PX = 2;   // ignore attempts smaller than this
-  const IN_BAND_EPS  = 6;   // sticky band tolerance to avoid re-triggering
-  const HYSTERESIS   = 12;  // must drift > this before we try again
+  const IN_BAND_EPS  = 8;   // sticky band tolerance to avoid re-triggering (tuned)
+  const HYSTERESIS   = 16;  // must drift > this before we try again (tuned)
+  // Hard-stable gate tuneables
+  const SIM_OK        = 0.70; // below this => freeze window
+  const JITTER_HIGH   = 25;   // std dev threshold (from logs)
+  const USER_FREEZE   = 1000; // ms after user scroll
+  const LOWSIM_FREEZE = 1500; // ms after a low-sim/jitter tick
+  // Gate state
+  let __tpLastProgAt = 0;
+  let __tpLastUserAt = 0;
+  let __tpLowSimAt   = 0;
+  function __tpOnUserScroll(){ try { __tpLastUserAt = performance.now(); } catch {} }
+  try { window.addEventListener('scroll', __tpOnUserScroll, { passive: true }); } catch {}
+  function __tpCanProgrammaticScroll(now){
+    try {
+      const t = (typeof now === 'number') ? now : performance.now();
+      if (t - __tpLastUserAt < USER_FREEZE)   return false;
+      if (t - __tpLowSimAt   < LOWSIM_FREEZE) return false;
+      if (t - __tpLastProgAt < 150)           return false; // coalescing cooldown
+      return true;
+    } catch { return true; }
+  }
   function inBand(targetY, top, vh, band){
     try {
       const b0 = Array.isArray(band) ? band[0] : 0.28;
@@ -493,11 +513,10 @@
   }
   // Optional: listen for scrollend to end cooldown earlier, but respect a minimum hold time (500ms)
   try {
-    let __tpLastProgAt = 0;
     const MIN_HOLD = 500;
     const _begin = beginProgrammaticScroll;
     beginProgrammaticScroll = function(ms = 800){
-      __tpLastProgAt = performance.now();
+      try { __tpLastProgAt = performance.now(); } catch {}
       return _begin(ms);
     };
     window.addEventListener('scrollend', ()=>{
@@ -580,6 +599,11 @@
       }
       const metrics = { lead, sim: bestSim, stale, anchorVisible, covBest, clusterCov, covActive };
       const decision = decideCatchup(metrics);
+      // Low-sim/jitter freeze marker
+      try {
+        const jStd = (typeof window.__tpJitterEma === 'number') ? window.__tpJitterEma : 0;
+        if (bestSim < SIM_OK || jStd > JITTER_HIGH){ __tpLowSimAt = performance.now(); }
+      } catch {}
       // Log eligibility each tick with reason (debug always; HUD only if verbose)
       try {
         let reason = (decision === 'go:signal') ? 'ok:signal' : (decision === 'go:probe') ? 'ok:probe' : 'hold';
@@ -600,6 +624,8 @@
       } catch {}
       if (decision.startsWith('go')){
         try {
+          // Hard-stable programmatic gate: skip actuation if in freeze windows
+          if (!__tpCanProgrammaticScroll()) { return; }
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
           // Control loop: widen band and skip smoothing if probing or after repeated no-op attempts
           __tpStagnantTicks++;
@@ -629,6 +655,7 @@
           const lastTop = currentScrollTop();
           // Keep programmatic flag for at least 500ms to allow coalescing
           beginProgrammaticScroll(500);
+          try { __tpLastProgAt = performance.now(); } catch {}
           // Snapshot metrics before probe to compare after movement
           const prevSim = bestSim;
           const prevCov = (covBest + clusterCov + covActive);
