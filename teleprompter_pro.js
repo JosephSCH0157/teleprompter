@@ -305,10 +305,10 @@
       const bucketed = Math.round((Number(untilMs)||0) / 500) * 500;
       if (!__tpOscActive){
         __tpOscActive = true; __tpOscUntil = bucketed;
-        try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'INFO'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'INFO'); } catch {}
+  try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'WARN'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'WARN'); } catch {}
       } else if (Math.abs(bucketed - __tpOscUntil) >= 1000){
         __tpOscUntil = bucketed;
-        try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'INFO'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'INFO'); } catch {}
+  try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'WARN'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'WARN'); } catch {}
       } else {
         try { console.debug('catchup:hold:oscillation', { until: bucketed }); } catch {}
       }
@@ -318,7 +318,7 @@
     try {
       if (!__tpOscActive) return;
       __tpOscActive = false; __tpOscUntil = 0;
-      try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:release', {}, 'INFO'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:release', {}, 'INFO'); } catch {}
+  try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:release', {}, 'WARN'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:release', {}, 'WARN'); } catch {}
     } catch {}
   }
   function __tpIsOscillating(){

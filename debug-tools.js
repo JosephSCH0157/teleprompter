@@ -166,6 +166,16 @@
     const ROWS = new Map(); // key -> {el,count,last}
     let lastPaint = 0;
     const RATE_MS = 250, TTL_MS = 1500, MAX_ROWS = 8;
+    function hudRoot(){
+      let el = document.getElementById('hud');
+      if (!el){
+        el = document.createElement('div');
+        el.id = 'hud';
+        el.style.cssText = 'position:fixed;bottom:8px;left:8px;max-width:40vw;z-index:99999;font:12px/1.3 system-ui;background:rgba(0,0,0,.5);color:#fff;padding:6px 8px;border-radius:8px;';
+        document.body.appendChild(el);
+      }
+      return el;
+    }
     function pushHudRow(tag, data){
       try {
         const now = performance.now();
@@ -192,7 +202,7 @@
     function createRow(tag){
       const el = document.createElement('div'); el.className = 'hud-row';
       el.innerHTML = `<span class="label"></span><span class="meta"></span> <span class="body"></span>`;
-      (document.querySelector('#tp-hud .tp-hud-body') || body).prepend(el);
+      hudRoot().prepend(el);
       return { el, count:0, last:0 };
     }
 
@@ -261,6 +271,9 @@
         try { HUD.log(tag, data, level); } catch {}
       };
     } catch {}
+
+    // Show a single boot line once HUD is ready
+    try { if (typeof window.emitHUD === 'function') window.emitHUD('hud:ready', { minLevel: hudConfig.minLevel }, 'INFO'); } catch {}
 
     // Optional: quiet mode — filter noisy HUD tags to keep console readable during dev
     (function(){
