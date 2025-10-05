@@ -3903,7 +3903,24 @@ function normTokens(text){
 // TP: display-open
 function openDisplay(){
   try {
-    // Always use the standalone external display for production
+    // Prefer an embedded iframe if present and same-origin; else fall back to popup
+    const displayFrame = document.getElementById('displayFrame');
+    if (displayFrame && displayFrame.contentWindow) {
+      displayWin = displayFrame.contentWindow;
+      displayReady = false;
+      displayChip.textContent = 'Display: frame';
+      closeDisplayBtn.disabled = true; // will enable on READY
+      // Kick off handshake ping (the display will send a READY message on load)
+      if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
+      displayHelloDeadline = performance.now() + 3000;
+      displayHelloTimer = setInterval(()=>{
+        if (!displayWin || displayReady) { clearInterval(displayHelloTimer); displayHelloTimer = null; return; }
+        if (performance.now() > displayHelloDeadline) { clearInterval(displayHelloTimer); displayHelloTimer = null; return; }
+        try { sendToDisplay({ type:'hello' }); } catch {}
+      }, 300);
+      return;
+    }
+    // Otherwise, open the standalone external display window
     displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
     if (!displayWin) {
       setStatus('Pop-up blocked. Allow pop-ups and try again.');
