@@ -3390,6 +3390,9 @@ let __tpStall = { reported: false };
 // Lookahead hop stabilization state
 let __tpHopGate = { idx: -1, hits: 0, firstAt: 0 };
 
+// Frontier tracker (EMA-smoothed with median-of-3 prefilter)
+let __tpFrontier = { idx: -1, alpha: 0.5, buf: [] };
+
 // Persistent spoken tail tracker and per-line progress tracker
 let __tpPrevTail = [];
 let __tpLineTracker = { vIdx: -1, pos: 0, len: 0, line: [] };
@@ -3831,19 +3834,43 @@ function advanceByTranscript(transcript, isFinal){
     bestSim = __adj; }
   if (bestSim < EFF_SIM_THRESHOLD) return;
 
-  // Confidence gate before switching active line (EMA-smoothed, suffix-aware)
+  // Frontier smoothing: median-of-3 prefilter + EMA to stabilize hopping
+  try {
+    const f = (__tpFrontier ||= { idx: -1, alpha: 0.5, buf: [] });
+    f.buf.push(bestIdx); if (f.buf.length > 3) f.buf.shift();
+    const med = (f.buf.length === 3) ? f.buf.slice().sort((a,b)=>a-b)[1] : bestIdx;
+    f.idx = (f.idx < 0) ? med : (f.alpha * med + (1 - f.alpha) * f.idx);
+    try { window.__tpFrontierIdx = f.idx; } catch {}
+  } catch {}
+
+  // Confidence gate before switching active line (EMA-smoothed, suffix-aware, frontier/cluster-aware)
   try {
     // Compute instantaneous coverage for current virtual line
     const vList = __vParaIndex || [];
-    const vCur = vList.find(v => bestIdx >= v.start && bestIdx <= v.end) || null;
+    const fIdx = (typeof window.__tpFrontierIdx === 'number' && window.__tpFrontierIdx >= 0) ? window.__tpFrontierIdx : bestIdx;
+    const vCur = vList.find(v => fIdx >= v.start && fIdx <= v.end) || null;
     const vIdx = vCur ? vList.indexOf(vCur) : -1;
     let covGate = 0;
     if (vIdx >= 0){
       const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
+      // Cluster coverage within a small window around the frontier to resist zeroing on flips
+      let clusterCov = 0;
+      try {
+        const w = [vIdx - 1, vIdx, vIdx + 1].filter(i => i >= 0 && i < vList.length);
+        let hit = 0, tot = 0;
+        for (const i of w){
+          const tks = scriptWords.slice(vList[i].start, vList[i].end + 1);
+          const c = tokenCoverage(tks, spoken);
+          const wgt = (i === vIdx) ? 1.0 : 0.6; // center heavier
+          hit += wgt * (c * tks.length);
+          tot += wgt * tks.length;
+        }
+        clusterCov = tot ? (hit / tot) : 0;
+      } catch { clusterCov = 0; }
       try {
         if (__tpLineTracker.vIdx === vIdx) covGate = Math.min(1, (__tpLineTracker.pos||0) / Math.max(1, __tpLineTracker.len||1));
-        else covGate = tokenCoverage(lineTokens, spoken);
-      } catch { covGate = tokenCoverage(lineTokens, spoken); }
+        else covGate = clusterCov;
+      } catch { covGate = clusterCov; }
     }
     const jitterStd = Number((J.std||0));
     // Count recent suffix hits in a short window to strengthen activation
