@@ -491,12 +491,31 @@
       if (__tpScrollTTL) { try { clearTimeout(__tpScrollTTL); } catch {} __tpScrollTTL = null; }
     } catch {}
   }
+  // Optional: listen for scrollend to end cooldown earlier, but respect a minimum hold time (500ms)
+  try {
+    let __tpLastProgAt = 0;
+    const MIN_HOLD = 500;
+    const _begin = beginProgrammaticScroll;
+    beginProgrammaticScroll = function(ms = 800){
+      __tpLastProgAt = performance.now();
+      return _begin(ms);
+    };
+    window.addEventListener('scrollend', ()=>{
+      try {
+        if (!__tpProgrammaticScroll) return;
+        const dt = performance.now() - __tpLastProgAt;
+        if (dt >= MIN_HOLD) { endProgrammaticScroll(); }
+      } catch {}
+    }, { passive:true });
+  } catch {}
   try { window.beginProgrammaticScroll = beginProgrammaticScroll; window.endProgrammaticScroll = endProgrammaticScroll; } catch {}
 
   // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
   let __tpStagnantTicks = 0;
   function evaluateCatchUp(){
     try {
+      // Cooldown guard: if a programmatic scroll was issued recently, skip re-evaluation
+      if (__tpProgrammaticScroll) { return; }
       const vList = __vParaIndex || [];
       if (!Array.isArray(vList) || !vList.length) return;
       const fIdx = (typeof window.__tpFrontierIdx === 'number' && window.__tpFrontierIdx >= 0) ? window.__tpFrontierIdx : currentIndex || 0;
@@ -586,6 +605,8 @@
           __tpStagnantTicks++;
           const aggressive = (decision === 'go:probe') || (__tpStagnantTicks > 12);
           const band = (decision === 'go:probe') ? __tpProbeBandForTier(__tpProbeTier) : [0.28, 0.55];
+          // Avoid recomputing/retargeting while in programmatic cooldown
+          if (__tpProgrammaticScroll) return;
           const estY = estimateY(frontierWord);
           // Hysteresis: don’t fire catch-up unless target drifted sufficiently outside the band
           try {
@@ -606,7 +627,8 @@
             if (typeof debug === 'function') debug({ tag:'catchup:target', bestIdx, frontierIdx, haveExact, targetY: estY });
           } catch {}
           const lastTop = currentScrollTop();
-          beginProgrammaticScroll();
+          // Keep programmatic flag for at least 500ms to allow coalescing
+          beginProgrammaticScroll(500);
           // Snapshot metrics before probe to compare after movement
           const prevSim = bestSim;
           const prevCov = (covBest + clusterCov + covActive);
