@@ -253,6 +253,24 @@
   }
   try { window.getScrollableAncestor = getScrollableAncestor; window.scrollToBand = scrollToBand; } catch {}
 
+  // Programmatic scroll guard with TTL to avoid stuck states
+  let __tpProgrammaticScroll = false;
+  let __tpScrollTTL = null;
+  function beginProgrammaticScroll(ms = 800){
+    try {
+      __tpProgrammaticScroll = true;
+      if (__tpScrollTTL) { try { clearTimeout(__tpScrollTTL); } catch {} }
+      __tpScrollTTL = setTimeout(()=>{ try { __tpProgrammaticScroll = false; __tpScrollTTL = null; } catch {} }, ms);
+    } catch {}
+  }
+  function endProgrammaticScroll(){
+    try {
+      __tpProgrammaticScroll = false;
+      if (__tpScrollTTL) { try { clearTimeout(__tpScrollTTL); } catch {} __tpScrollTTL = null; }
+    } catch {}
+  }
+  try { window.beginProgrammaticScroll = beginProgrammaticScroll; window.endProgrammaticScroll = endProgrammaticScroll; } catch {}
+
   // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
   function evaluateCatchUp(){
     try {
@@ -313,7 +331,12 @@
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
           if (el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else {
-            try { const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body); scrollToBand((el?.offsetTop||0), [0.25, 0.55], el || null, { overrideLock: true }); } catch {}
+            try {
+              beginProgrammaticScroll();
+              const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body);
+              scrollToBand((el?.offsetTop||0), [0.25, 0.55], el || null, { overrideLock: true });
+              setTimeout(()=> endProgrammaticScroll(), 300);
+            } catch {}
           }
           try { if (typeof debug==='function') debug({ tag:'scroll:catchup:tick', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
         } catch {}
@@ -324,7 +347,7 @@
         const offTooLong = (now - lastIn) > OFF_MS;
         const armed = (window.__tpWatchdogArmed !== false);
         if (!anchorVisible && offTooLong && !isUserScrolling() && armed) {
-          if (activeEl) ensureInView(activeEl, { top: 0.25, bottom: 0.55 });
+          if (activeEl) { beginProgrammaticScroll(); ensureInView(activeEl, { top: 0.25, bottom: 0.55 }); setTimeout(()=> endProgrammaticScroll(), 300); }
           try { if (typeof debug==='function') debug({ tag:'watchdog:recenter', offMs: Math.round(now - lastIn) }); } catch {}
           try { window.__tpWatchdogArmed = false; } catch {}
         }
