@@ -288,6 +288,28 @@
     } catch {}
   }
 
+  // Abortable lock with timeout + cancellation for reader-critical sections
+  class __TpMutex {
+    constructor(){ this.q = []; this.locked = false; }
+    async acquire(timeoutMs = 3000){
+      if (!this.locked){ this.locked = true; return () => this.release(); }
+      let release;
+      const ticket = new Promise(res => this.q.push(res));
+      const timed = new Promise((_, rej) => setTimeout(()=> rej(new Error('lock-timeout')), timeoutMs));
+      try { release = await Promise.race([ticket, timed]); }
+      catch(e){
+        try { console.warn('reader:lock:timeout → forcing progress'); } catch {}
+        this.locked = true; // take over to keep pipeline moving
+        return () => this.release();
+      }
+      return release;
+    }
+    release(){ const next = this.q.shift(); if (next) next(() => this.release()); else this.locked = false; }
+  }
+  const readerLock = new __TpMutex();
+  async function withReader(fn, where='reader'){ const release = await readerLock.acquire(3000); try { return await fn(); } finally { try { release(); } catch {} } }
+  try { window.readerLock = readerLock; window.withReader = withReader; } catch {}
+
   // ===== ScrollManager v2 — critically damped, single-flight, deadbanded =====
   (function installScrollManager(){
     try {
@@ -534,17 +556,22 @@
     } catch {}
   }
   function refreshYIndexMap(){
-    try {
-      yByIdx.clear();
-      const list = (paraIndex||[]);
-      for (const p of list){
-        const start = Number(p?.start)||0;
-        const y = Math.max(0, Number(p?.el?.offsetTop)||0);
-        if (p?.el) { try { p.el.setAttribute('data-idx', String(start)); } catch {} }
-        yByIdx.set(start, y);
-      }
-      recomputeAvgPerWord();
-    } catch {}
+    // Wrap in abortable lock to avoid wedging on rapid DOM mutations
+    (async ()=>{
+      const release = await readerLock.acquire(3000);
+      try {
+        yByIdx.clear();
+        const list = (paraIndex||[]);
+        for (const p of list){
+          const start = Number(p?.start)||0;
+          const y = Math.max(0, Number(p?.el?.offsetTop)||0);
+          if (p?.el) { try { p.el.setAttribute('data-idx', String(start)); } catch {} }
+          yByIdx.set(start, y);
+        }
+        recomputeAvgPerWord();
+      } catch {}
+      finally { try { release(); } catch {} }
+    })();
   }
   function estimateY(idx){
     try {
