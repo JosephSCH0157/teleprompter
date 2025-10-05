@@ -216,6 +216,10 @@
           return orig(tag, payload);
         };
         try { console.info('[HUD] quiet mode enabled'); } catch {}
+        // Log once on wrap to show initial relation
+        try { const info0 = _getMarkerInfo && _getMarkerInfo(); if (info0) HUD.log('anchor:marker:init', info0); } catch {}
+        // Update on resize as well (viewport changes)
+        try { window.addEventListener('resize', ()=>{ try{ const info = _getMarkerInfo && _getMarkerInfo(); if (info) HUD.log('anchor:marker', info); }catch{} }, { passive:true }); } catch {}
       } catch {}
     })();
 
@@ -243,12 +247,39 @@
         if (viewer && !viewer.__hudBound) {
           viewer.__hudBound = true;
           let last = 0;
+          let lastMarkerDelta = null, lastMarkerLog = 0;
+          function _getMarkerInfo(){
+            try {
+              const marker = document.getElementById('marker');
+              const script = document.getElementById('script');
+              const active = (script || viewer)?.querySelector('p.active') || null;
+              if (!viewer || !marker || !active) return null;
+              const vRect = viewer.getBoundingClientRect();
+              const mRect = marker.getBoundingClientRect();
+              const aRect = active.getBoundingClientRect();
+              const markerY = mRect.top - vRect.top;
+              const activeY = aRect.top - vRect.top;
+              const deltaPx = activeY - markerY; // + below marker, - above marker
+              const vh = Math.max(1, viewer.clientHeight || 1);
+              const deltaVH = +(deltaPx / vh).toFixed(3);
+              return { markerY: Math.round(markerY), activeY: Math.round(activeY), deltaPx: Math.round(deltaPx), deltaVH };
+            } catch { return null; }
+          }
           viewer.addEventListener('scroll', ()=>{
             const now = performance.now();
             if (now - last > 150) { // throttle
               last = now;
               const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
               HUD.log('scroll:viewer', { top: viewer.scrollTop, ratio: max ? +(viewer.scrollTop/max).toFixed(3) : 0 });
+              // Also log where the spoken (active) line is relative to the marker
+              const info = _getMarkerInfo();
+              if (info) {
+                const d = info.deltaPx;
+                if (lastMarkerDelta == null || Math.abs(d - lastMarkerDelta) >= 6 || (now - lastMarkerLog) > 400) {
+                  HUD.log('anchor:marker', info);
+                  lastMarkerDelta = d; lastMarkerLog = now;
+                }
+              }
             }
           }, { passive:true });
           // track writes per second via scheduler hint

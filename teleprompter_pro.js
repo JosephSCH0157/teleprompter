@@ -3568,7 +3568,24 @@ function advanceByTranscript(transcript, isFinal){
     // Initialize current element pointer
     try { currentEl?.classList.remove('active'); } catch {}
     currentEl = paraIndex.find(p => currentIndex >= p.start && currentIndex <= p.end)?.el || paraIndex[0]?.el || null;
-    if (currentEl) currentEl.classList.add('active');
+    if (currentEl) {
+      currentEl.classList.add('active');
+      try {
+        const viewer = document.getElementById('viewer');
+        const marker = document.getElementById('marker');
+        if (viewer && marker) {
+          const vRect = viewer.getBoundingClientRect();
+          const mRect = marker.getBoundingClientRect();
+          const aRect = currentEl.getBoundingClientRect();
+          const markerY = mRect.top - vRect.top;
+          const activeY = aRect.top - vRect.top;
+          const deltaPx = Math.round(activeY - markerY);
+          const vh = Math.max(1, viewer.clientHeight || 1);
+          const deltaVH = +(deltaPx / vh).toFixed(3);
+          if (typeof window.HUD?.log === 'function') HUD.log('anchor:marker:active', { markerY: Math.round(markerY), activeY: Math.round(activeY), deltaPx, deltaVH });
+        }
+      } catch {}
+    }
   }
 
   // Dynamic bottom spacer/padding so the marker can sit over the final paragraphs
