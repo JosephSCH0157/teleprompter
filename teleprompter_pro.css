@@ -96,6 +96,29 @@ select { font-size: 14px; }
     .status{font-size:12px;color:var(--muted)}
     .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:8px 0}
 
+    /* Primary speech sync button — larger and more prominent */
+    #recBtn{
+        font-size:16px;
+        font-weight:700;
+        padding:12px 16px;
+        border-radius:12px;
+        min-width:240px;
+        background:var(--accent);
+        color:#07131c;
+        border-color:var(--accent);
+        box-shadow:0 2px 0 rgba(124,196,255,.35), 0 8px 20px rgba(124,196,255,.18);
+        transition:filter .12s ease, box-shadow .15s ease;
+    }
+    #recBtn:hover{ filter:brightness(1.05); box-shadow:0 2px 0 rgba(124,196,255,.45), 0 10px 24px rgba(124,196,255,.22); }
+    #recBtn:disabled{ opacity:.6; filter:none; box-shadow:none; }
+    /* When listening, flip to a strong danger accent to emphasize Stop */
+    body.listening #recBtn{
+        background:#ff6b6b;
+        border-color:#ff6b6b;
+        color:#1b0a0a;
+        box-shadow:0 2px 0 rgba(255,107,107,.35), 0 8px 20px rgba(255,107,107,.2);
+    }
+
     .viewer{position:relative;overflow:auto;min-height:0}
     .script{max-width:900px;margin:0 auto;padding:40px}
     .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
