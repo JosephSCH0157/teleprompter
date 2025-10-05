@@ -2414,8 +2414,17 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Run tiny self-checks to catch regressions fast
     try { setTimeout(runSelfChecks, 0); } catch {}
 
-    // Keep bottom padding responsive to viewport changes
+    // Keep bottom padding/spacer responsive to viewport changes
     try { window.addEventListener('resize', applyBottomPad, { passive: true }); } catch {}
+    try { window.addEventListener('resize', updateEndSpacer, { passive: true }); } catch {}
+    try {
+      const _v = document.getElementById('viewer');
+      if (window.ResizeObserver && _v) {
+        const ro = new ResizeObserver(() => { try { updateEndSpacer(); } catch {} });
+        ro.observe(_v);
+        window.__tpSpacerRO = ro;
+      }
+    } catch {}
     // Update debug chip on scroll
     try { viewer?.addEventListener('scroll', () => { updateDebugPosChip(); }, { passive:true }); } catch {}
     // Initial debug chip paint
@@ -3474,6 +3483,7 @@ function advanceByTranscript(transcript, isFinal){
     applyTypography();
   // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
   applyBottomPad();
+  try { updateEndSpacer(); } catch {}
   // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
     // Mirror to display (only if open & ready)
@@ -3567,11 +3577,24 @@ function advanceByTranscript(transcript, isFinal){
       const pad = Math.max(window.innerHeight * 0.5, 320);
       // Prefer a persistent spacer element inside the viewer for headroom
       const spacer = document.getElementById('end-spacer');
-      if (spacer) {
-        try { spacer.style.height = `${Math.max(Math.floor(window.innerHeight * 0.50), 280)}px`; } catch {}
-      }
+      if (spacer) { try { updateEndSpacer(); } catch {} }
       // Keep padding as a fallback for legacy flows
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
+    } catch {}
+  }
+
+  // Size spacer so the end-of-content aligns to the marker when scrolled to max
+  function updateEndSpacer(){
+    try {
+      const viewer = document.getElementById('viewer');
+      const marker = document.getElementById('marker');
+      const spacer = document.getElementById('end-spacer');
+      if (!viewer || !marker || !spacer) return;
+      const vRect = viewer.getBoundingClientRect();
+      const mRect = marker.getBoundingClientRect();
+      const markerY = mRect.top - vRect.top; // marker offset within viewer
+      const S = Math.max(0, (viewer.clientHeight || 0) - markerY);
+      spacer.style.height = `${S}px`;
     } catch {}
   }
 
