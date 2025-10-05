@@ -3806,16 +3806,35 @@ function advanceByTranscript(transcript, isFinal){
     try {
       const ctx = getDisplayContext();
       const win = ctx?.win, doc = ctx?.doc;
+      // Preflight: if targeting a display context, nudge typography for layout parity
+      try {
+        if (ctx.name !== 'main' && displayWin && !displayWin.closed) {
+          const fsEl = document.getElementById('fontSize');
+          const lhEl = document.getElementById('lineHeight');
+          const fs = Number(fsEl?.value);
+          const lh = Number(lhEl?.value);
+          if ((isFinite(fs) && fs > 0) || (isFinite(lh) && lh >= 1.0)) {
+            sendToDisplay({ type:'typography', fontSize: isFinite(fs)?fs:undefined, lineHeight: isFinite(lh)?lh:undefined });
+          }
+        }
+      } catch {}
       // If cross-origin (no doc access), delegate
       if (ctx.name !== 'main' && (!doc || !doc.body)) { try { if (typeof crossOriginScroll === 'function') crossOriginScroll('END_TO_MARKER'); } catch {} return; }
       const scroller = __docGetScroller(doc, win);
       const marker = (doc.getElementById('marker-line') || doc.getElementById('marker'));
       const last = (doc.querySelector('.transcript-line:last-of-type') || doc.querySelector('#script p:last-of-type'));
-      if (!marker || !last || !scroller) return;
+      if (!marker || !scroller) return;
       const markerY = __docRelTop(marker, scroller, win);
       __ensureEndSpacer(doc, scroller, win, markerY);
       // Recompute after spacer potential resize
-      const lastBottom = __docRelBottom(last, scroller, win);
+      let lastBottom = null;
+      if (last) {
+        lastBottom = __docRelBottom(last, scroller, win);
+      } else {
+        // Virtualized: estimate last bottom by total content height minus scrollTop
+        const totalH = (scroller===win ? (doc.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0));
+        lastBottom = Math.max(0, totalH - __docGetScrollTop(scroller, win));
+      }
       const delta = lastBottom - markerY; // >0 => content needs to move up (scroll down)
       if (Math.abs(delta) <= 1) return;
       const current = __docGetScrollTop(scroller, win);
@@ -3824,7 +3843,12 @@ function advanceByTranscript(transcript, isFinal){
       // optional tidy nudge if layout shifts
       requestAnimationFrame(()=>{
         try {
-          const nb = __docRelBottom(last, scroller, win);
+          let nb = null;
+          if (last) nb = __docRelBottom(last, scroller, win);
+          else {
+            const totalH = (scroller===win ? (doc.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0));
+            nb = Math.max(0, totalH - __docGetScrollTop(scroller, win));
+          }
           const miss = nb - markerY;
           if (Math.abs(miss) > 1){
             const cur = __docGetScrollTop(scroller, win);

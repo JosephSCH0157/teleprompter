@@ -262,7 +262,12 @@
                   // Ensure end spacer is at least markerY + small pad
                   try { updateEndSpacer(); } catch {}
                   const markerY = relTop(marker, scroller, window);
-                  const lastBottom = relBottom(last, scroller, window);
+                  let lastBottom = null;
+                  if (last) lastBottom = relBottom(last, scroller, window);
+                  else {
+                    const totalH = (scroller===window ? (document.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0));
+                    lastBottom = Math.max(0, totalH - getScrollTop(scroller, window));
+                  }
                   const delta = lastBottom - markerY;
                   if (Math.abs(delta) <= 1) return;
                   const current = getScrollTop(scroller, window);
@@ -272,7 +277,12 @@
                   // tidy nudge if layout settles
                   requestAnimationFrame(()=>{
                     try {
-                      const nb = relBottom(last, scroller, window);
+                      let nb = null;
+                      if (last) nb = relBottom(last, scroller, window);
+                      else {
+                        const totalH = (scroller===window ? (document.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0));
+                        nb = Math.max(0, totalH - getScrollTop(scroller, window));
+                      }
                       const miss = nb - markerY;
                       if (Math.abs(miss) > 1){
                         const cur = getScrollTop(scroller, window);
