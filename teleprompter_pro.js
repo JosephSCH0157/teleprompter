@@ -427,7 +427,7 @@
       const now = performance.now();
       try { if (anchorVisible) window.__tpLastAnchorInViewAt = now; } catch {}
       const lastIn = (window.__tpLastAnchorInViewAt||0);
-      const STALE_MS = 1200, MIN_SIM = 0.92, LEAD_LINES = 2;
+  const STALE_MS = 1200, MIN_SIM = 0.92, LEAD_LINES = 2;
       const stale = (now - lastIn) > STALE_MS;
       // Lead in virtual lines
       let lead = 0; try {
@@ -442,24 +442,36 @@
         const aV = vList.findIndex(v => activeIdx >= v.start && activeIdx <= v.end);
         if (fV >= 0 && aV >= 0) lead = fV - aV;
       } catch { lead = 0; }
-      const shouldCatchUp = (lead >= LEAD_LINES && (clusterCov >= 0.35 || covBest >= 0.25 || bestSim >= MIN_SIM)) && (!isUserScrolling() && (stale || !anchorVisible));
       // Compute active coverage for logging (not used in decision)
       let covActive = 0; try {
         const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
       } catch { covActive = 0; }
+      // Dual thresholds + deadman probe
+      const SIM_GO = 0.82;
+      const SIM_PROBE = 0.60;
+      const HOLD_DEADMAN = 24; // ~24 ticks without progress => probe
+      window.__tpHoldStreak = (typeof window.__tpHoldStreak === 'number') ? window.__tpHoldStreak : 0;
+      const covered = (covBest + clusterCov + covActive) > 0;
+      function decideCatchup(m){
+        if (m.sim >= SIM_GO) return 'go:signal';
+        if (m.stale && !m.anchorVisible && !covered && m.sim >= SIM_PROBE && window.__tpHoldStreak >= HOLD_DEADMAN) return 'go:probe';
+        return 'hold';
+      }
+      const metrics = { lead, sim: bestSim, stale, anchorVisible, covBest, clusterCov, covActive };
+      const decision = decideCatchup(metrics);
       // Log eligibility each tick (debug always; HUD only if verbose)
       try {
-        const ev = { tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision: shouldCatchUp ? 'go' : 'hold' };
+        const ev = { tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision };
         if (typeof debug==='function') debug(ev);
         if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:eligibility', ev);
       } catch {}
-      if (shouldCatchUp){
+      if (decision.startsWith('go')){
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
-          // Control loop: widen band and skip smoothing after repeated no-op attempts
+          // Control loop: widen band and skip smoothing if probing or after repeated no-op attempts
           __tpStagnantTicks++;
-          const aggressive = __tpStagnantTicks > 12;
-          const band = aggressive ? [0.20, 0.50] : [0.25, 0.55];
+          const aggressive = (decision === 'go:probe') || (__tpStagnantTicks > 12);
+          const band = (decision === 'go:probe') ? [0.20, 0.50] : [0.28, 0.55];
           const estY = estimateY(frontierWord);
           try {
             const bestIdx = frontierWord; const frontierIdx = frontierWord;
@@ -478,14 +490,25 @@
               } else {
                 __tpStagnantTicks = 0;
               }
+              // Reset hold streak after any go
+              window.__tpHoldStreak = 0;
             } catch {}
             endProgrammaticScroll();
-          }, 120);
+          }, 300);
           try { if (typeof debug==='function') debug({ tag:'scroll:catchup:tick', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
         } catch {}
       }
       else {
         __tpStagnantTicks = 0;
+        try {
+          window.__tpHoldStreak += 1;
+          if (window.__tpHoldStreak % 24 === 0) {
+            try {
+              log('catchup:hold_streak', { holdStreak: window.__tpHoldStreak, sim: bestSim });
+              if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:hold_streak', { holdStreak: window.__tpHoldStreak, sim: +Number(bestSim).toFixed(2) });
+            } catch {}
+          }
+        } catch {}
       }
       // Comfort band watchdog: if active line off-screen for >2s and no user input, gently recentre once
       try {
