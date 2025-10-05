@@ -137,6 +137,36 @@
     } catch {}
   }
   try { window.unlockReaderLock = unlockReaderLock; } catch {}
+  // Keep an element within a comfort band (defaults: top=25%, bottom=55% of viewport)
+  function ensureInView(el, opts = {}){
+    try {
+      if (!el) return;
+      const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      const useWindow = (sc === document.scrollingElement || sc === document.documentElement || sc === document.body);
+      const vh = useWindow ? (window.innerHeight||0) : (sc.clientHeight||0);
+      if (!vh) return;
+      const topFrac = (typeof opts.top === 'number') ? opts.top : 0.25;
+      const botFrac = (typeof opts.bottom === 'number') ? opts.bottom : 0.55;
+      const topBand = vh * topFrac;
+      const botBand = vh * botFrac;
+      const scTop = useWindow ? 0 : ((typeof sc.getBoundingClientRect === 'function') ? sc.getBoundingClientRect().top : 0);
+      const r = el.getBoundingClientRect();
+      const top = r.top - scTop;
+      const bottom = r.bottom - scTop;
+      let delta = 0;
+      if (top < topBand) delta = top - topBand;
+      else if (bottom > botBand) delta = bottom - botBand;
+      if (Math.abs(delta) < 1) return;
+      if (window.__tpReaderLocked) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', reason:'ensureInView', delta }); } catch {} return; }
+      if (useWindow) {
+        try { window.scrollBy({ top: delta, behavior: 'smooth' }); } catch { try { window.scrollBy(0, delta); } catch {} }
+      } else {
+        const targetY = Math.max(0, Math.min((sc.scrollTop||0) + delta, Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0))));
+        maybeAutoScroll(targetY, sc);
+      }
+    } catch {}
+  }
+  try { window.ensureInView = ensureInView; } catch {}
 
   // Activation helpers: tolerate jitter using EMA conf, suffix hits, and a timeout guard
   let __tpLowConfSince = 0;
