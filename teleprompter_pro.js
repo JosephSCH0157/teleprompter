@@ -399,12 +399,30 @@ function setStatus(msg){
     // ignore
   }
 
-// Confusion pairs canonicalization: editable via Settings
+// Confusion pairs canonicalization: editable via Settings + defaults
+const DEFAULT_CONFUSIONS = {
+  confusionPairs: {
+    single: ["sing"],
+    portion: ["port", "portion"],
+    sale: ["sal", "salem"],
+    cell: ["cell", "salem", "sale"],
+    enforcement: ["enforcement", "forcemen", "forcement", "salemforcement"],
+    ev: ["ev", "uv", "evil"],
+    line: ["line", "l", "lion"],
+  }
+};
+
 let CANON = {};
 function loadConfusions(settings){
   try {
     CANON = {};
-    const pairs = settings && settings.confusionPairs || {};
+    // 1) Apply defaults first (can be overridden by user settings)
+    const defaults = (DEFAULT_CONFUSIONS && DEFAULT_CONFUSIONS.confusionPairs) || {};
+    for (const [canon, alts] of Object.entries(defaults)){
+      for (const alt of (alts||[])) { CANON[String(alt||'').toLowerCase()] = String(canon||''); }
+    }
+    // 2) Then apply user settings
+    const pairs = (settings && settings.confusionPairs) || {};
     for (const [canon, alts] of Object.entries(pairs)){
       for (const alt of (alts||[])) { CANON[String(alt||'').toLowerCase()] = String(canon||''); }
     }
