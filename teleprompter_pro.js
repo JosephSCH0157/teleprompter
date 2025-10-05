@@ -3373,57 +3373,68 @@ function advanceByTranscript(transcript, isFinal){
         const r = nextPara.el.getBoundingClientRect();
         const top = r.top - scTop; const bottom = r.bottom - scTop;
         const visible = (top >= 0 && bottom <= vh);
-        if (!visible){
-          // Prefer navigator for debounced, comfort-band-aware placement
-          let usedNavigator = false;
-          try {
-            const viewerEl = document.getElementById('viewer') || sc;
-            if (!window.__tpNav && viewerEl) window.__tpNav = makeNavigator(viewerEl);
-            if (window.__tpNav && typeof window.__tpNav.follow === 'function'){
-              window.__tpNav.follow(nextPara.el, bestIdx);
-              usedNavigator = true;
-              try { if (typeof debug==='function') debug({ tag:'visibility:navigator', idx: bestIdx }); } catch {}
+        // Coalesce triggers: only when idx changes, active element changes, or anchor is not visible
+        const curActive = (document.querySelector('.transcript-line.is-active') || document.querySelector('p.active') || null);
+        const st = (window.__tpVisGateState ||= { lastIdx: -1, lastActive: null });
+        const idxChanged = bestIdx !== st.lastIdx;
+        const activeChanged = curActive !== st.lastActive;
+        const shouldFollow = idxChanged || activeChanged || !visible;
+
+        if (shouldFollow){
+          if (!visible){
+            // Prefer navigator for debounced, comfort-band-aware placement
+            let usedNavigator = false;
+            try {
+              const viewerEl = document.getElementById('viewer') || sc;
+              if (!window.__tpNav && viewerEl) window.__tpNav = makeNavigator(viewerEl);
+              if (window.__tpNav && typeof window.__tpNav.follow === 'function'){
+                window.__tpNav.follow(nextPara.el, bestIdx);
+                usedNavigator = true;
+                try { if (typeof debug==='function') debug({ tag:'visibility:navigator', idx: bestIdx }); } catch {}
+              }
+            } catch {}
+            if (!usedNavigator){
+              const getTop = ()=>{ try {
+                const se = document.scrollingElement || document.documentElement || document.body;
+                if (sc === se || sc === document.documentElement || sc === document.body) return (se?.scrollTop||document.documentElement?.scrollTop||document.body?.scrollTop||0);
+                return (sc?.scrollTop||0);
+              } catch { return 0; } };
+              const beforeTop = getTop();
+              const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
+              try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+              // Escalate if movement is <12px within ~150ms
+              setTimeout(()=>{
+                try {
+                  const afterTop = getTop();
+                  if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
+                    try { nextPara.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); } catch { try { nextPara.el.scrollIntoView(true); } catch {} }
+                    try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'scrollIntoView', block:'center' }); } catch {}
+                  }
+                } catch {}
+              }, 160);
+              try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
             }
-          } catch {}
-          if (!usedNavigator){
-            const getTop = ()=>{ try {
-              const se = document.scrollingElement || document.documentElement || document.body;
-              if (sc === se || sc === document.documentElement || sc === document.body) return (se?.scrollTop||document.documentElement?.scrollTop||document.body?.scrollTop||0);
-              return (sc?.scrollTop||0);
-            } catch { return 0; } };
-            const beforeTop = getTop();
-            const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
-            try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
-            // Escalate if movement is <12px within ~150ms
-            setTimeout(()=>{
-              try {
-                const afterTop = getTop();
-                if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
-                  try { nextPara.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); } catch { try { nextPara.el.scrollIntoView(true); } catch {} }
-                  try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'scrollIntoView', block:'center' }); } catch {}
-                }
-              } catch {}
-            }, 160);
-            try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
           }
+          // Telemetry alongside anchor:marker for visibility (only when we ran)
+          try {
+            const viewerEl = document.getElementById('viewer');
+            const scrollerName = (sc === window) ? 'page' : (sc.id || sc.tagName || 'scroller');
+            const vTopBefore = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+            const anchorVisible = visible ? 1 : 0;
+            const attempt = (function(){ try { window.__tpVisAttempt = (window.__tpVisAttempt||0) + 1; return window.__tpVisAttempt; } catch { return 1; } })();
+            const payload = { source:'main', scroller: scrollerName, viewerTopBefore: vTopBefore, anchorVisible, attempt };
+            try { if (typeof HUD?.log === 'function') HUD.log('anchor:marker:vis', payload); } catch {}
+            try { if (typeof debug==='function') debug({ tag:'anchor:marker:vis', ...payload }); } catch {}
+          } catch {}
+          // Visibility failure counter for recovery (only when we ran)
+          try {
+            const nowV = performance.now();
+            const buf = (window.__tpVisFailBuf ||= []);
+            if (!visible) { buf.push(nowV); while (buf.length && nowV - buf[0] > 500) buf.shift(); }
+          } catch {}
         }
-        // Telemetry alongside anchor:marker for visibility
-        try {
-          const viewerEl = document.getElementById('viewer');
-          const scrollerName = (sc === window) ? 'page' : (sc.id || sc.tagName || 'scroller');
-          const vTopBefore = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
-          const anchorVisible = visible ? 1 : 0;
-          const attempt = (function(){ try { window.__tpVisAttempt = (window.__tpVisAttempt||0) + 1; return window.__tpVisAttempt; } catch { return 1; } })();
-          const payload = { source:'main', scroller: scrollerName, viewerTopBefore: vTopBefore, anchorVisible, attempt };
-          try { if (typeof HUD?.log === 'function') HUD.log('anchor:marker:vis', payload); } catch {}
-          try { if (typeof debug==='function') debug({ tag:'anchor:marker:vis', ...payload }); } catch {}
-        } catch {}
-        // Visibility failure counter for recovery
-        try {
-          const nowV = performance.now();
-          const buf = (window.__tpVisFailBuf ||= []);
-          if (!visible) { buf.push(nowV); while (buf.length && nowV - buf[0] > 500) buf.shift(); }
-        } catch {}
+        // Update coalesce state
+        try { st.lastIdx = bestIdx; st.lastActive = curActive; } catch {}
       }
     }
   } catch {}
