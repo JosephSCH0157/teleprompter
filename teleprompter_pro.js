@@ -619,7 +619,7 @@
         try { const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1); covBest = tokenCoverage(lineTokens, tail); } catch { covBest = 0; }
       } catch { clusterCov = 0; }
       const bestSim = (typeof window.__lastSimScore === 'number') ? window.__lastSimScore : 0;
-      const activeEl = (document.getElementById('script')||document).querySelector('p.active');
+  const activeEl = (document.getElementById('script')||document).querySelector('p.active');
       const anchorVisible = isInComfortBand(activeEl, { top: 0.25, bottom: 0.55 });
       const now = performance.now();
       try { if (anchorVisible) window.__tpLastAnchorInViewAt = now; } catch {}
@@ -643,6 +643,21 @@
       let covActive = 0; try {
         const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
       } catch { covActive = 0; }
+      // Oscillation breaker: if ABAB toggling detected, mark low-sim freeze and hold for ~1s
+      try {
+        const topNow = currentScrollTop();
+        __tpRecordTopSample(topNow);
+        if (__tpIsOscillating()){
+          const until = performance.now() + 1000;
+          __tpLowSimAt = performance.now();
+          __tpOscFreezeUntil = until;
+          const ev = { tag:'catchup:hold:oscillation', until };
+          try { if (typeof debug==='function') debug(ev); } catch {}
+          try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:hold:oscillation', ev); } catch {}
+          try { window.__tpLastCatchupDecision = 'hold:oscillation'; } catch {}
+          return;
+        }
+      } catch {}
       // Hard-stable eligibility check (applies before any catch-up/fallback)
       try {
         const jitterStd = (typeof window.__tpJitterEma === 'number') ? window.__tpJitterEma : 0;
