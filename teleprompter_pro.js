@@ -5985,6 +5985,8 @@ async function init(){
       document.body.classList.add('listening');
       try { recChip.textContent = 'Speech: listening…'; } catch {}
       speechOn = true; try{ window.HUD?.bus?.emit('speech:toggle', true); }catch{}
+      // HUD: speech start event
+      try { if (typeof HUD?.log === 'function') HUD.log('speech:onstart', { lang: recog.lang, interim: !!recog.interimResults, continuous: !!recog.continuous }); } catch {}
     };
 
     let _lastInterimAt = 0;
@@ -5997,7 +5999,15 @@ async function init(){
         else           interim += (r[0]?.transcript || '') + ' ';
       }
       // Finals = strong jumps
-      if (finals) advanceByTranscript(finals, /*isFinal*/true);
+      if (finals) {
+        // HUD: log a compact final transcript sample
+        try {
+          const sample = String(finals).trim();
+          const preview = sample.length > 64 ? (sample.slice(0, 64) + '…') : sample;
+          if (typeof HUD?.log === 'function') HUD.log('speech:final', { len: sample.length, preview });
+        } catch {}
+        advanceByTranscript(finals, /*isFinal*/true);
+      }
 
       // Interims = gentle tracking (every ~150ms)
       const now = performance.now();
@@ -6007,11 +6017,17 @@ async function init(){
       }
     };
 
-    recog.onerror = (e) => { console.warn('speech error', e.error); };
+    recog.onerror = (e) => {
+      console.warn('speech error', e.error);
+      try { if (typeof HUD?.log === 'function') HUD.log('speech:error', { error: e?.error || String(e||'') }); } catch {}
+      try { if (typeof debug === 'function') debug({ tag:'speech:error', error: e?.error || String(e||'') }); } catch {}
+    };
     recog.onend = () => {
       document.body.classList.remove('listening');
       try { recChip.textContent = 'Speech: idle'; } catch {}
       speechOn = false; try{ window.HUD?.bus?.emit('speech:toggle', false); }catch{}
+      // HUD: speech ended (natural or error)
+      try { if (typeof HUD?.log === 'function') HUD.log('speech:onend', { autoRestart: !!recAutoRestart, recActive: !!recActive, nextDelayMs: recAutoRestart? recBackoffMs : 0 }); } catch {}
       try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
       // If user didn't stop it, try to bring it back with backoff
       if (recAutoRestart && recActive) {
@@ -6036,6 +6052,7 @@ async function init(){
   function stopSpeechSync(){
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
+    try { if (typeof HUD?.log === 'function') HUD.log('speech:stop', {}); } catch {}
     try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
   }
 
