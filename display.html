@@ -231,7 +231,7 @@
                   const activeY = active ? relTop(active, scroller, window) : null;
                   try { console.info('MEASURE FROM', location.pathname, 'scH=', (scroller===window? window.innerHeight : scroller.clientHeight), 'markerY=', markerY, 'activeY=', activeY); } catch {}
                   const tgt = (window.opener || window.parent);
-                  if (tgt && typeof tgt.postMessage === 'function') tgt.postMessage({ type:'MEASURE', markerY, activeY }, '*');
+                  if (tgt && typeof tgt.postMessage === 'function') tgt.postMessage({ type:'MEASURE', source:'display', markerY, activeY }, '*');
                 } catch {}
               }
               // DISPLAY: apply a scroll based on HUD-provided viewport Ys (in DISPLAY coords)

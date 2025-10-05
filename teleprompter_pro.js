@@ -3687,6 +3687,7 @@ function advanceByTranscript(transcript, isFinal){
     const d = ctx?.doc; const w = ctx?.win;
     if (!d || !w) return { scroller: window, baseTop: 0 };
     const sc = d.querySelector('#displayScroll') || d.getElementById('wrap') || d.getElementById('viewer') || w;
+    // Measure baseTop in the target document’s own coordinates; do not add frame offsets here
     const baseTop = (sc===w ? 0 : (sc.getBoundingClientRect().top||0));
     return { scroller: sc, baseTop };
   }
@@ -3717,7 +3718,10 @@ function advanceByTranscript(transcript, isFinal){
       const ctx = getDisplayContext();
       if (ctx.name !== 'main' && ctx.doc){
         const m = measureMarkerActive(ctx);
-        if (m && m.markerY != null && m.activeY != null) return nudgeToMarkerInContext(ctx, m.markerY, m.activeY);
+        if (m && m.markerY != null && m.activeY != null) {
+          try { if (typeof window.HUD?.log === 'function') HUD.log('anchor:marker', { source: ctx.name, markerY: Math.round(m.markerY), activeY: Math.round(m.activeY) }); } catch {}
+          return nudgeToMarkerInContext(ctx, m.markerY, m.activeY);
+        }
         // If we got here, either element missing or measurement failed -> try cross-origin fallback if popup exists
         if (typeof window.crossOriginScroll === 'function') return window.crossOriginScroll();
         return nudgeToMarkerInDisplay();
@@ -3730,6 +3734,7 @@ function advanceByTranscript(transcript, isFinal){
       const vRect = viewer.getBoundingClientRect();
       const markerY = marker.getBoundingClientRect().top - vRect.top;
       const activeY = active.getBoundingClientRect().top - vRect.top;
+      try { if (typeof window.HUD?.log === 'function') HUD.log('anchor:marker', { source:'main', markerY: Math.round(markerY), activeY: Math.round(activeY) }); } catch {}
       nudgeToMarker(markerY, activeY);
     } catch {}
   }
@@ -3766,7 +3771,7 @@ function advanceByTranscript(transcript, isFinal){
             try {
               if (e.source !== displayWin) return;
               const d = e.data||{};
-              if (d.type === 'MEASURE') { settled = true; clearTimeout(timeout); window.removeEventListener('message', onMsg); resolve({ markerY: d.markerY, activeY: d.activeY }); }
+              if (d.type === 'MEASURE') { settled = true; clearTimeout(timeout); window.removeEventListener('message', onMsg); resolve({ source: d.source||'display', markerY: d.markerY, activeY: d.activeY }); }
             } catch {}
           }
           window.addEventListener('message', onMsg, { once:false });
@@ -3784,7 +3789,7 @@ function advanceByTranscript(transcript, isFinal){
       const vRect = viewer.getBoundingClientRect();
       const markerY = marker.getBoundingClientRect().top - vRect.top;
       const activeY = active.getBoundingClientRect().top - vRect.top;
-      return { markerY, activeY };
+      return { source:'main', markerY, activeY };
     } catch { return { markerY: null, activeY: null }; }
   }
 
@@ -3919,10 +3924,16 @@ function advanceByTranscript(transcript, isFinal){
   } catch {}
   // Optional: binding for HUD-driven updates
   try {
+    const _ayBuf = [];
     window.onHudUpdate = function(payload){
       try {
         const markerY = payload && payload.markerY;
-        const activeY = payload && payload.activeY;
+        let activeY = payload && payload.activeY;
+        // Median smooth activeY over last 3 samples to avoid visible flicker on rare snaps
+        if (typeof activeY === 'number' && isFinite(activeY)) {
+          _ayBuf.push(activeY); if (_ayBuf.length > 3) _ayBuf.shift();
+          if (_ayBuf.length >= 2){ const sorted = _ayBuf.slice().sort((a,b)=>a-b); const mid = sorted[Math.floor(sorted.length/2)]; activeY = mid; }
+        }
         try { window.__tpLastMarkerY = markerY; } catch {}
         // Always preflight end reachability so we never hit a ceiling near the end
         if (markerY != null) {
@@ -3931,6 +3942,8 @@ function advanceByTranscript(transcript, isFinal){
           const sc = document.getElementById('viewer'); if (sc) ensureEndSpacer(document, sc, window, markerY);
         }
         if (markerY != null && activeY != null) nudgeToMarker(markerY, activeY);
+        // Explicit source-tagged log for anchor:marker
+        try { if (typeof window.HUD?.log === 'function') HUD.log('anchor:marker', { source: (getDisplayContext()?.name||'main'), markerY: Math.round(markerY??-1), activeY: Math.round(activeY??-1) }); } catch {}
       } catch {}
     };
   } catch {}
