@@ -100,16 +100,17 @@
     return true;
   }
   function maybeActivate({ idx, sim, cov, suffixHits = 0, jitterStd }){
+    const CONF_T = 0.58;
     const conf = computeConf({ sim, cov, jitterStd });
-    const canActivate = (
-      conf >= 0.58 ||
-      (sim >= 0.92 && cov >= 0.14) ||
-      (suffixHits >= 2 && sim >= 0.88) ||
-      (cov >= 0.35 && sim >= 0.85)
-    );
-    if (canActivate) {
+    let reason = null;
+    if (sim >= 0.92 && cov >= 0.14) reason = 'sim+cov';
+    else if (suffixHits >= 2 && sim >= 0.88) reason = 'suffix';
+    else if (cov >= 0.35 && sim >= 0.85) reason = 'cov+sim';
+    else if (conf >= CONF_T) reason = 'conf';
+
+    if (reason) {
       __tpLowConfSince = 0;
-      return activateLine(idx);
+      return activateLine(idx, { reason });
     }
     // timeout guard: if we’re clearly on the right line but jitter is noisy
     if (sim >= 0.95) {
