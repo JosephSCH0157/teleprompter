@@ -522,7 +522,7 @@ function saveSettings(settings){ try { localStorage.setItem(SETTINGS_KEY, JSON.s
 try {
   const DEFAULTS = {
     nav: { anchorVH: 0.45, minDelta: 6, quietMs: 350, comfortBand: [0.25, 0.75] },
-    ux:  { snapActiveOnly: true, anchorSnap: '45vh' },
+    ux:  { snapActiveOnly: true, anchorSnap: '45vh', highlightActive: false },
     confusionPairs: {
       single: ['sing'],
       portion: ['port', 'portion'],
@@ -533,7 +533,7 @@ try {
       line: ['line','l','lion']
     }
   };
-  migrateHudSettings(DEFAULTS, { storageKey: SETTINGS_KEY, version: 2, versionStrategy: 'meta' });
+  migrateHudSettings(DEFAULTS, { storageKey: SETTINGS_KEY, version: 3, versionStrategy: 'meta' });
   const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
   loadConfusions(saved||{});
 } catch {}
@@ -565,9 +565,20 @@ function __applyStyleFromSettings(hudSettings, rootEl){
   try {
     const root = rootEl || document.querySelector('.viewer');
     if (!root) return;
+    // Optional class to signify whether highlighting is active
+    try { root.classList.toggle('highlight-on', !!__getDeep(hudSettings, 'ux.highlightActive')); } catch {}
     for (const [path, [cssVar, toCss]] of Object.entries(__STYLE_MAP)){
       const val = __getDeep(hudSettings, path);
-      if (val != null) try { root.style.setProperty(cssVar, toCss(val)); } catch {}
+      if (val != null) try {
+        if (path === 'ux.activeBg'){
+          // Respect highlightActive toggle: if off, clear any active background to revert to original look
+          const on = !!__getDeep(hudSettings, 'ux.highlightActive');
+          if (on) root.style.setProperty(cssVar, toCss(val));
+          else root.style.setProperty(cssVar, 'transparent');
+        } else {
+          root.style.setProperty(cssVar, toCss(val));
+        }
+      } catch {}
     }
     // Snap-only toggle
     try { root.classList.toggle('snap-only', !!__getDeep(hudSettings, 'ux.snapActiveOnly')); } catch {}

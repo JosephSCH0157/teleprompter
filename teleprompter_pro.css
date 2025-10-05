@@ -138,7 +138,7 @@ select { font-size: 14px; }
 
 /* Live-hydrated teleprompter variables */
 .viewer{
-    --viewer-active-bg:        #fffbcc;
+    --viewer-active-bg:        transparent;
     --viewer-inactive-opacity: 1;
     --viewer-font-size:        18px;
     --viewer-line-height:      1.5;
