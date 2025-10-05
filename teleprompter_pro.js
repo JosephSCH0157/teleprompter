@@ -3637,7 +3637,7 @@ function advanceByTranscript(transcript, isFinal){
       const maxScrollTop    = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       // Add just enough space so that neededScrollTop is attainable
       const neededExtra     = Math.max(0, Math.ceil(neededScrollTop - maxScrollTop));
-      if (neededExtra) spacer.style.height = `${neededExtra}px`;
+      if (neededExtra) spacer.style.height = `${neededExtra + 2}px`; // +2 safety to beat rounding
     } catch {}
   }
 
@@ -3659,14 +3659,31 @@ function advanceByTranscript(transcript, isFinal){
       try {
         const markerY = payload && payload.markerY;
         const activeY = payload && payload.activeY;
-        const idx = payload && payload.idx;
-        const lastIdx = (function(){ try { const c = document.getElementById('script'); return (c && c.children && c.children.length) ? c.children.length - 1 : 0; } catch { return 0; } })();
-        if (typeof idx === 'number' && idx >= (typeof lastIdx==='number'? lastIdx : 0)) {
-          ensureReachableForLastLine(markerY);
-        }
+        try { window.__tpLastMarkerY = markerY; } catch {}
+        // Always preflight end reachability so we never hit a ceiling near the end
+        if (markerY != null) ensureReachableForLastLine(markerY);
         if (markerY != null && activeY != null) nudgeToMarker(markerY, activeY);
       } catch {}
     };
+  } catch {}
+
+  // Hardening: avoid browser smooth-scroll lag and rubber-banding
+  try {
+    const sc = document.getElementById('viewer');
+    if (sc && sc.style) {
+      sc.style.overscrollBehavior = 'contain';
+      sc.style.scrollBehavior = 'auto';
+    }
+  } catch {}
+
+  // Recompute end reachability on layout changes (fonts, resize)
+  try {
+    const sc = document.getElementById('viewer');
+    if (window.ResizeObserver && sc) {
+      const ro2 = new ResizeObserver(() => { try { ensureReachableForLastLine(window.__tpLastMarkerY ?? null); } catch {} });
+      ro2.observe(sc);
+      window.__tpEndReachRO = ro2;
+    }
   } catch {}
 
   // call this whenever you actually advance or scroll due to a match
