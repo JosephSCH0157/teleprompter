@@ -3652,7 +3652,39 @@ function advanceByTranscript(transcript, isFinal){
       try { requestScroll(target); } catch { viewer.scrollTop = target; }
     } catch {}
   }
-  try { window.ensureReachableForLastLine = ensureReachableForLastLine; window.nudgeToMarker = nudgeToMarker; } catch {}
+  // Final snap: when very close, align the active line exactly to the marker
+  function endSnap(markerYViewport){
+    try {
+      const viewer = document.getElementById('viewer');
+      const script = document.getElementById('script');
+      const active = (script || viewer)?.querySelector('p.active');
+      if (!viewer || !active || markerYViewport == null) return;
+      const vRect = viewer.getBoundingClientRect();
+      const aRect = active.getBoundingClientRect();
+      // convert viewport Y values to scroller-space
+      const toScrollerY = (vpY)=> (Number(vpY)||0) + (viewer.scrollTop||0) - vRect.top;
+      const markerTop_sc = toScrollerY(markerYViewport);
+      const activeTop_sc = toScrollerY(aRect.top);
+      const delta = activeTop_sc - markerTop_sc;
+      const abs = Math.abs(delta);
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const progress = max ? (viewer.scrollTop / max) : 0;
+      const nearEnd = progress >= 0.92 || (function(){ try { const c = script?.children?.length||0; const idx = Array.from(script?.children||[]).indexOf(active); return c>0 && idx >= c-2; } catch { return false; } })();
+      // Only snap when very close, or a bit looser near the end
+      const tol = nearEnd ? 24 : 8;
+      if (abs <= tol){
+        const target = Math.max(0, Math.min((viewer.scrollTop||0) + delta, max));
+        try { requestScroll(target); } catch { viewer.scrollTop = target; }
+      }
+    } catch {}
+  }
+  try {
+    window.ensureReachableForLastLine = ensureReachableForLastLine;
+    window.nudgeToMarker = nudgeToMarker;
+    // Aliases to match external snippet naming
+    window.ensureEndReachability = ensureReachableForLastLine;
+    window.endSnap = endSnap;
+  } catch {}
   // Optional: binding for HUD-driven updates
   try {
     window.onHudUpdate = function(payload){
