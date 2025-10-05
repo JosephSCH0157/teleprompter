@@ -59,6 +59,26 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
+            // Display: ensure last lines can reach marker by adding a bottom spacer sized to markerY
+            function updateEndSpacer(){
+              try {
+                const scroller = (document.querySelector('#displayScroll') || wrap || window);
+                const marker = document.getElementById('marker-line');
+                if (!marker || !scriptEl || !scroller) return;
+                const baseTop = (scroller===window ? 0 : (scroller.getBoundingClientRect().top||0));
+                const markerY = (marker.getBoundingClientRect().top || 0) - baseTop;
+                const pad = Math.max(0, Math.ceil(markerY + 8));
+                let spacer = document.getElementById('end-spacer');
+                if (!spacer) {
+                  spacer = document.createElement('div');
+                  spacer.id = 'end-spacer';
+                  spacer.setAttribute('aria-hidden','true');
+                  spacer.style.pointerEvents = 'none';
+                }
+                spacer.style.height = pad + 'px';
+                if (spacer.parentElement !== scriptEl) scriptEl.appendChild(spacer);
+              } catch {}
+            }
             // Color sync via BroadcastChannel
             let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
             if (bc) {
@@ -156,8 +176,8 @@
                 try { window.__camPC.addIceCandidate(d.candidate); } catch {}
                 return;
               }
-              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
-              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
+              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); try{ updateEndSpacer(); }catch{} }
+              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); try{ updateEndSpacer(); }catch{} }
               if(d.type==='scroll'){
                 if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
@@ -214,6 +234,7 @@
             });
             document.getElementById('flip').onclick = flip;
             document.getElementById('invert').onclick = invert;
+            try { window.addEventListener('resize', ()=>{ try{ updateEndSpacer(); }catch{} }, { passive:true }); } catch {}
             const camPiPBtn = document.getElementById('camPiP');
             if (camPiPBtn){
               camPiPBtn.onclick = async () => {
