@@ -93,6 +93,37 @@
     }
   }
 
+  // Activation helpers: tolerate jitter using EMA conf, suffix hits, and a timeout guard
+  let __tpLowConfSince = 0;
+  function activateLine(idx, opts = {}){
+    try { if (typeof debug === 'function') debug({ tag:'match:activate', idx, reason: opts.reason||'conf' }); } catch {}
+    return true;
+  }
+  function maybeActivate({ idx, sim, cov, suffixHits = 0, jitterStd }){
+    const conf = computeConf({ sim, cov, jitterStd });
+    const canActivate = (
+      conf >= 0.58 ||
+      (sim >= 0.92 && cov >= 0.14) ||
+      (suffixHits >= 2 && sim >= 0.88) ||
+      (cov >= 0.35 && sim >= 0.85)
+    );
+    if (canActivate) {
+      __tpLowConfSince = 0;
+      return activateLine(idx);
+    }
+    // timeout guard: if we’re clearly on the right line but jitter is noisy
+    if (sim >= 0.95) {
+      if (!__tpLowConfSince) __tpLowConfSince = performance.now();
+      if (performance.now() - __tpLowConfSince > 1200 && cov >= 0.12) {
+        __tpLowConfSince = 0;
+        return activateLine(idx, { reason: 'timeout-guard' });
+      }
+    } else {
+      __tpLowConfSince = 0;
+    }
+    return false;
+  }
+
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
     if (typeof window.__tpRealCore !== 'function') {
@@ -3391,6 +3422,7 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
   const suffix = suffixHit(lineTokens, spoken, 6);
   if (suffix) {
     try { window.__tpLastSuffixHitAt = performance.now(); } catch {}
+    try { const b = (window.__tpSuffixBuf ||= []); const now = performance.now(); b.push(now); while (b.length && now - b[0] > 2000) b.shift(); } catch {}
     try { if (typeof debug==='function') debug({ tag:'SUFFIX_HIT', idx: bestIdx, k: 6, ok: true }); } catch {}
   }
     const earlyOk = (stagnantMs >= SOFT_EARLY_MS) && (cov >= COV_T || suffix);
@@ -3660,7 +3692,7 @@ function advanceByTranscript(transcript, isFinal){
     bestSim = __adj; }
   if (bestSim < EFF_SIM_THRESHOLD) return;
 
-  // Confidence gate before switching active line (EMA-smoothed)
+  // Confidence gate before switching active line (EMA-smoothed, suffix-aware)
   try {
     // Compute instantaneous coverage for current virtual line
     const vList = __vParaIndex || [];
@@ -3675,12 +3707,10 @@ function advanceByTranscript(transcript, isFinal){
       } catch { covGate = tokenCoverage(lineTokens, spoken); }
     }
     const jitterStd = Number((J.std||0));
-    const conf = computeConf({ sim: bestSim, cov: covGate, jitterStd });
-    const forceHigh = (bestSim >= 0.90 && covGate >= 0.50);
-    if (!(conf >= 0.72 || forceHigh)) {
-      // Defer switching active to avoid flicker; let matcher accumulate more evidence
-      return;
-    }
+    // Count recent suffix hits in a short window to strengthen activation
+    let suffixHits = 0; try { const nowH=performance.now(); const b=(window.__tpSuffixBuf||[]); suffixHits = b.filter(t => nowH - t <= 1500).length; } catch {}
+    const ok = maybeActivate({ idx: bestIdx, sim: bestSim, cov: covGate, suffixHits, jitterStd });
+    if (!ok) return; // Defer switching active to avoid flicker; let matcher accumulate more evidence
   } catch {}
 
   // Lost-mode tracker: increment low-sim runs and enter lost if jitter large
