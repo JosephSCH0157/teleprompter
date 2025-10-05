@@ -3718,7 +3718,18 @@ function advanceByTranscript(transcript, isFinal){
     } catch {}
   }
   try { window.getDisplayContext = getDisplayContext; window.alignToMarkerAuto = alignToMarkerAuto; } catch {}
-  try { if (typeof window.crossOriginScroll !== 'function') window.crossOriginScroll = ()=>{ try{ if(displayWin && !displayWin.closed) displayWin.postMessage({ type:'align-by-marker' }, '*'); }catch{} }; } catch {}
+  try {
+    if (typeof window.crossOriginScroll !== 'function') {
+      window.crossOriginScroll = (action)=>{
+        try {
+          if (displayWin && !displayWin.closed) {
+            if (action === 'END_TO_MARKER') displayWin.postMessage({ type:'END_TO_MARKER' }, '*');
+            else displayWin.postMessage({ type:'align-by-marker' }, '*');
+          }
+        } catch {}
+      };
+    }
+  } catch {}
   // Align the external display window by marker (if open): asks display to nudge by its own delta
   function nudgeToMarkerInDisplay(){
     try {
@@ -3760,6 +3771,75 @@ function advanceByTranscript(transcript, isFinal){
       return { markerY, activeY };
     } catch { return { markerY: null, activeY: null }; }
   }
+
+  // ---------- doc-aware measurement helpers (main) ----------
+  function __docGetScroller(doc, win){
+    try { return doc.querySelector('#displayScroll') || doc.getElementById('wrap') || doc.getElementById('viewer') || win; } catch { return win; }
+  }
+  function __docRelTop(el, scroller, win){
+    try { const r = el.getBoundingClientRect(); const baseTop = (scroller===win ? 0 : (scroller.getBoundingClientRect().top||0)); return r.top - baseTop; } catch { return 0; }
+  }
+  function __docRelBottom(el, scroller, win){
+    try { const r = el.getBoundingClientRect(); const baseTop = (scroller===win ? 0 : (scroller.getBoundingClientRect().top||0)); return r.bottom - baseTop; } catch { return 0; }
+  }
+  function __docGetScrollTop(scroller, win){ try { return (scroller===win) ? (win.scrollY||0) : (scroller.scrollTop||0); } catch { return 0; } }
+  function __docSetScrollTop(scroller, win, y){ try { if (scroller===win) win.scrollTo(0, Number(y)||0); else scroller.scrollTop = Number(y)||0; } catch {} }
+  function __docMaxScrollTop(scroller, win, doc){
+    try { const h = (scroller===win ? (doc.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0)); const vh = (scroller===win ? (win.innerHeight||0) : (scroller.clientHeight||0)); return Math.max(0, h - vh); } catch { return 0; }
+  }
+  function __ensureEndSpacer(doc, scroller, win, markerY){
+    try {
+      // For main app, reuse precise reachability helper
+      if (doc === document && typeof ensureReachableForLastLine === 'function') { ensureReachableForLastLine(markerY); return; }
+      const script = doc.getElementById('script'); if (!script) return;
+      let spacer = doc.getElementById('end-spacer');
+      if (!spacer) { spacer = doc.createElement('div'); spacer.id='end-spacer'; spacer.setAttribute('aria-hidden','true'); spacer.style.pointerEvents='none'; script.appendChild(spacer); }
+      const pad = Math.max(0, Math.ceil((Number(markerY)||0) + 8));
+      // Only increase; don’t shrink here to avoid flicker
+      const cur = parseInt((spacer.style.height||'0').replace('px',''))||0;
+      if (pad > cur) spacer.style.height = pad + 'px';
+    } catch {}
+  }
+
+  // ---------- main action: scroll until end hits the marker ----------
+  function scrollEndToMarker(){
+    try {
+      const ctx = getDisplayContext();
+      const win = ctx?.win, doc = ctx?.doc;
+      // If cross-origin (no doc access), delegate
+      if (ctx.name !== 'main' && (!doc || !doc.body)) { try { if (typeof crossOriginScroll === 'function') crossOriginScroll('END_TO_MARKER'); } catch {} return; }
+      const scroller = __docGetScroller(doc, win);
+      const marker = (doc.getElementById('marker-line') || doc.getElementById('marker'));
+      const last = (doc.querySelector('.transcript-line:last-of-type') || doc.querySelector('#script p:last-of-type'));
+      if (!marker || !last || !scroller) return;
+      const markerY = __docRelTop(marker, scroller, win);
+      __ensureEndSpacer(doc, scroller, win, markerY);
+      // Recompute after spacer potential resize
+      const lastBottom = __docRelBottom(last, scroller, win);
+      const delta = lastBottom - markerY; // >0 => content needs to move up (scroll down)
+      if (Math.abs(delta) <= 1) return;
+      const current = __docGetScrollTop(scroller, win);
+      const target = Math.min(current + delta, __docMaxScrollTop(scroller, win, doc));
+      __docSetScrollTop(scroller, win, Math.max(0, target));
+      // optional tidy nudge if layout shifts
+      requestAnimationFrame(()=>{
+        try {
+          const nb = __docRelBottom(last, scroller, win);
+          const miss = nb - markerY;
+          if (Math.abs(miss) > 1){
+            const cur = __docGetScrollTop(scroller, win);
+            const t2 = Math.min(cur + miss, __docMaxScrollTop(scroller, win, doc));
+            __docSetScrollTop(scroller, win, Math.max(0, t2));
+          }
+        } catch {}
+      });
+      try {
+        const scH = (scroller===win ? (win.innerHeight||0) : (scroller.clientHeight||0));
+        console.info('[end→marker]', ctx.name, 'scH=', scH, 'markerY=', markerY, 'lastBottom=', lastBottom);
+      } catch {}
+    } catch {}
+  }
+  try { window.scrollEndToMarker = scrollEndToMarker; } catch {}
   // Final snap: when very close, align the active line exactly to the marker
   function endSnap(markerYViewport){
     try {

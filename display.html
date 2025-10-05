@@ -252,6 +252,37 @@
                   setScrollTop(scroller, window, next);
                 } catch {}
               }
+              // Align the end (last paragraph bottom) to the marker within display context
+              if (d.type === 'END_TO_MARKER'){
+                try {
+                  const scroller = getScroller(document, window);
+                  const marker = document.getElementById('marker-line');
+                  const last = (document.querySelector('.transcript-line:last-of-type') || scriptEl.querySelector('p:last-of-type'));
+                  if (!scroller || !marker || !last) return;
+                  // Ensure end spacer is at least markerY + small pad
+                  try { updateEndSpacer(); } catch {}
+                  const markerY = relTop(marker, scroller, window);
+                  const lastBottom = relBottom(last, scroller, window);
+                  const delta = lastBottom - markerY;
+                  if (Math.abs(delta) <= 1) return;
+                  const current = getScrollTop(scroller, window);
+                  const maxTop = maxScrollTop(scroller, window, document);
+                  const next = Math.max(0, Math.min(current + delta, maxTop));
+                  setScrollTop(scroller, window, next);
+                  // tidy nudge if layout settles
+                  requestAnimationFrame(()=>{
+                    try {
+                      const nb = relBottom(last, scroller, window);
+                      const miss = nb - markerY;
+                      if (Math.abs(miss) > 1){
+                        const cur = getScrollTop(scroller, window);
+                        const n2 = Math.max(0, Math.min(cur + miss, maxScrollTop(scroller, window, document)));
+                        setScrollTop(scroller, window, n2);
+                      }
+                    } catch {}
+                  });
+                } catch {}
+              }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
                 else{ preRoll.style.display='none'; }
