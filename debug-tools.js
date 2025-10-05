@@ -263,6 +263,13 @@
       setConfig(cfg){ try { Object.assign(hudConfig, cfg||{}); } catch {} },
       bus
     };
+    // Map HUD.minLevel <-> hudConfig.minLevel
+    try {
+      Object.defineProperty(HUD, 'minLevel', {
+        get(){ return hudConfig.minLevel; },
+        set(v){ try { hudConfig.minLevel = (v||'INFO'); } catch {} }
+      });
+    } catch {}
     try { window.HUD = HUD; } catch {}
 
     // Global emit wrapper compatible with the requested API
@@ -272,8 +279,10 @@
       };
     } catch {}
 
-    // Show a single boot line once HUD is ready
-    try { if (typeof window.emitHUD === 'function') window.emitHUD('hud:ready', { minLevel: hudConfig.minLevel }, 'INFO'); } catch {}
+  // Show a single boot line once HUD is ready
+  try { if (typeof window.emitHUD === 'function') window.emitHUD('hud:ready', { minLevel: hudConfig.minLevel }, 'INFO'); } catch {}
+  // Apply requested mode change: raise verbosity to INFO and announce
+  try { HUD.minLevel = 'INFO'; if (typeof window.emitHUD === 'function') window.emitHUD('hud:mode', { minLevel: 'INFO' }, 'INFO'); } catch {}
 
     // Optional: quiet mode — filter noisy HUD tags to keep console readable during dev
     (function(){
