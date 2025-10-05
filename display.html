@@ -166,6 +166,30 @@
                   wrap.scrollTop = d.top||0;
                 }
               }
+              // DISPLAY: report marker/active measurement back to opener
+              if (d.type === 'measure-request'){
+                try {
+                  const scroller = (document.querySelector('#displayScroll') || wrap || window);
+                  const baseTop = (scroller===window ? 0 : (scroller.getBoundingClientRect().top||0));
+                  const marker = document.getElementById('marker-line');
+                  const active = scriptEl.querySelector('p.active');
+                  const markerY = marker ? (marker.getBoundingClientRect().top - baseTop) : null;
+                  const activeY = active ? (active.getBoundingClientRect().top - baseTop) : null;
+                  window.opener && window.opener.postMessage({ type:'MEASURE', markerY, activeY }, '*');
+                } catch {}
+              }
+              // DISPLAY: apply a scroll based on HUD-provided viewport Ys (in DISPLAY coords)
+              if (d.type === 'display-apply' && typeof d.markerY === 'number' && typeof d.activeY === 'number'){
+                try {
+                  const scroller = (document.querySelector('#displayScroll') || wrap || window);
+                  const baseTop = (scroller===window ? 0 : (scroller.getBoundingClientRect().top||0));
+                  const markerY = d.markerY - baseTop;
+                  const activeY = d.activeY - baseTop;
+                  const delta = activeY - markerY;
+                  if (scroller === window) window.scrollTo(0, Math.max(0, window.scrollY + delta));
+                  else scroller.scrollTop = Math.max(0, scroller.scrollTop + delta);
+                } catch {}
+              }
               // Optional: mainstream-align by marker delta within the display window
               if (d.type === 'align-by-marker'){
                 try {
