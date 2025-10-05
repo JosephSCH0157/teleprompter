@@ -212,6 +212,21 @@
     } catch { return document.scrollingElement || document.documentElement || document.body; }
   }
   function __nodeId(node){ try { return (node && (node.id || node.getAttribute?.('data-testid') || node.tagName)) || 'unknown'; } catch { return 'unknown'; } }
+  // Action-level scroll logs
+  function logScrollAttempt(scroller, before, desiredTop, reason){
+    try {
+      const payload = { scroller: __nodeId(scroller), before, desiredTop, delta: (desiredTop - before), reason };
+      try { if (typeof HUD?.log === 'function') HUD.log('scroll:attempt', payload); } catch {}
+      try { if (typeof debug === 'function') debug({ tag:'scroll:attempt', ...payload }); } catch {}
+    } catch {}
+  }
+  function logScrollFailure(scroller, before, desiredTop){
+    try {
+      const payload = { scroller: __nodeId(scroller), before, desiredTop, note: 'No change after retries; falling back to step-scroll/root.' };
+      try { if (typeof HUD?.log === 'function') HUD.log('scroll:stalled', payload); } catch {}
+      try { if (typeof debug === 'function') debug({ tag:'scroll:stalled', ...payload }); } catch {}
+    } catch {}
+  }
   // Scroll such that targetY aligns roughly to the band center, verify progress, and escalate if needed
   function scrollToBand(targetY, band=[0.28, 0.55], anchorEl=null, opts={}){
     try {
@@ -226,6 +241,8 @@
       const desiredTop = Math.max(0, Math.min(targetY - bandCenter * vh, maxScroll));
       const prefersReduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       const before = (scroller.scrollTop||0);
+      // Log actuator attempt before issuing the scroll
+      logScrollAttempt(scroller, before, desiredTop, 'scrollToBand');
       try { scroller.scrollTo({ top: desiredTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = desiredTop; } catch {} }
       let tries = 0;
       const verify = () => {
@@ -233,6 +250,10 @@
           const nowTop = (scroller.scrollTop||0);
           if (Math.abs(nowTop - before) > 1 || tries > 2){
             try { if (typeof debug==='function') debug({ tag:'scroll:progress', before, nowTop, desiredTop, scroller: __nodeId(scroller) }); } catch {}
+            if (Math.abs(nowTop - before) <= 1 && tries > 2) {
+              // No progress after escalations => log stall
+              logScrollFailure(scroller, before, desiredTop);
+            }
             return;
           }
           tries++;
@@ -423,6 +444,12 @@
             try {
               beginProgrammaticScroll();
               const estY = estimateY(frontierWord);
+              try {
+                const bestIdx = frontierWord; const frontierIdx = frontierWord;
+                const haveExact = (function(){ try { return !!(__tpYByIdx && __tpYByIdx.has(frontierIdx)); } catch { return false; } })();
+                if (typeof HUD?.log === 'function') HUD.log('catchup:target', { bestIdx, frontierIdx, haveExact, targetY: estY });
+                if (typeof debug === 'function') debug({ tag:'catchup:target', bestIdx, frontierIdx, haveExact, targetY: estY });
+              } catch {}
               const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body);
               scrollToBand(estY, [0.25, 0.55], null, { overrideLock: true });
               try { if (typeof debug==='function') debug({ tag:'catchup:estimateY', idx: frontierWord, estY }); } catch {}
