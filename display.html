@@ -47,7 +47,7 @@
               <span class="dot s2"></span><span class="lbl" id="lbl-s2">Brad</span>
             </div>
           </header>
-          <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
+          <div class="wrap" id="wrap"><div class="marker" id="marker-line"></div><div class="script" id="script"></div></div>
           <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button></div>
           <div id="mirrorCamWrap" hidden>
             <video id="mirrorCamVideo" autoplay muted></video>
@@ -165,6 +165,20 @@
                 } else {
                   wrap.scrollTop = d.top||0;
                 }
+              }
+              // Optional: mainstream-align by marker delta within the display window
+              if (d.type === 'align-by-marker'){
+                try {
+                  const scroller = wrap; // the display scroller
+                  const marker = document.getElementById('marker-line');
+                  // Active line mirror: try the same selector as main
+                  const active = scriptEl.querySelector('p.active');
+                  if (!marker || !active) return;
+                  const mTop = marker.getBoundingClientRect().top;
+                  const aTop = active.getBoundingClientRect().top;
+                  const delta = aTop - mTop;
+                  scroller.scrollTop += delta;
+                } catch {}
               }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }

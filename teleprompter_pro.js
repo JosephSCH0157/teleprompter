@@ -3652,6 +3652,13 @@ function advanceByTranscript(transcript, isFinal){
       try { requestScroll(target); } catch { viewer.scrollTop = target; }
     } catch {}
   }
+  // Align the external display window by marker (if open): asks display to nudge by its own delta
+  function nudgeToMarkerInDisplay(){
+    try {
+      if (!displayWin || displayWin.closed) return;
+      displayWin.postMessage({ type:'align-by-marker' }, '*');
+    } catch {}
+  }
   // Final snap: when very close, align the active line exactly to the marker
   function endSnap(markerYViewport){
     try {
@@ -3681,6 +3688,7 @@ function advanceByTranscript(transcript, isFinal){
   try {
     window.ensureReachableForLastLine = ensureReachableForLastLine;
     window.nudgeToMarker = nudgeToMarker;
+    window.nudgeToMarkerInDisplay = nudgeToMarkerInDisplay;
     // Aliases to match external snippet naming
     window.ensureEndReachability = ensureReachableForLastLine;
     window.endSnap = endSnap;
