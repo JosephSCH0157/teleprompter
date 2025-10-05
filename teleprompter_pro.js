@@ -325,14 +325,20 @@
       try { if (typeof debug === 'function') debug({ tag:'scroll:stalled', ...payload }); } catch {}
     } catch {}
   }
-  // Small, repeatable step on the SAME scroller; never fall back to root/window
-  function stepScroll(scroller, dir){
+  // Small, repeatable step was previously provided by stepScroll(scroller, dir)
+  // Removed to avoid any accidental root/window fallback. Use fallbackNudge instead.
+  // Fallback nudge with hard-stable and cooldown gates; always same scroller
+  function fallbackNudge({ scroller, delta, metrics }){
     try {
+      const m = metrics || { sim: (window.__lastSimScore||1), jitterStd: (window.__tpJitterEma||0), anchorVisible: true };
+      if (!__tpCanProgrammaticScroll()) { try { if (typeof debug==='function') debug({ tag:'scroll:fallback:skip', reason:'frozen' }); } catch {} return 'skip:frozen'; }
+      if (!stableEligible({ sim: Number(m.sim)||0, jitterStd: Number(m.jitterStd)||0, anchorVisible: !!m.anchorVisible })) { try { if (typeof debug==='function') debug({ tag:'scroll:fallback:skip', reason:'unstable' }); } catch {} return 'skip:unstable'; }
       const STEP = 24;
-      const dy = (dir >= 0 ? STEP : -STEP);
+      const dy = (Math.sign(delta)||1) * STEP;
       if (typeof scroller.scrollBy === 'function') scroller.scrollBy({ top: dy, behavior: 'auto' });
       else scroller.scrollTop = (scroller.scrollTop||0) + dy;
-    } catch {}
+      return 'ok:nudged';
+    } catch { return 'skip:error'; }
   }
   // Minimal catch-up mover: apply hard gates, sticky-band hold, then snapped write
   function scrollToBandSimple({ scroller, targetTop, band, viewportHeight, sim, jitterStd, anchorVisible }){
@@ -424,10 +430,13 @@
           if (tries === 2){
             // Force movement on stubborn containers
             try { scrollToSnapped(scroller, targetTop); } catch {}
-            // If direct set had no effect and the delta was not tiny, nudge with a small fixed step on the same scroller
+            // If direct set had no effect and the delta was not tiny, attempt a gated small-step nudge on the same scroller
             if (Math.abs((scroller.scrollTop||0) - before) <= 1){
               const delta = targetTop - before;
-              if (Math.abs(delta) >= MIN_NUDGE_PX){ stepScroll(scroller, Math.sign(delta)||1); }
+              if (Math.abs(delta) >= MIN_NUDGE_PX){
+                const metrics = (typeof opts?.metrics === 'object') ? opts.metrics : { sim: (window.__lastSimScore||1), jitterStd: (window.__tpJitterEma||0), anchorVisible: true };
+                fallbackNudge({ scroller, delta, metrics });
+              }
             }
           }
           requestAnimationFrame(verify);
@@ -641,6 +650,7 @@
           const ev = { tag:'catchup:stable:hold', sim:+Number(bestSim).toFixed(2), jitterStd:+Number(jitterStd).toFixed(2), anchorVisible, until: (__tpLowSimAt + LOWSIM_FREEZE) };
           try { if (typeof debug==='function') debug(ev); } catch {}
           try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:stable:hold', ev); } catch {}
+          try { window.__tpLastCatchupDecision = 'hold:unstable'; } catch {}
           return;
         }
       } catch {}
@@ -657,7 +667,8 @@
         return 'hold';
       }
       const metrics = { lead, sim: bestSim, stale, anchorVisible, covBest, clusterCov, covActive };
-      const decision = decideCatchup(metrics);
+  const decision = decideCatchup(metrics);
+  try { window.__tpLastCatchupDecision = decision; } catch {}
       // Low-sim/jitter freeze marker
       try {
         const jStd = (typeof window.__tpJitterEma === 'number') ? window.__tpJitterEma : 0;
@@ -684,7 +695,7 @@
       if (decision.startsWith('go')){
         try {
           // Hard-stable programmatic gate: skip actuation if in freeze windows
-          if (!__tpCanProgrammaticScroll()) { return; }
+          if (!__tpCanProgrammaticScroll()) { try { window.__tpLastCatchupDecision = 'hold:cooldown'; } catch {} return; }
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
           // Control loop: widen band and skip smoothing if probing or after repeated no-op attempts
           __tpStagnantTicks++;
@@ -752,6 +763,7 @@
       }
       else {
         __tpStagnantTicks = 0;
+        try { window.__tpLastCatchupDecision = 'hold'; } catch {}
         try {
           window.__tpHoldStreak += 1;
           if (window.__tpHoldStreak % 24 === 0) {
@@ -2723,15 +2735,13 @@ async function _initCore() {
     }
   });
 
-  // ===== Progressive Fallback Nudge =====
+  // ===== Progressive Fallback Nudge (strict, no root fallback, gated) =====
   (function(){
     const F = {
-      stepPx: 18,            // small push
-      maxSmallPushes: 3,     // after this, try mini-seek
-      miniSeekIdxSpan: 6,    // try ±6 indices around bestIdx
+      stepPx: 24,            // small push, device-ish friendly
       coolDownMs: 900,       // don’t spam nudges
     };
-    const S = { lastAt: 0, smallPushes: 0 };
+    const S = { lastAt: 0 };
     let fbDelay = 250, fbTimer = 0;
     window.__tpScheduleFallback = function(fn){
       if (fbTimer) return;
@@ -2763,47 +2773,27 @@ async function _initCore() {
 
       const viewer = document.getElementById('viewer');
       if (!viewer) return false;
+      // Disable any fallback if the catch-up decision is hold or we cannot programmatically scroll
+      try {
+        const decision = String(window.__tpLastCatchupDecision||'');
+        if (!decision || decision.startsWith('hold')) { try { if (typeof debug==='function') debug({ tag:'fallback-nudge:skip', reason:'decision-hold' }); } catch {} return false; }
+      } catch {}
+      try { if (!__tpCanProgrammaticScroll()) { if (typeof debug==='function') debug({ tag:'fallback-nudge:skip', reason:'cooldown' }); return false; } } catch {}
+      // Also guard on stability
+      try {
+        const sim = (typeof window.__lastSimScore==='number') ? window.__lastSimScore : 0;
+        const jitterStd = (typeof window.__tpJitterEma==='number') ? window.__tpJitterEma : 0;
+        const activeEl = (document.getElementById('script')||document).querySelector('p.active');
+        const anchorVisible = isInComfortBand(activeEl, { top: 0.25, bottom: 0.55 });
+        if (!stableEligible({ sim, jitterStd, anchorVisible })) { try { if (typeof debug==='function') debug({ tag:'fallback-nudge:skip', reason:'unstable' }); } catch {} return false; }
+      } catch {}
 
-      // 1) small push phase
-      if (S.smallPushes < F.maxSmallPushes) {
-        const to = viewer.scrollTop + F.stepPx;
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: to, idx: bestIdx, phase:'small' }); } catch {}
-        try { viewer.scrollTo({ top: to, behavior: 'instant' }); } catch { viewer.scrollTop = to; }
-        syncDisplay();
-        S.smallPushes++;
-        return true;
-      }
-
-      // 2) mini-seek: try to locate an element around bestIdx
-      const tryIdxs = [];
-      for (let k = -F.miniSeekIdxSpan; k <= F.miniSeekIdxSpan; k++) tryIdxs.push(bestIdx + k);
-      const el = tryIdxs
-        .map(i => document.querySelector(`[data-idx="${i}"],[data-token-idx="${i}"],.line[data-i="${i}"]`))
-        .find(Boolean);
-
-      if (el) {
-        const y = (el.offsetTop || 0) - Math.floor((viewer.clientHeight || 0) * 0.33);
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: y, idx: bestIdx, phase:'mini-seek' }); } catch {}
-        try { viewer.scrollTo({ top: y, behavior: 'instant' }); } catch { viewer.scrollTop = y; }
-        syncDisplay();
-        S.smallPushes = 0; // reset after successful mini-seek
-        return true;
-      }
-
-      // 3) anchor jump (last resort)
-      if (typeof window.scrollToCurrentIndex === 'function') {
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'anchor-jump' }); } catch {}
-        const prev = window.currentIndex;
-        window.currentIndex = bestIdx;
-        try { window.scrollToCurrentIndex(); } finally { window.currentIndex = prev; }
-        S.smallPushes = 0;
-        syncDisplay();
-        return true;
-      }
-
-  // If nothing else, bail silently (reduce log noise)
-  // try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'noop' }); } catch {}
-      return false;
+      // Tiny same-scroller nudge only
+      const to = viewer.scrollTop + (F.stepPx * 1);
+      try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: to, idx: bestIdx, phase:'tiny' }); } catch {}
+      try { viewer.scrollTo({ top: to, behavior: 'auto' }); } catch { viewer.scrollTop = to; }
+      syncDisplay();
+      return true;
     };
   })();
 
