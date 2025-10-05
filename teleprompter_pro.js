@@ -106,7 +106,10 @@
   // Activation helpers: tolerate jitter using EMA conf, suffix hits, and a timeout guard
   let __tpLowConfSince = 0;
   function activateLine(idx, opts = {}){
-    try { if (typeof debug === 'function') debug({ tag:'match:activate', idx, reason: opts.reason||'conf' }); } catch {}
+    const payload = { idx, reason: opts.reason||'conf', sim: opts.sim, cov: opts.cov, conf: opts.conf, suffixHits: opts.suffixHits };
+    try { if (typeof debug === 'function') debug({ tag:'match:activate', ...payload }); } catch {}
+    try { if (typeof HUD?.log === 'function') HUD.log('match:activate', payload); } catch {}
+    try { window.__tpLastActivation = { idx, reason: payload.reason, t: performance.now() }; } catch {}
     return true;
   }
   function maybeActivate({ idx, sim, cov, suffixHits = 0, jitterStd }){
@@ -121,14 +124,14 @@
 
     if (reason) {
       __tpLowConfSince = 0;
-      return activateLine(idx, { reason });
+      return activateLine(idx, { reason, sim, cov, conf, suffixHits });
     }
     // timeout guard: if we’re clearly on the right line but jitter is noisy
     if (sim >= 0.95) {
       if (!__tpLowConfSince) __tpLowConfSince = performance.now();
       if (performance.now() - __tpLowConfSince > 1200 && cov >= 0.12) {
         __tpLowConfSince = 0;
-        return activateLine(idx, { reason: 'timeout-guard' });
+        return activateLine(idx, { reason: 'timeout-guard', sim, cov, conf, suffixHits });
       }
     } else {
       __tpLowConfSince = 0;
@@ -3877,7 +3880,8 @@ function advanceByTranscript(transcript, isFinal){
         return { dup, dupCount: count, lineKey: key?.slice(0,80), vDup, vDupCount: vCount, vLineKey: vKey?.slice(0,80), vSig: vSig?.slice(0,80), vSigCount, dupPenalty, sigPenalty };
       } catch { return {}; }
     })(),
-    delta
+    delta,
+    ...(function(){ try { const a=window.__tpLastActivation; if (!a) return {}; const age=performance.now()-a.t; return age<1200? { lastActivation: { idx: a.idx, reason: a.reason, age: Math.round(age) } } : {}; } catch { return {}; } })()
   });
   try { window.__tpLastCand = { idx: bestIdx, score: __scoreNow }; } catch {}
   // Visibility gate: ensure the target paragraph is visible in the active scroller before advancing idx
