@@ -413,6 +413,75 @@ const DEFAULT_CONFUSIONS = {
 };
 
 let CANON = {};
+// One-time, versioned settings migration to merge defaults into localStorage without clobbering user values
+function migrateHudSettings(defaults, opts = {}) {
+  const STORAGE_KEY = opts.storageKey || 'hudSettings';
+  const VERSION     = opts.version || 1; // bump when defaults change
+  const FLAG_KEY    = `${STORAGE_KEY}:migrated:v${VERSION}`;
+
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return false;
+    if (localStorage.getItem(FLAG_KEY)) return false;
+
+    let current = {};
+    const raw = localStorage.getItem(STORAGE_KEY);
+    try { if (raw) current = JSON.parse(raw); }
+    catch {
+      try { localStorage.setItem(`${STORAGE_KEY}:backup:${Date.now()}`, raw || ''); } catch {}
+      current = {};
+    }
+
+    const [merged, changed] = (function mergeMissingDeep(dst, src){
+      let changed = false;
+      const out = (Array.isArray(dst) ? [...dst] : (isPlainObject(dst) ? { ...dst } : dst));
+
+      if (Array.isArray(src)){
+        const set = new Set(Array.isArray(out) ? out : []);
+        for (const v of src) if (!set.has(v)) { set.add(v); changed = true; }
+        return [Array.from(set), changed];
+      }
+
+      if (isPlainObject(src)){
+        const base = isPlainObject(out) ? out : {};
+        for (const [k, v] of Object.entries(src)){
+          if (!(k in base) || base[k] === undefined){
+            // structuredClone fallback
+            let clone;
+            try { clone = typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v)); }
+            catch { clone = v; }
+            base[k] = clone;
+            changed = true;
+          } else if (isPlainObject(v)){
+            const [child, c] = mergeMissingDeep(base[k], v);
+            if (c) { base[k] = child; changed = true; }
+          } else if (Array.isArray(v) && Array.isArray(base[k])){
+            const [arr, c] = mergeMissingDeep(base[k], v);
+            if (c) { base[k] = arr; changed = true; }
+          }
+        }
+        return [base, changed];
+      }
+
+      return [out, changed];
+
+      function isPlainObject(x){ return x && typeof x === 'object' && !Array.isArray(x); }
+    })(current, defaults);
+
+    try {
+      if (changed) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        // let the app know so Settings can re-render
+        try { window.dispatchEvent(new CustomEvent('hudSettings:migrated', { detail: { storageKey: STORAGE_KEY, version: VERSION } })); } catch {}
+      }
+      localStorage.setItem(FLAG_KEY, '1'); // one-time per version
+    } catch (err) {
+      console.warn('hudSettings migration failed:', err);
+      return false;
+    }
+
+    return changed;
+  } catch { return false; }
+}
 function loadConfusions(settings){
   try {
     CANON = {};
@@ -431,8 +500,25 @@ function loadConfusions(settings){
 function canonicalizeToken(token){ try { const t=String(token||'').toLowerCase(); return CANON[t] || token; } catch { return token; } }
 function normalizeTail(tail){ try { return String(tail||'').split(/\s+/).filter(Boolean).map(canonicalizeToken).join(' '); } catch { return String(tail||''); } }
 function saveSettings(settings){ try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings||{})); loadConfusions(settings||{}); } catch {} }
-// Boot-load settings
-try { const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); loadConfusions(saved||{}); } catch {}
+// Boot-load settings (run migration first)
+try {
+  const DEFAULTS = {
+    nav: { anchorVH: 0.45, minDelta: 6, quietMs: 350, comfortBand: [0.25, 0.75] },
+    ux:  { snapActiveOnly: true, anchorSnap: '45vh' },
+    confusionPairs: {
+      single: ['sing'],
+      portion: ['port', 'portion'],
+      sale: ['sal', 'salem'],
+      cell: ['cell', 'sale', 'salem'],
+      enforcement: ['enforcement','forcemen','forcement','salemforcement'],
+      ev: ['ev','uv','evil'],
+      line: ['line','l','lion']
+    }
+  };
+  migrateHudSettings(DEFAULTS, { storageKey: SETTINGS_KEY, version: 1 });
+  const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+  loadConfusions(saved||{});
+} catch {}
 }
 
 // Shared Normalize wiring helper
