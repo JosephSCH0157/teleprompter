@@ -1119,11 +1119,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         try {
           const cur = sel.value;
           sel.innerHTML = '';
-            cams.forEach(d => {
-              const o = document.createElement('option');
-              o.value = d.deviceId; o.textContent = d.label || 'Camera';
-              sel.appendChild(o);
-            });
+          cams.forEach(d => {
+            const o = document.createElement('option');
+            o.value = d.deviceId; o.textContent = d.label || 'Camera';
+            sel.appendChild(o);
+          });
           if (cur && Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur;
         } catch {}
       });
@@ -1139,7 +1139,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // Query essentials
     permChip = document.getElementById('permChip');
     micBtn = document.getElementById('micBtn');
-  // (Removed micDeviceSel rebinding; use getMicSel())
+    // (Removed micDeviceSel rebinding; use getMicSel())
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
     dbMeterTop = document.getElementById('dbMeterTop');
     const normalizeTopBtn = document.getElementById('normalizeTopBtn');
@@ -1147,11 +1147,10 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // Build both meters
     buildDbBars(dbMeterTop);
 
-  // TP: mic-wire
-  // Wire mic + devices
-  micBtn?.addEventListener('click', requestMic);
-  const relMicBtn = document.getElementById('relMicBtn');
-  relMicBtn?.addEventListener('click', releaseMic);
+    // TP: mic-wire
+    micBtn?.addEventListener('click', requestMic);
+    const relMicBtn = document.getElementById('relMicBtn');
+    relMicBtn?.addEventListener('click', releaseMic);
     refreshDevicesBtn?.addEventListener('click', populateDevices);
     try {
       await populateDevices();
@@ -1160,18 +1159,17 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const last = localStorage.getItem(DEVICE_KEY);
         if (last) {
           const sel = document.getElementById('settingsMicSel');
-          if (sel && Array.from(sel.options).some(o=>o.value===last)) {
-            sel.value = last;
-          }
+          if (sel && Array.from(sel.options).some(o=>o.value===last)) sel.value = last;
           // Do not auto-start mic on load; require explicit user action
         }
       } catch {}
       // Reflect idle state if mic not yet granted
       try { if (!audioStream && permChip) permChip.textContent = 'Mic: idle'; } catch {}
+      updateMicUIState();
     } catch {}
 
-  // TP: normalize-top-btn
-  // Wire Top-bar Normalize button
+    // TP: normalize-top-btn
+    // Wire Top-bar Normalize button
     wireNormalizeButton(normalizeTopBtn);
   }
 
@@ -3412,7 +3410,7 @@ function advanceByTranscript(transcript, isFinal){
 
   function formatInlineMarkup(text){
     let s = escapeHtml(text);
-    // basic
+    // basic inline tags
     s = s
       .replace(/\[b\]([\s\S]+?)\[\/b\]/gi, '<strong>$1<\/strong>')
       .replace(/\[i\]([\s\S]+?)\[\/i\]/gi, '<em>$1<\/em>')
@@ -3421,13 +3419,14 @@ function advanceByTranscript(transcript, isFinal){
       .replace(/\[note\]([\s\S]+?)\[\/note\]/gi, '<div class="note">$1<\/div>');
     // color/bg
     s = s.replace(/\[color=([^\]]+)\]([\s\S]+?)\[\/color\]/gi, (_, col, inner) => {
-      const c = safeColor(col); return c ? `<span style="color:${c}">${inner}</span>` : inner;
+      const c = safeColor(col);
+      return c ? `<span style="color:${c}">${inner}<\/span>` : inner;
     });
     s = s.replace(/\[bg=([^\]]+)\]([\s\S]+?)\[\/bg\]/gi, (_, col, inner) => {
-      const c = safeColor(col); return c ? `<span style="background:${c};padding:0 .15em;border-radius:.2em">${inner}</span>` : inner;
+      const c = safeColor(col);
+      return c ? `<span style="background:${c};padding:0 .15em;border-radius:.2em">${inner}<\/span>` : inner;
     });
-  // roles (standardized: only s1/s2 are colorized; g1/g2 and guest wrappers are stripped)
-    // Colorize s1 and s2
+    // roles (standardized: only s1/s2 are colorized; g1/g2 and guest wrappers are stripped)
     s = s.replace(/\[s1\]([\s\S]+?)\[\/s1\]/gi, (_, inner) => `<span style="${roleStyle('s1')}">${inner}<\/span>`);
     s = s.replace(/\[s2\]([\s\S]+?)\[\/s2\]/gi, (_, inner) => `<span style="${roleStyle('s2')}">${inner}<\/span>`);
     // Strip g1/g2 wrappers, keep content
