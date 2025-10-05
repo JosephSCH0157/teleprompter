@@ -244,9 +244,18 @@
   }
   function logScrollFailure(scroller, before, desiredTop){
     try {
-      const payload = { scroller: __nodeId(scroller), before, desiredTop, note: 'No change after retries; falling back to step-scroll/root.' };
+      const payload = { scroller: __nodeId(scroller), before, desiredTop, note: 'No change after retries; small step fallback on same scroller.' };
       try { if (typeof HUD?.log === 'function') HUD.log('scroll:stalled', payload); } catch {}
       try { if (typeof debug === 'function') debug({ tag:'scroll:stalled', ...payload }); } catch {}
+    } catch {}
+  }
+  // Small, repeatable step on the SAME scroller; never fall back to root/window
+  function stepScroll(scroller, dir){
+    try {
+      const STEP = 24;
+      const dy = (dir >= 0 ? STEP : -STEP);
+      if (typeof scroller.scrollBy === 'function') scroller.scrollBy({ top: dy, behavior: 'auto' });
+      else scroller.scrollTop = (scroller.scrollTop||0) + dy;
     } catch {}
   }
   // Scroll such that targetY aligns roughly to the band center, verify progress, and escalate if needed
@@ -307,13 +316,10 @@
           if (tries === 2){
             // Force movement on stubborn containers
             try { scroller.scrollTop = targetTop; } catch {}
+            // If direct set had no effect and the delta was not tiny, nudge with a small fixed step on the same scroller
             if (Math.abs((scroller.scrollTop||0) - before) <= 1){
               const delta = targetTop - before;
-              const tier = Number.isFinite(opts?.probeTier) ? Math.max(0, Math.min(3, opts.probeTier)) : 0;
-              const minStep = opts?.aggressive ? (160 + 60 * tier) : 48;
-              const maxStep = opts?.aggressive ? (240 + 80 * tier) : 240;
-              const step = Math.sign(delta) * Math.max(minStep, Math.min(maxStep, Math.abs(delta)));
-              try { scroller.scrollTop = before + step; } catch {}
+              if (Math.abs(delta) >= MIN_NUDGE_PX){ stepScroll(scroller, Math.sign(delta)||1); }
             }
           }
           requestAnimationFrame(verify);
