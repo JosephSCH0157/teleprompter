@@ -110,13 +110,14 @@
     return true;
   }
   function maybeActivate({ idx, sim, cov, suffixHits = 0, jitterStd }){
-    const CONF_T = 0.58;
+    const CONF_T = 0.58; // base
     const conf = computeConf({ sim, cov, jitterStd });
+    const confOk = conf >= Math.max(0.33, CONF_T - 0.25 * cov);
     let reason = null;
     if (sim >= 0.92 && cov >= 0.14) reason = 'sim+cov';
     else if (suffixHits >= 2 && sim >= 0.88) reason = 'suffix';
     else if (cov >= 0.35 && sim >= 0.85) reason = 'cov+sim';
-    else if (conf >= CONF_T) reason = 'conf';
+    else if (confOk) reason = 'conf';
 
     if (reason) {
       __tpLowConfSince = 0;
@@ -3349,12 +3350,53 @@ function __tailDelta(prev, cur){
   } catch { return cur || []; }
 }
 
+// Rough fuzzy match: allow <=1 edit for 4+ char tokens
+function __editDistanceAtMost1(a, b){
+  try {
+    if (a === b) return true;
+    const la = a.length|0, lb = b.length|0;
+    const d = Math.abs(la - lb);
+    if (d > 1) return false;
+    // Same length: allow one substitution
+    if (d === 0){
+      let diff = 0; for (let i=0;i<la;i++){ if (a[i] !== b[i]){ diff++; if (diff > 1) return false; } }
+      return diff <= 1;
+    }
+    // Length diff 1: allow single insertion/deletion via two-pointer scan
+    let i=0,j=0, edits=0; const long = la>lb?a:b, short = la>lb?b:a;
+    while (i<long.length && j<short.length){
+      if (long[i] === short[j]){ i++; j++; }
+      else { edits++; if (edits>1) return false; i++; }
+    }
+    return true; // trailing char allowed
+  } catch { return false; }
+}
+function __roughMatchesAnyToken(token, lineTokens){
+  try {
+    if (!token) return false;
+    const lt = Array.isArray(lineTokens) ? lineTokens : [];
+    // Fast exact match first
+    const set = new Set(lt);
+    if (set.has(token)) return true;
+    if (token.length < 3) return false;
+    for (const s of lt){
+      if (!s) continue;
+      const dl = Math.abs((s.length|0) - (token.length|0));
+      if (dl > 1) continue;
+      if (s.length >= 4 && token.length >= 4 && __editDistanceAtMost1(s, token)) return true;
+    }
+    return false;
+  } catch { return true; }
+}
+
 function tokenCoverage(lineTokens, tailTokens){
   try {
     if (!Array.isArray(lineTokens) || !lineTokens.length) return 0;
     if (!Array.isArray(tailTokens) || !tailTokens.length) return 0;
     // Gate short shards from tail to avoid fake coverage bumps
-    const tail = tailTokens.filter(t => t && t.length >= 3);
+    let tail = tailTokens.filter(t => t && t.length >= 3);
+    // Optional: ignore tokens that don't roughly match any token on the candidate line (helps on messy ASR)
+    try { tail = tail.filter(t => __roughMatchesAnyToken(t, lineTokens)); } catch {}
     if (!tail.length) return 0;
     let i = 0, hit = 0;
     for (const tok of lineTokens){
