@@ -260,7 +260,9 @@
       const [b0, b1] = Array.isArray(band) && band.length===2 ? band : [0.28, 0.55];
       const bandCenter = (b0 + b1) / 2;
       const maxScroll = Math.max(0, (scroller.scrollHeight||0) - vh);
-      const desiredTop = Math.max(0, Math.min(targetY - bandCenter * vh, maxScroll));
+      const desiredTopRaw = Math.max(0, Math.min(targetY - bandCenter * vh, maxScroll));
+      const DPR = (window.devicePixelRatio || 1);
+      const targetTop = Math.max(0, Math.min(Math.round(desiredTopRaw * DPR) / DPR, maxScroll));
       const prefersReduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       const before = (scroller.scrollTop||0);
       // Early success: already in band (with epsilon tolerance)
@@ -270,18 +272,18 @@
         return 'ok:in-band';
       }
       // Early noop: tiny nudge — treat as success and skip actuation
-      const dist = desiredTop - before;
+      const dist = targetTop - before;
       if (Math.abs(dist) < MIN_NUDGE_PX){
-        try { if (typeof debug==='function') debug({ tag:'scroll:tiny-noop', before, desiredTop, dist }); } catch {}
-        try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:tiny-noop', { before, desiredTop, dist }); } catch {}
+        try { if (typeof debug==='function') debug({ tag:'scroll:tiny-noop', before, desiredTop: targetTop, dist }); } catch {}
+        try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:tiny-noop', { before, desiredTop: targetTop, dist }); } catch {}
         return 'ok:tiny-noop';
       }
       // Log actuator attempt before issuing the scroll
-      logScrollAttempt(scroller, before, desiredTop, opts?.aggressive ? 'scrollToBand:aggressive' : 'scrollToBand');
+      logScrollAttempt(scroller, before, targetTop, opts?.aggressive ? 'scrollToBand:aggressive' : 'scrollToBand');
       if (opts?.aggressive) {
-        try { scroller.scrollTop = desiredTop; } catch {}
+        try { scroller.scrollTop = targetTop; } catch {}
       } else {
-        try { scroller.scrollTo({ top: desiredTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = desiredTop; } catch {} }
+        try { scroller.scrollTo({ top: targetTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = targetTop; } catch {} }
       }
       let tries = 0;
       let _lastHudProgressAt = 0;
@@ -290,23 +292,23 @@
           const nowTop = (scroller.scrollTop||0);
           if (Math.abs(nowTop - before) > 1 || tries > 2){
             try {
-              const ev = { tag:'scroll:progress', before, nowTop, desiredTop, scroller: __nodeId(scroller) };
+              const ev = { tag:'scroll:progress', before, nowTop, desiredTop: targetTop, scroller: __nodeId(scroller) };
               if (typeof debug==='function') debug(ev);
               const now = performance.now();
               if (__isHudVerbose() && typeof HUD?.log === 'function' && (now - _lastHudProgressAt) > 500) { HUD.log('scroll:progress', ev); _lastHudProgressAt = now; }
             } catch {}
             if (Math.abs(nowTop - before) <= 1 && tries > 2) {
               // No progress after escalations => log stall
-              logScrollFailure(scroller, before, desiredTop);
+              logScrollFailure(scroller, before, targetTop);
             }
             return;
           }
           tries++;
           if (tries === 2){
             // Force movement on stubborn containers
-            try { scroller.scrollTop = desiredTop; } catch {}
+            try { scroller.scrollTop = targetTop; } catch {}
             if (Math.abs((scroller.scrollTop||0) - before) <= 1){
-              const delta = desiredTop - before;
+              const delta = targetTop - before;
               const tier = Number.isFinite(opts?.probeTier) ? Math.max(0, Math.min(3, opts.probeTier)) : 0;
               const minStep = opts?.aggressive ? (160 + 60 * tier) : 48;
               const maxStep = opts?.aggressive ? (240 + 80 * tier) : 240;
