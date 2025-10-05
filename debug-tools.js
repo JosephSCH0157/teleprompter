@@ -49,6 +49,13 @@
       autoscroll: !!opts.autoscroll,
       maxRows: opts.maxRows,
     };
+    // HUD config: levels and muting
+    const LEVEL_RANK = { DEBUG:10, INFO:20, WARN:30, ERROR:40 };
+    const hudConfig = {
+      enabled: true,
+      minLevel: 'WARN',
+      mute: /^(catchup:hold:oscillation|match:catchup:stop|speech:(stop|onend))$/,
+    };
     const metrics = {
       // commit metrics
       lastCommitAt: 0,
@@ -189,9 +196,15 @@
     };
 
     const HUD = {
-      log(tag, payload){
+      log(tag, payload, level){
         try {
           if (paused) return;
+          const lvl = (typeof level === 'string') ? level : 'DEBUG';
+          if (hudConfig && hudConfig.enabled === false) return;
+          // Level threshold filter: keep suppressed logs in console, not HUD
+          if (LEVEL_RANK[lvl] < LEVEL_RANK[hudConfig.minLevel]) { try { console.debug('[HUD]', tag, payload); } catch {} return; }
+          // Mute pattern: console only
+          try { if (hudConfig.mute && hudConfig.mute.test(String(tag))) { console.debug('[HUD muted]', tag, payload); return; } } catch {}
           appendRow(tag, payload);
         } catch {}
         // Also mirror to console for trace tails
@@ -200,9 +213,17 @@
       show, hide, toggle,
       setFilter(tag, on){ state.filters[tag] = !!on; if (filterChips[tag]) filterChips[tag].classList.toggle('on', !!on); },
       setAutoscroll(on){ state.autoscroll = !!on; cbAuto.checked = !!on; },
+      setConfig(cfg){ try { Object.assign(hudConfig, cfg||{}); } catch {} },
       bus
     };
     try { window.HUD = HUD; } catch {}
+
+    // Global emit wrapper compatible with the requested API
+    try {
+      window.emitHUD = function emitHUD(tag, data, level){
+        try { HUD.log(tag, data, level); } catch {}
+      };
+    } catch {}
 
     // Optional: quiet mode — filter noisy HUD tags to keep console readable during dev
     (function(){
@@ -227,7 +248,7 @@
     if (typeof window.debug !== 'function') {
       window.debug = (evt) => {
         const tag = (evt && (evt.tag || evt.type)) || 'other';
-        HUD.log(tag, evt);
+        HUD.log(tag, evt, 'DEBUG');
       };
     } else {
       // wrap existing debug() to also feed HUD
@@ -235,7 +256,7 @@
       window.debug = function(evt){
         try { orig.apply(this, arguments); } catch {}
         const tag = (evt && (evt.tag || evt.type)) || 'other';
-        HUD.log(tag, evt);
+        HUD.log(tag, evt, 'DEBUG');
       };
     }
 
