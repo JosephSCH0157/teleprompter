@@ -473,14 +473,27 @@
       const covered = (covBest + clusterCov + covActive) > 0;
       function decideCatchup(m){
         if (m.sim >= SIM_GO) return 'go:signal';
-        if (m.stale && !m.anchorVisible && !covered && m.sim >= SIM_PROBE && window.__tpHoldStreak >= HOLD_DEADMAN) return 'go:probe';
+        // Probes allowed independent of coverage; key predicates: stale, anchor invisible, sim above probe, and hold streak
+        if (m.stale && !m.anchorVisible && m.sim >= SIM_PROBE && window.__tpHoldStreak >= HOLD_DEADMAN) return 'go:probe';
         return 'hold';
       }
       const metrics = { lead, sim: bestSim, stale, anchorVisible, covBest, clusterCov, covActive };
       const decision = decideCatchup(metrics);
-      // Log eligibility each tick (debug always; HUD only if verbose)
+      // Log eligibility each tick with reason (debug always; HUD only if verbose)
       try {
-        const ev = { tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision };
+        let reason = (decision === 'go:signal') ? 'ok:signal' : (decision === 'go:probe') ? 'ok:probe' : 'hold';
+        if (decision === 'hold'){
+          const blockers = [];
+          if (bestSim < SIM_GO) blockers.push('sim<thresh');
+          if (!stale) blockers.push('notStale');
+          if (anchorVisible) blockers.push('anchorVisible');
+          if (bestSim < SIM_PROBE) blockers.push('sim<probe');
+          if ((window.__tpHoldStreak|0) < HOLD_DEADMAN) blockers.push('hold<deadman');
+          // coverage is not a gate for probing, but include as info if present
+          if (covered) blockers.push('covered>0');
+          reason = blockers.join('|') || 'hold';
+        }
+        const ev = { tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision, reason, SIM_GO, SIM_PROBE, holdStreak:(window.__tpHoldStreak|0) };
         if (typeof debug==='function') debug(ev);
         if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:eligibility', ev);
       } catch {}
