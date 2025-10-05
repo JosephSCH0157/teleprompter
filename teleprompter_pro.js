@@ -76,6 +76,23 @@
   // Unified scroll scheduler entry: prefer rAF-batched writer if available
   function requestScroll(y){ try { (window.__tpScrollWrite || tpScrollTo)(y); } catch {} }
 
+  // EMA-smoothed confidence computation to resist jitter spikes
+  let __tpJitterEma = 0;
+  function computeConf({ sim, cov, jitterStd }) {
+    try {
+      __tpJitterEma = __tpJitterEma ? (0.3 * jitterStd + 0.7 * __tpJitterEma) : jitterStd;
+      const jFactor = Math.max(0.35, 1 - (__tpJitterEma / 18));
+      const conf = (0.55 * sim + 0.45 * cov) * jFactor;
+      try {
+        if (typeof debug === 'function')
+          debug({ tag:'match:conf', sim:+Number(sim).toFixed(3), cov:+Number(cov).toFixed(2), jitterStd:+Number(jitterStd||0).toFixed(2), jEma:+Number(__tpJitterEma).toFixed(2), jFactor:+Number(jFactor).toFixed(2), conf:+Number(conf).toFixed(3) });
+      } catch {}
+      return conf;
+    } catch {
+      return (0.55 * sim + 0.45 * cov);
+    }
+  }
+
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
     if (typeof window.__tpRealCore !== 'function') {
@@ -3643,7 +3660,7 @@ function advanceByTranscript(transcript, isFinal){
     bestSim = __adj; }
   if (bestSim < EFF_SIM_THRESHOLD) return;
 
-  // Confidence gate before switching active line
+  // Confidence gate before switching active line (EMA-smoothed)
   try {
     // Compute instantaneous coverage for current virtual line
     const vList = __vParaIndex || [];
@@ -3658,9 +3675,8 @@ function advanceByTranscript(transcript, isFinal){
       } catch { covGate = tokenCoverage(lineTokens, spoken); }
     }
     const jitterStd = Number((J.std||0));
-    const conf = (bestSim) * (1 - Math.min(jitterStd/2.0, 1)) * (0.6 + 0.4 * covGate);
+    const conf = computeConf({ sim: bestSim, cov: covGate, jitterStd });
     const forceHigh = (bestSim >= 0.90 && covGate >= 0.50);
-    try { if (typeof debug==='function') debug({ tag:'match:conf', bestIdx, sim:+bestSim.toFixed(3), jitterStd:+jitterStd.toFixed(2), cov:+covGate.toFixed(2), conf:+conf.toFixed(3) }); } catch {}
     if (!(conf >= 0.72 || forceHigh)) {
       // Defer switching active to avoid flicker; let matcher accumulate more evidence
       return;
