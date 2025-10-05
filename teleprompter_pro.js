@@ -415,13 +415,16 @@ const DEFAULT_CONFUSIONS = {
 let CANON = {};
 // One-time, versioned settings migration to merge defaults into localStorage without clobbering user values
 function migrateHudSettings(defaults, opts = {}) {
-  const STORAGE_KEY = opts.storageKey || 'hudSettings';
-  const VERSION     = opts.version || 1; // bump when defaults change
-  const FLAG_KEY    = `${STORAGE_KEY}:migrated:v${VERSION}`;
+  const STORAGE_KEY     = opts.storageKey || 'hudSettings';
+  const VERSION         = (opts.version ?? 1);
+  const versionStrategy = opts.versionStrategy || 'flag'; // 'flag' | 'meta'
+  const FLAG_KEY        = `${STORAGE_KEY}:migrated:v${VERSION}`;
 
   try {
     if (typeof window === 'undefined' || !window.localStorage) return false;
-    if (localStorage.getItem(FLAG_KEY)) return false;
+
+    // Decide if migration already done
+    if (versionStrategy === 'flag' && localStorage.getItem(FLAG_KEY)) return false;
 
     let current = {};
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -429,6 +432,12 @@ function migrateHudSettings(defaults, opts = {}) {
     catch {
       try { localStorage.setItem(`${STORAGE_KEY}:backup:${Date.now()}`, raw || ''); } catch {}
       current = {};
+    }
+
+    // meta-based short-circuit
+    if (versionStrategy === 'meta'){
+      const metaV = current?.__meta?.defaultsVersion ?? 0;
+      if (metaV >= VERSION) return false;
     }
 
     const [merged, changed] = (function mergeMissingDeep(dst, src){
@@ -467,13 +476,22 @@ function migrateHudSettings(defaults, opts = {}) {
       function isPlainObject(x){ return x && typeof x === 'object' && !Array.isArray(x); }
     })(current, defaults);
 
+    // Stamp version according to strategy
+    if (versionStrategy === 'meta'){
+      try {
+        merged.__meta = merged.__meta || {};
+        merged.__meta.defaultsVersion = VERSION;
+        if (!merged.__meta.migratedAt) merged.__meta.migratedAt = new Date().toISOString();
+      } catch {}
+    }
+
     try {
-      if (changed) {
+      if (changed || versionStrategy === 'meta') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
         // let the app know so Settings can re-render
-        try { window.dispatchEvent(new CustomEvent('hudSettings:migrated', { detail: { storageKey: STORAGE_KEY, version: VERSION } })); } catch {}
+        try { window.dispatchEvent(new CustomEvent('hudSettings:migrated', { detail: { storageKey: STORAGE_KEY, version: VERSION, strategy: versionStrategy } })); } catch {}
       }
-      localStorage.setItem(FLAG_KEY, '1'); // one-time per version
+      if (versionStrategy === 'flag') localStorage.setItem(FLAG_KEY, '1'); // one-time per version
     } catch (err) {
       console.warn('hudSettings migration failed:', err);
       return false;
@@ -515,10 +533,27 @@ try {
       line: ['line','l','lion']
     }
   };
-  migrateHudSettings(DEFAULTS, { storageKey: SETTINGS_KEY, version: 1 });
+  migrateHudSettings(DEFAULTS, { storageKey: SETTINGS_KEY, version: 2, versionStrategy: 'meta' });
   const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
   loadConfusions(saved||{});
 } catch {}
+
+// Lightweight hydrator to apply UX settings immediately on migrate or storage updates
+function __readHudSettings(){ try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return {}; } }
+function __applyUxFromSettings(s){
+  try {
+    const ux = s?.ux || {};
+    const root = document.querySelector('.viewer .script');
+    if (root){
+      if (ux.snapActiveOnly) root.classList.add('snap-active-only'); else root.classList.remove('snap-active-only');
+      try { if (typeof window.setSnapMode === 'function') window.setSnapMode(ux.snapActiveOnly ? 'active' : 'all'); } catch {}
+      if (ux.anchorSnap) try { root.style.setProperty('--anchor-snap', ux.anchorSnap); } catch {}
+    }
+  } catch {}
+}
+try { __applyUxFromSettings(__readHudSettings()); } catch {}
+window.addEventListener('hudSettings:migrated', (ev)=>{ try { __applyUxFromSettings(__readHudSettings()); } catch {} });
+window.addEventListener('storage', (e)=>{ try { if (e && e.key === SETTINGS_KEY) __applyUxFromSettings(__readHudSettings()); } catch {} });
 }
 
 // Shared Normalize wiring helper
