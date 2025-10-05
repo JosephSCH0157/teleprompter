@@ -212,6 +212,28 @@
     } catch { return document.scrollingElement || document.documentElement || document.body; }
   }
   function __nodeId(node){ try { return (node && (node.id || node.getAttribute?.('data-testid') || node.tagName)) || 'unknown'; } catch { return 'unknown'; } }
+  // Tolerance + hysteresis for scroll targeting
+  const MIN_NUDGE_PX = 2;   // ignore attempts smaller than this
+  const IN_BAND_EPS  = 6;   // sticky band tolerance to avoid re-triggering
+  const HYSTERESIS   = 12;  // must drift > this before we try again
+  function inBand(targetY, top, vh, band){
+    try {
+      const b0 = Array.isArray(band) ? band[0] : 0.28;
+      const b1 = Array.isArray(band) ? band[1] : 0.55;
+      const minTop = targetY - b1*vh - IN_BAND_EPS;
+      const maxTop = targetY - b0*vh + IN_BAND_EPS;
+      return top >= minTop && top <= maxTop;
+    } catch { return false; }
+  }
+  function isOutsideBandBy(targetY, top, vh, band, px){
+    try {
+      const b0 = Array.isArray(band) ? band[0] : 0.28;
+      const b1 = Array.isArray(band) ? band[1] : 0.55;
+      const minTop = targetY - b1*vh - (px||0);
+      const maxTop = targetY - b0*vh + (px||0);
+      return (top < minTop) || (top > maxTop);
+    } catch { return true; }
+  }
   // Action-level scroll logs
   function logScrollAttempt(scroller, before, desiredTop, reason){
     try {
@@ -241,6 +263,19 @@
       const desiredTop = Math.max(0, Math.min(targetY - bandCenter * vh, maxScroll));
       const prefersReduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       const before = (scroller.scrollTop||0);
+      // Early success: already in band (with epsilon tolerance)
+      if (inBand(targetY, before, vh, band)){
+        try { if (typeof debug==='function') debug({ tag:'scroll:in-band', before, targetY, band }); } catch {}
+        try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:in-band', { before, targetY, band }); } catch {}
+        return 'ok:in-band';
+      }
+      // Early noop: tiny nudge — treat as success and skip actuation
+      const dist = desiredTop - before;
+      if (Math.abs(dist) < MIN_NUDGE_PX){
+        try { if (typeof debug==='function') debug({ tag:'scroll:tiny-noop', before, desiredTop, dist }); } catch {}
+        try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:tiny-noop', { before, desiredTop, dist }); } catch {}
+        return 'ok:tiny-noop';
+      }
       // Log actuator attempt before issuing the scroll
       logScrollAttempt(scroller, before, desiredTop, opts?.aggressive ? 'scrollToBand:aggressive' : 'scrollToBand');
       if (opts?.aggressive) {
@@ -505,6 +540,18 @@
           const aggressive = (decision === 'go:probe') || (__tpStagnantTicks > 12);
           const band = (decision === 'go:probe') ? __tpProbeBandForTier(__tpProbeTier) : [0.28, 0.55];
           const estY = estimateY(frontierWord);
+          // Hysteresis: don’t fire catch-up unless target drifted sufficiently outside the band
+          try {
+            const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+            const useWindow = (sc === document.scrollingElement || sc === document.documentElement || sc === document.body);
+            const vhNow = useWindow ? (window.innerHeight||0) : (sc.clientHeight||0);
+            const topNow = (sc.scrollTop||0);
+            if (!isOutsideBandBy(estY, topNow, vhNow, band, HYSTERESIS) && decision !== 'go:probe'){
+              // For normal signal-go, bail if within hysteresis margin
+              try { if (typeof debug==='function') debug({ tag:'catchup:hysteresis-suppress', topNow, estY, band, HYSTERESIS }); } catch {}
+              return; // skip this tick
+            }
+          } catch {}
           try {
             const bestIdx = frontierWord; const frontierIdx = frontierWord;
             const haveExact = (function(){ try { return !!(__tpYByIdx && __tpYByIdx.has(frontierIdx)); } catch { return false; } })();
