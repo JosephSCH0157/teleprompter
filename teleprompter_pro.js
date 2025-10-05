@@ -73,6 +73,8 @@
       }
     } catch {}
   }
+  // Unified scroll scheduler entry: prefer rAF-batched writer if available
+  function requestScroll(y){ try { (window.__tpScrollWrite || tpScrollTo)(y); } catch {} }
 
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
@@ -2036,8 +2038,8 @@ async function _initCore() {
         return true;
       }
 
-      // If nothing else, log and bail
-      try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'noop' }); } catch {}
+  // If nothing else, bail silently (reduce log noise)
+  // try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'noop' }); } catch {}
       return false;
     };
   })();
@@ -2065,6 +2067,25 @@ async function _initCore() {
       try { deadmanWatchdog(currentIndex); } catch {}
     }
   }, 250);
+
+  // STALL resolver (don’t spin): react to emitted stall events
+  try {
+    window.addEventListener('tp:stall', (ev) => {
+      try {
+        const data = ev?.detail || {};
+        const cov = Number(data.cov || 0);
+        const now = performance.now();
+        if (cov >= 0.70) {
+          const recentSuffix = (typeof window.__tpLastSuffixHitAt === 'number') && ((now - window.__tpLastSuffixHitAt) < 400);
+          if (recentSuffix) {
+            try { if (typeof window.commitLine === 'function') window.commitLine(); } catch {}
+          } else {
+            try { if (typeof window.scheduleCatchupScan === 'function') window.scheduleCatchupScan(); } catch {}
+          }
+        }
+      } catch {}
+    });
+  } catch {}
 
   // After wiring open/close for the overlay:
   (window.__help?.ensureHelpUI || ensureHelpUI)();  // <- renames “Shortcuts” to “Help” and injects Normalize + Validate
@@ -3351,7 +3372,10 @@ function maybeSoftAdvance(bestIdx, bestSim, spoken){
     const COV_T   = listMode ? 0.65 : COV_THRESH;
     const STALL_T = listMode ? 700  : STALL_MS;
   const suffix = suffixHit(lineTokens, spoken, 6);
-  if (suffix) { try { if (typeof debug==='function') debug({ tag:'SUFFIX_HIT', idx: bestIdx, k: 6, ok: true }); } catch {} }
+  if (suffix) {
+    try { window.__tpLastSuffixHitAt = performance.now(); } catch {}
+    try { if (typeof debug==='function') debug({ tag:'SUFFIX_HIT', idx: bestIdx, k: 6, ok: true }); } catch {}
+  }
     const earlyOk = (stagnantMs >= SOFT_EARLY_MS) && (cov >= COV_T || suffix);
     const lateOk  = (stagnantMs >= STALL_T)       && (cov >= COV_T);
     if (earlyOk || lateOk){
@@ -3566,7 +3590,19 @@ function advanceByTranscript(transcript, isFinal){
       const newTail = __tailDelta(__tpPrevTail, spoken);
       if (newTail.length) {
         __feedLineTracker(newTail);
-        try { if (typeof debug==='function') debug({ tag:'COV_UPDATE', idx: bestIdx, pos: __tpLineTracker.pos, len: __tpLineTracker.len, tokens: newTail.slice() }); } catch {}
+        // Debounce coverage update logs/UI to avoid flicker on partial tokens
+        try {
+          const buf = (window.__tpCovBuf ||= []);
+          buf.push(...newTail);
+          clearTimeout(window.__tpCovT);
+          window.__tpCovT = setTimeout(()=>{
+            try {
+              const tokens = (window.__tpCovBuf||[]).slice(-24); // cap payload
+              if (typeof debug==='function') debug({ tag:'COV_UPDATE', idx: bestIdx, pos: __tpLineTracker.pos, len: __tpLineTracker.len, tokens });
+            } catch {}
+            try { window.__tpCovBuf = []; } catch {}
+          }, 80);
+        } catch {}
       }
       __tpPrevTail = spoken.slice();
     }
@@ -3606,6 +3642,30 @@ function advanceByTranscript(transcript, isFinal){
   if (__adj !== bestSim){ try { if (typeof debug==='function') debug({ tag:'match:sim:end-ease', bestIdx, sim:Number(bestSim.toFixed(3)), adj:Number(__adj.toFixed(3)) }); } catch {}
     bestSim = __adj; }
   if (bestSim < EFF_SIM_THRESHOLD) return;
+
+  // Confidence gate before switching active line
+  try {
+    // Compute instantaneous coverage for current virtual line
+    const vList = __vParaIndex || [];
+    const vCur = vList.find(v => bestIdx >= v.start && bestIdx <= v.end) || null;
+    const vIdx = vCur ? vList.indexOf(vCur) : -1;
+    let covGate = 0;
+    if (vIdx >= 0){
+      const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1);
+      try {
+        if (__tpLineTracker.vIdx === vIdx) covGate = Math.min(1, (__tpLineTracker.pos||0) / Math.max(1, __tpLineTracker.len||1));
+        else covGate = tokenCoverage(lineTokens, spoken);
+      } catch { covGate = tokenCoverage(lineTokens, spoken); }
+    }
+    const jitterStd = Number((J.std||0));
+    const conf = (bestSim) * (1 - Math.min(jitterStd/2.0, 1)) * (0.6 + 0.4 * covGate);
+    const forceHigh = (bestSim >= 0.90 && covGate >= 0.50);
+    try { if (typeof debug==='function') debug({ tag:'match:conf', bestIdx, sim:+bestSim.toFixed(3), jitterStd:+jitterStd.toFixed(2), cov:+covGate.toFixed(2), conf:+conf.toFixed(3) }); } catch {}
+    if (!(conf >= 0.72 || forceHigh)) {
+      // Defer switching active to avoid flicker; let matcher accumulate more evidence
+      return;
+    }
+  } catch {}
 
   // Lost-mode tracker: increment low-sim runs and enter lost if jitter large
   try {
@@ -3679,7 +3739,11 @@ function advanceByTranscript(transcript, isFinal){
 
   // Soften big forward jumps unless similarity is very strong
   const delta = bestIdx - currentIndex;
-  debug({
+  // Only log candidate when index or score meaningfully changes
+  const __candPrev = (window.__tpLastCand ||= { idx: -1, score: -1 });
+  const __scoreNow = Number(bestSim.toFixed(3));
+  const __logCand = (bestIdx !== __candPrev.idx) || (Math.abs(__scoreNow - __candPrev.score) >= 0.01);
+  if (__logCand) debug({
     tag: 'match:candidate',
     // normalize spoken tail consistently with line keys and matcher
     spokenTail: (function(){ try { return normTokens(spoken.join(' ')).join(' '); } catch { return spoken.join(' '); } })(),
@@ -3707,6 +3771,7 @@ function advanceByTranscript(transcript, isFinal){
     })(),
     delta
   });
+  try { window.__tpLastCand = { idx: bestIdx, score: __scoreNow }; } catch {}
   // Visibility gate: ensure the target paragraph is visible in the active scroller before advancing idx
   try {
     if (paraIndex && paraIndex.length) {
@@ -3776,6 +3841,20 @@ function advanceByTranscript(transcript, isFinal){
             const nowV = performance.now();
             const buf = (window.__tpVisFailBuf ||= []);
             if (!visible) { buf.push(nowV); while (buf.length && nowV - buf[0] > 500) buf.shift(); }
+          } catch {}
+          // Anchor attempt cap + single-shot fallback
+          try {
+            const attempts = (window.__tpVisAttempt||0);
+            if (attempts > 8) {
+              // Cancel anchor work for now and center the active line smoothly (respect reduced motion)
+              const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              const el = curActive || nextPara.el;
+              try { el?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion ? 'auto' : 'smooth' }); } catch {}
+              try { if (typeof debug==='function') debug({ tag:'anchor:giveup', idx: bestIdx, attempts }); } catch {}
+              try { if (typeof HUD?.log === 'function') HUD.log('anchor:giveup', { idx: bestIdx, attempts }); } catch {}
+              try { window.__tpVisAttempt = 0; } catch {}
+              try { st.lastIdx = bestIdx; st.lastActive = el; } catch {}
+            }
           } catch {}
         }
         // Update coalesce state
