@@ -196,6 +196,63 @@
   }
   try { window.ensureInView = ensureInView; } catch {}
 
+  // Find the nearest scrollable ancestor (overflowY/overflow auto|scroll|overlay) or fall back to document.scrollingElement
+  function getScrollableAncestor(el){
+    try {
+      let a = el;
+      while (a){
+        try {
+          const s = getComputedStyle(a);
+          const canScroll = /(auto|scroll|overlay)/.test(s.overflowY || s.overflow || '');
+          if (canScroll && (a.scrollHeight > (a.clientHeight + 4))) return a;
+        } catch {}
+        a = a.parentElement;
+      }
+      return document.scrollingElement || document.documentElement || document.body;
+    } catch { return document.scrollingElement || document.documentElement || document.body; }
+  }
+  function __nodeId(node){ try { return (node && (node.id || node.getAttribute?.('data-testid') || node.tagName)) || 'unknown'; } catch { return 'unknown'; } }
+  // Scroll such that targetY aligns roughly to the band center, verify progress, and escalate if needed
+  function scrollToBand(targetY, band=[0.28, 0.55], anchorEl=null, opts={}){
+    try {
+      const scroller = getScrollableAncestor(anchorEl || document.getElementById('viewer') || document.body);
+      if (__tpReaderLocked && !opts.overrideLock) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', reason:'scrollToBand' }); } catch {} return; }
+      const isRoot = (scroller === document.scrollingElement || scroller === document.documentElement || scroller === document.body);
+      const vh = isRoot ? (window.innerHeight||0) : (scroller.clientHeight||0);
+      if (!vh) return;
+      const [b0, b1] = Array.isArray(band) && band.length===2 ? band : [0.28, 0.55];
+      const bandCenter = (b0 + b1) / 2;
+      const maxScroll = Math.max(0, (scroller.scrollHeight||0) - vh);
+      const desiredTop = Math.max(0, Math.min(targetY - bandCenter * vh, maxScroll));
+      const prefersReduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      const before = (scroller.scrollTop||0);
+      try { scroller.scrollTo({ top: desiredTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = desiredTop; } catch {} }
+      let tries = 0;
+      const verify = () => {
+        try {
+          const nowTop = (scroller.scrollTop||0);
+          if (Math.abs(nowTop - before) > 1 || tries > 2){
+            try { if (typeof debug==='function') debug({ tag:'scroll:progress', before, nowTop, desiredTop, scroller: __nodeId(scroller) }); } catch {}
+            return;
+          }
+          tries++;
+          if (tries === 2){
+            // Force movement on stubborn containers
+            try { scroller.scrollTop = desiredTop; } catch {}
+            if (Math.abs((scroller.scrollTop||0) - before) <= 1){
+              const delta = desiredTop - before;
+              const step = Math.sign(delta) * Math.max(48, Math.min(240, Math.abs(delta)));
+              try { scroller.scrollTop = before + step; } catch {}
+            }
+          }
+          requestAnimationFrame(verify);
+        } catch {}
+      };
+      requestAnimationFrame(verify);
+    } catch {}
+  }
+  try { window.getScrollableAncestor = getScrollableAncestor; window.scrollToBand = scrollToBand; } catch {}
+
   // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
   function evaluateCatchUp(){
     try {
@@ -256,10 +313,7 @@
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
           if (el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else {
-            const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
-            const vh = (sc === window) ? (window.innerHeight||0) : (sc.clientHeight||0);
-            const targetTop = Math.max(0, (el?.offsetTop||0) - Math.floor(vh * 0.25));
-            maybeAutoScroll(targetTop, sc, { overrideLock: true });
+            try { const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body); scrollToBand((el?.offsetTop||0), [0.25, 0.55], el || null, { overrideLock: true }); } catch {}
           }
           try { if (typeof debug==='function') debug({ tag:'scroll:catchup:tick', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
         } catch {}
