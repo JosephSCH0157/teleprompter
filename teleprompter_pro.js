@@ -249,11 +249,17 @@
         try { scroller.scrollTo({ top: desiredTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = desiredTop; } catch {} }
       }
       let tries = 0;
+      let _lastHudProgressAt = 0;
       const verify = () => {
         try {
           const nowTop = (scroller.scrollTop||0);
           if (Math.abs(nowTop - before) > 1 || tries > 2){
-            try { if (typeof debug==='function') debug({ tag:'scroll:progress', before, nowTop, desiredTop, scroller: __nodeId(scroller) }); } catch {}
+            try {
+              const ev = { tag:'scroll:progress', before, nowTop, desiredTop, scroller: __nodeId(scroller) };
+              if (typeof debug==='function') debug(ev);
+              const now = performance.now();
+              if (__isHudVerbose() && typeof HUD?.log === 'function' && (now - _lastHudProgressAt) > 500) { HUD.log('scroll:progress', ev); _lastHudProgressAt = now; }
+            } catch {}
             if (Math.abs(nowTop - before) <= 1 && tries > 2) {
               // No progress after escalations => log stall
               logScrollFailure(scroller, before, desiredTop);
@@ -441,8 +447,12 @@
       let covActive = 0; try {
         const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
       } catch { covActive = 0; }
-      // Log eligibility each tick for visibility
-      try { if (typeof debug==='function') debug({ tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision: shouldCatchUp ? 'go' : 'hold' }); } catch {}
+      // Log eligibility each tick (debug always; HUD only if verbose)
+      try {
+        const ev = { tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision: shouldCatchUp ? 'go' : 'hold' };
+        if (typeof debug==='function') debug(ev);
+        if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:eligibility', ev);
+      } catch {}
       if (shouldCatchUp){
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
@@ -484,7 +494,11 @@
         const armed = (window.__tpWatchdogArmed !== false);
         if (!anchorVisible && offTooLong && !isUserScrolling() && armed) {
           if (activeEl) { beginProgrammaticScroll(); ensureInView(activeEl, { top: 0.25, bottom: 0.55 }); setTimeout(()=> endProgrammaticScroll(), 300); }
-          try { if (typeof debug==='function') debug({ tag:'watchdog:recenter', offMs: Math.round(now - lastIn) }); } catch {}
+          try {
+            const ev = { tag:'watchdog:recenter', offMs: Math.round(now - lastIn) };
+            if (typeof debug==='function') debug(ev);
+            if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('watchdog:recenter', ev);
+          } catch {}
           try { window.__tpWatchdogArmed = false; } catch {}
         }
         if (anchorVisible) { try { window.__tpWatchdogArmed = true; } catch {} }
@@ -1010,6 +1024,12 @@ try {
 
 // Lightweight hydrator to apply UX settings immediately on migrate or storage updates
 function __readHudSettings(){ try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return {}; } }
+function __isHudVerbose(){
+  try {
+    const s = __readHudSettings();
+    return !!(s?.debug?.verbose);
+  } catch { return false; }
+}
 function __applyUxFromSettings(s){
   try {
     const ux = s?.ux || {};
@@ -5554,6 +5574,7 @@ function startAutoScroll(){
   if (autoTimer) return;
   // Pause catch-up controller while auto-scroll is active
   try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
+  try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('autoscroll:start', { speed: Number(autoSpeed?.value)||0 }); } catch {}
   const step = () => {
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
     try { scrollByPx(pxPerSec / 60); } catch { viewer.scrollTop += (pxPerSec / 60); }
@@ -5564,6 +5585,7 @@ function startAutoScroll(){
     }
     // keep label updated with live speed
     autoToggle.textContent = `Auto-scroll: On (${pxPerSec}px/s)`;
+    try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('autoscroll:tick', { speed: pxPerSec }); } catch {}
   };
   autoTimer = setInterval(step, 1000 / 60);
   step(); // immediate tick so it feels responsive
@@ -5573,6 +5595,7 @@ function stopAutoScroll(){
   clearInterval(autoTimer);
   autoTimer = null;
   autoToggle.textContent = 'Auto-scroll: Off';
+  try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('autoscroll:stop', {}); } catch {}
   // Resume catch-up controller if speech sync is active — via heuristic gate
   if (recActive) {
     try {
@@ -5990,6 +6013,7 @@ async function init(){
     };
 
     let _lastInterimAt = 0;
+    let _lastInterimHudAt = 0;
     recog.onresult = (e) => {
       let interim = '';
       let finals  = '';
@@ -6013,6 +6037,15 @@ async function init(){
       const now = performance.now();
       if (interim && (now - _lastInterimAt) > 150) {
         _lastInterimAt = now;
+        // Verbose HUD: rate-limit interim previews to <= 2/sec
+        try {
+          if (__isHudVerbose() && typeof HUD?.log === 'function' && (now - _lastInterimHudAt) > 500) {
+            const sample = String(interim).trim();
+            const preview = sample.length > 64 ? (sample.slice(0, 64) + '…') : sample;
+            HUD.log('speech:interim', { len: sample.length, preview });
+            _lastInterimHudAt = now;
+          }
+        } catch {}
         advanceByTranscript(interim, /*isFinal*/false);
       }
     };
