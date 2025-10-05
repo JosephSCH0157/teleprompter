@@ -103,6 +103,41 @@
     }
   }
 
+  // Reader-lock: when the anchor (active line) is out of view for >2 frames (~250ms), pause auto-follow
+  const VIEW_GUARD_MS = 250;
+  let __tpAnchorOffAt = 0;
+  let __tpReaderLocked = false;
+  function onAnchorVisibility(visible){
+    try {
+      const now = performance.now();
+      if (!visible) {
+        if (!__tpAnchorOffAt) __tpAnchorOffAt = now;
+        if (!__tpReaderLocked && (now - __tpAnchorOffAt) > VIEW_GUARD_MS) {
+          __tpReaderLocked = true;
+          try { if (typeof HUD?.log === 'function') HUD.log('reader:locked', { since: __tpAnchorOffAt, at: now }); } catch {}
+          try { if (typeof debug === 'function') debug({ tag:'reader:locked', since: __tpAnchorOffAt, at: now }); } catch {}
+        }
+      } else {
+        __tpAnchorOffAt = 0;
+      }
+    } catch {}
+  }
+  function unlockReaderLock(reason='manual'){
+    try {
+      __tpReaderLocked = false; __tpAnchorOffAt = 0;
+      const now = performance.now();
+      try { if (typeof HUD?.log === 'function') HUD.log('reader:unlocked', { at: now, reason }); } catch {}
+      try { if (typeof debug === 'function') debug({ tag:'reader:unlocked', at: now, reason }); } catch {}
+    } catch {}
+  }
+  function maybeAutoScroll(targetY, scroller){
+    try {
+      if (__tpReaderLocked) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY }); } catch {} return; }
+      requestScroll(targetY);
+    } catch {}
+  }
+  try { window.unlockReaderLock = unlockReaderLock; } catch {}
+
   // Activation helpers: tolerate jitter using EMA conf, suffix hits, and a timeout guard
   let __tpLowConfSince = 0;
   function activateLine(idx, opts = {}){
@@ -3894,7 +3929,8 @@ function advanceByTranscript(transcript, isFinal){
       if (nextPara && nextPara.el && typeof nextPara.el.getBoundingClientRect === 'function'){
         const r = nextPara.el.getBoundingClientRect();
         const top = r.top - scTop; const bottom = r.bottom - scTop;
-        const visible = (top >= 0 && bottom <= vh);
+  const visible = (top >= 0 && bottom <= vh);
+  try { if (typeof onAnchorVisibility === 'function') onAnchorVisibility(!!visible); } catch {}
         // Coalesce triggers: only when idx changes, active element changes, or anchor is not visible
         const curActive = (document.querySelector('.transcript-line.is-active') || document.querySelector('p.active') || null);
         const st = (window.__tpVisGateState ||= { lastIdx: -1, lastActive: null });
@@ -4437,6 +4473,7 @@ function advanceByTranscript(transcript, isFinal){
     }
     function ensureVisible(el){
       try {
+        if (window.__tpReaderLocked) return; // don't yank the page while user reads
         const h = scroller.clientHeight || 0;
         const r = el.getBoundingClientRect();
         if (h && inComfortBand(r, h)) return; // Already good
@@ -4448,7 +4485,7 @@ function advanceByTranscript(transcript, isFinal){
         }
         // Fallback DOM snap once layout settles (benefits from scroll-margin-block)
         requestAnimationFrame(()=>{
-          try { el.scrollIntoView({ block:'center', inline:'nearest' }); } catch {}
+          try { if (!window.__tpReaderLocked) el.scrollIntoView({ block:'center', inline:'nearest' }); } catch {}
         });
       } catch {}
     }
@@ -4461,6 +4498,7 @@ function advanceByTranscript(transcript, isFinal){
         try { io.observe(el); } catch {}
         ensureVisible(el);
         lastIdx = idx; lastRunTs = performance.now();
+        try { if (typeof onAnchorVisibility === 'function') onAnchorVisibility(inComfortBand(el.getBoundingClientRect(), scroller.clientHeight||0)); } catch {}
       });
     }
     // Optional: pause auto-follow while the user scrolls
