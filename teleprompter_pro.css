@@ -135,6 +135,38 @@ select { font-size: 14px; }
 
         /* Safety: if we ever need to disable snapping entirely */
         .viewer .script.no-snap p { scroll-margin-block: 0; }
+
+/* Live-hydrated teleprompter variables */
+.viewer{
+    --viewer-active-bg:        #fffbcc;
+    --viewer-inactive-opacity: 1;
+    --viewer-font-size:        18px;
+    --viewer-line-height:      1.5;
+    --viewer-scroll-margin-top:140px;
+    --viewer-anchor-padding:   0px;
+
+    font-size: var(--viewer-font-size);
+    line-height: var(--viewer-line-height);
+}
+
+/* Visual rules driven by settings */
+.script p{ scroll-margin-top: var(--viewer-scroll-margin-top); }
+.script p.anchor{ padding-top: var(--viewer-anchor-padding); }
+.script p.active{ background: var(--viewer-active-bg); }
+.script p:not(.active){
+    opacity: var(--viewer-inactive-opacity);
+    transition: opacity .12s ease;
+}
+
+/* Optional snap-active-only mode */
+.viewer.snap-only .script p:not(.active){
+    opacity: var(--viewer-inactive-opacity, .4);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce){
+    .script p:not(.active){ transition: none; }
+}
     .u{ text-decoration: underline; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 
