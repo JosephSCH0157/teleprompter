@@ -272,8 +272,10 @@
             try { scroller.scrollTop = desiredTop; } catch {}
             if (Math.abs((scroller.scrollTop||0) - before) <= 1){
               const delta = desiredTop - before;
-              const minStep = opts?.aggressive ? 160 : 48;
-              const step = Math.sign(delta) * Math.max(minStep, Math.min(240, Math.abs(delta)));
+              const tier = Number.isFinite(opts?.probeTier) ? Math.max(0, Math.min(3, opts.probeTier)) : 0;
+              const minStep = opts?.aggressive ? (160 + 60 * tier) : 48;
+              const maxStep = opts?.aggressive ? (240 + 80 * tier) : 240;
+              const step = Math.sign(delta) * Math.max(minStep, Math.min(maxStep, Math.abs(delta)));
               try { scroller.scrollTop = before + step; } catch {}
             }
           }
@@ -313,6 +315,23 @@
     } catch {}
   }
   function avgLineHeight(){ return __tpAvgPerWordH; }
+  // Probe escalation state and helpers
+  let __tpProbeTier = 0; // 0..3
+  let __tpPrevProbeSim = 0;
+  let __tpPrevProbeCov = 0;
+  function __tpProbeBandForTier(t){
+    try { const n = Math.max(0, Math.min(3, Number(t)||0)); return n===0? [0.20,0.50] : n===1? [0.15,0.55] : n===2? [0.10,0.60] : [0.05,0.65]; } catch { return [0.20,0.50]; }
+  }
+  function __tpAfterProbeSample(prevSim, prevCov, m){
+    try {
+      const cov = (Number(m?.covBest)||0) + (Number(m?.clusterCov)||0) + (Number(m?.covActive)||0);
+      if ((Number(m?.sim)||0) > (Number(prevSim)||0) + 0.02 || cov > (Number(prevCov)||0)) {
+        __tpProbeTier = 0; // progress: reset
+      } else {
+        __tpProbeTier = Math.min(3, (__tpProbeTier|0) + 1);
+      }
+    } catch {}
+  }
   function refreshYIndexMap(){
     try {
       yByIdx.clear();
@@ -471,7 +490,7 @@
           // Control loop: widen band and skip smoothing if probing or after repeated no-op attempts
           __tpStagnantTicks++;
           const aggressive = (decision === 'go:probe') || (__tpStagnantTicks > 12);
-          const band = (decision === 'go:probe') ? [0.20, 0.50] : [0.28, 0.55];
+          const band = (decision === 'go:probe') ? __tpProbeBandForTier(__tpProbeTier) : [0.28, 0.55];
           const estY = estimateY(frontierWord);
           try {
             const bestIdx = frontierWord; const frontierIdx = frontierWord;
@@ -481,7 +500,10 @@
           } catch {}
           const lastTop = currentScrollTop();
           beginProgrammaticScroll();
-          scrollToBand(estY, band, el || null, { overrideLock: true, aggressive });
+          // Snapshot metrics before probe to compare after movement
+          const prevSim = bestSim;
+          const prevCov = (covBest + clusterCov + covActive);
+          scrollToBand(estY, band, el || null, { overrideLock: true, aggressive, probeTier: (decision==='go:probe') ? __tpProbeTier : 0 });
           setTimeout(()=>{
             try {
               const nowTop = currentScrollTop();
@@ -492,6 +514,16 @@
               }
               // Reset hold streak after any go
               window.__tpHoldStreak = 0;
+              // If this was a probe, evaluate progress and adjust tier
+              if (decision === 'go:probe') {
+                const m2 = { lead, sim: bestSim, stale, anchorVisible, covBest, clusterCov, covActive };
+                __tpAfterProbeSample(prevSim, prevCov, m2);
+                try {
+                  if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:probe_tier', { tier: __tpProbeTier, prevSim: +Number(prevSim).toFixed(2), sim: +Number(bestSim).toFixed(2), prevCov: +Number(prevCov).toFixed(2), cov: +Number((covBest+clusterCov+covActive)).toFixed(2) });
+                } catch {}
+              } else {
+                __tpProbeTier = 0; // normal success resets probe tier
+              }
             } catch {}
             endProgrammaticScroll();
           }, 300);
