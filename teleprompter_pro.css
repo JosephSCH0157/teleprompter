@@ -121,9 +121,20 @@ select { font-size: 14px; }
 
     .viewer{position:relative;overflow:auto;min-height:0}
     .script{max-width:900px;margin:0 auto;padding:40px}
-    .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
-    /* Natural centering for programmatic scrollIntoView */
-    .script p{ scroll-margin-top: 40vh; }
+        .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
+        /* Default: enable snapping for all script paragraphs, but only inside the viewer */
+        .viewer .script { --anchor-snap: 45vh; }
+        .viewer .script p { scroll-margin-block: var(--anchor-snap); }
+
+        /* Toggle to “active only” mode at runtime */
+        .viewer .script.snap-active-only p { scroll-margin-block: 0; }
+        .viewer .script.snap-active-only p.active,
+        .viewer .script.snap-active-only p.anchor {
+            scroll-margin-block: var(--anchor-snap);
+        }
+
+        /* Safety: if we ever need to disable snapping entirely */
+        .viewer .script.no-snap p { scroll-margin-block: 0; }
     .u{ text-decoration: underline; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 

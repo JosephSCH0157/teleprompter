@@ -338,6 +338,7 @@
 
   // Missing constants / safe fallbacks (restored)
   const DEVICE_KEY = 'tp_mic_device_v1';
+  const SETTINGS_KEY = 'hudSettings';
   // Define globals used later to avoid early ReferenceErrors halting script
   let dbAnim = null;          // requestAnimationFrame id for dB meter
   let audioStream = null;     // MediaStream for mic
@@ -397,6 +398,23 @@ function setStatus(msg){
   } catch (e) {
     // ignore
   }
+
+// Confusion pairs canonicalization: editable via Settings
+let CANON = {};
+function loadConfusions(settings){
+  try {
+    CANON = {};
+    const pairs = settings && settings.confusionPairs || {};
+    for (const [canon, alts] of Object.entries(pairs)){
+      for (const alt of (alts||[])) { CANON[String(alt||'').toLowerCase()] = String(canon||''); }
+    }
+  } catch {}
+}
+function canonicalizeToken(token){ try { const t=String(token||'').toLowerCase(); return CANON[t] || token; } catch { return token; } }
+function normalizeTail(tail){ try { return String(tail||'').split(/\s+/).filter(Boolean).map(canonicalizeToken).join(' '); } catch { return String(tail||''); } }
+function saveSettings(settings){ try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings||{})); loadConfusions(settings||{}); } catch {} }
+// Boot-load settings
+try { const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); loadConfusions(saved||{}); } catch {}
 }
 
 // Shared Normalize wiring helper
@@ -1881,6 +1899,17 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} }
           try{ updateDebugPosChip(); }catch{}
         };
+        // Snap mode toggle: 'all' | 'active' | 'off'
+        try {
+          window.setSnapMode = function setSnapMode(mode){
+            try {
+              const root = document.querySelector('.viewer .script');
+              if (!root) return;
+              root.classList.toggle('snap-active-only', mode === 'active');
+              root.classList.toggle('no-snap', mode === 'off');
+            } catch {}
+          };
+        } catch {}
       } catch {}
     })();
     } catch(e) { console.warn('scroll-helpers load failed', e); }
@@ -3399,7 +3428,7 @@ function advanceByTranscript(transcript, isFinal){
       const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
       const doc = document;
       // Build a tail phrase of 3-5 tokens from spoken tail
-      const tail = (function(){ try { const arr=(window.__tpPrevTail||[]); const n=Math.min(5, Math.max(3, arr.length)); return arr.slice(-n).join(' '); } catch { return ''; } })();
+      const tail = (function(){ try { const arr=(window.__tpPrevTail||[]); const n=Math.min(5, Math.max(3, arr.length)); return normalizeTail(arr.slice(-n).join(' ')); } catch { return ''; } })();
       if (tail && doc){
         // Find nearest paragraph whose text includes the tail (case-insensitive)
         const paras = Array.from(doc.querySelectorAll('#script p'));
