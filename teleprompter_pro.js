@@ -196,6 +196,75 @@
   }
   try { window.ensureInView = ensureInView; } catch {}
 
+  // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
+  function evaluateCatchUp(){
+    try {
+      const vList = __vParaIndex || [];
+      if (!Array.isArray(vList) || !vList.length) return;
+      const fIdx = (typeof window.__tpFrontierIdx === 'number' && window.__tpFrontierIdx >= 0) ? window.__tpFrontierIdx : currentIndex || 0;
+      const frontierWord = Math.max(0, Math.min(Math.round(fIdx), (scriptWords?.length||1) - 1));
+      const vCurIdx = vList.findIndex(v => frontierWord >= v.start && frontierWord <= v.end);
+      if (vCurIdx < 0) return;
+      const vCur = vList[vCurIdx];
+      // Compute cluster coverage around frontier using last spoken tail
+      let clusterCov = 0;
+      try {
+        const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : [];
+        const w = [vCurIdx - 1, vCurIdx, vCurIdx + 1].filter(i => i >= 0 && i < vList.length);
+        let hit = 0, tot = 0;
+        for (const i of w){
+          const tks = scriptWords.slice(vList[i].start, vList[i].end + 1);
+          const c = tokenCoverage(tks, tail);
+          const wgt = (i === vCurIdx) ? 1.0 : 0.6;
+          hit += wgt * (c * tks.length);
+          tot += wgt * tks.length;
+        }
+        clusterCov = tot ? (hit / tot) : 0;
+      } catch { clusterCov = 0; }
+      const bestSim = (typeof window.__lastSimScore === 'number') ? window.__lastSimScore : 0;
+      const activeEl = (document.getElementById('script')||document).querySelector('p.active');
+      const anchorVisible = isInComfortBand(activeEl, { top: 0.25, bottom: 0.55 });
+      const now = performance.now();
+      try { if (anchorVisible) window.__tpLastAnchorInViewAt = now; } catch {}
+      const lastIn = (window.__tpLastAnchorInViewAt||0);
+      const STALE_MS = 1200, MIN_SIM = 0.92, LEAD_LINES = 2;
+      const stale = (now - lastIn) > STALE_MS;
+      // Lead in virtual lines
+      let lead = 0; try {
+        const activeIdx = (function(){
+          try {
+            const el = activeEl; if (!el) return -1;
+            const para = paraIndex.find(p => p.el === el) || null;
+            if (!para) return -1; return para.start;
+          } catch { return -1; }
+        })();
+        const fV = vCurIdx;
+        const aV = vList.findIndex(v => activeIdx >= v.start && activeIdx <= v.end);
+        if (fV >= 0 && aV >= 0) lead = fV - aV;
+      } catch { lead = 0; }
+      const shouldCatchUp = (lead >= LEAD_LINES && (clusterCov >= 0.35 || bestSim >= MIN_SIM)) && (!isUserScrolling() && (stale || !anchorVisible));
+      if (shouldCatchUp){
+        try {
+          const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
+          if (el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else {
+            const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+            const vh = (sc === window) ? (window.innerHeight||0) : (sc.clientHeight||0);
+            const targetTop = Math.max(0, (el?.offsetTop||0) - Math.floor(vh * 0.25));
+            maybeAutoScroll(targetTop, sc, { overrideLock: true });
+          }
+          try { if (typeof debug==='function') debug({ tag:'scroll:catchup:tick', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
+        } catch {}
+      }
+    } catch {}
+  }
+  // Run a small rAF scheduler to keep catch-up re-armed unless user is actively scrolling
+  try {
+    if (!window.__tpCatchupRAF){
+      const tick = () => { try { evaluateCatchUp(); } catch {} window.__tpCatchupRAF = requestAnimationFrame(tick); };
+      window.__tpCatchupRAF = requestAnimationFrame(tick);
+    }
+  } catch {}
+
   // Activation helpers: tolerate jitter using EMA conf, suffix hits, and a timeout guard
   let __tpLowConfSince = 0;
   let __tpLastAct = { idx: null, reason: null };
