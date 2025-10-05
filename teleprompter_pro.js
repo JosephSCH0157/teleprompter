@@ -189,11 +189,12 @@
     const CONF_T = 0.58; // base
     const conf = computeConf({ sim, cov, jitterStd });
     const confOk = conf >= Math.max(0.33, CONF_T - 0.25 * cov);
-    let reason = null;
-    if (sim >= 0.92 && cov >= 0.14) reason = 'sim+cov';
-    else if (suffixHits >= 2 && sim >= 0.88) reason = 'suffix';
-    else if (cov >= 0.35 && sim >= 0.85) reason = 'cov+sim';
-    else if (confOk) reason = 'conf';
+  let reason = null;
+  if (cov === 1 && confOk) reason = 'conf';
+  else if (sim >= 0.92 && cov >= 0.14) reason = 'sim+cov';
+  else if (suffixHits >= 2 && sim >= 0.88) reason = 'suffix';
+  else if (cov >= 0.35 && sim >= 0.85) reason = 'cov+sim';
+  else if (confOk) reason = 'conf';
 
     if (reason) {
       __tpLowConfSince = 0;
