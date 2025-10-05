@@ -254,6 +254,29 @@
       return (top < minTop) || (top > maxTop);
     } catch { return true; }
   }
+  // Sticky band around the snapped targetTop with tolerance
+  const STICKY_EPS = IN_BAND_EPS;
+  function inStickyBand(targetTop, top, vh, band){
+    try {
+      const b0 = Array.isArray(band) ? band[0] : 0.28;
+      const b1 = Array.isArray(band) ? band[1] : 0.55;
+      const minTop = targetTop - b1*vh - STICKY_EPS;
+      const maxTop = targetTop - b0*vh + STICKY_EPS;
+      return top >= minTop && top <= maxTop;
+    } catch { return false; }
+  }
+  // Device-pixel-snapped programmatic scroll (auto behavior), ignores tiny moves
+  function scrollToSnapped(scroller, top){
+    try {
+      const DPR = (window.devicePixelRatio || 1);
+      const snapped = Math.round(top * DPR) / DPR;
+      const dist = snapped - (scroller.scrollTop||0);
+      if (Math.abs(dist) < MIN_NUDGE_PX) return;
+      try { __tpLastProgAt = performance.now(); } catch {}
+      if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top: snapped, behavior: 'auto' });
+      else scroller.scrollTop = snapped;
+    } catch {}
+  }
   // Oscillation breaker: detect A↔B↔A within 500ms and <=200px separation
   let __tpLastPosSamples = [];
   let __tpOscFreezeUntil = 0;
@@ -335,12 +358,17 @@
         try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:tiny-noop', { before, desiredTop: targetTop, dist }); } catch {}
         return 'ok:tiny-noop';
       }
+      // Sticky band guard: only move when outside the sticky band of the snapped target
+      if (inStickyBand(targetTop, before, vh, band)){
+        try { if (typeof debug==='function') debug({ tag:'scroll:sticky-hold', before, targetTop, band, STICKY_EPS }); } catch {}
+        return 'ok:sticky';
+      }
       // Log actuator attempt before issuing the scroll
       logScrollAttempt(scroller, before, targetTop, opts?.aggressive ? 'scrollToBand:aggressive' : 'scrollToBand');
-      if (opts?.aggressive) {
-        try { scroller.scrollTop = targetTop; } catch {}
-      } else {
-        try { scroller.scrollTo({ top: targetTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = targetTop; } catch {} }
+      if (opts?.aggressive) { try { scrollToSnapped(scroller, targetTop); } catch {} }
+      else {
+        if (prefersReduced) { try { scrollToSnapped(scroller, targetTop); } catch {} }
+        else { try { scroller.scrollTo({ top: targetTop, behavior: 'smooth' }); } catch { try { scrollToSnapped(scroller, targetTop); } catch {} } }
       }
       let tries = 0;
       let _lastHudProgressAt = 0;
@@ -374,7 +402,7 @@
           tries++;
           if (tries === 2){
             // Force movement on stubborn containers
-            try { scroller.scrollTop = targetTop; } catch {}
+            try { scrollToSnapped(scroller, targetTop); } catch {}
             // If direct set had no effect and the delta was not tiny, nudge with a small fixed step on the same scroller
             if (Math.abs((scroller.scrollTop||0) - before) <= 1){
               const delta = targetTop - before;
