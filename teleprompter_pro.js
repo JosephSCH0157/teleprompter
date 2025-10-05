@@ -553,7 +553,121 @@ function __applyUxFromSettings(s){
 }
 try { __applyUxFromSettings(__readHudSettings()); } catch {}
 window.addEventListener('hudSettings:migrated', (ev)=>{ try { __applyUxFromSettings(__readHudSettings()); } catch {} });
-window.addEventListener('storage', (e)=>{ try { if (e && e.key === SETTINGS_KEY) __applyUxFromSettings(__readHudSettings()); } catch {} });
+window.addEventListener('storage', (e)=>{ try {
+  if (e && e.key === SETTINGS_KEY){
+    const s = __readHudSettings();
+    // Respect optional dev.hydrateOnStorage flag (default true)
+    const hydrate = (s?.dev?.hydrateOnStorage !== false);
+    if (hydrate){ __applyUxFromSettings(s); __hydrateSettingsControls(s); }
+  }
+} catch {} });
+
+// ---- Settings controls hydrator/binder ----
+const __SETTINGS_BINDINGS = [
+  // UX / Navigation
+  { sel:'#snap-active-only',   path:'ux.snapActiveOnly',   type:'checkbox' },
+  { sel:'#anchor-snap',        path:'ux.anchorSnap',       type:'text'     },
+  { sel:'#scroll-margin-top',  path:'ux.scrollMarginTop',  type:'number'   },
+  { sel:'#anchor-padding',     path:'ux.anchorPadding',    type:'number'   },
+  { sel:'#highlight-active',   path:'ux.highlightActive',  type:'checkbox' },
+  { sel:'#active-bg',          path:'ux.activeBg',         type:'color'    },
+  { sel:'#inactive-opacity',   path:'ux.inactiveOpacity',  type:'number'   },
+  { sel:'#font-size',          path:'ux.fontSize',         type:'number'   },
+  { sel:'#line-height',        path:'ux.lineHeight',       type:'text'     },
+  // Autoscroll
+  { sel:'#autoscroll-enabled', path:'autoscroll.enabled',  type:'checkbox' },
+  { sel:'#autoscroll-speed',   path:'autoscroll.baseSpeed',type:'number'   },
+  { sel:'#autoscroll-accel',   path:'autoscroll.accel',    type:'number'   },
+  { sel:'#autoscroll-pause-hover', path:'autoscroll.pauseOnHover', type:'checkbox' },
+  // Viewer / Scrolling
+  { sel:'#scroll-smooth',      path:'viewer.smoothScroll', type:'checkbox' },
+  { sel:'#scroll-step',        path:'viewer.scrollStep',   type:'number'   },
+  { sel:'#dom-snap-recovery',  path:'viewer.domSnapRecovery', type:'checkbox' },
+  { sel:'#marker-visibility-ensure', path:'viewer.visibilityEnsure', type:'checkbox' },
+  // Matcher / Catch-up
+  { sel:'#match-window-ahead', path:'match.windowAhead',   type:'number'   },
+  { sel:'#catchup-jitter-std', path:'match.catchupJitterStd', type:'number' },
+  // Speech / Confusions
+  { sel:'#confusables',        path:'speech.confusionPairs', type:'json'   },
+  { sel:'#voice-hints',        path:'speech.hints',         type:'json'    },
+  // Debug / Dev
+  { sel:'#debug-overlay',      path:'debug.overlay',        type:'checkbox' },
+  { sel:'#debug-logs',         path:'debug.verbose',        type:'checkbox' },
+  { sel:'#storage-strategy',   path:'dev.versionStrategy',  type:'text'     },
+  { sel:'#defaults-version',   path:'dev.defaultsVersion',  type:'number-ro' },
+  { sel:'#hydrate-on-storage', path:'dev.hydrateOnStorage', type:'checkbox' },
+];
+
+function __getDeep(obj, path){ try { return String(path).split('.').reduce((a,k)=> (a&&a[k]!==undefined)? a[k] : undefined, obj); } catch { return undefined; } }
+function __setDeep(obj, path, value){
+  try {
+    const keys = String(path).split('.');
+    const out = (obj && typeof obj==='object') ? JSON.parse(JSON.stringify(obj)) : {};
+    let cur = out;
+    for (let i=0;i<keys.length-1;i++){
+      const k = keys[i];
+      if (!cur[k] || typeof cur[k] !== 'object') cur[k] = {};
+      cur = cur[k];
+    }
+    cur[keys[keys.length-1]] = value;
+    return out;
+  } catch { return obj; }
+}
+function __castFromControl(el, type){
+  try {
+    if (type==='checkbox') return !!el.checked;
+    if (type==='number' || type==='range') return (el.value===''? undefined : Number(el.value));
+    if (type==='color' || type==='text' || type==='select') return el.value;
+    if (type==='json') { try { return JSON.parse(el.value||'{}'); } catch { return undefined; } }
+    if (type==='number-ro') return undefined; // read-only; do not write back
+    return el.value;
+  } catch { return undefined; }
+}
+function __applyToControl(el, type, val){
+  try {
+    if (type==='checkbox') el.checked = !!val;
+    else if (type==='number' || type==='range' || type==='color' || type==='text' || type==='select') el.value = (val ?? '');
+    else if (type==='json') el.value = (val ? JSON.stringify(val, null, 2) : '');
+    else if (type==='number-ro') el.value = (val ?? '');
+  } catch {}
+}
+function __hydrateSettingsControls(s){
+  try {
+    for (const b of __SETTINGS_BINDINGS){
+      const el = document.querySelector(b.sel);
+      if (!el) continue;
+      let val = __getDeep(s, b.path);
+      // special for defaults version: reflect from __meta if not set in dev
+      if (b.path==='dev.defaultsVersion' && (val===undefined || val===null)) val = s?.__meta?.defaultsVersion ?? '';
+      __applyToControl(el, b.type, val);
+    }
+  } catch {}
+}
+function __bindSettingsControls(){
+  try {
+    for (const b of __SETTINGS_BINDINGS){
+      const el = document.querySelector(b.sel);
+      if (!el || el.dataset.wired) continue;
+      el.dataset.wired = '1';
+      const ev = (el.tagName==='SELECT'||el.type==='checkbox') ? 'change' : 'input';
+      el.addEventListener(ev, ()=>{
+        try {
+          const type = b.type;
+          const val = __castFromControl(el, type);
+          if (type==='number-ro') return; // do not write back
+          const cur = __readHudSettings();
+          const next = (val===undefined ? cur : __setDeep(cur, b.path, val));
+          try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
+          // Apply UX live and re-hydrate in case of derived changes
+          __applyUxFromSettings(next);
+          __hydrateSettingsControls(next);
+          // Broadcast change event for any listeners
+          try { window.dispatchEvent(new CustomEvent('hudSettings:changed', { detail: { storageKey: SETTINGS_KEY, path: b.path } })); } catch {}
+        } catch {}
+      });
+    }
+  } catch {}
+}
 }
 
 // Shared Normalize wiring helper
@@ -2121,11 +2235,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     if (settingsBtn && settingsOverlay && settingsClose && settingsBody){
       const openSettings = () => {
         try { buildSettingsContent(); } catch(e){}
+        try { __hydrateSettingsControls(__readHudSettings()); __bindSettingsControls(); } catch {}
         settingsOverlay.classList.remove('hidden');
         settingsBtn.setAttribute('aria-expanded','true');
       };
       // Prebuild asynchronously after main init so first open isn't empty if user opens quickly
-      setTimeout(()=>{ try { buildSettingsContent(); } catch{} }, 0);
+  setTimeout(()=>{ try { buildSettingsContent(); __hydrateSettingsControls(__readHudSettings()); __bindSettingsControls(); } catch{} }, 0);
       const closeSettings = () => { settingsOverlay.classList.add('hidden'); settingsBtn.setAttribute('aria-expanded','false'); };
       settingsBtn.addEventListener('click', openSettings);
       settingsClose.addEventListener('click', closeSettings);
