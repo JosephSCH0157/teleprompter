@@ -208,6 +208,7 @@
       const vCur = vList[vCurIdx];
       // Compute cluster coverage around frontier using last spoken tail
       let clusterCov = 0;
+      let covBest = 0;
       try {
         const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : [];
         const w = [vCurIdx - 1, vCurIdx, vCurIdx + 1].filter(i => i >= 0 && i < vList.length);
@@ -220,6 +221,8 @@
           tot += wgt * tks.length;
         }
         clusterCov = tot ? (hit / tot) : 0;
+        // covBest: coverage of the frontier's current virtual line
+        try { const lineTokens = scriptWords.slice(vCur.start, vCur.end + 1); covBest = tokenCoverage(lineTokens, tail); } catch { covBest = 0; }
       } catch { clusterCov = 0; }
       const bestSim = (typeof window.__lastSimScore === 'number') ? window.__lastSimScore : 0;
       const activeEl = (document.getElementById('script')||document).querySelector('p.active');
@@ -242,7 +245,13 @@
         const aV = vList.findIndex(v => activeIdx >= v.start && activeIdx <= v.end);
         if (fV >= 0 && aV >= 0) lead = fV - aV;
       } catch { lead = 0; }
-      const shouldCatchUp = (lead >= LEAD_LINES && (clusterCov >= 0.35 || bestSim >= MIN_SIM)) && (!isUserScrolling() && (stale || !anchorVisible));
+      const shouldCatchUp = (lead >= LEAD_LINES && (clusterCov >= 0.35 || covBest >= 0.25 || bestSim >= MIN_SIM)) && (!isUserScrolling() && (stale || !anchorVisible));
+      // Compute active coverage for logging (not used in decision)
+      let covActive = 0; try {
+        const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
+      } catch { covActive = 0; }
+      // Log eligibility each tick for visibility
+      try { if (typeof debug==='function') debug({ tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision: shouldCatchUp ? 'go' : 'hold' }); } catch {}
       if (shouldCatchUp){
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
@@ -255,6 +264,18 @@
           try { if (typeof debug==='function') debug({ tag:'scroll:catchup:tick', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
         } catch {}
       }
+      // Comfort band watchdog: if active line off-screen for >2s and no user input, gently recentre once
+      try {
+        const OFF_MS = 2000;
+        const offTooLong = (now - lastIn) > OFF_MS;
+        const armed = (window.__tpWatchdogArmed !== false);
+        if (!anchorVisible && offTooLong && !isUserScrolling() && armed) {
+          if (activeEl) ensureInView(activeEl, { top: 0.25, bottom: 0.55 });
+          try { if (typeof debug==='function') debug({ tag:'watchdog:recenter', offMs: Math.round(now - lastIn) }); } catch {}
+          try { window.__tpWatchdogArmed = false; } catch {}
+        }
+        if (anchorVisible) { try { window.__tpWatchdogArmed = true; } catch {} }
+      } catch {}
     } catch {}
   }
   // Run a small rAF scheduler to keep catch-up re-armed unless user is actively scrolling
