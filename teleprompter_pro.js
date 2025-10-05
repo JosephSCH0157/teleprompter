@@ -3803,17 +3803,16 @@ function advanceByTranscript(transcript, isFinal){
   function __docMaxScrollTop(scroller, win, doc){
     try { const h = (scroller===win ? (doc.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0)); const vh = (scroller===win ? (win.innerHeight||0) : (scroller.clientHeight||0)); return Math.max(0, h - vh); } catch { return 0; }
   }
-  function __ensureEndSpacer(doc, scroller, win, markerY){
+  // Size spacer so that when scrolled to max, the last line's bottom can sit at the marker
+  function ensureEndSpacer(doc, scroller, win, markerY, padExtra = 8){
     try {
-      // For main app, reuse precise reachability helper
-      if (doc === document && typeof ensureReachableForLastLine === 'function') { ensureReachableForLastLine(markerY); return; }
-      const script = doc.getElementById('script'); if (!script) return;
+      const V = (scroller === win ? win.innerHeight : scroller.clientHeight) || 0;
+      const pad = Math.max(0, Math.ceil((V - Number(markerY || 0)) + Number(padExtra)));
+      const script = doc.getElementById('script') || doc.body;
+      if (!script) return;
       let spacer = doc.getElementById('end-spacer');
       if (!spacer) { spacer = doc.createElement('div'); spacer.id='end-spacer'; spacer.setAttribute('aria-hidden','true'); spacer.style.pointerEvents='none'; script.appendChild(spacer); }
-      const pad = Math.max(0, Math.ceil((Number(markerY)||0) + 8));
-      // Only increase; don’t shrink here to avoid flicker
-      const cur = parseInt((spacer.style.height||'0').replace('px',''))||0;
-      if (pad > cur) spacer.style.height = pad + 'px';
+      spacer.style.height = pad + 'px';
     } catch {}
   }
 
@@ -3841,7 +3840,7 @@ function advanceByTranscript(transcript, isFinal){
       const last = (doc.querySelector('.transcript-line:last-of-type') || doc.querySelector('#script p:last-of-type'));
       if (!marker || !scroller) return;
       const markerY = __docRelTop(marker, scroller, win);
-      __ensureEndSpacer(doc, scroller, win, markerY);
+  ensureEndSpacer(doc, scroller, win, markerY);
       // Recompute after spacer potential resize
       let lastBottom = null;
       if (last) {
@@ -3908,6 +3907,7 @@ function advanceByTranscript(transcript, isFinal){
   }
   try {
     window.ensureReachableForLastLine = ensureReachableForLastLine;
+    window.ensureEndSpacer = function(markerY){ try { const sc = document.getElementById('viewer'); if (sc) ensureEndSpacer(document, sc, window, markerY ?? (function(){ try{ const m=document.getElementById('marker'); const v=sc.getBoundingClientRect(); return m.getBoundingClientRect().top - v.top; } catch { return Math.round((sc.clientHeight||0)*0.4); } })()); } catch {} };
     window.nudgeToMarker = nudgeToMarker;
     window.nudgeToMarkerInDisplay = nudgeToMarkerInDisplay;
     window.measureDisplayOrMain = measureDisplayOrMain;
@@ -3923,7 +3923,11 @@ function advanceByTranscript(transcript, isFinal){
         const activeY = payload && payload.activeY;
         try { window.__tpLastMarkerY = markerY; } catch {}
         // Always preflight end reachability so we never hit a ceiling near the end
-        if (markerY != null) ensureReachableForLastLine(markerY);
+        if (markerY != null) {
+          ensureReachableForLastLine(markerY);
+          // Also set spacer so max scroll allows last line to sit at the marker
+          const sc = document.getElementById('viewer'); if (sc) ensureEndSpacer(document, sc, window, markerY);
+        }
         if (markerY != null && activeY != null) nudgeToMarker(markerY, activeY);
       } catch {}
     };
@@ -3942,7 +3946,7 @@ function advanceByTranscript(transcript, isFinal){
   try {
     const sc = document.getElementById('viewer');
     if (window.ResizeObserver && sc) {
-      const ro2 = new ResizeObserver(() => { try { ensureReachableForLastLine(window.__tpLastMarkerY ?? null); } catch {} });
+      const ro2 = new ResizeObserver(() => { try { const vRect = sc.getBoundingClientRect(); const m = document.getElementById('marker'); const mY = m ? (m.getBoundingClientRect().top - vRect.top) : Math.round((sc.clientHeight||0)*0.4); ensureReachableForLastLine(mY); ensureEndSpacer(document, sc, window, mY); } catch {} });
       ro2.observe(sc);
       window.__tpEndReachRO = ro2;
     }

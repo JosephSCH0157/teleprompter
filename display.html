@@ -93,16 +93,25 @@
                 const marker = document.getElementById('marker-line');
                 if (!marker || !scriptEl || !scroller) return;
                 const markerY = relTop(marker, scroller, window);
-                const pad = Math.max(0, Math.ceil(markerY + 8));
-                let spacer = document.getElementById('end-spacer');
+                ensureEndSpacer(document, scroller, window, markerY);
+                // ensure spacer is under #script
+                const spacer = document.getElementById('end-spacer');
+                if (spacer && spacer.parentElement !== scriptEl) scriptEl.appendChild(spacer);
+              } catch {}
+            }
+            function ensureEndSpacer(doc, scroller, win, markerY, padExtra = 8){
+              try {
+                const V = (scroller === win ? win.innerHeight : scroller.clientHeight) || 0;
+                const pad = Math.max(0, Math.ceil((V - Number(markerY || 0)) + Number(padExtra)));
+                let spacer = doc.getElementById('end-spacer');
                 if (!spacer) {
-                  spacer = document.createElement('div');
+                  spacer = doc.createElement('div');
                   spacer.id = 'end-spacer';
                   spacer.setAttribute('aria-hidden','true');
                   spacer.style.pointerEvents = 'none';
+                  (doc.querySelector('#script') || doc.body).appendChild(spacer);
                 }
                 spacer.style.height = pad + 'px';
-                if (spacer.parentElement !== scriptEl) scriptEl.appendChild(spacer);
               } catch {}
             }
             // Color sync via BroadcastChannel
@@ -260,7 +269,7 @@
                   const last = (document.querySelector('.transcript-line:last-of-type') || scriptEl.querySelector('p:last-of-type'));
                   if (!scroller || !marker || !last) return;
                   // Ensure end spacer is at least markerY + small pad
-                  try { updateEndSpacer(); } catch {}
+                  try { const mY = relTop(marker, scroller, window); ensureEndSpacer(document, scroller, window, mY); } catch {}
                   const markerY = relTop(marker, scroller, window);
                   let lastBottom = null;
                   if (last) lastBottom = relBottom(last, scroller, window);
