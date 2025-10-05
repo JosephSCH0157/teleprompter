@@ -3561,10 +3561,16 @@ function advanceByTranscript(transcript, isFinal){
     if (currentEl) currentEl.classList.add('active');
   }
 
-  // Dynamic bottom padding so the marker can sit over the final paragraphs
+  // Dynamic bottom spacer/padding so the marker can sit over the final paragraphs
   function applyBottomPad(){
     try {
       const pad = Math.max(window.innerHeight * 0.5, 320);
+      // Prefer a persistent spacer element inside the viewer for headroom
+      const spacer = document.getElementById('end-spacer');
+      if (spacer) {
+        try { spacer.style.height = `${Math.max(Math.floor(window.innerHeight * 0.50), 280)}px`; } catch {}
+      }
+      // Keep padding as a fallback for legacy flows
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
     } catch {}
   }

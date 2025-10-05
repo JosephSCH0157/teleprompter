@@ -103,6 +103,8 @@ select { font-size: 14px; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 
     .marker{position:sticky;top:40%;height:2px;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+    /* Bottom spacer: gives marker headroom near end without relying only on padding */
+    #end-spacer{ height: 50vh; min-height: 280px; pointer-events:none; }
 
     body.listening .script p{ color:#cfe8ff; }
     body.listening .marker{ background:#9bd2ff; box-shadow:0 0 10px #9bd2ff; }
