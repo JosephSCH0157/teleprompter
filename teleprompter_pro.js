@@ -3374,25 +3374,38 @@ function advanceByTranscript(transcript, isFinal){
         const top = r.top - scTop; const bottom = r.bottom - scTop;
         const visible = (top >= 0 && bottom <= vh);
         if (!visible){
-          const getTop = ()=>{ try {
-            const se = document.scrollingElement || document.documentElement || document.body;
-            if (sc === se || sc === document.documentElement || sc === document.body) return (se?.scrollTop||document.documentElement?.scrollTop||document.body?.scrollTop||0);
-            return (sc?.scrollTop||0);
-          } catch { return 0; } };
-          const beforeTop = getTop();
-          const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
-          try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
-          // Escalate if movement is <12px within ~150ms
-          setTimeout(()=>{
-            try {
-              const afterTop = getTop();
-              if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
-                try { nextPara.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); } catch { try { nextPara.el.scrollIntoView(true); } catch {} }
-                try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'scrollIntoView', block:'center' }); } catch {}
-              }
-            } catch {}
-          }, 160);
-          try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
+          // Prefer navigator for debounced, comfort-band-aware placement
+          let usedNavigator = false;
+          try {
+            const viewerEl = document.getElementById('viewer') || sc;
+            if (!window.__tpNav && viewerEl) window.__tpNav = makeNavigator(viewerEl);
+            if (window.__tpNav && typeof window.__tpNav.follow === 'function'){
+              window.__tpNav.follow(nextPara.el, bestIdx);
+              usedNavigator = true;
+              try { if (typeof debug==='function') debug({ tag:'visibility:navigator', idx: bestIdx }); } catch {}
+            }
+          } catch {}
+          if (!usedNavigator){
+            const getTop = ()=>{ try {
+              const se = document.scrollingElement || document.documentElement || document.body;
+              if (sc === se || sc === document.documentElement || sc === document.body) return (se?.scrollTop||document.documentElement?.scrollTop||document.body?.scrollTop||0);
+              return (sc?.scrollTop||0);
+            } catch { return 0; } };
+            const beforeTop = getTop();
+            const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
+            try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+            // Escalate if movement is <12px within ~150ms
+            setTimeout(()=>{
+              try {
+                const afterTop = getTop();
+                if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
+                  try { nextPara.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); } catch { try { nextPara.el.scrollIntoView(true); } catch {} }
+                  try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'scrollIntoView', block:'center' }); } catch {}
+                }
+              } catch {}
+            }, 160);
+            try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
+          }
         }
         // Telemetry alongside anchor:marker for visibility
         try {
@@ -3845,6 +3858,71 @@ function advanceByTranscript(transcript, isFinal){
       try { requestScroll(target); } catch { viewer.scrollTop = target; }
     } catch {}
   }
+
+  // Small navigator with latches, comfort band, and min-delta
+  function makeNavigator(scroller){
+    const ANCHOR_VH = 0.45;       // where we like the active line to sit
+    const QUIET_MS  = 350;        // don't re-run ensureVisible within this window for same idx
+    const CACHE_MS  = 2000;       // remember "definitely visible" lines briefly
+    const MIN_DELTA = 6;          // ignore scrolls smaller than this (px)
+    const BAND      = [0.25, 0.75]; // comfort band as fraction of scroller height
+    const RATIO_OK  = 0.8;        // IO ratio to count as visible enough
+
+    let lastIdx = -1;
+    let lastRunTs = 0;
+    let raf = 0;
+    const visibleUntil = new WeakMap(); // el -> expiry ms
+
+    const io = new IntersectionObserver((entries) => {
+      const now = performance.now();
+      for (const e of entries) {
+        if (e.isIntersecting && e.intersectionRatio >= RATIO_OK) {
+          visibleUntil.set(e.target, now + CACHE_MS);
+        }
+      }
+    }, { root: scroller, threshold: [RATIO_OK] });
+
+    function isRecentlyVisible(el){ return (visibleUntil.get(el) || 0) > performance.now(); }
+    function inComfortBand(rect, h){
+      const topOK = rect.top >= h * BAND[0];
+      const botOK = rect.bottom <= h * BAND[1];
+      return topOK && botOK;
+    }
+    function ensureVisible(el){
+      try {
+        const h = scroller.clientHeight || 0;
+        const r = el.getBoundingClientRect();
+        if (h && inComfortBand(r, h)) return; // Already good
+        // Primary precise placement
+        const targetTop = Math.max(0, (el.offsetTop||0) - Math.floor(h * ANCHOR_VH));
+        const curTop = (scroller.scrollTop||0);
+        if (Math.abs(curTop - targetTop) > MIN_DELTA){
+          try { requestScroll(targetTop); } catch { try { scroller.scrollTop = targetTop; } catch {} }
+        }
+        // Fallback DOM snap once layout settles (benefits from scroll-margin-block)
+        requestAnimationFrame(()=>{
+          try { el.scrollIntoView({ block:'center', inline:'nearest' }); } catch {}
+        });
+      } catch {}
+    }
+    function queue(el, idx){
+      const now = performance.now();
+      if (idx === lastIdx && (now - lastRunTs) < QUIET_MS) return;
+      if (isRecentlyVisible(el)) { lastIdx = idx; lastRunTs = now; return; }
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(()=>{
+        try { io.observe(el); } catch {}
+        ensureVisible(el);
+        lastIdx = idx; lastRunTs = performance.now();
+      });
+    }
+    // Optional: pause auto-follow while the user scrolls
+    let pausedUntil = 0; const PAUSE_MS = 1200;
+    function pause(){ pausedUntil = performance.now() + PAUSE_MS; }
+    try { ['wheel','touchstart','pointerdown','keydown'].forEach(evt => scroller.addEventListener(evt, pause, { passive:true })); } catch {}
+    return { follow(el, idx){ if (performance.now() < pausedUntil) return; queue(el, idx); } };
+  }
+  try { window.makeNavigator = makeNavigator; } catch {}
   // ---------- context selection ----------
   function getDisplayContext(){
     try {
@@ -4298,9 +4376,9 @@ function normTokens(text){
       const inline = raw.match(/^\s*([^:>\-—()]+?)(?:\s*\((off[-\s]?script)\))?\s*[:>\-—]\s*(.+)$/i);
       if (inline) {
         flush();
-        const who   = inline[1];
-        const body  = inline[3].trim();
-        const role  = resolveRole(who);
+        const who  = inline[1];
+        const body = inline[3].trim();
+        const role = resolveRole(who);
         if (role) {
           const show = keepNames ? `[b]${displayNameFor(role, who)}:[/b] ` : '';
           out.push(`[${role}]${show}${body}[/${role}]`);
