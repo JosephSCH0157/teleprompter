@@ -329,9 +329,7 @@
   })();
   // Oscillation breaker: detect A↔B↔A within 500ms and <=200px separation
   let __tpLastPosSamples = [];
-  let __tpOscFreezeUntil = 0;
-  let __tpOscActive = false;
-  let __tpOscUntil = 0;
+  let __tpOscFreezeUntil = 0; // retained for metrics only
   function __tpRecordTopSample(top){
     try {
       const t = performance.now();
@@ -339,28 +337,7 @@
       if (__tpLastPosSamples.length > 6) __tpLastPosSamples.shift();
     } catch {}
   }
-  // Edge-triggered HUD helpers for oscillation hold/release
-  function onOscillationHold(untilMs){
-    try {
-      const bucketed = Math.round((Number(untilMs)||0) / 500) * 500;
-      if (!__tpOscActive){
-        __tpOscActive = true; __tpOscUntil = bucketed;
-  try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'WARN'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'WARN'); } catch {}
-      } else if (Math.abs(bucketed - __tpOscUntil) >= 1000){
-        __tpOscUntil = bucketed;
-  try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:oscillation', { until: bucketed }, 'WARN'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:oscillation', { until: bucketed }, 'WARN'); } catch {}
-      } else {
-        try { console.debug('catchup:hold:oscillation', { until: bucketed }); } catch {}
-      }
-    } catch {}
-  }
-  function onOscillationRelease(){
-    try {
-      if (!__tpOscActive) return;
-      __tpOscActive = false; __tpOscUntil = 0;
-  try { if (typeof emitHUD === 'function') emitHUD('catchup:hold:release', {}, 'WARN'); else if (typeof HUD?.log==='function') HUD.log('catchup:hold:release', {}, 'WARN'); } catch {}
-    } catch {}
-  }
+  // Removed oscillation hold/release: PD loop will dampen without backoff
   function __tpIsOscillating(){
     try {
       if (!__tpLastPosSamples || __tpLastPosSamples.length < 4) return false;
@@ -707,14 +684,11 @@
       let covActive = 0; try {
         const el = activeEl; if (el){ const para = paraIndex.find(p => p.el === el) || null; if (para){ const tail = Array.isArray(window.__tpPrevTail) ? window.__tpPrevTail : []; const lineTokens = scriptWords.slice(para.start, para.end + 1); covActive = tokenCoverage(lineTokens, tail); } }
       } catch { covActive = 0; }
-      // Release oscillation hold when freeze window passes
-      try { if (__tpOscActive && performance.now() >= __tpOscFreezeUntil) onOscillationRelease(); } catch {}
-      // Oscillation breaker: previously held for ~1s; with ScrollManager PD loop, avoid hard holds to reduce tug-of-war
+      // Oscillation breaker: with ScrollManager PD loop, avoid hard holds to reduce tug-of-war
       try {
         const topNow = currentScrollTop();
         __tpRecordTopSample(topNow);
-        // If oscillation is detected, prefer letting ScrollManager PD settle without issuing additional holds
-        // so we do not spam hard-stops; continue to decision logic
+        // If oscillation is detected, prefer letting ScrollManager PD settle; continue to decision logic
         if (__tpIsOscillating()){ /* no-op: let PD loop dampen */ }
       } catch {}
       // Hard-stable eligibility check (applies before any catch-up/fallback)
@@ -921,6 +895,23 @@
     }
     return false;
   }
+
+  // Debounce chatty sources before they reach SCROLLER
+  const __tpDebouncers = new Map();
+  function debounceKeyed(key, fn, ms = 150){ try { const tPrev = __tpDebouncers.get(key); if (tPrev) clearTimeout(tPrev); const t = setTimeout(()=>{ try{ fn(); }catch{} }, ms); __tpDebouncers.set(key, t); } catch {} }
+
+  // If a bus exists, coalesce bursts of match:activate events into one SCROLLER request
+  try {
+    if (window.HUD?.bus && typeof window.HUD.bus.on === 'function' && window.SCROLLER){
+      window.HUD.bus.on('match:activate', (p)=>{
+        try {
+          const bucket = Math.round((Number(p?.conf)||0) * 20);
+          const key = `ma:${p?.idx}|${p?.reason}|${bucket}`;
+          debounceKeyed(key, ()=>{ try { window.SCROLLER.onMatchActivate(p); } catch {} }, 120);
+        } catch {}
+      });
+    }
+  } catch {}
 
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
