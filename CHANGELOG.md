@@ -53,3 +53,6 @@ Notes: Virtual lines, soft advance, junk-anchor gate v2, cluster penalty, end-ga
   
 - feat(transcript): enhance marker tracking by logging active line position relative to the marker (e17673d)
 
+## 1.5.9  
+- feat(transcript): add scrollToElAtMarker function for enhanced marker positioning (8734ab6)
+
