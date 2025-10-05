@@ -195,6 +195,7 @@
                   const active = scriptEl.querySelector('p.active');
                   const markerY = marker ? (marker.getBoundingClientRect().top - baseTop) : null;
                   const activeY = active ? (active.getBoundingClientRect().top - baseTop) : null;
+                  try { console.info('MEASURE FROM', location.pathname, 'scH=', (scroller===window? window.innerHeight : scroller.clientHeight), 'markerY=', markerY, 'activeY=', activeY); } catch {}
                   window.opener && window.opener.postMessage({ type:'MEASURE', markerY, activeY }, '*');
                 } catch {}
               }
