@@ -1861,7 +1861,26 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         try { window.__lockActiveScroller = ()=>{ _locked=true; if (!window.__TP_SCROLLER) { const v=detectViewer(); window.__TP_SCROLLER = v || (document.scrollingElement||document.documentElement||document.body); } }; } catch {}
         try { window.__unlockActiveScroller = ()=>{ _locked=false; }; } catch {}
         // Override requestScroll to force a single target per session
-        requestScroll  = (y)=>{ try{ scrollToY(y); }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} } try{ updateDebugPosChip(); }catch{} };
+        requestScroll  = (y)=>{
+          try{
+            const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+            const before = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+            scrollToY(y);
+            // Telemetry: measure result after ~160ms to spot dead scrolls
+            setTimeout(()=>{
+              try {
+                const after = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+                const delta = Math.round((after||0) - (before||0));
+                const intended = Math.round(Number(y)||0);
+                const tag = 'scroll:result';
+                const payload = { before, after, delta, intended, ok: Math.abs(delta) >= 1 };
+                try { if (typeof debug==='function') debug({ tag, ...payload }); } catch {}
+                try { if (typeof HUD?.log === 'function') HUD.log(tag, payload); } catch {}
+              } catch {}
+            }, 160);
+          }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} }
+          try{ updateDebugPosChip(); }catch{}
+        };
       } catch {}
     })();
     } catch(e) { console.warn('scroll-helpers load failed', e); }
@@ -3346,6 +3365,23 @@ function advanceByTranscript(transcript, isFinal){
           }, 160);
           try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
         }
+        // Telemetry alongside anchor:marker for visibility
+        try {
+          const viewerEl = document.getElementById('viewer');
+          const scrollerName = (sc === window) ? 'page' : (sc.id || sc.tagName || 'scroller');
+          const vTopBefore = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+          const anchorVisible = visible ? 1 : 0;
+          const attempt = (function(){ try { window.__tpVisAttempt = (window.__tpVisAttempt||0) + 1; return window.__tpVisAttempt; } catch { return 1; } })();
+          const payload = { source:'main', scroller: scrollerName, viewerTopBefore: vTopBefore, anchorVisible, attempt };
+          try { if (typeof HUD?.log === 'function') HUD.log('anchor:marker:vis', payload); } catch {}
+          try { if (typeof debug==='function') debug({ tag:'anchor:marker:vis', ...payload }); } catch {}
+        } catch {}
+        // Visibility failure counter for recovery
+        try {
+          const nowV = performance.now();
+          const buf = (window.__tpVisFailBuf ||= []);
+          if (!visible) { buf.push(nowV); while (buf.length && nowV - buf[0] > 500) buf.shift(); }
+        } catch {}
       }
     }
   } catch {}
@@ -3354,6 +3390,52 @@ function advanceByTranscript(transcript, isFinal){
   } else {
     currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
   }
+
+  // Recovery: if similarity is weak or repeated visibility failures, snap by DOM text search
+  try {
+    const weakSim = (function(){ try { return (window.__lastSimScore||0) < 0.6; } catch { return false; } })();
+    const manyVisFails = (function(){ try { const b=(window.__tpVisFailBuf||[]); const now=performance.now(); const recent=b.filter(t=> now - t <= 500).length; return recent >= 2; } catch { return false; } })();
+    if (weakSim || manyVisFails) {
+      const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      const doc = document;
+      // Build a tail phrase of 3-5 tokens from spoken tail
+      const tail = (function(){ try { const arr=(window.__tpPrevTail||[]); const n=Math.min(5, Math.max(3, arr.length)); return arr.slice(-n).join(' '); } catch { return ''; } })();
+      if (tail && doc){
+        // Find nearest paragraph whose text includes the tail (case-insensitive)
+        const paras = Array.from(doc.querySelectorAll('#script p'));
+        const lowerTail = tail.toLowerCase();
+        let bestEl = null; let bestDist = Infinity;
+        const scTop = (sc===window) ? 0 : ((typeof sc.getBoundingClientRect==='function')? sc.getBoundingClientRect().top : 0);
+        const curTop = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+        for (const p of paras){
+          try {
+            const txt = (p.textContent||'').toLowerCase();
+            if (!txt.includes(lowerTail)) continue;
+            const r = p.getBoundingClientRect();
+            const y = (r.top - scTop) + curTop;
+            const dist = Math.abs(y - curTop);
+            if (dist < bestDist){ bestDist = dist; bestEl = p; }
+          } catch {}
+        }
+        if (bestEl){
+          const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0);
+          const targetTop = Math.max(0, (bestEl.offsetTop||0) - Math.floor(vh * 0.45));
+          const before = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+          try { requestScroll(targetTop); } catch { try { if (sc===window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+          // Telemetry for recovery
+          setTimeout(()=>{
+            try {
+              const after = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+              const moved = Math.round((after||0) - (before||0));
+              const payload = { tag:'recovery:dom-snap', tail, before, after, moved };
+              try { if (typeof debug==='function') debug(payload); } catch {}
+              try { if (typeof HUD?.log === 'function') HUD.log('recovery:dom-snap', payload); } catch {}
+            } catch {}
+          }, 160);
+        }
+      }
+    }
+  } catch {}
 
   // Scroll toward the paragraph that contains currentIndex, gently clamped
   if (!paraIndex.length) return;
