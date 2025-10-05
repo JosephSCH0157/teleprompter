@@ -54,7 +54,7 @@
     const hudConfig = {
       enabled: true,
       minLevel: 'WARN',
-      mute: /^(catchup:hold:oscillation|match:catchup:stop|speech:(stop|onend))$/,
+      mute: /^speech:(stop|onend)$/,
     };
     const metrics = {
       // commit metrics
@@ -242,11 +242,18 @@
       emit(evt, ...args){ const a = listeners[evt]; if (!a) return; a.slice().forEach(fn=>{ try{ fn(...args); }catch{} }); }
     };
 
+    function _defaultLevelFor(tag){
+      try {
+        const t = String(tag||'');
+        if (/^(scroll:|speech:|match:|catchup:|reader:)/.test(t)) return 'INFO';
+        return 'DEBUG';
+      } catch { return 'DEBUG'; }
+    }
     const HUD = {
       log(tag, payload, level){
         try {
           if (paused) return;
-          const lvl = (typeof level === 'string') ? level : 'DEBUG';
+          const lvl = (typeof level === 'string') ? level : _defaultLevelFor(tag);
           if (hudConfig && hudConfig.enabled === false) return;
           // Level threshold filter: keep suppressed logs in console, not HUD
           if (LEVEL_RANK[lvl] < LEVEL_RANK[hudConfig.minLevel]) { try { console.debug('[HUD]', tag, payload); } catch {} return; }
@@ -279,10 +286,22 @@
       };
     } catch {}
 
-  // Show a single boot line once HUD is ready
-  try { if (typeof window.emitHUD === 'function') window.emitHUD('hud:ready', { minLevel: hudConfig.minLevel }, 'INFO'); } catch {}
-  // Apply requested mode change: raise verbosity to INFO and announce
-  try { HUD.minLevel = 'INFO'; if (typeof window.emitHUD === 'function') window.emitHUD('hud:mode', { minLevel: 'INFO' }, 'INFO'); } catch {}
+    // Show a single boot line once HUD is ready
+    try { if (typeof window.emitHUD === 'function') window.emitHUD('hud:ready', { minLevel: hudConfig.minLevel }, 'INFO'); } catch {}
+    // Developer override via URL ?hud=debug or localStorage tp_hud_debug=1
+    try {
+      const Q = new URLSearchParams(location.search);
+      const DEV_VERBOSE = Q.get('hud')==='debug' || localStorage.getItem('tp_hud_debug')==='1';
+      if (DEV_VERBOSE){
+        hudConfig.minLevel = 'DEBUG';
+        hudConfig.mute = /$^/; // match nothing
+        try { if (typeof window.emitHUD==='function') window.emitHUD('hud:mode', { minLevel:'DEBUG', devVerbose:true }, 'INFO'); } catch {}
+      } else {
+        // Default to INFO for richer overlay by default
+        HUD.minLevel = 'INFO';
+        try { if (typeof window.emitHUD==='function') window.emitHUD('hud:mode', { minLevel:'INFO' }, 'INFO'); } catch {}
+      }
+    } catch {}
 
     // Optional: quiet mode — filter noisy HUD tags to keep console readable during dev
     (function(){
