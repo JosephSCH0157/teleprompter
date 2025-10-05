@@ -4621,6 +4621,13 @@ async function init(){
   try {
     await _initCore();
     console.log('[TP-Pro] init() wrapper end (success)');
+    // Turn on CSS snap for active lines only to avoid micro-adjusts
+    try {
+      const root = document.querySelector('.viewer .script');
+      if (root) root.classList.add('snap-active-only');
+      // If the helper exists, also set mode explicitly for consistency
+      try { if (typeof window.setSnapMode === 'function') window.setSnapMode('active'); } catch {}
+    } catch {}
     // After DOM ready and core init, fetch and propagate the build version
     (async function attachVersionEverywhere(){
       try {
