@@ -1820,6 +1820,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     scrollByPx     = (px)=>{ sh.scrollByPx(px); try{ updateDebugPosChip(); }catch{} };
     scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
     scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
+  scrollToElAtMarker = (el)=>{ sh.scrollToElAtMarker(el); try{ updateDebugPosChip(); }catch{} };
     requestScroll  = (y)=>{ try{ sh.requestScroll(y); }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} } try{ updateDebugPosChip(); }catch{} };
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
@@ -2053,13 +2054,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           // Stop auto-catchup momentarily to avoid contention
           __scrollCtl?.stopAutoCatchup?.();
           const sc = getScroller();
-          const offset = Math.round(sc.clientHeight * 0.40);
           // Prefer currentEl, else the paragraph for currentIndex, else most-visible
           const vis = __anchorObs?.mostVisibleEl?.() || null;
           let el = currentEl || (paraIndex.find(p=>currentIndex>=p.start && currentIndex<=p.end)?.el) || vis || null;
           if (!el && Array.isArray(lineEls)) el = lineEls[0] || null;
           if (el) {
-            scrollToEl(el, offset);
+            if (typeof scrollToElAtMarker === 'function') scrollToElAtMarker(el); else scrollToEl(el, Math.round(sc.clientHeight * 0.40));
             const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
             const ratio = max ? (sc.scrollTop / max) : 0;
             sendToDisplay({ type:'scroll', top: sc.scrollTop, ratio });
@@ -3352,7 +3352,7 @@ function advanceByTranscript(transcript, isFinal){
         const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
         requestScroll(limitedTop);
       } else {
-        scrollToEl(currentEl, markerTop);
+        if (typeof scrollToElAtMarker === 'function') scrollToElAtMarker(currentEl); else scrollToEl(currentEl, markerTop);
       }
     } catch {
       let next;
@@ -3828,7 +3828,7 @@ function openDisplay(){
   // Centralized scroll target + helpers (always scroll the same container, not window)
   // Installed later once viewer is bound
   function getScroller(){ return viewer; }
-  let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
+  let clampScrollTop, scrollByPx, scrollToY, scrollToEl, scrollToElAtMarker;
 
   // Debug chip updater (throttled via rAF): shows anchor percentage within viewport and scrollTop
   function updateDebugPosChipImmediate(){

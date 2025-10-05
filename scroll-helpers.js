@@ -38,5 +38,26 @@ export function createScrollerHelpers(getScroller){
     const y = (el.offsetTop||0) - (Number(offset)||0);
     requestScroll(clampScrollTop(y));
   }
-  return { getScroller, clampScrollTop, scrollByPx, scrollToY, scrollToEl, requestScroll };
+  function scrollToElAtMarker(el){
+    const sc = getScroller(); if (!sc || !el) return;
+    try {
+      const vRect = sc.getBoundingClientRect ? sc.getBoundingClientRect() : { top: 0 };
+      const marker = document.getElementById('marker');
+      let markerY = 0;
+      if (marker && marker.getBoundingClientRect) {
+        const mRect = marker.getBoundingClientRect();
+        markerY = mRect.top - vRect.top;
+      } else {
+        const pct = (typeof window.MARKER_PCT === 'number' ? window.MARKER_PCT : 0.40);
+        markerY = (sc.clientHeight || 0) * pct;
+      }
+      const y = (el.offsetTop || 0) - markerY;
+      requestScroll(clampScrollTop(y));
+    } catch {
+      // fallback: center-ish using 40%
+      const y = (el.offsetTop||0) - Math.round((getScroller()?.clientHeight||0) * 0.40);
+      requestScroll(clampScrollTop(y));
+    }
+  }
+  return { getScroller, clampScrollTop, scrollByPx, scrollToY, scrollToEl, scrollToElAtMarker, requestScroll };
 }

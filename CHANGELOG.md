@@ -46,3 +46,10 @@ Stability baseline after init/boot fixes and camera/display guards.
 - Version: Bump to 1.5.7 and expose `window.APP_VERSION`.
 
 This snapshot is declared the new baseline.
+## 1.5.8
+ANVIL build: 2025-10-04 00:00
+Baseline: fix/scroll-geometry
+Notes: Virtual lines, soft advance, junk-anchor gate v2, cluster penalty, end-game easing, stall logs
+  
+- feat(transcript): enhance marker tracking by logging active line position relative to the marker (e17673d)
+
