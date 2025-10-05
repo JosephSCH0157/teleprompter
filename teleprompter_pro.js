@@ -130,13 +130,41 @@
       try { if (typeof debug === 'function') debug({ tag:'reader:unlocked', at: now, reason }); } catch {}
     } catch {}
   }
-  function maybeAutoScroll(targetY, scroller){
+  function maybeAutoScroll(targetY, scroller, opts = {}){
     try {
-      if (__tpReaderLocked) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY }); } catch {} return; }
+      if (__tpReaderLocked && !opts.overrideLock) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY }); } catch {} return; }
       requestScroll(targetY);
     } catch {}
   }
   try { window.unlockReaderLock = unlockReaderLock; } catch {}
+  // Utility: check if an element is within a comfort band inside the active scroller
+  function isInComfortBand(el, opts = {}){
+    try {
+      if (!el) return false;
+      const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      const useWindow = (sc === document.scrollingElement || sc === document.documentElement || sc === document.body);
+      const vh = useWindow ? (window.innerHeight||0) : (sc.clientHeight||0);
+      if (!vh) return false;
+      const topFrac = (typeof opts.top === 'number') ? opts.top : 0.25;
+      const botFrac = (typeof opts.bottom === 'number') ? opts.bottom : 0.55;
+      const topBand = vh * topFrac;
+      const botBand = vh * botFrac;
+      const scTop = useWindow ? 0 : ((typeof sc.getBoundingClientRect === 'function') ? sc.getBoundingClientRect().top : 0);
+      const r = el.getBoundingClientRect();
+      const top = r.top - scTop;
+      const bottom = r.bottom - scTop;
+      return (top >= topBand && bottom <= botBand);
+    } catch { return false; }
+  }
+  try { window.isInComfortBand = isInComfortBand; } catch {}
+  // User scrolling detector to avoid fighting the reader
+  let __tpUserScrollUntil = 0;
+  function markUserScroll(){ try { __tpUserScrollUntil = performance.now() + 600; } catch {} }
+  try {
+    const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document);
+    ['wheel','touchstart','pointerdown','keydown'].forEach(evt => (sc.addEventListener ? sc.addEventListener(evt, markUserScroll, { passive:true }) : window.addEventListener(evt, markUserScroll, { passive:true })));
+  } catch {}
+  function isUserScrolling(){ try { return performance.now() < __tpUserScrollUntil; } catch { return false; } }
   // Keep an element within a comfort band (defaults: top=25%, bottom=55% of viewport)
   function ensureInView(el, opts = {}){
     try {
@@ -3873,6 +3901,51 @@ function advanceByTranscript(transcript, isFinal){
       } catch { covGate = clusterCov; }
     }
     const jitterStd = Number((J.std||0));
+    // Scroll-follow gating: allow gentle catch-up based on sim/lead/cluster coverage (separate from activation)
+    try {
+      const STALE_MS = 1200, MIN_SIM = 0.92, LEAD_LINES = 2;
+      const activeEl = (document.getElementById('script')||document).querySelector('p.active');
+      const anchorVisible = isInComfortBand(activeEl, { top: 0.25, bottom: 0.55 });
+      // Track last time anchor was visible in band
+      const nowT = performance.now();
+      try {
+        if (anchorVisible) window.__tpLastAnchorInViewAt = nowT;
+      } catch {}
+      const lastIn = (window.__tpLastAnchorInViewAt||0);
+      const stale = (nowT - lastIn) > STALE_MS;
+      // Compute lead in lines using virtual line indices
+      let lead = 0;
+      try {
+        const vList = __vParaIndex || [];
+        const activeIdx = (function(){
+          try {
+            const el = activeEl; if (!el) return -1;
+            const para = paraIndex.find(p => p.el === el) || null;
+            if (!para) return -1;
+            return para.start;
+          } catch { return -1; }
+        })();
+        const frontierWord = Math.max(0, Math.min(Math.round(fIdx), scriptWords.length - 1));
+        const fV = vList.findIndex(v => frontierWord >= v.start && frontierWord <= v.end);
+        const aV = vList.findIndex(v => activeIdx >= v.start && activeIdx <= v.end);
+        if (fV >= 0 && aV >= 0) lead = fV - aV;
+      } catch { lead = 0; }
+      const shouldCatchUp = (lead >= LEAD_LINES && (clusterCov >= 0.35 || bestSim >= MIN_SIM)) && (!isUserScrolling() && (stale || !anchorVisible));
+      if (shouldCatchUp) {
+        try {
+          const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+          const vh = (sc === window) ? (window.innerHeight||0) : (sc.clientHeight||0);
+          const bandTop = Math.floor(vh * 0.25);
+          const targetY = Math.max(0, Math.min((vCur?.start != null ? (scriptWords.slice(0, vCur.start).join(' ').length) : 0), Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0))));
+          // Use ensureInView on the element if available; else compute a placement near the band
+          if (vCur) {
+            const el = (function(){ try { const p = paraIndex.find(p => fIdx >= p.start && fIdx <= p.end); return p?.el; } catch { return null; } })();
+            if (el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else maybeAutoScroll(targetY, sc, { overrideLock: true });
+          }
+          try { if (typeof debug==='function') debug({ tag:'scroll:catchup', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
+        } catch {}
+      }
+    } catch {}
     // Count recent suffix hits in a short window to strengthen activation
     let suffixHits = 0; try { const nowH=performance.now(); const b=(window.__tpSuffixBuf||[]); suffixHits = b.filter(t => nowH - t <= 1500).length; } catch {}
     const ok = maybeActivate({ idx: bestIdx, sim: bestSim, cov: covGate, suffixHits, jitterStd });
