@@ -1144,13 +1144,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
           if (sel && Array.from(sel.options).some(o=>o.value===last)) {
             sel.value = last;
           }
-          pendingAutoStart = true;
+          // Do not auto-start mic on load; require explicit user action
         }
       } catch {}
-      if (pendingAutoStart) {
-        // Attempt auto-start (user gesture may still be required in some browsers)
-        requestMic();
-      }
+      // Reflect idle state if mic not yet granted
+      try { if (!audioStream && permChip) permChip.textContent = 'Mic: idle'; } catch {}
     } catch {}
 
   // TP: normalize-top-btn
