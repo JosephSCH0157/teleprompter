@@ -242,8 +242,12 @@
       const prefersReduced = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       const before = (scroller.scrollTop||0);
       // Log actuator attempt before issuing the scroll
-      logScrollAttempt(scroller, before, desiredTop, 'scrollToBand');
-      try { scroller.scrollTo({ top: desiredTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = desiredTop; } catch {} }
+      logScrollAttempt(scroller, before, desiredTop, opts?.aggressive ? 'scrollToBand:aggressive' : 'scrollToBand');
+      if (opts?.aggressive) {
+        try { scroller.scrollTop = desiredTop; } catch {}
+      } else {
+        try { scroller.scrollTo({ top: desiredTop, behavior: prefersReduced ? 'auto' : 'smooth' }); } catch { try { scroller.scrollTop = desiredTop; } catch {} }
+      }
       let tries = 0;
       const verify = () => {
         try {
@@ -262,7 +266,8 @@
             try { scroller.scrollTop = desiredTop; } catch {}
             if (Math.abs((scroller.scrollTop||0) - before) <= 1){
               const delta = desiredTop - before;
-              const step = Math.sign(delta) * Math.max(48, Math.min(240, Math.abs(delta)));
+              const minStep = opts?.aggressive ? 160 : 48;
+              const step = Math.sign(delta) * Math.max(minStep, Math.min(240, Math.abs(delta)));
               try { scroller.scrollTop = before + step; } catch {}
             }
           }
@@ -382,6 +387,7 @@
   try { window.beginProgrammaticScroll = beginProgrammaticScroll; window.endProgrammaticScroll = endProgrammaticScroll; } catch {}
 
   // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
+  let __tpStagnantTicks = 0;
   function evaluateCatchUp(){
     try {
       const vList = __vParaIndex || [];
@@ -440,24 +446,36 @@
       if (shouldCatchUp){
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
-          if (el) { beginProgrammaticScroll(); ensureInView(el, { top: 0.25, bottom: 0.55 }); setTimeout(()=> endProgrammaticScroll(), 300); } else {
+          // Control loop: widen band and skip smoothing after repeated no-op attempts
+          __tpStagnantTicks++;
+          const aggressive = __tpStagnantTicks > 12;
+          const band = aggressive ? [0.20, 0.50] : [0.25, 0.55];
+          const estY = estimateY(frontierWord);
+          try {
+            const bestIdx = frontierWord; const frontierIdx = frontierWord;
+            const haveExact = (function(){ try { return !!(__tpYByIdx && __tpYByIdx.has(frontierIdx)); } catch { return false; } })();
+            if (typeof HUD?.log === 'function') HUD.log('catchup:target', { bestIdx, frontierIdx, haveExact, targetY: estY });
+            if (typeof debug === 'function') debug({ tag:'catchup:target', bestIdx, frontierIdx, haveExact, targetY: estY });
+          } catch {}
+          const lastTop = currentScrollTop();
+          beginProgrammaticScroll();
+          scrollToBand(estY, band, el || null, { overrideLock: true, aggressive });
+          setTimeout(()=>{
             try {
-              beginProgrammaticScroll();
-              const estY = estimateY(frontierWord);
-              try {
-                const bestIdx = frontierWord; const frontierIdx = frontierWord;
-                const haveExact = (function(){ try { return !!(__tpYByIdx && __tpYByIdx.has(frontierIdx)); } catch { return false; } })();
-                if (typeof HUD?.log === 'function') HUD.log('catchup:target', { bestIdx, frontierIdx, haveExact, targetY: estY });
-                if (typeof debug === 'function') debug({ tag:'catchup:target', bestIdx, frontierIdx, haveExact, targetY: estY });
-              } catch {}
-              const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body);
-              scrollToBand(estY, [0.25, 0.55], null, { overrideLock: true });
-              try { if (typeof debug==='function') debug({ tag:'catchup:estimateY', idx: frontierWord, estY }); } catch {}
-              setTimeout(()=> endProgrammaticScroll(), 300);
+              const nowTop = currentScrollTop();
+              if (Math.abs(nowTop - lastTop) < 1) {
+                __tpStagnantTicks = Math.max(__tpStagnantTicks, 16);
+              } else {
+                __tpStagnantTicks = 0;
+              }
             } catch {}
-          }
+            endProgrammaticScroll();
+          }, 120);
           try { if (typeof debug==='function') debug({ tag:'scroll:catchup:tick', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
         } catch {}
+      }
+      else {
+        __tpStagnantTicks = 0;
       }
       // Comfort band watchdog: if active line off-screen for >2s and no user input, gently recentre once
       try {
