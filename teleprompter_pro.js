@@ -3835,9 +3835,11 @@ function advanceByTranscript(transcript, isFinal){
       } catch {}
       // If cross-origin (no doc access), delegate
       if (ctx.name !== 'main' && (!doc || !doc.body)) { try { if (typeof crossOriginScroll === 'function') crossOriginScroll('END_TO_MARKER'); } catch {} return; }
-      const scroller = __docGetScroller(doc, win);
+  const scroller = __docGetScroller(doc, win);
       const marker = (doc.getElementById('marker-line') || doc.getElementById('marker'));
-      const last = (doc.querySelector('.transcript-line:last-of-type') || doc.querySelector('#script p:last-of-type'));
+  // Optional virtualization hook: allow app to materialize last node when near end
+  try { if (typeof win?.__ensureLastNode === 'function') win.__ensureLastNode(); } catch {}
+  const last = (doc.querySelector('.transcript-line:last-of-type') || doc.querySelector('#script p:last-of-type'));
       if (!marker || !scroller) return;
       const markerY = __docRelTop(marker, scroller, win);
   ensureEndSpacer(doc, scroller, win, markerY);
@@ -3865,7 +3867,7 @@ function advanceByTranscript(transcript, isFinal){
             nb = Math.max(0, totalH - __docGetScrollTop(scroller, win));
           }
           const miss = nb - markerY;
-          if (Math.abs(miss) > 1){
+          if (Math.abs(miss) > 3){
             const cur = __docGetScrollTop(scroller, win);
             const t2 = Math.min(cur + miss, __docMaxScrollTop(scroller, win, doc));
             __docSetScrollTop(scroller, win, Math.max(0, t2));

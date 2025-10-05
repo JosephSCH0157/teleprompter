@@ -266,6 +266,8 @@
                 try {
                   const scroller = getScroller(document, window);
                   const marker = document.getElementById('marker-line');
+                  // Optional virtualization hook: allow app to materialize last node when near end
+                  try { if (typeof window.__ensureLastNode === 'function') window.__ensureLastNode(); } catch {}
                   const last = (document.querySelector('.transcript-line:last-of-type') || scriptEl.querySelector('p:last-of-type'));
                   if (!scroller || !marker || !last) return;
                   // Ensure end spacer is at least markerY + small pad
@@ -293,7 +295,7 @@
                         nb = Math.max(0, totalH - getScrollTop(scroller, window));
                       }
                       const miss = nb - markerY;
-                      if (Math.abs(miss) > 1){
+                      if (Math.abs(miss) > 3){
                         const cur = getScrollTop(scroller, window);
                         const n2 = Math.max(0, Math.min(cur + miss, maxScrollTop(scroller, window, document)));
                         setScrollTop(scroller, window, n2);
