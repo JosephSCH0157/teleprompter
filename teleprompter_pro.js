@@ -4820,11 +4820,11 @@ async function init(){
       recog.maxAlternatives = Math.max(2, recog.maxAlternatives || 0);
       const SGL = (window.SpeechGrammarList || window.webkitSpeechGrammarList);
       if (SGL && 'grammars' in recog) {
-        const list = new SGL();
-        const domainTerms = ['ban','confiscation','transfer','possession'];
+  const list = new SGL();
+  const domainTerms = ['ban','confiscation','transfer','possession','raid','raids','cell','sale','single'];
         const grammar = '#JSGF V1.0; grammar domain; public <term> = ' + domainTerms.join(' | ') + ' ;';
         // Small weight to gently bias without overfitting
-        list.addFromString(grammar, 0.4);
+  list.addFromString(grammar, 0.4);
         recog.grammars = list;
         try { if (typeof debug === 'function') debug({ tag:'speech:grammar', installed:true, terms:domainTerms, weight:0.4 }); } catch {}
       } else {

@@ -122,6 +122,8 @@ select { font-size: 14px; }
     .viewer{position:relative;overflow:auto;min-height:0}
     .script{max-width:900px;margin:0 auto;padding:40px}
     .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
+    /* Natural centering for programmatic scrollIntoView */
+    .script p{ scroll-margin-top: 40vh; }
     .u{ text-decoration: underline; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 
