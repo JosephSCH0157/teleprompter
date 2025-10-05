@@ -3615,6 +3615,60 @@ function advanceByTranscript(transcript, isFinal){
     } catch {}
   }
 
+  // Ensure the last line can physically reach the marker by adding just-enough spacer
+  function ensureReachableForLastLine(markerYFromHud = null){
+    try {
+      const viewer = document.getElementById('viewer');
+      const marker = document.getElementById('marker');
+      const spacer = document.getElementById('end-spacer');
+      const content = document.getElementById('script');
+      if (!viewer || !content || !spacer) return;
+      const lastLine = content.lastElementChild;
+      if (!lastLine) return;
+      // reset before measuring true bottom
+      spacer.style.height = '0px';
+      const llRect = lastLine.getBoundingClientRect();
+      const vTop = viewer.getBoundingClientRect().top;
+      const markerTop = markerYFromHud != null ? Number(markerYFromHud) : (function(){ try { return document.getElementById('marker').getBoundingClientRect().top; } catch { return vTop + Math.round((viewer.clientHeight||0)*0.4); } })();
+      // How much more scrollTop is needed for lastLine.TOP to align with the marker?
+      const deltaToMarker   = llRect.top - markerTop;
+      const neededScrollTop = viewer.scrollTop + deltaToMarker;
+      // Current max scrollTop
+      const maxScrollTop    = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      // Add just enough space so that neededScrollTop is attainable
+      const neededExtra     = Math.max(0, Math.ceil(neededScrollTop - maxScrollTop));
+      if (neededExtra) spacer.style.height = `${neededExtra}px`;
+    } catch {}
+  }
+
+  // Simple follower that nudges scroll so the active line aligns to marker using HUD delta
+  function nudgeToMarker(markerY, activeY){
+    try {
+      const viewer = document.getElementById('viewer');
+      if (!viewer) return;
+      const delta = Number(activeY) - Number(markerY); // + => content needs to move up (scroll down)
+      if (!Number.isFinite(delta) || Math.abs(delta) < 1) return;
+      const target = Math.max(0, Math.min(viewer.scrollTop + delta, Math.max(0, viewer.scrollHeight - viewer.clientHeight)));
+      try { requestScroll(target); } catch { viewer.scrollTop = target; }
+    } catch {}
+  }
+  try { window.ensureReachableForLastLine = ensureReachableForLastLine; window.nudgeToMarker = nudgeToMarker; } catch {}
+  // Optional: binding for HUD-driven updates
+  try {
+    window.onHudUpdate = function(payload){
+      try {
+        const markerY = payload && payload.markerY;
+        const activeY = payload && payload.activeY;
+        const idx = payload && payload.idx;
+        const lastIdx = (function(){ try { const c = document.getElementById('script'); return (c && c.children && c.children.length) ? c.children.length - 1 : 0; } catch { return 0; } })();
+        if (typeof idx === 'number' && idx >= (typeof lastIdx==='number'? lastIdx : 0)) {
+          ensureReachableForLastLine(markerY);
+        }
+        if (markerY != null && activeY != null) nudgeToMarker(markerY, activeY);
+      } catch {}
+    };
+  } catch {}
+
   // call this whenever you actually advance or scroll due to a match
   function markAdvance(){
     _lastAdvanceAt = performance.now();
