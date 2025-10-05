@@ -3314,6 +3314,25 @@ function advanceByTranscript(transcript, isFinal){
     })(),
     delta
   });
+  // Visibility gate: ensure the target paragraph is visible in the active scroller before advancing idx
+  try {
+    if (paraIndex && paraIndex.length) {
+      const nextPara = paraIndex.find(p => bestIdx >= p.start && bestIdx <= p.end) || paraIndex[paraIndex.length-1];
+      const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      const vh = (sc === window) ? (window.innerHeight||0) : (sc.clientHeight||0);
+      const scTop = (sc === window) ? 0 : ((typeof sc.getBoundingClientRect === 'function') ? sc.getBoundingClientRect().top : 0);
+      if (nextPara && nextPara.el && typeof nextPara.el.getBoundingClientRect === 'function'){
+        const r = nextPara.el.getBoundingClientRect();
+        const top = r.top - scTop; const bottom = r.bottom - scTop;
+        const visible = (top >= 0 && bottom <= vh);
+        if (!visible){
+          const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
+          try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+          try { if (typeof debug==='function') debug({ tag:'visibility:ensure', targetTop, vh, lineTop: (nextPara.el.offsetTop||0) }); } catch {}
+        }
+      }
+    }
+  } catch {}
   if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM){
     currentIndex += MAX_JUMP_AHEAD_WORDS;
   } else {
