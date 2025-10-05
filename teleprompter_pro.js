@@ -78,10 +78,20 @@
 
   // EMA-smoothed confidence computation to resist jitter spikes
   let __tpJitterEma = 0;
+  let __tpJFactorPrev = 1;
+  let __tpSpikeGuardUntil = 0;
+  function onJitterSpike(){ try { __tpSpikeGuardUntil = performance.now() + 1200; } catch {} }
   function computeConf({ sim, cov, jitterStd }) {
     try {
       __tpJitterEma = __tpJitterEma ? (0.3 * jitterStd + 0.7 * __tpJitterEma) : jitterStd;
-      const jFactor = Math.max(0.35, 1 - (__tpJitterEma / 18));
+      let jFactor = Math.max(0.35, 1 - (__tpJitterEma / 18));
+      // Sedate attenuation during jitter spikes so confidence isn't yanked down mid-lock
+      try {
+        if (performance.now() < __tpSpikeGuardUntil) {
+          jFactor = Math.max(__tpJFactorPrev, 0.60);
+        }
+        __tpJFactorPrev = jFactor;
+      } catch {}
       const conf = (0.55 * sim + 0.45 * cov) * jFactor;
       try {
         if (typeof debug === 'function')
@@ -3687,6 +3697,7 @@ function advanceByTranscript(transcript, isFinal){
       if (J.std >= 7 && (!elevated)) {
         J.spikeUntil = nowJ + 8000;
         try { if (typeof debug==='function') debug({ tag:'match:jitter:spike', std: J.std, until: J.spikeUntil }); } catch {}
+        try { if (typeof onJitterSpike === 'function') onJitterSpike(); } catch {}
       }
     }
   } catch {}
