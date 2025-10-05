@@ -551,8 +551,30 @@ function __applyUxFromSettings(s){
     }
   } catch {}
 }
-try { __applyUxFromSettings(__readHudSettings()); } catch {}
-window.addEventListener('hudSettings:migrated', (ev)=>{ try { __applyUxFromSettings(__readHudSettings()); } catch {} });
+
+// Live viewer style hydrator (CSS variables) for UX-visual settings
+const __STYLE_MAP = {
+  'ux.activeBg'       : ['--viewer-active-bg',        (v)=> String(v) ],
+  'ux.inactiveOpacity': ['--viewer-inactive-opacity', (v)=> { const spec=__getRange('ux.inactiveOpacity'); return String(__clamp(Number(v), spec)); } ],
+  'ux.fontSize'       : ['--viewer-font-size',        (v)=> { const spec=__getRange('ux.fontSize'); return `${__clamp(Number(v), spec)}px`; } ],
+  'ux.lineHeight'     : ['--viewer-line-height',      (v)=> { const spec=__getRange('ux.lineHeight'); return String(__clamp(Number(v), spec)); } ],
+  'ux.scrollMarginTop': ['--viewer-scroll-margin-top',(v)=> { const spec=__getRange('ux.scrollMarginTop'); return `${__clamp(Number(v), spec)}px`; } ],
+  'ux.anchorPadding'  : ['--viewer-anchor-padding',   (v)=> { const spec=__getRange('ux.anchorPadding'); return `${__clamp(Number(v), spec)}px`; } ],
+};
+function __applyStyleFromSettings(hudSettings, rootEl){
+  try {
+    const root = rootEl || document.querySelector('.viewer');
+    if (!root) return;
+    for (const [path, [cssVar, toCss]] of Object.entries(__STYLE_MAP)){
+      const val = __getDeep(hudSettings, path);
+      if (val != null) try { root.style.setProperty(cssVar, toCss(val)); } catch {}
+    }
+    // Snap-only toggle
+    try { root.classList.toggle('snap-only', !!__getDeep(hudSettings, 'ux.snapActiveOnly')); } catch {}
+  } catch {}
+}
+try { const __bootS = __readHudSettings(); __applyUxFromSettings(__bootS); __applyStyleFromSettings(__bootS); } catch {}
+window.addEventListener('hudSettings:migrated', (ev)=>{ try { const s=__readHudSettings(); __applyUxFromSettings(s); __applyStyleFromSettings(s); __hydrateSettingsControls(s); } catch {} });
 window.addEventListener('storage', (e)=>{ try {
   if (e && e.key === SETTINGS_KEY){
     const s = __readHudSettings();
@@ -563,6 +585,35 @@ window.addEventListener('storage', (e)=>{ try {
 } catch {} });
 
 // ---- Settings controls hydrator/binder ----
+// Ranges and defaults for clamping and UI attributes
+const RANGE = {
+  ux: {
+    inactiveOpacity: {min: 0,   max: 1,   step: 0.05, def: 0.8},
+    scrollMarginTop: {min: 0,   max: 300, step: 4,    def: 140},
+    anchorPadding:   {min: 0,   max: 200, step: 2,    def: 0},
+    fontSize:        {min: 12,  max: 28,  step: 1,    def: 18},
+    lineHeight:      {min: 1.2, max: 2.0, step: 0.05, def: 1.5}
+  },
+  viewer: {
+    scrollStep:      {min: 8,   max: 120, step: 4,    def: 24}
+  },
+  autoscroll: {
+    baseSpeed:       {min: 0,   max: 2000,step: 50,   def: 600},
+    accel:           {min: 0,   max: 2000,step: 50,   def: 300}
+  },
+  match: {
+    windowAhead:     {min: 60,  max: 600, step: 30,   def: 240},
+    catchupJitterStd:{min: 0.2, max: 4,   step: 0.1,  def: 2.0}
+  }
+};
+const __clamp = (v, spec) => Math.min(spec.max, Math.max(spec.min, v));
+function __getRange(path){ try { return path.split('.').reduce((a,k)=> a && a[k], RANGE); } catch { return undefined; } }
+function __applyRanged(path, raw){
+  const spec = __getRange(path); if (!spec) return raw;
+  const n = Number(raw);
+  const val = Number.isFinite(n) ? n : spec.def;
+  return __clamp(val, spec);
+}
 const __SETTINGS_BINDINGS = [
   // UX / Navigation
   { sel:'#snap-active-only',   path:'ux.snapActiveOnly',   type:'checkbox' },
@@ -636,10 +687,28 @@ function __hydrateSettingsControls(s){
     for (const b of __SETTINGS_BINDINGS){
       const el = document.querySelector(b.sel);
       if (!el) continue;
+      // Set range attributes and hints when applicable
+      const spec = __getRange(b.path);
+      if (spec && (b.type==='number' || b.type==='range')){
+        try { el.min = String(spec.min); el.max = String(spec.max); el.step = String(spec.step); } catch {}
+        try { el.title = `${spec.min}–${spec.max}`; } catch {}
+      }
       let val = __getDeep(s, b.path);
       // special for defaults version: reflect from __meta if not set in dev
       if (b.path==='dev.defaultsVersion' && (val===undefined || val===null)) val = s?.__meta?.defaultsVersion ?? '';
+      // Clamp on hydrate
+      if (spec && val != null && (b.type==='number' || b.type==='range')) val = __clamp(Number(val), spec);
       __applyToControl(el, b.type, val);
+
+      // Reveal defaults-version if strategy is meta
+      if (b.sel==='#defaults-version'){
+        try {
+          const stratEl = document.querySelector('#storage-strategy');
+          const strategy = stratEl ? String(stratEl.value||'') : String(__getDeep(s,'dev.versionStrategy')||'');
+          const wrap = el.closest('.settings-row') || el.parentElement;
+          if (wrap) wrap.style.display = (strategy==='meta') ? '' : 'none';
+        } catch {}
+      }
     }
   } catch {}
 }
@@ -653,13 +722,20 @@ function __bindSettingsControls(){
       el.addEventListener(ev, ()=>{
         try {
           const type = b.type;
-          const val = __castFromControl(el, type);
+          let val = __castFromControl(el, type);
+          // Clamp ranges on write
+          const spec = __getRange(b.path);
+          if (spec && (type==='number' || type==='range')){
+            const raw = (val===undefined ? spec.def : Number(val));
+            val = __clamp(Number.isFinite(raw) ? raw : spec.def, spec);
+          }
           if (type==='number-ro') return; // do not write back
           const cur = __readHudSettings();
           const next = (val===undefined ? cur : __setDeep(cur, b.path, val));
           try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
           // Apply UX live and re-hydrate in case of derived changes
           __applyUxFromSettings(next);
+          __applyStyleFromSettings(next);
           __hydrateSettingsControls(next);
           // Broadcast change event for any listeners
           try { window.dispatchEvent(new CustomEvent('hudSettings:changed', { detail: { storageKey: SETTINGS_KEY, path: b.path } })); } catch {}
@@ -2235,12 +2311,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     if (settingsBtn && settingsOverlay && settingsClose && settingsBody){
       const openSettings = () => {
         try { buildSettingsContent(); } catch(e){}
-        try { __hydrateSettingsControls(__readHudSettings()); __bindSettingsControls(); } catch {}
+        try { const s=__readHudSettings(); __hydrateSettingsControls(s); __bindSettingsControls(); __applyStyleFromSettings(s); } catch {}
         settingsOverlay.classList.remove('hidden');
         settingsBtn.setAttribute('aria-expanded','true');
       };
       // Prebuild asynchronously after main init so first open isn't empty if user opens quickly
-  setTimeout(()=>{ try { buildSettingsContent(); __hydrateSettingsControls(__readHudSettings()); __bindSettingsControls(); } catch{} }, 0);
+  setTimeout(()=>{ try { const s=__readHudSettings(); buildSettingsContent(); __hydrateSettingsControls(s); __bindSettingsControls(); __applyStyleFromSettings(s); } catch{} }, 0);
       const closeSettings = () => { settingsOverlay.classList.add('hidden'); settingsBtn.setAttribute('aria-expanded','false'); };
       settingsBtn.addEventListener('click', openSettings);
       settingsClose.addEventListener('click', closeSettings);
