@@ -334,6 +334,17 @@
       else scroller.scrollTop = (scroller.scrollTop||0) + dy;
     } catch {}
   }
+  // Minimal catch-up mover: apply hard gates, sticky-band hold, then snapped write
+  function scrollToBandSimple({ scroller, targetTop, band, viewportHeight, sim, jitterStd, anchorVisible }){
+    try {
+      if (!stableEligible({ sim, jitterStd, anchorVisible })) return 'hold:unstable';
+      if (!__tpCanProgrammaticScroll()) return 'hold:cooldown';
+      const top = (scroller?.scrollTop||0);
+      if (inStickyBand(targetTop, top, viewportHeight, band)) return 'ok:in-band';
+      scrollToSnapped(scroller, targetTop);
+      return 'ok:snapped';
+    } catch { return 'hold:error'; }
+  }
   // Scroll such that targetY aligns roughly to the band center, verify progress, and escalate if needed
   function scrollToBand(targetY, band=[0.28, 0.55], anchorEl=null, opts={}){
     try {
@@ -707,7 +718,12 @@
           // Snapshot metrics before probe to compare after movement
           const prevSim = bestSim;
           const prevCov = (covBest + clusterCov + covActive);
-          scrollToBand(estY, band, el || null, { overrideLock: true, aggressive, probeTier: (decision==='go:probe') ? __tpProbeTier : 0 });
+          // Prepare simple mover inputs
+          const scroller = getScrollableAncestor(el || document.getElementById('viewer') || document.body);
+          const useWindow = (scroller === document.scrollingElement || scroller === document.documentElement || scroller === document.body);
+          const vhNow = useWindow ? (window.innerHeight||0) : (scroller.clientHeight||0);
+          const result = scrollToBandSimple({ scroller, targetTop: estY, band, viewportHeight: vhNow, sim: bestSim, jitterStd: (typeof window.__tpJitterEma==='number'?window.__tpJitterEma:0), anchorVisible });
+          try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:catchup:result', { result }); } catch {}
           setTimeout(()=>{
             try {
               const nowTop = currentScrollTop();
