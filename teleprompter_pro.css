@@ -152,10 +152,22 @@ select { font-size: 14px; }
 /* Visual rules driven by settings */
 .script p{ scroll-margin-top: var(--viewer-scroll-margin-top); }
 .script p.anchor{ padding-top: var(--viewer-anchor-padding); }
-.script p.active{ background: var(--viewer-active-bg); }
+/* When highlighting is enabled, underline the active paragraph instead of boxing it */
+.viewer.highlight-on .script p.active{
+    background: none;
+    text-decoration: underline;
+    text-decoration-thickness: 0.1em;
+    text-underline-offset: 6px;
+}
 .script p:not(.active){
     opacity: var(--viewer-inactive-opacity);
     transition: opacity .12s ease;
+}
+
+/* Default: when highlight is off, keep active paragraphs without extra decoration */
+.viewer:not(.highlight-on) .script p.active{
+    background: none;
+    text-decoration: none;
 }
 
 /* Optional snap-active-only mode */

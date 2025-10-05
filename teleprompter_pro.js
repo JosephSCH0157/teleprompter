@@ -543,11 +543,15 @@ function __readHudSettings(){ try { return JSON.parse(localStorage.getItem(SETTI
 function __applyUxFromSettings(s){
   try {
     const ux = s?.ux || {};
-    const root = document.querySelector('.viewer .script');
-    if (root){
-      if (ux.snapActiveOnly) root.classList.add('snap-active-only'); else root.classList.remove('snap-active-only');
+    const scriptRoot = document.querySelector('.viewer .script');
+    const viewerRoot = document.querySelector('.viewer');
+    if (scriptRoot){
+      if (ux.snapActiveOnly) scriptRoot.classList.add('snap-active-only'); else scriptRoot.classList.remove('snap-active-only');
       try { if (typeof window.setSnapMode === 'function') window.setSnapMode(ux.snapActiveOnly ? 'active' : 'all'); } catch {}
-      if (ux.anchorSnap) try { root.style.setProperty('--anchor-snap', ux.anchorSnap); } catch {}
+      if (ux.anchorSnap) try { scriptRoot.style.setProperty('--anchor-snap', ux.anchorSnap); } catch {}
+    }
+    if (viewerRoot){
+      try { viewerRoot.classList.toggle('highlight-on', !!ux.highlightActive); } catch {}
     }
   } catch {}
 }
