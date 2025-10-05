@@ -3659,6 +3659,40 @@ function advanceByTranscript(transcript, isFinal){
       displayWin.postMessage({ type:'align-by-marker' }, '*');
     } catch {}
   }
+
+  // Measure marker/active either from Display (popup or iframe) if open, else from main
+  async function measureDisplayOrMain(){
+    // Try display first
+    try {
+      if (displayWin && !displayWin.closed && displayReady) {
+        const res = await new Promise((resolve)=>{
+          let settled = false;
+          const timeout = setTimeout(()=>{ if(!settled){ settled=true; resolve(null); } }, 200);
+          function onMsg(e){
+            try {
+              if (e.source !== displayWin) return;
+              const d = e.data||{};
+              if (d.type === 'MEASURE') { settled = true; clearTimeout(timeout); window.removeEventListener('message', onMsg); resolve({ markerY: d.markerY, activeY: d.activeY }); }
+            } catch {}
+          }
+          window.addEventListener('message', onMsg, { once:false });
+          try { displayWin.postMessage({ type:'measure-request' }, '*'); } catch {}
+        });
+        if (res) return res;
+      }
+    } catch {}
+    // Fallback to main measurement
+    try {
+      const viewer = document.getElementById('viewer');
+      const marker = document.getElementById('marker');
+      const active = (document.getElementById('script')||viewer)?.querySelector('p.active');
+      if (!viewer || !marker || !active) return { markerY: null, activeY: null };
+      const vRect = viewer.getBoundingClientRect();
+      const markerY = marker.getBoundingClientRect().top - vRect.top;
+      const activeY = active.getBoundingClientRect().top - vRect.top;
+      return { markerY, activeY };
+    } catch { return { markerY: null, activeY: null }; }
+  }
   // Final snap: when very close, align the active line exactly to the marker
   function endSnap(markerYViewport){
     try {
@@ -3689,6 +3723,7 @@ function advanceByTranscript(transcript, isFinal){
     window.ensureReachableForLastLine = ensureReachableForLastLine;
     window.nudgeToMarker = nudgeToMarker;
     window.nudgeToMarkerInDisplay = nudgeToMarkerInDisplay;
+    window.measureDisplayOrMain = measureDisplayOrMain;
     // Aliases to match external snippet naming
     window.ensureEndReachability = ensureReachableForLastLine;
     window.endSnap = endSnap;

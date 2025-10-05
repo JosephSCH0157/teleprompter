@@ -186,7 +186,7 @@
                   wrap.scrollTop = d.top||0;
                 }
               }
-              // DISPLAY: report marker/active measurement back to opener
+              // DISPLAY: report marker/active measurement back to opener/parent
               if (d.type === 'measure-request'){
                 try {
                   const scroller = (document.querySelector('#displayScroll') || wrap || window);
@@ -196,7 +196,8 @@
                   const markerY = marker ? (marker.getBoundingClientRect().top - baseTop) : null;
                   const activeY = active ? (active.getBoundingClientRect().top - baseTop) : null;
                   try { console.info('MEASURE FROM', location.pathname, 'scH=', (scroller===window? window.innerHeight : scroller.clientHeight), 'markerY=', markerY, 'activeY=', activeY); } catch {}
-                  window.opener && window.opener.postMessage({ type:'MEASURE', markerY, activeY }, '*');
+                  const tgt = (window.opener || window.parent);
+                  if (tgt && typeof tgt.postMessage === 'function') tgt.postMessage({ type:'MEASURE', markerY, activeY }, '*');
                 } catch {}
               }
               // DISPLAY: apply a scroll based on HUD-provided viewport Ys (in DISPLAY coords)
