@@ -330,7 +330,7 @@
       if (shouldCatchUp){
         try {
           const el = (function(){ try { const p = paraIndex.find(p => frontierWord >= p.start && frontierWord <= p.end); return p?.el; } catch { return null; } })();
-          if (el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else {
+          if (el) { beginProgrammaticScroll(); ensureInView(el, { top: 0.25, bottom: 0.55 }); setTimeout(()=> endProgrammaticScroll(), 300); } else {
             try {
               beginProgrammaticScroll();
               const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body);
