@@ -3652,6 +3652,73 @@ function advanceByTranscript(transcript, isFinal){
       try { requestScroll(target); } catch { viewer.scrollTop = target; }
     } catch {}
   }
+  // ---------- context selection ----------
+  function getDisplayContext(){
+    try {
+      if (displayWin && !displayWin.closed){
+        try { void displayWin.document; return { name:'popup', win: displayWin, doc: displayWin.document }; } catch {}
+      }
+    } catch {}
+    try {
+      const frame = document.getElementById('displayFrame');
+      if (frame && frame.contentWindow){
+        try { void frame.contentWindow.document; return { name:'iframe', win: frame.contentWindow, doc: frame.contentWindow.document }; } catch {}
+      }
+    } catch {}
+    return { name:'main', win: window, doc: document };
+  }
+  function getContextScroller(ctx){
+    const d = ctx?.doc; const w = ctx?.win;
+    if (!d || !w) return { scroller: window, baseTop: 0 };
+    const sc = d.querySelector('#displayScroll') || d.getElementById('wrap') || d.getElementById('viewer') || w;
+    const baseTop = (sc===w ? 0 : (sc.getBoundingClientRect().top||0));
+    return { scroller: sc, baseTop };
+  }
+  function measureMarkerActive(ctx){
+    try {
+      ctx ||= getDisplayContext();
+      const d = ctx.doc, w = ctx.win; if (!d || !w) return { ctx, markerY:null, activeY:null };
+      const { scroller, baseTop } = getContextScroller(ctx);
+      const marker = d.getElementById('marker-line') || d.getElementById('marker');
+      const active = d.querySelector('.transcript-line.is-active') || d.querySelector('p.active');
+      const markerY = marker ? (marker.getBoundingClientRect().top - baseTop) : null;
+      const activeY = active ? (active.getBoundingClientRect().top - baseTop) : null;
+      return { ctx, markerY, activeY };
+    } catch { return { ctx, markerY:null, activeY:null }; }
+  }
+  function nudgeToMarkerInContext(ctx, markerY, activeY){
+    try {
+      const d = ctx?.doc, w = ctx?.win; if (!d || !w) return;
+      const { scroller } = getContextScroller(ctx);
+      const delta = Number(activeY) - Number(markerY);
+      if (!Number.isFinite(delta) || Math.abs(delta) < 1) return;
+      if (scroller === w) w.scrollTo(0, Math.max(0, (w.scrollY||0) + delta));
+      else scroller.scrollTop = Math.max(0, (scroller.scrollTop||0) + delta);
+    } catch {}
+  }
+  function alignToMarkerAuto(){
+    try {
+      const ctx = getDisplayContext();
+      if (ctx.name !== 'main' && ctx.doc){
+        const m = measureMarkerActive(ctx);
+        if (m && m.markerY != null && m.activeY != null) return nudgeToMarkerInContext(ctx, m.markerY, m.activeY);
+        // If we got here, either element missing or measurement failed -> try cross-origin fallback if popup exists
+        if (typeof window.crossOriginScroll === 'function') return window.crossOriginScroll();
+        return nudgeToMarkerInDisplay();
+      }
+      // Fallback to main window geometry
+      const viewer = document.getElementById('viewer');
+      const marker = document.getElementById('marker');
+      const active = (document.getElementById('script')||document).querySelector('p.active');
+      if (!viewer || !marker || !active) return;
+      const vRect = viewer.getBoundingClientRect();
+      const markerY = marker.getBoundingClientRect().top - vRect.top;
+      const activeY = active.getBoundingClientRect().top - vRect.top;
+      nudgeToMarker(markerY, activeY);
+    } catch {}
+  }
+  try { window.getDisplayContext = getDisplayContext; window.alignToMarkerAuto = alignToMarkerAuto; } catch {}
+  try { if (typeof window.crossOriginScroll !== 'function') window.crossOriginScroll = ()=>{ try{ if(displayWin && !displayWin.closed) displayWin.postMessage({ type:'align-by-marker' }, '*'); }catch{} }; } catch {}
   // Align the external display window by marker (if open): asks display to nudge by its own delta
   function nudgeToMarkerInDisplay(){
     try {
