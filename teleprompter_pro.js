@@ -287,6 +287,46 @@
       else scroller.scrollTop = snapped;
     } catch {}
   }
+
+  // ===== ScrollManager v2 — critically damped, single-flight, deadbanded =====
+  (function installScrollManager(){
+    try {
+      if (window.SCROLLER) return;
+      function clamp(n,min,max){ return Math.min(max, Math.max(min, n)); }
+      function getScroller(){ return (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body); }
+      function getScrollTop(sc){ return (sc === window) ? (window.scrollY||0) : (sc.scrollTop||0); }
+      function setScrollTop(sc, top){ try { if (sc === window) window.scrollTo(0, top); else sc.scrollTo({ top, behavior:'auto' }); } catch { if (sc !== window) sc.scrollTop = top; else try{ window.scrollTo(0, top); }catch{} } }
+      function getMaxTop(sc){ try { const h = (sc===window) ? document.documentElement.scrollHeight : (sc.scrollHeight||0); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); return Math.max(0, h - vh); } catch { return 0; } }
+      function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
+
+      class ScrollManager {
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; try { const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        request(r){ try { const sc = getScroller(); let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null); if (y == null) return; if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) { this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' }; } if (!this.raf) this.start(); } catch {} }
+        onMatchActivate({ idx, reason, conf }){ try { const bucket = Math.round((Number(conf)||0) * 20); const key = `${idx}|${reason||''}|${bucket}`; if (key === this._lastMatchKey) return; this._lastMatchKey = key; const el = (document.getElementById('script')||document).querySelector(`[data-match-idx="${idx}"]`) || document.querySelector(`#match-${idx}`) || null; if (!el) return; this.request({ el, priority:5, src:'match', reason:String(reason||'') }); } catch {} }
+        onSpeechFinal(node){ try { if (!node) return; this.request({ el: node, priority: 10, src:'speech', reason:'final' }); } catch {} }
+        onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
+        start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
+        stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; }
+        tick = (ts) => {
+          this.raf = requestAnimationFrame(this.tick);
+          const sc = getScroller();
+          if (ts < this.coolingUntil) return; // user truce
+          if (this.pending){ this.targetY = this.pending.y; this.pending = null; }
+          if (this.targetY == null) return this.stop();
+          const pos = getScrollTop(sc);
+          const err = this.targetY - pos;
+          const absErr = Math.abs(err);
+          if (absErr < this.deadband){ if (!this.lastOutside) this.lastOutside = ts; if (ts - this.lastOutside >= this.settleMs) return this.stop(); } else { this.lastOutside = 0; }
+          const dt = (this.lastTs ? (ts - this.lastTs) : 16.7) / 1000; this.lastTs = ts;
+          const a = this.kp * err - this.kd * this.v;
+          this.v = clamp(this.v + a * dt, -this.maxSpeed, this.maxSpeed);
+          const next = clamp(pos + this.v * dt, 0, getMaxTop(sc));
+          setScrollTop(sc, next);
+        }
+      }
+      try { window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager(); } catch {}
+    } catch {}
+  })();
   // Oscillation breaker: detect A↔B↔A within 500ms and <=200px separation
   let __tpLastPosSamples = [];
   let __tpOscFreezeUntil = 0;
@@ -669,18 +709,13 @@
       } catch { covActive = 0; }
       // Release oscillation hold when freeze window passes
       try { if (__tpOscActive && performance.now() >= __tpOscFreezeUntil) onOscillationRelease(); } catch {}
-      // Oscillation breaker: if ABAB toggling detected, mark low-sim freeze and hold for ~1s
+      // Oscillation breaker: previously held for ~1s; with ScrollManager PD loop, avoid hard holds to reduce tug-of-war
       try {
         const topNow = currentScrollTop();
         __tpRecordTopSample(topNow);
-        if (__tpIsOscillating()){
-          const until = performance.now() + 1000;
-          __tpLowSimAt = performance.now();
-          __tpOscFreezeUntil = until;
-          try { onOscillationHold(until); } catch {}
-          try { window.__tpLastCatchupDecision = 'hold:oscillation'; } catch {}
-          return;
-        }
+        // If oscillation is detected, prefer letting ScrollManager PD settle without issuing additional holds
+        // so we do not spam hard-stops; continue to decision logic
+        if (__tpIsOscillating()){ /* no-op: let PD loop dampen */ }
       } catch {}
       // Hard-stable eligibility check (applies before any catch-up/fallback)
       try {
@@ -772,8 +807,11 @@
           const scroller = getScrollableAncestor(el || document.getElementById('viewer') || document.body);
           const useWindow = (scroller === document.scrollingElement || scroller === document.documentElement || scroller === document.body);
           const vhNow = useWindow ? (window.innerHeight||0) : (scroller.clientHeight||0);
-          const result = scrollToBandSimple({ scroller, targetTop: estY, band, viewportHeight: vhNow, sim: bestSim, jitterStd: (typeof window.__tpJitterEma==='number'?window.__tpJitterEma:0), anchorVisible });
-          try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:catchup:result', { result }); } catch {}
+          // Route programmatic movement through ScrollManager (single authority, deadband + PD)
+          try {
+            const prio = (decision === 'go:signal') ? 6 : 7; // probe edges slightly higher to help recovery
+            window.SCROLLER?.request({ y: estY, priority: prio, src: (decision==='go:signal'?'match':'system'), reason: 'catchup' });
+          } catch {}
           setTimeout(()=>{
             try {
               const nowTop = currentScrollTop();
