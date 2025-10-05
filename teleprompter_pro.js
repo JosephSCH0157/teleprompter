@@ -1836,7 +1836,34 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     scrollToY      = (y)=>{ sh.scrollToY(y); try{ updateDebugPosChip(); }catch{} };
     scrollToEl     = (el,off=0)=>{ sh.scrollToEl(el,off); try{ updateDebugPosChip(); }catch{} };
   scrollToElAtMarker = (el)=>{ sh.scrollToElAtMarker(el); try{ updateDebugPosChip(); }catch{} };
-    requestScroll  = (y)=>{ try{ sh.requestScroll(y); }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} } try{ updateDebugPosChip(); }catch{} };
+    // Session scroller lock to avoid double-scroll race between page and viewer
+    (function installSessionScrollerLock(){
+      try {
+        if (window.__tpSessScrollerLockInstalled) return; window.__tpSessScrollerLockInstalled = true;
+        let _locked = false;
+        function detectViewer(){ try { const v = document.getElementById('viewer'); if (!v) return null; const canScroll = (v.scrollHeight - v.clientHeight) > 1; return canScroll ? v : null; } catch { return null; } }
+        function lockToViewerIfPossible(){ if (_locked) return; const v = detectViewer(); if (v){ try { window.__TP_SCROLLER = v; } catch {} _locked = true; try { console.info('[TP-Pro] Active scroller locked: viewer'); } catch {} } }
+        function scrollToY(y){
+          try {
+            // Attempt to lock to viewer at first opportunity (when it can scroll)
+            lockToViewerIfPossible();
+            const viewerEl = document.getElementById('viewer');
+            const pageEl = document.scrollingElement || document.documentElement || document.body;
+            const sc = (_locked && window.__TP_SCROLLER) ? window.__TP_SCROLLER : (detectViewer() || pageEl);
+            const max = Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0));
+            const to = Math.max(0, Math.min(Number(y)||0, max));
+            // Prefer the tiny scheduler if available (coalesced writes, deterministic)
+            if (typeof window.__tpScrollWrite === 'function') { window.__tpScrollWrite(to); return; }
+            try { sc.scrollTo({ top: to, behavior: 'instant' }); } catch { try { sc.scrollTop = to; } catch {} }
+          } catch {}
+        }
+        // Publish helpers (optional teardown could unset lock if needed later)
+        try { window.__lockActiveScroller = ()=>{ _locked=true; if (!window.__TP_SCROLLER) { const v=detectViewer(); window.__TP_SCROLLER = v || (document.scrollingElement||document.documentElement||document.body); } }; } catch {}
+        try { window.__unlockActiveScroller = ()=>{ _locked=false; }; } catch {}
+        // Override requestScroll to force a single target per session
+        requestScroll  = (y)=>{ try{ scrollToY(y); }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} } try{ updateDebugPosChip(); }catch{} };
+      } catch {}
+    })();
     } catch(e) { console.warn('scroll-helpers load failed', e); }
 
     try {
