@@ -3724,9 +3724,13 @@ function advanceByTranscript(transcript, isFinal){
     try {
       const viewer = document.getElementById('viewer');
       if (!viewer) return;
-      const delta = Number(activeY) - Number(markerY); // + => content needs to move up (scroll down)
-      if (!Number.isFinite(delta) || Math.abs(delta) < 1) return;
-      const target = Math.max(0, Math.min(viewer.scrollTop + delta, Math.max(0, viewer.scrollHeight - viewer.clientHeight)));
+      // Round and ignore tiny deltas to reduce jitter
+      const ay = Math.round(Number(activeY));
+      const my = Math.round(Number(markerY));
+      const delta = ay - my; // + => content needs to move up (scroll down)
+      if (!Number.isFinite(delta) || Math.abs(delta) < 6) return;
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const target = Math.max(0, Math.min(Math.round(viewer.scrollTop + delta), max));
       try { requestScroll(target); } catch { viewer.scrollTop = target; }
     } catch {}
   }
@@ -3760,8 +3764,8 @@ function advanceByTranscript(transcript, isFinal){
       const { scroller, baseTop } = getContextScroller(ctx);
       const marker = d.getElementById('marker-line') || d.getElementById('marker');
       const active = d.querySelector('.transcript-line.is-active') || d.querySelector('p.active');
-      const markerY = marker ? (marker.getBoundingClientRect().top - baseTop) : null;
-      const activeY = active ? (active.getBoundingClientRect().top - baseTop) : null;
+      const markerY = marker ? Math.round(marker.getBoundingClientRect().top - baseTop) : null;
+      const activeY = active ? Math.round(active.getBoundingClientRect().top - baseTop) : null;
       return { ctx, markerY, activeY };
     } catch { return { ctx, markerY:null, activeY:null }; }
   }
@@ -3769,10 +3773,14 @@ function advanceByTranscript(transcript, isFinal){
     try {
       const d = ctx?.doc, w = ctx?.win; if (!d || !w) return;
       const { scroller } = getContextScroller(ctx);
-      const delta = Number(activeY) - Number(markerY);
-      if (!Number.isFinite(delta) || Math.abs(delta) < 1) return;
-      if (scroller === w) w.scrollTo(0, Math.max(0, (w.scrollY||0) + delta));
-      else scroller.scrollTop = Math.max(0, (scroller.scrollTop||0) + delta);
+      const ay = Math.round(Number(activeY));
+      const my = Math.round(Number(markerY));
+      const delta = ay - my;
+      if (!Number.isFinite(delta) || Math.abs(delta) < 6) return;
+      const cur = (scroller === w) ? (w.scrollY||0) : (scroller.scrollTop||0);
+      const max = (function(){ try { const h = (scroller===w ? (d.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0)); const vh=(scroller===w ? (w.innerHeight||0) : (scroller.clientHeight||0)); return Math.max(0, h - vh); } catch { return 0; } })();
+      const target = Math.max(0, Math.min(Math.round(cur + delta), max));
+      if (scroller === w) w.scrollTo(0, target); else scroller.scrollTop = target;
     } catch {}
   }
   function alignToMarkerAuto(){
@@ -3794,10 +3802,10 @@ function advanceByTranscript(transcript, isFinal){
       const active = (document.getElementById('script')||document).querySelector('p.active');
       if (!viewer || !marker || !active) return;
       const vRect = viewer.getBoundingClientRect();
-      const markerY = marker.getBoundingClientRect().top - vRect.top;
-      const activeY = active.getBoundingClientRect().top - vRect.top;
-      try { if (typeof window.HUD?.log === 'function') HUD.log('anchor:marker', { source:'main', markerY: Math.round(markerY), activeY: Math.round(activeY) }); } catch {}
-      nudgeToMarker(markerY, activeY);
+  const markerY = Math.round(marker.getBoundingClientRect().top - vRect.top);
+  const activeY = Math.round(active.getBoundingClientRect().top - vRect.top);
+  try { if (typeof window.HUD?.log === 'function') HUD.log('anchor:marker', { source:'main', markerY, activeY }); } catch {}
+  nudgeToMarker(markerY, activeY);
     } catch {}
   }
   try { window.getDisplayContext = getDisplayContext; window.alignToMarkerAuto = alignToMarkerAuto; } catch {}
