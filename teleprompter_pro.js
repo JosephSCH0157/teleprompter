@@ -253,6 +253,95 @@
   }
   try { window.getScrollableAncestor = getScrollableAncestor; window.scrollToBand = scrollToBand; } catch {}
 
+  // Index→Y mapping: keep a map of word-index to element top (offsetTop) so we can estimate target Y even when no element is present
+  const yByIdx = new Map();
+  let __tpAvgPerWordH = 24; // fallback per-word vertical increment
+  function currentScrollTop(){
+    try {
+      const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      return (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+    } catch { return 0; }
+  }
+  function recomputeAvgPerWord(){
+    try {
+      const N = (paraIndex||[]);
+      if (!N.length) return;
+      const steps = [];
+      for (let i=0;i<N.length-1;i++){
+        const a = N[i], b = N[i+1];
+        const dy = Math.max(0, (b.el?.offsetTop||0) - (a.el?.offsetTop||0));
+        const dw = Math.max(1, (b.start - a.start)); // words between starts ≈ tokens in a
+        if (dy>0 && dw>0) steps.push(dy/dw);
+      }
+      if (steps.length){
+        steps.sort((x,y)=>x-y);
+        const mid = steps[Math.floor(steps.length/2)] || steps[0];
+        __tpAvgPerWordH = Math.max(6, Math.min(64, mid));
+      }
+    } catch {}
+  }
+  function avgLineHeight(){ return __tpAvgPerWordH; }
+  function refreshYIndexMap(){
+    try {
+      yByIdx.clear();
+      const list = (paraIndex||[]);
+      for (const p of list){
+        const start = Number(p?.start)||0;
+        const y = Math.max(0, Number(p?.el?.offsetTop)||0);
+        if (p?.el) { try { p.el.setAttribute('data-idx', String(start)); } catch {} }
+        yByIdx.set(start, y);
+      }
+      recomputeAvgPerWord();
+    } catch {}
+  }
+  function estimateY(idx){
+    try {
+      idx = Number(idx)||0;
+      if (yByIdx.has(idx)) return yByIdx.get(idx);
+      const known = Array.from(yByIdx.keys()).sort((a,b)=>a-b);
+      if (!known.length) return currentScrollTop();
+      const below = known.find(k => k > idx);
+      let above = null; for (let i=known.length-1;i>=0;i--){ if (known[i] < idx){ above = known[i]; break; } }
+      if (above != null && below != null){
+        const dy = (yByIdx.get(below) - yByIdx.get(above)) / Math.max(1, (below - above));
+        return Math.round(yByIdx.get(above) + dy * (idx - above));
+      }
+      if (above != null) return Math.round(yByIdx.get(above) + avgLineHeight() * (idx - above));
+      if (below != null) return Math.round(yByIdx.get(below) - avgLineHeight() * (below - idx));
+      // absolute fallback: current scrollTop + (idx - activeIdx)*avgLineHeight
+      let activeIdx = (function(){
+        try {
+          const el = (document.getElementById('script')||document).querySelector('p.active');
+          const p = el ? (paraIndex||[]).find(pp => pp.el === el) : null;
+          if (p) return p.start|0;
+        } catch {}
+        return Number(currentIndex)||0;
+      })();
+      return Math.round(currentScrollTop() + (idx - activeIdx) * avgLineHeight());
+    } catch { return currentScrollTop(); }
+  }
+  try { window.__tpYByIdx = yByIdx; window.estimateY = estimateY; } catch {}
+  // Observe layout and DOM changes to keep the map fresh
+  try {
+    const installYIdxObservers = () => {
+      const viewer = document.getElementById('viewer');
+      const script = document.getElementById('script');
+      if (!script) return;
+      if (!window.__tpYIdxRO && window.ResizeObserver){
+        window.__tpYIdxRO = new ResizeObserver(()=>{ try { refreshYIndexMap(); } catch {} });
+        try { window.__tpYIdxRO.observe(script); } catch {}
+        if (viewer) try { window.__tpYIdxRO.observe(viewer); } catch {}
+      }
+      if (!window.__tpYIdxMO && window.MutationObserver){
+        window.__tpYIdxMO = new MutationObserver(()=>{ try { refreshYIndexMap(); } catch {} });
+        try { window.__tpYIdxMO.observe(script, { childList:true, subtree:true }); } catch {}
+      }
+    };
+    // Defer until DOMContentLoaded if needed
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installYIdxObservers, { once:true });
+    else installYIdxObservers();
+  } catch {}
+
   // Programmatic scroll guard with TTL to avoid stuck states
   let __tpProgrammaticScroll = false;
   let __tpScrollTTL = null;
@@ -333,8 +422,10 @@
           if (el) { beginProgrammaticScroll(); ensureInView(el, { top: 0.25, bottom: 0.55 }); setTimeout(()=> endProgrammaticScroll(), 300); } else {
             try {
               beginProgrammaticScroll();
+              const estY = estimateY(frontierWord);
               const scroller = getScrollableAncestor(document.getElementById('viewer') || document.body);
-              scrollToBand((el?.offsetTop||0), [0.25, 0.55], el || null, { overrideLock: true });
+              scrollToBand(estY, [0.25, 0.55], null, { overrideLock: true });
+              try { if (typeof debug==='function') debug({ tag:'catchup:estimateY', idx: frontierWord, estY }); } catch {}
               setTimeout(()=> endProgrammaticScroll(), 300);
             } catch {}
           }
@@ -4588,7 +4679,7 @@ function advanceByTranscript(transcript, isFinal){
     // Rebuild IntersectionObserver and (re)observe visible paragraphs
     // Rebuild IntersectionObserver via modular anchor observer
     try { __anchorObs?.ensure?.(); } catch {}
-    const paras = Array.from(scriptEl.querySelectorAll('p'));
+  const paras = Array.from(scriptEl.querySelectorAll('p'));
     try { __anchorObs?.observeAll?.(paras); } catch {}
     lineEls = paras;
     try { updateDebugPosChip(); } catch {}
@@ -4601,6 +4692,8 @@ function advanceByTranscript(transcript, isFinal){
       const toks = normTokens(el.textContent || '');
       const wc = toks.length || 1;
       const key = normLineKey(el.textContent || '');
+      // assign data-idx for lookup and debugging
+      try { el.setAttribute('data-idx', String(acc)); } catch {}
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key });
       acc += wc;
       __paraTokens.push(toks);
@@ -4608,6 +4701,8 @@ function advanceByTranscript(transcript, isFinal){
       try { if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1); } catch {}
     }
     __dfN = __paraTokens.length;
+    // Refresh the y-index map now that indices are rebuilt
+    try { refreshYIndexMap(); } catch {}
     // Build virtual merged lines for matcher duplicate disambiguation
     try {
       const MIN_LEN = 35, MAX_LEN = 120; // characters
