@@ -234,6 +234,29 @@
       return (top < minTop) || (top > maxTop);
     } catch { return true; }
   }
+  // Oscillation breaker: detect A↔B↔A within 500ms and <=200px separation
+  let __tpLastPosSamples = [];
+  let __tpOscFreezeUntil = 0;
+  function __tpRecordTopSample(top){
+    try {
+      const t = performance.now();
+      __tpLastPosSamples.push({ top: Number(top)||0, t });
+      if (__tpLastPosSamples.length > 6) __tpLastPosSamples.shift();
+    } catch {}
+  }
+  function __tpIsOscillating(){
+    try {
+      if (!__tpLastPosSamples || __tpLastPosSamples.length < 4) return false;
+      const s = __tpLastPosSamples.slice(-4);
+      const a = s[0], b = s[1], c = s[2], d = s[3];
+      const ab = Math.abs(a.top - b.top);
+      const ac = Math.abs(a.top - c.top);
+      const bd = Math.abs(b.top - d.top);
+      const span = (d.t - a.t);
+      // Two alternations: a≈c and b≈d, with pair separation not too large and within short time window
+      return (ac < 4) && (bd < 4) && (ab <= 200) && (span <= 500);
+    } catch { return false; }
+  }
   // Action-level scroll logs
   function logScrollAttempt(scroller, before, desiredTop, reason){
     try {
@@ -276,6 +299,11 @@
       const before = (scroller.scrollTop||0);
       // Early success: already in band (with epsilon tolerance)
       if (inBand(targetY, before, vh, band)){
+        // If we are in an oscillation freeze window, treat as settled
+        if (performance.now() < __tpOscFreezeUntil){
+          try { if (typeof debug==='function') debug({ tag:'scroll:settled:freeze', before, targetY, band }); } catch {}
+          return 'ok:settled';
+        }
         try { if (typeof debug==='function') debug({ tag:'scroll:in-band', before, targetY, band }); } catch {}
         try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:in-band', { before, targetY, band }); } catch {}
         return 'ok:in-band';
@@ -299,6 +327,17 @@
       const verify = () => {
         try {
           const nowTop = (scroller.scrollTop||0);
+          // Record for oscillation detection
+          __tpRecordTopSample(nowTop);
+          // If in freeze window, do not escalate; consider settled
+          if (performance.now() < __tpOscFreezeUntil){ return; }
+          // If ABAB oscillation detected, freeze fallbacks for 1s and mark settled
+          if (__tpIsOscillating()){
+            __tpOscFreezeUntil = performance.now() + 1000;
+            try { if (typeof debug==='function') debug({ tag:'scroll:oscillation-freeze', until: __tpOscFreezeUntil }); } catch {}
+            try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('scroll:oscillation-freeze', { until: __tpOscFreezeUntil }); } catch {}
+            return; // ok:settled
+          }
           if (Math.abs(nowTop - before) > 1 || tries > 2){
             try {
               const ev = { tag:'scroll:progress', before, nowTop, desiredTop: targetTop, scroller: __nodeId(scroller) };
