@@ -352,27 +352,80 @@
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; try { const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        getContainer(){ try { this.state.container = getScroller(); } catch {} return this.state.container; }
         request(r){
           try {
             const sc = getScroller();
+            try { this.state.container = sc; } catch {}
+            const ts = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            const lockFlags = { cooling: (ts < this.coolingUntil), animating: !!this.raf };
+            const containerId = (function(){ try { return __nodeId(sc); } catch { return 'unknown'; } })();
+            const dims = (function(){ try { const sh = (sc===window) ? (document.documentElement?.scrollHeight||0) : (sc?.scrollHeight||0); const ch = (sc===window) ? (window.innerHeight||0) : (sc?.clientHeight||0); return { scrollHeight: sh|0, clientHeight: ch|0 }; } catch { return { scrollHeight:0, clientHeight:0 }; } })();
+            const maxTop = (function(){ try { return getMaxTop(sc); } catch { return 0; } })();
+            const posNow = (function(){ try { return getScrollTop(sc)|0; } catch { return 0; } })();
             // Emergency path: jump immediately (e.g., a11y reveal) bypassing animation/cooldown
             if (r && r.immediate) {
               let y0 = (typeof r.y === 'number') ? r.y : (r.el ? computeTargetYForEl(r.el, sc) : null);
               if (y0 != null) {
                 setScrollTop(sc, y0);
                 this.targetY = y0; this.v = 0; this.lastTs = 0; this.pending = null;
-                return;
+                const ev = { tag:'scroll:result', ok:true, immediate:true, containerId, ...dims, lockFlags, y:y0|0, pos: posNow, holdTag: r?.reason||'' };
+                try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                return ev;
               }
             }
             let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
-            if (y == null) return;
+            if (y == null) {
+              const ev = { tag:'scroll:result', ok:false, reason:'no-target', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              return ev;
+            }
+            // Container mismatch check for element targets
+            if (r?.el) {
+              try {
+                const anc = getScrollableAncestor(r.el);
+                const mismatch = (anc && sc && anc !== sc && !(sc===window && (anc===document.scrollingElement||anc===document.documentElement||anc===document.body)));
+                if (mismatch) {
+                  const ev = { tag:'scroll:result', ok:false, reason:'container-mismatch', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+                  try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                  return ev;
+                }
+              } catch {}
+            }
+            if (ts < this.coolingUntil) {
+              const ev = { tag:'scroll:result', ok:false, reason:'locked:inertia', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              return ev;
+            }
+            if (!sc || dims.clientHeight <= 0 || (maxTop|0) <= 0) {
+              const ev = { tag:'scroll:result', ok:false, reason:'not-scrollable', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              return ev;
+            }
+            const yClamped = Math.max(0, Math.min(Number(y)||0, maxTop));
+            const atBoundNoMove = (yClamped === posNow);
+            if (atBoundNoMove) {
+              const reason = (yClamped !== y) ? 'bounds-clamp' : 'hold:stable';
+              const ev = { tag:'scroll:result', ok:false, reason, containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              return ev;
+            }
+            if (Math.abs(yClamped - posNow) < this.deadband) {
+              const ev = { tag:'scroll:result', ok:false, reason:'hold:stable', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              return ev;
+            }
+            y = yClamped;
             try { window.__lastScrollTarget = y; } catch {}
             if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
               if (this.pending && (r.priority|0) > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
               this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
             }
             if (!this.raf) this.start();
+            const ev = { tag:'scroll:result', ok:true, reason:'accepted', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'' };
+            try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+            return ev;
           } catch {}
         }
         onMatchActivate({ idx, reason, conf }){ try { const bucket = Math.round((Number(conf)||0) * 20); const key = `${idx}|${reason||''}|${bucket}`; if (key === this._lastMatchKey) return; this._lastMatchKey = key; const el = (document.getElementById('script')||document).querySelector(`[data-match-idx="${idx}"]`) || document.querySelector(`#match-${idx}`) || null; if (!el) return; this.request({ el, priority:5, src:'match', reason:String(reason||'') }); } catch {} }
