@@ -638,6 +638,7 @@
       window.SCROLLER.onResult((ev)=>{
         try {
           const reason = String(ev?.reason||'');
+          try { window.__tpCatchupLastReason = reason; window.__tpCatchupLastAt = performance.now(); } catch {}
           if (reason === 'accepted:bounded-advance') {
             __catchupRefDec('bounded-advance');
           }
@@ -1304,6 +1305,15 @@
             const prio = (decision === 'go:signal') ? 6 : 7; // probe edges slightly higher to help recovery
             // Tag teleprompter catch-up requests and include anchor visibility for bounded-advance exception
             __catchupRefInc();
+            // Early end if already close or we just had a bounded-advance
+            try {
+              const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+              const nowTop = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+              const EPS = 24;
+              const near = Math.abs(nowTop - (Number(estY)||0)) <= EPS;
+              const recentBA = (function(){ try { return (window.__tpCatchupLastReason === 'accepted:bounded-advance') && ((performance.now() - (window.__tpCatchupLastAt||0)) < 300); } catch { return false; } })();
+              if (near || recentBA) { __catchupRefDec(near ? 'close-enough' : 'bounded-advance'); return; }
+            } catch {}
             const res = window.SCROLLER?.request({ y: estY, priority: prio, src: 'teleprompter', tag: 'teleprompter', anchorVisible, reason: 'catchup' });
             // If the controller returns a structured result, allow immediate close on close-enough
             try {

@@ -135,7 +135,10 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
       let err = targetY - anchorY;      // positive => line is below target (we need to scroll down)
       // Early finish if close enough to target band
       try {
-        if (Math.abs(err) <= EPS) {
+          // Invalidate stale frames by generation
+          if (!inGen(localGen)) { stopAutoCatchup(); return; }
+          const recentBA = (function(){ try { return (window.__tpCatchupLastReason === 'accepted:bounded-advance') && ((performance.now() - (window.__tpCatchupLastAt||0)) < 300); } catch { return false; } })();
+          if (Math.abs(err) <= EPS || recentBA) {
           _dbg({ tag:'match:catchup:close-enough', err, anchorY, targetY, EPS });
           stopAutoCatchup();
           return;
