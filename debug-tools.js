@@ -252,6 +252,7 @@
         return 'DEBUG';
       } catch { return 'DEBUG'; }
     }
+    const HUD_VERBOSE = (function(){ try { return (localStorage.getItem('tp_hud_verbose') || '0') === '1'; } catch { return false; } })();
     const HUD = {
       log(tag, payload, level){
         try {
@@ -265,7 +266,15 @@
           appendRow(tag, payload);
         } catch {}
         // Also mirror to console for trace tails
-        try { console.log('[HUD]', tag, payload); } catch {}
+        try {
+          if (String(tag) === 'catchup:stable:hold') {
+            if (HUD_VERBOSE && window.__tpShouldLog?.('catchup:stable:hold')) console.debug('[HUD]', tag, payload);
+          } else if (String(tag) === 'catchup:eligibility') {
+            if (HUD_VERBOSE && window.__tpShouldLog?.('catchup:eligibility')) console.debug('[HUD]', tag, payload);
+          } else {
+            console.log('[HUD]', tag, payload);
+          }
+        } catch {}
       },
       show, hide, toggle,
       setFilter(tag, on){ state.filters[tag] = !!on; if (filterChips[tag]) filterChips[tag].classList.toggle('on', !!on); },
