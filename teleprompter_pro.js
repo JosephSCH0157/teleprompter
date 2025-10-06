@@ -193,6 +193,30 @@
       mo.observe(root, { attributes:true, childList:true, subtree:true });
     } catch {}
   })();
+  // One-time logger for extension messaging noise: prove it's an extension, then ignore
+  (function installExtensionMessagingNoiseLogger(){
+    try {
+      if (window.__tpExtNoiseLoggerInstalled) return; window.__tpExtNoiseLoggerInstalled = true;
+      let seen = false;
+      window.addEventListener('unhandledrejection', (e) => {
+        try {
+          if (seen) return;
+          const r = e && e.reason;
+          const msg = String((r && (r.message || r)) || '');
+          if (!msg.toLowerCase().includes('message channel closed')) return;
+          seen = true;
+          const stack = (r && r.stack) || '';
+          // Try to extract a Chrome extension ID from the stack if present
+          let extId = null;
+          try {
+            const m = stack && stack.match(/chrome-extension:\/\/([a-z0-9]{32})/i);
+            if (m && m[1]) extId = m[1];
+          } catch {}
+          console.warn('[EXT messaging error]', { msg, stack, extId });
+        } catch {}
+      });
+    } catch {}
+  })();
   // Boot instrumentation (added)
   try {
     window.__TP_BOOT_TRACE = [];
