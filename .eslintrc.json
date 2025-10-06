@@ -1,0 +1,16 @@
+{
+  "extends": [],
+  "env": { "browser": true, "es6": true },
+  "rules": {
+    "no-restricted-properties": [
+      "error",
+      { "object": "window", "property": "scrollTo", "message": "Use SCROLLER.request" },
+      { "object": "window", "property": "scrollBy", "message": "Use SCROLLER.request" }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      { "selector": "MemberExpression[property.name='scrollIntoView']", "message": "Use SCROLLER.request" },
+      { "selector": "AssignmentExpression[left.property.name='scrollTop']", "message": "Use SCROLLER.request" }
+    ]
+  }
+}

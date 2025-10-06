@@ -338,7 +338,7 @@
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; try { const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; try { const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
         request(r){
           try {
             const sc = getScroller();
@@ -354,6 +354,7 @@
             let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
             if (y == null) return;
             if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
+              if (this.pending && (r.priority|0) > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
               this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
             }
             if (!this.raf) this.start();
@@ -382,6 +383,36 @@
         }
       }
       try { window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager(); } catch {}
+    } catch {}
+  })();
+  // Temporary safety net: shims to route native scroll calls through SCROLLER
+  (function installScrollShims(){
+    try {
+      if (window.__tpScrollShimsInstalled) return; window.__tpScrollShimsInstalled = true;
+      const origScrollTo = window.scrollTo ? window.scrollTo.bind(window) : null;
+      const origScrollBy = window.scrollBy ? window.scrollBy.bind(window) : null;
+      const origSIV = Element?.prototype?.scrollIntoView;
+      if (origScrollTo) window.scrollTo = function(x, y){ try { const top = (typeof x === 'object') ? (x?.top ?? 0) : (y ?? 0); window.SCROLLER?.request({ y: Number(top)||0, src:'shim', reason:'scrollTo', priority:5 }); } catch { try { return origScrollTo(x, y); } catch {} } };
+      if (origScrollBy) window.scrollBy = function(x, y){ try { const dy = (typeof x === 'number' && typeof y === 'number') ? y : ((x && typeof x==='object') ? (x.top ?? 0) : 0); const start = (window.scrollY||0); window.SCROLLER?.request({ y: Number(start + dy)||0, src:'shim', reason:'scrollBy', priority:5 }); } catch { try { return origScrollBy(x, y); } catch {} } };
+      if (origSIV) Element.prototype.scrollIntoView = function(arg){ try { window.SCROLLER?.request({ el: this, src:'shim', reason:'scrollIntoView', priority:6 }); } catch { try { return origSIV.call(this, arg); } catch {} } };
+    } catch {}
+  })();
+  // Telemetry: count non-SCROLLER scrolls (should be 0)
+  (function installScrollTelemetry(){
+    try {
+      if (window.__tpScrollTelemetryInstalled) return; window.__tpScrollTelemetryInstalled = true;
+      const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      let lastTop = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+      const onScroll = ()=>{
+        try {
+          const cur = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+          const intended = (typeof window.__lastScrollTarget==='number') ? window.__lastScrollTarget : null;
+          const ok = intended != null && Math.abs(cur - intended) <= 2;
+          if (!ok && Math.abs(cur - lastTop) >= 1){ try { window.__tpNonScrollerScrolls = (window.__tpNonScrollerScrolls||0) + 1; } catch {} }
+          lastTop = cur;
+        } catch {}
+      };
+      try { (sc===window?window:sc).addEventListener('scroll', onScroll, { passive:true }); } catch {}
     } catch {}
   })();
   // Hash/anchor handling: prevent native jumps; route through SCROLLER
@@ -2993,9 +3024,9 @@ async function _initCore() {
       } catch {}
 
       // Tiny same-scroller nudge only
-      const to = viewer.scrollTop + (F.stepPx * 1);
-      try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: to, idx: bestIdx, phase:'tiny' }); } catch {}
-      try { viewer.scrollTo({ top: to, behavior: 'auto' }); } catch { viewer.scrollTop = to; }
+  const to = viewer.scrollTop + (F.stepPx * 1);
+  try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: to, idx: bestIdx, phase:'tiny' }); } catch {}
+  try { window.SCROLLER?.request({ y: to, priority: 3, src: 'system', reason: 'fallback-nudge' }); } catch {}
       syncDisplay();
       return true;
     };
@@ -3192,9 +3223,8 @@ shortcutsClose   = document.getElementById('shortcutsClose');
             const sc = (_locked && window.__TP_SCROLLER) ? window.__TP_SCROLLER : (detectViewer() || pageEl);
             const max = Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0));
             const to = Math.max(0, Math.min(Number(y)||0, max));
-            // Prefer the tiny scheduler if available (coalesced writes, deterministic)
-            if (typeof window.__tpScrollWrite === 'function') { window.__tpScrollWrite(to); return; }
-            try { sc.scrollTo({ top: to, behavior: 'instant' }); } catch { try { sc.scrollTop = to; } catch {} }
+            // Route through single authority
+            try { window.SCROLLER?.request({ y: to, priority: 7, src: 'system', reason: 'session-lock' }); } catch {}
           } catch {}
         }
         // Publish helpers (optional teardown could unset lock if needed later)
@@ -3218,7 +3248,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
                 try { if (typeof HUD?.log === 'function') HUD.log(tag, payload); } catch {}
               } catch {}
             }, 160);
-          }catch{ try{ (window.requestScroll||((a)=>window.scrollTo(0, (typeof a==='object'?a.top:a)||0)))({ top: y }); }catch{} }
+          }catch{ try{ window.SCROLLER?.request({ y, priority: 7, src: 'system', reason: 'requestScroll:fallback' }); }catch{} }
           try{ updateDebugPosChip(); }catch{}
         };
         // Snap mode toggle: 'all' | 'active' | 'off'
@@ -3987,30 +4017,14 @@ function scrollToCurrentIndex(){
   paraIndex.forEach(pi => pi.el.classList.toggle('active', pi === p));
   // Center-ish scroll
   const target = Math.max(0, p.el.offsetTop - (viewer.clientHeight * 0.40));
-  // gentle ease towards target (use smoothness prefs if present)
-  const S = (window.__TP_SCROLL || { EASE_STEP: 80, EASE_MIN: 10 });
-  const dy = target - viewer.scrollTop;
-  if (Math.abs(dy) > S.EASE_MIN) {
-    // Dynamic ease step: speed up when far or near the end to avoid perceived slowdown
-    let step = S.EASE_STEP;
-    const absdy = Math.abs(dy);
-    if (absdy > 400) step = Math.max(step, Math.min(160, Math.floor(absdy * 0.40)));
-    try {
-      const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = maxScroll ? (viewer.scrollTop / maxScroll) : 0;
-      if (ratio >= 0.75) step = Math.floor(step * 1.5);
-      else if (ratio >= 0.60) step = Math.floor(step * 1.25);
-    } catch {}
-    viewer.scrollTop += Math.sign(dy) * Math.min(absdy, step);
-  } else {
-    viewer.scrollTop = target;
-  }
+  // Route through SCROLLER single authority
+  try { window.SCROLLER?.request({ y: target, priority: 6, src: 'system', reason: 'advanceEase' }); } catch {}
   if (typeof markAdvance === 'function') markAdvance(); else _lastAdvanceAt = performance.now();
-  if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
+  if (typeof debug === 'function') debug({ tag:'scroll', top: target });
   {
-    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const ratio = max ? (viewer.scrollTop / max) : 0;
-    sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+  const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+  const ratio = max ? (target / max) : 0;
+  sendToDisplay({ type: 'scroll', top: target, ratio });
   }
 }
 // Install HUD (tilde to toggle). Safe if file missing.
@@ -4889,7 +4903,7 @@ function advanceByTranscript(transcript, isFinal){
               } catch { return 0; } };
               const beforeTop = getTop();
               const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
-              try { requestScroll(targetTop); } catch { try { if (sc === window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+              try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 6, src: 'system', reason: 'visibility:ensure' }); } catch {} }
               // Escalate if movement is <12px within ~150ms
               setTimeout(()=>{
                 try {
@@ -4976,7 +4990,7 @@ function advanceByTranscript(transcript, isFinal){
           const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0);
           const targetTop = Math.max(0, (bestEl.offsetTop||0) - Math.floor(vh * 0.45));
           const before = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
-          try { requestScroll(targetTop); } catch { try { if (sc===window) window.scrollTo(0, targetTop); else sc.scrollTop = targetTop; } catch {} }
+          try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 6, src: 'system', reason: 'recovery:dom-snap' }); } catch {} }
           // Telemetry for recovery
           setTimeout(()=>{
             try {
@@ -5030,11 +5044,12 @@ function advanceByTranscript(transcript, isFinal){
     } catch {}
     // Calm Mode: snap using geometry-based targeting at commit time
     try { onSpeechCommit(currentEl); } catch {}
-    if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop, mode:'calm-commit' });
+  if (typeof debug === 'function') debug({ tag:'scroll', top: (typeof window.__lastScrollTarget==='number'?window.__lastScrollTarget:viewer.scrollTop), mode:'calm-commit' });
     {
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+  const tTop = (typeof window.__lastScrollTarget==='number'?window.__lastScrollTarget:viewer.scrollTop);
+  const ratio = max ? (tTop / max) : 0;
+  sendToDisplay({ type:'scroll', top: tTop, ratio });
     }
     try {
       const vRect = viewer.getBoundingClientRect();
@@ -5072,9 +5087,9 @@ function advanceByTranscript(transcript, isFinal){
       let next;
       if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
       else         next = Math.max(viewer.scrollTop - backStep, desiredTop);
-      try { requestScroll(next); } catch { viewer.scrollTop = next; }
+      try { requestScroll(next); } catch { try { window.SCROLLER?.request({ y: next, priority: 6, src: 'system', reason: 'advance:fallback' }); } catch {} }
     }
-    if (typeof debug === 'function') debug({ tag:'scroll', top: viewer.scrollTop });
+    if (typeof debug === 'function') debug({ tag:'scroll', top: (typeof window.__lastScrollTarget==='number'?window.__lastScrollTarget:viewer.scrollTop) });
     {
       // compute output from intended target if we just scheduled a write
       const tTop = (()=>{
@@ -5372,7 +5387,7 @@ function advanceByTranscript(transcript, isFinal){
       if (!Number.isFinite(delta) || Math.abs(delta) < 6) return;
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const target = Math.max(0, Math.min(Math.round(viewer.scrollTop + delta), max));
-      try { requestScroll(target); } catch { viewer.scrollTop = target; }
+  try { requestScroll(target); } catch { try { window.SCROLLER?.request({ y: target, priority: 6, src: 'system', reason: 'nudgeToMarker' }); } catch {} }
     } catch {}
   }
 
@@ -5415,7 +5430,7 @@ function advanceByTranscript(transcript, isFinal){
         const targetTop = Math.max(0, (el.offsetTop||0) - Math.floor(h * ANCHOR_VH));
         const curTop = (scroller.scrollTop||0);
         if (Math.abs(curTop - targetTop) > MIN_DELTA){
-          try { requestScroll(targetTop); } catch { try { scroller.scrollTop = targetTop; } catch {} }
+          try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 4, src: 'system', reason: 'navigator:ensureVisible' }); } catch {} }
         }
         // Fallback DOM snap once layout settles (benefits from scroll-margin-block)
         requestAnimationFrame(()=>{
@@ -5582,7 +5597,12 @@ function advanceByTranscript(transcript, isFinal){
     try { const r = el.getBoundingClientRect(); const baseTop = (scroller===win ? 0 : (scroller.getBoundingClientRect().top||0)); return r.bottom - baseTop; } catch { return 0; }
   }
   function __docGetScrollTop(scroller, win){ try { return (scroller===win) ? (win.scrollY||0) : (scroller.scrollTop||0); } catch { return 0; } }
-  function __docSetScrollTop(scroller, win, y){ try { if (scroller===win) win.scrollTo(0, Number(y)||0); else scroller.scrollTop = Number(y)||0; } catch {} }
+  function __docSetScrollTop(scroller, win, y){
+    try {
+      if (scroller===win) { window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src:'system', reason:'doc:set' }); }
+      else { window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src:'system', reason:'doc:set' }); }
+    } catch {}
+  }
   function __docMaxScrollTop(scroller, win, doc){
     try { const h = (scroller===win ? (doc.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0)); const vh = (scroller===win ? (win.innerHeight||0) : (scroller.clientHeight||0)); return Math.max(0, h - vh); } catch { return 0; }
   }
