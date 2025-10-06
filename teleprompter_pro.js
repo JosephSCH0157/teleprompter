@@ -6904,6 +6904,7 @@ async function init(){
    * ────────────────────────────────────────────────────────────── */
   // TP: speech-start
   function startSpeechSync(){
+    try { window.nextGen && window.nextGen(); } catch {}
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR){
       setStatus('Speech recognition not supported in this browser.');
@@ -7024,7 +7025,17 @@ async function init(){
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
     try { if (typeof HUD?.log === 'function') HUD.log('speech:stop', {}); } catch {}
+    // Invalidate all pending work: bump generation
+    try { if (window.nextGen) window.nextGen(); } catch {}
+    // End motion and pinning
     try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
+    // Clear anchor/ensureVisible state and disable ensures
+    try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
+    try { window.__TP_DISABLE_ENSUREVISIBLE = true; } catch {}
+    try { if (typeof window.clearAnchor === 'function') window.clearAnchor(); } catch {}
+    // Cancel any module timers and rAFs
+    try { if (typeof window.clearAllTimers === 'function') window.clearAllTimers(); } catch {}
+    try { if (typeof window.killMomentum === 'function') window.killMomentum(); } catch {}
   }
 
   // TP: docx-mammoth

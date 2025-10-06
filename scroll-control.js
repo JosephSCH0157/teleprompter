@@ -11,7 +11,16 @@ const WriteLock = (()=>{ let owner = null, until = 0; return {
   release(id){ try { if (owner === id) until = 0; } catch {} },
   heldBy(){ return owner; }
 }; })();
+// Global animation/timer state and generation token
+let GEN = (typeof window !== 'undefined' && typeof window.__TP_GEN === 'number') ? window.__TP_GEN : 0;
 let rafId, prevErr = 0, active = false;
+const timers = new Set();
+export function nextGen(){ try { GEN = ((typeof window!=='undefined' ? (window.__TP_GEN = ((window.__TP_GEN||0)+1)) : (GEN+1))); } catch { GEN++; } try { if (typeof window!=='undefined') window.__TP_GEN = GEN; } catch {} return GEN; }
+export function inGen(g){ try { return g === ((typeof window!=='undefined' && typeof window.__TP_GEN==='number') ? window.__TP_GEN : GEN); } catch { return g === GEN; } }
+export function addTimer(id){ try { if (id != null) timers.add(id); } catch {} return id; }
+export function clearAllTimers(){ try { timers.forEach(id => { try { clearTimeout(id); } catch {} }); timers.clear(); } catch {} }
+export function killMomentum(){ try { const s = (typeof window!=='undefined') ? window.SCROLLER : null; if (s) { try { s.v = 0; } catch {} try { s.stop && s.stop(); } catch {} } } catch {} }
+try { if (typeof window!=='undefined'){ window.nextGen = nextGen; window.inGen = inGen; window.addTimer = addTimer; window.clearAllTimers = clearAllTimers; window.killMomentum = killMomentum; } } catch {}
 // Unsubscribe handle for ScrollManager onResult during catchup
 let __unsubCatchupResult = null;
 // Mark document as animating to pause IO rebinds and other churn
@@ -79,6 +88,8 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
 
   _dbg({ tag:'match:catchup:start' });
   _startCatchup();
+  // Capture generation at start; bail if invalidated
+  const localGen = (typeof window!=='undefined' && typeof window.__TP_GEN==='number') ? window.__TP_GEN : GEN;
 
   // Stop catchup on ScrollManager signals for bounded advance or explicit close-enough
   try {
@@ -98,6 +109,7 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
 
   function tick() {
     try {
+      if (!inGen(localGen)) { stopAutoCatchup(); return; }
       const anchorY = getAnchorY();     // current line Y within viewport
       const targetY = getTargetY();     // desired Y (e.g., 0.4 * viewportHeight)
       let err = targetY - anchorY;      // positive => line is below target (we need to scroll down)
@@ -139,6 +151,8 @@ export function stopAutoCatchup() {
   try { WriteLock.release('catchup'); } catch {}
   // Remove any active subscription to ScrollManager results
   try { if (__unsubCatchupResult) { __unsubCatchupResult(); __unsubCatchupResult = null; } } catch {}
+  // Clear scheduled timers associated with this module
+  try { clearAllTimers(); } catch {}
 }
 
 // Factory so caller can treat this as a controller instance
@@ -152,7 +166,7 @@ export function createScrollController(getScroller){
       const id = tag || 'teleprompter';
       if (!WriteLock.try(id, 400)) return false;
       write(y);
-      setTimeout(()=>{ try { WriteLock.release(id); } catch {} }, 100);
+      addTimer(setTimeout(()=>{ try { WriteLock.release(id); } catch {} }, 100));
       return true;
     } catch { return false; }
   };
@@ -204,11 +218,11 @@ export function createScrollController(getScroller){
         last = now;
         try { return fn.apply(lastThis, lastArgs); } catch {}
       } else if (!tId) {
-        tId = setTimeout(()=>{
+        tId = addTimer(setTimeout(()=>{
           last = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
           tId = null;
           try { fn.apply(lastThis, lastArgs); } catch {}
-        }, Math.max(0, remain));
+        }, Math.max(0, remain)));
       }
     };
   }
