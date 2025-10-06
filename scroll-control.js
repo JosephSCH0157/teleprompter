@@ -72,8 +72,23 @@ function unpinViewer(){
     __PINNED_H = null; __PIN_TARGET = null;
   } catch {}
 }
-function _startCatchup(){ try { window.__TP_CATCHUP_ACTIVE = true; } catch {} _markAnim(true); pinViewer(); }
-function _endCatchup(){ try { window.__TP_CATCHUP_ACTIVE = false; } catch {} _markAnim(false); unpinViewer(); }
+function _startCatchup(){
+  try { window.__TP_CATCHUP_ACTIVE = true; } catch {}
+  // Mute ensure helpers during animation to avoid fighting
+  try { (window.__TP_RUNTIME = (window.__TP_RUNTIME||{ ensureEnabled:true })).ensureEnabled = false; } catch {}
+  _markAnim(true);
+  pinViewer();
+}
+function _endCatchup(){
+  unpinViewer();
+  try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
+  _markAnim(false);
+  // Keep helpers off briefly to dampen post-stop thrash; re-enable after 300ms
+  try {
+    const reenable = () => { try { if (window.__TP_RUNTIME) window.__TP_RUNTIME.ensureEnabled = true; } catch {} };
+    addTimer(setTimeout(reenable, 300));
+  } catch {}
+}
 
 export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   if (active) return;

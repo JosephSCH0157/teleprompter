@@ -5160,7 +5160,8 @@ function advanceByTranscript(transcript, isFinal){
           // Use ensureInView on the element if available; else compute a placement near the band
           if (vCur) {
             const el = (function(){ try { const p = paraIndex.find(p => fIdx >= p.start && fIdx <= p.end); return p?.el; } catch { return null; } })();
-            if (!window.__TP_CATCHUP_ACTIVE && el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else if (!window.__TP_CATCHUP_ACTIVE && !el) maybeAutoScroll(targetY, sc, { overrideLock: true });
+            const __ENSURE_OK = !(window.__TP_RUNTIME && window.__TP_RUNTIME.ensureEnabled === false);
+            if (!window.__TP_CATCHUP_ACTIVE && __ENSURE_OK && el) ensureInView(el, { top: 0.25, bottom: 0.55 }); else if (!window.__TP_CATCHUP_ACTIVE && __ENSURE_OK && !el) maybeAutoScroll(targetY, sc, { overrideLock: true });
           }
           try { if (typeof debug==='function') debug({ tag:'scroll:catchup', lead, clusterCov:+clusterCov.toFixed(2), sim:+bestSim.toFixed(2), stale, anchorVisible }); } catch {}
         } catch {}
@@ -5880,7 +5881,7 @@ function advanceByTranscript(transcript, isFinal){
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(()=>{
         try { io.observe(el); } catch {}
-  if (!window.__TP_CATCHUP_ACTIVE && !window.__TP_DISABLE_ENSUREVISIBLE) ensureVisible(el);
+  if (!window.__TP_CATCHUP_ACTIVE && !window.__TP_DISABLE_ENSUREVISIBLE && !(window.__TP_RUNTIME && window.__TP_RUNTIME.ensureEnabled === false)) ensureVisible(el);
         lastIdx = idx; lastRunTs = performance.now();
         try { if (typeof onAnchorVisibility === 'function') onAnchorVisibility(inComfortBand(el.getBoundingClientRect(), scroller.clientHeight||0)); } catch {}
       });
