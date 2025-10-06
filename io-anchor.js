@@ -9,6 +9,18 @@ export function createAnchorObserver(getRoot, onUpdate){
   const ratios = new Map();
   let most = null;
 
+  function guardIO(fn){
+    return function guardedIO(entries, obs){
+      try {
+        if ((typeof window !== 'undefined') && (window.__TP_ANIMATING || window.__TP_CATCHUP_ACTIVE)){
+          try { if (window.__TP_DEV && window.__tpShouldLog?.('IO paused')) console.debug('[IO paused]', entries && entries.length); } catch {}
+          return;
+        }
+      } catch {}
+      return fn(entries, obs);
+    };
+  }
+
   function computeMostVisible(){
     let bestEl = most, bestR = bestEl ? (ratios.get(bestEl)||0) : 0;
     for (const [el, r] of ratios){ if (r > bestR){ bestR = r; bestEl = el; } }
@@ -28,11 +40,11 @@ export function createAnchorObserver(getRoot, onUpdate){
     if (io) { try { io.disconnect(); } catch {} }
     ratios.clear(); most = null;
     try {
-      io = new IntersectionObserver((entries)=>{
+      io = new IntersectionObserver(guardIO((entries)=>{
         for (const e of entries){ ratios.set(e.target, e.intersectionRatio || 0); }
         computeMostVisible();
         try { onUpdate && onUpdate(most); } catch {}
-      }, { root: (root === undefined ? null : root), threshold: IO_THRESHOLDS });
+      }), { root: (root === undefined ? null : root), threshold: IO_THRESHOLDS });
     } catch { io = null; }
   }
 
