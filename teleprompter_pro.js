@@ -73,6 +73,26 @@
       }
     } catch {}
   })();
+  // Track last human input (capture-phase) and gate selectionchange work to reduce noise
+  (function installHumanInputAndSelectionGate(){
+    try {
+      if (window.__tpHumanInputGateInstalled) return; window.__tpHumanInputGateInstalled = true;
+      let __lastHumanInput = 0;
+      const bump = ()=>{ try { __lastHumanInput = performance.now(); window.__TP_LAST_HUMAN_INPUT = __lastHumanInput; } catch {} };
+      ['pointerdown','keydown','touchstart','mousedown'].forEach(evt => {
+        try { window.addEventListener(evt, bump, { capture: true, passive: true }); } catch {}
+      });
+      document.addEventListener('selectionchange', ()=>{
+        try {
+          if (!document.hasFocus()) return;
+          if (window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING) return;
+          if ((performance.now() - __lastHumanInput) > 1500) return; // extension/idle noise
+          // Place real selection handling here if needed; keep minimal in production
+          try { if (window.__TP_DEV) console.debug('[selchange:allowed]'); } catch {}
+        } catch {}
+      });
+    } catch {}
+  })();
   // Guard against visualViewport resize/scroll storms (IME, zoom, OS UI): queue during motion and apply on settle
   (function installVisualViewportGuard(){
     try {
