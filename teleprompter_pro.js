@@ -76,6 +76,23 @@
   // Unified scroll scheduler entry: prefer rAF-batched writer if available
   function requestScroll(y){ try { (window.__tpScrollWrite || tpScrollTo)(y); } catch {} }
 
+  // Minimal write batching to shed main-thread load during bursts
+  const __tpWriteQ = [];
+  let __tpWriteRAF = 0;
+  function scheduleWrite(fn){
+    try {
+      __tpWriteQ.push(fn);
+      if (!__tpWriteRAF){
+        __tpWriteRAF = requestAnimationFrame(()=>{
+          const q = __tpWriteQ.splice(0, __tpWriteQ.length);
+          __tpWriteRAF = 0;
+          for (const w of q){ try { w(); } catch {} }
+        });
+      }
+    } catch {}
+  }
+  try { window.scheduleWrite = scheduleWrite; } catch {}
+
   // EMA-smoothed confidence computation to resist jitter spikes
   let __tpJitterEma = 0;
   let __tpJFactorPrev = 1;
@@ -186,12 +203,11 @@
       else if (bottom > botBand) delta = bottom - botBand;
       if (Math.abs(delta) < 1) return;
       if (window.__tpReaderLocked) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', reason:'ensureInView', delta }); } catch {} return; }
-      if (useWindow) {
-        try { window.scrollBy({ top: delta, behavior: 'smooth' }); } catch { try { window.scrollBy(0, delta); } catch {} }
-      } else {
+      // Route through single-flight ScrollManager for critically damped motion
+      try {
         const targetY = Math.max(0, Math.min((sc.scrollTop||0) + delta, Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0))));
-        maybeAutoScroll(targetY, sc);
-      }
+        window.SCROLLER?.request({ y: targetY, priority: 4, src: 'viewer', reason: 'ensureInView' });
+      } catch {}
     } catch {}
   }
   try { window.ensureInView = ensureInView; } catch {}
@@ -890,8 +906,10 @@
       }
       __tpLastAct = { idx, reason: payload.reason };
     } catch {}
-    try { if (typeof debug === 'function') debug({ tag:'match:activate', ...payload }); } catch {}
-    try { if (typeof HUD?.log === 'function') HUD.log('match:activate', payload); } catch {}
+  try { if (typeof debug === 'function') debug({ tag:'match:activate', ...payload }); } catch {}
+  try { if (typeof HUD?.log === 'function') HUD.log('match:activate', payload); } catch {}
+  // Emit to bus so debouncers can coalesce before reaching SCROLLER
+  try { window.HUD?.bus?.emit('match:activate', payload); } catch {}
     try { window.__tpLastActivation = { idx, reason: payload.reason, t: performance.now() }; } catch {}
     return true;
   }
@@ -2631,6 +2649,8 @@ function injectHelpPanel(){
     const btn   = document.getElementById('shortcutsBtn');
     const modal = document.getElementById('shortcutsOverlay');
     const title = document.getElementById('shortcutsTitle');
+  // Notify ScrollManager about user input to enter cooldown truce
+  try { ['wheel','touchmove','keydown'].forEach(evt => window.addEventListener(evt, ()=>{ try { window.SCROLLER?.onUserScroll(); } catch {} }, { passive:true })); } catch {}
     const close = document.getElementById('shortcutsClose');
     if (!modal) return;
 
@@ -6391,6 +6411,11 @@ async function init(){
           if (typeof HUD?.log === 'function') HUD.log('speech:final', { len: sample.length, preview });
         } catch {}
         advanceByTranscript(finals, /*isFinal*/true);
+        // Optional: if active line element exists, promote a high-priority scroll request
+        try {
+          const activeEl = (document.getElementById('script')||document).querySelector('p.active');
+          if (activeEl) { window.SCROLLER?.onSpeechFinal(activeEl); }
+        } catch {}
       }
 
       // Interims = gentle tracking (every ~150ms)
