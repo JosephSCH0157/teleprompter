@@ -352,7 +352,7 @@
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
         getContainer(){ try { this.state.container = getScroller(); } catch {} return this.state.container; }
         request(r){
           try {
@@ -364,6 +364,16 @@
             const dims = (function(){ try { const sh = (sc===window) ? (document.documentElement?.scrollHeight||0) : (sc?.scrollHeight||0); const ch = (sc===window) ? (window.innerHeight||0) : (sc?.clientHeight||0); return { scrollHeight: sh|0, clientHeight: ch|0 }; } catch { return { scrollHeight:0, clientHeight:0 }; } })();
             const maxTop = (function(){ try { return getMaxTop(sc); } catch { return 0; } })();
             const posNow = (function(){ try { return getScrollTop(sc)|0; } catch { return 0; } })();
+            // Debounce failsafe: if we've been holding for >600ms with no movement, drop repeats from teleprompter intent
+            if (this.holdState.active && r?.tag === 'teleprompter'){
+              const heldMs = ts - (this.holdState.since||0);
+              const noMove = Math.abs(posNow - (this.holdState.pos||0)) < 1;
+              if (heldMs > 600 && noMove){
+                const ev = { tag:'scroll:result', ok:false, reason:'debounce:hold', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
+                try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                return ev;
+              }
+            }
             // Emergency path: jump immediately (e.g., a11y reveal) bypassing animation/cooldown
             if (r && r.immediate) {
               let y0 = (typeof r.y === 'number') ? r.y : (r.el ? computeTargetYForEl(r.el, sc) : null);
@@ -372,6 +382,7 @@
                 this.targetY = y0; this.v = 0; this.lastTs = 0; this.pending = null;
                 const ev = { tag:'scroll:result', ok:true, immediate:true, containerId, ...dims, lockFlags, y:y0|0, pos: posNow, holdTag: r?.reason||'' };
                 try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                try { this.holdState.active = false; } catch {}
                 return ev;
               }
             }
@@ -405,14 +416,30 @@
             }
             const yClamped = Math.max(0, Math.min(Number(y)||0, maxTop));
             const atBoundNoMove = (yClamped === posNow);
-            if (atBoundNoMove) {
-              const reason = (yClamped !== y) ? 'bounds-clamp' : 'hold:stable';
+            if (atBoundNoMove || Math.abs(yClamped - posNow) < this.deadband) {
+              // Teleprompter exception: if anchor isn't visible, allow a bounded advance toward target instead of holding
+              if (r?.tag === 'teleprompter' && r?.anchorVisible === false) {
+                const dir = Math.sign((yClamped - posNow) || 1) || 1;
+                const step = Math.min(32, Math.max(8, Math.abs(yClamped - posNow) || 32));
+                y = Math.max(0, Math.min(posNow + dir * step, maxTop));
+                try { window.__lastScrollTarget = y; } catch {}
+                if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
+                  if (this.pending && (r.priority|0) > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
+                  this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
+                }
+                if (!this.raf) this.start();
+                try { this.holdState.active = false; } catch {}
+                const ev = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'' };
+                try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                return ev;
+              }
+              // Record/continue hold state for potential debounce
+              try {
+                if (!this.holdState.active) { this.holdState.active = true; this.holdState.since = ts; this.holdState.pos = posNow; this.holdState.tag = String(r?.tag||''); }
+                else { this.holdState.pos = posNow; }
+              } catch {}
+              const reason = atBoundNoMove && (yClamped !== y) ? 'bounds-clamp' : 'hold:stable';
               const ev = { tag:'scroll:result', ok:false, reason, containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
-              return ev;
-            }
-            if (Math.abs(yClamped - posNow) < this.deadband) {
-              const ev = { tag:'scroll:result', ok:false, reason:'hold:stable', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
               try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
               return ev;
             }
@@ -423,6 +450,7 @@
               this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
             }
             if (!this.raf) this.start();
+            try { this.holdState.active = false; } catch {}
             const ev = { tag:'scroll:result', ok:true, reason:'accepted', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'' };
             try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
             return ev;
@@ -1029,7 +1057,8 @@
           // Route programmatic movement through ScrollManager (single authority, deadband + PD)
           try {
             const prio = (decision === 'go:signal') ? 6 : 7; // probe edges slightly higher to help recovery
-            window.SCROLLER?.request({ y: estY, priority: prio, src: (decision==='go:signal'?'match':'system'), reason: 'catchup' });
+            // Tag teleprompter catch-up requests and include anchor visibility for bounded-advance exception
+            window.SCROLLER?.request({ y: estY, priority: prio, src: 'teleprompter', tag: 'teleprompter', anchorVisible, reason: 'catchup' });
           } catch {}
           setTimeout(()=>{
             try {
