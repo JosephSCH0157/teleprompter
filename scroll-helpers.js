@@ -19,7 +19,7 @@ export function createScrollerHelpers(getScroller){
     if (_rafId) return;
     _rafId = requestAnimationFrame(() => {
       const t = _pendingTop; _pendingTop = null; _rafId = 0;
-      try { sc.scrollTo({ top: t, behavior: 'auto' }); } catch { sc.scrollTop = t; }
+      try { window.SCROLLER?.request({ y: t, priority: 4, src: 'helper', reason: 'scroll-helpers' }); } catch {}
       try { window.__lastScrollTarget = null; } catch {}
       // Do NOT read layout here; defer reads to next frame.
     });

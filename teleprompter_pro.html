@@ -29,11 +29,16 @@
             var top = (typeof arg === 'object') ? Number(arg && arg.top) : Number(arg);
             if (!isFinite(top)) top = 0;
             var behavior = (typeof arg === 'object' && arg && arg.behavior) ? String(arg.behavior) : 'smooth';
-            if (typeof window.scrollTo === 'function') {
-              window.scrollTo({ top: top, behavior: behavior });
-            } else {
-              (document.scrollingElement || document.documentElement || document.body).scrollTop = top;
+            if (window.SCROLLER && typeof window.SCROLLER.request === 'function') {
+              try { window.SCROLLER.request({ y: top, priority: 5, src: 'polyfill', reason: 'requestScroll', immediate: behavior === 'auto' || behavior === 'instant' }); return; } catch {}
             }
+            try {
+              if (typeof window.scrollTo === 'function') {
+                window.scrollTo({ top: top, behavior: behavior });
+              } else {
+                (document.scrollingElement || document.documentElement || document.body).scrollTop = top;
+              }
+            } catch {}
           } catch {}
         };
       }

@@ -67,14 +67,14 @@
     try {
       const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
       const target = Math.min(Math.max(0, y | 0), max);
-      sc.scrollTop = target;
+      try { window.SCROLLER?.request({ y: target, priority: 5, src: 'system', reason: 'tpScrollTo' }); } catch {}
       if (window.__TP_DEV) {
-        try { console.debug('[TP-Pro Calm] tpScrollTo', { y, target, max, scroller: sc.id || sc.tagName }); } catch {}
+        try { console.debug('[TP-Pro Calm] tpScrollTo->SCROLLER', { y, target, max, scroller: sc.id || sc.tagName }); } catch {}
       }
     } catch {}
   }
   // Unified scroll scheduler entry: prefer rAF-batched writer if available
-  function requestScroll(y){ try { (window.__tpScrollWrite || tpScrollTo)(y); } catch {} }
+  function requestScroll(y){ try { window.__lastScrollTarget = Number(y)||0; window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll' }); } catch {} }
 
   // Minimal write batching to shed main-thread load during bursts
   const __tpWriteQ = [];
@@ -299,8 +299,7 @@
       const dist = snapped - (scroller.scrollTop||0);
       if (Math.abs(dist) < MIN_NUDGE_PX) return;
       try { __tpLastProgAt = performance.now(); } catch {}
-      if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top: snapped, behavior: 'auto' });
-      else scroller.scrollTop = snapped;
+  try { window.SCROLLER?.request({ y: snapped, priority: 5, src: 'system', reason: 'snapped' }); } catch {}
     } catch {}
   }
 
@@ -333,7 +332,22 @@
       function clamp(n,min,max){ return Math.min(max, Math.max(min, n)); }
       function getScroller(){ return (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body); }
       function getScrollTop(sc){ return (sc === window) ? (window.scrollY||0) : (sc.scrollTop||0); }
-      function setScrollTop(sc, top){ try { if (sc === window) window.scrollTo(0, top); else sc.scrollTo({ top, behavior:'auto' }); } catch { if (sc !== window) sc.scrollTop = top; else try{ window.scrollTo(0, top); }catch{} } }
+      function setScrollTop(sc, top){
+        try {
+          try { window.__tpInSetScrollTop = true; } catch {}
+          if (sc === window) window.scrollTo(0, top);
+          else sc.scrollTo({ top, behavior:'auto' });
+        } catch {
+          if (sc !== window) {
+            /* eslint-disable-next-line no-restricted-syntax */
+            sc.scrollTop = top;
+          } else {
+            try{ window.scrollTo(0, top); }catch{}
+          }
+        } finally {
+          try { window.__tpInSetScrollTop = false; } catch {}
+        }
+      }
       function getMaxTop(sc){ try { const h = (sc===window) ? document.documentElement.scrollHeight : (sc.scrollHeight||0); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); return Math.max(0, h - vh); } catch { return 0; } }
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
@@ -353,6 +367,7 @@
             }
             let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
             if (y == null) return;
+            try { window.__lastScrollTarget = y; } catch {}
             if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
               if (this.pending && (r.priority|0) > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
               this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
@@ -364,7 +379,7 @@
         onSpeechFinal(node){ try { if (!node) return; this.request({ el: node, priority: 10, src:'speech', reason:'final' }); } catch {} }
         onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
         start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
-        stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; }
+  stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} }
         tick = (ts) => {
           this.raf = requestAnimationFrame(this.tick);
           const sc = getScroller();
@@ -392,9 +407,29 @@
       const origScrollTo = window.scrollTo ? window.scrollTo.bind(window) : null;
       const origScrollBy = window.scrollBy ? window.scrollBy.bind(window) : null;
       const origSIV = Element?.prototype?.scrollIntoView;
-      if (origScrollTo) window.scrollTo = function(x, y){ try { const top = (typeof x === 'object') ? (x?.top ?? 0) : (y ?? 0); window.SCROLLER?.request({ y: Number(top)||0, src:'shim', reason:'scrollTo', priority:5 }); } catch { try { return origScrollTo(x, y); } catch {} } };
-      if (origScrollBy) window.scrollBy = function(x, y){ try { const dy = (typeof x === 'number' && typeof y === 'number') ? y : ((x && typeof x==='object') ? (x.top ?? 0) : 0); const start = (window.scrollY||0); window.SCROLLER?.request({ y: Number(start + dy)||0, src:'shim', reason:'scrollBy', priority:5 }); } catch { try { return origScrollBy(x, y); } catch {} } };
-      if (origSIV) Element.prototype.scrollIntoView = function(arg){ try { window.SCROLLER?.request({ el: this, src:'shim', reason:'scrollIntoView', priority:6 }); } catch { try { return origSIV.call(this, arg); } catch {} } };
+      if (origScrollTo) window.scrollTo = function(x, y){
+        try {
+          if (window.__tpInSetScrollTop) return origScrollTo ? origScrollTo(x, y) : undefined; // internal write, don't loop
+          const top = (typeof x === 'object') ? (x?.top ?? 0) : (y ?? 0);
+          try { window.__lastScrollTarget = Number(top)||0; } catch {}
+          window.SCROLLER?.request({ y: Number(top)||0, src:'shim', reason:'scrollTo', priority:5 });
+        } catch { try { return origScrollTo(x, y); } catch {} }
+      };
+      if (origScrollBy) window.scrollBy = function(x, y){
+        try {
+          if (window.__tpInSetScrollTop) return origScrollBy ? origScrollBy(x, y) : undefined;
+          const dy = (typeof x === 'number' && typeof y === 'number') ? y : ((x && typeof x==='object') ? (x.top ?? 0) : 0);
+          const start = (window.scrollY||0);
+          const dest = Number(start + dy)||0;
+          try { window.__lastScrollTarget = dest; } catch {}
+          window.SCROLLER?.request({ y: dest, src:'shim', reason:'scrollBy', priority:5 });
+        } catch { try { return origScrollBy(x, y); } catch {} }
+      };
+      if (origSIV) Element.prototype.scrollIntoView = function(arg){
+        try {
+          window.SCROLLER?.request({ el: this, src:'shim', reason:'scrollIntoView', priority:6 });
+        } catch { try { return origSIV.call(this, arg); } catch {} }
+      };
     } catch {}
   })();
   // Telemetry: count non-SCROLLER scrolls (should be 0)
@@ -530,10 +565,10 @@
       const m = metrics || { sim: (window.__lastSimScore||1), jitterStd: (window.__tpJitterEma||0), anchorVisible: true };
       if (!__tpCanProgrammaticScroll()) { try { if (typeof debug==='function') debug({ tag:'scroll:fallback:skip', reason:'frozen' }); } catch {} return 'skip:frozen'; }
       if (!stableEligible({ sim: Number(m.sim)||0, jitterStd: Number(m.jitterStd)||0, anchorVisible: !!m.anchorVisible })) { try { if (typeof debug==='function') debug({ tag:'scroll:fallback:skip', reason:'unstable' }); } catch {} return 'skip:unstable'; }
-      const STEP = 24;
-      const dy = (Math.sign(delta)||1) * STEP;
-      if (typeof scroller.scrollBy === 'function') scroller.scrollBy({ top: dy, behavior: 'auto' });
-      else scroller.scrollTop = (scroller.scrollTop||0) + dy;
+  const STEP = 24;
+  const dy = (Math.sign(delta)||1) * STEP;
+  const to = (scroller?.scrollTop||0) + dy;
+  try { window.SCROLLER?.request({ y: to, priority: 3, src: 'system', reason: 'fallbackNudge' }); } catch {}
       return 'ok:nudged';
     } catch { return 'skip:error'; }
   }
@@ -589,11 +624,7 @@
       }
       // Log actuator attempt before issuing the scroll
       logScrollAttempt(scroller, before, targetTop, opts?.aggressive ? 'scrollToBand:aggressive' : 'scrollToBand');
-      if (opts?.aggressive) { try { scrollToSnapped(scroller, targetTop); } catch {} }
-      else {
-        if (prefersReduced) { try { scrollToSnapped(scroller, targetTop); } catch {} }
-        else { try { scroller.scrollTo({ top: targetTop, behavior: 'smooth' }); } catch { try { scrollToSnapped(scroller, targetTop); } catch {} } }
-      }
+      try { window.SCROLLER?.request({ y: targetTop, priority: opts?.aggressive ? 6 : 5, src: 'system', reason: 'scrollToBand' }); } catch {}
       let tries = 0;
       let _lastHudProgressAt = 0;
       const verify = () => {
@@ -1118,19 +1149,24 @@
         try {
           if (window.__tpTinySchedulerInstalled) return;
           window.__tpTinySchedulerInstalled = true;
-          let _pendingTop = null, _rafId = 0;
           const getScroller = ()=> (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
           function clamp(y){ const sc = getScroller(); if (!sc) return 0; const max = Math.max(0, sc.scrollHeight - sc.clientHeight); return Math.max(0, Math.min(Number(y)||0, max)); }
-          function requestScrollTop(y){ const sc = getScroller(); if (!sc) return; _pendingTop = clamp(y); try{ window.__lastScrollTarget = _pendingTop; }catch{} if (_rafId) return; _rafId = requestAnimationFrame(()=>{ const t=_pendingTop; _pendingTop=null; _rafId=0; try{ sc.scrollTo({ top: t, behavior:'auto' }); } catch { sc.scrollTop = t; } try{ window.__lastScrollTarget=null; }catch{} }); }
+          function requestScrollTop(y){
+            const sc = getScroller(); if (!sc) return;
+            const t = clamp(y);
+            try{ window.__lastScrollTarget = t; }catch{}
+            try { window.SCROLLER?.request({ y: t, priority: 4, src: 'tiny', reason: 'tiny-scheduler' }); } catch {}
+          }
           // publish minimal API
           window.__tpScrollWrite = requestScrollTop;
-          // optional: wrap viewer.scrollTop writes
+          // optional: wrap viewer.scrollTop writes to go through SCROLLER
           const sc = getScroller();
           if (sc && !sc.__tpWriteWrapped){
             sc.__tpWriteWrapped = true;
             try {
-              const origSet = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(sc), 'scrollTop')?.set;
-              if (origSet){
+              const proto = Object.getPrototypeOf(sc);
+              const desc = Object.getOwnPropertyDescriptor(proto, 'scrollTop');
+              if (desc && desc.set){
                 Object.defineProperty(sc, 'scrollTop', { configurable:true, set(v){ requestScrollTop(v); } });
               }
             } catch {}
@@ -4133,10 +4169,12 @@ setTimeout(() => {
   };
   const scrollBy = (dy) => {
     try {
-      viewer.scrollTop = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+      const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+      try { requestScroll(next); } catch { try { window.SCROLLER?.request({ y: next, priority: 5, src: 'system', reason: 'scrollByFn' }); } catch {} }
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const ratio = max ? (viewer.scrollTop / max) : 0;
-      sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
+      const top = (typeof window.__lastScrollTarget==='number'?window.__lastScrollTarget:next);
+      const ratio = max ? (top / max) : 0;
+      sendToDisplay({ type: 'scroll', top, ratio });
     } catch {}
   };
   try { __scrollCtl.stopAutoCatchup(); } catch {}
@@ -5503,7 +5541,17 @@ function advanceByTranscript(transcript, isFinal){
       const cur = (scroller === w) ? (w.scrollY||0) : (scroller.scrollTop||0);
       const max = (function(){ try { const h = (scroller===w ? (d.scrollingElement?.scrollHeight||0) : (scroller.scrollHeight||0)); const vh=(scroller===w ? (w.innerHeight||0) : (scroller.clientHeight||0)); return Math.max(0, h - vh); } catch { return 0; } })();
       const target = Math.max(0, Math.min(Math.round(cur + delta), max));
-      if (scroller === w) w.scrollTo(0, target); else scroller.scrollTop = target;
+      try {
+        if (ctx && ctx.win && ctx.win.SCROLLER && typeof ctx.win.SCROLLER.request === 'function') {
+          try { ctx.win.__lastScrollTarget = target; } catch {}
+          ctx.win.SCROLLER.request({ y: target, priority: 6, src: 'system', reason: 'marker-nudge' });
+        } else if (scroller === w) {
+          w.scrollTo(0, target);
+        } else {
+          /* eslint-disable-next-line no-restricted-syntax */
+          scroller.scrollTop = target;
+        }
+      } catch {}
     } catch {}
   }
   function alignToMarkerAuto(){
@@ -5706,7 +5754,7 @@ function advanceByTranscript(transcript, isFinal){
       const tol = nearEnd ? 24 : 8;
       if (abs <= tol){
         const target = Math.max(0, Math.min((viewer.scrollTop||0) + delta, max));
-        try { requestScroll(target); } catch { viewer.scrollTop = target; }
+        try { requestScroll(target); } catch { try { window.SCROLLER?.request({ y: target, priority: 5, src: 'system', reason: 'endSnap' }); } catch {} }
       }
     } catch {}
   }
@@ -6065,7 +6113,7 @@ function startAutoScroll(){
   try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('autoscroll:start', { speed: Number(autoSpeed?.value)||0 }); } catch {}
   const step = () => {
     const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
-    try { scrollByPx(pxPerSec / 60); } catch { viewer.scrollTop += (pxPerSec / 60); }
+  try { scrollByPx(pxPerSec / 60); } catch { try { window.SCROLLER?.request({ y: Math.max(0, Math.min((viewer.scrollTop||0) + (pxPerSec/60), viewer.scrollHeight)), priority: 4, src: 'auto', reason: 'auto-scroll' }); } catch {} }
     {
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const ratio = max ? (viewer.scrollTop / max) : 0;
@@ -6423,9 +6471,9 @@ async function init(){
     resetTimer();
     // Rebuild layout to ensure paraIndex is fresh, but keep content
     renderScript(editor?.value || '');
-    // Reset logical position and scroll to the very top
-    currentIndex = 0;
-    viewer.scrollTop = 0;
+  // Reset logical position and scroll to the very top via SCROLLER
+  currentIndex = 0;
+  try { window.SCROLLER?.request({ y: 0, priority: 9, src: 'system', reason: 'reset', immediate: true }); } catch { /* eslint-disable-next-line no-restricted-syntax */ try { viewer.scrollTop = 0; } catch {} }
     // Reset dead-man timer state
     _wdLastIdx = -1; _wdLastTop = 0; _wdLastT = 0;
     try {

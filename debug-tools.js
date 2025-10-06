@@ -221,7 +221,10 @@
         body.appendChild(row);
         const extra = body.children.length - state.maxRows;
         if (extra > 0) { for (let i=0;i<extra;i++) body.removeChild(body.firstChild); }
-        if (state.autoscroll) body.scrollTop = body.scrollHeight;
+        if (state.autoscroll) {
+          /* eslint-disable-next-line no-restricted-syntax */
+          body.scrollTop = body.scrollHeight;
+        }
       } catch {}
     }
 

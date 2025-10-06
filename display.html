@@ -74,6 +74,12 @@
               return (scroller === win) ? win.scrollY : scroller.scrollTop;
             }
             function setScrollTop(scroller, win, y) {
+              try {
+                if (win.SCROLLER && typeof win.SCROLLER.request === 'function' && (scroller === win || scroller === win.document.getElementById('wrap') || scroller === win.document.querySelector('#displayScroll'))) {
+                  win.SCROLLER.request({ y: Number(y)||0, priority: 5, src: 'display', reason: 'setScrollTop' });
+                  return;
+                }
+              } catch {}
               if (scroller === win) win.scrollTo(0, y);
               else scroller.scrollTop = y;
             }
@@ -214,12 +220,25 @@
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); try{ updateEndSpacer(); }catch{} }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); try{ updateEndSpacer(); }catch{} }
               if(d.type==='scroll'){
-                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  wrap.scrollTop = Math.round(d.ratio * max);
-                } else {
-                  wrap.scrollTop = d.top||0;
-                }
+                try {
+                  if (window.SCROLLER && typeof window.SCROLLER.request === 'function'){
+                    if (typeof d.ratio === 'number' && isFinite(d.ratio)){
+                      const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                      const y = Math.round(d.ratio * max);
+                      window.SCROLLER.request({ y, priority: 5, src: 'display', reason: 'scroll:ratio' });
+                    } else {
+                      const y = Number(d.top)||0;
+                      window.SCROLLER.request({ y, priority: 5, src: 'display', reason: 'scroll:top' });
+                    }
+                  } else {
+                    if (typeof d.ratio === 'number' && isFinite(d.ratio)){
+                      const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                      wrap.scrollTop = Math.round(d.ratio * max);
+                    } else {
+                      wrap.scrollTop = d.top||0;
+                    }
+                  }
+                } catch {}
               }
               // DISPLAY: report marker/active measurement back to opener/parent
               if (d.type === 'measure-request'){
