@@ -5215,13 +5215,17 @@ function advanceByTranscript(transcript, isFinal){
               } catch { return 0; } };
               const beforeTop = getTop();
               const targetTop = Math.max(0, (nextPara.el.offsetTop||0) - Math.floor(vh * 0.45));
-              try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 6, src: 'system', reason: 'visibility:ensure' }); } catch {} }
+              if (!window.__TP_CATCHUP_ACTIVE && !window.__TP_DISABLE_ENSUREVISIBLE) {
+                try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 6, src: 'system', reason: 'visibility:ensure' }); } catch {} }
+              }
               // Escalate if movement is <12px within ~150ms
               setTimeout(()=>{
                 try {
                   const afterTop = getTop();
                   if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
-                    try { window.SCROLLER?.request({ el: nextPara.el, priority: 6, src: 'system', reason: 'visibility' }); } catch {}
+                    if (!window.__TP_CATCHUP_ACTIVE && !window.__TP_DISABLE_ENSUREVISIBLE) {
+                      try { window.SCROLLER?.request({ el: nextPara.el, priority: 6, src: 'system', reason: 'visibility' }); } catch {}
+                    }
                     try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'SCROLLER', block:'center' }); } catch {}
                   }
                 } catch {}
