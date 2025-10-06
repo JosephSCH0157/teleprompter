@@ -12,6 +12,8 @@ const WriteLock = (()=>{ let owner = null, until = 0; return {
   heldBy(){ return owner; }
 }; })();
 let rafId, prevErr = 0, active = false;
+// Unsubscribe handle for ScrollManager onResult during catchup
+let __unsubCatchupResult = null;
 // Mark document as animating to pause IO rebinds and other churn
 function _markAnim(on){
   try {
@@ -70,15 +72,40 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   const vMin = 0.2;     // px/frame (deadzone)
   const vMax = 12;      // px/frame cap
   const bias = 0;       // baseline offset
+  const EPS = 24;       // close-enough tolerance (px)
 
   _dbg({ tag:'match:catchup:start' });
   _startCatchup();
+
+  // Stop catchup on ScrollManager signals for bounded advance or explicit close-enough
+  try {
+    if (typeof window !== 'undefined' && window.SCROLLER && typeof window.SCROLLER.onResult === 'function'){
+      __unsubCatchupResult = window.SCROLLER.onResult((ev)=>{
+        try {
+          if (!active) return;
+          const reason = String(ev?.reason||'');
+          if (reason === 'accepted:bounded-advance' || reason === 'close-enough') {
+            try { _dbg({ tag:'match:catchup:finish', reason }); } catch {}
+            stopAutoCatchup();
+          }
+        } catch {}
+      });
+    }
+  } catch {}
 
   function tick() {
     try {
       const anchorY = getAnchorY();     // current line Y within viewport
       const targetY = getTargetY();     // desired Y (e.g., 0.4 * viewportHeight)
       let err = targetY - anchorY;      // positive => line is below target (we need to scroll down)
+      // Early finish if close enough to target band
+      try {
+        if (Math.abs(err) <= EPS) {
+          _dbg({ tag:'match:catchup:close-enough', err, anchorY, targetY, EPS });
+          stopAutoCatchup();
+          return;
+        }
+      } catch {}
       const deriv = err - prevErr;
       const vRaw = (kP*err) + (kD*deriv) + bias;
       let v = vRaw;
@@ -113,6 +140,8 @@ export function stopAutoCatchup() {
   _dbg({ tag:'match:catchup:stop' });
   _endCatchup();
   try { WriteLock.release('catchup'); } catch {}
+  // Remove any active subscription to ScrollManager results
+  try { if (__unsubCatchupResult) { __unsubCatchupResult(); __unsubCatchupResult = null; } } catch {}
 }
 
 // Factory so caller can treat this as a controller instance
