@@ -104,6 +104,11 @@
         try {
           const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
           if (window.__TP_CATCHUP_ACTIVE || window.__TP_PAGE_HIDDEN) return false;
+          // Respect unified cooldown window to ignore late pulses after settle/focus
+          try {
+            const cd = Math.max(window.__TP_CATCHUP_COOLDOWN_UNTIL||0, window.__TP_COOLDOWN_UNTIL||0);
+            if (now < cd) return false;
+          } catch {}
           const lastFocus = (function(){ try { return window.__TP_LAST_FOCUS||0; } catch { return 0; } })();
           if ((now - lastFocus) < 250) return false;
           const o = Object.assign({}, (opts||{}));
@@ -150,7 +155,7 @@
       window.addEventListener('tp-settled', ()=>{
         try {
           // Honor catchup cooldown; schedule a small delay
-          const delay = (function(){ try { const t = window.__TP_CATCHUP_COOLDOWN_UNTIL||0; const now = performance.now(); return Math.max(0, t - now) + 30; } catch { return 120; } })();
+          const delay = (function(){ try { const t = Math.max(window.__TP_CATCHUP_COOLDOWN_UNTIL||0, window.__TP_COOLDOWN_UNTIL||0); const now = performance.now(); return Math.max(0, t - now) + 30; } catch { return 120; } })();
           setTimeout(()=>{ try { window.__TP_FLUSH_PENDING_HELPER?.(); } catch {} }, delay);
         } catch {}
       }, { passive:true });
@@ -690,7 +695,7 @@
               this._logReject(ev, ts);
               return ev;
             }
-            const cdUntil = (function(){ try { return window.__TP_CATCHUP_COOLDOWN_UNTIL||0; } catch { return 0; } })();
+            const cdUntil = (function(){ try { return Math.max(window.__TP_CATCHUP_COOLDOWN_UNTIL||0, window.__TP_COOLDOWN_UNTIL||0); } catch { return 0; } })();
             if (ts < cdUntil && r?.tag !== 'catchup'){
               const ev = { tag:'scroll:result', ok:false, reason:'reject:cooldown', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
               this._logReject(ev, ts);
@@ -1783,7 +1788,10 @@
             const sc = getScroller(); if (!sc) return;
             const t = clamp(y);
             try{ window.__lastScrollTarget = t; }catch{}
-            try { window.SCROLLER?.request({ y: t, priority: 4, src: 'tiny', reason: 'tiny-scheduler' }); } catch {}
+            try {
+              const call = (typeof window.helperWrite === 'function') ? window.helperWrite : (window.SCROLLER?.request?.bind(window.SCROLLER));
+              call && call({ y: t, priority: 4, src: 'tiny', reason: 'tiny-scheduler', tag: 'helper' });
+            } catch {}
           }
           // publish minimal API
           window.__tpScrollWrite = requestScrollTop;

@@ -105,7 +105,14 @@ function _endCatchup(){
   unpinViewport();
   try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
   // Brief cool-down to ignore late helper pulses after animation ends
-  try { if (typeof performance !== 'undefined') window.__TP_CATCHUP_COOLDOWN_UNTIL = performance.now() + 300; } catch {}
+  try {
+    if (typeof performance !== 'undefined') {
+      const until = performance.now() + 300;
+      window.__TP_CATCHUP_COOLDOWN_UNTIL = until;
+      // Also set unified cooldown marker
+      window.__TP_COOLDOWN_UNTIL = Math.max(until, window.__TP_COOLDOWN_UNTIL||0);
+    }
+  } catch {}
   _markAnim(false);
   // Restore touch-action after motion ends
   try {

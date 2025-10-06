@@ -19,7 +19,10 @@ export function createScrollerHelpers(getScroller){
     if (_rafId) return;
     _rafId = requestAnimationFrame(() => {
       const t = _pendingTop; _pendingTop = null; _rafId = 0;
-      try { window.SCROLLER?.request({ y: t, priority: 4, src: 'helper', reason: 'scroll-helpers' }); } catch {}
+      try {
+        const call = (typeof window.helperWrite === 'function') ? window.helperWrite : (window.SCROLLER?.request?.bind(window.SCROLLER));
+        call && call({ y: t, priority: 4, src: 'helper', reason: 'scroll-helpers', tag: 'helper' });
+      } catch {}
       try { window.__lastScrollTarget = null; } catch {}
       // Do NOT read layout here; defer reads to next frame.
     });
