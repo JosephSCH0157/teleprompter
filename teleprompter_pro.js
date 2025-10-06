@@ -27,6 +27,9 @@
         console.info('[TP-Pro] DEV mode enabled');
         // Lazy-load rogue writer guard in DEV to catch direct scrollTop/scrollIntoView writes
         (async ()=>{ try { await import('./dev/rogue-writer-guard.js'); } catch {} })();
+        // Optional freeze probe: enable with ?freeze=1 or localStorage tp_freeze=1
+        const FREEZE = Q.has('freeze') || localStorage.getItem('tp_freeze') === '1';
+        if (FREEZE) { (async ()=>{ try { await import('./dev/freeze-probe.js'); } catch {} })(); }
       }
     } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
@@ -439,15 +442,20 @@
       function getScrollTop(sc){ return (sc === window) ? (window.scrollY||0) : (sc.scrollTop||0); }
       function setScrollTop(sc, top){
         try {
+          try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop', t: performance.now() }; } catch {}
           try { window.__tpInSetScrollTop = true; } catch {}
           if (sc === window) window.scrollTo(0, top);
           else sc.scrollTo({ top, behavior:'auto' });
         } catch {
           if (sc !== window) {
             /* eslint-disable-next-line no-restricted-syntax */
+            try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop:direct', t: performance.now() }; } catch {}
             sc.scrollTop = top;
           } else {
-            try{ window.scrollTo(0, top); }catch{}
+            try {
+              if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop:window', t: performance.now() };
+              window.scrollTo(0, top);
+            }catch{}
           }
         } finally {
           try { window.__tpInSetScrollTop = false; } catch {}
