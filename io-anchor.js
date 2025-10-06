@@ -16,7 +16,8 @@ export function createAnchorObserver(getRoot, onUpdate){
   }
 
   function ensure(){
-    const root = getRoot?.();
+    // Resolve root via provided getter; honor null for window viewport
+    const root = (typeof getRoot === 'function') ? getRoot() : null;
     if (!root) return;
     if (io) io.disconnect();
     ratios.clear(); most = null;

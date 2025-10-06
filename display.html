@@ -70,6 +70,17 @@
               const baseTop = (scroller === win ? 0 : scroller.getBoundingClientRect().top);
               return r.bottom - baseTop;
             }
+            // Prefer SCROLLER container for observer roots; null maps to viewport
+            function getIoRoot(win){
+              try {
+                const sc = win.SCROLLER;
+                if (sc && typeof sc.getContainer === 'function'){
+                  const c = sc.getContainer();
+                  return (c === win) ? null : (c || null);
+                }
+              } catch {}
+              return null;
+            }
             function getScrollTop(scroller, win) {
               return (scroller === win) ? win.scrollY : scroller.scrollTop;
             }

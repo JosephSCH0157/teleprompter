@@ -5443,6 +5443,19 @@ function advanceByTranscript(transcript, isFinal){
     let raf = 0;
     const visibleUntil = new WeakMap(); // el -> expiry ms
 
+    // Bind IO to SCROLLER's scroll root (null for window)
+    const getIORoot = () => {
+      try {
+        const sc = (window.SCROLLER || null);
+        if (sc && typeof sc.getContainer === 'function') {
+          const c = sc.getContainer();
+          // Per spec, root:null means viewport; use element when provided
+          return (c === window) ? null : (c || null);
+        }
+      } catch {}
+      // Fallback to viewer element if present; else viewport
+      try { const v = document.getElementById('viewer'); return v || null; } catch { return null; }
+    };
     const io = new IntersectionObserver((entries) => {
       const now = performance.now();
       for (const e of entries) {
@@ -5450,7 +5463,7 @@ function advanceByTranscript(transcript, isFinal){
           visibleUntil.set(e.target, now + CACHE_MS);
         }
       }
-    }, { root: scroller, threshold: [RATIO_OK] });
+    }, { root: getIORoot(), threshold: [RATIO_OK] });
 
     function isRecentlyVisible(el){ return (visibleUntil.get(el) || 0) > performance.now(); }
     function inComfortBand(rect, h){
