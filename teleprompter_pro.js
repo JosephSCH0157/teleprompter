@@ -555,6 +555,19 @@
       function getMaxTop(sc){ try { const h = (sc===window) ? document.documentElement.scrollHeight : (sc.scrollHeight||0); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); return Math.max(0, h - vh); } catch { return 0; } }
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
+          // Estimate a typical line height in pixels for meaningful target changes
+          function getLineHeightPx(){
+            try {
+              const root = (document.getElementById('script')||document);
+              const p = root.querySelector('p.active') || root.querySelector('.script p') || root.querySelector('p');
+              if (!p) return 64;
+              const cs = getComputedStyle(p);
+              let lh = parseFloat(cs.lineHeight);
+              if (!isFinite(lh)) { const fs = parseFloat(cs.fontSize)||48; lh = fs * 1.35; }
+              return Math.max(24, Math.round(lh));
+            } catch { return 64; }
+          }
+
       class ScrollManager {
         constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
         getContainer(){ try { this.state.container = getScroller(); } catch {} return this.state.container; }
@@ -743,7 +756,27 @@
           // Reads (measure phase)
           try { window.beginMeasure && window.beginMeasure(); } catch {}
           const sc = getScroller();
-          if (this.pending){ this.targetY = this.pending.y; this.pending = null; }
+          if (this.pending){
+            const cand = this.pending.y; this.pending = null;
+            // Freeze target inside band and only accept meaningful changes
+            try {
+              const db = this.deadband|0;
+              const frozen = (typeof window.__TP_FROZEN_TARGET_Y === 'number') ? window.__TP_FROZEN_TARGET_Y : (this.targetY ?? cand);
+              // If candidate is within the deadband of the frozen/current target, keep frozen
+              if (this.targetY != null && Math.abs(cand - (frozen ?? this.targetY)) <= db) {
+                this.targetY = (frozen ?? this.targetY);
+              } else {
+                // Only update frozen target on meaningful change (~0.6 * line height)
+                const thresh = Math.max(db, Math.round(getLineHeightPx() * 0.6));
+                if (typeof frozen !== 'number' || Math.abs(cand - frozen) > thresh) {
+                  this.targetY = cand;
+                  try { window.__TP_FROZEN_TARGET_Y = cand; } catch {}
+                } else {
+                  this.targetY = (frozen ?? cand);
+                }
+              }
+            } catch { this.targetY = cand; }
+          }
           if (this.targetY == null) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
           const pos = getScrollTop(sc);
           const err = this.targetY - pos;
@@ -757,6 +790,20 @@
           } else {
             this.lastOutside = 0;
           }
+          // Sticky done: also consider velocity and short within window (~3 frames)
+          try {
+            const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : (ts);
+            const lastPos = (typeof this._lastPos === 'number') ? this._lastPos : pos;
+            const lastT   = (typeof this._lastT === 'number')   ? this._lastT   : (nowMs - 16);
+            const vPxMs = Math.abs((pos - lastPos) / Math.max(1, (nowMs - lastT)));
+            this._lastPos = pos; this._lastT = nowMs;
+            if (absErr <= (this.deadband|0) && vPxMs <= 0.2) {
+              this._within = (this._within|0) + 1;
+            } else {
+              this._within = 0;
+            }
+            if ((this._within|0) >= 3) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
+          } catch {}
           const a = this.kp * err - this.kd * this.v;
           this.v = clamp(this.v + a * dt, -this.maxSpeed, this.maxSpeed);
           const next = clamp(pos + this.v * dt, 0, getMaxTop(sc));
