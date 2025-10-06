@@ -89,11 +89,28 @@ function _startCatchup(){
   try { (window.__TP_RUNTIME = (window.__TP_RUNTIME||{ ensureEnabled:true })).ensureEnabled = false; } catch {}
   _markAnim(true);
   pinViewport();
+  // Disable pinch/kinetic gestures while catchup owns the scroll
+  try {
+    const sc = __getPinTarget();
+    if (sc && sc.style){
+      try { sc.dataset.prevTouchAction = sc.style.touchAction || ''; } catch {}
+      sc.style.touchAction = 'none';
+    }
+  } catch {}
 }
 function _endCatchup(){
   unpinViewport();
   try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
   _markAnim(false);
+  // Restore touch-action after motion ends
+  try {
+    const sc = __getPinTarget();
+    if (sc && sc.style){
+      const prev = (sc.dataset && sc.dataset.prevTouchAction) ? sc.dataset.prevTouchAction : '';
+      sc.style.touchAction = prev;
+      try { if (sc.dataset) delete sc.dataset.prevTouchAction; } catch {}
+    }
+  } catch {}
   // Keep helpers off briefly to dampen post-stop thrash; re-enable after 300ms
   try {
     const reenable = () => { try { if (window.__TP_RUNTIME) window.__TP_RUNTIME.ensureEnabled = true; } catch {} };
