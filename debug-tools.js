@@ -260,20 +260,23 @@
           const lvl = (typeof level === 'string') ? level : _defaultLevelFor(tag);
           if (hudConfig && hudConfig.enabled === false) return;
           // Level threshold filter: keep suppressed logs in console, not HUD
-          if (LEVEL_RANK[lvl] < LEVEL_RANK[hudConfig.minLevel]) { try { console.debug('[HUD]', tag, payload); } catch {} return; }
+          if (LEVEL_RANK[lvl] < LEVEL_RANK[hudConfig.minLevel]) {
+            try {
+              const HUD_VERBOSE = (localStorage.getItem('tp_hud_verbose')||'0')==='1';
+              const NOISY = /^catchup:(eligibility|hysteresis-suppress|tick)$/;
+              if (HUD_VERBOSE && !NOISY.test(String(tag))) console.debug('[HUD]', tag, payload);
+            } catch {}
+            return;
+          }
           // Mute pattern: console only
           try { if (hudConfig.mute && hudConfig.mute.test(String(tag))) { console.debug('[HUD muted]', tag, payload); return; } } catch {}
           appendRow(tag, payload);
         } catch {}
         // Also mirror to console for trace tails
         try {
-          if (String(tag) === 'catchup:stable:hold') {
-            if (HUD_VERBOSE && window.__tpShouldLog?.('catchup:stable:hold')) console.debug('[HUD]', tag, payload);
-          } else if (String(tag) === 'catchup:eligibility') {
-            if (HUD_VERBOSE && window.__tpShouldLog?.('catchup:eligibility')) console.debug('[HUD]', tag, payload);
-          } else {
-            console.log('[HUD]', tag, payload);
-          }
+          const NOISY = /^catchup:(eligibility|hysteresis-suppress|tick)$/;
+          if (HUD_VERBOSE && !NOISY.test(String(tag))) console.debug('[HUD]', tag, payload);
+          else console.log('[HUD]', tag, payload);
         } catch {}
       },
       show, hide, toggle,
