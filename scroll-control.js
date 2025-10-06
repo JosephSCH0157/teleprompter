@@ -47,7 +47,7 @@ function __getPinTarget(){
     return viewer;
   } catch { return null; }
 }
-function pinViewer(){
+function __applyPin(){
   try {
     const v = __getPinTarget();
     if (!v) return;
@@ -61,7 +61,7 @@ function pinViewer(){
     try { _dbg({ tag:'ui:pin-viewer', h: __PINNED_H, id: v.id||v.tagName }); } catch {}
   } catch {}
 }
-function unpinViewer(){
+function __clearPin(){
   try {
     const v = __PIN_TARGET || __getPinTarget();
     if (!v) return;
@@ -72,15 +72,20 @@ function unpinViewer(){
     __PINNED_H = null; __PIN_TARGET = null;
   } catch {}
 }
+// Reference-counted global pin/unpin (safe across multiple animators)
+try { if (typeof window !== 'undefined' && typeof window.__TP_PIN_COUNT !== 'number') window.__TP_PIN_COUNT = 0; } catch {}
+export function pinViewport(){ try { if (typeof window !== 'undefined'){ window.__TP_PIN_COUNT = (window.__TP_PIN_COUNT||0) + 1; if (window.__TP_PIN_COUNT === 1) __applyPin(); } else { __applyPin(); } } catch {} }
+export function unpinViewport(){ try { if (typeof window !== 'undefined'){ window.__TP_PIN_COUNT = Math.max(0, (window.__TP_PIN_COUNT||0) - 1); if (window.__TP_PIN_COUNT === 0) __clearPin(); } else { __clearPin(); } } catch {} }
+try { if (typeof window !== 'undefined'){ window.pinViewport = pinViewport; window.unpinViewport = unpinViewport; } } catch {}
 function _startCatchup(){
   try { window.__TP_CATCHUP_ACTIVE = true; } catch {}
   // Mute ensure helpers during animation to avoid fighting
   try { (window.__TP_RUNTIME = (window.__TP_RUNTIME||{ ensureEnabled:true })).ensureEnabled = false; } catch {}
   _markAnim(true);
-  pinViewer();
+  pinViewport();
 }
 function _endCatchup(){
-  unpinViewer();
+  unpinViewport();
   try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
   _markAnim(false);
   // Keep helpers off briefly to dampen post-stop thrash; re-enable after 300ms
