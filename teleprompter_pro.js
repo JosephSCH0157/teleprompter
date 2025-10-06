@@ -5773,7 +5773,7 @@ function advanceByTranscript(transcript, isFinal){
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(()=>{
         try { io.observe(el); } catch {}
-        ensureVisible(el);
+  if (!window.__TP_CATCHUP_ACTIVE && !window.__TP_DISABLE_ENSUREVISIBLE) ensureVisible(el);
         lastIdx = idx; lastRunTs = performance.now();
         try { if (typeof onAnchorVisibility === 'function') onAnchorVisibility(inComfortBand(el.getBoundingClientRect(), scroller.clientHeight||0)); } catch {}
       });
