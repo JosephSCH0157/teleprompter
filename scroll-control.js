@@ -22,8 +22,44 @@ function _markAnim(on){
     if (typeof window !== 'undefined') window.__TP_ANIMATING = !!on;
   } catch {}
 }
-function _startCatchup(){ try { window.__TP_CATCHUP_ACTIVE = true; } catch {} _markAnim(true); }
-function _endCatchup(){ try { window.__TP_CATCHUP_ACTIVE = false; } catch {} _markAnim(false); }
+
+// Optionally pin the viewer height during motion (stops clientHeight flapping)
+let __PINNED_H = null;
+function __shouldPinViewer(){
+  try {
+    if (typeof window !== 'undefined' && window.__TP_PIN_VIEWER === true) return true;
+    const val = (typeof localStorage !== 'undefined') ? localStorage.getItem('tp_pin_viewer') : null;
+    return val === '1' || val === 'true';
+  } catch { return false; }
+}
+function pinViewer(){
+  try {
+    if (!__shouldPinViewer()) return;
+    const doc = (typeof document !== 'undefined') ? document : null;
+    const v = doc ? doc.getElementById('viewer') : null;
+    if (!v) return;
+    __PINNED_H = v.clientHeight;
+    const px = (__PINNED_H|0) + 'px';
+    v.style.minHeight = px;
+    v.style.maxHeight = px;
+    v.style.contain = 'layout size';
+    try { _dbg({ tag:'ui:pin-viewer', h: __PINNED_H }); } catch {}
+  } catch {}
+}
+function unpinViewer(){
+  try {
+    const doc = (typeof document !== 'undefined') ? document : null;
+    const v = doc ? doc.getElementById('viewer') : null;
+    if (!v) return;
+    v.style.minHeight = '';
+    v.style.maxHeight = '';
+    v.style.contain = '';
+    try { _dbg({ tag:'ui:unpin-viewer', h: __PINNED_H }); } catch {}
+    __PINNED_H = null;
+  } catch {}
+}
+function _startCatchup(){ try { window.__TP_CATCHUP_ACTIVE = true; } catch {} _markAnim(true); pinViewer(); }
+function _endCatchup(){ try { window.__TP_CATCHUP_ACTIVE = false; } catch {} _markAnim(false); unpinViewer(); }
 
 export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   if (active) return;
