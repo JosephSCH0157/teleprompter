@@ -1058,7 +1058,7 @@
       // Periodically refresh the anchor IO root during catch-up to follow container/mode/content changes
       try {
         const now = performance.now();
-        if (!__tpLastIORebindAt || (now - __tpLastIORebindAt) > 750) {
+        if (window.__TP_CATCHUP_ACTIVE && (!__tpLastIORebindAt || (now - __tpLastIORebindAt) > 750)) {
           __tpLastIORebindAt = now; try { rebindObserverIf && rebindObserverIf('catchup:tick'); } catch {}
         }
       } catch {}
@@ -2486,12 +2486,20 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       if (!sc) return null; return (sc === window) ? null : sc;
     } catch { return null; }
   }
+  let __tpLastIORoot = null; // cache last IO root to avoid redundant rebinds
   function rebindObserverIf(reason){
     try {
       // Lazily create observer if needed with current root
       if (!__anchorObs && window.ioMod && typeof window.ioMod.createAnchorObserver==='function'){
         __anchorObs = window.ioMod.createAnchorObserver(__getIORoot, () => { try{ updateDebugPosChip(); }catch{} });
       }
+      // Skip periodic tick rebinds if root hasn't changed to reduce churn/logs
+      try {
+        const rootNow = __getIORoot();
+        const sameRoot = (rootNow === __tpLastIORoot);
+        if (reason === 'catchup:tick' && sameRoot) return;
+        __tpLastIORoot = rootNow;
+      } catch {}
       // Re-establish IO with a fresh root
       try { __anchorObs?.ensure?.(); } catch {}
       // Re-observe current paragraphs
