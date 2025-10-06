@@ -235,6 +235,14 @@ html, body, #viewer {
     overflow-anchor: none !important;
 }
 
+/* visual stability in the scroller */
+#viewer{
+    /* stop scroll chaining into parent */
+    overscroll-behavior: contain;
+    /* prevent reflow when scrollbar appears/disappears */
+    scrollbar-gutter: stable;
+}
+
 /* Subtle CK watermark */
 body.ck::after{
     content:"CK";
