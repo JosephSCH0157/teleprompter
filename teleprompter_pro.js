@@ -124,9 +124,16 @@
   const VIEW_GUARD_MS = 250;
   let __tpAnchorOffAt = 0;
   let __tpReaderLocked = false;
+  let __tpLastAnchorVisible = null;
   function onAnchorVisibility(visible){
     try {
       const now = performance.now();
+      // Rebind anchor IO on visibility transitions to ensure correct root
+      try {
+        const changed = (__tpLastAnchorVisible !== visible);
+        __tpLastAnchorVisible = visible;
+        if (changed) { try { rebindObserverIf && rebindObserverIf(visible ? 'anchor:visible' : 'anchor:invisible'); } catch {} }
+      } catch {}
       if (!visible) {
         if (!__tpAnchorOffAt) __tpAnchorOffAt = now;
         if (!__tpReaderLocked && (now - __tpAnchorOffAt) > VIEW_GUARD_MS) {
@@ -564,6 +571,8 @@
           const top = (typeof x === 'object') ? (x?.top ?? 0) : (y ?? 0);
           try { window.__lastScrollTarget = Number(top)||0; } catch {}
           window.SCROLLER?.request({ y: Number(top)||0, src:'shim', reason:'scrollTo', priority:5 });
+          // Root might effectively change (e.g., switching to window). Rebind IO.
+          try { rebindObserverIf && rebindObserverIf('scrollTo'); } catch {}
         } catch { try { return origScrollTo(x, y); } catch {} }
       };
       if (origScrollBy) window.scrollBy = function(x, y){
@@ -579,6 +588,7 @@
       if (origSIV) Element.prototype.scrollIntoView = function(arg){
         try {
           window.SCROLLER?.request({ el: this, src:'shim', reason:'scrollIntoView', priority:6 });
+          try { rebindObserverIf && rebindObserverIf('scrollIntoView'); } catch {}
         } catch { try { return origSIV.call(this, arg); } catch {} }
       };
     } catch {}
@@ -973,8 +983,16 @@
 
   // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
   let __tpStagnantTicks = 0;
+  let __tpLastIORebindAt = 0;
   function evaluateCatchUp(){
     try {
+      // Periodically refresh the anchor IO root during catch-up to follow container/mode/content changes
+      try {
+        const now = performance.now();
+        if (!__tpLastIORebindAt || (now - __tpLastIORebindAt) > 750) {
+          __tpLastIORebindAt = now; try { rebindObserverIf && rebindObserverIf('catchup:tick'); } catch {}
+        }
+      } catch {}
       // Cooldown guard: if a programmatic scroll was issued recently, skip re-evaluation
       if (__tpProgrammaticScroll) { return; }
       const vList = __vParaIndex || [];
@@ -2393,6 +2411,28 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   // Safe placeholders for optional modules to prevent ReferenceError when dynamic import fails
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null;     // set after io-anchor.js loads
+  function __getIORoot(){
+    try {
+      const sc = (window.SCROLLER && typeof window.SCROLLER.getContainer==='function') ? window.SCROLLER.getContainer() : (window.__TP_SCROLLER || document.getElementById('viewer') || null);
+      if (!sc) return null; return (sc === window) ? null : sc;
+    } catch { return null; }
+  }
+  function rebindObserverIf(reason){
+    try {
+      // Lazily create observer if needed with current root
+      if (!__anchorObs && window.ioMod && typeof window.ioMod.createAnchorObserver==='function'){
+        __anchorObs = window.ioMod.createAnchorObserver(__getIORoot, () => { try{ updateDebugPosChip(); }catch{} });
+      }
+      // Re-establish IO with a fresh root
+      try { __anchorObs?.ensure?.(); } catch {}
+      // Re-observe current paragraphs
+      try {
+        const paras = Array.from((document.getElementById('script')||document).querySelectorAll('p'));
+        __anchorObs?.observeAll?.(paras);
+      } catch {}
+      try { if (reason) console.debug('[TP] anchorIO:rebind', reason, { root: __getIORoot() }); } catch {}
+    } catch {}
+  }
   let __scrollCtl = null;     // set after scroll-control.js loads
   // Mic selector single source of truth (settings overlay)
   const getMicSel = () => document.getElementById('settingsMicSel');
@@ -3460,7 +3500,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
 
     try {
       const ioMod = await import('./io-anchor.js');
-      __anchorObs = ioMod.createAnchorObserver(() => viewer, () => { try{ updateDebugPosChip(); }catch{} });
+  // Root is bound to SCROLLER container (null for window)
+  window.ioMod = ioMod;
+  __anchorObs = ioMod.createAnchorObserver(__getIORoot, () => { try{ updateDebugPosChip(); }catch{} });
     } catch(e) { console.warn('io-anchor load failed', e); }
     try {
       const scMod = await import('./scroll-control.js');
@@ -5565,7 +5607,10 @@ function advanceByTranscript(transcript, isFinal){
       const maxScrollTop    = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       // Add just enough space so that neededScrollTop is attainable
       const neededExtra     = Math.max(0, Math.ceil(neededScrollTop - maxScrollTop));
-      if (neededExtra) spacer.style.height = `${neededExtra + 2}px`; // +2 safety to beat rounding
+      if (neededExtra) {
+        spacer.style.height = `${neededExtra + 2}px`; // +2 safety to beat rounding
+        try { rebindObserverIf && rebindObserverIf('content:spacer-adjust'); } catch {}
+      }
     } catch {}
   }
 

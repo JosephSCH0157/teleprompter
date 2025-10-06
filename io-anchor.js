@@ -16,17 +16,17 @@ export function createAnchorObserver(getRoot, onUpdate){
   }
 
   function ensure(){
-    // Resolve root via provided getter; honor null for window viewport
-    const root = (typeof getRoot === 'function') ? getRoot() : null;
-    if (!root) return;
-    if (io) io.disconnect();
+    // Resolve root via provided getter; allow null for window viewport
+    let root = null;
+    try { root = (typeof getRoot === 'function') ? getRoot() : null; } catch { root = null; }
+    if (io) { try { io.disconnect(); } catch {} }
     ratios.clear(); most = null;
     try {
       io = new IntersectionObserver((entries)=>{
         for (const e of entries){ ratios.set(e.target, e.intersectionRatio || 0); }
         computeMostVisible();
         try { onUpdate && onUpdate(most); } catch {}
-      }, { root, threshold: IO_THRESHOLDS });
+      }, { root: (root === undefined ? null : root), threshold: IO_THRESHOLDS });
     } catch { io = null; }
   }
 
