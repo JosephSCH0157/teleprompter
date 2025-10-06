@@ -224,7 +224,7 @@
     } catch {}
   }
   // Unified scroll scheduler entry: prefer rAF-batched writer if available
-  function requestScroll(y){ try { window.__lastScrollTarget = Number(y)||0; window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll' }); } catch {} }
+  function requestScroll(y){ try { window.__lastScrollTarget = Number(y)||0; window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll', tag: 'helper' }); } catch {} }
 
   // Minimal write batching to shed main-thread load during bursts
   const __tpWriteQ = [];
@@ -306,8 +306,10 @@
   }
   function maybeAutoScroll(targetY, scroller, opts = {}){
     try {
-      if (__tpReaderLocked && !opts.overrideLock) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY }); } catch {} return; }
+      if (__tpReaderLocked && !opts.overrideLock) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY }); } catch {} return false; }
+      try { if (window.__TP_CATCHUP_ACTIVE) return false; } catch {}
       requestScroll(targetY);
+      return true;
     } catch {}
   }
   try { window.unlockReaderLock = unlockReaderLock; } catch {}
@@ -359,11 +361,13 @@
       if (top < topBand) delta = top - topBand;
       else if (bottom > botBand) delta = bottom - botBand;
       if (Math.abs(delta) < 1) return;
-      if (window.__tpReaderLocked) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', reason:'ensureInView', delta }); } catch {} return; }
+      if (window.__tpReaderLocked) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', reason:'ensureInView', delta }); } catch {} return false; }
+      try { if (window.__TP_CATCHUP_ACTIVE) return false; } catch {}
       // Route through single-flight ScrollManager for critically damped motion
       try {
         const targetY = Math.max(0, Math.min((sc.scrollTop||0) + delta, Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0))));
-        window.SCROLLER?.request({ y: targetY, priority: 4, src: 'viewer', reason: 'ensureInView' });
+        window.SCROLLER?.request({ y: targetY, priority: 4, src: 'viewer', reason: 'ensureInView', tag: 'helper' });
+        return true;
       } catch {}
     } catch {}
   }
@@ -586,8 +590,26 @@
             const dims = (function(){ try { const sh = (sc===window) ? (document.documentElement?.scrollHeight||0) : (sc?.scrollHeight||0); const ch = (sc===window) ? (window.innerHeight||0) : (sc?.clientHeight||0); return { scrollHeight: sh|0, clientHeight: ch|0 }; } catch { return { scrollHeight:0, clientHeight:0 }; } })();
             const maxTop = (function(){ try { return getMaxTop(sc); } catch { return 0; } })();
             const posNow = (function(){ try { return getScrollTop(sc)|0; } catch { return 0; } })();
+            // Normalize tag to avoid empty string writes
+            try { if (r && (!r.tag || r.tag === '')) r.tag = 'helper'; } catch {}
             const isManual = !!(r && (r.manual === true || r.priority === 'manual'));
             const prioNum = (function(){ try { if (typeof r?.priority === 'string') return (r.priority === 'manual') ? 99 : 5; return (r?.priority|0); } catch { return 5; } })();
+
+            // Hardened write gate: block non-catchup writes during active animation/lock and brief cooldown
+            const animActive = (function(){
+              try { return !!(window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING || (window.WriteLock && typeof WriteLock?.heldBy === 'function' && WriteLock.heldBy() === 'catchup')); } catch { return !!(window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING); }
+            })();
+            if (animActive && r?.tag !== 'catchup'){
+              const ev = { tag:'scroll:result', ok:false, reason:'reject:anim-active', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+              this._logReject(ev, ts);
+              return ev;
+            }
+            const cdUntil = (function(){ try { return window.__TP_CATCHUP_COOLDOWN_UNTIL||0; } catch { return 0; } })();
+            if (ts < cdUntil && r?.tag !== 'catchup'){
+              const ev = { tag:'scroll:result', ok:false, reason:'reject:cooldown', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+              this._logReject(ev, ts);
+              return ev;
+            }
             // Debounce failsafe: if we've been holding for >600ms with no movement, drop repeats from teleprompter intent
             if (this.holdState.active && r?.tag === 'teleprompter'){
               const heldMs = ts - (this.holdState.since||0);

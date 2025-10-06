@@ -101,6 +101,8 @@ function _startCatchup(){
 function _endCatchup(){
   unpinViewport();
   try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
+  // Brief cool-down to ignore late helper pulses after animation ends
+  try { if (typeof performance !== 'undefined') window.__TP_CATCHUP_COOLDOWN_UNTIL = performance.now() + 300; } catch {}
   _markAnim(false);
   // Restore touch-action after motion ends
   try {
