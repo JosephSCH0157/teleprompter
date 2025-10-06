@@ -30,6 +30,9 @@
         // Optional freeze probe: enable with ?freeze=1 or localStorage tp_freeze=1
         const FREEZE = Q.has('freeze') || localStorage.getItem('tp_freeze') === '1';
         if (FREEZE) { (async ()=>{ try { await import('./dev/freeze-probe.js'); } catch {} })(); }
+        // Optional listener registry: enable with ?listeners=1 or localStorage tp_listeners=1
+        const LISTENERS = Q.has('listeners') || localStorage.getItem('tp_listeners') === '1';
+        if (LISTENERS) { (async ()=>{ try { await import('./dev/listener-registry.js'); } catch {} })(); }
       }
     } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
