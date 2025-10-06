@@ -719,7 +719,7 @@
           }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; this._count = { animRejects: 0 }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
         _postFrame(){
           try {
             // Place any heavier bookkeeping here to keep rAF light.
@@ -734,6 +734,11 @@
         _logReject(ev, ts){
           // Always emit to listeners, regardless of backoff suppression
           try { this._emitResult(ev); } catch {}
+          // Downgrade noisy animation rejections: count and return without HUD spam
+          try {
+            const reason = String(ev && ev.reason || '');
+            if (reason === 'reject:anim-active') { this._count.animRejects = (this._count.animRejects||0) + 1; return; }
+          } catch {}
           try {
             const key = `${ev.reason||'unk'}|${ev.containerId||'unk'}|${ev.holdTag||''}|${ev.tag||''}`;
             let s = this._rej.get(key);
@@ -916,7 +921,7 @@
   onSpeechFinal(node){ try { if (!node) return; if (window.__TP_CATCHUP_ACTIVE) { try { window.__TP_QUEUE_HELPER?.(() => { try { this.request({ el: node, priority: 10, src:'speech', reason:'final', tag: 'helper' }); } catch {} }, 'speech:final'); } catch {} return; } this.request({ el: node, priority: 10, src:'speech', reason:'final', tag: 'helper' }); } catch {} }
         onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
         start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
-  stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} try { window.dispatchEvent(new CustomEvent('tp-settled', { detail: { source: 'scroller' } })); } catch {} }
+  stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} try { if (this._count && this._count.animRejects>0) { try { console.debug('[scroll] animRejects', this._count.animRejects); } catch {} this._count.animRejects = 0; } } catch {} try { window.dispatchEvent(new CustomEvent('tp-settled', { detail: { source: 'scroller' } })); } catch {} }
         tick = (ts) => {
           // Schedule next frame immediately; keep this handler minimal
           this.raf = requestAnimationFrame(this.tick);
