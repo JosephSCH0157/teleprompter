@@ -276,6 +276,22 @@
       return true;
     } catch { return true; }
   }
+  // ── Log gate (DEV-only noise control) ───────────────────────────
+  (function installTpLogGate(){
+    try {
+      const df = localStorage.getItem('tp_log_mute') || '';     // e.g. "catchup:|anchorIO"
+      const smp = Math.max(1, +(localStorage.getItem('tp_log_sample') || 1));
+      const re = df ? new RegExp(df, 'i') : null;
+      const counts = new Map();
+      window.__tpShouldLog = (tagStr='') => {
+        if (!re) return true;
+        if (!re.test(tagStr)) return true;
+        const n = (counts.get(tagStr) || 0) + 1;
+        counts.set(tagStr, n);
+        return (n % smp) === 0; // sample
+      };
+    } catch {}
+  })();
   // Backoff logger for catchup:stable:hold to avoid spam
   const __tpCatchupHoldLog = new Map(); // key -> { nextAt, count, interval }
   function __tpLogCatchupStableHold(ev){
@@ -287,8 +303,8 @@
       if (ts < s.nextAt) { s.count++; return; }
       const suppressed = s.count|0; s.count = 0; s.nextAt = ts + s.interval; s.interval = Math.min(Math.max(150, s.interval * 2), 1500);
       if (suppressed > 0) ev.suppressed = suppressed;
-      try { if (typeof debug==='function') debug(ev); } catch {}
-      try { if (__isHudVerbose() && typeof HUD?.log==='function') HUD.log('catchup:stable:hold', ev); } catch {}
+  try { if (typeof debug==='function' && window.__tpShouldLog?.('catchup:stable:hold')) debug(ev); } catch {}
+  try { if (__isHudVerbose() && typeof HUD?.log==='function' && window.__tpShouldLog?.('catchup:stable:hold')) HUD.log('catchup:stable:hold', ev); } catch {}
     } catch {}
   }
   function inBand(targetY, top, vh, band){
@@ -1155,8 +1171,8 @@
           reason = blockers.join('|') || 'hold';
         }
         const ev = { tag:'catchup:eligibility', lead, sim:+Number(bestSim).toFixed(2), covBest:+Number(covBest).toFixed(2), clusterCov:+Number(clusterCov).toFixed(2), covActive:+Number(covActive).toFixed(2), stale, anchorVisible, decision, reason, SIM_GO, SIM_PROBE, holdStreak:(window.__tpHoldStreak|0) };
-        if (typeof debug==='function') debug(ev);
-        if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:eligibility', ev);
+  if (typeof debug==='function') debug(ev);
+  if (__isHudVerbose() && typeof HUD?.log === 'function' && window.__tpShouldLog?.('catchup:eligibility')) HUD.log('catchup:eligibility', ev);
       } catch {}
       if (decision.startsWith('go')){
         try {
@@ -2483,7 +2499,12 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         const paras = Array.from((document.getElementById('script')||document).querySelectorAll('p'));
         __anchorObs?.observeAll?.(paras);
       } catch {}
-      try { if (reason) console.debug('[TP] anchorIO:rebind', reason, { root: __getIORoot() }); } catch {}
+      try {
+        if (!reason) { /* no-op */ }
+        else if (window.__tpShouldLog?.('anchorIO:rebind ' + String(reason))) {
+          console.debug('[TP] anchorIO:rebind', reason, { root: __getIORoot() });
+        }
+      } catch {}
     } catch {}
   }
   let __scrollCtl = null;     // set after scroll-control.js loads
