@@ -103,6 +103,19 @@
       window.addEventListener('tp-settled', applyQueued, { passive: true });
     } catch {}
   })();
+  // Flush a single deferred helper shortly after settle
+  (function installHelperFlushOnSettle(){
+    try {
+      if (window.__tpHelperFlushInstalled) return; window.__tpHelperFlushInstalled = true;
+      window.addEventListener('tp-settled', ()=>{
+        try {
+          // Honor catchup cooldown; schedule a small delay
+          const delay = (function(){ try { const t = window.__TP_CATCHUP_COOLDOWN_UNTIL||0; const now = performance.now(); return Math.max(0, t - now) + 30; } catch { return 120; } })();
+          setTimeout(()=>{ try { window.__TP_FLUSH_PENDING_HELPER?.(); } catch {} }, delay);
+        } catch {}
+      }, { passive:true });
+    } catch {}
+  })();
   // Speech events guard: mute all speech events when sync is off
   (function installSpeechGuard(){
     try {
@@ -3831,8 +3844,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
             const sc = (_locked && window.__TP_SCROLLER) ? window.__TP_SCROLLER : (detectViewer() || pageEl);
             const max = Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0));
             const to = Math.max(0, Math.min(Number(y)||0, max));
-            // Route through single authority
-            try { window.SCROLLER?.request({ y: to, priority: 7, src: 'system', reason: 'session-lock' }); } catch {}
+            // Route through single authority (defer during motion)
+            if (window.__TP_CATCHUP_ACTIVE) { try { window.__TP_QUEUE_HELPER?.(() => { try { window.SCROLLER?.request({ y: to, priority: 7, src: 'system', reason: 'session-lock', tag: 'helper' }); } catch {} }, 'session-lock'); } catch {} return; }
+            try { window.SCROLLER?.request({ y: to, priority: 7, src: 'system', reason: 'session-lock', tag: 'helper' }); } catch {}
           } catch {}
         }
         // Publish helpers (optional teardown could unset lock if needed later)
@@ -6057,20 +6071,22 @@ function advanceByTranscript(transcript, isFinal){
     }
     function ensureVisible(el){
       try {
-        if (window.__tpReaderLocked) return; // don't yank the page while user reads
+        if (window.__tpReaderLocked) return false; // don't yank the page while user reads
+        if (window.__TP_CATCHUP_ACTIVE) { try { window.__TP_QUEUE_HELPER?.(() => ensureVisible(el), 'ensureVisible'); } catch {} return false; }
         const h = scroller.clientHeight || 0;
         const r = el.getBoundingClientRect();
-        if (h && inComfortBand(r, h)) return; // Already good
+        if (h && inComfortBand(r, h)) return false; // Already good
         // Primary precise placement
         const targetTop = Math.max(0, (el.offsetTop||0) - Math.floor(h * ANCHOR_VH));
         const curTop = (scroller.scrollTop||0);
         if (Math.abs(curTop - targetTop) > MIN_DELTA){
-          try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 4, src: 'system', reason: 'navigator:ensureVisible' }); } catch {} }
+          try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 4, src: 'system', reason: 'navigator:ensureVisible', tag: 'helper' }); } catch {} }
         }
         // Fallback DOM snap once layout settles (benefits from scroll-margin-block)
         requestAnimationFrame(()=>{
-          try { if (!window.__tpReaderLocked) window.SCROLLER?.request({ el, priority: 4, src: 'system', reason: 'ensureVisible:fallback' }); } catch {}
+          try { if (!window.__tpReaderLocked && !window.__TP_CATCHUP_ACTIVE) window.SCROLLER?.request({ el, priority: 4, src: 'system', reason: 'ensureVisible:fallback', tag: 'helper' }); } catch {}
         });
+        return true;
       } catch {}
     }
     function queue(el, idx){
@@ -6078,7 +6094,7 @@ function advanceByTranscript(transcript, isFinal){
       if (idx === lastIdx && (now - lastRunTs) < QUIET_MS) return;
       if (isRecentlyVisible(el)) { lastIdx = idx; lastRunTs = now; return; }
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(()=>{
+  raf = requestAnimationFrame(()=>{
         try { io.observe(el); } catch {}
   if (!window.__TP_CATCHUP_ACTIVE && !window.__TP_DISABLE_ENSUREVISIBLE && !(window.__TP_RUNTIME && window.__TP_RUNTIME.ensureEnabled === false)) ensureVisible(el);
         lastIdx = idx; lastRunTs = performance.now();
