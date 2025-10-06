@@ -4407,10 +4407,10 @@ setTimeout(() => {
 
 // Gentle PID-like catch-up controller
   function tryStartCatchup(){
-  if (!speechOn) { try{ __scrollCtl?.stopAutoCatchup?.(); }catch{} return; }
+  if (!speechOn) { try{ __scrollCtl?.stopAutoCatchup?.(); }catch{} try { window.__TP_CATCHUP_ACTIVE = false; } catch {} return; }
   if (!__scrollCtl?.startAutoCatchup || !viewer) return;
   // If auto-scroll is running, skip catch-up to avoid conflicts
-  if (autoTimer) return;
+  if (autoTimer) { try { window.__TP_CATCHUP_ACTIVE = false; } catch {} return; }
   const markerTop = () => (viewer?.clientHeight || 0) * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
   const getTargetY = () => markerTop();
   const getAnchorY = () => {
@@ -4450,6 +4450,7 @@ setTimeout(() => {
     } catch {}
   };
   try { __scrollCtl.stopAutoCatchup(); } catch {}
+  try { window.__TP_CATCHUP_ACTIVE = true; } catch {}
   __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
 }
 
@@ -4473,6 +4474,7 @@ function maybeCatchupByAnchor(anchorY, viewportH){
       _lowStartTs = 0;
       // Save CPU/jitter when we don't need it
       try { __scrollCtl.stopAutoCatchup(); } catch {}
+      try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
     }
   } catch {}
 }
