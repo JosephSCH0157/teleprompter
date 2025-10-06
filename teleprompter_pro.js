@@ -217,6 +217,60 @@
       });
     } catch {}
   })();
+  // Rogue writer guard: scope to viewer surface and document scroller; ignore HUD/outside
+  (function installRogueWriterGuard(){
+    try {
+      if (window.__tpRogueWriterGuardInstalled) return; window.__tpRogueWriterGuardInstalled = true;
+      const getViewer = ()=>{ try { return document.getElementById('viewer'); } catch { return null; } };
+      const isGuardSurface = (el)=>{
+        try {
+          if (!el || !(el instanceof Element)) return false;
+          // document.scrollingElement is guarded too
+          try { if (document.scrollingElement && el === document.scrollingElement) return true; } catch {}
+          const v = getViewer();
+          if (v && (el === v || (typeof v.contains === 'function' && v.contains(el)))) return true;
+        } catch {}
+        return false;
+      };
+      // Find a prototype that actually holds scrollTop accessors
+      const bases = [Element && Element.prototype, HTMLElement && HTMLElement.prototype, HTMLDivElement && HTMLDivElement.prototype].filter(Boolean);
+      let targetProto = null, origDesc = null;
+      for (const proto of bases){
+        try {
+          const d = Object.getOwnPropertyDescriptor(proto, 'scrollTop');
+          if (d && (typeof d.get === 'function') && (typeof d.set === 'function')) { targetProto = proto; origDesc = d; break; }
+        } catch {}
+      }
+      if (!targetProto || !origDesc) return; // nothing to wrap
+      if (targetProto.__tpScrollTopWrapped) return; // already wrapped
+      Object.defineProperty(targetProto, 'scrollTop', {
+        configurable: true,
+        enumerable: origDesc.enumerable,
+        get: origDesc.get,
+        set: function(next){
+          try {
+            // Allow HUD/debug panes to scroll without noise; only guard viewer/doc scroller
+            const el = this;
+            const isHud = (function(){ try { return !!(el && typeof el.closest === 'function' && el.closest('.tp-hud')); } catch { return false; } })();
+            if (!isGuardSurface(el) || isHud) return origDesc.set.call(el, next);
+            // Optional DEV write token to bypass guard
+            if (window.__TP_DEV_WRITE_OK) return origDesc.set.call(el, next);
+            // During anim/catchup, flag rogue writes on the guarded surfaces
+            if (window.__TP_ANIMATING || window.__TP_CATCHUP_ACTIVE){
+              try {
+                const info = { tag:'rogue:scrollTop', elTag: el && el.tagName, id: el && el.id, class: el && el.className, next };
+                console.warn('[Rogue scrollTop during catchup]', info);
+              } catch {}
+            }
+            return origDesc.set.call(el, next);
+          } catch {
+            try { return origDesc.set.call(this, next); } catch {}
+          }
+        }
+      });
+      try { targetProto.__tpScrollTopWrapped = true; } catch {}
+    } catch {}
+  })();
   // Boot instrumentation (added)
   try {
     window.__TP_BOOT_TRACE = [];
