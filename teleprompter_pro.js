@@ -225,6 +225,11 @@
   }
   // Unified scroll scheduler entry: prefer rAF-batched writer if available
   function requestScroll(y){ try { window.__lastScrollTarget = Number(y)||0; window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll', tag: 'helper' }); } catch {} }
+  // Queue exactly one pending helper action to run after catchup settles
+  try {
+    window.__TP_QUEUE_HELPER = function(fn, label){ try { window.__tpPendingHelper = { fn: (typeof fn==='function') ? fn : null, label: String(label||'') }; } catch {} };
+    window.__TP_FLUSH_PENDING_HELPER = function(){ try { const p = window.__tpPendingHelper; window.__tpPendingHelper = null; if (p && typeof p.fn === 'function') p.fn(); } catch {} };
+  } catch {}
 
   // Minimal write batching to shed main-thread load during bursts
   const __tpWriteQ = [];
@@ -745,7 +750,7 @@
           } catch { return { ok:false, reason:'error', tag:'manual' }; }
         }
         onMatchActivate({ idx, reason, conf }){ try { const bucket = Math.round((Number(conf)||0) * 20); const key = `${idx}|${reason||''}|${bucket}`; if (key === this._lastMatchKey) return; this._lastMatchKey = key; const el = (document.getElementById('script')||document).querySelector(`[data-match-idx="${idx}"]`) || document.querySelector(`#match-${idx}`) || null; if (!el) return; this.request({ el, priority:5, src:'match', reason:String(reason||'') }); } catch {} }
-        onSpeechFinal(node){ try { if (!node) return; this.request({ el: node, priority: 10, src:'speech', reason:'final' }); } catch {} }
+  onSpeechFinal(node){ try { if (!node) return; if (window.__TP_CATCHUP_ACTIVE) { try { window.__TP_QUEUE_HELPER?.(() => { try { this.request({ el: node, priority: 10, src:'speech', reason:'final', tag: 'helper' }); } catch {} }, 'speech:final'); } catch {} return; } this.request({ el: node, priority: 10, src:'speech', reason:'final', tag: 'helper' }); } catch {} }
         onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
         start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
   stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} try { window.dispatchEvent(new CustomEvent('tp-settled', { detail: { source: 'scroller' } })); } catch {} }
