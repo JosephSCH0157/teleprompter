@@ -156,7 +156,13 @@
         try {
           // Honor catchup cooldown; schedule a small delay
           const delay = (function(){ try { const t = Math.max(window.__TP_CATCHUP_COOLDOWN_UNTIL||0, window.__TP_COOLDOWN_UNTIL||0); const now = performance.now(); return Math.max(0, t - now) + 30; } catch { return 120; } })();
-          setTimeout(()=>{ try { window.__TP_FLUSH_PENDING_HELPER?.(); } catch {} }, delay);
+          setTimeout(()=>{
+            try {
+              // Skip flush when motion is active; benign requests would be rejected anyway
+              if (window.__TP_ANIMATING || window.__TP_CATCHUP_ACTIVE) return;
+              window.__TP_FLUSH_PENDING_HELPER?.();
+            } catch {}
+          }, delay);
         } catch {}
       }, { passive:true });
     } catch {}
@@ -373,7 +379,14 @@
   // Queue exactly one pending helper action to run after catchup settles
   try {
     window.__TP_QUEUE_HELPER = function(fn, label){ try { window.__tpPendingHelper = { fn: (typeof fn==='function') ? fn : null, label: String(label||'') }; } catch {} };
-    window.__TP_FLUSH_PENDING_HELPER = function(){ try { const p = window.__tpPendingHelper; window.__tpPendingHelper = null; if (p && typeof p.fn === 'function') p.fn(); } catch {} };
+    window.__TP_FLUSH_PENDING_HELPER = function(){
+      try {
+        // Avoid flushing while motion is active; drop the pending helper as stale
+        if (window.__TP_ANIMATING || window.__TP_CATCHUP_ACTIVE) { window.__tpPendingHelper = null; return; }
+        const p = window.__tpPendingHelper; window.__tpPendingHelper = null;
+        if (p && typeof p.fn === 'function') p.fn();
+      } catch {}
+    };
   } catch {}
 
   // Minimal write batching to shed main-thread load during bursts
