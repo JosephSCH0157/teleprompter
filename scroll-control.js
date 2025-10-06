@@ -117,17 +117,11 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
       if (Math.abs(v) < vMin) v = 0;
       v = Math.max(-vMax, Math.min(vMax, v));
 
-      if (v === 0 && Math.abs(vRaw) >= 0) {
-        // Deadzone or clamped to zero
-        _dbg({ tag:'match:catchup:deadzone', err, deriv, vRaw: Number(vRaw.toFixed(3)), v: 0, vMin, vMax, anchorY, targetY });
-      }
-
       if (v !== 0) {
         // Single-writer arbitration: catchup owns the lock while active
         if (WriteLock.try('catchup', 400)) {
           try { scrollBy(v); } catch {}
         }
-        _dbg({ tag:'match:catchup:apply', err, deriv, vRaw: Number(vRaw.toFixed(3)), v: Number(v.toFixed(3)), vMin, vMax, anchorY, targetY });
       }
       prevErr = err;
     } catch {}

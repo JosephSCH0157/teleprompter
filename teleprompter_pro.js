@@ -52,6 +52,46 @@
 
   // Calm Mode geometry helpers: unified target math and clamped scroll writes
   // These are safe to define always; callers should only use them when CALM is enabled.
+  // Dev-only: simple measure/mutate phase guard and longtask observer to catch main-thread hogs
+  try {
+    if (window.__TP_DEV && !window.__tpPhaseShimInstalled){
+      window.__tpPhaseShimInstalled = true;
+      let PHASE = 'idle'; // 'measure' | 'mutate' | 'idle'
+      window.beginMeasure = function(){ PHASE = 'measure'; };
+      window.beginMutate = function(){ PHASE = 'mutate'; };
+      window.endFrame     = function(){ PHASE = 'idle'; };
+      function assertNoLayoutRead(){ try { if (PHASE === 'mutate') console.warn('Layout read during mutate phase'); } catch {} }
+      try {
+        const proto = Element.prototype;
+        const wrapGetter = (name)=>{
+          try {
+            const desc = Object.getOwnPropertyDescriptor(proto, name);
+            if (!desc || !desc.get) return;
+            Object.defineProperty(proto, name, { get(){ assertNoLayoutRead(); return desc.get.call(this); } });
+          } catch {}
+        };
+        ['scrollHeight','clientHeight','offsetHeight'].forEach(wrapGetter);
+        const origGBCR = proto.getBoundingClientRect;
+        if (typeof origGBCR === 'function'){
+          proto.getBoundingClientRect = function(){ assertNoLayoutRead(); return origGBCR.apply(this, arguments); };
+        }
+      } catch {}
+      try {
+        if ('PerformanceObserver' in window){
+          const po = new PerformanceObserver((list)=>{
+            try {
+              for (const e of list.getEntries()){
+                const d = Math.round(e.duration);
+                const blame = (e.attribution && e.attribution[0] && e.attribution[0].name) || 'unknown';
+                console.log('[LongTask]', d+'ms', 'blame:', blame);
+              }
+            } catch {}
+          });
+          po.observe({ entryTypes:['longtask'] });
+        }
+      } catch {}
+    }
+  } catch {}
   function getYForElInScroller(el, sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body), pct = 0.38) {
     try {
       if (!el || !sc) return 0;
@@ -560,20 +600,32 @@
         start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
   stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} }
         tick = (ts) => {
+          // Schedule next frame immediately; keep this handler minimal
           this.raf = requestAnimationFrame(this.tick);
-          const sc = getScroller();
           if (ts < this.coolingUntil) return; // user truce
+          // Reads (measure phase)
+          try { window.beginMeasure && window.beginMeasure(); } catch {}
+          const sc = getScroller();
           if (this.pending){ this.targetY = this.pending.y; this.pending = null; }
-          if (this.targetY == null) return this.stop();
+          if (this.targetY == null) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
           const pos = getScrollTop(sc);
           const err = this.targetY - pos;
-          const absErr = Math.abs(err);
-          if (absErr < this.deadband){ if (!this.lastOutside) this.lastOutside = ts; if (ts - this.lastOutside >= this.settleMs) return this.stop(); } else { this.lastOutside = 0; }
+          const absErr = (err < 0 ? -err : err);
           const dt = (this.lastTs ? (ts - this.lastTs) : 16.7) / 1000; this.lastTs = ts;
+          // Mutations (mutate phase): compute and write only
+          try { window.beginMutate && window.beginMutate(); } catch {}
+          if (absErr < this.deadband){
+            if (!this.lastOutside) this.lastOutside = ts;
+            if (ts - this.lastOutside >= this.settleMs) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
+          } else {
+            this.lastOutside = 0;
+          }
           const a = this.kp * err - this.kd * this.v;
           this.v = clamp(this.v + a * dt, -this.maxSpeed, this.maxSpeed);
           const next = clamp(pos + this.v * dt, 0, getMaxTop(sc));
           setScrollTop(sc, next);
+          // End frame
+          try { window.endFrame && window.endFrame(); } catch {}
         }
       }
       try { window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager(); } catch {}
@@ -687,6 +739,8 @@
       let lastTop = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
       const onScroll = ()=>{
         try {
+          // Pause during animation to avoid doing layout-sensitive work in a hot scroll path
+          if (window.__TP_ANIMATING) return;
           const cur = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
           const intended = (typeof window.__lastScrollTarget==='number') ? window.__lastScrollTarget : null;
           const ok = intended != null && Math.abs(cur - intended) <= 2;
