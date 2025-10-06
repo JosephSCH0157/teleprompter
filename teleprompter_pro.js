@@ -33,6 +33,9 @@
         // Optional listener registry: enable with ?listeners=1 or localStorage tp_listeners=1
         const LISTENERS = Q.has('listeners') || localStorage.getItem('tp_listeners') === '1';
         if (LISTENERS) { (async ()=>{ try { await import('./dev/listener-registry.js'); } catch {} })(); }
+        // Optional scheduler registry: enable with ?sched=1 or localStorage tp_sched=1
+        const SCHED = Q.has('sched') || localStorage.getItem('tp_sched') === '1';
+        if (SCHED) { (async ()=>{ try { await import('./dev/scheduler-registry.js'); } catch {} })(); }
       }
     } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
