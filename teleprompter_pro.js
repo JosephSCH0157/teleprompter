@@ -694,6 +694,18 @@
             }
             const yClamped = Math.max(0, Math.min(Number(y)||0, maxTop));
             const atBoundNoMove = (yClamped === posNow);
+
+            // Final sanity: if a write-lock is held by someone else, reject
+            try {
+              const held = (typeof window !== 'undefined' && window.WriteLock && typeof window.WriteLock.heldBy === 'function') ? window.WriteLock.heldBy() : null;
+              const locked = (typeof window !== 'undefined' && window.WriteLock && typeof window.WriteLock.isLocked === 'function') ? window.WriteLock.isLocked() : !!held;
+              const tagNow = (r?.tag || '');
+              if (locked && held && held !== tagNow) {
+                const ev = { tag:'scroll:result', ok:false, reason:'reject:locked-by', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: tagNow, heldBy: held };
+                this._logReject(ev, ts);
+                return ev;
+              }
+            } catch {}
             if (atBoundNoMove || Math.abs(yClamped - posNow) < this.deadband) {
               if (isManual) {
                 // Manual probe: bypass holds by issuing a tiny nudge to verify scrollability

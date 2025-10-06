@@ -15,8 +15,11 @@ const WriteLock = (()=>{ let owner = null, until = 0; return {
     } catch { return true; }
   },
   release(id){ try { if (owner === id) { until = 0; owner = null; try { if (typeof window!=='undefined') window.__TP_WRITE_OWNER = null; } catch {} } } catch {} },
-  heldBy(){ return owner; }
+  heldBy(){ return owner; },
+  isLocked(){ try { const now = performance.now(); return !!owner && now <= until; } catch { return !!owner; } }
 }; })();
+// Expose for external guards (controller sanity checks)
+try { if (typeof window !== 'undefined') window.WriteLock = WriteLock; } catch {}
 // Global animation/timer state and generation token
 let GEN = (typeof window !== 'undefined' && typeof window.__TP_GEN === 'number') ? window.__TP_GEN : 0;
 let rafId, prevErr = 0, active = false;
