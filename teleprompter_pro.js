@@ -366,6 +366,8 @@
             const dims = (function(){ try { const sh = (sc===window) ? (document.documentElement?.scrollHeight||0) : (sc?.scrollHeight||0); const ch = (sc===window) ? (window.innerHeight||0) : (sc?.clientHeight||0); return { scrollHeight: sh|0, clientHeight: ch|0 }; } catch { return { scrollHeight:0, clientHeight:0 }; } })();
             const maxTop = (function(){ try { return getMaxTop(sc); } catch { return 0; } })();
             const posNow = (function(){ try { return getScrollTop(sc)|0; } catch { return 0; } })();
+            const isManual = !!(r && (r.manual === true || r.priority === 'manual'));
+            const prioNum = (function(){ try { if (typeof r?.priority === 'string') return (r.priority === 'manual') ? 99 : 5; return (r?.priority|0); } catch { return 5; } })();
             // Debounce failsafe: if we've been holding for >600ms with no movement, drop repeats from teleprompter intent
             if (this.holdState.active && r?.tag === 'teleprompter'){
               const heldMs = ts - (this.holdState.since||0);
@@ -407,7 +409,7 @@
                 }
               } catch {}
             }
-            if (ts < this.coolingUntil) {
+            if (!isManual && ts < this.coolingUntil) {
               const ev = { tag:'scroll:result', ok:false, reason:'locked:inertia', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
               this._logReject(ev, ts);
               return ev;
@@ -420,15 +422,32 @@
             const yClamped = Math.max(0, Math.min(Number(y)||0, maxTop));
             const atBoundNoMove = (yClamped === posNow);
             if (atBoundNoMove || Math.abs(yClamped - posNow) < this.deadband) {
+              if (isManual) {
+                // Manual probe: bypass holds by issuing a tiny nudge to verify scrollability
+                const dir = Math.sign((yClamped - posNow) || 1) || 1;
+                const step = 2;
+                y = Math.max(0, Math.min(posNow + dir * step, maxTop));
+                try { window.__lastScrollTarget = y; } catch {}
+                if (!this.pending || prioNum >= (this.pending.priority|0)) {
+                  if (this.pending && prioNum > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
+                  this.pending = { y, priority: prioNum, src: r?.src||'manual', reason: r?.reason||'probe' };
+                }
+                if (!this.raf) this.start();
+                try { this.holdState.active = false; } catch {}
+                const ev = { tag:'scroll:result', ok:true, reason:'accepted:manual-probe', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'manual') };
+                this._rej.clear();
+                this._log(ev);
+                return ev;
+              }
               // Teleprompter exception: if anchor isn't visible, allow a bounded advance toward target instead of holding
               if (r?.tag === 'teleprompter' && r?.anchorVisible === false) {
                 const dir = Math.sign((yClamped - posNow) || 1) || 1;
                 const step = Math.min(32, Math.max(8, Math.abs(yClamped - posNow) || 32));
                 y = Math.max(0, Math.min(posNow + dir * step, maxTop));
                 try { window.__lastScrollTarget = y; } catch {}
-                if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
-                  if (this.pending && (r.priority|0) > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
-                  this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
+                if (!this.pending || prioNum >= (this.pending.priority|0)) {
+                  if (this.pending && prioNum > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
+                  this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'' };
                 }
                 if (!this.raf) this.start();
                 try { this.holdState.active = false; } catch {}
@@ -449,9 +468,9 @@
             }
             y = yClamped;
             try { window.__lastScrollTarget = y; } catch {}
-            if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
-              if (this.pending && (r.priority|0) > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
-              this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
+            if (!this.pending || prioNum >= (this.pending.priority|0)) {
+              if (this.pending && prioNum > (this.pending.priority|0)) { try { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; } catch {} this._preempts++; }
+              this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'' };
             }
             if (!this.raf) this.start();
             try { this.holdState.active = false; } catch {}
@@ -460,6 +479,15 @@
             this._log(ev);
             return ev;
           } catch {}
+        }
+        to(opts){
+          try {
+            const o = Object.assign({ src:'manual', reason:'probe' }, (opts||{}));
+            if (o.priority === 'manual') { o.manual = true; o.priority = 99; }
+            else if (o.manual && typeof o.priority !== 'number') { o.priority = 99; }
+            if (!o.tag) o.tag = 'manual';
+            return this.request(o);
+          } catch { return { ok:false, reason:'error', tag:'manual' }; }
         }
         onMatchActivate({ idx, reason, conf }){ try { const bucket = Math.round((Number(conf)||0) * 20); const key = `${idx}|${reason||''}|${bucket}`; if (key === this._lastMatchKey) return; this._lastMatchKey = key; const el = (document.getElementById('script')||document).querySelector(`[data-match-idx="${idx}"]`) || document.querySelector(`#match-${idx}`) || null; if (!el) return; this.request({ el, priority:5, src:'match', reason:String(reason||'') }); } catch {} }
         onSpeechFinal(node){ try { if (!node) return; this.request({ el: node, priority: 10, src:'speech', reason:'final' }); } catch {} }
