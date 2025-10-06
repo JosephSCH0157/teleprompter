@@ -12,6 +12,18 @@ const WriteLock = (()=>{ let owner = null, until = 0; return {
   heldBy(){ return owner; }
 }; })();
 let rafId, prevErr = 0, active = false;
+// Mark document as animating to pause IO rebinds and other churn
+function _markAnim(on){
+  try {
+    const doc = (typeof document !== 'undefined') ? document : null;
+    if (doc && doc.documentElement && doc.documentElement.classList) {
+      doc.documentElement.classList.toggle('tp-animating', !!on);
+    }
+    if (typeof window !== 'undefined') window.__TP_ANIMATING = !!on;
+  } catch {}
+}
+function _startCatchup(){ try { window.__TP_CATCHUP_ACTIVE = true; } catch {} _markAnim(true); }
+function _endCatchup(){ try { window.__TP_CATCHUP_ACTIVE = false; } catch {} _markAnim(false); }
 
 export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   if (active) return;
@@ -24,7 +36,7 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   const bias = 0;       // baseline offset
 
   _dbg({ tag:'match:catchup:start' });
-  try { window.__TP_CATCHUP_ACTIVE = true; } catch {}
+  _startCatchup();
 
   function tick() {
     try {
@@ -63,7 +75,7 @@ export function stopAutoCatchup() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
   _dbg({ tag:'match:catchup:stop' });
-  try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
+  _endCatchup();
   try { WriteLock.release('catchup'); } catch {}
 }
 

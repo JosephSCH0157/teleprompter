@@ -16,6 +16,12 @@ export function createAnchorObserver(getRoot, onUpdate){
   }
 
   function ensure(){
+    try {
+      const doc = (typeof document !== 'undefined') ? document : null;
+      if (doc && (doc.documentElement.classList.contains('tp-animating') || (typeof window !== 'undefined' && window.__TP_ANIMATING))) {
+        return; // skip rebind during active animation/catchup
+      }
+    } catch {}
     // Resolve root via provided getter; allow null for window viewport
     let root = null;
     try { root = (typeof getRoot === 'function') ? getRoot() : null; } catch { root = null; }
