@@ -262,6 +262,28 @@
       return true;
     } catch { return false; }
   }
+  // Catch-up specific: only gate on sim/jitter (allow probes when anchor is invisible)
+  function catchupStableEligible({ sim, jitterStd }){
+    try {
+      if (sim < SIM_OK || jitterStd > JITTER_HIGH){ try { __tpLowSimAt = performance.now(); } catch {} return false; }
+      return true;
+    } catch { return true; }
+  }
+  // Backoff logger for catchup:stable:hold to avoid spam
+  const __tpCatchupHoldLog = new Map(); // key -> { nextAt, count, interval }
+  function __tpLogCatchupStableHold(ev){
+    try {
+      const ts = performance.now();
+      const key = `${ev.reason||'unstable'}|${ev.anchorVisible?'vis':'novis'}`;
+      let s = __tpCatchupHoldLog.get(key);
+      if (!s) { s = { nextAt: 0, count: 0, interval: 150 }; __tpCatchupHoldLog.set(key, s); }
+      if (ts < s.nextAt) { s.count++; return; }
+      const suppressed = s.count|0; s.count = 0; s.nextAt = ts + s.interval; s.interval = Math.min(Math.max(150, s.interval * 2), 1500);
+      if (suppressed > 0) ev.suppressed = suppressed;
+      try { if (typeof debug==='function') debug(ev); } catch {}
+      try { if (__isHudVerbose() && typeof HUD?.log==='function') HUD.log('catchup:stable:hold', ev); } catch {}
+    } catch {}
+  }
   function inBand(targetY, top, vh, band){
     try {
       const b0 = Array.isArray(band) ? band[0] : 0.28;
@@ -1015,10 +1037,14 @@
       // Hard-stable eligibility check (applies before any catch-up/fallback)
       try {
         const jitterStd = (typeof window.__tpJitterEma === 'number') ? window.__tpJitterEma : 0;
-        if (!stableEligible({ sim: bestSim, jitterStd, anchorVisible })){
-          const ev = { tag:'catchup:stable:hold', sim:+Number(bestSim).toFixed(2), jitterStd:+Number(jitterStd).toFixed(2), anchorVisible, until: (__tpLowSimAt + LOWSIM_FREEZE) };
-          try { if (typeof debug==='function') debug(ev); } catch {}
-          try { if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('catchup:stable:hold', ev); } catch {}
+        if (!catchupStableEligible({ sim: bestSim, jitterStd })){
+          const lastInAge = Math.max(0, performance.now() - (window.__tpLastAnchorInViewAt||0));
+          let reasonBits = [];
+          if (bestSim < SIM_OK) reasonBits.push('sim<thresh');
+          if (jitterStd > JITTER_HIGH) reasonBits.push('jitter>high');
+          const reason = reasonBits.join('|') || 'unstable';
+          const ev = { tag:'catchup:stable:hold', sim:+Number(bestSim).toFixed(2), jitterStd:+Number(jitterStd).toFixed(2), anchorVisible, lastInAge: Math.round(lastInAge), holdStreak:(window.__tpHoldStreak|0), until: (__tpLowSimAt + LOWSIM_FREEZE), reason };
+          __tpLogCatchupStableHold(ev);
           try { window.__tpLastCatchupDecision = 'hold:unstable'; } catch {}
           return;
         }
@@ -1031,7 +1057,7 @@
       const covered = (covBest + clusterCov + covActive) > 0;
       function decideCatchup(m){
         if (m.sim >= SIM_GO) return 'go:signal';
-        // Probes allowed independent of coverage; key predicates: stale, anchor invisible, sim above probe, and hold streak
+        // Allow probe when anchor is invisible, stale, and sim passes probe threshold with sustained holds
         if (m.stale && !m.anchorVisible && m.sim >= SIM_PROBE && window.__tpHoldStreak >= HOLD_DEADMAN) return 'go:probe';
         return 'hold';
       }
