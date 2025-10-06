@@ -229,6 +229,12 @@ select { font-size: 14px; }
 /* Disable browser smooth scrolling for live-follow (always snap immediately) */
 #viewer, #scriptScrollContainer { scroll-behavior: auto !important; }
 
+/* Disable browser “helpful” scrolling + smooth behavior globally */
+html, body, #viewer {
+    scroll-behavior: auto !important;
+    overflow-anchor: none !important;
+}
+
 /* Subtle CK watermark */
 body.ck::after{
     content:"CK";
