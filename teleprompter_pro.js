@@ -73,6 +73,68 @@
       }
     } catch {}
   })();
+  // Guard against visualViewport resize/scroll storms (IME, zoom, OS UI): queue during motion and apply on settle
+  (function installVisualViewportGuard(){
+    try {
+      const vv = window.visualViewport;
+      if (!vv) return;
+      let queued = null;
+      const applyQueued = ()=>{
+        try {
+          if (!queued) return;
+          const q = queued; queued = null;
+          // Recompute geometry safely now that we are settled
+          try { if (typeof rebindObserverIf === 'function') rebindObserverIf('vv:settled'); } catch {}
+          try { if (typeof debug === 'function') debug({ tag:'vv:apply', w:q.w, h:q.h, ts:q.ts }); } catch {}
+        } catch {}
+      };
+      const onVV = ()=>{
+        try {
+          if (window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING) {
+            queued = { w: vv.width, h: vv.height, ts: performance.now() };
+            return;
+          }
+          // Not animating: handle immediately
+          applyQueued();
+        } catch {}
+      };
+      vv.addEventListener('resize', onVV, { passive: true });
+      vv.addEventListener('scroll', onVV, { passive: true });
+      window.addEventListener('tp-settled', applyQueued, { passive: true });
+    } catch {}
+  })();
+  // Speech events guard: mute all speech events when sync is off
+  (function installSpeechGuard(){
+    try {
+      if (window.__tpSpeechGuardInstalled) return; window.__tpSpeechGuardInstalled = true;
+      const speechEvents = [
+        'result','end','audiostart','audioend','soundstart','soundend','speechstart','speechend','nomatch','error'
+      ];
+      try { window.__TP_SPEECH_ENABLED = false; } catch {}
+      window.TP_speechGuard = (target)=>{
+        try {
+          if (!target || !target.addEventListener) return;
+          speechEvents.forEach(ev => {
+            try {
+              target.addEventListener(ev, (e)=>{ try { if (!window.__TP_SPEECH_ENABLED) e.stopImmediatePropagation(); } catch {} }, true);
+            } catch {}
+          });
+        } catch {}
+      };
+    } catch {}
+  })();
+  // DEV: MutationObserver logging during animation to catch heavy layout changes
+  (function installMutationLog(){
+    try {
+      if (!window.__TP_DEV || window.__tpMutationLogInstalled) return; window.__tpMutationLogInstalled = true;
+      const root = document.getElementById('viewer') || document.body || document.documentElement;
+      if (!root) return;
+      const mo = new MutationObserver((list)=>{
+        try { if (window.__TP_ANIMATING) console.warn('[mutations during anim]', Array.from(list||[]).slice(0,5)); } catch {}
+      });
+      mo.observe(root, { attributes:true, childList:true, subtree:true });
+    } catch {}
+  })();
   // Boot instrumentation (added)
   try {
     window.__TP_BOOT_TRACE = [];
@@ -651,7 +713,7 @@
         onSpeechFinal(node){ try { if (!node) return; this.request({ el: node, priority: 10, src:'speech', reason:'final' }); } catch {} }
         onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
         start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
-  stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} }
+  stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} try { window.dispatchEvent(new CustomEvent('tp-settled', { detail: { source: 'scroller' } })); } catch {} }
         tick = (ts) => {
           // Schedule next frame immediately; keep this handler minimal
           this.raf = requestAnimationFrame(this.tick);
@@ -6978,6 +7040,9 @@ async function init(){
     if (autoTimer) stopAutoScroll();
 
     recog = new SR();
+  // Ensure speech events are gated until we explicitly enable them
+  try { window.__TP_SPEECH_ENABLED = false; } catch {}
+  try { if (typeof window.TP_speechGuard === 'function') window.TP_speechGuard(recog); } catch {}
     recog.continuous = true;
     recog.interimResults = true;
     recog.lang = 'en-US';
@@ -7006,6 +7071,7 @@ async function init(){
       document.body.classList.add('listening');
       try { recChip.textContent = 'Speech: listening…'; } catch {}
       speechOn = true; try{ window.HUD?.bus?.emit('speech:toggle', true); }catch{}
+  try { window.__TP_SPEECH_ENABLED = true; } catch {}
       // HUD: speech start event
       try { if (typeof HUD?.log === 'function') HUD.log('speech:onstart', { lang: recog.lang, interim: !!recog.interimResults, continuous: !!recog.continuous }); } catch {}
     };
@@ -7062,6 +7128,7 @@ async function init(){
       document.body.classList.remove('listening');
       try { recChip.textContent = 'Speech: idle'; } catch {}
       speechOn = false; try{ window.HUD?.bus?.emit('speech:toggle', false); }catch{}
+  try { window.__TP_SPEECH_ENABLED = false; } catch {}
       // HUD: speech ended (natural or error)
       try { if (typeof HUD?.log === 'function') HUD.log('speech:onend', { autoRestart: !!recAutoRestart, recActive: !!recActive, nextDelayMs: recAutoRestart? recBackoffMs : 0 }); } catch {}
       try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
@@ -7090,6 +7157,7 @@ async function init(){
     try { (window.__TP_RUNTIME = (window.__TP_RUNTIME||{ ensureEnabled:true })).ensureEnabled = false; } catch {}
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
+  try { window.__TP_SPEECH_ENABLED = false; } catch {}
     try { if (typeof HUD?.log === 'function') HUD.log('speech:stop', {}); } catch {}
     // Invalidate all pending work: bump generation
     try { if (window.nextGen) window.nextGen(); } catch {}

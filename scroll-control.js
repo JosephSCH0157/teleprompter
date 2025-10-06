@@ -205,6 +205,8 @@ export function stopAutoCatchup() {
   rafId = null;
   _dbg({ tag:'match:catchup:stop' });
   _endCatchup();
+  // Notify listeners that motion has fully settled
+  try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tp-settled', { detail: { source: 'catchup' } })); } catch {}
   try { WriteLock.release('catchup'); } catch {}
   // Remove any active subscription to ScrollManager results
   try { if (__unsubCatchupResult) { __unsubCatchupResult(); __unsubCatchupResult = null; } } catch {}
