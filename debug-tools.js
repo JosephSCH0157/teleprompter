@@ -218,12 +218,21 @@
         const tg = mkEl('div', 'tp-hud-tag', String(tag));
         const pl = mkEl('div', 'tp-hud-payload', typeof payload === 'string' ? payload : safeJson(payload));
         row.append(ts, tg, pl);
+        // Compute whether the user is currently at the bottom BEFORE appending
+        const atBottom = (function(){
+          try { return (body.scrollTop + body.clientHeight) >= (body.scrollHeight - 2); } catch { return false; }
+        })();
         body.appendChild(row);
         const extra = body.children.length - state.maxRows;
         if (extra > 0) { for (let i=0;i<extra;i++) body.removeChild(body.firstChild); }
+        // Polite autoscroll: only when enabled, not animating, and user was already at bottom
         if (state.autoscroll) {
-          /* eslint-disable-next-line no-restricted-syntax */
-          body.scrollTop = body.scrollHeight;
+          if (!window.__TP_ANIMATING && atBottom) {
+            const prev = window.__TP_DEV_WRITE_OK;
+            window.__TP_DEV_WRITE_OK = 'hud-autoscroll';
+            try { body.scrollTop = body.scrollHeight; }
+            finally { window.__TP_DEV_WRITE_OK = prev; }
+          }
         }
       } catch {}
     }
