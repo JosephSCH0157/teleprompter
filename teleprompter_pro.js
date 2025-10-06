@@ -93,6 +93,26 @@
       });
     } catch {}
   })();
+  // Mute helpers when tab is hidden or right after focus returns
+  (function installVisibilityAndHelperWrite(){
+    try {
+      if (window.__tpHelperWriteInstalled) return; window.__tpHelperWriteInstalled = true;
+      const onVis = ()=>{ try { window.__TP_PAGE_HIDDEN = !!document.hidden; if (!document.hidden) window.__TP_LAST_FOCUS = performance.now(); } catch {} };
+      try { document.addEventListener('visibilitychange', onVis, { passive:true }); onVis(); } catch {}
+      try { window.addEventListener('focus', ()=>{ try { window.__TP_LAST_FOCUS = performance.now(); } catch {} }, true); } catch {}
+      window.helperWrite = function helperWrite(opts){
+        try {
+          const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          if (window.__TP_CATCHUP_ACTIVE || window.__TP_PAGE_HIDDEN) return false;
+          const lastFocus = (function(){ try { return window.__TP_LAST_FOCUS||0; } catch { return 0; } })();
+          if ((now - lastFocus) < 250) return false;
+          const o = Object.assign({}, (opts||{}));
+          if (!o.tag) o.tag = 'helper';
+          try { return !!(window.SCROLLER && typeof window.SCROLLER.request === 'function' && window.SCROLLER.request(o)); } catch { return false; }
+        } catch { return false; }
+      };
+    } catch {}
+  })();
   // Guard against visualViewport resize/scroll storms (IME, zoom, OS UI): queue during motion and apply on settle
   (function installVisualViewportGuard(){
     try {
@@ -257,7 +277,16 @@
     } catch {}
   }
   // Unified scroll scheduler entry: prefer rAF-batched writer if available
-  function requestScroll(y){ try { window.__lastScrollTarget = Number(y)||0; window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll', tag: 'helper' }); } catch {} }
+  function requestScroll(y){
+    try {
+      window.__lastScrollTarget = Number(y)||0;
+      if (typeof window.helperWrite === 'function') {
+        window.helperWrite({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll', tag: 'helper' });
+      } else {
+        window.SCROLLER?.request({ y: Number(y)||0, priority: 5, src: 'system', reason: 'requestScroll', tag: 'helper' });
+      }
+    } catch {}
+  }
   // Queue exactly one pending helper action to run after catchup settles
   try {
     window.__TP_QUEUE_HELPER = function(fn, label){ try { window.__tpPendingHelper = { fn: (typeof fn==='function') ? fn : null, label: String(label||'') }; } catch {} };
@@ -607,7 +636,13 @@
           }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        _postFrame(){
+          try {
+            // Place any heavier bookkeeping here to keep rAF light.
+            // Example: non-critical HUD updates, deferred diagnostics, etc.
+          } catch {}
+        }
         getContainer(){ try { this.state.container = getScroller(); } catch {} return this.state.container; }
         // Public: subscribe to scroll result events; returns an unsubscribe function
         onResult(fn){ try { if (typeof fn === 'function') { this._resultListeners.add(fn); return () => { try { this._resultListeners.delete(fn); } catch {} }; } } catch {} return () => {}; }
@@ -831,7 +866,16 @@
           const pos = getScrollTop(sc);
           const err = this.targetY - pos;
           const absErr = (err < 0 ? -err : err);
-          const dt = (this.lastTs ? (ts - this.lastTs) : 16.7) / 1000; this.lastTs = ts;
+          const rawDtMs = (this.lastTs ? (ts - this.lastTs) : 16.7);
+          const dt = rawDtMs / 1000; this.lastTs = ts;
+          // If we woke up from an idle gap, drop velocity and skip heavy motion to avoid re-arming
+          if (rawDtMs > 180) {
+            try { this.v = 0; } catch {}
+            try { window.endFrame && window.endFrame(); } catch {}
+            // Defer any heavier bookkeeping off the rAF
+            if (!this._pendingPostFrame) { this._pendingPostFrame = true; queueMicrotask(()=>{ this._pendingPostFrame = false; this._postFrame(); }); }
+            return;
+          }
           // Mutations (mutate phase): compute and write only
           try { window.beginMutate && window.beginMutate(); } catch {}
           if (absErr < this.deadband){
@@ -860,6 +904,8 @@
           setScrollTop(sc, next);
           // End frame
           try { window.endFrame && window.endFrame(); } catch {}
+          // Defer heavier bookkeeping so the rAF stays light
+          if (!this._pendingPostFrame) { this._pendingPostFrame = true; try { queueMicrotask(()=>{ try { this._pendingPostFrame = false; this._postFrame(); } catch { this._pendingPostFrame = false; } }); } catch { this._pendingPostFrame = false; } }
         }
       }
       try { window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager(); } catch {}
@@ -6112,11 +6158,16 @@ function advanceByTranscript(transcript, isFinal){
         const targetTop = Math.max(0, (el.offsetTop||0) - Math.floor(h * ANCHOR_VH));
         const curTop = (scroller.scrollTop||0);
         if (Math.abs(curTop - targetTop) > MIN_DELTA){
-          try { requestScroll(targetTop); } catch { try { window.SCROLLER?.request({ y: targetTop, priority: 4, src: 'system', reason: 'navigator:ensureVisible', tag: 'helper' }); } catch {} }
+          try { requestScroll(targetTop); } catch { try { (window.helperWrite||window.SCROLLER?.request)?.({ y: targetTop, priority: 4, src: 'system', reason: 'navigator:ensureVisible', tag: 'helper' }); } catch {} }
         }
         // Fallback DOM snap once layout settles (benefits from scroll-margin-block)
         requestAnimationFrame(()=>{
-          try { if (!window.__tpReaderLocked && !window.__TP_CATCHUP_ACTIVE) window.SCROLLER?.request({ el, priority: 4, src: 'system', reason: 'ensureVisible:fallback', tag: 'helper' }); } catch {}
+          try {
+            if (!window.__tpReaderLocked && !window.__TP_CATCHUP_ACTIVE) {
+              const call = (typeof window.helperWrite === 'function') ? window.helperWrite : (window.SCROLLER?.request?.bind(window.SCROLLER));
+              call && call({ el, priority: 4, src: 'system', reason: 'ensureVisible:fallback', tag: 'helper' });
+            }
+          } catch {}
         });
         return true;
       } catch {}
