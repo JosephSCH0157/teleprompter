@@ -352,8 +352,10 @@
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
         getContainer(){ try { this.state.container = getScroller(); } catch {} return this.state.container; }
+        _log(ev){ try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {} }
+        _logReject(ev, ts){ try { const key = `${ev.reason||'unk'}|${ev.containerId||'unk'}|${ev.holdTag||''}|${ev.tag||''}`; let s = this._rej.get(key); if (!s) { s = { nextAt: 0, count: 0, interval: 150 }; this._rej.set(key, s); } if (ts < s.nextAt) { s.count++; return; } const suppressed = s.count|0; s.count = 0; s.nextAt = ts + s.interval; s.interval = Math.min(Math.max(150, s.interval * 2), 1500); if (suppressed > 0) ev.suppressed = suppressed; this._log(ev); } catch { this._log(ev); } }
         request(r){
           try {
             const sc = getScroller();
@@ -380,16 +382,17 @@
               if (y0 != null) {
                 setScrollTop(sc, y0);
                 this.targetY = y0; this.v = 0; this.lastTs = 0; this.pending = null;
-                const ev = { tag:'scroll:result', ok:true, immediate:true, containerId, ...dims, lockFlags, y:y0|0, pos: posNow, holdTag: r?.reason||'' };
-                try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                const ev = { tag:'scroll:result', ok:true, immediate:true, containerId, ...dims, lockFlags, y:y0|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') };
+                this._rej.clear();
+                this._log(ev);
                 try { this.holdState.active = false; } catch {}
                 return ev;
               }
             }
             let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
             if (y == null) {
-              const ev = { tag:'scroll:result', ok:false, reason:'no-target', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              const ev = { tag:'scroll:result', ok:false, reason:'no-target', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+              this._logReject(ev, ts);
               return ev;
             }
             // Container mismatch check for element targets
@@ -398,20 +401,20 @@
                 const anc = getScrollableAncestor(r.el);
                 const mismatch = (anc && sc && anc !== sc && !(sc===window && (anc===document.scrollingElement||anc===document.documentElement||anc===document.body)));
                 if (mismatch) {
-                  const ev = { tag:'scroll:result', ok:false, reason:'container-mismatch', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-                  try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                  const ev = { tag:'scroll:result', ok:false, reason:'container-mismatch', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+                  this._logReject(ev, ts);
                   return ev;
                 }
               } catch {}
             }
             if (ts < this.coolingUntil) {
-              const ev = { tag:'scroll:result', ok:false, reason:'locked:inertia', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              const ev = { tag:'scroll:result', ok:false, reason:'locked:inertia', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+              this._logReject(ev, ts);
               return ev;
             }
             if (!sc || dims.clientHeight <= 0 || (maxTop|0) <= 0) {
-              const ev = { tag:'scroll:result', ok:false, reason:'not-scrollable', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              const ev = { tag:'scroll:result', ok:false, reason:'not-scrollable', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+              this._logReject(ev, ts);
               return ev;
             }
             const yClamped = Math.max(0, Math.min(Number(y)||0, maxTop));
@@ -429,8 +432,9 @@
                 }
                 if (!this.raf) this.start();
                 try { this.holdState.active = false; } catch {}
-                const ev = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'' };
-                try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                const ev = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') };
+                this._rej.clear();
+                this._log(ev);
                 return ev;
               }
               // Record/continue hold state for potential debounce
@@ -439,8 +443,8 @@
                 else { this.holdState.pos = posNow; }
               } catch {}
               const reason = atBoundNoMove && (yClamped !== y) ? 'bounds-clamp' : 'hold:stable';
-              const ev = { tag:'scroll:result', ok:false, reason, containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-              try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+              const ev = { tag:'scroll:result', ok:false, reason, containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
+              this._logReject(ev, ts);
               return ev;
             }
             y = yClamped;
@@ -451,8 +455,9 @@
             }
             if (!this.raf) this.start();
             try { this.holdState.active = false; } catch {}
-            const ev = { tag:'scroll:result', ok:true, reason:'accepted', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'' };
-            try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+            const ev = { tag:'scroll:result', ok:true, reason:'accepted', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') };
+            this._rej.clear();
+            this._log(ev);
             return ev;
           } catch {}
         }
