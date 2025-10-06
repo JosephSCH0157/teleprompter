@@ -239,9 +239,18 @@ html, body, #viewer {
 #viewer{
     /* stop scroll chaining into parent */
     overscroll-behavior: contain;
-    /* prevent reflow when scrollbar appears/disappears */
-    scrollbar-gutter: stable;
+    /* prevent reflow when scrollbar appears/disappears; reserve both edges for RTL/LTR */
+    scrollbar-gutter: stable both-edges;
 }
+
+/* kill kinetic gestures while we drive */
+.tp-animating #viewer { touch-action: none; }
+
+/* subtle active line highlight without weight shifts */
+.script .active { font-weight: inherit; background: rgba(255,255,0,.15); }
+
+/* reserve space for media to avoid layout jumps */
+img, video { content-visibility: auto; contain-intrinsic-size: 600px 338px; }
 
 /* Subtle CK watermark */
 body.ck::after{
