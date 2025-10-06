@@ -7023,6 +7023,8 @@ async function init(){
 
   // TP: speech-stop
   function stopSpeechSync(){
+    // Immediately disable helper ensures to avoid post-stop yank
+    try { (window.__TP_RUNTIME = (window.__TP_RUNTIME||{ ensureEnabled:true })).ensureEnabled = false; } catch {}
     try { recog && recog.stop(); } catch(_) {}
     recog = null;
     try { if (typeof HUD?.log === 'function') HUD.log('speech:stop', {}); } catch {}
@@ -7037,6 +7039,11 @@ async function init(){
     // Cancel any module timers and rAFs
     try { if (typeof window.clearAllTimers === 'function') window.clearAllTimers(); } catch {}
     try { if (typeof window.killMomentum === 'function') window.killMomentum(); } catch {}
+    // Re-enable helper ensures after a short dampening window (schedule after clearing timers)
+    try {
+      const reenable = () => { try { if (window.__TP_RUNTIME) window.__TP_RUNTIME.ensureEnabled = true; } catch {} };
+      if (typeof window.addTimer === 'function') window.addTimer(setTimeout(reenable, 300)); else setTimeout(reenable, 300);
+    } catch {}
   }
 
   // TP: docx-mammoth
