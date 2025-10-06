@@ -558,6 +558,54 @@
       try { window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager(); } catch {}
     } catch {}
   })();
+
+  // Lightweight HOLD facade to clear sticky holds/backoff on transitions
+  try {
+    if (!window.HOLD) {
+      const HOLD = {
+        // Clear holds/backoff for a specific tag (e.g., 'session-lock', 'final'); if no tag, clear all
+        clear(tag){
+          try {
+            const s = window.SCROLLER;
+            if (!s) return;
+            // Reset inertia/cooldown so programmatic scrolls can proceed post-transition
+            try { s.coolingUntil = 0; } catch {}
+            // Reset current hold state
+            try { s.holdState = { active:false, since:0, pos:0, tag:'' }; } catch {}
+            // Clear backoff/coalescer entries
+            try {
+              if (!s._rej || typeof s._rej.forEach !== 'function') return;
+              if (!tag) { s._rej.clear(); return; }
+              const dels = [];
+              s._rej.forEach((_, key) => {
+                try {
+                  const parts = String(key).split('|');
+                  // key format: reason | containerId | holdTag | tag
+                  const holdTag = parts[2] || '';
+                  if (holdTag === String(tag)) dels.push(key);
+                } catch {}
+              });
+              for (const k of dels) { try { s._rej.delete(k); } catch {} }
+            } catch {}
+          } catch {}
+        },
+        clearAll(){ try { this.clear(); } catch {} }
+      };
+      try { window.HOLD = HOLD; } catch {}
+    }
+  } catch {}
+
+  // Mode/container transition hook: clear sticky holds and rebind IO root
+  try {
+    if (!window.onModeChange) {
+      window.onModeChange = function onModeChange(next){
+        try { window.HOLD?.clear('session-lock'); } catch {}
+        try { window.HOLD?.clear('final'); } catch {}
+        try { rebindObserverIf && rebindObserverIf(true); } catch {}
+        try { if (typeof debug==='function') debug({ tag:'mode:change', next }); } catch {}
+      };
+    }
+  } catch {}
   // Temporary safety net: shims to route native scroll calls through SCROLLER
   (function installScrollShims(){
     try {
