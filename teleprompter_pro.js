@@ -31,6 +31,20 @@
     } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
   } catch {}
+  // Optional: suppress wheel/touch inputs while catchup owns the scroll (prevents browser momentum fighting the controller)
+  (function installInputSuppression(){
+    try {
+      const ENABLED = (function(){ try { const v = localStorage.getItem('tp_block_inputs'); return v === '1' || v === 'true'; } catch { return false; } })();
+      if (!ENABLED) return;
+      const viewer = document.getElementById('viewer');
+      if (!viewer) return;
+      const opts = { passive:false, capture:true };
+      const onWheel = (e)=>{ try { if (window.__TP_CATCHUP_ACTIVE) { e.preventDefault(); e.stopImmediatePropagation(); } } catch {} };
+      const onTouchMove = (e)=>{ try { if (window.__TP_CATCHUP_ACTIVE) { e.preventDefault(); e.stopImmediatePropagation(); } } catch {} };
+      try { viewer.addEventListener('wheel', onWheel, opts); } catch {}
+      try { viewer.addEventListener('touchmove', onTouchMove, opts); } catch {}
+    } catch {}
+  })();
   // Boot instrumentation (added)
   try {
     window.__TP_BOOT_TRACE = [];
