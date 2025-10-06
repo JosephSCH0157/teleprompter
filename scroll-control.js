@@ -7,8 +7,14 @@ function _dbg(ev){
 }
 // Single-writer micro lock with TTL; simple arbitration across modules
 const WriteLock = (()=>{ let owner = null, until = 0; return {
-  try(id, ms = 500){ try { const now = performance.now(); if (now > until || owner === id){ owner = id; until = now + ms; return true; } return false; } catch { return true; } },
-  release(id){ try { if (owner === id) until = 0; } catch {} },
+  try(id, ms = 500){
+    try {
+      const now = performance.now();
+      if (now > until || owner === id){ owner = id; until = now + ms; try { if (typeof window!=='undefined') window.__TP_WRITE_OWNER = owner; } catch {} return true; }
+      return false;
+    } catch { return true; }
+  },
+  release(id){ try { if (owner === id) { until = 0; owner = null; try { if (typeof window!=='undefined') window.__TP_WRITE_OWNER = null; } catch {} } } catch {} },
   heldBy(){ return owner; }
 }; })();
 // Global animation/timer state and generation token

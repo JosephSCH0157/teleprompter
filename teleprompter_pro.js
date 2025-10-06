@@ -22,7 +22,13 @@
       document.documentElement.classList.toggle('tp-dev', !!DEV);
     } catch {}
     try { if (CALM) { window.__TP_DISABLE_NUDGES = true; } } catch {}
-    try { if (DEV) console.info('[TP-Pro] DEV mode enabled'); } catch {}
+    try {
+      if (DEV) {
+        console.info('[TP-Pro] DEV mode enabled');
+        // Lazy-load rogue writer guard in DEV to catch direct scrollTop/scrollIntoView writes
+        (async ()=>{ try { await import('./dev/rogue-writer-guard.js'); } catch {} })();
+      }
+    } catch {}
     try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
   } catch {}
   // Boot instrumentation (added)
