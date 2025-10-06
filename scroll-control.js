@@ -25,39 +25,42 @@ function _markAnim(on){
   } catch {}
 }
 
-// Optionally pin the viewer height during motion (stops clientHeight flapping)
+// Pin the scroller viewport height during motion (prevents clientHeight flapping)
 let __PINNED_H = null;
-function __shouldPinViewer(){
+let __PIN_TARGET = null;
+function __getPinTarget(){
   try {
-    if (typeof window !== 'undefined' && window.__TP_PIN_VIEWER === true) return true;
-    const val = (typeof localStorage !== 'undefined') ? localStorage.getItem('tp_pin_viewer') : null;
-    return val === '1' || val === 'true';
-  } catch { return false; }
+    const sc = (typeof window !== 'undefined' && window.SCROLLER && typeof window.SCROLLER.getContainer==='function') ? window.SCROLLER.getContainer() : null;
+    const doc = (typeof document !== 'undefined') ? document : null;
+    const viewer = doc ? doc.getElementById('viewer') : null;
+    // Prefer the SCROLLER container if it's a real element; otherwise fall back to #viewer
+    if (sc && sc !== window && sc !== document && sc !== document.body && sc !== document.documentElement) return sc;
+    return viewer;
+  } catch { return null; }
 }
 function pinViewer(){
   try {
-    if (!__shouldPinViewer()) return;
-    const doc = (typeof document !== 'undefined') ? document : null;
-    const v = doc ? doc.getElementById('viewer') : null;
+    const v = __getPinTarget();
     if (!v) return;
+    __PIN_TARGET = v;
     __PINNED_H = v.clientHeight;
     const px = (__PINNED_H|0) + 'px';
     v.style.minHeight = px;
     v.style.maxHeight = px;
-    v.style.contain = 'layout size';
-    try { _dbg({ tag:'ui:pin-viewer', h: __PINNED_H }); } catch {}
+    // Include paint containment to fully isolate reflow/paint jitter during motion
+    v.style.contain = 'layout size paint';
+    try { _dbg({ tag:'ui:pin-viewer', h: __PINNED_H, id: v.id||v.tagName }); } catch {}
   } catch {}
 }
 function unpinViewer(){
   try {
-    const doc = (typeof document !== 'undefined') ? document : null;
-    const v = doc ? doc.getElementById('viewer') : null;
+    const v = __PIN_TARGET || __getPinTarget();
     if (!v) return;
     v.style.minHeight = '';
     v.style.maxHeight = '';
     v.style.contain = '';
-    try { _dbg({ tag:'ui:unpin-viewer', h: __PINNED_H }); } catch {}
-    __PINNED_H = null;
+    try { _dbg({ tag:'ui:unpin-viewer', h: __PINNED_H, id: v.id||v.tagName }); } catch {}
+    __PINNED_H = null; __PIN_TARGET = null;
   } catch {}
 }
 function _startCatchup(){ try { window.__TP_CATCHUP_ACTIVE = true; } catch {} _markAnim(true); pinViewer(); }
