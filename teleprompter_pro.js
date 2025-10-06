@@ -580,6 +580,23 @@
     } catch {}
   })();
 
+  // Subscribe to scroll results to detect bounded advance and finish catchup early
+  try {
+    if (window.SCROLLER && typeof window.SCROLLER.onResult === 'function'){
+      window.SCROLLER.onResult((ev)=>{
+        try {
+          const reason = String(ev?.reason||'');
+          if (reason === 'accepted:bounded-advance') {
+            __catchupRefDec('bounded-advance');
+          }
+          if (reason === 'close-enough') {
+            __catchupRefDec('close-enough');
+          }
+        } catch {}
+      });
+    }
+  } catch {}
+
   // Lightweight HOLD facade to clear sticky holds/backoff on transitions
   try {
     if (!window.HOLD) {
@@ -1050,6 +1067,19 @@
   } catch {}
   try { window.beginProgrammaticScroll = beginProgrammaticScroll; window.endProgrammaticScroll = endProgrammaticScroll; } catch {}
 
+  // Catchup activity ref-counter: mark active while a catchup actuation is in-flight
+  let __tpCatchupRefs = 0;
+  function __catchupRefInc(){
+    try { __tpCatchupRefs = ((__tpCatchupRefs|0) + 1); window.__TP_CATCHUP_ACTIVE = true; } catch {}
+  }
+  function __catchupRefDec(reason=''){
+    try {
+      __tpCatchupRefs = Math.max(0, (__tpCatchupRefs|0) - 1);
+      if (!__tpCatchupRefs) window.__TP_CATCHUP_ACTIVE = false;
+      try { if (typeof debug==='function') debug({ tag:'catchup:end', reason, refs: __tpCatchupRefs }); } catch {}
+    } catch {}
+  }
+
   // Continuous catch-up scheduler: evaluate gentle scroll-follow independently of activation
   let __tpStagnantTicks = 0;
   let __tpLastIORebindAt = 0;
@@ -1219,7 +1249,18 @@
           try {
             const prio = (decision === 'go:signal') ? 6 : 7; // probe edges slightly higher to help recovery
             // Tag teleprompter catch-up requests and include anchor visibility for bounded-advance exception
-            window.SCROLLER?.request({ y: estY, priority: prio, src: 'teleprompter', tag: 'teleprompter', anchorVisible, reason: 'catchup' });
+            __catchupRefInc();
+            const res = window.SCROLLER?.request({ y: estY, priority: prio, src: 'teleprompter', tag: 'teleprompter', anchorVisible, reason: 'catchup' });
+            // If the controller returns a structured result, allow immediate close on close-enough
+            try {
+              const EPS = 24; // ~1–2 lines on typical layout
+              const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+              const nowTop = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
+              const targetY = Number(estY)||0;
+              if (Math.abs(nowTop - targetY) <= EPS) {
+                __catchupRefDec('close-enough');
+              }
+            } catch {}
           } catch {}
           setTimeout(()=>{
             try {
