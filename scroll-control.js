@@ -134,6 +134,17 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   // Capture generation at start; bail if invalidated
   const localGen = (typeof window!=='undefined' && typeof window.__TP_GEN==='number') ? window.__TP_GEN : GEN;
 
+  // DEV-only: snapshot schedulers during the jump to spot non-scroller loops
+  try {
+    if (typeof window !== 'undefined' && window.__TP_DEV) {
+      try { if (typeof window.dumpRAF === 'function') window.dumpRAF(); } catch {}
+      try { if (typeof window.dumpTimers === 'function') window.dumpTimers(); } catch {}
+      // Follow-up snapshots while motion is active
+      addTimer(setTimeout(()=>{ try { if (active) { try { window.dumpRAF && window.dumpRAF(); } catch {} try { window.dumpTimers && window.dumpTimers(); } catch {} } } catch {} }, 250));
+      addTimer(setTimeout(()=>{ try { if (active) { try { window.dumpRAF && window.dumpRAF(); } catch {} try { window.dumpTimers && window.dumpTimers(); } catch {} } } catch {} }, 800));
+    }
+  } catch {}
+
   // Stop catchup on ScrollManager signals for bounded advance or explicit close-enough
   try {
     if (typeof window !== 'undefined' && window.SCROLLER && typeof window.SCROLLER.onResult === 'function'){

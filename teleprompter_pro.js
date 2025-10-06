@@ -54,6 +54,25 @@
       try { viewer.addEventListener('touchmove', onTouchMove, opts); } catch {}
     } catch {}
   })();
+  // Prevent native focus autoscroll globally and log selection changes (DEV) to catch culprits
+  (function installFocusAndSelectionGuards(){
+    try {
+      // Make focus non-scrolling by default
+      const proto = HTMLElement && HTMLElement.prototype;
+      const _focus = proto && proto.focus ? proto.focus : null;
+      if (_focus && !window.__tpFocusGuardInstalled){
+        window.__tpFocusGuardInstalled = true;
+        proto.focus = function(opts){
+          try { return _focus.call(this, Object.assign({}, (opts||{}), { preventScroll: true })); } catch { return _focus.call(this, opts); }
+        };
+      }
+      // DEV: selectionchange logging to surface jitter correlations
+      if (window.__TP_DEV && !window.__tpSelLogInstalled){
+        window.__tpSelLogInstalled = true;
+        document.addEventListener('selectionchange', ()=>{ try { console.debug('[selchange]'); } catch {} }, true);
+      }
+    } catch {}
+  })();
   // Boot instrumentation (added)
   try {
     window.__TP_BOOT_TRACE = [];
