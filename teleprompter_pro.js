@@ -381,10 +381,15 @@
       function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
 
       class ScrollManager {
-        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+        constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
         getContainer(){ try { this.state.container = getScroller(); } catch {} return this.state.container; }
-        _log(ev){ try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {} }
+        // Public: subscribe to scroll result events; returns an unsubscribe function
+        onResult(fn){ try { if (typeof fn === 'function') { this._resultListeners.add(fn); return () => { try { this._resultListeners.delete(fn); } catch {} }; } } catch {} return () => {}; }
+        _emitResult(ev){ try { this._resultListeners.forEach(cb => { try { cb(ev); } catch {} }); } catch {} }
+        _log(ev){ try { this._emitResult(ev); } catch {} try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {} }
         _logReject(ev, ts){
+          // Always emit to listeners, regardless of backoff suppression
+          try { this._emitResult(ev); } catch {}
           try {
             const key = `${ev.reason||'unk'}|${ev.containerId||'unk'}|${ev.holdTag||''}|${ev.tag||''}`;
             let s = this._rej.get(key);
@@ -418,7 +423,7 @@
               const noMove = Math.abs(posNow - (this.holdState.pos||0)) < 1;
               if (heldMs > 600 && noMove){
                 const ev = { tag:'scroll:result', ok:false, reason:'debounce:hold', containerId, ...dims, lockFlags, holdTag: r?.reason||'' };
-                try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {}
+                this._logReject(ev, ts);
                 return ev;
               }
             }
