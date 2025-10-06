@@ -243,8 +243,20 @@ html, body, #viewer {
     scrollbar-gutter: stable both-edges;
 }
 
-/* kill kinetic gestures while we drive */
-.tp-animating #viewer { touch-action: none; }
+/* lock height while animating so clientHeight doesn't flap; also kill kinetic gestures */
+.tp-animating #viewer {
+    height: 100svh;
+    max-height: 100svh;
+    touch-action: none;
+}
+
+/* Fallback for browsers without small viewport units support */
+@supports not (height: 100svh) {
+    .tp-animating #viewer {
+        height: 100vh;
+        max-height: 100vh;
+    }
+}
 
 /* subtle active line highlight without weight shifts */
 .script .active { font-weight: inherit; background: rgba(255,255,0,.15); }
