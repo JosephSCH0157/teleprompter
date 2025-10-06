@@ -339,7 +339,26 @@
 
       class ScrollManager {
         constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; try { const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
-        request(r){ try { const sc = getScroller(); let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null); if (y == null) return; if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) { this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' }; } if (!this.raf) this.start(); } catch {} }
+        request(r){
+          try {
+            const sc = getScroller();
+            // Emergency path: jump immediately (e.g., a11y reveal) bypassing animation/cooldown
+            if (r && r.immediate) {
+              let y0 = (typeof r.y === 'number') ? r.y : (r.el ? computeTargetYForEl(r.el, sc) : null);
+              if (y0 != null) {
+                setScrollTop(sc, y0);
+                this.targetY = y0; this.v = 0; this.lastTs = 0; this.pending = null;
+                return;
+              }
+            }
+            let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
+            if (y == null) return;
+            if (!this.pending || (r.priority|0) >= (this.pending.priority|0)) {
+              this.pending = { y, priority: (r.priority|0), src: r.src||'system', reason: r.reason||'' };
+            }
+            if (!this.raf) this.start();
+          } catch {}
+        }
         onMatchActivate({ idx, reason, conf }){ try { const bucket = Math.round((Number(conf)||0) * 20); const key = `${idx}|${reason||''}|${bucket}`; if (key === this._lastMatchKey) return; this._lastMatchKey = key; const el = (document.getElementById('script')||document).querySelector(`[data-match-idx="${idx}"]`) || document.querySelector(`#match-${idx}`) || null; if (!el) return; this.request({ el, priority:5, src:'match', reason:String(reason||'') }); } catch {} }
         onSpeechFinal(node){ try { if (!node) return; this.request({ el: node, priority: 10, src:'speech', reason:'final' }); } catch {} }
         onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
@@ -363,6 +382,36 @@
         }
       }
       try { window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager(); } catch {}
+    } catch {}
+  })();
+  // Hash/anchor handling: prevent native jumps; route through SCROLLER
+  (function installAnchorHandlers(){
+    try {
+      if (window.__tpAnchorHandlersInstalled) return; window.__tpAnchorHandlersInstalled = true;
+      try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch {}
+      document.addEventListener('click', (ev)=>{
+        try {
+          const a = ev.target && (ev.target.closest ? ev.target.closest('a[href^="#"]') : null);
+          if (!a) return;
+          const href = a.getAttribute('href')||''; if (!href || href === '#') return;
+          const raw = href.slice(1);
+          const id = raw ? decodeURIComponent(raw) : '';
+          if (!id) return;
+          const el = document.getElementById(id) || document.querySelector(`[name="${CSS.escape(id)}"]`);
+          if (!el) return;
+          ev.preventDefault();
+          try { history.pushState(null, '', href); } catch {}
+          try { window.SCROLLER?.request({ el, priority: 8, src: 'system', reason: 'hash' }); } catch {}
+        } catch {}
+      }, true);
+      window.addEventListener('hashchange', ()=>{
+        try {
+          const id = (location.hash||'').replace(/^#/, ''); if (!id) return;
+          const el = document.getElementById(id) || document.querySelector(`[name="${CSS.escape(id)}"]`);
+          if (!el) return;
+          window.SCROLLER?.request({ el, priority: 8, src: 'system', reason: 'hash' });
+        } catch {}
+      });
     } catch {}
   })();
   // Oscillation breaker: detect A↔B↔A within 500ms and <=200px separation
@@ -389,6 +438,44 @@
       return (ac < 4) && (bd < 4) && (ab <= 200) && (span <= 500);
     } catch { return false; }
   }
+  // Watchdog: gently recenter when off for a while, with strict gating
+  (function installMaybeRecenter(){
+    try {
+      if (window.__tpMaybeRecenterInstalled) return; window.__tpMaybeRecenterInstalled = true;
+      let _sinceTooFar = 0;
+      window.maybeRecenter = function(el){
+        try {
+          if (!el) return;
+          const now = performance.now();
+          const box = el.getBoundingClientRect();
+          const topPct = box.top / (window.innerHeight||1);
+          const err = Math.min(Math.abs(box.top - (window.innerHeight||0)*0.35), 9999);
+          const scIdle = !window.SCROLLER?.raf;
+          const outsideCooldown = now > (window.SCROLLER?.coolingUntil||0);
+          const tooFar = (topPct < 0.10) || (topPct > 0.85) || (err > 180);
+          if (tooFar) {
+            if (!_sinceTooFar) _sinceTooFar = now;
+          } else {
+            _sinceTooFar = 0;
+          }
+          const held = _sinceTooFar && ((now - _sinceTooFar) >= 500);
+          if (scIdle && outsideCooldown && held) {
+            window.SCROLLER?.request({ el, priority: 2, src: 'system', reason: 'watchdog' });
+            _sinceTooFar = 0; // one-shot until it drifts again
+            return true;
+          }
+        } catch {}
+        return false;
+      };
+    } catch {}
+  })();
+  // Helper: focus element without native scrolling, then request SCROLLER placement
+  try {
+    window.focusVisible = function(el, prio = 9){
+      try { el?.focus?.({ preventScroll: true }); } catch { try { el?.focus?.(); } catch {} }
+      try { if (el) window.SCROLLER?.request({ el, priority: prio|0, src: 'system', reason: 'focus' }); } catch {}
+    };
+  } catch {}
   // Action-level scroll logs
   function logScrollAttempt(scroller, before, desiredTop, reason){
     try {
@@ -868,19 +955,19 @@
           }
         } catch {}
       }
-      // Comfort band watchdog: if active line off-screen for >2s and no user input, gently recentre once
+      // Comfort band watchdog: gated recenter through ScrollManager
       try {
-        const OFF_MS = 2000;
-        const offTooLong = (now - lastIn) > OFF_MS;
         const armed = (window.__tpWatchdogArmed !== false);
-        if (!anchorVisible && offTooLong && !isUserScrolling() && armed) {
-          if (activeEl) { beginProgrammaticScroll(); ensureInView(activeEl, { top: 0.25, bottom: 0.55 }); setTimeout(()=> endProgrammaticScroll(), 300); }
-          try {
-            const ev = { tag:'watchdog:recenter', offMs: Math.round(now - lastIn) };
-            if (typeof debug==='function') debug(ev);
-            if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('watchdog:recenter', ev);
-          } catch {}
-          try { window.__tpWatchdogArmed = false; } catch {}
+        if (!anchorVisible && armed && activeEl) {
+          const did = window.maybeRecenter?.(activeEl);
+          if (did) {
+            try {
+              const ev = { tag:'watchdog:recenter', reason:'maybeRecenter', ts: Date.now() };
+              if (typeof debug==='function') debug(ev);
+              if (__isHudVerbose() && typeof HUD?.log === 'function') HUD.log('watchdog:recenter', ev);
+            } catch {}
+            try { window.__tpWatchdogArmed = false; } catch {}
+          }
         }
         if (anchorVisible) { try { window.__tpWatchdogArmed = true; } catch {} }
       } catch {}
@@ -2626,7 +2713,8 @@ function ensureHelpUI(){
       pre.textContent = (String(text||'').trim()) || 'No issues found.';
       panel.classList.remove('hidden');
       // focus so Ctrl/Cmd+C works immediately
-      pre.focus();
+      try { pre.focus({ preventScroll: true }); } catch { try { pre.focus(); } catch {} }
+      try { window.SCROLLER?.request({ el: pre, priority: 9, src: 'system', reason: 'focus' }); } catch {}
       // auto-select all for instant copy
       try {
         const sel = window.getSelection(); const r = document.createRange();
@@ -2796,14 +2884,15 @@ async function _initCore() {
     if (!shortcutsOverlay) return;
     shortcutsOverlay.classList.remove('hidden');
     shortcutsBtn?.setAttribute('aria-expanded','true');
-    setTimeout(()=>shortcutsClose?.focus(), 0);
+  setTimeout(()=>{ try { shortcutsClose?.focus({ preventScroll: true }); } catch { try { shortcutsClose?.focus(); } catch {} } try { window.SCROLLER?.request({ el: shortcutsClose, priority: 9, src: 'system', reason: 'focus' }); } catch {} }, 0);
   }
   // (rest of init logic continues below ... existing code ...)
   function closeShortcuts(){
     if (!shortcutsOverlay) return;
     shortcutsOverlay.classList.add('hidden');
     shortcutsBtn?.setAttribute('aria-expanded','false');
-    shortcutsBtn?.focus();
+  try { shortcutsBtn?.focus({ preventScroll: true }); } catch { try { shortcutsBtn?.focus(); } catch {} }
+  try { window.SCROLLER?.request({ el: shortcutsBtn, priority: 9, src: 'system', reason: 'focus' }); } catch {}
   }
 
   // Now bind listeners
@@ -3814,7 +3903,7 @@ shortcutsClose   = document.getElementById('shortcutsClose');
       const isActive = (el) => !!(el && el.classList && (el.classList.contains('current') || el.classList.contains('active')))
         || (el && typeof el.getAttribute === 'function' && (el.getAttribute('data-active') === '1' || el.getAttribute('aria-current') === 'true'));
       const getActive = () => root && root.querySelector && root.querySelector('.current, .active, [data-active="1"], .tp-active, .spoken, [aria-current="true"]');
-      const anchor = (el) => { if (!el) return; try { const y = getYForElInScroller(el, sc, 0.38); tpScrollTo(y, sc); } catch {} };
+  const anchor = (el) => { if (!el) return; try { window.SCROLLER?.request({ el, priority: 8, src: 'system', reason: 'anchor' }); } catch {} };
 
       try { anchor(getActive()); } catch {}
       try {
@@ -4394,9 +4483,8 @@ function legacyOnSpeechCommit(activeEl){
 function onSpeechCommit(activeEl){
   try {
     if (!window.__TP_CALM) return legacyOnSpeechCommit(activeEl);
-    const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
-    const y = getYForElInScroller(activeEl, sc, 0.38);
-    tpScrollTo(y, sc);
+    // Route through ScrollManager single authority
+    window.SCROLLER?.request({ el: activeEl, priority: 10, src: 'speech', reason: 'commit' });
   } catch {}
 }
 
@@ -4807,8 +4895,8 @@ function advanceByTranscript(transcript, isFinal){
                 try {
                   const afterTop = getTop();
                   if (Math.abs((afterTop||0) - (beforeTop||0)) < 12) {
-                    try { nextPara.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); } catch { try { nextPara.el.scrollIntoView(true); } catch {} }
-                    try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'scrollIntoView', block:'center' }); } catch {}
+                    try { window.SCROLLER?.request({ el: nextPara.el, priority: 6, src: 'system', reason: 'visibility' }); } catch {}
+                    try { if (typeof debug==='function') debug({ tag:'visibility:escalate', method:'SCROLLER', block:'center' }); } catch {}
                   }
                 } catch {}
               }, 160);
@@ -4839,7 +4927,7 @@ function advanceByTranscript(transcript, isFinal){
               // Cancel anchor work for now and center the active line smoothly (respect reduced motion)
               const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
               const el = curActive || nextPara.el;
-              try { el?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion ? 'auto' : 'smooth' }); } catch {}
+              try { if (el) window.SCROLLER?.request({ el, priority: 5, src: 'system', reason: 'ensureVisible' }); } catch {}
               try { if (typeof debug==='function') debug({ tag:'anchor:giveup', idx: bestIdx, attempts }); } catch {}
               try { if (typeof HUD?.log === 'function') HUD.log('anchor:giveup', { idx: bestIdx, attempts }); } catch {}
               try { window.__tpVisAttempt = 0; } catch {}
@@ -5331,7 +5419,7 @@ function advanceByTranscript(transcript, isFinal){
         }
         // Fallback DOM snap once layout settles (benefits from scroll-margin-block)
         requestAnimationFrame(()=>{
-          try { if (!window.__tpReaderLocked) el.scrollIntoView({ block:'center', inline:'nearest' }); } catch {}
+          try { if (!window.__tpReaderLocked) window.SCROLLER?.request({ el, priority: 4, src: 'system', reason: 'ensureVisible:fallback' }); } catch {}
         });
       } catch {}
     }
