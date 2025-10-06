@@ -5,6 +5,12 @@ function _dbg(ev){
     else if (window && window.HUD) HUD.log(ev.tag || 'log', ev);
   } catch {}
 }
+// Single-writer micro lock with TTL; simple arbitration across modules
+const WriteLock = (()=>{ let owner = null, until = 0; return {
+  try(id, ms = 500){ try { const now = performance.now(); if (now > until || owner === id){ owner = id; until = now + ms; return true; } return false; } catch { return true; } },
+  release(id){ try { if (owner === id) until = 0; } catch {} },
+  heldBy(){ return owner; }
+}; })();
 let rafId, prevErr = 0, active = false;
 
 export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
@@ -18,6 +24,7 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   const bias = 0;       // baseline offset
 
   _dbg({ tag:'match:catchup:start' });
+  try { window.__TP_CATCHUP_ACTIVE = true; } catch {}
 
   function tick() {
     try {
@@ -38,7 +45,10 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
       }
 
       if (v !== 0) {
-        try { scrollBy(v); } catch {}
+        // Single-writer arbitration: catchup owns the lock while active
+        if (WriteLock.try('catchup', 400)) {
+          try { scrollBy(v); } catch {}
+        }
         _dbg({ tag:'match:catchup:apply', err, deriv, vRaw: Number(vRaw.toFixed(3)), v: Number(v.toFixed(3)), vMin, vMax, anchorY, targetY });
       }
       prevErr = err;
@@ -53,15 +63,26 @@ export function stopAutoCatchup() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
   _dbg({ tag:'match:catchup:stop' });
+  try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
+  try { WriteLock.release('catchup'); } catch {}
 }
 
 // Factory so caller can treat this as a controller instance
-export function createScrollController(){
-  return {
-    startAutoCatchup,
-    stopAutoCatchup,
-    isActive: () => active
+export function createScrollController(getScroller){
+  const getSc = (typeof getScroller === 'function') ? getScroller : () => (document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+  const write = (y) => { try { const sc = getSc(); if (sc) sc.scrollTop = (y|0); } catch {} };
+  const request = (y, tag = '') => {
+    try {
+      // Policy: while catchup is active, only catchup may write; others bail
+      if ((tag||'') !== 'catchup' && window.__TP_CATCHUP_ACTIVE) return false;
+      const id = tag || 'teleprompter';
+      if (!WriteLock.try(id, 400)) return false;
+      write(y);
+      setTimeout(()=>{ try { WriteLock.release(id); } catch {} }, 100);
+      return true;
+    } catch { return false; }
   };
+  return { startAutoCatchup, stopAutoCatchup, isActive: () => active, request, write, isLocked: () => !!WriteLock.heldBy() };
 }
 
 // ===== Scroll & Match Gate (anti-thrash) =====
