@@ -361,7 +361,7 @@
       };
     } catch {}
 
-    // Show a single boot line once HUD is ready
+  // Show a single boot line once HUD is ready
     try { if (typeof window.emitHUD === 'function') window.emitHUD('hud:ready', { minLevel: hudConfig.minLevel }, 'INFO'); } catch {}
     // Developer override via URL ?hud=debug or localStorage tp_hud_debug=1
     try {
@@ -376,6 +376,12 @@
         HUD.minLevel = 'INFO';
         try { if (typeof window.emitHUD==='function') window.emitHUD('hud:mode', { minLevel:'INFO' }, 'INFO'); } catch {}
       }
+    } catch {}
+
+    // If dev mode is on, force open once to ensure visibility even if other gates bailed earlier
+    try {
+      const DEV_ON = (localStorage.getItem('tp_dev_mode') === '1');
+      if (DEV_ON) { try { show(); } catch {} }
     } catch {}
 
     // Optional: quiet mode — filter noisy HUD tags to keep console readable during dev
