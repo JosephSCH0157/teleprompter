@@ -5,6 +5,10 @@
 (function () {
   'use strict';
 
+  // Optional read/write scheduler facade (uses core/schedule.js when present)
+  const READ = (fn)=>{ try { return (window.SCHEDULE && typeof window.SCHEDULE.read==='function') ? window.SCHEDULE.read(fn) : fn(); } catch { try { fn(); } catch {} } };
+  const WRITE = (fn)=>{ try { return (window.SCHEDULE && typeof window.SCHEDULE.write==='function') ? window.SCHEDULE.write(fn) : fn(); } catch { try { fn(); } catch {} } };
+
   const DEFAULTS = {
     hotkey: '~',
     maxRows: 400,
@@ -272,15 +276,14 @@
         const pl = mkEl('div', 'tp-hud-payload', typeof payload === 'string' ? payload : safeJson(payload));
         row.append(ts, tg, pl);
         // Compute whether the user is currently at the bottom BEFORE appending
-        const atBottom = (function(){
-          try { return (body.scrollTop + body.clientHeight) >= (body.scrollHeight - 2); } catch { return false; }
-        })();
-        body.appendChild(row);
+        let atBottom = false;
+        READ(()=>{ try { atBottom = (body.scrollTop + body.clientHeight) >= (body.scrollHeight - 2); } catch { atBottom = false; } });
+  WRITE(()=>{ try { body.appendChild(row); } catch {} });
         const extra = body.children.length - state.maxRows;
-        if (extra > 0) { for (let i=0;i<extra;i++) body.removeChild(body.firstChild); }
+  if (extra > 0) { WRITE(()=>{ try { for (let i=0;i<extra;i++) body.removeChild(body.firstChild); } catch {} }); }
         // Polite autoscroll: only when enabled, not animating, and user was already at bottom
         if (state.autoscroll && atBottom) {
-          try { setHudScrollTop(body, body.scrollHeight); } catch {}
+            try { READ(()=>{ const h = body.scrollHeight; WRITE(()=> setHudScrollTop(body, h)); }); } catch {}
         }
       } catch {}
     }
@@ -427,9 +430,8 @@
               if (!viewer || !marker || !active) return null;
               // Optionally reduce read pressure during animation
               if (window.__TP_ANIMATING) return null;
-              const vRect = viewer.getBoundingClientRect();
-              const mRect = marker.getBoundingClientRect();
-              const aRect = active.getBoundingClientRect();
+              let vRect, mRect, aRect;
+              READ(()=>{ try { vRect = viewer.getBoundingClientRect(); mRect = marker.getBoundingClientRect(); aRect = active.getBoundingClientRect(); } catch {} });
               const markerY = mRect.top - vRect.top;
               const activeY = aRect.top - vRect.top;
               const deltaPx = activeY - markerY; // + below marker, - above marker
@@ -449,8 +451,8 @@
               if (now - last <= 150) return; // throttle
               last = now;
               // Measure layout in rAF (post-mutate)
-              const top = viewer.scrollTop;
-              const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+              let top=0, max=0;
+              READ(()=>{ try { top = viewer.scrollTop; max = Math.max(0, viewer.scrollHeight - viewer.clientHeight); } catch {} });
               HUD.log('scroll:viewer', { top, ratio: max ? +(top/max).toFixed(3) : 0 });
               // Also log where the spoken (active) line is relative to the marker
               const info = _getMarkerInfo();

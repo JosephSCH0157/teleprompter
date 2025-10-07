@@ -3,6 +3,8 @@
 (function(){
   'use strict';
   if (window.SCROLLER) return;
+  const READ = (fn)=>{ try { return (window.SCHEDULE && typeof window.SCHEDULE.read==='function') ? window.SCHEDULE.read(fn) : fn(); } catch { try { fn(); } catch {} } };
+  const WRITE = (fn)=>{ try { return (window.SCHEDULE && typeof window.SCHEDULE.write==='function') ? window.SCHEDULE.write(fn) : fn(); } catch { try { fn(); } catch {} } };
   // Catch-up motion shaping
   const MAX_CATCHUP_STEP = 120; // px per tick toward far target
   const MAX_TARGET_DELTA = 420; // px; anything larger gets staged
@@ -17,25 +19,47 @@
     } catch { return (document.scrollingElement || document.documentElement || document.body); }
   }
   function getScrollTop(sc){ return (sc === window) ? (window.scrollY||0) : (sc.scrollTop||0); }
-  function getMaxTop(sc){ try { const h = (sc===window) ? document.documentElement.scrollHeight : (sc.scrollHeight||0); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); return Math.max(0, h - vh); } catch { return 0; } }
-  function setScrollTop(sc, top){
+  function getMaxTop(sc){
     try {
-      try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop', t: performance.now() }; } catch {}
-      try { window.__tpInSetScrollTop = true; } catch {}
-      if (sc === window) window.scrollTo(0, top);
-      else sc.scrollTo({ top, behavior:'auto' });
-    } catch {
-      if (sc !== window) {
-        try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop:direct', t: performance.now() }; } catch {}
-        sc.scrollTop = top;
-      } else {
-        try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop:window', t: performance.now() }; window.scrollTo(0, top); }catch{}
-      }
-    } finally {
-      try { window.__tpInSetScrollTop = false; } catch {}
-    }
+      let h=0, vh=0;
+      READ(()=>{ h = (sc===window) ? document.documentElement.scrollHeight : (sc.scrollHeight||0); vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); });
+      return Math.max(0, h - vh);
+    } catch { return 0; }
   }
-  function computeTargetYForEl(el, sc){ try { if (!el||!sc) return null; const scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0}); const r = el.getBoundingClientRect(); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); const bias = 0.35; const y = getScrollTop(sc) + (r.top - scR.top) - Math.round(vh * bias); return clamp(y, 0, getMaxTop(sc)); } catch { return null; } }
+  function setScrollTop(sc, top){
+    WRITE(()=>{
+      try {
+        try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop', t: performance.now() }; } catch {}
+        try { window.__tpInSetScrollTop = true; } catch {}
+        if (sc === window) window.scrollTo(0, top);
+        else sc.scrollTo({ top, behavior:'auto' });
+      } catch {
+        if (sc !== window) {
+          try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop:direct', t: performance.now() }; } catch {}
+          try { sc.scrollTop = top; } catch {}
+        } else {
+          try { if (typeof performance!=='undefined') window.__TP_LAST_WRITE = { tag:'SCROLLER.setScrollTop:window', t: performance.now() }; window.scrollTo(0, top); }catch{}
+        }
+      } finally {
+        try { window.__tpInSetScrollTop = false; } catch {}
+      }
+    });
+  }
+  function computeTargetYForEl(el, sc){
+    try {
+      if (!el||!sc) return null;
+      let scR = { top: 0 }, r = { top: 0 }, vh = 0, topNow = 0;
+      READ(()=>{
+        scR = (sc===window) ? { top:0 } : (sc.getBoundingClientRect?.()||{top:0});
+        r = el.getBoundingClientRect();
+        vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0);
+        topNow = getScrollTop(sc);
+      });
+      const bias = 0.35;
+      const y = topNow + (r.top - scR.top) - Math.round(vh * bias);
+      return clamp(y, 0, getMaxTop(sc));
+    } catch { return null; }
+  }
   function getLineHeightPx(){
     try {
       const root = (document.getElementById('script')||document);
@@ -181,11 +205,11 @@
         } catch { this.targetY = cand; }
       }
       if (this.targetY == null) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
-      const pos = getScrollTop(sc);
+  const pos = getScrollTop(sc);
       const err = this.targetY - pos; const absErr = Math.abs(err);
       const rawDtMs = (this.lastTs ? (ts - this.lastTs) : 16.7); const dt = rawDtMs / 1000; this.lastTs = ts;
       if (rawDtMs > 180) { this.v = 0; try { window.endFrame && window.endFrame(); } catch {}; if (!this._pendingPostFrame) { this._pendingPostFrame = true; queueMicrotask(()=>{ this._pendingPostFrame = false; this._postFrame(); }); } return; }
-      try { window.beginMutate && window.beginMutate(); } catch {}
+  try { window.beginMutate && window.beginMutate(); } catch {}
       if (absErr < this.deadband){ if (!this.lastOutside) this.lastOutside = ts; if (ts - this.lastOutside >= this.settleMs) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); } } else { this.lastOutside = 0; }
       try {
         const nowMs = performance.now();
@@ -209,9 +233,9 @@
           }
           const step = Math.sign(effTarget - pos) * Math.min(Math.abs(effTarget - pos), MAX_CATCHUP_STEP);
           const nextCatch = clamp(pos + step, 0, getMaxTop(sc));
-          if (Math.abs(nextCatch - pos) >= 0.25) { setScrollTop(sc, nextCatch); }
+          if (Math.abs(nextCatch - pos) >= 0.25) { WRITE(()=> setScrollTop(sc, nextCatch)); }
           try { window.endFrame && window.endFrame(); } catch {}
-          if (!this._pendingPostFrame) { this._pendingPostFrame = true; try { queueMicrotask(()=>{ try { this._pendingPostFrame = false; this._postFrame(); } catch { this._pendingPostFrame = false; } }); } catch { this._pendingPostFrame = false; } }
+          if (!this._pendingPostFrame) { this._pendingPostFrame = true; try { (window.SCHEDULE && SCHEDULE.write ? SCHEDULE.write : (fn=>fn()))(()=>{ try { this._pendingPostFrame = false; this._postFrame(); } catch { this._pendingPostFrame = false; } }); } catch { this._pendingPostFrame = false; } }
           return;
         }
       } catch {}
@@ -239,10 +263,10 @@
         } else if (absErr > (this.deadband*3)) { this._quietUntil = 0; }
         this._lastErr = absErr;
       } catch {}
-      const next = clamp(pos + this.v * dt, 0, getMaxTop(sc));
-      if (Math.abs(next - pos) >= 0.25) { setScrollTop(sc, next); }
-      try { window.endFrame && window.endFrame(); } catch {}
-      if (!this._pendingPostFrame) { this._pendingPostFrame = true; try { queueMicrotask(()=>{ try { this._pendingPostFrame = false; this._postFrame(); } catch { this._pendingPostFrame = false; } }); } catch { this._pendingPostFrame = false; } }
+  const next = clamp(pos + this.v * dt, 0, getMaxTop(sc));
+  if (Math.abs(next - pos) >= 0.25) { setScrollTop(sc, next); }
+  try { window.endFrame && window.endFrame(); } catch {}
+  if (!this._pendingPostFrame) { this._pendingPostFrame = true; try { (window.SCHEDULE && SCHEDULE.write ? SCHEDULE.write : (fn=>fn()))(()=>{ try { this._pendingPostFrame = false; this._postFrame(); } catch { this._pendingPostFrame = false; } }); } catch { this._pendingPostFrame = false; } }
     }
   }
   window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager();
