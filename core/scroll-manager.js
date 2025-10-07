@@ -73,10 +73,9 @@
         if (animActive && !isTele){ const ev = { tag:'scroll:result', ok:false, reason:'reject:anim-active', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') }; this._logReject(ev, ts); return ev; }
         const cdUntil = Math.max(window.__TP_CATCHUP_COOLDOWN_UNTIL||0, window.__TP_COOLDOWN_UNTIL||0);
         if (ts < cdUntil && !isTele){ const ev = { tag:'scroll:result', ok:false, reason:'reject:cooldown', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') }; this._logReject(ev, ts); return ev; }
+        // Teleprompter/catchup must not be blocked by prior helper holds
         if (this.holdState.active && r?.tag === 'teleprompter'){
-          const heldMs = ts - (this.holdState.since||0);
-          const noMove = Math.abs(posNow - (this.holdState.pos||0)) < 1;
-          if (heldMs > 600 && noMove){ const ev = { tag:'scroll:result', ok:false, reason:'debounce:hold', containerId, ...dims, lockFlags, holdTag: r?.reason||'' }; this._logReject(ev, ts); return ev; }
+          this.holdState.active = false;
         }
         if (r && r.immediate) {
           let y0 = (typeof r.y === 'number') ? r.y : (r.el ? computeTargetYForEl(r.el, sc) : null);
@@ -139,7 +138,8 @@
             if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r?.src||'manual', reason: r?.reason||'probe' }; }
             if (!this.raf) this.start(); this.holdState.active = false; const ev = { tag:'scroll:result', ok:true, reason:'accepted:manual-probe', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'manual') }; this._rej.clear(); this._log(ev); return ev;
           }
-          if (r?.tag === 'teleprompter' && r?.anchorVisible === false) {
+          // Allow bounded-advance for teleprompter when within deadband or at-bound even if anchorVisible is unknown
+          if (r?.tag === 'teleprompter') {
             const dir = Math.sign((yClamped - posNow) || 1) || 1; const step = Math.min(32, Math.max(8, Math.abs(yClamped - posNow) || 32)); y = Math.max(0, Math.min(posNow + dir * step, maxTop)); window.__lastScrollTarget = y; if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'' }; } if (!this.raf) this.start(); this.holdState.active = false; const ev = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') }; this._rej.clear(); this._log(ev); return ev;
           }
           if (!this.holdState.active) { this.holdState.active = true; this.holdState.since = ts; this.holdState.pos = posNow; this.holdState.tag = String(r?.tag||''); }
