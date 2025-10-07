@@ -794,6 +794,7 @@
             // Normalize tag to avoid empty string writes
             try { if (r && (!r.tag || r.tag === '')) r.tag = 'helper'; } catch {}
             const isManual = !!(r && (r.manual === true || r.priority === 'manual'));
+            const isTele = !!(r && ((r.tag === 'teleprompter') || (r.src === 'teleprompter') || (r.tag === 'catchup')));
             const prioNum = (function(){ try { if (typeof r?.priority === 'string') return (r.priority === 'manual') ? 99 : 5; return (r?.priority|0); } catch { return 5; } })();
 
             // Hardened write gate: block non-catchup writes during active animation/lock and brief cooldown
@@ -807,13 +808,13 @@
                 return !!(window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING || this.raf);
               }
             })();
-            if (animActive && r?.tag !== 'catchup'){
+            if (animActive && !((r?.tag === 'catchup') || (r?.tag === 'teleprompter') || (r?.src === 'teleprompter'))){
               const ev = { tag:'scroll:result', ok:false, reason:'reject:anim-active', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
               this._logReject(ev, ts);
               return ev;
             }
             const cdUntil = (function(){ try { return Math.max(window.__TP_CATCHUP_COOLDOWN_UNTIL||0, window.__TP_COOLDOWN_UNTIL||0); } catch { return 0; } })();
-            if (ts < cdUntil && r?.tag !== 'catchup'){
+            if (ts < cdUntil && !((r?.tag === 'catchup') || (r?.tag === 'teleprompter') || (r?.src === 'teleprompter'))){
               const ev = { tag:'scroll:result', ok:false, reason:'reject:cooldown', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
               this._logReject(ev, ts);
               return ev;
@@ -859,7 +860,7 @@
                 }
               } catch {}
             }
-            if (!isManual && ts < this.coolingUntil) {
+            if (!isManual && ts < this.coolingUntil && !isTele) {
               const ev = { tag:'scroll:result', ok:false, reason:'locked:inertia', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||''), anchorVisible: !!r?.anchorVisible };
               this._logReject(ev, ts);
               return ev;
@@ -877,7 +878,9 @@
               const held = (typeof window !== 'undefined' && window.WriteLock && typeof window.WriteLock.heldBy === 'function') ? window.WriteLock.heldBy() : null;
               const locked = (typeof window !== 'undefined' && window.WriteLock && typeof window.WriteLock.isLocked === 'function') ? window.WriteLock.isLocked() : !!held;
               const tagNow = (r?.tag || '');
-              if (locked && held && held !== tagNow) {
+              // Treat teleprompter/catchup as compatible owners to avoid cross-controller stalls
+              const compatible = (isTele && (held === 'catchup' || held === 'teleprompter')) || (tagNow === held);
+              if (locked && held && !compatible) {
                 const ev = { tag:'scroll:result', ok:false, reason:'reject:locked-by', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: tagNow, heldBy: held };
                 this._logReject(ev, ts);
                 return ev;
