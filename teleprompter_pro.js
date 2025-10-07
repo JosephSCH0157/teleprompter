@@ -3728,8 +3728,8 @@
       .toLowerCase()
       .replace(/[^a-z0-9']/g, '');
   }
-  function splitWords(t) {
-    return String(t).toLowerCase().split(/\s+/).map(normWord).filter(Boolean);
+  function splitWords(_t) {
+    return String(_t).toLowerCase().split(/\s+/).map(normWord).filter(Boolean);
   }
 
   // TP: scroll-current-index
@@ -5307,7 +5307,7 @@
   function getScroller() {
     return viewer;
   }
-  let clampScrollTop, scrollByPx, scrollToY, scrollToEl;
+  let clampScrollTop, scrollByPx, _scrollToY, scrollToEl;
 
   // Debug chip updater (throttled via rAF): shows anchor percentage within viewport and scrollTop
   function updateDebugPosChipImmediate() {
