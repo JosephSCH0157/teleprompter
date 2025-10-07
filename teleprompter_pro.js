@@ -5223,6 +5223,24 @@ function advanceByTranscript(transcript, isFinal){
         else covGate = clusterCov;
       } catch { covGate = clusterCov; }
     }
+    // Confidence and no-skip guard on frontier advance
+    try {
+      let fNow = (typeof window.__tpFrontierIdx === 'number' && window.__tpFrontierIdx >= 0) ? window.__tpFrontierIdx : bestIdx;
+      // Only advance frontier if match confidence is solid and coverage is above threshold
+      if ((bestSim < 0.66) || ((covGate||0) < 0.6)) {
+        fNow = Math.min(fNow, bestIdx); // don't leap beyond current best
+      }
+      // Never leap more than 2 virtual lines ahead of bestIdx
+      if (Array.isArray(vList) && vList.length){
+        const vBest = vList.findIndex(v => bestIdx >= v.start && bestIdx <= v.end);
+        const vFront = vList.findIndex(v => fNow >= v.start && fNow <= v.end);
+        if (vBest >= 0 && vFront >= 0 && vFront > (vBest + 2)){
+          const maxV = Math.min(vBest + 2, vList.length - 1);
+          fNow = vList[maxV].start; // clamp to start of allowed frontier line
+        }
+      }
+      window.__tpFrontierIdx = fNow;
+    } catch {}
     const jitterStd = Number((J.std||0));
     // Scroll-follow gating: allow gentle catch-up based on sim/lead/cluster coverage (separate from activation)
     try {
