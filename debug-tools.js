@@ -381,6 +381,8 @@
               const script = document.getElementById('script');
               const active = (script || viewer)?.querySelector('p.active') || null;
               if (!viewer || !marker || !active) return null;
+              // Optionally reduce read pressure during animation
+              if (window.__TP_ANIMATING) return null;
               const vRect = viewer.getBoundingClientRect();
               const mRect = marker.getBoundingClientRect();
               const aRect = active.getBoundingClientRect();
@@ -392,12 +394,20 @@
               return { markerY: Math.round(markerY), activeY: Math.round(activeY), deltaPx: Math.round(deltaPx), deltaVH };
             } catch { return null; }
           }
+          let __scrollRAF = 0, __lastTs = 0;
           viewer.addEventListener('scroll', ()=>{
-            const now = performance.now();
-            if (now - last > 150) { // throttle
+            const ts = performance.now();
+            __lastTs = ts;
+            if (__scrollRAF) return;
+            __scrollRAF = requestAnimationFrame(()=>{
+              __scrollRAF = 0;
+              const now = __lastTs;
+              if (now - last <= 150) return; // throttle
               last = now;
+              // Measure layout in rAF (post-mutate)
+              const top = viewer.scrollTop;
               const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-              HUD.log('scroll:viewer', { top: viewer.scrollTop, ratio: max ? +(viewer.scrollTop/max).toFixed(3) : 0 });
+              HUD.log('scroll:viewer', { top, ratio: max ? +(top/max).toFixed(3) : 0 });
               // Also log where the spoken (active) line is relative to the marker
               const info = _getMarkerInfo();
               if (info) {
@@ -407,7 +417,7 @@
                   lastMarkerDelta = d; lastMarkerLog = now;
                 }
               }
-            }
+            });
           }, { passive:true });
           // track writes per second via scheduler hint
           const origScrollTo = viewer.scrollTo?.bind(viewer);
