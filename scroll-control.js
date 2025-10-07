@@ -1,4 +1,26 @@
 // Minimal PID-like auto catch-up scroll controller
+// Catch-up staging and per-write step caps (shared policy)
+export const MAX_TARGET_DELTA = 420;  // px; stage far jumps
+export const MAX_STEP = 120;          // px; per write step cap
+
+export function clampTarget(currentTop, targetY){
+  try {
+    const d = (Number(targetY)||0) - (Number(currentTop)||0);
+    if (Math.abs(d) > MAX_TARGET_DELTA) {
+      return (Number(currentTop)||0) + Math.sign(d) * MAX_TARGET_DELTA;
+    }
+    return (Number(targetY)||0);
+  } catch { return (Number(targetY)||0); }
+}
+
+export function nextCatchupY(currentTop, targetY){
+  try {
+    const staged = clampTarget(currentTop, targetY);
+    const delta = (Number(staged)||0) - (Number(currentTop)||0);
+    const step = Math.sign(delta) * Math.min(Math.abs(delta), MAX_STEP);
+    return (Number(currentTop)||0) + step;
+  } catch { return (Number(currentTop)||0); }
+}
 function _dbg(ev){
   try {
     if (typeof debug === 'function') debug(ev);
