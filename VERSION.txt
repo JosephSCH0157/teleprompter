@@ -1,4 +1,4 @@
 1.5.9
-ANVIL build: 2025-10-04 00:00
+ANVIL build: 2025-10-06 00:00
 Baseline: fix/scroll-geometry
-Notes: Virtual lines, soft advance, junk-anchor gate v2, cluster penalty, end-game easing, stall logs
+Notes: Centralized ScrollManager module; viewer scroller lock; bounded-advance for teleprompter/catchup; reduced HUD noise

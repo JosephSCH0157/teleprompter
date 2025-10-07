@@ -1,0 +1,13 @@
+Teleprompter Pro v1.5.9 — Baseline (2025-10-06)
+
+Includes:
+- Centralized ScrollManager (core/scroll-manager.js) with PD loop, deadband, single-flight rAF
+- Viewer-first scroller selection; early lock; fallback from HTML/body when not-scrollable
+- Teleprompter/catchup unblocked: bounded-advance within deadband; compatible write-locks
+- Motion quality: adaptive taper near target; quiet low-velocity writes; sub-pixel suppression; sticky settle
+- Diagnostics: throttled anim rejections; polite HUD autoscroll; rAF-based HUD reads; one-time extension error logger
+- Packaging: HTML loads core before main; legacy inline ScrollManager removed from teleprompter_pro.js
+
+Status: Known issues remain (edge-case stalls near target under specific content). Declaring this as a working baseline to unblock next steps.
+
+Source of truth: teleprompter_pro.js (header indicates version) and MANIFEST.md

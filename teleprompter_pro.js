@@ -283,7 +283,7 @@
     const _origLog = console.log.bind(console);
     const tag = (m)=> `[TP-BOOT ${Date.now()%100000}] ${m}`;
   // Publish build version for About panel and diagnostics
-  try { window.APP_VERSION = '1.5.8'; } catch {}
+  try { window.APP_VERSION = '1.5.9'; } catch {}
   window.__tpBootPush = (m)=>{ try { const rec = { t: Date.now(), m }; window.__TP_BOOT_TRACE.push(rec); console.log('[TP-TRACE]', rec.m); } catch(e){ try { console.warn('[TP-TRACE-FAIL]', e); } catch {} } };
     __tpBootPush('script-enter');
     _origLog(tag('entered main IIFE'));

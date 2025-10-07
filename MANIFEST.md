@@ -1,12 +1,13 @@
 ---
-build: anvil-baseline-1.5.8
-commit: b2e23a4
-date: 2025-10-04
+build: anvil-baseline-1.5.9
+commit: HEAD
+date: 2025-10-06
 modules:
 	- teleprompter_pro.html
 	- teleprompter_pro.js
 	- teleprompter_pro.css
 	- display.html
+	- core/scroll-manager.js
 	- scroll-helpers.js
 	- scroll-control.js
 	- io-anchor.js
@@ -17,8 +18,8 @@ modules:
 
 # ANVIL Manifest
 
-**Build**: 2025-10-03 21:15  
-**Baseline**: fix/scroll-geometry  
+**Build**: 2025-10-06 00:00  
+**Baseline**: fix/scroll-geometry (declared)  
 **Dev Mode**: ON when ?dev=1 or localStorage tp_dev_mode=1
 
 ## Entry Points
