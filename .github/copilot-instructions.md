@@ -4,6 +4,8 @@
 
 This is a browser-based teleprompter application built as a **modular monolith** with sophisticated scroll control and external integrations. The core is a single HTML page (`teleprompter_pro.html`) with ES6 modules for major subsystems.
 
+**Current Status**: Working on `fix/post-rollback-stabilization` branch (based on v1.5.8-stable). Main was rolled back for stability - new features are being re-introduced incrementally.
+
 ### Key Components & Data Flow
 
 - **Core**: `teleprompter_pro.js` - main application with scroll geometry management
@@ -86,6 +88,7 @@ After any scroll-related changes:
 - Update `window.APP_VERSION` in `teleprompter_pro.js`
 - Document changes in `CHANGELOG.md`
 - Build info goes in `MANIFEST.md`
+- Current version: v1.5.8 (ANVIL build with virtual lines, soft advance, jitter detection)
 
 ## Integration Points
 
@@ -95,9 +98,22 @@ After any scroll-related changes:
 
 **Storage**: Settings persist via localStorage with versioned keys (e.g., `tp_rec_settings_v1`).
 
+## Current Focus Areas (v1.5.8)
+
+**Advanced Speech Matching**: The app now features sophisticated line matching with:
+- Virtual lines merging short runts to reduce jitter
+- Monotonic commit system with hysteresis (requires stable hits)
+- Distance-penalized ranking with rarity gating (IDF scoring)
+- Junk-anchor gate v2 preventing jumps on common words
+- Lost Mode recovery using 3-gram anchors when similarity drops
+- Coverage-based soft advance to prevent stalls on long lines
+
+**Jitter Detection**: Rolling standard deviation tracking with spike detection for match quality monitoring.
+
 ## Common Gotchas
 
 - **Scroll Conflicts**: Never write `scrollTop` directly - always use `scroll-helpers.js` functions
 - **Module Loading**: Use dynamic imports for optional dependencies (see `adapters/obs.js` CDN loading)
 - **HUD Isolation**: Debug HUD must be position:fixed and not affect main layout
 - **Speech Sync**: Line matching depends on exact DOM structure - be careful with text normalization changes
+- **Virtual Lines**: The matching system now operates on virtual lines (merged short segments) - check index mapping when debugging highlighting issues
