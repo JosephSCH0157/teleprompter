@@ -1681,8 +1681,22 @@
           try {
             const bestIdx = frontierWord; const frontierIdx = frontierWord;
             const haveExact = (function(){ try { return !!(__tpYByIdx && __tpYByIdx.has(frontierIdx)); } catch { return false; } })();
-            if (typeof HUD?.log === 'function') HUD.log('catchup:target', { bestIdx, frontierIdx, haveExact, targetY: estY });
-            if (typeof debug === 'function') debug({ tag:'catchup:target', bestIdx, frontierIdx, haveExact, targetY: estY });
+            // Throttle HUD spam: only log if target moved meaningfully or enough time elapsed
+            try {
+              const now = performance.now();
+              const lastTs = (window.__tpCatchupLogTs||0);
+              const lastY = (typeof window.__tpCatchupLogY === 'number') ? window.__tpCatchupLogY : null;
+              const dy = Math.abs(estY - (lastY==null? estY : lastY));
+              const timeOk = (now - lastTs) >= 350; // ~3Hz max
+              const moveOk = dy >= 24;             // 24px movement threshold
+              if (typeof HUD?.log === 'function' && (timeOk || moveOk)) {
+                HUD.log('catchup:target', { bestIdx, frontierIdx, haveExact, targetY: estY });
+                window.__tpCatchupLogTs = now; window.__tpCatchupLogY = estY;
+              }
+              // Only mirror to debug when HUD verbose is enabled
+              const HUD_VERBOSE = (function(){ try { return (localStorage.getItem('tp_hud_verbose')||'0')==='1'; } catch { return false; } })();
+              if (HUD_VERBOSE && typeof debug === 'function') debug({ tag:'catchup:target', bestIdx, frontierIdx, haveExact, targetY: estY });
+            } catch {}
           } catch {}
           const lastTop = currentScrollTop();
           // Keep programmatic flag for at least 500ms to allow coalescing
