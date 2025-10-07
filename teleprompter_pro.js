@@ -513,6 +513,60 @@
     } catch { return false; }
   }
   try { window.isAnchorVisible = isAnchorVisible; } catch {}
+  // One-time ensure-visible at boot or first speech start
+  (function installInitialEnsureVisible(){
+    try {
+      let done = false;
+      function kick(tag){
+        if (done) return; done = true;
+        try {
+          const active = (document.getElementById('script')||document).querySelector('p.active');
+          if (!active) return;
+          const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+          const useWindow = (sc === document.scrollingElement || sc === document.documentElement || sc === document.body);
+          // Is anchor visible already?
+          const visible = (function(){ try { return isInComfortBand(active, { top: 0.25, bottom: 0.55 }); } catch { return false; } })();
+          if (visible) return;
+          // Compute initial anchor top in scroller coords
+          let initialTop = 0;
+          try {
+            if (useWindow) {
+              const r = active.getBoundingClientRect();
+              initialTop = (window.scrollY||0) + r.top - Math.round((window.innerHeight||0) * 0.25);
+            } else {
+              const scTop = (typeof sc.getBoundingClientRect==='function') ? sc.getBoundingClientRect().top : 0;
+              const r = active.getBoundingClientRect();
+              initialTop = (sc.scrollTop||0) + (r.top - scTop) - Math.round((sc.clientHeight||0) * 0.25);
+            }
+          } catch { initialTop = (sc.scrollTop||0); }
+          const target = Math.max(0, Math.min(initialTop - 80, Math.max(0, (sc.scrollHeight||0) - (sc.clientHeight||0))));
+          const req = { y: target, priority: 10, src: 'ensureVisible:init', reason: String(tag||'init'), tag: 'helper', anchorVisible: false };
+          const doWrite = ()=>{ try { window.SCROLLER?.request(req); } catch {} };
+          try { (window.SCHEDULE && SCHEDULE.write) ? SCHEDULE.write(doWrite) : doWrite(); } catch { doWrite(); }
+        } catch {}
+      }
+      // After content load
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(()=> kick('dom'), 0);
+      } else {
+        window.addEventListener('DOMContentLoaded', ()=> kick('dom'), { once: true });
+      }
+      // On first speech start
+      try {
+        const bindSpeechKick = ()=>{
+          try {
+            const r = window.recog;
+            if (!r || r.__kickBound) return;
+            r.__kickBound = true;
+            const prev = r.onstart;
+            r.onstart = function(){ try { kick('speech'); } catch {} return (typeof prev==='function') ? prev.apply(this, arguments) : undefined; };
+          } catch {}
+        };
+        // Try now and again shortly in case recog is constructed later
+        bindSpeechKick(); setTimeout(bindSpeechKick, 500); setTimeout(bindSpeechKick, 1500);
+      } catch {}
+    } catch {}
+  })();
   // User scrolling detector to avoid fighting the reader
   let __tpUserScrollUntil = 0;
   function markUserScroll(){ try { __tpUserScrollUntil = performance.now() + 600; } catch {} }
