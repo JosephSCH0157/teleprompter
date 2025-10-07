@@ -2147,7 +2147,13 @@ function __applyStyleFromSettings(hudSettings, rootEl){
       } catch {}
     }
     // Snap-only toggle
-    try { root.classList.toggle('snap-only', !!__getDeep(hudSettings, 'ux.snapActiveOnly')); } catch {}
+    try {
+      const on = !!__getDeep(hudSettings, 'ux.snapActiveOnly');
+      // If #viewer exists, use applyViewerMode to ensure invariants; otherwise, fall back to class toggle on .viewer
+      const v = document.getElementById('viewer');
+      if (v && typeof window.applyViewerMode === 'function') window.applyViewerMode(on ? 'snap' : 'free');
+      else root.classList.toggle('snap-only', on);
+    } catch {}
   } catch {}
 }
 try { const __bootS = __readHudSettings(); __applyUxFromSettings(__bootS); __applyStyleFromSettings(__bootS); } catch {}
@@ -2160,6 +2166,32 @@ window.addEventListener('storage', (e)=>{ try {
     if (hydrate){ __applyUxFromSettings(s); __hydrateSettingsControls(s); }
   }
 } catch {} });
+
+// Viewer mode + scrollability helpers
+try {
+  if (!window.applyViewerMode) {
+    window.applyViewerMode = function(mode){
+      try {
+        const v = document.getElementById('viewer');
+        if (!v) return;
+        v.classList.toggle('snap-only', mode === 'snap');
+        // invariants: viewer must remain scrollable
+        try { v.style.overflowY = 'auto'; } catch {}
+        try { v.style.scrollBehavior = 'auto'; } catch {}
+        try { v.style.overscrollBehavior = 'contain'; } catch {}
+      } catch {}
+    };
+  }
+  if (!window.canScroll) {
+    window.canScroll = function(el){
+      try {
+        if (!el) return false;
+        const cs = getComputedStyle(el);
+        return /(auto|scroll)/i.test(String(cs.overflowY||'')) && (el.scrollHeight > el.clientHeight + 1);
+      } catch { return false; }
+    };
+  }
+} catch {}
 
 // ---- Settings controls hydrator/binder ----
 // Ranges and defaults for clamping and UI attributes
