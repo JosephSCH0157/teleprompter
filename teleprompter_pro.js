@@ -1668,7 +1668,8 @@ async function _initCore() {
   // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
   setInterval(() => {
     if (window.__TP_DISABLE_NUDGES) return;
-    if (!recActive || !viewer) return; // only when speech sync is active
+    // Only run nudges while recognizer is actively listening
+    if (!speechOn || !viewer) return;
     if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
     const now = performance.now();
   const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
@@ -3711,7 +3712,7 @@ function stopAutoScroll(){
   autoTimer = null;
   autoToggle.textContent = 'Auto-scroll: Off';
   // Resume catch-up controller if speech sync is active — via heuristic gate
-  if (recActive) {
+  if (speechOn) {
     try {
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
