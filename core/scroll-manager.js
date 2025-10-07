@@ -259,4 +259,40 @@
       } catch {}
     }, { once:true });
   } catch {}
+
+  // Dev-only: layout jitter probe — detects UI chrome movement even when scrollTop is stable
+  try {
+    const isDev = (function(){
+      try { return (localStorage.getItem('tp_dev_mode') === '1') || /[?&]dev=1\b/.test(location.search); } catch { return false; }
+    })();
+    if (isDev && !window.__TP_LAYOUT_JITTER_PROBE) {
+      window.__TP_LAYOUT_JITTER_PROBE = true;
+      const startProbe = ()=>{
+        try {
+          const probeEl = document.getElementById('viewer') || document.querySelector('#viewer');
+          if (!probeEl) return;
+          let lastTop = 0;
+          try { lastTop = probeEl.getBoundingClientRect().top|0; } catch { lastTop = 0; }
+          const tick = () => {
+            try {
+              const t = probeEl.getBoundingClientRect().top;
+              const drift = Math.abs(t - lastTop);
+              if (drift > 1) {
+                const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                // Minimal dev log; avoid HUD spam
+                console.log('layout:jitter', { lastTop, t, drift, time: now });
+              }
+              lastTop = t;
+              requestAnimationFrame(tick);
+            } catch {
+              try { requestAnimationFrame(tick); } catch {}
+            }
+          };
+          requestAnimationFrame(tick);
+        } catch {}
+      };
+      if (document.readyState === 'complete' || document.readyState === 'interactive') startProbe();
+      else window.addEventListener('DOMContentLoaded', startProbe, { once: true });
+    }
+  } catch {}
 })();
