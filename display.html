@@ -10,8 +10,14 @@
   <style>
           :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#2ea8ff;--s2-color:#ff6b6b}
           html,body{height:100%}
+          /* Kill outer page scroll; wrap is the only scroller */
+          html, body { overflow: hidden; }
           body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
+          /* One true scroller */
           .wrap{height:100%;overflow:auto}
+          #wrap{height:100%;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:auto}
+          /* Disable browser auto-anchoring for stability */
+          *{overflow-anchor:none}
           /* Top bar legend */
           #displayTopbar{position:fixed;top:0;left:0;right:0;height:36px;display:flex;align-items:center;pointer-events:none;z-index:1000;padding:0 10px}
           #legend{display:flex;gap:14px;align-items:center;font-size:12px;opacity:.95;margin-left:4px;background:rgba(14,20,27,.72);border:1px solid var(--edge);padding:4px 8px;border-radius:999px}
