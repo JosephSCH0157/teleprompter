@@ -212,9 +212,9 @@ export function createScrollController() {
         const now = performance.now();
 
         // Hysteresis commit: only commit after stability across frames, with direction-specific thresholds
-        // Respect jitter elevation from main module
-        let effFwd = FWD_SIM,
-          effBack = BACK_SIM;
+        // Respect jitter elevation from main module and allow dynamic tuning from main app (__tpGateFwdSim/__tpGateBackSim)
+        let effFwd = typeof window.__tpGateFwdSim === 'number' ? window.__tpGateFwdSim : FWD_SIM,
+          effBack = typeof window.__tpGateBackSim === 'number' ? window.__tpGateBackSim : BACK_SIM;
         try {
           const J = window.__tpJitter || {};
           const elevated = typeof J.spikeUntil === 'number' && now < J.spikeUntil;

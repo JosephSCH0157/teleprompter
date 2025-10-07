@@ -3284,6 +3284,21 @@
         STRICT_FORWARD_SIM = 0.72;
         MAX_JUMP_AHEAD_WORDS = 12;
       }
+      // Also map aggressiveness to scroll commit gate thresholds (consumed by scroll-control.js)
+      try {
+        // Defaults mirror scroll-control constants: FWD_SIM=0.82, BACK_SIM=0.86
+        const gates = {
+          1: { fwd: 0.85, back: 0.88 }, // Conservative
+          2: { fwd: 0.82, back: 0.86 }, // Normal
+          3: { fwd: 0.78, back: 0.84 }, // Aggressive
+          4: { fwd: 0.75, back: 0.83 }, // Aggressive live-read
+        };
+        const g = gates[v] || gates['2'];
+        window.__tpGateFwdSim = g.fwd;
+        window.__tpGateBackSim = g.back;
+        // Optionally expose for HUD/diagnostics
+        window.__tpGate = { fwd: g.fwd, back: g.back, updatedAt: Date.now() };
+      } catch {}
       // After applying preset, optionally override with custom tuning profile if enabled
       try {
         if (localStorage.getItem(TUNE_ENABLE_KEY) === '1') {
