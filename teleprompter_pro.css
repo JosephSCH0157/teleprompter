@@ -278,3 +278,20 @@ body.ck::after{
     color:#d67d2d; opacity:.18;
     pointer-events:none;
 }
+
+/* HUD isolation: fixed layer, no impact on layout, own compositor layer */
+[data-tp-hud]{
+    position: fixed;
+    inset: auto 12px 12px auto; /* default corner; JS can reposition */
+    contain: layout paint size;
+    will-change: transform;
+    transform: translateZ(0);
+}
+.tp-hud-body{
+    max-height: 40vh;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+/* Global scroll stability: reserve scrollbar, disable native smooth, kill auto-anchoring */
+* { overflow-anchor: none; }
