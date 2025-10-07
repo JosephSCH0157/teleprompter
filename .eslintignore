@@ -1,5 +1,0 @@
-releases/
-**/*.min.js
-node_modules/
-.vscode/*
-!.vscode/settings.json
