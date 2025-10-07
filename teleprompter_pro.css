@@ -69,6 +69,8 @@ select { font-size: 14px; }
 
     :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; }
     html,body{height:100%}
+    /* Always reserve outer scrollbar to avoid layout shift when content toggles */
+    html, body { overflow-y: scroll; }
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
     .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10}
@@ -234,6 +236,9 @@ html, body, #viewer {
     scroll-behavior: auto !important;
     overflow-anchor: none !important;
 }
+
+/* Avoid fractional transforms on parents of #viewer to prevent subpixel rounding/jitter */
+.shell, .pane, #viewer { transform: none !important; will-change: auto; }
 
 /* visual stability in the scroller */
 #viewer{

@@ -228,14 +228,25 @@
         // Polite autoscroll: only when enabled, not animating, and user was already at bottom
         if (state.autoscroll) {
           if (!window.__TP_ANIMATING && atBottom) {
-            const prev = window.__TP_DEV_WRITE_OK;
-            window.__TP_DEV_WRITE_OK = 'hud-autoscroll';
-            try {
-              // Defer the write to the next frame to avoid read/write in same phase
-              requestAnimationFrame(()=>{ try { body.scrollTop = body.scrollHeight; } catch {} });
-            } finally {
-              window.__TP_DEV_WRITE_OK = prev;
+            // Helper: check catch-up activity (global flag)
+            const isCatchingUp = () => { try { return !!window.__TP_CATCHUP_ACTIVE; } catch { return false; } };
+            // Helper: write HUD scrollTop with proper phasing and whitelist tag
+            function setHudScrollTop(el, y){
+              const write = () => {
+                const prev = window.__TP_DEV_WRITE_OK;
+                window.__TP_DEV_WRITE_OK = 'hud-autoscroll';
+                try { el.scrollTop = y; } catch {}
+                finally { window.__TP_DEV_WRITE_OK = prev; }
+              };
+              if (isCatchingUp()) {
+                // Never write during catch-up; schedule after paint (rAF) and then microtask to land after other rAF writers
+                requestAnimationFrame(() => { try { queueMicrotask(write); } catch { write(); } });
+              } else {
+                // Normal path: still defer to next frame to avoid same-phase mutate
+                requestAnimationFrame(write);
+              }
             }
+            try { setHudScrollTop(body, body.scrollHeight); } catch {}
           }
         }
       } catch {}
