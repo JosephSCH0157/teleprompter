@@ -19,16 +19,9 @@
     "typescript": "^5.6.0"
   },
   "lint-staged": {
-    "**/*.js": [
-      "prettier --write",
-      "eslint --fix"
-    ],
-    "**/*.{html,css}": [
+    "*.{js,jsx}": [
+      "eslint --fix",
       "prettier --write"
-    ],
-    "ignore": [
-      "node_modules/**",
-      "releases/**"
     ]
   }
 }
