@@ -141,6 +141,13 @@ select { font-size: 14px; }
         /* Safety: if we ever need to disable snapping entirely */
         .viewer .script.no-snap p { scroll-margin-block: 0; }
 
+    /* GOOD: viewer keeps overflow; snapping defined on inner content when snap-only is active */
+    #viewer.snap-only .script { scroll-snap-type: y proximity; }
+    /* Support common item types inside script */
+    #viewer.snap-only .script p,
+    #viewer.snap-only .script .line,
+    #viewer.snap-only .script .page { scroll-snap-align: start; }
+
 /* Live-hydrated teleprompter variables */
 .viewer{
     --viewer-active-bg:        transparent;
