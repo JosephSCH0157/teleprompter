@@ -358,7 +358,10 @@
               try {
                 if (m.type === 'attributes' && (m.attributeName === 'style' || m.attributeName === 'class')){
                   if (m.attributeName === 'style') {
-                    console.log('[viewer style changed]', v.getAttribute('style'));
+                    const s = v.getAttribute('style') || '';
+                    console.log('[viewer style changed]', s);
+                    // Explicit guard: warn when inline style toggles overflow properties
+                    try { if (/(^|;)\s*overflow/i.test(s)) console.warn('[viewer overflow changed]', s); } catch {}
                   } else if (m.attributeName === 'class') {
                     console.log('[viewer class changed]', v.className);
                   }
