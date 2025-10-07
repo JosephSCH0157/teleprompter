@@ -469,7 +469,16 @@
   }
   function maybeAutoScroll(targetY, scroller, opts = {}){
     try {
-      if (__tpReaderLocked && !opts.overrideLock) { try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY }); } catch {} return false; }
+      // Allow a brief override of reader-lock while we are closing distance to the target
+      // Treat as "in catch-up" if we're more than ~120px away from the target
+      const sc = (scroller || window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
+      const nowTop = (sc === window) ? (window.scrollY||0) : (sc.scrollTop||0);
+      const IN_CATCHUP = Math.abs(Number(targetY||0) - Number(nowTop||0)) > 120;
+      const visibleEnough = (function(){ try { return isAnchorVisible() || IN_CATCHUP; } catch { return IN_CATCHUP; } })();
+      if (__tpReaderLocked && !opts.overrideLock && !visibleEnough) {
+        try { if (typeof debug==='function') debug({ tag:'reader:block-scroll', targetY, nowTop, IN_CATCHUP, visibleEnough }); } catch {}
+        return false;
+      }
       try { if (window.__TP_CATCHUP_ACTIVE) return false; } catch {}
       requestScroll(targetY);
       return true;
@@ -496,6 +505,14 @@
     } catch { return false; }
   }
   try { window.isInComfortBand = isInComfortBand; } catch {}
+  // Helper: is the active anchor paragraph visible within the comfort band?
+  function isAnchorVisible(){
+    try {
+      const el = (document.getElementById('script')||document).querySelector('p.active');
+      return isInComfortBand(el, { top: 0.25, bottom: 0.55 });
+    } catch { return false; }
+  }
+  try { window.isAnchorVisible = isAnchorVisible; } catch {}
   // User scrolling detector to avoid fighting the reader
   let __tpUserScrollUntil = 0;
   function markUserScroll(){ try { __tpUserScrollUntil = performance.now() + 600; } catch {} }
