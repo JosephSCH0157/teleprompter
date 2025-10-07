@@ -604,6 +604,7 @@
       'wheel',
       (e) => {
         if (e.ctrlKey || e.metaKey) {
+          // eslint-disable-next-line no-restricted-syntax -- Prevent browser-level zoom to avoid app zoom conflicts
           e.preventDefault();
         }
       },
@@ -614,7 +615,10 @@
       (e) => {
         if (e.ctrlKey || e.metaKey) {
           const k = e.key || '';
-          if (k === '+' || k === '=' || k === '-' || k === '_' || k === '0') e.preventDefault();
+          if (k === '+' || k === '=' || k === '-' || k === '_' || k === '0') {
+            // eslint-disable-next-line no-restricted-syntax -- Prevent browser zoom/reset shortcuts (Ctrl/Meta + +/-/0)
+            e.preventDefault();
+          }
         }
       },
       { capture: true }
@@ -2069,6 +2073,7 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+        // eslint-disable-next-line no-restricted-syntax -- Use Shift+? to open help instead of typing '/'
         e.preventDefault();
         openHelp();
       }
@@ -2362,15 +2367,18 @@
 
       switch (e.key) {
         case ' ': // Space
+          // eslint-disable-next-line no-restricted-syntax -- Space toggles auto-scroll; prevent page scroll
           e.preventDefault();
           if (autoTimer) stopAutoScroll();
           else startAutoScroll();
           break;
         case 'ArrowUp':
+          // eslint-disable-next-line no-restricted-syntax -- ArrowUp adjusts speed; avoid default page scroll
           e.preventDefault();
           tweakSpeed(+5); // +5 px/s
           break;
         case 'ArrowDown':
+          // eslint-disable-next-line no-restricted-syntax -- ArrowDown adjusts speed; avoid default page scroll
           e.preventDefault();
           tweakSpeed(-5); // -5 px/s
           break;
@@ -2389,6 +2397,7 @@
         case '?':
         case '/':
           if (e.shiftKey) {
+            // eslint-disable-next-line no-restricted-syntax -- Open shortcuts overlay on Shift+? without typing '/'
             e.preventDefault();
             openShortcuts();
           }
@@ -2967,6 +2976,7 @@
       if (!dt) return;
       const text = dt.getData('text/plain');
       if (!text) return;
+      // eslint-disable-next-line no-restricted-syntax -- Override default paste to transform text with tags
       ev.preventDefault();
       const alreadyTagged = /\[(s1|s2|g1|g2)\]/i.test(text);
       const normalized = normalizeSimpleTagTypos(text);
@@ -3435,6 +3445,7 @@
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') {
         if (DEV_MODE) {
           ensureTuningPanel();
+          // eslint-disable-next-line no-restricted-syntax -- Reserve Ctrl+Alt+T for dev tuning panel
           e.preventDefault();
         }
       }
@@ -6491,6 +6502,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   }
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.altKey && e.key?.toLowerCase?.() === 'k') {
+      // eslint-disable-next-line no-restricted-syntax -- Reserve Ctrl+Alt+K for About dialog
       e.preventDefault();
       showAbout();
     }

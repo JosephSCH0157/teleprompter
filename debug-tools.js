@@ -223,6 +223,7 @@
     // Keyboard toggle
     window.addEventListener('keydown', (e) => {
       if (e.key === opts.hotkey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+        // eslint-disable-next-line no-restricted-syntax -- Reserve HUD toggle hotkey; prevent default typing
         e.preventDefault();
         toggle();
       }
