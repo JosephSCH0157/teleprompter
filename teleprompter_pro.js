@@ -1921,16 +1921,19 @@
           window.__tpScrollWrite = requestScrollTop;
           // optional: wrap viewer.scrollTop writes to go through SCROLLER
           const sc = getScroller();
-          if (sc && !sc.__tpWriteWrapped){
-            sc.__tpWriteWrapped = true;
-            try {
+          // Avoid hijacking scrollTop setter by default (can cause recursion with ScrollManager)
+          // Opt-in for DEV only via localStorage tp_wrap_scrolltop=1
+          try {
+            const WRAP = (function(){ try { return (localStorage.getItem('tp_wrap_scrolltop')||'0') === '1'; } catch { return false; } })();
+            if (WRAP && sc && !sc.__tpWriteWrapped){
+              sc.__tpWriteWrapped = true;
               const proto = Object.getPrototypeOf(sc);
               const desc = Object.getOwnPropertyDescriptor(proto, 'scrollTop');
               if (desc && desc.set){
                 Object.defineProperty(sc, 'scrollTop', { configurable:true, set(v){ requestScrollTop(v); } });
               }
-            } catch {}
-          }
+            }
+          } catch {}
         } catch {}
       })();
             // Prefer explicitly published real core ONLY if it's not just the early waiter
