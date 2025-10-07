@@ -279,6 +279,46 @@ window.__tpResetJitter()           // Clear jitter history
 window.__tpClearFreezes()          // Unblock all freeze states
 ```
 
+### HUD Pattern Analysis & Diagnostics
+
+**Oscillation Detection Patterns**:
+```
+scroll:requestScroll [3576] → scroll → match:catchup:stop
+```
+Repeated every ~200ms indicates scroll thrashing. Look for:
+- Same `scrollTop` values bouncing (e.g., 3533 ↔ 3575 ↔ 3533)
+- `scroll:requestScroll` with identical targets
+- High `writesPerSec` (>4) with minimal progress
+- `match:catchup:stop` immediately after each scroll
+
+**Jitter Health Indicators**:
+```
+match:jitter {"mean":0.87,"std":2.17,"n":30,"elevated":false}
+```
+- `std` > 2.0 = high jitter, approaching spike threshold
+- `mean` climbing (0.53 → 0.87 → 0.9) = increasing instability  
+- Watch for `elevated:true` triggering freeze windows
+
+**Stall Detection Signatures**:
+```
+STALL {"idx":397,"cov":0,"nextSim":0,"time":3.7,"nearEnd":false}
+```
+- `time` > 2.5s without activation = true stall
+- `cov`:0 with no meaningful coverage = speech mismatch
+- `nextSim`:0 = no viable forward candidates
+
+**Match Quality Red Flags**:
+- `bestScore` consistently < 0.6 = poor phrase matching
+- `delta` values jumping >5 indices = instability
+- Same `lineKey` repeated = stuck on duplicate lines
+- `spokenTail` fragments ("but the", "the fif") = incomplete speech
+
+**Calm Mode Commit Patterns**:
+```
+scroll {"tag":"scroll","top":3550,"mode":"calm-commit"}
+```
+Indicates system switched to gentler commit strategy to reduce oscillation.
+
 ### Troubleshooting Matrix
 | Symptom | Probable Cause | Knob to Turn |
 |---------|----------------|--------------|
@@ -287,6 +327,10 @@ window.__tpClearFreezes()          // Unblock all freeze states
 | Ping-pong scrolling | Narrow bands | Increase `IN_BAND_EPS`, oscillation freeze |
 | Frequent stalls | High activation bar | Lower `SIM_GO`, check deadman logic |
 | Over-eager jumps | Low thresholds | Raise activation thresholds, tighten bands |
+| Scroll thrashing (same positions) | Hysteresis too narrow | Increase `HYSTERESIS` to 64px, `IN_BAND_EPS` to 20px |
+| High jitter (std >2.0) | Noisy mic or poor tokenization | Check mic levels, add confusion pairs |
+| Frequent `calm-commit` | System self-protection | Review recent speech quality, reset jitter |
+| `writesPerSec` >6 sustained | Scroll spam | Enable oscillation detection, check anchor visibility |
 | No speech events | Autoplay blocked | Click anywhere, check `getUserMedia` perms |
 | Camera black/frozen | Device conflicts | Check `NotReadableError`, try device cycling |
 | Display bridge timeout | Network/CORS | Enable dev mode, check handshake logs |
