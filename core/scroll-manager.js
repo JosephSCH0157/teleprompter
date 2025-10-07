@@ -379,4 +379,22 @@
       else window.addEventListener('DOMContentLoaded', install, { once: true });
     }
   } catch {}
+
+  // Dev helper: kill phantom page-edge gutters by force-locking page overflow
+  try {
+    const isDev = (function(){
+      try { return (localStorage.getItem('tp_dev_mode') === '1') || /[?&]dev=1\b/.test(location.search); } catch { return false; }
+    })();
+    if (isDev && !window.__killPageGutters) {
+      window.__killPageGutters = function(){
+        try {
+          if (document && document.documentElement && document.body){
+            document.documentElement.style.overflowY = 'hidden';
+            document.body.style.overflow = 'hidden';
+            console.warn('[page gutters] html/body overflow set to hidden');
+          }
+        } catch {}
+      };
+    }
+  } catch {}
 })();
