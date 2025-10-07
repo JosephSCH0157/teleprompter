@@ -72,7 +72,7 @@
     } catch { return 64; }
   }
   class ScrollManager {
-    constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.pendingMeta = null; this.targetMeta = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; this._count = { animRejects: 0 }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+    constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.pendingMeta = null; this.targetMeta = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; this._count = { animRejects: 0 }; this._lastNotScrollableWarn = 0; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
     _postFrame(){ /* hook */ }
     // External hint: user scrolled; enter cooldown briefly
     onUserScroll(ms){ try { const d = Number(ms)||1400; this.coolingUntil = performance.now() + d; } catch {} }
@@ -82,7 +82,14 @@
     onResult(fn){ try { if (typeof fn === 'function') { this._resultListeners.add(fn); return () => { try { this._resultListeners.delete(fn); } catch {} }; } } catch {} return () => {}; }
     _emitResult(ev){ try { this._resultListeners.forEach(cb => { try { cb(ev); } catch {} }); } catch {} }
     _log(ev){ try { this._emitResult(ev); if (typeof debug==='function') debug(ev); if (typeof HUD?.log==='function'){ const ok=!!ev?.ok, anim=!!this.raf; const notable=/^(accepted:bounded-advance|accepted:manual-probe|immediate)$/i.test(String(ev?.reason||'')); if (!ok) HUD.log('scroll:result', ev); else if (notable || !anim) HUD.log('scroll:result', ev); } } catch {} }
-    _logReject(ev, ts){ try { this._emitResult(ev); const reason = String(ev?.reason||''); if (reason === 'reject:anim-active'){ this._count.animRejects = (this._count.animRejects||0)+1; return; } const key = `${ev.reason||'unk'}|${ev.containerId||'unk'}|${ev.holdTag||''}|${ev.tag||''}`; let s = this._rej.get(key); if (!s) { s = { nextAt: 0, count: 0, interval: 150 }; this._rej.set(key, s); } if (ts < s.nextAt) { s.count++; return; } const suppressed = s.count|0; s.count = 0; s.nextAt = ts + s.interval; s.interval = Math.min(Math.max(150, s.interval * 2), 1500); if (suppressed > 0) ev.suppressed = suppressed; console.log(`[reject] reason=${ev.reason||''} container=${ev.containerId||''}`); this._log(ev); } catch { this._log(ev); } }
+    _logReject(ev, ts){ try { this._emitResult(ev); const reason = String(ev?.reason||''); if (reason === 'reject:anim-active'){ this._count.animRejects = (this._count.animRejects||0)+1; return; }
+        // Optional QoL: hard throttle spammy not-scrollable console logs (keep events flowing)
+        if (reason === 'not-scrollable'){
+          const last = this._lastNotScrollableWarn|0; const gap = ts - last; const minMs = (typeof window.__TP_REJECT_THROTTLE_MS === 'number') ? Math.max(0, window.__TP_REJECT_THROTTLE_MS) : 1000;
+          if (gap < minMs) { return; }
+          this._lastNotScrollableWarn = ts;
+        }
+        const key = `${ev.reason||'unk'}|${ev.containerId||'unk'}|${ev.holdTag||''}|${ev.tag||''}`; let s = this._rej.get(key); if (!s) { s = { nextAt: 0, count: 0, interval: 150 }; this._rej.set(key, s); } if (ts < s.nextAt) { s.count++; return; } const suppressed = s.count|0; s.count = 0; s.nextAt = ts + s.interval; s.interval = Math.min(Math.max(150, s.interval * 2), 1500); if (suppressed > 0) ev.suppressed = suppressed; const fn = (reason === 'not-scrollable') ? 'warn' : 'log'; console[fn](`[reject] reason=${ev.reason||''} container=${ev.containerId||''}`); this._log(ev); } catch { this._log(ev); } }
     request(r){
       try {
   let sc = getScroller(); this.state.container = sc;
