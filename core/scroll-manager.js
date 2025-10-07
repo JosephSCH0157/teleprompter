@@ -3,6 +3,9 @@
 (function(){
   'use strict';
   if (window.SCROLLER) return;
+  // Catch-up motion shaping
+  const MAX_CATCHUP_STEP = 120; // px per tick toward far target
+  const MAX_TARGET_DELTA = 420; // px; anything larger gets staged
   function clamp(n,min,max){ return Math.min(max, Math.max(min, n)); }
   function getScroller(){
     try {
@@ -45,7 +48,7 @@
     } catch { return 64; }
   }
   class ScrollManager {
-    constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; this._count = { animRejects: 0 }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
+    constructor(){ this.targetY = null; this.raf = 0; this.v = 0; this.lastTs = 0; this.coolingUntil = 0; this.pending = null; this.pendingMeta = null; this.targetMeta = null; this.kp = 0.028; this.kd = 0.18; this.maxSpeed = 1600; this.deadband = 28; this.settleMs = 240; this.lastOutside = 0; this._preempts=0; this.state = { container: null }; this.holdState = { active:false, since:0, pos:0, tag:'' }; this._rej = new Map(); this._resultListeners = new Set(); this._pendingPostFrame = false; this._count = { animRejects: 0 }; try { this.state.container = getScroller(); const cool = (ms)=>{ this.coolingUntil = performance.now() + ms; }; ['wheel','touchmove'].forEach(ev=> window.addEventListener(ev, ()=>cool(1400), { passive:true })); window.addEventListener('keydown', (e)=>{ try { if (['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key)) cool(1400); } catch {} }, { passive:true }); } catch {} }
     _postFrame(){ /* hook */ }
     // External hint: user scrolled; enter cooldown briefly
     onUserScroll(ms){ try { const d = Number(ms)||1400; this.coolingUntil = performance.now() + d; } catch {} }
@@ -103,7 +106,8 @@
                     if (isTele) {
                       const dir = Math.sign((yCl2 - pos2) || 1) || 1; const step = Math.min(32, Math.max(8, Math.abs(yCl2 - pos2) || 32));
                       const yb = Math.max(0, Math.min(pos2 + dir * step, newMaxTop));
-                      this.pending = { y: yb, priority: (r?.priority|0) || 5, src: r?.src||'system', reason: r?.reason||'' };
+                      this.pending = { y: yb, priority: (r?.priority|0) || 5, src: r?.src||'system', reason: r?.reason||'', tag: (r?.tag||'') };
+                      this.pendingMeta = { src: (r?.src||'system'), tag: (r?.tag||'') };
                       if (!this.raf) this.start(); this.holdState.active = false;
                       const ev2 = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId:(sc?.id || sc?.tagName || 'viewer'), ...dims, lockFlags, y: yb|0, pos: pos2, holdTag: r?.reason||'', tag: (r?.tag||'') };
                       this._rej.clear(); this._log(ev2); return ev2;
@@ -111,7 +115,8 @@
                   } else {
                     // Normal accept path with the viewer
                     const pr = (typeof r?.priority === 'string') ? ((r.priority === 'manual') ? 99 : 5) : (r?.priority|0);
-                    this.pending = { y: yCl2, priority: pr, src: r?.src||'system', reason: r?.reason||'' };
+                    this.pending = { y: yCl2, priority: pr, src: r?.src||'system', reason: r?.reason||'', tag: (r?.tag||'') };
+                    this.pendingMeta = { src: (r?.src||'system'), tag: (r?.tag||'') };
                     if (!this.raf) this.start(); this.holdState.active = false;
                     const ev2 = { tag:'scroll:result', ok:true, reason:'accepted', containerId:(sc?.id || sc?.tagName || 'viewer'), ...dims, lockFlags, y: yCl2|0, pos: pos2, holdTag: r?.reason||'', tag: (r?.tag||'') };
                     this._rej.clear(); this._log(ev2); return ev2;
@@ -135,18 +140,18 @@
         if (atBoundNoMove || Math.abs(yClamped - posNow) < this.deadband) {
           if (isManual) {
             const dir = Math.sign((yClamped - posNow) || 1) || 1; const step = 2; y = Math.max(0, Math.min(posNow + dir * step, maxTop)); window.__lastScrollTarget = y;
-            if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r?.src||'manual', reason: r?.reason||'probe' }; }
+            if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r?.src||'manual', reason: r?.reason||'probe', tag: (r?.tag||'manual') }; this.pendingMeta = { src: (r?.src||'manual'), tag: (r?.tag||'manual') }; }
             if (!this.raf) this.start(); this.holdState.active = false; const ev = { tag:'scroll:result', ok:true, reason:'accepted:manual-probe', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'manual') }; this._rej.clear(); this._log(ev); return ev;
           }
           // Allow bounded-advance for teleprompter/catchup when within deadband or at-bound
           if (isTele) {
-            const dir = Math.sign((yClamped - posNow) || 1) || 1; const step = Math.min(32, Math.max(8, Math.abs(yClamped - posNow) || 32)); y = Math.max(0, Math.min(posNow + dir * step, maxTop)); window.__lastScrollTarget = y; if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'' }; } if (!this.raf) this.start(); this.holdState.active = false; const ev = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') }; this._rej.clear(); this._log(ev); return ev;
+            const dir = Math.sign((yClamped - posNow) || 1) || 1; const step = Math.min(32, Math.max(8, Math.abs(yClamped - posNow) || 32)); y = Math.max(0, Math.min(posNow + dir * step, maxTop)); window.__lastScrollTarget = y; if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'', tag: (r?.tag||'') }; this.pendingMeta = { src: (r?.src||'system'), tag: (r?.tag||'') }; } if (!this.raf) this.start(); this.holdState.active = false; const ev = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') }; this._rej.clear(); this._log(ev); return ev;
           }
           if (!this.holdState.active) { this.holdState.active = true; this.holdState.since = ts; this.holdState.pos = posNow; this.holdState.tag = String(r?.tag||''); }
           else { this.holdState.pos = posNow; }
           const reason = atBoundNoMove && (yClamped !== y) ? 'bounds-clamp' : 'hold:stable'; const ev = { tag:'scroll:result', ok:false, reason, containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||''), anchorVisible: !!r?.anchorVisible }; this._logReject(ev, ts); return ev;
         }
-        y = yClamped; window.__lastScrollTarget = y; if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'' }; }
+  y = yClamped; window.__lastScrollTarget = y; if (!this.pending || prioNum >= (this.pending.priority|0)) { if (this.pending && prioNum > (this.pending.priority|0)) { window.__tpScrollerPreempts = (window.__tpScrollerPreempts||0) + 1; this._preempts++; } this.pending = { y, priority: prioNum, src: r.src||'system', reason: r.reason||'', tag: (r?.tag||'') }; this.pendingMeta = { src: (r?.src||'system'), tag: (r?.tag||'') }; }
         if (!this.raf) this.start(); this.holdState.active = false; const ev = { tag:'scroll:result', ok:true, reason:'accepted', containerId, ...dims, lockFlags, y: y|0, pos: posNow, holdTag: r?.reason||'', tag: (r?.tag||'') }; this._rej.clear(); this._log(ev); return ev;
       } catch {}
     }
@@ -159,7 +164,7 @@
       const sc = getScroller();
       try { window.beginMeasure && window.beginMeasure(); } catch {}
       if (this.pending){
-        const cand = this.pending.y; this.pending = null;
+        const cand = this.pending.y; const meta = this.pendingMeta; this.pending = null; this.pendingMeta = null; this.targetMeta = meta || this.targetMeta;
         try {
           const db = this.deadband|0;
           const frozen = (typeof window.__TP_FROZEN_TARGET_Y === 'number') ? window.__TP_FROZEN_TARGET_Y : (this.targetY ?? cand);
@@ -190,6 +195,25 @@
         this._lastPos = pos; this._lastT = nowMs;
         if (absErr <= (this.deadband|0) && vPxMs <= 0.2) { this._within = (this._within|0) + 1; } else { this._within = 0; }
         if ((this._within|0) >= 3) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
+      } catch {}
+      // Catch-up staging and max step per tick (applies to teleprompter/catchup targets)
+      try {
+        const tag = this.targetMeta?.tag || '';
+        const src = this.targetMeta?.src || '';
+        const isCatch = (tag === 'catchup' || src === 'catchup' || tag === 'teleprompter' || src === 'teleprompter');
+        if (isCatch) {
+          let effTarget = this.targetY;
+          const delta = effTarget - pos;
+          if (Math.abs(delta) > MAX_TARGET_DELTA) {
+            effTarget = pos + Math.sign(delta) * MAX_TARGET_DELTA;
+          }
+          const step = Math.sign(effTarget - pos) * Math.min(Math.abs(effTarget - pos), MAX_CATCHUP_STEP);
+          const nextCatch = clamp(pos + step, 0, getMaxTop(sc));
+          if (Math.abs(nextCatch - pos) >= 0.25) { setScrollTop(sc, nextCatch); }
+          try { window.endFrame && window.endFrame(); } catch {}
+          if (!this._pendingPostFrame) { this._pendingPostFrame = true; try { queueMicrotask(()=>{ try { this._pendingPostFrame = false; this._postFrame(); } catch { this._pendingPostFrame = false; } }); } catch { this._pendingPostFrame = false; } }
+          return;
+        }
       } catch {}
       // Adaptive taper + quiet backoff
       let kp = this.kp, kd = this.kd, vmax = this.maxSpeed;
