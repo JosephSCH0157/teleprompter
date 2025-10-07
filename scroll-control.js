@@ -197,7 +197,14 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
 
   function tick() {
     try {
+      if (!active) return; // guard: in case of late rAF after stop
       if (!inGen(localGen)) { stopAutoCatchup(); return; }
+      // Stop if scroller is no longer scrollable (prevents not-scrollable spam)
+      try {
+        const sc = __getPinTarget();
+        const canScrollNow = !!(sc && (sc.clientHeight|0) > 0 && ((sc.scrollHeight|0) - (sc.clientHeight|0)) > 0);
+        if (!canScrollNow) { stopAutoCatchup(); return; }
+      } catch {}
       const anchorY = getAnchorY();     // current line Y within viewport
       const targetY = getTargetY();     // desired Y (e.g., 0.4 * viewportHeight)
       let err = targetY - anchorY;      // positive => line is below target (we need to scroll down)
@@ -223,7 +230,15 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
       if (v !== 0) {
         // Single-writer arbitration: catchup owns the lock while active
         if (WriteLock.try('catchup', 400)) {
-          try { scrollBy(v); } catch {}
+          try {
+            // Re-check scroller capacity before writing
+            const sc = __getPinTarget();
+            if (!sc || (sc.clientHeight|0) <= 0 || ((sc.scrollHeight|0) - (sc.clientHeight|0)) <= 0) {
+              stopAutoCatchup();
+            } else {
+              scrollBy(v);
+            }
+          } catch {}
         }
       }
       prevErr = err;

@@ -4773,7 +4773,12 @@ setTimeout(() => {
   const scrollBy = (dy) => {
     try {
       const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-      try { requestScroll(next); } catch { try { window.SCROLLER?.request({ y: next, priority: 5, src: 'system', reason: 'scrollByFn' }); } catch {} }
+      // Catch-up writer: write directly via controller to avoid SCROLLER rejects spam
+      try { __scrollCtl?.write?.(next); }
+      catch {
+        // Fallback: minimal direct write if controller is missing
+        try { viewer.scrollTop = next; } catch {}
+      }
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const top = (typeof window.__lastScrollTarget==='number'?window.__lastScrollTarget:next);
       const ratio = max ? (top / max) : 0;
@@ -4782,6 +4787,11 @@ setTimeout(() => {
   };
   try { __scrollCtl.stopAutoCatchup(); } catch {}
   try { window.__TP_CATCHUP_ACTIVE = true; } catch {}
+  // Preflight: only start catch-up if viewer is scrollable
+  try {
+    const canScrollNow = !!(viewer && viewer.clientHeight > 0 && (viewer.scrollHeight - viewer.clientHeight) > 0);
+    if (!canScrollNow) { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} try { window.__TP_CATCHUP_ACTIVE = false; } catch {} return; }
+  } catch {}
   __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
 }
 
@@ -4793,6 +4803,8 @@ function maybeCatchupByAnchor(anchorY, viewportH){
     if (!__scrollCtl?.startAutoCatchup || !viewer) return;
     // Don't start while auto-scroll is active
     if (autoTimer) { _lowStartTs = 0; try{ __scrollCtl.stopAutoCatchup(); }catch{}; return; }
+    // Only run while viewer is scrollable
+    try { const canScrollNow = !!(viewer && viewer.clientHeight > 0 && (viewer.scrollHeight - viewer.clientHeight) > 0); if (!canScrollNow) { _lowStartTs = 0; try{ __scrollCtl.stopAutoCatchup(); }catch{}; try { window.__TP_CATCHUP_ACTIVE = false; } catch {} return; } } catch {}
     const h = Math.max(1, Number(viewportH)||viewer.clientHeight||1);
     const ratio = anchorY / h; // 0=top, 1=bottom
     if (ratio > 0.65){
