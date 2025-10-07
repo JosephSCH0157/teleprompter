@@ -2167,6 +2167,22 @@ window.addEventListener('storage', (e)=>{ try {
   }
 } catch {} });
 
+// One-shot console unstick helpers and wiring
+try {
+  if (!window.stopCatchup) {
+    window.stopCatchup = function(reason){
+      try { if (window.__TP_DEV) console.debug('[stopCatchup]', reason||''); } catch {}
+      try { __scrollCtl?.stopAutoCatchup?.(); } catch {}
+      try { window.__TP_CATCHUP_ACTIVE = false; } catch {}
+      try { window.killMomentum && window.killMomentum(); } catch {}
+      try { window.assertViewerInvariants && window.assertViewerInvariants(); } catch {}
+      try { const v = document.getElementById('viewer'); if (v) v.style.overflowY = 'auto'; } catch {}
+    };
+  }
+  // Allow: window.dispatchEvent(new Event('mic:released')) to force-stop catch-up in-session
+  window.addEventListener('mic:released', () => { try { window.stopCatchup && window.stopCatchup('mic:released'); } catch {} });
+} catch {}
+
 // Viewer mode + scrollability helpers
 try {
   if (!window.assertViewerInvariants) {
