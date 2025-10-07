@@ -1,4 +1,5 @@
 // @ts-nocheck
+/* eslint-env node */
 // ESLint v9 flat config
 /** @type {import('eslint').Linter.FlatConfig[]} */
 module.exports = [
