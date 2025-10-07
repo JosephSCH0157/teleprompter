@@ -92,6 +92,13 @@ select { font-size: 14px; }
     .panel .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
     button,select,input[type="number"],input[type="text"]{background:#0e141b;color:var(--fg);border:1px solid var(--edge);padding:8px 10px;border-radius:10px;cursor:pointer}
     button:disabled{opacity:.5;cursor:not-allowed}
+    /* Emphasized primary action button */
+    .btn-primary{font-size:16px;padding:10px 14px;border-radius:12px;font-weight:600}
+    .btn-start{background:#0e2534;border-color:#2b90ff;color:#cfe8ff;box-shadow:0 0 0 1px #2b90ff55 inset}
+    .btn-start:hover{background:#0f2b3d}
+    .btn-stop{background:#2b0e11;border-color:#ff5353;color:#ffd6d6;box-shadow:0 0 0 1px #ff535355 inset}
+    .btn-stop:hover{background:#351015}
+    .btn-subtle{opacity:.9}
     textarea{width:100%;min-height:160px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px}
     .status{font-size:12px;color:var(--muted)}
     .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:8px 0}

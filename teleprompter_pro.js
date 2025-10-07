@@ -581,8 +581,7 @@
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
   let recAutoRestart = false;
-  // Auto-start mic if previously chosen device is present
-  let pendingAutoStart = false;
+  // Mic is opt-in via explicit user request now; no auto-start
   function _toast(msg, opts) {
     // Lightweight fallback if the richer toast system was not injected
     try {
@@ -1804,6 +1803,25 @@
     }
   }
 
+  function releaseMic() {
+    try {
+      if (audioStream) {
+        audioStream.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch {}
+        });
+      }
+    } catch {}
+    audioStream = null;
+    try {
+      permChip && (permChip.textContent = 'Mic: released');
+    } catch {}
+    try {
+      _stopDbMeter();
+    } catch {}
+  }
+
   async function populateDevices() {
     try {
       if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -1867,8 +1885,10 @@
     buildDbBars(dbMeterTop);
 
     // TP: mic-wire
-    // Wire mic + devices
+    // Wire mic + devices (explicit)
     micBtn?.addEventListener('click', requestMic);
+    const releaseMicBtn = document.getElementById('releaseMicBtn');
+    releaseMicBtn?.addEventListener('click', releaseMic);
     refreshDevicesBtn?.addEventListener('click', populateDevices);
     try {
       await populateDevices();
@@ -1883,10 +1903,7 @@
           pendingAutoStart = true;
         }
       } catch {}
-      if (pendingAutoStart) {
-        // Attempt auto-start (user gesture may still be required in some browsers)
-        requestMic();
-      }
+      // No automatic mic start; user must click Request mic
     } catch {}
 
     // TP: normalize-top-btn
@@ -3075,6 +3092,8 @@
           recBtn.disabled = false;
           try {
             recBtn.removeAttribute('title');
+            recBtn.classList.add('btn-primary', 'btn-start');
+            recBtn.title = 'Start speech sync';
           } catch {}
         }
       }
@@ -5523,6 +5542,11 @@
       recChip.textContent = 'Speech: idle';
       recBtn.textContent = 'Start speech sync';
       try {
+        recBtn.classList.remove('btn-stop');
+        recBtn.classList.add('btn-primary', 'btn-start');
+        recBtn.title = 'Start speech sync';
+      } catch {}
+      try {
         __scrollCtl?.stopAutoCatchup?.();
       } catch {}
       try {
@@ -5543,6 +5567,11 @@
       document.body.classList.add('listening'); // when starting
       recChip.textContent = 'Speech: listening…';
       recBtn.textContent = 'Stop speech sync';
+      try {
+        recBtn.classList.remove('btn-start');
+        recBtn.classList.add('btn-primary', 'btn-stop');
+        recBtn.title = 'Stop speech sync';
+      } catch {}
       startTimer();
       startSpeechSync();
       // Try to start external recorders per settings
