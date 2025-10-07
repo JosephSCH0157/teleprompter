@@ -101,56 +101,100 @@ After any scroll-related changes:
 ## Speech Recognition & Text-Matching Pipeline
 
 ### Signal → Decision Flow
-**Input & Guards**: Web Speech API events (`result`, `speechstart/end`, `error`) → speech guard (mutes when sync disabled) → tail processing
 
-**Tail Processing**: 
-- Canonicalization handles confusion pairs (e.g., `enforcement ↔ forcement/salemforcement`)
-- Tokenization: words split on whitespace/punct, normalized to lowercase for matching
+**Input Taps & Guards**:
+- Web Speech API events: `result` (interim/final), `speechstart`, `speechend`, `error`, `nomatch`
+- Speech guard: `speechGuard.mute()` when sync disabled via UI toggle; `speechGuard.unmute()` on re-enable
+- Error paths: Handle `network`, `no-speech`, `aborted`, `audio-capture` gracefully with retry logic
+
+**Tail Processing**:
+- **Canonicalization**: Normalize confusion pairs before matching:
+  - `enforcement` ↔ `forcement`/`salemforcement`  
+  - `constitutional` ↔ `tuition`/`institutional`
+  - Custom mappings in `confusionPairs` object
+- **Tokenization**: Split on `\s+` and punct, normalize to lowercase, filter empty strings
+- **Stop Words**: Common words (`the`, `and`, `so`) marked as junk tokens for anchor gating
 
 **Similarity & Coverage**:
-- `sim`: N-gram windowed similarity against line text
-- `coverage`: Fraction of spoken tokens found in target line
-- `suffixHits ≥ 2`: Override low coverage when tail matches line ending
+- **sim**: N-gram windowed similarity using sliding window over line text
+- **coverage**: `matchedTokens.length / spokenTokens.length` - fraction of spoken tokens found in target line
+- **suffixHits**: Count of spoken tail tokens matching line ending; `≥ 2` overrides low coverage for end-of-line detection
 
-**Confidence Fusion**: `(0.55*sim + 0.45*cov) * jFactor`
-- `jFactor`: EMA-smoothed jitter penalty (rolling std dev of match indices)
-- Spike guard: Elevates jitter threshold for ~8s after detection
+**Confidence Fusion**: 
+- Formula: `(0.55 * sim + 0.45 * cov) * jFactor`
+- **jFactor**: EMA-smoothed jitter penalty from rolling std dev of `bestIdx - currentIdx`
+- **Spike Guard**: After jitter spike detected, elevate threshold for ~8s to prevent false activations
+- **Jitter Estimation**: Rolling window std dev with 0.85 EMA decay, spike at `> JITTER_HIGH` threshold
 
-**Activation Policy**: Calls `activateLine()` when:
-- `cov == 1 && confOk` (perfect coverage with confidence)
-- `sim ≥ 0.92 && cov ≥ 0.14` (high similarity with minimal coverage)  
-- Suffix rule triggers, or timeout guard (~1.2s) expires
-- Includes dedupe/debouncing via HUD bus coalescing
+**Activation Policy**: Calls `activateLine(idx, reason)` when:
+- `cov == 1.0 && confidence > confThreshold` (perfect coverage + confidence check)
+- `sim ≥ 0.92 && cov ≥ 0.14` (high similarity even with minimal coverage)
+- `suffixHits ≥ 2 && sim ≥ suffixFloor` (suffix rule for line endings)
+- Timeout guard: ~1.2s elapsed without activation → force with best candidate
+- **Dedupe**: HUD bus coalescing prevents duplicate activations within 50ms window
 
 ### Catch-up & Scroll Control
-**Eligibility Gates**: Low-sim/jitter freeze, anchor visibility check, hysteresis bands, bounded-advance early exit
 
-**Oscillation Detection**: A↔B↔A pattern within 500ms triggers freeze window
+**Eligibility Gates**:
+- **Low-Sim Freeze**: Block when recent similarity < `SIM_FREEZE` threshold
+- **Jitter Freeze**: Block during jitter spike recovery window
+- **Anchor Visibility**: Require current anchor visible in viewport before allowing scroll
+- **Hysteresis Bands**: Sticky zones around current position prevent micro-oscillations  
+- **Bounded Advance**: Early exit if jump > `MAX_ADVANCE_LINES` to prevent runaway scrolling
 
-**Single Authority**: PD/ScrollManager is sole scroll writer; all operations go through `SCROLLER.request()`
+**Oscillation Detection**:
+- Pattern: A↔B↔A line transitions within 500ms window triggers freeze
+- **Freeze Window**: 2-3 second cooldown after oscillation detected
+- **History Buffer**: Track last N scroll targets with timestamps for pattern matching
+
+**Single Authority Pattern**:
+- **PD Controller**: `PIDController` in `scroll-control.js` is sole scroll writer
+- **SCROLLER.request()**: All scroll operations must go through request queue in `scroll-helpers.js`
+- **Lock Mechanism**: Raw writer operations use mutex to prevent concurrent scroll writes
+- **Rejection Logging**: `[reject] reason=not-scrollable` when viewer element not ready
 
 ## Aggressiveness Tuning System
 
 ### Probe Tiers (0-3)
-| Tier | Band Width | Trigger |
-|------|------------|---------|
-| 0 | `[0.20, 0.50]` | Initial/reset |
-| 1 | `[0.15, 0.55]` | Tier advance |
-| 2 | `[0.10, 0.60]` | Continued probing |
-| 3 | `[0.05, 0.65]` | Maximum width |
+| Tier | Band Width | Advance Trigger | Reset Trigger |
+|------|------------|-----------------|---------------|
+| 0 | `[0.20, 0.50]` | 3 successful probes | User intervention |
+| 1 | `[0.15, 0.55]` | 4 successful probes | 2 failed activations |
+| 2 | `[0.10, 0.60]` | 5 successful probes | Jitter spike |
+| 3 | `[0.05, 0.65]` | Maximum aggression | Oscillation detected |
 
-### Key Thresholds
-- `SIM_GO = 0.82`: Direct activation threshold
-- `SIM_PROBE = 0.60`: Minimum for probe consideration
-- `HYSTERESIS`: Pixel buffer preventing scroll thrash
-- `IN_BAND_EPS`: Sticky band tolerance
+### Key Thresholds & Gates
+- **SIM_GO = 0.82**: Direct activation threshold (bypass probe system)
+- **SIM_PROBE = 0.60**: Minimum similarity for probe consideration  
+- **Deadman Counter**: 24 consecutive holds triggers fallback nudge
+- **Stale Criteria**: >2.5s without activation marks line as stale
+- **Lead Lines**: Look-ahead window of 2-3 lines for early activation
+
+### Hysteresis & Stability
+- **HYSTERESIS**: 48px scroll buffer preventing micro-bouncing
+- **IN_BAND_EPS**: 12px sticky band tolerance around target position
+- **Oscillation Window**: 500ms history for A↔B↔A detection
+- **Stability Check**: Require 150ms dwell time before new scroll
+
+### Fallback Nudge System
+- **Step Size**: 24px incremental scroll when similarity insufficient
+- **SIM_OK Threshold**: 0.72 minimum for nudge eligibility  
+- **JITTER_HIGH Gate**: 0.35 jitter threshold blocks nudging
+- **Cooldown Windows**:
+  - `USER_FREEZE`: 3s after manual scroll intervention
+  - `LOWSIM_FREEZE`: 2s after sustained low similarity
+
+### Programmatic Scroll Gates
+- **beginProgrammaticScroll()**: 250ms TTL for batch scroll operations
+- **__tpCanProgrammaticScroll()**: Checks user activity, jitter state, anchor visibility
+- **Throttle Logic**: Max 8 commits/sec to prevent scroll spam
 
 ### Tuning Cookbook
-- **Lags on fast readers**: Decrease `HYSTERESIS`, raise `SIM_PROBE` slightly
-- **Jitters on noisy mics**: Raise `JITTER_HIGH`, slow EMA, widen early band  
-- **Ping-pongs**: Increase `IN_BAND_EPS`, extend oscillation freeze
-- **Stalls frequently**: Lower `SIM_GO`, check deadman counter (24 holds)
-- **Over-eager**: Raise activation thresholds, tighten bands
+- **Lags on fast readers**: Decrease `HYSTERESIS` to 32px, raise `SIM_PROBE` to 0.65
+- **Jitters on noisy mics**: Raise `JITTER_HIGH` to 0.45, slow EMA to 0.90, widen Tier 0 to `[0.15, 0.55]`
+- **Ping-pongs**: Increase `IN_BAND_EPS` to 18px, extend oscillation freeze to 750ms
+- **Stalls frequently**: Lower `SIM_GO` to 0.78, check deadman at 18 holds, reduce stale timeout to 2.0s
+- **Over-eager jumps**: Raise all thresholds by 0.05, tighten Tier 3 to `[0.08, 0.62]`, increase dwell time to 200ms
 
 ## External Integrations & Gotchas
 
@@ -178,8 +222,13 @@ After any scroll-related changes:
 | Flag | localStorage Key | Fixes |
 |------|------------------|-------|
 | `?dev=1` | `tp_dev_mode` | Enables dev UI, verbose logs |
-| - | `tp_calm` | Disables nudges, gentler UX |
+| `?calm=1` | `tp_calm` | Disables nudges, gentler UX |
 | - | `tp_hud_verbose` | Full HUD diagnostic output |
+| - | `tp_log_mute` | Silence noisy log tags |
+| - | `tp_log_sample` | Sample rate for high-frequency logs |
+| - | `tp_disable_autoplay_guard` | Skip Chrome autoplay detection |
+| - | `tp_force_stun_servers` | Override RTC server config |
+| - | `tp_ime_resize_guard` | Mobile keyboard resize protection |
 
 ## HUD Usage & Debugging Recipes
 
@@ -191,6 +240,9 @@ localStorage.setItem('tp_hud_verbose', '1');
 // Filter noisy logs  
 localStorage.setItem('tp_log_mute', 'catchup:|anchorIO');
 localStorage.setItem('tp_log_sample', '8');
+// Advanced filtering
+localStorage.setItem('tp_quiet_tags', 'scroll:micro,match:interim');
+localStorage.setItem('tp_focus_tags', 'activation,jitter,oscillation');
 ```
 
 ### Key Streams to Monitor
@@ -200,11 +252,32 @@ localStorage.setItem('tp_log_sample', '8');
 - `reader:locked/unlocked` - Why scrolling is paused
 - `rogue:scrollTop` - Warns about unauthorized scroll writes
 - `watchdog:recenter` - Last-resort recenter triggers
+- `match:candidate` vs `match:commit` - Ranking vs final decisions
+- `jitter:spike` - When jitter threshold exceeded
+- `oscillation:detected` - A↔B↔A pattern caught
+- `nudge:fallback` - When similarity insufficient for activation
 
 ### Quick Sanity Checks
 1. **Speech Recognition**: Say known line → expect `match:activate` with reason `conf` or `sim+cov`
 2. **Probe Behavior**: During speech, `__tpHoldStreak` should oscillate; climbing to 24 repeatedly = over-probing
 3. **Scroll Stability**: Frequent `scroll:oscillation-freeze` = need wider sticky band or more hysteresis
+4. **Jitter Health**: `window.__tpJitterMeter` should stay < 0.35; spikes indicate mic issues
+5. **Coverage Quality**: Watch `match:candidate` logs for `cov` values; consistent < 0.3 suggests tokenization issues
+
+### Diagnostic Commands
+```javascript
+// Runtime inspection
+window.__tpGetMatchState()     // Current similarity, coverage, jitter
+window.__tpGetScrollState()    // Position, target, locks, freezes
+window.__tpGetProbeState()     // Current tier, band, hold streak
+window.__tpDumpAnchorState()   // Visible lines, IO entries
+window.__tpTestTokenizer('your phrase here')  // Debug tokenization
+
+// Emergency controls
+window.__tpForceActivate(lineIdx)  // Override guards
+window.__tpResetJitter()           // Clear jitter history
+window.__tpClearFreezes()          // Unblock all freeze states
+```
 
 ### Troubleshooting Matrix
 | Symptom | Probable Cause | Knob to Turn |
@@ -214,6 +287,9 @@ localStorage.setItem('tp_log_sample', '8');
 | Ping-pong scrolling | Narrow bands | Increase `IN_BAND_EPS`, oscillation freeze |
 | Frequent stalls | High activation bar | Lower `SIM_GO`, check deadman logic |
 | Over-eager jumps | Low thresholds | Raise activation thresholds, tighten bands |
+| No speech events | Autoplay blocked | Click anywhere, check `getUserMedia` perms |
+| Camera black/frozen | Device conflicts | Check `NotReadableError`, try device cycling |
+| Display bridge timeout | Network/CORS | Enable dev mode, check handshake logs |
 
 ## Common Gotchas
 
