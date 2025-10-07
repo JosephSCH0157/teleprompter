@@ -2169,6 +2169,30 @@ window.addEventListener('storage', (e)=>{ try {
 
 // Viewer mode + scrollability helpers
 try {
+  if (!window.assertViewerInvariants) {
+    window.assertViewerInvariants = function(){
+      try {
+        const v = document.getElementById('viewer');
+        if (v && v.style) {
+          try { v.style.overflowY = 'auto'; } catch {}
+          try { v.style.scrollBehavior = 'auto'; } catch {}
+          try { v.style.overscrollBehavior = 'contain'; } catch {}
+        }
+        // Ensure common flex parents are scroll-safe containers
+        try {
+          ['#app', '.shell', '.pane', '.main'].forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+              try { el.style.display = 'flex'; } catch {}
+              try { el.style.flexDirection = 'column'; } catch {}
+              try { el.style.minHeight = '0'; } catch {}
+              try { el.style.minWidth = '0'; } catch {}
+              try { el.style.overflow = 'hidden'; } catch {}
+            });
+          });
+        } catch {}
+      } catch {}
+    };
+  }
   if (!window.applyViewerMode) {
     window.applyViewerMode = function(mode){
       try {
@@ -2176,9 +2200,7 @@ try {
         if (!v) return;
         v.classList.toggle('snap-only', mode === 'snap');
         // invariants: viewer must remain scrollable
-        try { v.style.overflowY = 'auto'; } catch {}
-        try { v.style.scrollBehavior = 'auto'; } catch {}
-        try { v.style.overscrollBehavior = 'contain'; } catch {}
+        try { window.assertViewerInvariants && window.assertViewerInvariants(); } catch {}
       } catch {}
     };
   }
@@ -4533,6 +4555,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         `;
         document.head.appendChild(st);
       } catch {}
+
+      // Re-assert viewer/parent invariants after Calm Mode styles
+      try { window.assertViewerInvariants && window.assertViewerInvariants(); } catch {}
 
       // Keep overlays from perturbing geometry
       try {
