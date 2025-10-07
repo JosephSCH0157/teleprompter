@@ -4,7 +4,15 @@
   'use strict';
   if (window.SCROLLER) return;
   function clamp(n,min,max){ return Math.min(max, Math.max(min, n)); }
-  function getScroller(){ return (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body); }
+  function getScroller(){
+    try {
+      const pref = (function(){ try { return window.__TP_SCROLLER; } catch { return null; } })();
+      if (pref && (pref === window || (pref instanceof Element))) return pref;
+      const viewer = document.getElementById('viewer');
+      if (viewer) return viewer;
+      return (document.scrollingElement || document.documentElement || document.body);
+    } catch { return (document.scrollingElement || document.documentElement || document.body); }
+  }
   function getScrollTop(sc){ return (sc === window) ? (window.scrollY||0) : (sc.scrollTop||0); }
   function getMaxTop(sc){ try { const h = (sc===window) ? document.documentElement.scrollHeight : (sc.scrollHeight||0); const vh = (sc===window) ? (window.innerHeight||0) : (sc.clientHeight||0); return Math.max(0, h - vh); } catch { return 0; } }
   function setScrollTop(sc, top){
@@ -50,7 +58,7 @@
     _logReject(ev, ts){ try { this._emitResult(ev); const reason = String(ev?.reason||''); if (reason === 'reject:anim-active'){ this._count.animRejects = (this._count.animRejects||0)+1; return; } const key = `${ev.reason||'unk'}|${ev.containerId||'unk'}|${ev.holdTag||''}|${ev.tag||''}`; let s = this._rej.get(key); if (!s) { s = { nextAt: 0, count: 0, interval: 150 }; this._rej.set(key, s); } if (ts < s.nextAt) { s.count++; return; } const suppressed = s.count|0; s.count = 0; s.nextAt = ts + s.interval; s.interval = Math.min(Math.max(150, s.interval * 2), 1500); if (suppressed > 0) ev.suppressed = suppressed; console.log(`[reject] reason=${ev.reason||''} container=${ev.containerId||''}`); this._log(ev); } catch { this._log(ev); } }
     request(r){
       try {
-        const sc = getScroller(); this.state.container = sc;
+  let sc = getScroller(); this.state.container = sc;
         const ts = performance.now();
         const lockFlags = { cooling: (ts < this.coolingUntil), animating: !!this.raf };
         const containerId = (sc?.id || sc?.tagName || 'unknown');
@@ -77,7 +85,45 @@
         let y = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
         if (y == null) { const ev = { tag:'scroll:result', ok:false, reason:'no-target', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||''), anchorVisible: !!r?.anchorVisible }; this._logReject(ev, ts); return ev; }
         if (!isManual && ts < this.coolingUntil && !isTele) { const ev = { tag:'scroll:result', ok:false, reason:'locked:inertia', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||''), anchorVisible: !!r?.anchorVisible }; this._logReject(ev, ts); return ev; }
-        if (!sc || dims.clientHeight <= 0 || (maxTop|0) <= 0) { const ev = { tag:'scroll:result', ok:false, reason:'not-scrollable', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||''), anchorVisible: !!r?.anchorVisible }; this._logReject(ev, ts); return ev; }
+        if (!sc || dims.clientHeight <= 0 || (maxTop|0) <= 0) {
+          // Fallback: if we mistakenly chose HTML/body but a #viewer exists and is scrollable, swap to it
+          try {
+            const v = document.getElementById('viewer');
+            if (v && v.clientHeight > 0 && (v.scrollHeight - v.clientHeight) > 0) {
+              sc = v; this.state.container = sc;
+              dims.scrollHeight = v.scrollHeight|0; dims.clientHeight = v.clientHeight|0;
+              const newMaxTop = getMaxTop(sc);
+              if (newMaxTop > 0) {
+                // Recompute target and continue with the viewer scroller
+                const y2 = (typeof r?.y === 'number') ? r.y : (r?.el ? computeTargetYForEl(r.el, sc) : null);
+                if (y2 != null) {
+                  const yCl2 = Math.max(0, Math.min(Number(y2)||0, newMaxTop));
+                  const pos2 = getScrollTop(sc)|0;
+                  if (Math.abs(yCl2 - pos2) < this.deadband) {
+                    // Treat as bounded advance if teleprompter
+                    if (r?.tag === 'teleprompter' && r?.anchorVisible === false) {
+                      const dir = Math.sign((yCl2 - pos2) || 1) || 1; const step = Math.min(32, Math.max(8, Math.abs(yCl2 - pos2) || 32));
+                      const yb = Math.max(0, Math.min(pos2 + dir * step, newMaxTop));
+                      this.pending = { y: yb, priority: (r?.priority|0) || 5, src: r?.src||'system', reason: r?.reason||'' };
+                      if (!this.raf) this.start(); this.holdState.active = false;
+                      const ev2 = { tag:'scroll:result', ok:true, reason:'accepted:bounded-advance', containerId:(sc?.id || sc?.tagName || 'viewer'), ...dims, lockFlags, y: yb|0, pos: pos2, holdTag: r?.reason||'', tag: (r?.tag||'') };
+                      this._rej.clear(); this._log(ev2); return ev2;
+                    }
+                  } else {
+                    // Normal accept path with the viewer
+                    const pr = (typeof r?.priority === 'string') ? ((r.priority === 'manual') ? 99 : 5) : (r?.priority|0);
+                    this.pending = { y: yCl2, priority: pr, src: r?.src||'system', reason: r?.reason||'' };
+                    if (!this.raf) this.start(); this.holdState.active = false;
+                    const ev2 = { tag:'scroll:result', ok:true, reason:'accepted', containerId:(sc?.id || sc?.tagName || 'viewer'), ...dims, lockFlags, y: yCl2|0, pos: pos2, holdTag: r?.reason||'', tag: (r?.tag||'') };
+                    this._rej.clear(); this._log(ev2); return ev2;
+                  }
+                }
+              }
+            }
+          } catch {}
+          const ev = { tag:'scroll:result', ok:false, reason:'not-scrollable', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||''), anchorVisible: !!r?.anchorVisible };
+          this._logReject(ev, ts); return ev;
+        }
         const yClamped = Math.max(0, Math.min(Number(y)||0, maxTop));
         const atBoundNoMove = (yClamped === posNow);
         try {
@@ -176,4 +222,17 @@
     }
   }
   window.ScrollManager = ScrollManager; window.SCROLLER = new ScrollManager();
+  // Early lock: prefer #viewer as the active scroller once DOM is ready
+  try {
+    window.addEventListener('DOMContentLoaded', ()=>{
+      try {
+        const v = document.getElementById('viewer');
+        if (v) {
+          window.__TP_SCROLLER = v;
+          // Freeze a base viewport height to reduce geometry flapping
+          try { if (!window.__TP_VIEWER_HEIGHT_BASE) window.__TP_VIEWER_HEIGHT_BASE = v.clientHeight|0; } catch {}
+        }
+      } catch {}
+    }, { once:true });
+  } catch {}
 })();
