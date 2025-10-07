@@ -3710,6 +3710,7 @@ function stopAutoScroll(){
   clearInterval(autoTimer);
   autoTimer = null;
   autoToggle.textContent = 'Auto-scroll: Off';
+}
   // Resume catch-up controller if speech sync is active — via heuristic gate
   if (recActive) {
     try {
@@ -3723,7 +3724,6 @@ function stopAutoScroll(){
       maybeCatchupByAnchor(anchorY, viewer.clientHeight);
     } catch { try { __scrollCtl?.stopAutoCatchup?.(); } catch {} }
   }
-}
 
 // ⬇️ keep this OUTSIDE stopAutoScroll
 function tweakSpeed(delta){
