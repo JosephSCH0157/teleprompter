@@ -4114,8 +4114,12 @@ shortcutsClose   = document.getElementById('shortcutsClose');
           try{
             const sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body);
             const before = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
-            scrollToY(y);
-            // Telemetry: measure result after ~160ms to spot dead scrolls
+            const yNum = Number(y);
+            // Ignore undefined/NaN requests and zero-effect moves
+            if (!Number.isFinite(yNum)) return;
+            if (Math.abs(yNum - before) < 1) return;
+            scrollToY(yNum);
+            // Telemetry: measure result after ~160ms to spot dead scrolls, only when meaningful and idle
             setTimeout(()=>{
               try {
                 // Skip verbose before/after logging while ScrollManager is animating; it's expected to diverge mid-flight
@@ -4123,7 +4127,15 @@ shortcutsClose   = document.getElementById('shortcutsClose');
                 if (anim) return;
                 const after = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
                 const delta = Math.round((after||0) - (before||0));
-                const intended = Math.round(Number(y)||0);
+                const intended = Math.round(yNum);
+                // Throttle and skip no-op logs
+                try {
+                  const now = performance.now();
+                  window.__tpReqScrollLastLogAt = window.__tpReqScrollLastLogAt||0;
+                  if ((now - window.__tpReqScrollLastLogAt) < 300) return;
+                  window.__tpReqScrollLastLogAt = now;
+                } catch {}
+                if (Math.abs(intended - Math.round(before)) < 1 && Math.abs(delta) < 1) return;
                 const tag = 'scroll:result';
                 const payload = { before, after, delta, intended, ok: Math.abs(delta) >= 1 };
                 try { if (typeof debug==='function') debug({ tag, ...payload }); } catch {}
