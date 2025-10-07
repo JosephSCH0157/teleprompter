@@ -1456,6 +1456,28 @@
               const recentBA = (function(){ try { return (window.__tpCatchupLastReason === 'accepted:bounded-advance') && ((performance.now() - (window.__tpCatchupLastAt||0)) < 300); } catch { return false; } })();
               if (near || recentBA) { __catchupRefDec(near ? 'close-enough' : 'bounded-advance'); return; }
             } catch {}
+            // Gate: prove #viewer is scrollable before enqueueing catch-up
+            try {
+              const v = document.getElementById('viewer');
+              let canScroll = false, ovY = '', ch = 0, sh = 0;
+              if (v) {
+                const cs = getComputedStyle(v);
+                ovY = cs.overflowY || '';
+                ch = v.clientHeight|0;
+                sh = v.scrollHeight|0;
+                canScroll = /auto|scroll/i.test(ovY) && (sh > ch + 1);
+              }
+              if (!canScroll) {
+                if (!window.__tpViewerNotScrollableWarned) {
+                  window.__tpViewerNotScrollableWarned = true;
+                  console.debug('[skip] viewer not scrollable', { overflowY: ovY, clientHeight: ch, scrollHeight: sh });
+                }
+                __catchupRefDec('viewer-not-scrollable');
+                return;
+              } else {
+                window.__tpViewerNotScrollableWarned = false;
+              }
+            } catch {}
             const res = window.SCROLLER?.request({ y: estY, priority: prio, src: 'teleprompter', tag: 'teleprompter', anchorVisible, reason: 'catchup' });
             // If the controller returns a structured result, allow immediate close on close-enough
             try {
