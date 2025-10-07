@@ -319,4 +319,61 @@
       else window.addEventListener('DOMContentLoaded', startProbe, { once: true });
     }
   } catch {}
+
+  // Dev-only: viewer overflow guard/probe — logs who/when #viewer overflow changes; optional hard override
+  try {
+    const isDev = (function(){
+      try { return (localStorage.getItem('tp_dev_mode') === '1') || /[?&]dev=1\b/.test(location.search); } catch { return false; }
+    })();
+    if (isDev && !window.__TP_VIEWER_OVERFLOW_PROBE) {
+      window.__TP_VIEWER_OVERFLOW_PROBE = true;
+      const install = ()=>{
+        try {
+          const v = document.getElementById('viewer') || document.querySelector('#viewer');
+          if (!v) return;
+          // Optional hard override for debugging: localStorage tp_force_overflow_auto=1
+          try {
+            if (localStorage.getItem('tp_force_overflow_auto') === '1') {
+              v.style.overflowY = 'auto';
+              console.warn('[viewer] overflowY hard-override → auto (dev flag tp_force_overflow_auto=1)');
+            }
+          } catch {}
+          const logSnapshot = (reason)=>{
+            try {
+              const cs = getComputedStyle(v);
+              const snap = {
+                reason: reason||'',
+                overflow: cs.overflow,
+                overflowY: cs.overflowY,
+                clientHeight: v.clientHeight|0,
+                scrollHeight: v.scrollHeight|0,
+                class: v.className||''
+              };
+              console.log('[viewer] overflow probe', snap);
+            } catch {}
+          };
+          logSnapshot('install');
+          const mo = new MutationObserver((muts)=>{
+            muts.forEach(m=>{
+              try {
+                if (m.type === 'attributes' && (m.attributeName === 'style' || m.attributeName === 'class')){
+                  if (m.attributeName === 'style') {
+                    console.log('[viewer style changed]', v.getAttribute('style'));
+                  } else if (m.attributeName === 'class') {
+                    console.log('[viewer class changed]', v.className);
+                  }
+                  logSnapshot(m.attributeName);
+                }
+              } catch {}
+            });
+          });
+          mo.observe(v, { attributes: true, attributeFilter: ['style','class'] });
+          // Expose manual probe
+          try { window.__probeViewerOverflow = ()=> logSnapshot('manual'); } catch {}
+        } catch {}
+      };
+      if (document.readyState === 'complete' || document.readyState === 'interactive') install();
+      else window.addEventListener('DOMContentLoaded', install, { once: true });
+    }
+  } catch {}
 })();
