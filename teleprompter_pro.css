@@ -70,7 +70,8 @@ select { font-size: 14px; }
     :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; }
     html,body{height:100%}
     /* Kill phantom gutters on the page: app owns scroll containers */
-    html, body { overflow: hidden; }
+    /* Ancestors: full height, no page scrollbars */
+    html, body { height: 100%; overflow: hidden; }
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
     .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10}
@@ -241,14 +242,28 @@ html, body, #viewer {
 
 /* Avoid fractional transforms on parents of #viewer to prevent subpixel rounding/jitter */
     .shell, .pane, #viewer { transform: none !important; will-change: auto; }
-    #app, .shell, .pane, .main { height:100%; overflow:hidden; display:flex; }
+    /* Every flex parent between body → #viewer: allow child to overflow and prevent gutters */
+    #app, .shell, .pane, .main {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0; /* CRUCIAL: allow child to overflow */
+        min-width: 0;
+        overflow: hidden; /* keep gutters off the page edge */
+    }
 
 /* visual stability in the scroller */
+/* The one true scroller */
 #viewer{
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     /* stop scroll chaining into parent */
     overscroll-behavior: contain;
     /* prevent reflow when scrollbar appears/disappears; reserve both edges for RTL/LTR */
     scrollbar-gutter: stable both-edges;
+    /* ensure no native smooth scroll interferes */
+    scroll-behavior: auto;
 }
 
 /* lock height while animating so clientHeight doesn't flap; also kill kinetic gestures */
