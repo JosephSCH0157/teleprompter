@@ -49,6 +49,59 @@
       autoscroll: !!opts.autoscroll,
       maxRows: opts.maxRows,
     };
+    // HUD awareness of scroll/catch-up state via SCROLLER's event stream
+    const hudMotion = { catchupActive: false, lastCatchTs: 0, anim: false };
+    function _bindScrollerEvents(){
+      try {
+        const s = window.SCROLLER;
+        if (!s || typeof s.onResult !== 'function' || s.__hudBound) return;
+        s.__hudBound = true;
+        s.onResult((ev)=>{
+          try {
+            const now = (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+            const tag = ev && ev.tag;
+            const ok = !!ev?.ok;
+            const anim = !!(ev?.lockFlags && ev.lockFlags.animating);
+            hudMotion.anim = anim;
+            if (ok && (tag === 'catchup' || tag === 'teleprompter')) {
+              hudMotion.catchupActive = true;
+              hudMotion.lastCatchTs = now;
+            }
+          } catch {}
+        });
+        // When the scroller settles, we can clear our motion flags
+        window.addEventListener('tp-settled', ()=>{ try { hudMotion.catchupActive = false; hudMotion.anim = false; } catch {} }, { passive: true });
+      } catch {}
+    }
+    // Try binding early and again shortly after boot in case SCROLLER is late
+    try { _bindScrollerEvents(); } catch {}
+    try { setTimeout(_bindScrollerEvents, 250); setTimeout(_bindScrollerEvents, 1000); } catch {}
+
+    // Helper: current "catch-up" activity based on recent events/animation
+    function isCatchingUp(){
+      try {
+        const now = (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+        const recent = (now - (hudMotion.lastCatchTs||0)) < 600;
+        return !!(hudMotion.catchupActive || hudMotion.anim || recent);
+      } catch { return false; }
+    }
+    // Helper: write HUD scrollTop with phasing and writer whitelist
+    function setHudScrollTop(el, y){
+      const write = () => {
+        const prev = window.__TP_DEV_WRITE_OK;
+        window.__TP_DEV_WRITE_OK = 'hud-autoscroll';
+        try { el.scrollTop = y; } catch {}
+        finally { window.__TP_DEV_WRITE_OK = prev; }
+      };
+      if (isCatchingUp()) {
+        // During catch-up/animation, schedule after paint then microtask to trail other writers
+        try { requestAnimationFrame(() => { try { queueMicrotask(write); } catch { write(); } }); } catch { write(); }
+      } else {
+        // Normal path: still defer to the next frame to avoid mutate-phase contention
+        try { requestAnimationFrame(write); } catch { write(); }
+      }
+    }
+    try { window.setHudScrollTop = setHudScrollTop; } catch {}
     // HUD config: levels and muting
     const LEVEL_RANK = { DEBUG:10, INFO:20, WARN:30, ERROR:40 };
     const hudConfig = {
@@ -226,28 +279,8 @@
         const extra = body.children.length - state.maxRows;
         if (extra > 0) { for (let i=0;i<extra;i++) body.removeChild(body.firstChild); }
         // Polite autoscroll: only when enabled, not animating, and user was already at bottom
-        if (state.autoscroll) {
-          if (!window.__TP_ANIMATING && atBottom) {
-            // Helper: check catch-up activity (global flag)
-            const isCatchingUp = () => { try { return !!window.__TP_CATCHUP_ACTIVE; } catch { return false; } };
-            // Helper: write HUD scrollTop with proper phasing and whitelist tag
-            function setHudScrollTop(el, y){
-              const write = () => {
-                const prev = window.__TP_DEV_WRITE_OK;
-                window.__TP_DEV_WRITE_OK = 'hud-autoscroll';
-                try { el.scrollTop = y; } catch {}
-                finally { window.__TP_DEV_WRITE_OK = prev; }
-              };
-              if (isCatchingUp()) {
-                // Never write during catch-up; schedule after paint (rAF) and then microtask to land after other rAF writers
-                requestAnimationFrame(() => { try { queueMicrotask(write); } catch { write(); } });
-              } else {
-                // Normal path: still defer to next frame to avoid same-phase mutate
-                requestAnimationFrame(write);
-              }
-            }
-            try { setHudScrollTop(body, body.scrollHeight); } catch {}
-          }
+        if (state.autoscroll && atBottom) {
+          try { setHudScrollTop(body, body.scrollHeight); } catch {}
         }
       } catch {}
     }
