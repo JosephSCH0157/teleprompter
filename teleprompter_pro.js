@@ -798,7 +798,14 @@
 
             // Hardened write gate: block non-catchup writes during active animation/lock and brief cooldown
             const animActive = (function(){
-              try { return !!(window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING || (window.WriteLock && typeof WriteLock?.heldBy === 'function' && WriteLock.heldBy() === 'catchup')); } catch { return !!(window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING); }
+              try {
+                // Treat ScrollManager's own animation as active to keep a single writer
+                const scrollerAnim = !!this.raf;
+                const catchupHeld = (window.WriteLock && typeof WriteLock?.heldBy === 'function' && WriteLock.heldBy() === 'catchup');
+                return !!(scrollerAnim || window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING || catchupHeld);
+              } catch {
+                return !!(window.__TP_CATCHUP_ACTIVE || window.__TP_ANIMATING || this.raf);
+              }
             })();
             if (animActive && r?.tag !== 'catchup'){
               const ev = { tag:'scroll:result', ok:false, reason:'reject:anim-active', containerId, ...dims, lockFlags, holdTag: r?.reason||'', tag: (r?.tag||'') };
@@ -947,7 +954,7 @@
         onMatchActivate({ idx, reason, conf }){ try { const bucket = Math.round((Number(conf)||0) * 20); const key = `${idx}|${reason||''}|${bucket}`; if (key === this._lastMatchKey) return; this._lastMatchKey = key; const el = (document.getElementById('script')||document).querySelector(`[data-match-idx="${idx}"]`) || document.querySelector(`#match-${idx}`) || null; if (!el) return; this.request({ el, priority:5, src:'match', reason:String(reason||'') }); } catch {} }
   onSpeechFinal(node){ try { if (!node) return; if (window.__TP_CATCHUP_ACTIVE) { try { window.__TP_QUEUE_HELPER?.(() => { try { this.request({ el: node, priority: 10, src:'speech', reason:'final', tag: 'helper' }); } catch {} }, 'speech:final'); } catch {} return; } this.request({ el: node, priority: 10, src:'speech', reason:'final', tag: 'helper' }); } catch {} }
         onUserScroll(){ try { this.coolingUntil = performance.now() + 1400; } catch {} }
-        start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
+    start(){ try { this.raf = requestAnimationFrame(this.tick); } catch {} }
   stop(){ try { cancelAnimationFrame(this.raf); } catch {} this.raf = 0; this.v = 0; this.lastTs = 0; this.pending = null; this.targetY = null; this.lastOutside = 0; try { window.__lastScrollTarget = null; } catch {} try { if (this._count && this._count.animRejects>0) { try { console.debug('[scroll] animRejects', this._count.animRejects); } catch {} this._count.animRejects = 0; } } catch {} try { window.dispatchEvent(new CustomEvent('tp-settled', { detail: { source: 'scroller' } })); } catch {} }
         tick = (ts) => {
           // Schedule next frame immediately; keep this handler minimal
@@ -1013,10 +1020,47 @@
             }
             if ((this._within|0) >= 3) { try { window.endFrame && window.endFrame(); } catch {} return this.stop(); }
           } catch {}
-          const a = this.kp * err - this.kd * this.v;
-          this.v = clamp(this.v + a * dt, -this.maxSpeed, this.maxSpeed);
+          // Adaptive PD taper near target to reduce overshoot and WPS
+          let kp = this.kp, kd = this.kd, vmax = this.maxSpeed;
+          try {
+            if (absErr < 160) {
+              const e = absErr;
+              // piecewise linear scale: 160->1.0, 80->0.6, 40->0.4
+              const scale = (e <= 40) ? 0.4 : (e <= 80 ? 0.6 : 0.8);
+              kp = this.kp * scale;
+              // keep damping relatively stronger as we taper to avoid oscillations
+              kd = this.kd * Math.max(0.7, scale);
+              vmax = Math.max(300, this.maxSpeed * (0.5 + 0.5*scale));
+            }
+          } catch {}
+          const a = kp * err - kd * this.v;
+          this.v = clamp(this.v + a * dt, -vmax, vmax);
+          // Low-velocity write backoff when converging: skip writes for a brief quiet window
+          try {
+            this._quietUntil = (typeof this._quietUntil === 'number') ? this._quietUntil : 0;
+            this._lastErr = (typeof this._lastErr === 'number') ? this._lastErr : absErr;
+            const speed = Math.abs(this.v);
+            const errImproving = absErr <= this._lastErr + 0.5; // allow tiny jitter
+            if (absErr < (this.deadband*2 + 6) && speed < 22 && errImproving) {
+              // de-burst writes while we trickle in; ~25ms quiet window
+              if (ts < this._quietUntil) {
+                // do not write this frame
+                this._lastErr = absErr; // update trend
+                try { window.endFrame && window.endFrame(); } catch {}
+                return; // keep RAF running
+              }
+              this._quietUntil = ts + 25;
+            } else if (absErr > (this.deadband*3)) {
+              // reset quiet window when we drift out again
+              this._quietUntil = 0;
+            }
+            this._lastErr = absErr;
+          } catch {}
           const next = clamp(pos + this.v * dt, 0, getMaxTop(sc));
-          setScrollTop(sc, next);
+          // Avoid sub-pixel thrash: only write if movement is meaningful
+          if (Math.abs(next - pos) >= 0.25) {
+            setScrollTop(sc, next);
+          }
           // End frame
           try { window.endFrame && window.endFrame(); } catch {}
           // Defer heavier bookkeeping so the rAF stays light
@@ -4074,6 +4118,9 @@ shortcutsClose   = document.getElementById('shortcutsClose');
             // Telemetry: measure result after ~160ms to spot dead scrolls
             setTimeout(()=>{
               try {
+                // Skip verbose before/after logging while ScrollManager is animating; it's expected to diverge mid-flight
+                const anim = !!(window.SCROLLER && window.SCROLLER.raf);
+                if (anim) return;
                 const after = (sc===window) ? (window.scrollY||0) : (sc.scrollTop||0);
                 const delta = Math.round((after||0) - (before||0));
                 const intended = Math.round(Number(y)||0);
