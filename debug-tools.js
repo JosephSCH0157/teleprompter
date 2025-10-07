@@ -230,8 +230,12 @@
           if (!window.__TP_ANIMATING && atBottom) {
             const prev = window.__TP_DEV_WRITE_OK;
             window.__TP_DEV_WRITE_OK = 'hud-autoscroll';
-            try { body.scrollTop = body.scrollHeight; }
-            finally { window.__TP_DEV_WRITE_OK = prev; }
+            try {
+              // Defer the write to the next frame to avoid read/write in same phase
+              requestAnimationFrame(()=>{ try { body.scrollTop = body.scrollHeight; } catch {} });
+            } finally {
+              window.__TP_DEV_WRITE_OK = prev;
+            }
           }
         }
       } catch {}

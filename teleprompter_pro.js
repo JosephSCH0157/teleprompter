@@ -743,7 +743,21 @@
         // Public: subscribe to scroll result events; returns an unsubscribe function
         onResult(fn){ try { if (typeof fn === 'function') { this._resultListeners.add(fn); return () => { try { this._resultListeners.delete(fn); } catch {} }; } } catch {} return () => {}; }
         _emitResult(ev){ try { this._resultListeners.forEach(cb => { try { cb(ev); } catch {} }); } catch {} }
-        _log(ev){ try { this._emitResult(ev); } catch {} try { if (typeof debug==='function') debug(ev); } catch {} try { if (typeof HUD?.log==='function') HUD.log('scroll:result', ev); } catch {} }
+        _log(ev){
+          try { this._emitResult(ev); } catch {}
+          // Trim HUD noise: only report rejects or notable accepts; suppress routine accepts during animation
+          try {
+            const ok = !!(ev && ev.ok);
+            const reason = String(ev && ev.reason || '');
+            const notable = /^(accepted:bounded-advance|accepted:manual-probe|immediate)$/i.test(reason);
+            const anim = !!this.raf;
+            if (typeof HUD?.log === 'function'){
+              if (!ok) HUD.log('scroll:result', ev);
+              else if (notable || !anim) HUD.log('scroll:result', ev);
+            }
+            if (typeof debug === 'function') debug(ev);
+          } catch {}
+        }
         _logReject(ev, ts){
           // Always emit to listeners, regardless of backoff suppression
           try { this._emitResult(ev); } catch {}
