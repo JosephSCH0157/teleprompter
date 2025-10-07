@@ -50,7 +50,7 @@
         const rec = { t: Date.now(), m };
         window.__TP_BOOT_TRACE.push(rec);
         console.log('[TP-TRACE]', rec.m);
-      } catch (e) {
+      } catch {
         try {
           console.warn('[TP-TRACE-FAIL]', e);
         } catch {}
@@ -368,8 +368,8 @@
             __tpBootPush('window-init-proxy-waiting-core');
           } catch {}
           return await window._initCoreRunner();
-        } catch (e) {
-          console.error('[TP-Pro] window.init proxy error', e);
+        } catch (_e) {
+          console.error('[TP-Pro] window.init proxy error', _e);
         }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -384,7 +384,7 @@
         try {
           if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
           const scriptEl = document.getElementById('script');
-          const editorEl = document.getElementById('editor');
+          const _editorEl = document.getElementById('editor');
           if (scriptEl && !scriptEl.innerHTML) {
             scriptEl.innerHTML = '<p><em>Paste text in the editor to begin… (early)</em></p>';
           }
@@ -407,8 +407,8 @@
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
           } catch {}
-        } catch (e) {
-          console.warn('[TP-Pro] earlyInitFallback error', e);
+        } catch (_e) {
+          console.warn('[TP-Pro] earlyInitFallback error', _e);
         }
       });
     } catch {}
@@ -420,7 +420,7 @@
       if (window.__tpInitSuccess || window.__tpMinimalBootRan) return;
       window.__tpMinimalBootRan = true;
       const scriptEl = document.getElementById('script');
-      const editorEl = document.getElementById('editor');
+      const _editorEl2 = document.getElementById('editor');
       if (scriptEl && (!scriptEl.textContent || !scriptEl.textContent.trim())) {
         scriptEl.innerHTML = '<p><em>Paste text in the editor to begin…</em></p>';
       }
@@ -447,7 +447,7 @@
           try {
             if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch (e) {
+          } catch {
             console.warn('Mini normalize failed', e);
           }
         });
@@ -455,7 +455,7 @@
       try {
         __tpBootPush('minimal-boot');
       } catch {}
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro] minimalBoot error', e);
     }
   }
@@ -476,7 +476,7 @@
         window.__tpInitCalled = true;
         init();
       }
-    } catch (e) {
+    } catch {
       console.error('[TP-Pro] early force init error', e);
     }
   }, 0);
@@ -499,7 +499,7 @@
         } catch {}
         try {
           init();
-        } catch (e) {
+        } catch {
           console.error('init failed (early)', e);
         }
       } else if (typeof window._initCore === 'function') {
@@ -511,7 +511,7 @@
           try {
             await window._initCore();
             console.log('[TP-Pro] _initCore early path end (success)');
-          } catch (e) {
+          } catch {
             console.error('[TP-Pro] _initCore failed (early path):', e);
           }
         })();
@@ -547,7 +547,7 @@
         Promise.resolve().then(whenInitReady);
       }
     }
-  } catch (e) {
+  } catch {
     console.warn('early init scheduling error', e);
   }
   try {
@@ -635,7 +635,7 @@
           return p;
         })();
       s.textContent = String(msg);
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -649,7 +649,7 @@
         try {
           if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
           else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-        } catch (e) {
+        } catch {
           try {
             alert('Normalize error: ' + (e?.message || e));
           } catch {}
@@ -772,7 +772,7 @@
       syncSettingsValues();
       setupSettingsTabs();
       if (body.querySelector('.settings-card')) _settingsBuilt = true;
-    } catch (e) {
+    } catch {
       console.warn('Settings build failed, will retry', e);
       _settingsBuilt = false;
     }
@@ -802,7 +802,7 @@
             try {
               await switchCamera(camSelS.value);
               _toast('Camera switched', { type: 'ok' });
-            } catch (e) {
+            } catch {
               warn('Camera switch failed', e);
               _toast('Camera switch failed');
             }
@@ -956,7 +956,7 @@
           try {
             await switchCamera(camSelS.value);
             _toast('Camera switched', { type: 'ok' });
-          } catch (e) {
+          } catch {
             warn('Camera switch failed', e);
             _toast('Camera switch failed');
           }
@@ -1050,7 +1050,7 @@
       const ev = new Event('input');
       ta.dispatchEvent(ev);
       alert('Basic normalization applied.');
-    } catch (e) {
+    } catch {
       alert('Normalize fallback failed: ' + e.message);
     }
   }
@@ -1319,7 +1319,7 @@
         // Build spans aligned via line height approximation
         const style = getComputedStyle(ta);
         const lh = parseFloat(style.lineHeight) || 16;
-        const padTop = ta.scrollTop; // will adjust on scroll
+        const _padTop = ta.scrollTop; // will adjust on scroll
         function rebuild() {
           try {
             overlay.innerHTML = '';
@@ -1369,7 +1369,7 @@
     __tpBootPush('after-validateStandardTags-def');
   } catch {}
   let recBackoffMs = 300; // grows on repeated failures
-  const MATCH_WINDOW = 6; // how far ahead we’ll look for the next word
+  const _MATCH_WINDOW = 6; // how far ahead we’ll look for the next word
   // Safe placeholders for optional modules to prevent ReferenceError when dynamic import fails
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null; // set after io-anchor.js loads
@@ -1591,8 +1591,8 @@
     resetBtn,
     loadSample,
     clearText,
-    saveLocalBtn,
-    loadLocalBtn,
+    _saveLocalBtn,
+    _loadLocalBtn,
     downloadFileBtn,
     uploadFileBtn,
     uploadFileInput,
@@ -1618,7 +1618,7 @@
     camWrap,
     camVideo,
     startCamBtn,
-    stopCamBtn,
+    _stopCamBtn,
     camDeviceSel,
     camSize,
     camOpacity,
@@ -1692,7 +1692,7 @@
     el.querySelectorAll('.bar.on').forEach((b) => b.classList.remove('on'));
   }
 
-  function stopDbMeter() {
+  function _stopDbMeter() {
     if (dbAnim) cancelAnimationFrame(dbAnim);
     dbAnim = null;
     try {
@@ -1792,7 +1792,7 @@
       try {
         if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId);
       } catch {}
-    } catch (e) {
+    } catch {
       warn('Mic denied or failed', e);
       try {
         permChip && (permChip.textContent = 'Mic: denied');
@@ -1838,7 +1838,7 @@
           if (cur && Array.from(sel.options).some((o) => o.value === cur)) sel.value = cur;
         } catch {}
       });
-    } catch (e) {
+    } catch {
       /* ignore */
     }
   }
@@ -2080,7 +2080,7 @@
     // --- Validate tags quickly ---
     const validateBtn = overlay.querySelector('#validateBtn');
     if (validateBtn) {
-      const showValidation = (text) => {
+      const _showValidation = (text) => {
         const sheet = overlay.querySelector('.sheet') || overlay;
         let panel = sheet.querySelector('#validatePanel');
         if (!panel) {
@@ -2118,7 +2118,7 @@
                   try {
                     setStatus && setStatus('Validation copied ✓');
                   } catch {}
-                } catch (e) {
+                } catch {
                   try {
                     setStatus && setStatus('Copy failed: ' + (e?.message || e));
                   } catch {}
@@ -2148,8 +2148,8 @@
           msg = window.validateStandardTags
             ? window.validateStandardTags(true)
             : 'Validator missing.';
-        } catch (e) {
-          msg = 'Validation error: ' + (e?.message || e);
+        } catch (_e) {
+          msg = 'Validation error: ' + (_e?.message || _e);
         }
         try {
           window.showValidation(msg);
@@ -2168,7 +2168,7 @@
       const btn = document.getElementById('shortcutsBtn');
       const modal = document.getElementById('shortcutsOverlay');
       const title = document.getElementById('shortcutsTitle');
-      const close = document.getElementById('shortcutsClose');
+      const _close = document.getElementById('shortcutsClose');
       if (!modal) return;
 
       // Rename button + title
@@ -2319,13 +2319,13 @@
           VIEWER_HEIGHT_BASE
         );
       }
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro Calm] scroller lock failed', e);
     }
     // Run minimal wiring first (meters, help overlay, normalize button)
     try {
       __initMinimal();
-    } catch (e) {
+    } catch {
       console.warn('Minimal init failed', e);
     }
     // ⬇️ grab these *first*
@@ -2671,14 +2671,14 @@
       const shMod = await import('./scroll-helpers.js');
       const sh = shMod.createScrollerHelpers(() => viewer);
       __scrollHelpers = sh;
-      clampScrollTop = sh.clampScrollTop;
+      _clampScrollTop = sh.clampScrollTop;
       scrollByPx = (px) => {
         sh.scrollByPx(px);
         try {
           updateDebugPosChip();
         } catch {}
       };
-      scrollToY = (y) => {
+      _scrollToY = (y) => {
         sh.scrollToY(y);
         try {
           updateDebugPosChip();
@@ -2705,7 +2705,7 @@
           updateDebugPosChip();
         } catch {}
       };
-    } catch (e) {
+    } catch {
       console.warn('scroll-helpers load failed', e);
     }
 
@@ -2802,7 +2802,7 @@
       const openSettings = () => {
         try {
           buildSettingsContent();
-        } catch (e) {}
+        } catch {}
         settingsOverlay.classList.remove('hidden');
         settingsBtn.setAttribute('aria-expanded', 'true');
       };
@@ -2858,9 +2858,9 @@
       if (obsStatus) obsStatus.textContent = 'OBS: testing…';
       try {
         saveObsConfig();
-        const ok = await __recorder.get('obs').test();
+        const _ok = await __recorder.get('obs').test();
         if (obsStatus) obsStatus.textContent = 'OBS: ok';
-      } catch (e) {
+      } catch {
         if (obsStatus) obsStatus.textContent = 'OBS: failed';
         try {
           const errMsg = __recorder.get('obs').getLastError?.() || e?.message || String(e);
@@ -2889,7 +2889,7 @@
         if (typeof window.normalizeToStandard === 'function') {
           try {
             window.normalizeToStandard();
-          } catch (e) {
+          } catch {
             alert('Normalize error: ' + e.message);
           }
           return;
@@ -3276,7 +3276,7 @@
       if (_tunePanelEl) populateTuningInputs();
     }
     applyAggro();
-    matchAggroSel?.addEventListener('change', (e) => {
+    matchAggroSel?.addEventListener('change', (_e) => {
       applyAggro();
       try {
         localStorage.setItem(AGGRO_KEY, matchAggroSel.value || '2');
@@ -3602,7 +3602,7 @@
         document.documentElement ||
         document.body;
 
-      const isActive = (el) =>
+      const _isActive = (el) =>
         !!(
           el &&
           el.classList &&
@@ -3642,7 +3642,7 @@
         });
       } catch {}
     }
-  } catch (e) {
+  } catch {
     try {
       console.warn('[TP-Pro Calm] highlight observer failed', e);
     } catch {}
@@ -3773,6 +3773,10 @@
       sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
     }
   }
+  // Expose for other modules (e.g., scroll-control.js)
+  try {
+    window.scrollToCurrentIndex = scrollToCurrentIndex;
+  } catch {}
   // Install HUD (tilde to toggle). Safe if file missing.
   try {
     window.__tpHud = window.__tpInstallHUD && window.__tpInstallHUD({ hotkey: '~' });
@@ -3798,7 +3802,7 @@
         document.addEventListener('DOMContentLoaded', () => {
           try {
             init();
-          } catch (e) {
+          } catch {
             console.error('init failed', e);
           }
         });
@@ -3806,7 +3810,7 @@
         Promise.resolve().then(() => {
           try {
             init();
-          } catch (e) {
+          } catch {
             console.error('init failed', e);
           }
         });
@@ -3824,7 +3828,7 @@
         console.warn('[TP-Pro] Late init fallback firing');
         if (typeof init === 'function') init();
       }
-    } catch (e) {
+    } catch {
       console.error('[TP-Pro] Late init fallback failed', e);
     }
   }, 1500);
@@ -4161,7 +4165,7 @@
   }
 
   // Speech commit hook: use geometry-based targeting only in Calm Mode
-  function legacyOnSpeechCommit(activeEl) {
+  function legacyOnSpeechCommit(_activeEl) {
     // No-op by default: non-Calm keeps existing behavior already executed in advanceByTranscript
   }
   function onSpeechCommit(activeEl) {
@@ -5285,7 +5289,7 @@
           sendToDisplay({ type: 'hello' });
         } catch {}
       }, 300);
-    } catch (e) {
+    } catch {
       setStatus('Unable to open display window: ' + e.message);
     }
   }
@@ -5307,7 +5311,7 @@
   function getScroller() {
     return viewer;
   }
-  let clampScrollTop, scrollByPx, _scrollToY, scrollToEl;
+  let _clampScrollTop, scrollByPx, _scrollToY, scrollToEl;
 
   // Debug chip updater (throttled via rAF): shows anchor percentage within viewport and scrollTop
   function updateDebugPosChipImmediate() {
@@ -5559,11 +5563,11 @@
           if (el) el.textContent = v;
           // 3) HUD header will pick up APP_VERSION automatically
           if (window.HUD) HUD.log('boot:version', { v });
-        } catch (e) {
+        } catch {
           if (window.HUD) HUD.log('boot:version-error', String(e));
         }
       })();
-    } catch (e) {
+    } catch {
       console.error('[TP-Pro] init() failed:', e);
       try {
         (window.__TP_BOOT_TRACE || []).push({
@@ -5575,7 +5579,7 @@
       try {
         if (!window.__tpInitSuccess) {
           console.warn('[TP-Pro] Running emergency fallback init');
-          const ed = document.getElementById('editor');
+          const _ed = document.getElementById('editor');
           const sc = document.getElementById('script');
           if (sc && !sc.innerHTML)
             sc.innerHTML = '<p><em>Paste text in the editor to begin… (fallback)</em></p>';
@@ -5643,7 +5647,7 @@
         if (displayWin && !displayWin.closed && displayReady) await ensureCamPeer();
       } catch {}
       populateDevices();
-    } catch (e) {
+    } catch {
       warn('startCamera failed', e);
     }
   }
@@ -5775,7 +5779,7 @@
       await pc.setLocalDescription(offer);
       camAwaitingAnswer = true;
       // offer already sent above
-    } catch (e) {
+    } catch {
       warn('ensureCamPeer failed', e);
     }
   }
@@ -5865,7 +5869,7 @@
         sendToDisplay({ type: 'cam-opacity', opacity: op });
         sendToDisplay({ type: 'cam-mirror', on: !!camMirror.checked });
       } catch {}
-    } catch (e) {
+    } catch {
       warn('switchCamera failed', e);
       throw e;
     }
@@ -5877,7 +5881,7 @@
       } else {
         await camVideo.requestPictureInPicture();
       }
-    } catch (e) {
+    } catch {
       warn('PiP failed', e);
     }
   }
@@ -5890,7 +5894,7 @@
     try {
       localStorage.setItem(LS_KEY, editor.value || '');
       setStatus('Saved to browser.');
-    } catch (e) {
+    } catch {
       setStatus('Save failed.');
     }
   }
@@ -5900,11 +5904,11 @@
       editor.value = v;
       renderScript(v);
       setStatus('Loaded from browser.');
-    } catch (e) {
+    } catch {
       setStatus('Load failed.');
     }
   }
-  function scheduleAutosave() {
+  function _scheduleAutosave() {
     /* optional: attach a debounce here */
   }
 
@@ -6057,7 +6061,7 @@
               recChip.textContent = 'Speech: listening…';
             } catch {}
             document.body.classList.add('listening');
-          } catch (e) {
+          } catch {
             // swallow; next interval will try again
           }
         }, recBackoffMs);
@@ -6067,8 +6071,8 @@
 
     try {
       recog.start();
-    } catch (e) {
-      console.warn('speech start failed', e);
+    } catch {
+      // speech start failed
     }
     // Don't start catch-up unconditionally; the heuristic will kick it in when needed
   }
@@ -6077,7 +6081,7 @@
   function stopSpeechSync() {
     try {
       recog && recog.stop();
-    } catch (_) {}
+    } catch {}
     recog = null;
     try {
       __scrollCtl?.stopAutoCatchup?.();
@@ -6108,7 +6112,7 @@
       try {
         await loadScript(src);
         if (window.mammoth) return window.mammoth;
-      } catch (e) {
+      } catch {
         lastErr = e;
       }
     }
@@ -6189,7 +6193,7 @@
         pass: count === 1,
         info: `${label} found ${count}`,
       });
-    } catch (e) {
+    } catch {
       checks.push({ name: 'Single script include', pass: true, info: '(skipped)' });
     }
 

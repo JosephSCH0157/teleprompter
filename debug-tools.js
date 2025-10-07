@@ -486,14 +486,14 @@
             ].forEach((ev) => bind(ev, 'on' + ev));
             // Gate WPS: toggle on speech start/end
             const prevStart = r.onstart;
-            r.onstart = function (e) {
+            r.onstart = function (_e) {
               try {
                 HUD.bus.emit('speech:toggle', true);
               } catch {}
               return typeof prevStart === 'function' ? prevStart.apply(this, arguments) : undefined;
             };
             const prevEnd = r.onend;
-            r.onend = function (e) {
+            r.onend = function (_e) {
               try {
                 HUD.bus.emit('speech:toggle', false);
               } catch {}
@@ -545,7 +545,7 @@
     // Reflow risk detection: if both writes and layout reads occur in same frame
     (function installReflowRisk() {
       try {
-        const doc = document;
+        const _doc = document;
         const props = [
           'offsetTop',
           'offsetLeft',
@@ -561,7 +561,7 @@
           'scrollHeight',
         ];
         const elProto = Element.prototype;
-        const rd = new WeakSet();
+        const _rd = new WeakSet();
         // track reads
         props.forEach((p) => {
           const d = Object.getOwnPropertyDescriptor(elProto, p);
