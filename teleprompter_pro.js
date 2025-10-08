@@ -2696,19 +2696,37 @@
         // Phase 2: gentle catch-up burst if we appear bottom-hovered and not within cooldown
         const cooldownOk = !_lastRescueAt || now - _lastRescueAt > COOLDOWN_MS;
         const bottomish = aRatio !== null && aRatio > BOTTOM_RATIO;
+        // Alternate bottomness via document scroll ratio so rescue can trigger even when anchor IO misses
+        let docBottomish = false,
+          docRatio = null;
+        try {
+          const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+          const top = Math.max(0, viewer.scrollTop || 0);
+          docRatio = max ? top / max : 0;
+          const DOC_THR =
+            typeof window.__tpDocBottomRatio === 'number' ? window.__tpDocBottomRatio : 0.72;
+          docBottomish = docRatio > DOC_THR;
+        } catch {}
         const catchupAvailable = !!(
           __scrollCtl &&
           __scrollCtl.startAutoCatchup &&
           __scrollCtl.stopAutoCatchup
         );
         const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
-        if (stalled && bottomish && cooldownOk && catchupAvailable && !catchupActive) {
+        if (
+          stalled &&
+          (bottomish || docBottomish) &&
+          cooldownOk &&
+          catchupAvailable &&
+          !catchupActive
+        ) {
           // Start a short catch-up burst to re-center
           try {
             debug?.({
               tag: 'stall:rescue:start',
               method: 'catchup-burst',
               aRatio,
+              docRatio,
               noCommitFor: Math.floor(noCommitFor),
             });
           } catch {}
@@ -2759,10 +2777,17 @@
                 });
               } catch {}
             };
+            // During the burst, relax clamp guard stickiness/min-delta for a short window
+            try {
+              window.__tpStallRelaxUntil = now + Math.max(400, Math.min(CATCHUP_BURST_MS, 1000));
+            } catch {}
             __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
             setTimeout(() => {
               try {
                 __scrollCtl.stopAutoCatchup();
+                try {
+                  window.__tpStallRelaxUntil = 0;
+                } catch {}
                 debug?.({ tag: 'stall:rescue:done', method: 'catchup-burst' });
               } catch {}
             }, CATCHUP_BURST_MS);

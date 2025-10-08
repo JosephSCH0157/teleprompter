@@ -382,6 +382,27 @@ export function createScrollController() {
     const now =
       typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     const inCatchup = !!(typeof window !== 'undefined' && window.__tpCatchupActive);
+    // During a short stall-rescue window, or when we're near the document bottom,
+    // relax clamp rules so small corrections and modest jumps aren't vetoed by sticky/min-delta.
+    const stallRelax = !!(
+      typeof window !== 'undefined' &&
+      typeof window.__tpStallRelaxUntil === 'number' &&
+      now < window.__tpStallRelaxUntil
+    );
+    const docBottomish = (function () {
+      try {
+        const max = typeof _maxY === 'number' ? _maxY : 0;
+        if (max <= 0) return false;
+        const r = targetY / max;
+        const thr =
+          typeof window !== 'undefined' && typeof window.__tpClampDocRelaxRatio === 'number'
+            ? window.__tpClampDocRelaxRatio
+            : 0.7;
+        return r > thr;
+      } catch {
+        return false;
+      }
+    })();
     // First-time initialization
     if (S.lastClampY < 0) {
       S.lastClampY = targetY;
@@ -439,15 +460,30 @@ export function createScrollController() {
           ms: Math.floor(timeSinceLast),
         });
       } else {
-        logEv({
-          tag: 'scroll:clamp-skip',
-          targetY,
-          last: S.lastClampY,
-          delta,
-          accum: S.accumDelta,
-          dir,
-        });
-        return false;
+        // If we're in a relaxed window (stall rescue) or near the document bottom,
+        // permit this micro step to avoid bottom-hover stalls.
+        if (stallRelax || docBottomish) {
+          leakyPass = true;
+          logEv({
+            tag: 'scroll:clamp-relax-pass',
+            targetY,
+            last: S.lastClampY,
+            delta,
+            accum: S.accumDelta,
+            dir,
+            context: stallRelax ? 'stall' : 'doc',
+          });
+        } else {
+          logEv({
+            tag: 'scroll:clamp-skip',
+            targetY,
+            last: S.lastClampY,
+            delta,
+            accum: S.accumDelta,
+            dir,
+          });
+          return false;
+        }
       }
     }
 
@@ -455,13 +491,13 @@ export function createScrollController() {
     // and the target Y is within a modest band, skip to avoid visible top flipping.
     // While auto catch-up is active, disable sticky suppression to allow smooth continuous motion.
     const stickyMs =
-      inCatchup || leakyPass
+      inCatchup || leakyPass || stallRelax || docBottomish
         ? 0
         : typeof window.__tpClampStickyMs === 'number'
           ? window.__tpClampStickyMs
           : 600;
     const stickyPx =
-      inCatchup || leakyPass
+      inCatchup || leakyPass || stallRelax || docBottomish
         ? 0
         : typeof window.__tpClampStickyPx === 'number'
           ? window.__tpClampStickyPx
@@ -470,7 +506,7 @@ export function createScrollController() {
     try {
       idx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
     } catch {}
-    if (!(inCatchup || leakyPass)) {
+    if (!(inCatchup || leakyPass || stallRelax || docBottomish)) {
       if (
         idx === S.lastClampIdx &&
         S.lastClampAt &&
