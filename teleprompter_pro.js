@@ -760,12 +760,12 @@
         'Recording',
         'recording',
         `
-        <div class="settings-inline-row">
+        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" value="${getVal('obsUrl', 'ws://127.0.0.1:4455')}" placeholder="ws://host:port" />
-          <input id="settingsObsPass" class="obs-pass" type="password" value="${getVal('obsPassword', '')}" placeholder="password" />
-          <button id="settingsObsTest" class="btn-chip">Test</button>
-        </div>
+          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://127.0.0.1:4455')}" placeholder="ws://host:port" />
+          <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
+          <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
+        </form>
         <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`
       )
     );
@@ -1002,10 +1002,16 @@
       .getElementById('settingsNormalize')
       ?.addEventListener('click', () => normalizeTopBtn?.click());
     // Recording / OBS
+    const obsForm = document.getElementById('obsSettingsForm');
     const obsEnable = document.getElementById('settingsEnableObs');
     const obsUrlS = document.getElementById('settingsObsUrl');
     const obsPassS = document.getElementById('settingsObsPass');
     const obsTestS = document.getElementById('settingsObsTest');
+    // Prevent accidental submit/reload of settings form (Enter key)
+    obsForm?.addEventListener('submit', (ev) => {
+      // eslint-disable-next-line no-restricted-syntax -- Prevent settings form submit from navigating/reloading
+      ev.preventDefault();
+    });
     // When Settings overlay toggles OBS, mirror to main toggle (query main DOM each time)
     obsEnable?.addEventListener('change', () => {
       const mainEnable = document.getElementById('enableObs');
