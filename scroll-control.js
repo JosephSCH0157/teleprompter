@@ -29,7 +29,10 @@ export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
     try {
       const anchorY = getAnchorY(); // current line Y within viewport
       const targetY = getTargetY(); // desired Y (e.g., 0.4 * viewportHeight)
-      let err = targetY - anchorY; // positive => line is below target (we need to scroll down)
+      // Error is measured as how far the anchor sits below the target within the viewport.
+      // Positive err => anchor is too low (large Y), so we should scroll down (increase scrollTop).
+      // Negative err => anchor is too high, so we should scroll up (decrease scrollTop).
+      let err = anchorY - targetY;
       const deriv = err - prevErr;
       const vRaw = kP * err + kD * deriv + bias;
       let v = vRaw;
