@@ -225,6 +225,25 @@ export function createScrollController() {
         } catch {}
 
         const movingBack = bestIdx < S.committedIdx;
+        const deltaIdx = bestIdx - S.committedIdx;
+        const adelta = Math.abs(deltaIdx);
+
+        // Single-line stability/time gating to reduce oscillation
+        const singleDebounceMs =
+          typeof window.__tpSingleDebounceMs === 'number' ? window.__tpSingleDebounceMs : 220;
+        const singleFreezeMs =
+          typeof window.__tpSingleFreezeMs === 'number' ? window.__tpSingleFreezeMs : 140;
+
+        // If within a short freeze window after a single-line commit, ignore further +/-1 flips
+        if (adelta === 1 && typeof S.singleFreezeUntil === 'number' && now < S.singleFreezeUntil) {
+          logEv({
+            tag: 'match:gate',
+            reason: 'single-freeze',
+            bestIdx,
+            committedIdx: S.committedIdx,
+          });
+          return;
+        }
         const ok = (!movingBack && sim >= effFwd) || (movingBack && sim >= effBack);
         if (!ok) {
           S.stableHits = 0;
@@ -247,14 +266,30 @@ export function createScrollController() {
           S.stableHits = 1;
         }
 
-        if (S.stableHits < STABLE_HITS) {
+        // Require extra stability/time for single-line commits
+        let needHits = STABLE_HITS;
+        if (adelta === 1) needHits += movingBack ? 2 : 1;
+        if (S.stableHits < needHits) {
           logEv({
             tag: 'match:gate',
             reason: 'unstable',
             bestIdx,
             pendingIdx: S.pendingIdx,
             hits: S.stableHits,
-            need: STABLE_HITS,
+            need: needHits,
+          });
+          return;
+        }
+
+        // Time gate for single-line commits
+        if (adelta === 1 && S.lastCommitAt && now - S.lastCommitAt < singleDebounceMs) {
+          logEv({
+            tag: 'match:gate',
+            reason: 'single-debounce',
+            since: Math.floor(now - S.lastCommitAt),
+            needMs: singleDebounceMs,
+            bestIdx,
+            committedIdx: S.committedIdx,
           });
           return;
         }
@@ -269,6 +304,13 @@ export function createScrollController() {
 
         // Use throttled applier to coalesce high-frequency updates
         applyCommitThrottled(commitIdx);
+
+        // After committing a single step, set a brief freeze to resist ping-pong
+        if (adelta === 1) {
+          S.singleFreezeUntil = now + singleFreezeMs;
+        } else {
+          S.singleFreezeUntil = 0;
+        }
       } catch (e) {
         logEv({ tag: 'match:gate:error', e: String(e) });
       }
