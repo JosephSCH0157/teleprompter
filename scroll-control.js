@@ -113,6 +113,8 @@ export function createScrollController() {
     lastCommitAt: 0,
     lastCommitIdx: 0,
     lastClampY: -1,
+    lastClampAt: 0,
+    lastClampIdx: -1,
   };
 
   // Monotonic commit with hysteresis and per-commit jump cap
@@ -320,8 +322,17 @@ export function createScrollController() {
   // Throttle identical clamps (call this inside your clamp function)
   window.__tpClampGuard = function (targetY, _maxY) {
     if (typeof targetY !== 'number') return true;
+    const now =
+      typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    // First-time initialization
     if (S.lastClampY < 0) {
       S.lastClampY = targetY;
+      S.lastClampAt = now;
+      try {
+        S.lastClampIdx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
+      } catch {
+        S.lastClampIdx = -1;
+      }
       return true;
     }
     const delta = Math.abs(targetY - S.lastClampY);
@@ -329,7 +340,38 @@ export function createScrollController() {
       logEv({ tag: 'scroll:clamp-skip', targetY, last: S.lastClampY, delta });
       return false;
     }
+
+    // Sticky guard: if we're trying to reclamp the same index within a short window
+    // and the target Y is within a modest band, skip to avoid visible top flipping.
+    const stickyMs = typeof window.__tpClampStickyMs === 'number' ? window.__tpClampStickyMs : 600;
+    const stickyPx = typeof window.__tpClampStickyPx === 'number' ? window.__tpClampStickyPx : 64;
+    let idx = -1;
+    try {
+      idx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
+    } catch {}
+    if (
+      idx === S.lastClampIdx &&
+      S.lastClampAt &&
+      now - S.lastClampAt < stickyMs &&
+      Math.abs(targetY - S.lastClampY) < stickyPx
+    ) {
+      logEv({
+        tag: 'scroll:clamp-sticky',
+        targetY,
+        last: S.lastClampY,
+        delta,
+        idx,
+        since: Math.floor(now - S.lastClampAt),
+        stickyMs,
+        stickyPx,
+      });
+      return false;
+    }
+
+    // Accept this clamp and record
     S.lastClampY = targetY;
+    S.lastClampAt = now;
+    S.lastClampIdx = idx;
     return true;
   };
 })();
