@@ -116,10 +116,10 @@ export function createScrollController() {
   };
 
   // Monotonic commit with hysteresis and per-commit jump cap
-  const STABLE_HITS = 2; // require staying on candidate across frames
+  const STABLE_HITS = typeof window.__tpStableHits === 'number' ? window.__tpStableHits : 2; // require staying on candidate across frames
   const FWD_SIM = 0.82; // forward threshold
   const BACK_SIM = 0.86; // stricter to backtrack
-  const MAX_STEP = 6; // cap per-commit move in indices
+  const MAX_STEP = typeof window.__tpMaxCommitStep === 'number' ? window.__tpMaxCommitStep : 6; // cap per-commit move in indices
 
   // Minimal throttle helper (~6-8 updates/sec @ 125ms)
   function throttle(fn, wait) {

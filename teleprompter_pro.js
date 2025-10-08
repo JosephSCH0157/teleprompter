@@ -3512,6 +3512,11 @@
           EASE_STEP: 60,
           EASE_MIN: 12,
         };
+        // Commit gate: smaller index steps and stricter stability for ultra-smooth motion
+        try {
+          window.__tpMaxCommitStep = 3; // per-commit index cap
+          window.__tpStableHits = 2; // keep hysteresis as-is for stability
+        } catch {}
       } else if (v === 'responsive') {
         // less jitter: higher deadband/throttle, smaller back steps
         window.__TP_SCROLL = {
@@ -3522,6 +3527,10 @@
           EASE_STEP: 96,
           EASE_MIN: 6,
         };
+        try {
+          window.__tpMaxCommitStep = 6; // faster catch-up
+          window.__tpStableHits = 1; // commit with fewer stable frames for responsiveness
+        } catch {}
       } else {
         // balanced
         window.__TP_SCROLL = {
@@ -3532,6 +3541,10 @@
           EASE_STEP: 80,
           EASE_MIN: 10,
         };
+        try {
+          window.__tpMaxCommitStep = 5;
+          window.__tpStableHits = 2;
+        } catch {}
       }
     }
     applySmooth();
