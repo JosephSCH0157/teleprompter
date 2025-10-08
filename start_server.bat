@@ -47,6 +47,13 @@ where python >nul 2>nul && (
   goto :eof
 )
 
-echo Could not find Node npx or Python. Please install Node.js or Python 3.
+rem Final fallback: built-in PowerShell static server (no installs needed)
+if exist "%ROOT%ps_static_server.ps1" (
+  echo Falling back to PowerShell static server on http://127.0.0.1:5180/
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%ROOT%ps_static_server.ps1" -Port 5180 -Bind 127.0.0.1 -Root .
+  goto :eof
+)
+
+echo Could not find Node npx, Python, or PowerShell server script. Please install Node.js, Python 3, or add ps_static_server.ps1.
 pause
 endlocal
