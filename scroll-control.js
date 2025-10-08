@@ -12,6 +12,10 @@ let rafId,
 export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
   if (active) return;
   active = true;
+  try {
+    // Signal to clamp guard that we're in continuous catch-up mode
+    window.__tpCatchupActive = true;
+  } catch {}
   prevErr = 0;
   const kP = 0.12; // proportional gain (gentle)
   const kD = 0.1; // derivative gain (damping)
@@ -76,6 +80,9 @@ export function stopAutoCatchup() {
   active = false;
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
+  try {
+    window.__tpCatchupActive = false;
+  } catch {}
   _dbg({ tag: 'match:catchup:stop' });
 }
 
@@ -370,6 +377,7 @@ export function createScrollController() {
     if (typeof targetY !== 'number') return true;
     const now =
       typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    const inCatchup = !!(typeof window !== 'undefined' && window.__tpCatchupActive);
     // First-time initialization
     if (S.lastClampY < 0) {
       S.lastClampY = targetY;
@@ -382,42 +390,58 @@ export function createScrollController() {
       return true;
     }
     const delta = Math.abs(targetY - S.lastClampY);
-    if (delta < G.minClampDeltaPx) {
+    // In continuous catch-up mode, allow fine-grained steps to pass through the guard.
+    // Otherwise, enforce the normal minimum delta to avoid micro re-clamps.
+    if (!inCatchup && delta < G.minClampDeltaPx) {
       logEv({ tag: 'scroll:clamp-skip', targetY, last: S.lastClampY, delta });
       return false;
     }
 
     // Sticky guard: if we're trying to reclamp the same index within a short window
     // and the target Y is within a modest band, skip to avoid visible top flipping.
-    const stickyMs = typeof window.__tpClampStickyMs === 'number' ? window.__tpClampStickyMs : 600;
-    const stickyPx = typeof window.__tpClampStickyPx === 'number' ? window.__tpClampStickyPx : 64;
+    // While auto catch-up is active, disable sticky suppression to allow smooth continuous motion.
+    const stickyMs = inCatchup
+      ? 0
+      : typeof window.__tpClampStickyMs === 'number'
+        ? window.__tpClampStickyMs
+        : 600;
+    const stickyPx = inCatchup
+      ? 0
+      : typeof window.__tpClampStickyPx === 'number'
+        ? window.__tpClampStickyPx
+        : 64;
     let idx = -1;
     try {
       idx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
     } catch {}
-    if (
-      idx === S.lastClampIdx &&
-      S.lastClampAt &&
-      now - S.lastClampAt < stickyMs &&
-      Math.abs(targetY - S.lastClampY) < stickyPx
-    ) {
-      logEv({
-        tag: 'scroll:clamp-sticky',
-        targetY,
-        last: S.lastClampY,
-        delta,
-        idx,
-        since: Math.floor(now - S.lastClampAt),
-        stickyMs,
-        stickyPx,
-      });
-      return false;
+    if (!inCatchup) {
+      if (
+        idx === S.lastClampIdx &&
+        S.lastClampAt &&
+        now - S.lastClampAt < stickyMs &&
+        Math.abs(targetY - S.lastClampY) < stickyPx
+      ) {
+        logEv({
+          tag: 'scroll:clamp-sticky',
+          targetY,
+          last: S.lastClampY,
+          delta,
+          idx,
+          since: Math.floor(now - S.lastClampAt),
+          stickyMs,
+          stickyPx,
+        });
+        return false;
+      }
     }
 
     // Accept this clamp and record
     S.lastClampY = targetY;
     S.lastClampAt = now;
     S.lastClampIdx = idx;
+    if (inCatchup) {
+      logEv({ tag: 'scroll:clamp-catchup', targetY, last: S.lastClampY, delta });
+    }
     return true;
   };
 })();
