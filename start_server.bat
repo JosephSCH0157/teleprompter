@@ -4,6 +4,8 @@ rem Resolve script directory and serve that explicitly regardless of current dir
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
 echo Working dir: %CD%
+echo Script: %~f0
+echo Modified: %~t0
 if exist teleprompter_pro.html (
   echo Found: %CD%\teleprompter_pro.html
 ) else (
