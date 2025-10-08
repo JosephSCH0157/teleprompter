@@ -2580,36 +2580,196 @@
       };
     })();
 
-    // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
-    setInterval(() => {
-      if (window.__TP_DISABLE_NUDGES) return;
-      if (!recActive || !viewer) return; // only when speech sync is active
-      if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
-      const now = performance.now();
-      const MISS_FALLBACK_MS = 1800; // no matches for ~1.8s
-      // If similarity has been in the mid band (0.72–0.80) very recently, wait a couple frames (~300ms)
-      try {
-        const sim = window.__lastSimScore ?? null;
-        if (sim !== null && sim >= 0.72 && sim < 0.8) {
-          window.__tpLastMidSimAt = now;
-        }
-      } catch {}
-      const recentMid =
-        typeof window.__tpLastMidSimAt === 'number' && now - window.__tpLastMidSimAt < 300;
-      if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-        if (recentMid) {
-          return;
-        }
+    // Stall-recovery watchdog + Stall detector (Phase 1: telemetry, Phase 2: gentle catch-up burst)
+    (function installStallWatchdogs() {
+      const TICK_MS = 250;
+      const STALL_MS = typeof window.__tpStallMs === 'number' ? window.__tpStallMs : 1500;
+      const LOW_PROGRESS_SEC =
+        typeof window.__tpLowProgSec === 'number' ? window.__tpLowProgSec : 2.0;
+      const BOTTOM_RATIO =
+        typeof window.__tpBottomRatio === 'number' ? window.__tpBottomRatio : 0.7;
+      const CATCHUP_BURST_MS =
+        typeof window.__tpCatchupBurstMs === 'number' ? window.__tpCatchupBurstMs : 900;
+      const COOLDOWN_MS =
+        typeof window.__tpStallCooldownMs === 'number' ? window.__tpStallCooldownMs : 1200;
+      let _lastRescueAt = 0;
+
+      function getAnchorRatio() {
         try {
-          window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0));
-        } catch {}
-        _lastAdvanceAt = now; // cool-off gate for next nudge check
-        // dead-man watchdog after logical index adjustment
-        try {
-          deadmanWatchdog(currentIndex);
-        } catch {}
+          const v = viewer;
+          const h = Math.max(1, v?.clientHeight || 1);
+          const vis =
+            window.__anchorObs && typeof window.__anchorObs.mostVisibleEl === 'function'
+              ? window.__anchorObs.mostVisibleEl()
+              : null;
+          const el = vis || document.querySelector('#script p.active') || null;
+          if (!el || !v) return null;
+          const er = el.getBoundingClientRect();
+          const vr = v.getBoundingClientRect ? v.getBoundingClientRect() : { top: 0 };
+          const y = er.top - vr.top;
+          return Math.max(0, Math.min(1, y / h));
+        } catch {
+          return null;
+        }
       }
-    }, 250);
+
+      function progressRate() {
+        try {
+          const meta =
+            typeof window.__tpGetCommitMeta === 'function' ? window.__tpGetCommitMeta() : null;
+          if (!meta) return null;
+          const dt = Math.max(0.001, (performance.now() - (meta.lastCommitAt || 0)) / 1000);
+          const di = Math.max(
+            0,
+            (typeof currentIndex === 'number' ? currentIndex : 0) - (meta.lastCommitIdx || 0)
+          );
+          return di / dt;
+        } catch {
+          return null;
+        }
+      }
+
+      setInterval(() => {
+        if (window.__TP_DISABLE_NUDGES) return;
+        if (!recActive || !viewer) return; // only when speech sync is active
+        if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
+        const now = performance.now();
+
+        // Existing: fallback nudge if no advance recently and not in mid-sim window
+        const MISS_FALLBACK_MS = 1800; // keep original timing
+        try {
+          const sim = window.__lastSimScore ?? null;
+          if (sim !== null && sim >= 0.72 && sim < 0.8) {
+            window.__tpLastMidSimAt = now;
+          }
+        } catch {}
+        const recentMid =
+          typeof window.__tpLastMidSimAt === 'number' && now - window.__tpLastMidSimAt < 300;
+        if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
+          if (!recentMid) {
+            try {
+              window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0));
+            } catch {}
+            _lastAdvanceAt = now;
+            try {
+              deadmanWatchdog(currentIndex);
+            } catch {}
+          }
+        }
+
+        // Phase 1: telemetry-only stall detector
+        const meta =
+          typeof window.__tpGetCommitMeta === 'function'
+            ? window.__tpGetCommitMeta()
+            : { lastCommitAt: 0, lastCommitIdx: 0, committedIdx: 0 };
+        const noCommitFor = now - (meta.lastCommitAt || 0);
+        const pr = progressRate();
+        const aRatio = getAnchorRatio();
+        const inJitterSpike = !!(
+          window.__tpJitter &&
+          typeof window.__tpJitter.spikeUntil === 'number' &&
+          now < window.__tpJitter.spikeUntil
+        );
+        const stallMsAdj = inJitterSpike ? STALL_MS + 400 : STALL_MS;
+        const stalled = noCommitFor > stallMsAdj;
+        if (stalled || (pr !== null && pr < 0.3 && noCommitFor > LOW_PROGRESS_SEC * 1000)) {
+          try {
+            debug?.({
+              tag: 'stall:detected',
+              noCommitFor: Math.floor(noCommitFor),
+              pr,
+              anchorRatio: aRatio,
+              jitterSpike: inJitterSpike,
+              committedIdx: meta.committedIdx,
+              currentIndex,
+            });
+          } catch {}
+          try {
+            window.__tpMarkRecoverySpot?.('stall', {
+              noCommitFor: Math.floor(noCommitFor),
+              pr,
+              anchorRatio: aRatio,
+            });
+          } catch {}
+        }
+
+        // Phase 2: gentle catch-up burst if we appear bottom-hovered and not within cooldown
+        const cooldownOk = !_lastRescueAt || now - _lastRescueAt > COOLDOWN_MS;
+        const bottomish = aRatio !== null && aRatio > BOTTOM_RATIO;
+        const catchupAvailable = !!(
+          __scrollCtl &&
+          __scrollCtl.startAutoCatchup &&
+          __scrollCtl.stopAutoCatchup
+        );
+        const catchupActive = !!(__scrollCtl && __scrollCtl.isActive && __scrollCtl.isActive());
+        if (stalled && bottomish && cooldownOk && catchupAvailable && !catchupActive) {
+          // Start a short catch-up burst to re-center
+          try {
+            debug?.({
+              tag: 'stall:rescue:start',
+              method: 'catchup-burst',
+              aRatio,
+              noCommitFor: Math.floor(noCommitFor),
+            });
+          } catch {}
+          _lastRescueAt = now;
+          try {
+            // Build closures consistent with tryStartCatchup()
+            const markerTop = () => {
+              const pct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+              return (viewer?.clientHeight || 0) * pct;
+            };
+            const getTargetY = () => markerTop();
+            const getAnchorY = () => {
+              const vis =
+                window.__anchorObs && typeof window.__anchorObs.mostVisibleEl === 'function'
+                  ? window.__anchorObs.mostVisibleEl()
+                  : null;
+              if (vis && viewer) {
+                const rect = vis.getBoundingClientRect();
+                const vRect = viewer.getBoundingClientRect();
+                return rect.top - vRect.top;
+              }
+              const activeP = (scriptEl || viewer)?.querySelector('p.active') || null;
+              if (activeP && viewer) {
+                const rect = activeP.getBoundingClientRect();
+                const vRect = viewer.getBoundingClientRect();
+                return rect.top - vRect.top;
+              }
+              return markerTop();
+            };
+            const scrollBy = (dy) => {
+              try {
+                const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+                if (typeof requestScroll === 'function') requestScroll(next);
+                else viewer.scrollTop = next;
+                const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+                const ratio = max
+                  ? (typeof window.__lastScrollTarget === 'number'
+                      ? window.__lastScrollTarget
+                      : viewer.scrollTop) / max
+                  : 0;
+                sendToDisplay({
+                  type: 'scroll',
+                  top:
+                    typeof window.__lastScrollTarget === 'number'
+                      ? window.__lastScrollTarget
+                      : viewer.scrollTop,
+                  ratio,
+                });
+              } catch {}
+            };
+            __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
+            setTimeout(() => {
+              try {
+                __scrollCtl.stopAutoCatchup();
+                debug?.({ tag: 'stall:rescue:done', method: 'catchup-burst' });
+              } catch {}
+            }, CATCHUP_BURST_MS);
+          } catch {}
+        }
+      }, TICK_MS);
+    })();
 
     // After wiring open/close for the overlay:
     (window.__help?.ensureHelpUI || ensureHelpUI)(); // <- renames “Shortcuts” to “Help” and injects Normalize + Validate

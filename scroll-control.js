@@ -539,6 +539,20 @@ export function createScrollController() {
       } catch {}
       return null;
     }
+    // Expose minimal commit metadata for stall detection
+    if (typeof window.__tpGetCommitMeta !== 'function') {
+      window.__tpGetCommitMeta = function () {
+        try {
+          return {
+            lastCommitAt: S.lastCommitAt || 0,
+            lastCommitIdx: S.lastCommitIdx || 0,
+            committedIdx: S.committedIdx || 0,
+          };
+        } catch {
+          return { lastCommitAt: 0, lastCommitIdx: 0, committedIdx: 0 };
+        }
+      };
+    }
     window.__tpMarkRecoverySpot = function (reason, extra) {
       try {
         const now =
