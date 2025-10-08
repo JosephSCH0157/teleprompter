@@ -31,6 +31,7 @@
         }
       };
     } catch {}
+    // Dev-only cache bust handled via __TP_ADDV and HTML loader; no top-level await here
     try {
       window.__TP_DEV = DEV;
       window.__TP_CALM = CALM;
