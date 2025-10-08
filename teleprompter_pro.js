@@ -2228,7 +2228,7 @@
     __tpBootPush('after-ensureHelpUI-def');
   } catch {}
 
-  function injectHelpPanel() {
+  function _injectHelpPanel() {
     try {
       const btn = document.getElementById('shortcutsBtn');
       const modal = document.getElementById('shortcutsOverlay');
@@ -2794,6 +2794,44 @@
               } catch {}
             }, CATCHUP_BURST_MS);
           } catch {}
+        }
+
+        // Mid-script micro-nudge: if stalled but not bottomish, gently poke the scroller forward
+        // to break sticky/min-delta traps. Keep rare and small to avoid visible jumps.
+        if (stalled && !(bottomish || docBottomish) && cooldownOk && !catchupActive) {
+          try {
+            debug?.({ tag: 'stall:nudge', reason: 'mid-script' });
+          } catch {}
+          _lastRescueAt = now;
+          try {
+            // Temporarily relax clamp guard and apply a tiny nudge
+            window.__tpStallRelaxUntil = now + 350;
+          } catch {}
+          try {
+            const step = 12; // px
+            const next = Math.max(0, Math.min(viewer.scrollTop + step, viewer.scrollHeight));
+            if (typeof requestScroll === 'function') requestScroll(next);
+            else viewer.scrollTop = next;
+            const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+            const ratio = max
+              ? (typeof window.__lastScrollTarget === 'number'
+                  ? window.__lastScrollTarget
+                  : viewer.scrollTop) / max
+              : 0;
+            sendToDisplay({
+              type: 'scroll',
+              top:
+                typeof window.__lastScrollTarget === 'number'
+                  ? window.__lastScrollTarget
+                  : viewer.scrollTop,
+              ratio,
+            });
+          } catch {}
+          setTimeout(() => {
+            try {
+              window.__tpStallRelaxUntil = 0;
+            } catch {}
+          }, 375);
         }
       }, TICK_MS);
     })();
@@ -4033,7 +4071,7 @@
       .toLowerCase()
       .replace(/[^a-z0-9']/g, '');
   }
-  function splitWords(_t) {
+  function _splitWords(_t) {
     return String(_t).toLowerCase().split(/\s+/).map(normWord).filter(Boolean);
   }
 
@@ -4084,6 +4122,10 @@
   // Expose for other modules (e.g., scroll-control.js)
   try {
     window.scrollToCurrentIndex = scrollToCurrentIndex;
+    // If scroll-control loaded, let it install commit gating wrapper now
+    if (typeof window.__tpInstallCommitGate === 'function') {
+      window.__tpInstallCommitGate(scrollToCurrentIndex);
+    }
   } catch {}
   // Install HUD (tilde to toggle). Safe if file missing.
   try {

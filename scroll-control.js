@@ -189,9 +189,16 @@ export function createScrollController() {
     return true;
   };
 
-  // Wrap existing scrollToCurrentIndex if present on window
-  const _origScrollToCurrentIndex = window.scrollToCurrentIndex;
-  if (typeof _origScrollToCurrentIndex === 'function') {
+  // Helper to wrap a provided core scrollToCurrentIndex with commit gating and metadata updates
+  function __installCommitGateInternal(coreFn) {
+    if (typeof coreFn !== 'function') return;
+    // Avoid double-wrapping
+    if (
+      typeof window.scrollToCurrentIndex === 'function' &&
+      window.scrollToCurrentIndex.__tpCommitWrapped
+    ) {
+      return;
+    }
     // Throttled applier to coalesce frequent commits
     const applyCommitThrottled = throttle((commitIdx) => {
       try {
@@ -207,7 +214,7 @@ export function createScrollController() {
         } catch {}
         const __prev = window.currentIndex;
         window.currentIndex = commitIdx;
-        _origScrollToCurrentIndex();
+        coreFn();
       } catch {
       } finally {
         // no-op
@@ -220,7 +227,7 @@ export function createScrollController() {
       logEv({ tag: 'match:commit', committedIdx: S.committedIdx, sim: window.__lastSimScore ?? 1 });
     }, 125);
 
-    window.scrollToCurrentIndex = function () {
+    function gatedScrollToCurrentIndex() {
       try {
         const bestIdx = window.currentIndex;
         const sim = window.__lastSimScore ?? 1;
@@ -373,7 +380,25 @@ export function createScrollController() {
       } catch (e) {
         logEv({ tag: 'match:gate:error', e: String(e) });
       }
+    }
+    // Mark and install
+    try {
+      gatedScrollToCurrentIndex.__tpCommitWrapped = true;
+      window.scrollToCurrentIndex = gatedScrollToCurrentIndex;
+    } catch {}
+  }
+
+  // Expose installer on window for late binding from core
+  try {
+    window.__tpInstallCommitGate = function (coreFn) {
+      __installCommitGateInternal(coreFn);
     };
+  } catch {}
+
+  // Wrap existing scrollToCurrentIndex if present on window at load time
+  const _origScrollToCurrentIndex = window.scrollToCurrentIndex;
+  if (typeof _origScrollToCurrentIndex === 'function') {
+    __installCommitGateInternal(_origScrollToCurrentIndex);
   }
 
   // Throttle identical clamps (call this inside your clamp function)
