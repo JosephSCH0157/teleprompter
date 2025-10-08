@@ -265,9 +265,24 @@
     <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
   </div>
 </div>
-<script src="./debug-tools.js?v=dev-20251007" defer></script>
-<script src="./debug-seed.js?v=dev-20251007" defer></script>
-<script src="teleprompter_pro.js?v=dev-20251007" defer></script>
+<script>
+  (function(){
+    try{
+      var Q = new URLSearchParams(location.search);
+      var DEV = document.documentElement.classList.contains('tp-dev');
+      var v = DEV ? ('dev-'+Date.now()) : 'dev-20251007';
+      function add(src){ var s=document.createElement('script'); s.src=src; s.defer=true; document.currentScript.after(s); }
+      add('./debug-tools.js?v='+v);
+      add('./debug-seed.js?v='+v);
+      var tp = document.createElement('script'); tp.defer=true; tp.src = 'teleprompter_pro.js?v='+v; document.currentScript.after(tp);
+    }catch(e){
+      // Fallback to static includes if dynamic injection fails
+      document.write('<script src="./debug-tools.js?v=dev-20251007" defer><\/script>');
+      document.write('<script src="./debug-seed.js?v=dev-20251007" defer><\/script>');
+      document.write('<script src="teleprompter_pro.js?v=dev-20251007" defer><\/script>');
+    }
+  })();
+</script>
 
 <!-- Build label -->
 <div id="anvil-build-label">
