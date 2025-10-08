@@ -3509,12 +3509,13 @@
           THROTTLE: 280,
           FWD: 80,
           BACK: 30,
-          EASE_STEP: 60,
+          EASE_STEP: 48,
           EASE_MIN: 12,
+          BOOST: false,
         };
         // Commit gate: smaller index steps and stricter stability for ultra-smooth motion
         try {
-          window.__tpMaxCommitStep = 3; // per-commit index cap
+          window.__tpMaxCommitStep = 2; // per-commit index cap (smaller steps)
           window.__tpStableHits = 2; // keep hysteresis as-is for stability
         } catch {}
       } else if (v === 'responsive') {
@@ -3526,9 +3527,10 @@
           BACK: 50,
           EASE_STEP: 96,
           EASE_MIN: 6,
+          BOOST: true,
         };
         try {
-          window.__tpMaxCommitStep = 6; // faster catch-up
+          window.__tpMaxCommitStep = 5; // faster catch-up but still bounded
           window.__tpStableHits = 1; // commit with fewer stable frames for responsiveness
         } catch {}
       } else {
@@ -3538,11 +3540,12 @@
           THROTTLE: 260,
           FWD: 96,
           BACK: 40,
-          EASE_STEP: 80,
+          EASE_STEP: 64,
           EASE_MIN: 10,
+          BOOST: false,
         };
         try {
-          window.__tpMaxCommitStep = 5;
+          window.__tpMaxCommitStep = 3;
           window.__tpStableHits = 2;
         } catch {}
       }
@@ -3815,8 +3818,11 @@
       try {
         const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = maxScroll ? viewer.scrollTop / maxScroll : 0;
-        if (ratio >= 0.75) step = Math.floor(step * 1.5);
-        else if (ratio >= 0.6) step = Math.floor(step * 1.25);
+        const boost = (window.__TP_SCROLL && window.__TP_SCROLL.BOOST) === true;
+        if (boost) {
+          if (ratio >= 0.75) step = Math.floor(step * 1.5);
+          else if (ratio >= 0.6) step = Math.floor(step * 1.25);
+        }
       } catch {}
       viewer.scrollTop += Math.sign(dy) * Math.min(absdy, step);
     } else {
