@@ -118,7 +118,9 @@
       document.scrollingElement ||
       document.documentElement ||
       document.body,
-    pct = 0.38
+    pct = typeof window !== 'undefined' && typeof window.__TP_MARKER_PCT === 'number'
+      ? window.__TP_MARKER_PCT
+      : 0.4
   ) {
     try {
       if (!el || !sc) return 0;
@@ -147,6 +149,12 @@
     try {
       const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
       const target = Math.min(Math.max(0, y | 0), max);
+      try {
+        if (typeof window.__tpClampGuard === 'function') {
+          const ok = window.__tpClampGuard(target, max);
+          if (!ok) return; // skip micro re-clamp
+        }
+      } catch {}
       sc.scrollTop = target;
       if (window.__TP_DEV) {
         try {
@@ -4003,8 +4011,15 @@
     if (!__scrollCtl?.startAutoCatchup || !viewer) return;
     // If auto-scroll is running, skip catch-up to avoid conflicts
     if (autoTimer) return;
-    const markerTop = () =>
-      (viewer?.clientHeight || 0) * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.36);
+    const markerTop = () => {
+      const pct =
+        typeof window.__TP_MARKER_PCT === 'number'
+          ? window.__TP_MARKER_PCT
+          : typeof MARKER_PCT === 'number'
+            ? MARKER_PCT
+            : 0.4;
+      return (viewer?.clientHeight || 0) * pct;
+    };
     const getTargetY = () => markerTop();
     const getAnchorY = () => {
       try {
@@ -4036,10 +4051,23 @@
     };
     const scrollBy = (dy) => {
       try {
-        viewer.scrollTop = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+        const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+        if (typeof requestScroll === 'function') requestScroll(next);
+        else viewer.scrollTop = next;
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-        const ratio = max ? viewer.scrollTop / max : 0;
-        sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+        const ratio = max
+          ? (typeof window.__lastScrollTarget === 'number'
+              ? window.__lastScrollTarget
+              : viewer.scrollTop) / max
+          : 0;
+        sendToDisplay({
+          type: 'scroll',
+          top:
+            typeof window.__lastScrollTarget === 'number'
+              ? window.__lastScrollTarget
+              : viewer.scrollTop,
+          ratio,
+        });
       } catch {}
     };
     try {
@@ -4103,7 +4131,7 @@
   let MAX_JUMP_AHEAD_WORDS = 12; // max words to bump when pushing forward
   // Scroll correction tuning
   // TP: marker-percent — forward bias the reading line slightly to reduce lag
-  const MARKER_PCT = 0.36;
+  const MARKER_PCT = 0.4;
   // Gentler motion to avoid jumpiness
   let DEAD_BAND_PX = 18; // ignore small errors
   // NOTE: Historical naming mismatch: some earlier code / docs referenced CORRECTION_MIN_INTERVAL_MS.
@@ -4709,7 +4737,12 @@
     } catch {}
 
     const markerTop = Math.round(
-      viewer.clientHeight * (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4)
+      viewer.clientHeight *
+        (typeof window.__TP_MARKER_PCT === 'number'
+          ? window.__TP_MARKER_PCT
+          : typeof MARKER_PCT === 'number'
+            ? MARKER_PCT
+            : 0.4)
     );
     const desiredTop = targetPara.el.offsetTop - markerTop; // let scheduler clamp
     // Base cap to keep motion tame; relax near the end to avoid slowdown perception
