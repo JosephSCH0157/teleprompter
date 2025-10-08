@@ -2766,7 +2766,7 @@
           updateDebugPosChip();
         } catch {}
       };
-    } catch {
+    } catch (e) {
       console.warn('scroll-helpers load failed', e);
     }
 
@@ -3901,7 +3901,7 @@
         document.addEventListener('DOMContentLoaded', () => {
           try {
             init();
-          } catch {
+          } catch (e) {
             console.error('init failed', e);
           }
         });
@@ -3909,7 +3909,7 @@
         Promise.resolve().then(() => {
           try {
             init();
-          } catch {
+          } catch (e) {
             console.error('init failed', e);
           }
         });
@@ -3927,7 +3927,7 @@
         console.warn('[TP-Pro] Late init fallback firing');
         if (typeof init === 'function') init();
       }
-    } catch {
+    } catch (e) {
       console.error('[TP-Pro] Late init fallback failed', e);
     }
   }, 1500);
@@ -3967,6 +3967,17 @@
             closeDisplay();
           } else if (id === 'presentBtn' && typeof openDisplay === 'function') {
             openDisplay();
+          } else if (id === 'settingsBtn') {
+            const overlay = document.getElementById('settingsOverlay');
+            if (overlay) {
+              try {
+                if (typeof buildSettingsContent === 'function') buildSettingsContent();
+              } catch {}
+              overlay.classList.remove('hidden');
+              try {
+                e.target.setAttribute('aria-expanded', 'true');
+              } catch {}
+            }
           } else if (id === 'micBtn') {
             requestMic();
           }
