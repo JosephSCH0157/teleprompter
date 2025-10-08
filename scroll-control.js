@@ -124,6 +124,10 @@ export function createScrollController() {
     lastClampIdx: -1,
     lastBestIdx: -1,
     seenHits: 0,
+    // Leaky integrator for micro-clamps when not in catch-up
+    accumDelta: 0,
+    accumDir: 0,
+    lastLeakAt: 0,
   };
 
   // Monotonic commit with hysteresis and per-commit jump cap
@@ -387,34 +391,86 @@ export function createScrollController() {
       } catch {
         S.lastClampIdx = -1;
       }
+      S.accumDelta = 0;
+      S.accumDir = 0;
+      S.lastLeakAt = now;
       return true;
     }
     const delta = Math.abs(targetY - S.lastClampY);
     // In continuous catch-up mode, allow fine-grained steps to pass through the guard.
-    // Otherwise, enforce the normal minimum delta to avoid micro re-clamps.
+    // Otherwise, use a leaky integrator to periodically allow micro re-clamps in a consistent direction
+    // so we don't get stuck hovering near the bottom.
+    let leakyPass = false;
     if (!inCatchup && delta < G.minClampDeltaPx) {
-      logEv({ tag: 'scroll:clamp-skip', targetY, last: S.lastClampY, delta });
-      return false;
+      const dir = Math.sign(targetY - S.lastClampY);
+      if (dir === 0) {
+        logEv({ tag: 'scroll:clamp-skip', targetY, last: S.lastClampY, delta });
+        return false;
+      }
+      if (S.accumDir === dir) S.accumDelta += delta;
+      else {
+        S.accumDir = dir;
+        S.accumDelta = delta;
+      }
+      const timeSinceLast = now - (S.lastLeakAt || 0);
+      const LEAK_INTERVAL_MS =
+        typeof window.__tpClampLeakMs === 'number' ? window.__tpClampLeakMs : 420;
+      const LEAK_MIN_DELTA =
+        typeof window.__tpClampLeakMinPx === 'number' ? window.__tpClampLeakMinPx : 8;
+      if (S.accumDelta >= G.minClampDeltaPx) {
+        leakyPass = true;
+        logEv({
+          tag: 'scroll:clamp-leak-pass',
+          targetY,
+          last: S.lastClampY,
+          delta,
+          accum: S.accumDelta,
+          dir,
+        });
+      } else if (timeSinceLast >= LEAK_INTERVAL_MS && delta >= LEAK_MIN_DELTA) {
+        leakyPass = true;
+        logEv({
+          tag: 'scroll:clamp-time-pass',
+          targetY,
+          last: S.lastClampY,
+          delta,
+          accum: S.accumDelta,
+          dir,
+          ms: Math.floor(timeSinceLast),
+        });
+      } else {
+        logEv({
+          tag: 'scroll:clamp-skip',
+          targetY,
+          last: S.lastClampY,
+          delta,
+          accum: S.accumDelta,
+          dir,
+        });
+        return false;
+      }
     }
 
     // Sticky guard: if we're trying to reclamp the same index within a short window
     // and the target Y is within a modest band, skip to avoid visible top flipping.
     // While auto catch-up is active, disable sticky suppression to allow smooth continuous motion.
-    const stickyMs = inCatchup
-      ? 0
-      : typeof window.__tpClampStickyMs === 'number'
-        ? window.__tpClampStickyMs
-        : 600;
-    const stickyPx = inCatchup
-      ? 0
-      : typeof window.__tpClampStickyPx === 'number'
-        ? window.__tpClampStickyPx
-        : 64;
+    const stickyMs =
+      inCatchup || leakyPass
+        ? 0
+        : typeof window.__tpClampStickyMs === 'number'
+          ? window.__tpClampStickyMs
+          : 600;
+    const stickyPx =
+      inCatchup || leakyPass
+        ? 0
+        : typeof window.__tpClampStickyPx === 'number'
+          ? window.__tpClampStickyPx
+          : 64;
     let idx = -1;
     try {
       idx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
     } catch {}
-    if (!inCatchup) {
+    if (!(inCatchup || leakyPass)) {
       if (
         idx === S.lastClampIdx &&
         S.lastClampAt &&
@@ -439,6 +495,16 @@ export function createScrollController() {
     S.lastClampY = targetY;
     S.lastClampAt = now;
     S.lastClampIdx = idx;
+    if (leakyPass && S.accumDir) {
+      // Reduce accumulator by the applied delta in the same direction, keep leftover to continue smooth drift
+      S.accumDelta = Math.max(0, S.accumDelta - delta);
+      S.lastLeakAt = now;
+    } else if (inCatchup) {
+      // Catch-up writes reset the leak timers/accum to avoid double-counting
+      S.accumDelta = 0;
+      S.accumDir = 0;
+      S.lastLeakAt = now;
+    }
     if (inCatchup) {
       logEv({ tag: 'scroll:clamp-catchup', targetY, last: S.lastClampY, delta });
     }
