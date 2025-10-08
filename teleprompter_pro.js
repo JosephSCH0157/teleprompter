@@ -2982,6 +2982,20 @@
     } catch (e) {
       console.warn('scroll-control load failed', e);
     }
+    // Dev-only: fixture loader (?fixture=name or ?fixtureUrl=encodedURL)
+    try {
+      const Q = new URLSearchParams(location.search);
+      const fxName = Q.get('fixture');
+      const fxUrl = Q.get('fixtureUrl');
+      if ((window.__TP_DEV || Q.has('dev')) && (fxName || fxUrl)) {
+        const url = fxUrl || `./fixtures/${fxName.replace(/[^a-z0-9._-]/gi, '')}.txt`;
+        const resp = await fetch((window.__TP_ADDV || ((p) => p))(url));
+        const txt = await resp.text();
+        if (editor) editor.value = txt;
+        renderScript(txt);
+        console.info('[TP-Pro] Loaded fixture:', url);
+      }
+    } catch {}
     // …keep the rest of your init() as-is…
 
     // Wire UI
