@@ -1006,30 +1006,38 @@
     const obsUrlS = document.getElementById('settingsObsUrl');
     const obsPassS = document.getElementById('settingsObsPass');
     const obsTestS = document.getElementById('settingsObsTest');
+    // When Settings overlay toggles OBS, mirror to main toggle (query main DOM each time)
     obsEnable?.addEventListener('change', () => {
-      if (enableObsChk) {
-        enableObsChk.checked = obsEnable.checked;
-        enableObsChk.dispatchEvent(new Event('change', { bubbles: true }));
+      const mainEnable = document.getElementById('enableObs');
+      if (mainEnable) {
+        mainEnable.checked = !!obsEnable.checked;
+        mainEnable.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
+    // Mirror URL
     obsUrlS?.addEventListener('change', () => {
-      if (obsUrlInput) {
-        obsUrlInput.value = obsUrlS.value;
-        obsUrlInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const mainUrl = document.getElementById('obsUrl');
+      if (mainUrl && typeof obsUrlS.value === 'string') {
+        mainUrl.value = obsUrlS.value;
+        mainUrl.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
+    // Mirror password
     obsPassS?.addEventListener('change', () => {
-      if (obsPassInput) {
-        obsPassInput.value = obsPassS.value;
-        obsPassInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const mainPass = document.getElementById('obsPassword');
+      if (mainPass && typeof obsPassS.value === 'string') {
+        mainPass.value = obsPassS.value;
+        mainPass.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
+    // Proxy test button and surface result via toast
     obsTestS?.addEventListener('click', async () => {
-      obsTestBtn?.click();
+      const mainTest = document.getElementById('obsTestBtn');
+      mainTest?.click();
       setTimeout(() => {
-        _toast(obsStatus?.textContent || 'OBS test', {
-          type: (obsStatus?.textContent || '').includes('ok') ? 'ok' : 'error',
-        });
+        const statusEl = document.getElementById('obsStatus');
+        const txt = statusEl?.textContent || 'OBS test';
+        _toast(txt, { type: (txt || '').includes('ok') ? 'ok' : 'error' });
       }, 600);
     });
   }
