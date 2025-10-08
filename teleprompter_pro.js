@@ -1761,6 +1761,11 @@
     const release = 0.15; // 0..1 (higher = faster fall)
     let levelSmooth = 0; // smoothed 0..1 level after log mapping
     const draw = () => {
+      // If analyser was torn down (e.g., mic released), stop the loop gracefully
+      if (!analyser || !data) {
+        dbAnim = null;
+        return;
+      }
       analyser.getByteFrequencyData(data);
       // Root-mean-square amplitude 0..1
       const rms = Math.sqrt(data.reduce((a, b) => a + b * b, 0) / data.length) / 255;
@@ -5667,11 +5672,11 @@
           if (el) el.textContent = v;
           // 3) HUD header will pick up APP_VERSION automatically
           if (window.HUD) HUD.log('boot:version', { v });
-        } catch {
+        } catch (e) {
           if (window.HUD) HUD.log('boot:version-error', String(e));
         }
       })();
-    } catch {
+    } catch (e) {
       console.error('[TP-Pro] init() failed:', e);
       try {
         (window.__TP_BOOT_TRACE || []).push({

@@ -114,6 +114,9 @@ select { font-size: 14px; }
     body.listening .script p{ color:#cfe8ff; }
     body.listening .marker{ background:#9bd2ff; box-shadow:0 0 10px #9bd2ff; }
     body.listening .topbar{ box-shadow:0 2px 0 rgba(124,196,255,.35) inset; }
+    /* Make record button clearly red while listening */
+    body.listening #recBtn{ background:#c81919; color:#fff; border-color:#ff6969; box-shadow:0 0 0 1px #ff696955 inset; }
+    body.listening #recBtn:hover{ background:#b31818; }
 
     @supports(height: 100dvh){ body{ min-height:100dvh; } }
 
