@@ -1651,7 +1651,7 @@
     camWrap,
     camVideo,
     startCamBtn,
-    _stopCamBtn,
+    stopCamBtn,
     camDeviceSel,
     camSize,
     camOpacity,
