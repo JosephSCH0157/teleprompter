@@ -762,7 +762,7 @@
         `
         <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://127.0.0.1:4455')}" placeholder="ws://host:port" />
+          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
         </form>
@@ -2818,7 +2818,7 @@
           const cfgs = { ...(s.configs || {}) };
           if (!cfgs.obs)
             cfgs.obs = {
-              url: obsUrlInput?.value || 'ws://127.0.0.1:4455',
+              url: obsUrlInput?.value || 'ws://192.168.1.198:4455',
               password: obsPassInput?.value || '',
             };
           __recorder.setSettings({ selected: sel, configs: cfgs });
@@ -2879,7 +2879,7 @@
         const prev = cfgs.obs || {};
         cfgs.obs = {
           ...prev,
-          url: obsUrlInput?.value || prev.url || 'ws://127.0.0.1:4455',
+          url: obsUrlInput?.value || prev.url || 'ws://192.168.1.198:4455',
           password: obsPassInput?.value || prev.password || '',
         };
         __recorder.setSettings({ configs: cfgs });
