@@ -240,12 +240,12 @@ export async function initBuiltIns() {
     // Attempt to load and register built-in adapters. Each is optional.
     const adapters = [];
     try {
-      const m = await import('./adapters/bridge.js');
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/bridge.js'));
       const a = m?.createBridgeAdapter?.();
       if (a) adapters.push(a);
     } catch {}
     try {
-      const m = await import('./adapters/obs.js');
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/obs.js'));
       const a = m?.createOBSAdapter?.();
       if (a) adapters.push(a);
     } catch {}

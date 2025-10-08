@@ -42,7 +42,20 @@
   // In-app helpers will override this with a coalesced scroller scheduler when ready
 </script>
 
-<link href="teleprompter_pro.css?v=dev-20251007" rel="stylesheet"/>
+<script>
+  (function(){
+    try{
+      var DEV = document.documentElement.classList.contains('tp-dev');
+      var V = DEV ? Date.now().toString(36) : 'dev-20251007';
+      var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
+      document.write('<link rel="stylesheet" href="'+add('teleprompter_pro.css')+'">');
+      // publish V for JS to use in dynamic imports
+      window.__TP_DEV = DEV; window.__TP_DEV_VERSION = V;
+    }catch(e){
+      document.write('<link rel="stylesheet" href="teleprompter_pro.css?v=dev-20251007">');
+    }
+  })();
+</script>
 <style>
   #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui, sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
   html.tp-dev #anvil-build-label{display:block}
@@ -268,15 +281,13 @@
 <script>
   (function(){
     try{
-      var Q = new URLSearchParams(location.search);
-      var DEV = document.documentElement.classList.contains('tp-dev');
-      var v = DEV ? ('dev-'+Date.now()) : 'dev-20251007';
-      function add(src){ var s=document.createElement('script'); s.src=src; s.defer=true; document.currentScript.after(s); }
-      add('./debug-tools.js?v='+v);
-      add('./debug-seed.js?v='+v);
-      var tp = document.createElement('script'); tp.defer=true; tp.src = 'teleprompter_pro.js?v='+v; document.currentScript.after(tp);
+      var DEV = window.__TP_DEV || document.documentElement.classList.contains('tp-dev');
+      var V = window.__TP_DEV_VERSION || (DEV ? Date.now().toString(36) : 'dev-20251007');
+      var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
+      document.write('<script src="'+add('./debug-tools.js')+'" defer><\/script>');
+      document.write('<script src="'+add('./debug-seed.js')+'" defer><\/script>');
+      document.write('<script src="'+add('teleprompter_pro.js')+'" defer><\/script>');
     }catch(e){
-      // Fallback to static includes if dynamic injection fails
       document.write('<script src="./debug-tools.js?v=dev-20251007" defer><\/script>');
       document.write('<script src="./debug-seed.js?v=dev-20251007" defer><\/script>');
       document.write('<script src="teleprompter_pro.js?v=dev-20251007" defer><\/script>');

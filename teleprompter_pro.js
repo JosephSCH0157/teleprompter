@@ -16,6 +16,21 @@
     const Q = new URLSearchParams(location.search);
     const DEV = Q.has('dev') || localStorage.getItem('tp_dev_mode') === '1';
     const CALM = Q.has('calm') || localStorage.getItem('tp_calm') === '1';
+    // Dev-time cache buster for dynamic imports
+    try {
+      const V =
+        (typeof window !== 'undefined' && window.__TP_DEV && window.__TP_DEV_VERSION) ||
+        (DEV ? 'dev-' + Date.now().toString(36) : '');
+      window.__TP_DEV_VERSION = V;
+      window.__TP_ADDV = function addV(p) {
+        try {
+          if (!V) return p;
+          return p + (p.indexOf('?') >= 0 ? '&' : '?') + 'v=' + V;
+        } catch {
+          return p;
+        }
+      };
+    } catch {}
     try {
       window.__TP_DEV = DEV;
       window.__TP_CALM = CALM;
@@ -2708,7 +2723,7 @@
     }
     // Initialize modular helpers now that viewer exists
     try {
-      const shMod = await import('./scroll-helpers.js');
+      const shMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-helpers.js'));
       const sh = shMod.createScrollerHelpers(() => viewer);
       __scrollHelpers = sh;
       _clampScrollTop = sh.clampScrollTop;
@@ -2750,7 +2765,7 @@
     }
 
     try {
-      const ioMod = await import('./io-anchor.js');
+      const ioMod = await import((window.__TP_ADDV || ((p) => p))('./io-anchor.js'));
       __anchorObs = ioMod.createAnchorObserver(
         () => viewer,
         () => {
@@ -2763,7 +2778,7 @@
       console.warn('io-anchor load failed', e);
     }
     try {
-      const scMod = await import('./scroll-control.js');
+      const scMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-control.js'));
       __scrollCtl = scMod.createScrollController(() => viewer);
     } catch (e) {
       console.warn('scroll-control load failed', e);
