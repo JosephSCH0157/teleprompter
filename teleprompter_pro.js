@@ -4088,7 +4088,18 @@
     // Highlight active paragraph (optional)
     paraIndex.forEach((pi) => pi.el.classList.toggle('active', pi === p));
     // Center-ish scroll
-    const target = Math.max(0, p.el.offsetTop - viewer.clientHeight * 0.4);
+    let target = Math.max(0, p.el.offsetTop - viewer.clientHeight * 0.4);
+    // Anti-backscroll near bottom: avoid moving upward more than a tiny epsilon when bottomish
+    try {
+      const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const ratio = max ? viewer.scrollTop / max : 0;
+      const DOC_THR =
+        typeof window.__tpDocBottomRatio === 'number' ? window.__tpDocBottomRatio : 0.72;
+      if (ratio > DOC_THR && target < viewer.scrollTop) {
+        const EPS = typeof window.__tpEndEpsilonPx === 'number' ? window.__tpEndEpsilonPx : 2;
+        target = Math.max(viewer.scrollTop - EPS, target);
+      }
+    } catch {}
     // gentle ease towards target (use smoothness prefs if present)
     const S = window.__TP_SCROLL || { EASE_STEP: 80, EASE_MIN: 10 };
     const dy = target - viewer.scrollTop;

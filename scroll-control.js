@@ -428,6 +428,28 @@ export function createScrollController() {
         return false;
       }
     })();
+    // Near-bottom anti-backscroll: when bottomish, avoid upward moves beyond a tiny tolerance
+    // to prevent visible "pull up" near the end. Allow very small settling moves.
+    if (S.lastClampY >= 0 && docBottomish) {
+      const up = targetY < S.lastClampY;
+      if (up) {
+        const upDelta = Math.abs(targetY - S.lastClampY);
+        const MAX_UP_PX =
+          typeof window !== 'undefined' && typeof window.__tpClampMaxUpPxNearBottom === 'number'
+            ? window.__tpClampMaxUpPxNearBottom
+            : 2; // tiny settling only
+        if (upDelta > MAX_UP_PX) {
+          logEv({
+            tag: 'scroll:clamp-bottom-up-skip',
+            targetY,
+            last: S.lastClampY,
+            upDelta,
+            maxUp: MAX_UP_PX,
+          });
+          return false;
+        }
+      }
+    }
     // First-time initialization
     if (S.lastClampY < 0) {
       S.lastClampY = targetY;
