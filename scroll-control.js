@@ -115,6 +115,8 @@ export function createScrollController() {
     lastClampY: -1,
     lastClampAt: 0,
     lastClampIdx: -1,
+    lastBestIdx: -1,
+    seenHits: 0,
   };
 
   // Monotonic commit with hysteresis and per-commit jump cap
@@ -226,6 +228,15 @@ export function createScrollController() {
           }
         } catch {}
 
+        // Track persistence of bestIdx regardless of sim-threshold pass/fail
+        if (bestIdx === S.lastBestIdx) {
+          S.seenHits++;
+        } else {
+          S.lastBestIdx = bestIdx;
+          S.seenHits = 1;
+          S.lastBestAt = now;
+        }
+
         const movingBack = bestIdx < S.committedIdx;
         const deltaIdx = bestIdx - S.committedIdx;
         const adelta = Math.abs(deltaIdx);
@@ -249,6 +260,41 @@ export function createScrollController() {
         const ok = (!movingBack && sim >= effFwd) || (movingBack && sim >= effBack);
         if (!ok) {
           S.stableHits = 0;
+
+          // Fallback: if we've stalled without commits for a while but the bestIdx
+          // persists ahead by a noticeable gap with moderate confidence, take a small step.
+          const RECOMMIT_MS =
+            typeof window.__tpRecommitMs === 'number' ? window.__tpRecommitMs : 1500;
+          const RECOMMIT_SIM_LOW =
+            typeof window.__tpRecommitSimLow === 'number' ? window.__tpRecommitSimLow : 0.5;
+          const RECOMMIT_GAP =
+            typeof window.__tpRecommitGap === 'number' ? window.__tpRecommitGap : 6;
+          const RECOMMIT_HITS =
+            typeof window.__tpRecommitHits === 'number' ? window.__tpRecommitHits : 3;
+
+          const stalledLong = S.lastCommitAt ? now - S.lastCommitAt >= RECOMMIT_MS : false;
+          const forwardDrift = !movingBack && adelta >= RECOMMIT_GAP && sim >= RECOMMIT_SIM_LOW;
+          const persistent = S.seenHits >= RECOMMIT_HITS;
+          if (stalledLong && forwardDrift && persistent) {
+            const dir = Math.sign(deltaIdx);
+            // Take a conservative step to avoid overshoot; capped by MAX_STEP
+            const step = Math.max(1, Math.min(adelta, Math.min(MAX_STEP, 3)));
+            const commitIdx = S.committedIdx + dir * step;
+            applyCommitThrottled(commitIdx);
+            S.singleFreezeUntil = 0; // do not enforce single-line freeze on fallback
+            logEv({
+              tag: 'match:commit:fallback',
+              reason: 'low-sim-stall',
+              bestIdx,
+              committedIdx: S.committedIdx,
+              sim,
+              step,
+              adelta,
+              stalledMs: Math.floor(now - S.lastCommitAt),
+            });
+            return;
+          }
+
           logEv({
             tag: 'match:gate',
             reason: 'sim-too-low',

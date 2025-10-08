@@ -5129,7 +5129,12 @@
   // Dynamic bottom padding so the marker can sit over the final paragraphs
   function applyBottomPad() {
     try {
-      const pad = Math.max(window.innerHeight * 0.5, 320);
+      // Ensure we can place the last paragraph at the marker line (e.g., ~40% from top)
+      const markerPct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+      const vh = (viewer && viewer.clientHeight) || window.innerHeight || 800;
+      const needForMarker = Math.floor(vh * markerPct) + 80; // add some cushion
+      const basePad = Math.max(window.innerHeight * 0.55, 360);
+      const pad = Math.max(basePad, needForMarker);
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
     } catch {}
   }
@@ -5141,6 +5146,61 @@
       (__tpStall ||= {}).reported = false;
     } catch {}
   }
+
+  // Near-end watchdog: keep drifting the page so the last paragraph can reach the marker line
+  (function installEndDriftWatchdog() {
+    try {
+      if (window.__TP_END_DRIFT_INSTALLED) return;
+      window.__TP_END_DRIFT_INSTALLED = true;
+      const TICK_MS = 220;
+      let tId = 0;
+      const loop = () => {
+        try {
+          const now = performance.now();
+          const sc = viewer;
+          if (!sc) return;
+          // Don’t interfere while auto-catchup is active
+          if (window.__scrollCtl && window.__scrollCtl.isActive && window.__scrollCtl.isActive()) {
+            tId = setTimeout(loop, TICK_MS);
+            return;
+          }
+          // Only act near the end of content
+          const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+          const ratio = max ? sc.scrollTop / max : 0;
+          const nearEndPage = ratio > 0.86;
+          // If we haven’t advanced for a while but are near the end, nudge towards the current target paragraph
+          const idleMs = now - (_lastAdvanceAt || 0);
+          const idleTooLong = idleMs > 1600;
+          if (nearEndPage && idleTooLong) {
+            try {
+              const p =
+                paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end) ||
+                paraIndex[paraIndex.length - 1];
+              if (p && p.el) {
+                const target = Math.max(0, p.el.offsetTop - sc.clientHeight * 0.4);
+                // Only drift if below target
+                if (sc.scrollTop < target - 2) {
+                  const step = Math.min(
+                    60,
+                    Math.max(18, Math.floor((target - sc.scrollTop) * 0.25))
+                  );
+                  sc.scrollTop = Math.min(max, sc.scrollTop + step);
+                  try {
+                    debug && debug({ tag: 'scroll:end-drift', top: sc.scrollTop, target, ratio });
+                  } catch {}
+                }
+              }
+            } catch {}
+          }
+        } catch {}
+        tId = setTimeout(loop, TICK_MS);
+      };
+      tId = setTimeout(loop, TICK_MS);
+      try {
+        window.__TP_cancelEndDrift = () => tId && clearTimeout(tId);
+      } catch {}
+    } catch {}
+  })();
   window.renderScript = renderScript; // for any external callers
 
   // Camera/WebRTC keepalive: periodically attempt reconnection if user intends camera mirroring
