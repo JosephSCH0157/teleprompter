@@ -2630,30 +2630,32 @@
       }
 
       setInterval(() => {
-        if (window.__TP_DISABLE_NUDGES) return;
         if (!recActive || !viewer) return; // only when speech sync is active
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
         const now = performance.now();
 
         // Existing: fallback nudge if no advance recently and not in mid-sim window
-        const MISS_FALLBACK_MS = 1800; // keep original timing
-        try {
-          const sim = window.__lastSimScore ?? null;
-          if (sim !== null && sim >= 0.72 && sim < 0.8) {
-            window.__tpLastMidSimAt = now;
-          }
-        } catch {}
-        const recentMid =
-          typeof window.__tpLastMidSimAt === 'number' && now - window.__tpLastMidSimAt < 300;
-        if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-          if (!recentMid) {
-            try {
-              window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0));
-            } catch {}
-            _lastAdvanceAt = now;
-            try {
-              deadmanWatchdog(currentIndex);
-            } catch {}
+        // Keep this disabled in Calm Mode, but allow stall detection/rescue to still run.
+        if (!window.__TP_DISABLE_NUDGES) {
+          const MISS_FALLBACK_MS = 1800; // keep original timing
+          try {
+            const sim = window.__lastSimScore ?? null;
+            if (sim !== null && sim >= 0.72 && sim < 0.8) {
+              window.__tpLastMidSimAt = now;
+            }
+          } catch {}
+          const recentMid =
+            typeof window.__tpLastMidSimAt === 'number' && now - window.__tpLastMidSimAt < 300;
+          if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
+            if (!recentMid) {
+              try {
+                window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0));
+              } catch {}
+              _lastAdvanceAt = now;
+              try {
+                deadmanWatchdog(currentIndex);
+              } catch {}
+            }
           }
         }
 
@@ -5704,7 +5706,17 @@
   }
   // TP: display-send
   function sendToDisplay(payload) {
-    if (displayWin && !displayWin.closed) displayWin.postMessage(payload, '*');
+    if (!displayWin || displayWin.closed) return;
+    try {
+      if (payload && payload.type === 'scroll') {
+        const now =
+          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        const seq = (window.__tpScrollSeq ||= 0) + 1;
+        window.__tpScrollSeq = seq;
+        payload = { ...payload, seq, ts: now };
+      }
+    } catch {}
+    displayWin.postMessage(payload, '*');
   }
   window.sendToDisplay = sendToDisplay;
 
