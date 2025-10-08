@@ -510,4 +510,74 @@ export function createScrollController() {
     }
     return true;
   };
+
+  // ===== Recovery spot marker (telemetry-only) =====
+  // Non-invasive: lets us record a snapshot for later rescue logic.
+  (function installRecoveryMarker() {
+    if (typeof window.__tpMarkRecoverySpot === 'function') return; // idempotent
+    const spots = [];
+    function getAnchorRatio() {
+      try {
+        const viewer =
+          document.getElementById('viewer') ||
+          document.scrollingElement ||
+          document.documentElement ||
+          document.body;
+        const h = Math.max(1, viewer.clientHeight || 1);
+        // Prefer IO anchor if present
+        const vis =
+          window.__anchorObs && typeof window.__anchorObs.mostVisibleEl === 'function'
+            ? window.__anchorObs.mostVisibleEl()
+            : null;
+        const el = vis || document.querySelector('#script p.active') || null;
+        if (el && viewer && typeof el.getBoundingClientRect === 'function') {
+          const er = el.getBoundingClientRect();
+          const vr = viewer.getBoundingClientRect ? viewer.getBoundingClientRect() : { top: 0 };
+          const anchorY = er.top - vr.top;
+          return Math.max(0, Math.min(1, anchorY / h));
+        }
+      } catch {}
+      return null;
+    }
+    window.__tpMarkRecoverySpot = function (reason, extra) {
+      try {
+        const now =
+          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        const viewer =
+          document.getElementById('viewer') ||
+          document.scrollingElement ||
+          document.documentElement ||
+          document.body;
+        const max = Math.max(0, (viewer.scrollHeight || 0) - (viewer.clientHeight || 0));
+        const top = viewer.scrollTop || 0;
+        const ratio = max ? top / max : 0;
+        const anchorRatio = getAnchorRatio();
+        const rec = {
+          tag: 'recovery:mark',
+          t: now,
+          reason: reason || 'manual',
+          committedIdx: S.committedIdx,
+          lastCommitAt: S.lastCommitAt,
+          pendingIdx: S.pendingIdx,
+          lastBestIdx: S.lastBestIdx,
+          sim: typeof window.__lastSimScore === 'number' ? window.__lastSimScore : null,
+          currentIndex: typeof window.currentIndex === 'number' ? window.currentIndex : null,
+          scrollTop: top,
+          scrollRatio: ratio,
+          anchorRatio,
+          jitter: window.__tpJitter || null,
+          extra: extra || null,
+        };
+        spots.push(rec);
+        try {
+          window.__tpRecoverySpots = spots;
+        } catch {}
+        _dbg(rec);
+        return rec;
+      } catch (e) {
+        _dbg({ tag: 'recovery:mark:error', e: String(e) });
+        return null;
+      }
+    };
+  })();
 })();
