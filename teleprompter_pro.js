@@ -2659,7 +2659,7 @@
           }
         }
 
-        // Phase 1: telemetry-only stall detector
+        // Phase 1: telemetry-only stall detector + forced commit after repeated stalls
         const meta =
           typeof window.__tpGetCommitMeta === 'function'
             ? window.__tpGetCommitMeta()
@@ -2674,6 +2674,13 @@
         );
         const stallMsAdj = inJitterSpike ? STALL_MS + 400 : STALL_MS;
         const stalled = noCommitFor > stallMsAdj;
+        // Forced commit after repeated stalls
+        window.__tpStallStreak = window.__tpStallStreak || 0;
+        if (stalled) {
+          window.__tpStallStreak++;
+        } else {
+          window.__tpStallStreak = 0;
+        }
         if (stalled || (pr !== null && pr < 0.3 && noCommitFor > LOW_PROGRESS_SEC * 1000)) {
           try {
             debug?.({
@@ -2684,6 +2691,7 @@
               jitterSpike: inJitterSpike,
               committedIdx: meta.committedIdx,
               currentIndex,
+              stallStreak: window.__tpStallStreak,
             });
           } catch {}
           try {
@@ -2693,6 +2701,29 @@
               anchorRatio: aRatio,
             });
           } catch {}
+          // If we've stalled 6+ times in a row and not at end, force a commit to break out
+          if (window.__tpStallStreak >= 6 && typeof window.currentIndex === 'number') {
+            try {
+              if (typeof window.__tpGetCommitMeta === 'function') {
+                const meta = window.__tpGetCommitMeta();
+                const idx = window.currentIndex;
+                if (meta && typeof meta.committedIdx === 'number' && idx > meta.committedIdx) {
+                  window.scrollToCurrentIndex = window.scrollToCurrentIndex || (() => {});
+                  // Force commit by calling the commit gate's throttled applier directly if possible
+                  if (window.scrollToCurrentIndex.__tpCommitWrapped) {
+                    // Use the commit gate's throttled commit
+                    window.scrollToCurrentIndex(idx);
+                  } else {
+                    // Fallback: just set committedIdx and scroll
+                    meta.committedIdx = idx;
+                    if (typeof requestScroll === 'function') requestScroll(viewer.scrollTop);
+                  }
+                  debug?.({ tag: 'forced-commit', idx, committedIdx: meta.committedIdx });
+                  window.__tpStallStreak = 0;
+                }
+              }
+            } catch {}
+          }
         }
 
         // Phase 2: gentle catch-up burst if we appear bottom-hovered and not within cooldown

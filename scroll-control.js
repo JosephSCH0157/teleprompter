@@ -236,10 +236,33 @@ export function createScrollController() {
         const sim = window.__lastSimScore ?? 1;
         const now = performance.now();
 
+        // Relax commit gating near end (last 20%): lower sim/hits thresholds
+        let anchorRatio = 0,
+          docRatio = 0;
+        try {
+          if (typeof window.__tpGetAnchorRatio === 'function')
+            anchorRatio = window.__tpGetAnchorRatio();
+        } catch {}
+        try {
+          const v = document.getElementById('viewer');
+          if (v) {
+            const max = Math.max(0, v.scrollHeight - v.clientHeight);
+            const top = Math.max(0, v.scrollTop || 0);
+            docRatio = max ? top / max : 0;
+          }
+        } catch {}
+        const NEAR_END = anchorRatio > 0.38 || docRatio > 0.72;
+
         // Hysteresis commit: only commit after stability across frames, with direction-specific thresholds
         // Respect jitter elevation from main module and allow dynamic tuning from main app (__tpGateFwdSim/__tpGateBackSim)
         let effFwd = typeof window.__tpGateFwdSim === 'number' ? window.__tpGateFwdSim : FWD_SIM,
           effBack = typeof window.__tpGateBackSim === 'number' ? window.__tpGateBackSim : BACK_SIM;
+        let needHitsAdj = 0;
+        if (NEAR_END) {
+          effFwd = Math.min(effFwd, 0.68); // allow lower sim
+          effBack = Math.min(effBack, 0.7);
+          needHitsAdj = -1; // require fewer stable hits
+        }
         try {
           const J = window.__tpJitter || {};
           const elevated = typeof J.spikeUntil === 'number' && now < J.spikeUntil;
@@ -336,7 +359,7 @@ export function createScrollController() {
         }
 
         // Require extra stability/time for single-line commits
-        let needHits = STABLE_HITS;
+        let needHits = STABLE_HITS + needHitsAdj;
         if (adelta === 1) needHits += movingBack ? 2 : 1;
         if (S.stableHits < needHits) {
           logEv({
