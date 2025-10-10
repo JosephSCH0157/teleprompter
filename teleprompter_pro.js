@@ -2629,6 +2629,7 @@
 
       setInterval(() => {
         if (!recActive) return; // only when speech sync is active
+        debug?.({ tag: 'watchdog-tick', recActive, now: performance.now() });
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
         const now = performance.now();
 
@@ -2711,7 +2712,11 @@
         ) {
           window.__tpCommit.ts = now;
           window.__tpStallStreak = 0;
-          console.log('STALL RESET: pause detected, resetting timer and streak');
+          debug?.({
+            tag: 'stall-reset',
+            idx: window.currentIndex,
+            committedIdx: window.__tpCommit.idx,
+          });
           try {
             debug?.({
               tag: 'match:stall-reset',
