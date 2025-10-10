@@ -3,9 +3,19 @@
 // ESLint v9 flat config
 /** @type {import('eslint').Linter.FlatConfig[]} */
 module.exports = [
+  // Ignore patterns
   {
     ignores: ['releases/**', '**/*.min.js', 'node_modules/**', '.vscode/**'],
   },
+  // Always treat line-index.js as an ES module
+  {
+    files: ['line-index.js'],
+    languageOptions: {
+      sourceType: 'module',
+      ecmaVersion: 2021,
+    },
+  },
+  // Config for the config file itself
   {
     files: ['eslint.config.js'],
     languageOptions: {
@@ -21,8 +31,10 @@ module.exports = [
       'no-undef': 'off',
     },
   },
+  // All other JS files (browser scripts)
   {
     files: ['**/*.js'],
+    excludedFiles: ['line-index.js', 'eslint.config.js'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'script',
@@ -73,31 +85,17 @@ module.exports = [
       'no-useless-return': 'warn',
     },
   },
-  {
-    files: [
-      'scroll-helpers.js',
-      'scroll-control.js',
-      'io-anchor.js',
-      'help.js',
-      'eggs.js',
-      'recorders.js',
-      'adapters/**/*.js',
-      'line-index.js',
-    ],
-    languageOptions: {
-      sourceType: 'module',
-    },
-  },
+  // scroll-control.js: allow undefined (globals injected at runtime)
   {
     files: ['scroll-control.js'],
     rules: {
       'no-undef': 'off',
     },
   },
+  // teleprompter_pro.js: allow undefined and some unused vars
   {
     files: ['teleprompter_pro.js'],
     rules: {
-      // Large browser IIFE with many window-attached globals
       'no-undef': 'off',
       'no-unused-vars': [
         'warn',
