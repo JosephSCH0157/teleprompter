@@ -1,170 +1,158 @@
-// scroll-control.js
-// Clean ES module (no CommonJS/AMD).
-// Provides a resilient, anti-stall, PID-like scroll follower.
-//
-// Usage:
-//   import createScrollController from './scroll-control.js';
-//   const scroller = createScrollController(adapters, logFn);
-//   scroller.updateMatch({ idx, bestIdx, sim, windowAhead });
-//   scroller.setMode('follow' | 'calm');
-//
-// Required adapters:
-//   getYForIndex(idx) -> number (px from top of document for transcript line idx)
-//   getViewport() -> { top, height, scrollHeight }
-//   scrollTo(y, { immediate }) -> void
+// scroll-control.js — browser-only ES module
+// A small scroll controller with feed‑forward + damping. No Node/AMD wrappers.
 
-export default function createScrollController(adapters, log = () => {}) {
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const now = () => performance.now();
+/**
+ * @typedef {Object} Adapters
+ * @property {() => number} getViewerTop - current scrollTop of the scrolling element.
+ * @property {(top:number) => void} requestScroll - schedule an immediate scrollTop set.
+ * @property {() => number} getViewportHeight - viewport/client height.
+ * @property {() => number} now - high resolution time (e.g., performance.now).
+ * @property {(cb:FrameRequestCallback) => number} raf - requestAnimationFrame.
+ */
 
-  // Config
-  const anchorRatioBase = 0.38; // keep the matched line ~38% from top
-  const leadBoostLo = 0.02; // extra lead at low confidence
-  const leadBoostHi = 0.08; // extra lead at high confidence
-  const ratchetSim = 0.66; // similarity threshold to enable ratchet
-  const stallMs = 900; // declare stall if not catching up within this
-  const microNudgePx = 1; // minimal nudge to break pixel snapping
-  const calmFactor = 0.6; // gentler speed in calm mode
+/**
+ * @typedef {Object} TelemetryFn
+ * @property {(tag:string, data?:any) => void} log
+ */
 
-  // PID-ish motion parameters
-  const kp = 0.24;
-  const kd = 0.18;
-  const maxStepLo = 180; // px/frame cap at low confidence
-  const maxStepHi = 600; // px/frame cap at high confidence
+/**
+ * Factory
+ * @param {Partial<Adapters>} adapters
+ * @param {(tag:string, data?:any) => void} [telemetry]
+ */
+export default function createScrollController(adapters = {}, telemetry) {
+  const log = telemetry || (() => {});
 
-  const state = {
-    mode: 'follow',
-    lastTs: now(),
-    lastErr: 0,
-    lastTop: 0,
-    lastBestIdx: -1,
-    lastAdvanceTs: now(),
-    ratchetIdx: -1,
-    ratchetTop: -1,
-    targetTop: 0,
+  // Adapters with sensible browser defaults
+  const root = document.scrollingElement || document.documentElement;
+  const A = {
+    getViewerTop: adapters.getViewerTop || (() => root.scrollTop || 0),
+    requestScroll:
+      adapters.requestScroll ||
+      ((top) => {
+        root.scrollTop = top;
+      }),
+    getViewportHeight:
+      adapters.getViewportHeight || (() => root.clientHeight || window.innerHeight || 0),
+    now: adapters.now || (() => (window.performance ? performance.now() : Date.now())),
+    raf: adapters.raf || ((cb) => requestAnimationFrame(cb)),
   };
 
-  function telemetry(tag, data) {
-    try {
-      log(tag, data);
-    } catch {}
-  }
+  // Controller state
+  let mode = 'follow'; // "follow" | "calm"
+  let targetTop = 0; // where we want to be
+  let lastT = A.now();
+  let v = 0; // estimated velocity (px/s)
+  let pendingRaf = 0;
 
-  function desiredAnchorTop(sim) {
-    // Increase lead as similarity rises to avoid getting behind
-    const boost = leadBoostLo + (leadBoostHi - leadBoostLo) * clamp((sim - 0.5) / 0.5, 0, 1);
-    return clamp(anchorRatioBase + boost, 0.2, 0.6);
-  }
+  // Tunables
+  const Kp = 0.22; // proportional gain (how strongly we chase error)
+  const Kd = 0.18; // derivative gain (damps overshoot)
+  const Kff = 0.55; // feed‑forward gain (uses topDelta directly)
+  const MAX_STEP = 1600; // max px movement per tick
+  const SNAP_EPS = 0.5; // snap when close enough
+  const WAKE_EPS = 8; // require this error to (re)start RAF loop
 
-  function computeTargetTop(bestIdx, sim) {
-    const vp = adapters.getViewport();
-    const anchor = desiredAnchorTop(sim);
-    const yForBest = adapters.getYForIndex(bestIdx);
-    let desiredTop = yForBest - anchor * vp.height;
-    desiredTop = clamp(desiredTop, 0, Math.max(0, vp.scrollHeight - vp.height));
+  function step() {
+    pendingRaf = 0;
+    const t = A.now();
+    const dt = Math.max(0.001, (t - lastT) / 1000); // seconds
+    lastT = t;
 
-    // Ratchet: when confident, don't allow the target to move behind bestIdx-2
-    if (sim >= ratchetSim) {
-      const nextRatchetIdx = Math.max(state.ratchetIdx, bestIdx - 2);
-      if (nextRatchetIdx !== state.ratchetIdx) {
-        state.ratchetIdx = nextRatchetIdx;
-        state.ratchetTop = clamp(
-          adapters.getYForIndex(state.ratchetIdx) - anchor * vp.height,
-          0,
-          Math.max(0, vp.scrollHeight - vp.height)
-        );
-      }
-      if (state.ratchetTop >= 0) {
-        desiredTop = Math.max(desiredTop, state.ratchetTop);
-      }
+    const viewerTop = A.getViewerTop();
+    const error = targetTop - viewerTop;
+
+    // INTENT FOR topDelta:
+    // topDelta measures how far we are from target NOW, independent of velocity estimate.
+    // We use it as a feed‑forward term to prevent slow drift & stalls when we fall behind.
+    const topDelta = error; // alias for clarity in formulas
+
+    // Basic PD + feed‑forward controller
+    const accel = Kp * error - Kd * v + Kff * (topDelta / Math.max(1, A.getViewportHeight()));
+    v += accel * dt * 1000; // px/s update (scaled)
+
+    // Convert to a bounded step
+    let stepPx = v * dt;
+    if (!Number.isFinite(stepPx)) stepPx = 0;
+    stepPx = Math.max(-MAX_STEP, Math.min(MAX_STEP, stepPx));
+
+    // If we're close, snap and sleep
+    if (Math.abs(error) <= SNAP_EPS) {
+      if (Math.abs(v) > 1) v *= 0.5;
+      A.requestScroll(targetTop);
+      log('scroll', { tag: 'scroll', top: targetTop, mode });
+      return; // sleep until new target arrives
     }
 
-    return desiredTop;
-  }
+    const nextTop = viewerTop + stepPx;
+    A.requestScroll(nextTop);
+    log('scroll', { tag: 'scroll', top: nextTop, mode });
 
-  function stepScroll(ts) {
-    const vp = adapters.getViewport();
-    const dt = Math.max(1, ts - state.lastTs); // ms
-    const err = state.targetTop - vp.top;
-
-    // PID-like velocity (no integral term)
-    let v = kp * err + kd * ((err - state.lastErr) / dt) * 16.67; // normalize to 60fps
-
-    // Clamp speed based on confidence via targetStep range cached at updateMatch
-    const maxStep = state.maxStepPx ?? maxStepLo;
-    v = clamp(v, -maxStep, maxStep);
-
-    // Calm mode damps movement
-    if (state.mode === 'calm') v *= calmFactor;
-
-    // Apply micro-nudge to break sticky states
-    let nextTop = vp.top + v;
-    if (Math.abs(err) > 0 && Math.abs(v) < 0.5) {
-      nextTop = vp.top + Math.sign(err) * microNudgePx;
+    // Keep animating while there’s meaningful error
+    if (Math.abs(targetTop - nextTop) > WAKE_EPS) {
+      pendingRaf = A.raf(step);
     }
-
-    nextTop = clamp(nextTop, 0, Math.max(0, vp.scrollHeight - vp.height));
-
-    const immediate = Math.abs(nextTop - vp.top) <= microNudgePx;
-    adapters.scrollTo(nextTop, { immediate });
-
-    state.lastTs = ts;
-    state.lastErr = err;
-    state.lastTop = nextTop;
   }
 
-  function tick(ts) {
-    try {
-      stepScroll(ts);
-    } catch {}
-    requestAnimationFrame(tick);
+  function ensureLoop() {
+    // Wake the loop only if we are meaningfully off
+    if (!pendingRaf && Math.abs(targetTop - A.getViewerTop()) > WAKE_EPS) {
+      lastT = A.now();
+      pendingRaf = A.raf(step);
+    }
   }
-  requestAnimationFrame(tick);
 
   return {
-    setMode(mode) {
-      state.mode = mode === 'calm' ? 'calm' : 'follow';
+    /**
+     * Push a new target. If you already know the absolute top, pass it here.
+     * @param {{top:number}} param0
+     */
+    requestScroll({ top }) {
+      if (typeof top === 'number' && Number.isFinite(top)) {
+        targetTop = top;
+        ensureLoop();
+      }
     },
 
-    updateMatch({ idx, bestIdx, sim = 0, windowAhead = 200 }) {
-      // Detect forward progress of recognition
-      const vp = adapters.getViewport();
-      const prevBest = state.lastBestIdx;
-      if (bestIdx > prevBest) {
-        state.lastBestIdx = bestIdx;
-        state.lastAdvanceTs = now();
+    /**
+     * Convenience helper when you only know a delta you’d like to cover.
+     * @param {number} delta
+     */
+    nudge(delta) {
+      if (!Number.isFinite(delta)) return;
+      targetTop = (A.getViewerTop() || 0) + delta;
+      ensureLoop();
+    },
+
+    /**
+     * Match updates from your alignment engine.
+     * Provide an absolute `nextTop` if you have it; otherwise provide an error proxy.
+     * @param {{ nextTop?: number, behindPx?: number }} update
+     */
+    updateMatch(update) {
+      try {
+        if (typeof update?.nextTop === 'number' && Number.isFinite(update.nextTop)) {
+          targetTop = update.nextTop;
+        } else if (typeof update?.behindPx === 'number' && Number.isFinite(update.behindPx)) {
+          // If we only know we're behind by X pixels, move toward that
+          targetTop = (A.getViewerTop() || 0) + update.behindPx;
+        }
+        ensureLoop();
+      } catch {
+        // deliberately empty — guard against malformed updates in production
       }
+    },
 
-      // Compute target top and dynamic max step
-      state.targetTop = computeTargetTop(bestIdx, sim);
-      const conf = clamp(sim, 0, 1);
-      state.maxStepPx = Math.round(maxStepLo + (maxStepHi - maxStepLo) * (conf >= 0.85 ? 1 : conf));
-
-      // Anti-stall: if we haven't moved enough while bestIdx advanced recently, force a bump
-      const sinceAdvance = now() - state.lastAdvanceTs;
-      const topDelta = Math.abs(vp.top - state.lastTop);
-      if (sinceAdvance > stallMs && bestIdx >= prevBest) {
-        // Force a forward bump scaled by confidence & viewport
-        const bumpBase = clamp(vp.height * (0.08 + 0.12 * conf), 80, 800);
-        const forced = clamp(
-          state.targetTop + Math.sign(state.targetTop - vp.top) * bumpBase,
-          0,
-          Math.max(0, vp.scrollHeight - vp.height)
-        );
-        adapters.scrollTo(forced, { immediate: false });
-        telemetry('STALL', {
-          idx,
-          bestIdx,
-          sim: conf,
-          time: Math.round(sinceAdvance / 10) / 100,
-          atBottom: vp.top + vp.height >= vp.scrollHeight - 2,
-        });
-        // Refresh timers so we don't spam
-        state.lastAdvanceTs = now();
-        state.lastTop = forced;
-      }
-
-      telemetry('match:sim', { idx, bestIdx, sim: +sim.toFixed(3), windowAhead });
+    /**
+     * Switch controller profile.
+     * "follow": quicker to react; "calm": slower, less jittery.
+     */
+    setMode(m) {
+      mode = m === 'calm' ? 'calm' : 'follow';
+      // In "calm" we reduce gains a bit; mild tweak via local closure variables:
+      // (Do it by small factors to avoid abrupt changes.)
+      // Note: We can’t reassign consts, so damp velocity as a soft reset.
+      v *= mode === 'calm' ? 0.6 : 1.0;
     },
   };
 }
