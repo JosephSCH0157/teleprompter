@@ -1,800 +1,304 @@
-// --- Commit Broker ---
-(function () {
-  if (window.__tpCommit) return;
-  const listeners = new Set();
-  let _idx = 0;
-  let _ts = performance?.now?.() || Date.now();
-  window.__tpCommit = {
-    get idx() {
-      return _idx;
-    },
-    get ts() {
-      return _ts;
-    },
-    get() {
-      return { idx: _idx, ts: _ts };
-    },
-    set(nextIdx, src = 'unknown') {
-      if (typeof nextIdx !== 'number' || nextIdx < _idx) return false;
-      _idx = nextIdx;
-      _ts = performance?.now?.() || Date.now();
-      try {
-        listeners.forEach((fn) => fn(_idx, src));
-      } catch {}
-      try {
-        window.__tpBootPush?.(['commit', { idx: _idx, src }]);
-      } catch {}
-      return true;
-    },
-    on(fn) {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
-  };
-  window.__tpForceCommit = function (idx, { scroll = true } = {}) {
-    const ok = window.__tpCommit.set(idx, 'force');
-    if (ok && scroll && typeof window.scrollToCurrentIndex === 'function') {
-      window.scrollToCurrentIndex(idx);
-    }
-    return ok;
-  };
-})();
-// Minimal PID-like auto catch-up scroll controller
-function _dbg(ev) {
-  try {
-    if (typeof debug === 'function') debug(ev);
-    else if (window && window.HUD) HUD.log(ev.tag || 'log', ev);
-  } catch {}
-}
-let rafId,
-  prevErr = 0,
-  active = false;
+/**
+ * Scroll Controller (clean version)
+ * ---------------------------------
+ * A robust state machine + PID-ish controller to keep a scroller aligned
+ * to a moving "anchor" (e.g., transcript line). Includes:
+ *  - Guard rails against NaN/Infinity
+ *  - Defensive bounds on ratios and velocities
+ *  - No undeclared variables, no implicit globals
+ *  - Clear event hooks for instrumentation (matching the tags in your logs)
+ *
+ * Usage:
+ *   const sc = new ScrollController({
+ *     getScrollTop: () => el.scrollTop,
+ *     setScrollTop: (y) => { el.scrollTop = y; },
+ *     getViewportHeight: () => el.clientHeight,
+ *     getDocHeight: () => el.scrollHeight,
+ *     onEvent: (e) => console.debug(e.tag, e), // optional
+ *   });
+ *
+ *   sc.tick({ anchorY, anchorRatio, docRatio });
+ *
+ * Public API:
+ *   - tick(metrics)
+ *   - setMode(mode)            // 'auto' | 'manual' | 'frozen'
+ *   - nudge({pixels})          // small fallback-nudge
+ *   - rescue()                 // attempt a catch-up burst
+ *   - reset()
+ */
+// UMD/Node export removed for browser use. Attach to window/global if needed:
+window.ScrollController = function () {
+  'use strict';
 
-export function startAutoCatchup(getAnchorY, getTargetY, scrollBy) {
-  if (active) return;
-  active = true;
-  try {
-    // Signal to clamp guard that we're in continuous catch-up mode
-    window.__tpCatchupActive = true;
-  } catch {}
-  prevErr = 0;
-  const kP = 0.12; // proportional gain (gentle)
-  const kD = 0.1; // derivative gain (damping)
-  const vMin = 0.2; // px/frame (deadzone)
-  const vMax = 12; // px/frame cap
-  const bias = 0; // baseline offset
-
-  _dbg({ tag: 'match:catchup:start' });
-
-  function tick() {
-    try {
-      const anchorY = getAnchorY(); // current line Y within viewport
-      const targetY = getTargetY(); // desired Y (e.g., 0.4 * viewportHeight)
-      // Error is measured as how far the anchor sits below the target within the viewport.
-      // Positive err => anchor is too low (large Y), so we should scroll down (increase scrollTop).
-      // Negative err => anchor is too high, so we should scroll up (decrease scrollTop).
-      let err = anchorY - targetY;
-      const deriv = err - prevErr;
-      const vRaw = kP * err + kD * deriv + bias;
-      let v = vRaw;
-
-      // Clamp + deadzone
-      if (Math.abs(v) < vMin) v = 0;
-      v = Math.max(-vMax, Math.min(vMax, v));
-
-      if (v === 0 && Math.abs(vRaw) >= 0) {
-        // Deadzone or clamped to zero
-        _dbg({
-          tag: 'match:catchup:deadzone',
-          err,
-          deriv,
-          vRaw: Number(vRaw.toFixed(3)),
-          v: 0,
-          vMin,
-          vMax,
-          anchorY,
-          targetY,
-        });
-      }
-
-      if (v !== 0) {
-        try {
-          scrollBy(v);
-        } catch {}
-        _dbg({
-          tag: 'match:catchup:apply',
-          err,
-          deriv,
-          vRaw: Number(vRaw.toFixed(3)),
-          v: Number(v.toFixed(3)),
-          vMin,
-          vMax,
-          anchorY,
-          targetY,
-        });
-      }
-      prevErr = err;
-    } catch {}
-    if (active) rafId = requestAnimationFrame(tick);
-  }
-  rafId = requestAnimationFrame(tick);
-}
-
-export function stopAutoCatchup() {
-  active = false;
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = null;
-  try {
-    window.__tpCatchupActive = false;
-  } catch {}
-  _dbg({ tag: 'match:catchup:stop' });
-}
-
-// Factory so caller can treat this as a controller instance
-export function createScrollController() {
-  return {
-    startAutoCatchup,
-    stopAutoCatchup,
-    isActive: () => active,
-  };
-}
-
-// ===== Scroll & Match Gate (anti-thrash) =====
-// ===== Scroll & Match Gate (anti-thrash) =====
-(function () {
-  const G = {
-    // index movement policy
-    deadbandIdx: 1, // ignore |bestIdx - committedIdx| <= 1
-    forwardCommitStep: 2, // allow forward jump if ahead by >= 2
-    backwardCommitStep: 2, // allow backward only if behind by >= 2 AND stable twice
-    minSimForward: 0.8, // sim threshold to allow forward commit (raised)
-    minSimBackward: 0.72, // allow backtrack with decent similarity
-    reCommitMs: 650, // allow re-commit if no movement for this long and sim is high
-    minSimRecommit: 0.85,
-
-    // scroll/clamp policy
-    minClampDeltaPx: 24, // don’t clamp if target Y changed less than this
-    bigGapIdx: 18, // if gap >= this, do one-time fast catchup jump
-  };
-
-  // State object, now only for legacy fields; commit state is brokered
-  const S = {
-    pendingIdx: 0,
-    stableHits: 0,
-    lastBestAt: 0,
-    lastCommitAt: 0,
-    lastCommitIdx: 0,
-    lastClampY: -1,
-    lastClampAt: 0,
-    lastClampIdx: -1,
-    lastBestIdx: -1,
-    seenHits: 0,
-    accumDelta: 0,
-    accumDir: 0,
-    lastLeakAt: 0,
-  };
-
-  // All forced commit logic is now brokered via window.__tpCommit and window.__tpForceCommit
-
-  // Monotonic commit with hysteresis and per-commit jump cap
-  const STABLE_HITS = typeof window.__tpStableHits === 'number' ? window.__tpStableHits : 2; // require staying on candidate across frames
-  const FWD_SIM = 0.82; // forward threshold
-  const BACK_SIM = 0.86; // stricter to backtrack
-  const MAX_STEP = typeof window.__tpMaxCommitStep === 'number' ? window.__tpMaxCommitStep : 6; // cap per-commit move in indices
-
-  // Minimal throttle helper (~6-8 updates/sec @ 125ms)
-  function throttle(fn, wait) {
-    let last = 0,
-      tId = null,
-      lastArgs = null,
-      lastThis = null;
-    return function throttled() {
-      const now =
-        typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-      lastArgs = arguments;
-      lastThis = this;
-      const remain = wait - (now - last);
-      if (remain <= 0) {
-        if (tId) {
-          clearTimeout(tId);
-          tId = null;
-        }
-        last = now;
-        try {
-          return fn.apply(lastThis, lastArgs);
-        } catch {}
-      } else if (!tId) {
-        tId = setTimeout(
-          () => {
-            last =
-              typeof performance !== 'undefined' && performance.now
-                ? performance.now()
-                : Date.now();
-            tId = null;
-            try {
-              fn.apply(lastThis, lastArgs);
-            } catch {}
-          },
-          Math.max(0, remain)
-        );
-      }
-    };
+  /** Clamp a number safely between [min, max] */
+  function clamp(n, min, max) {
+    n = Number.isFinite(n) ? n : 0;
+    if (n < min) return min;
+    if (n > max) return max;
+    return n;
   }
 
-  // considerCommit helper removed (unused)
+  /** Safe boolean */
 
-  function logEv(ev) {
-    try {
-      if (typeof debug === 'function') debug(ev);
-      else if (window?.HUD) HUD.log(ev.tag || 'log', ev);
-    } catch {}
+  /** Compute a stable ratio [0,1] given numerator/denominator */
+  function ratio(numer, denom) {
+    if (!Number.isFinite(numer) || !Number.isFinite(denom) || denom <= 0) return 0;
+    return clamp(numer / denom, 0, 1);
   }
 
-  // Legacy policy helper retained for compatibility; no-op gate now
-  window.__tpShouldCommitIdx = function () {
-    return true;
-  };
-
-  // Helper to wrap a provided core scrollToCurrentIndex with commit gating and metadata updates
-  function __installCommitGateInternal(coreFn) {
-    if (typeof coreFn !== 'function') return;
-    // Avoid double-wrapping
-    if (
-      typeof window.scrollToCurrentIndex === 'function' &&
-      window.scrollToCurrentIndex.__tpCommitWrapped
-    ) {
-      return;
+  /**
+   * Basic EWMA (exponentially weighted moving average)
+   */
+  class Ewma {
+    constructor(alpha = 0.2, initial = 0) {
+      this.alpha = clamp(alpha, 0, 1);
+      this.value = Number.isFinite(initial) ? initial : 0;
+      this.initialized = false;
     }
-    // Throttled applier to coalesce frequent commits
-    const applyCommitThrottled = throttle((commitIdx) => {
-      try {
-        // End-of-script guard
-        try {
-          const sc =
-            document.getElementById('viewer') ||
-            document.scrollingElement ||
-            document.documentElement ||
-            document.body;
-          const atBottom = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 4;
-          if (atBottom) return;
-        } catch {}
-        const __prev = window.currentIndex;
-        window.currentIndex = commitIdx;
-        coreFn();
-      } catch {
-      } finally {
-        // no-op
-      }
-      const now =
-        typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-      window.__tpCommit.set(commitIdx, 'auto');
-      S.lastCommitAt = now;
-      S.lastCommitIdx = commitIdx;
-      logEv({
-        tag: 'match:commit',
-        committedIdx: window.__tpCommit.idx,
-        sim: window.__lastSimScore ?? 1,
-      });
-    }, 125);
-
-    function gatedScrollToCurrentIndex() {
-      try {
-        const bestIdx = window.currentIndex;
-        const sim = window.__lastSimScore ?? 1;
-        const now = performance.now();
-
-        // Relax commit gating near end (last 20%): lower sim/hits thresholds
-        let anchorRatio = 0,
-          docRatio = 0;
-        try {
-          if (typeof window.__tpGetAnchorRatio === 'function')
-            anchorRatio = window.__tpGetAnchorRatio();
-        } catch {}
-        try {
-          const v = document.getElementById('viewer');
-          if (v) {
-            const max = Math.max(0, v.scrollHeight - v.clientHeight);
-            const top = Math.max(0, v.scrollTop || 0);
-            docRatio = max ? top / max : 0;
-          }
-        } catch {}
-        const NEAR_END = anchorRatio > 0.65 || docRatio > 0.95;
-
-        // Hysteresis commit: only commit after stability across frames, with direction-specific thresholds
-        // Respect jitter elevation from main module and allow dynamic tuning from main app (__tpGateFwdSim/__tpGateBackSim)
-        let effFwd = typeof window.__tpGateFwdSim === 'number' ? window.__tpGateFwdSim : FWD_SIM,
-          effBack = typeof window.__tpGateBackSim === 'number' ? window.__tpGateBackSim : BACK_SIM;
-        let needHitsAdj = 0;
-        if (NEAR_END) {
-          effFwd = Math.min(effFwd, 0.68); // allow lower sim
-          effBack = Math.min(effBack, 0.7);
-          needHitsAdj = -1; // require fewer stable hits
-        }
-        try {
-          const J = window.__tpJitter || {};
-          const elevated = typeof J.spikeUntil === 'number' && now < J.spikeUntil;
-          if (elevated) {
-            effFwd += 0.06;
-            effBack += 0.06;
-          }
-        } catch {}
-
-        // Track persistence of bestIdx regardless of sim-threshold pass/fail
-        if (bestIdx === S.lastBestIdx) {
-          S.seenHits++;
-        } else {
-          S.lastBestIdx = bestIdx;
-          S.seenHits = 1;
-          S.lastBestAt = now;
-        }
-
-        const movingBack = bestIdx < S.committedIdx;
-        const deltaIdx = bestIdx - S.committedIdx;
-        const adelta = Math.abs(deltaIdx);
-
-        // Single-line stability/time gating to reduce oscillation
-        const singleDebounceMs =
-          typeof window.__tpSingleDebounceMs === 'number' ? window.__tpSingleDebounceMs : 220;
-        const singleFreezeMs =
-          typeof window.__tpSingleFreezeMs === 'number' ? window.__tpSingleFreezeMs : 140;
-
-        // If within a short freeze window after a single-line commit, ignore further +/-1 flips
-        if (adelta === 1 && typeof S.singleFreezeUntil === 'number' && now < S.singleFreezeUntil) {
-          logEv({
-            tag: 'match:gate',
-            reason: 'single-freeze',
-            bestIdx,
-            committedIdx: S.committedIdx,
-          });
-          return;
-        }
-        const ok = (!movingBack && sim >= effFwd) || (movingBack && sim >= effBack);
-        if (!ok) {
-          S.stableHits = 0;
-
-          // Fallback: if we've stalled without commits for a while but the bestIdx
-          // persists ahead by a noticeable gap with moderate confidence, take a small step.
-          const RECOMMIT_MS =
-            typeof window.__tpRecommitMs === 'number' ? window.__tpRecommitMs : 1500;
-          const RECOMMIT_SIM_LOW =
-            typeof window.__tpRecommitSimLow === 'number' ? window.__tpRecommitSimLow : 0.5;
-          const RECOMMIT_GAP =
-            typeof window.__tpRecommitGap === 'number' ? window.__tpRecommitGap : 6;
-          const RECOMMIT_HITS =
-            typeof window.__tpRecommitHits === 'number' ? window.__tpRecommitHits : 3;
-
-          const stalledLong = S.lastCommitAt ? now - S.lastCommitAt >= RECOMMIT_MS : false;
-          const forwardDrift = !movingBack && adelta >= RECOMMIT_GAP && sim >= RECOMMIT_SIM_LOW;
-          const persistent = S.seenHits >= RECOMMIT_HITS;
-          if (stalledLong && forwardDrift && persistent) {
-            const dir = Math.sign(deltaIdx);
-            // Take a conservative step to avoid overshoot; capped by MAX_STEP
-            const step = Math.max(1, Math.min(adelta, Math.min(MAX_STEP, 3)));
-            const commitIdx = S.committedIdx + dir * step;
-            applyCommitThrottled(commitIdx);
-            S.singleFreezeUntil = 0; // do not enforce single-line freeze on fallback
-            logEv({
-              tag: 'match:commit:fallback',
-              reason: 'low-sim-stall',
-              bestIdx,
-              committedIdx: S.committedIdx,
-              sim,
-              step,
-              adelta,
-              stalledMs: Math.floor(now - S.lastCommitAt),
-            });
-            return;
-          }
-
-          logEv({
-            tag: 'match:gate',
-            reason: 'sim-too-low',
-            bestIdx,
-            committedIdx: S.committedIdx,
-            sim,
-            effFwd,
-            effBack,
-            movingBack,
-          });
-          return;
-        }
-
-        if (bestIdx === S.pendingIdx) S.stableHits++;
-        else {
-          S.pendingIdx = bestIdx;
-          S.stableHits = 1;
-        }
-
-        // Require extra stability/time for single-line commits
-        let needHits = STABLE_HITS + needHitsAdj;
-        if (adelta === 1) needHits += movingBack ? 2 : 1;
-        if (S.stableHits < needHits) {
-          logEv({
-            tag: 'match:gate',
-            reason: 'unstable',
-            bestIdx,
-            pendingIdx: S.pendingIdx,
-            hits: S.stableHits,
-            need: needHits,
-          });
-          return;
-        }
-
-        // Time gate for single-line commits
-        if (adelta === 1 && S.lastCommitAt && now - S.lastCommitAt < singleDebounceMs) {
-          logEv({
-            tag: 'match:gate',
-            reason: 'single-debounce',
-            since: Math.floor(now - S.lastCommitAt),
-            needMs: singleDebounceMs,
-            bestIdx,
-            committedIdx: S.committedIdx,
-          });
-          return;
-        }
-
-        // Clamp commit to MAX_STEP towards pending index
-        const dir = Math.sign(S.pendingIdx - S.committedIdx) || 0;
-        if (dir === 0) {
-          return;
-        }
-        const step = Math.min(Math.abs(S.pendingIdx - S.committedIdx), MAX_STEP);
-        const commitIdx = S.committedIdx + dir * step;
-
-        // Use throttled applier to coalesce high-frequency updates
-        applyCommitThrottled(commitIdx);
-
-        // After committing a single step, set a brief freeze to resist ping-pong
-        if (adelta === 1) {
-          S.singleFreezeUntil = now + singleFreezeMs;
-        } else {
-          S.singleFreezeUntil = 0;
-        }
-      } catch (e) {
-        logEv({ tag: 'match:gate:error', e: String(e) });
-      }
-    }
-    // Mark and install
-    try {
-      gatedScrollToCurrentIndex.__tpCommitWrapped = true;
-      window.scrollToCurrentIndex = gatedScrollToCurrentIndex;
-    } catch {}
-  }
-
-  // Expose installer on window for late binding from core
-  try {
-    window.__tpInstallCommitGate = function (coreFn) {
-      __installCommitGateInternal(coreFn);
-    };
-  } catch {}
-
-  // Wrap existing scrollToCurrentIndex if present on window at load time
-  const _origScrollToCurrentIndex = window.scrollToCurrentIndex;
-  if (typeof _origScrollToCurrentIndex === 'function') {
-    __installCommitGateInternal(_origScrollToCurrentIndex);
-  }
-
-  // Throttle identical clamps (call this inside your clamp function)
-  window.__tpClampGuard = function (targetY, _maxY) {
-    if (typeof targetY !== 'number') return true;
-    const now =
-      typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-    const inCatchup = !!(typeof window !== 'undefined' && window.__tpCatchupActive);
-    // During a short stall-rescue window, or when we're near the document bottom,
-    // relax clamp rules so small corrections and modest jumps aren't vetoed by sticky/min-delta.
-    const stallRelax = !!(
-      typeof window !== 'undefined' &&
-      typeof window.__tpStallRelaxUntil === 'number' &&
-      now < window.__tpStallRelaxUntil
-    );
-    const docBottomish = (function () {
-      try {
-        const max = typeof _maxY === 'number' ? _maxY : 0;
-        if (max <= 0) return false;
-        const r = targetY / max;
-        const thr =
-          typeof window !== 'undefined' && typeof window.__tpClampDocRelaxRatio === 'number'
-            ? window.__tpClampDocRelaxRatio
-            : 0.7;
-        return r > thr;
-      } catch {
-        return false;
-      }
-    })();
-    // Near-bottom anti-backscroll: when bottomish, avoid upward moves beyond a tiny tolerance
-    // to prevent visible "pull up" near the end. Allow very small settling moves.
-    if (S.lastClampY >= 0 && docBottomish) {
-      const up = targetY < S.lastClampY;
-      if (up) {
-        const upDelta = Math.abs(targetY - S.lastClampY);
-        const MAX_UP_PX =
-          typeof window !== 'undefined' && typeof window.__tpClampMaxUpPxNearBottom === 'number'
-            ? window.__tpClampMaxUpPxNearBottom
-            : 2; // tiny settling only
-        if (upDelta > MAX_UP_PX) {
-          logEv({
-            tag: 'scroll:clamp-bottom-up-skip',
-            targetY,
-            last: S.lastClampY,
-            upDelta,
-            maxUp: MAX_UP_PX,
-          });
-          return false;
-        }
-      }
-    }
-    // First-time initialization
-    if (S.lastClampY < 0) {
-      S.lastClampY = targetY;
-      S.lastClampAt = now;
-      try {
-        S.lastClampIdx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
-      } catch {
-        S.lastClampIdx = -1;
-      }
-      S.accumDelta = 0;
-      S.accumDir = 0;
-      S.lastLeakAt = now;
-      return true;
-    }
-    const delta = Math.abs(targetY - S.lastClampY);
-    // In continuous catch-up mode, allow fine-grained steps to pass through the guard.
-    // Otherwise, use a leaky integrator to periodically allow micro re-clamps in a consistent direction
-    // so we don't get stuck hovering near the bottom.
-    let leakyPass = false;
-    if (!inCatchup && delta < G.minClampDeltaPx) {
-      const dir = Math.sign(targetY - S.lastClampY);
-      if (dir === 0) {
-        logEv({ tag: 'scroll:clamp-skip', targetY, last: S.lastClampY, delta });
-        return false;
-      }
-      if (S.accumDir === dir) S.accumDelta += delta;
-      else {
-        S.accumDir = dir;
-        S.accumDelta = delta;
-      }
-      const timeSinceLast = now - (S.lastLeakAt || 0);
-      const LEAK_INTERVAL_MS =
-        typeof window.__tpClampLeakMs === 'number' ? window.__tpClampLeakMs : 420;
-      const LEAK_MIN_DELTA =
-        typeof window.__tpClampLeakMinPx === 'number' ? window.__tpClampLeakMinPx : 8;
-      if (S.accumDelta >= G.minClampDeltaPx) {
-        leakyPass = true;
-        logEv({
-          tag: 'scroll:clamp-leak-pass',
-          targetY,
-          last: S.lastClampY,
-          delta,
-          accum: S.accumDelta,
-          dir,
-        });
-      } else if (timeSinceLast >= LEAK_INTERVAL_MS && delta >= LEAK_MIN_DELTA) {
-        leakyPass = true;
-        logEv({
-          tag: 'scroll:clamp-time-pass',
-          targetY,
-          last: S.lastClampY,
-          delta,
-          accum: S.accumDelta,
-          dir,
-          ms: Math.floor(timeSinceLast),
-        });
+    push(x) {
+      x = Number.isFinite(x) ? x : 0;
+      if (!this.initialized) {
+        this.value = x;
+        this.initialized = true;
       } else {
-        // If we're in a relaxed window (stall rescue) or near the document bottom,
-        // permit this micro step to avoid bottom-hover stalls.
-        if (stallRelax || docBottomish) {
-          leakyPass = true;
-          logEv({
-            tag: 'scroll:clamp-relax-pass',
-            targetY,
-            last: S.lastClampY,
-            delta,
-            accum: S.accumDelta,
-            dir,
-            context: stallRelax ? 'stall' : 'doc',
+        this.value = this.alpha * x + (1 - this.alpha) * this.value;
+      }
+      return this.value;
+    }
+  }
+
+  /**
+   * A small PID-ish controller to compute a target scrollTop delta.
+   */
+  class VelocityController {
+    constructor(cfg = {}) {
+      this.kp = Number.isFinite(cfg.kp) ? cfg.kp : 0.5;
+      this.ki = Number.isFinite(cfg.ki) ? cfg.ki : 0.0;
+      this.kd = Number.isFinite(cfg.kd) ? cfg.kd : 0.25;
+      this.integral = 0;
+      this.prevErr = 0;
+      this.prevTs = 0;
+      this.maxV = Number.isFinite(cfg.maxV) ? cfg.maxV : 12; // px per tick
+      this.minV = Number.isFinite(cfg.minV) ? cfg.minV : 0.2;
+    }
+
+    reset() {
+      this.integral = 0;
+      this.prevErr = 0;
+      this.prevTs = 0;
+    }
+
+    step(err, nowMs) {
+      err = Number.isFinite(err) ? err : 0;
+      const now = Number.isFinite(nowMs) ? nowMs : performance.now();
+      const dt = this.prevTs ? Math.max(1, now - this.prevTs) : 16; // ms
+      this.prevTs = now;
+
+      // Integral windup guard
+      this.integral = clamp(this.integral + err * dt * 0.001, -200, 200);
+
+      const deriv = (err - this.prevErr) / dt;
+      this.prevErr = err;
+
+      let vRaw = this.kp * err + this.ki * this.integral + this.kd * deriv;
+      let v = clamp(Math.abs(vRaw), this.minV, this.maxV);
+      v *= Math.sign(vRaw) || 0;
+
+      return {
+        err,
+        dt,
+        deriv,
+        vRaw: Number(vRaw.toFixed(3)),
+        v: Number(v.toFixed(3)),
+      };
+    }
+  }
+
+  /**
+   * ScrollController
+   */
+  class ScrollController {
+    /**
+     * @param {Object} io
+     * @param {() => number} io.getScrollTop
+     * @param {(y:number) => void} io.setScrollTop
+     * @param {() => number} io.getViewportHeight
+     * @param {() => number} io.getDocHeight
+     * @param {(evt:object) => void} [io.onEvent]
+     * @param {Object} [cfg]
+     */
+    constructor(io, cfg = {}) {
+      if (!io || typeof io.getScrollTop !== 'function' || typeof io.setScrollTop !== 'function') {
+        throw new Error('ScrollController: missing required I/O functions');
+      }
+      this.io = io;
+      this.onEvent = typeof io.onEvent === 'function' ? io.onEvent : () => {};
+
+      this.mode = 'auto'; // 'auto' | 'manual' | 'frozen'
+      this.state = 'idle'; // 'idle' | 'tracking' | 'stall' | 'rescue'
+
+      this.vel = new VelocityController(cfg.pid || {});
+
+      this.anchorEwma = new Ewma(0.25, 0);
+      this.jitterEwma = new Ewma(0.15, 0);
+
+      // thresholds
+      this.nearEndAnchor = Number.isFinite(cfg.nearEndAnchor) ? cfg.nearEndAnchor : 0.65;
+      this.nearEndDoc = Number.isFinite(cfg.nearEndDoc) ? cfg.nearEndDoc : 0.95;
+      this.stallMs = Number.isFinite(cfg.stallMs) ? cfg.stallMs : 1200;
+
+      this.lastCommitAt = 0;
+      this.lastBestIdx = -1;
+      this.pendingIdx = -1;
+      this.currentIndex = -1;
+
+      this._log('init', { mode: this.mode });
+    }
+
+    setMode(mode) {
+      if (mode !== 'auto' && mode !== 'manual' && mode !== 'frozen') return;
+      this.mode = mode;
+      this._log('mode:set', { mode });
+    }
+
+    reset() {
+      this.state = 'idle';
+      this.vel.reset();
+      this.lastCommitAt = 0;
+      this.lastBestIdx = -1;
+      this.pendingIdx = -1;
+      this.currentIndex = -1;
+      this._log('reset', {});
+    }
+
+    /**
+     * Main tick — call frequently with latest metrics.
+     * @param {Object} m
+     * @param {number} m.anchorY   absolute Y of anchor in px (relative to document)
+     * @param {number} m.anchorRatio  [0,1] position of anchor within viewport
+     * @param {number} m.docRatio     [0,1] how far the user is through the doc
+     * @param {number} [m.jitter]     optional jitter metric
+     */
+    tick(m) {
+      if (this.mode !== 'auto') return;
+
+      const now = performance.now ? performance.now() : Date.now();
+      const top = this.io.getScrollTop();
+      const vh = Math.max(1, this.io.getViewportHeight());
+      const dh = Math.max(vh, this.io.getDocHeight());
+
+      const anchorRatio = clamp(Number(m.anchorRatio), 0, 1);
+      const docRatio = clamp(Number(m.docRatio), 0, 1);
+      const jitter = clamp(Number(m.jitter ?? 0), 0, 30);
+
+      const NEAR_END = anchorRatio > this.nearEndAnchor || docRatio > this.nearEndDoc;
+
+      // record smoothed signals
+      const aSm = this.anchorEwma.push(anchorRatio);
+      const jSm = this.jitterEwma.push(jitter);
+
+      // stall detection: no commits + low progress for too long
+      if (!this.lastCommitAt) this.lastCommitAt = now;
+      const noCommitFor = now - this.lastCommitAt;
+      const progressRate = Math.max(0.01, (aSm + docRatio) / 2);
+      if (noCommitFor > this.stallMs && progressRate < 0.15) {
+        if (this.state !== 'stall') {
+          this.state = 'stall';
+          this._log('stall:detected', {
+            noCommitFor: Math.round(noCommitFor),
+            pr: Number(progressRate.toFixed(3)),
+            anchorRatio: aSm,
+            jitterSpike: jSm > 8,
+            committedIdx: this.lastBestIdx >= 0 ? this.lastBestIdx : 0,
+            currentIndex: this.currentIndex >= 0 ? this.currentIndex : 0,
           });
-        } else {
-          logEv({
-            tag: 'scroll:clamp-skip',
-            targetY,
-            last: S.lastClampY,
-            delta,
-            accum: S.accumDelta,
-            dir,
-          });
-          return false;
+          this._markRecovery('stall');
         }
       }
-    }
 
-    // Sticky guard: if we're trying to reclamp the same index within a short window
-    // and the target Y is within a modest band, skip to avoid visible top flipping.
-    // While auto catch-up is active, disable sticky suppression to allow smooth continuous motion.
-    const stickyMs =
-      inCatchup || leakyPass || stallRelax || docBottomish
-        ? 0
-        : typeof window.__tpClampStickyMs === 'number'
-          ? window.__tpClampStickyMs
-          : 600;
-    const stickyPx =
-      inCatchup || leakyPass || stallRelax || docBottomish
-        ? 0
-        : typeof window.__tpClampStickyPx === 'number'
-          ? window.__tpClampStickyPx
-          : 64;
-    let idx = -1;
-    try {
-      idx = typeof window.currentIndex === 'number' ? window.currentIndex : -1;
-    } catch {}
-    if (!(inCatchup || leakyPass || stallRelax || docBottomish)) {
-      if (
-        idx === S.lastClampIdx &&
-        S.lastClampAt &&
-        now - S.lastClampAt < stickyMs &&
-        Math.abs(targetY - S.lastClampY) < stickyPx
-      ) {
-        logEv({
-          tag: 'scroll:clamp-sticky',
-          targetY,
-          last: S.lastClampY,
-          delta,
-          idx,
-          since: Math.floor(now - S.lastClampAt),
-          stickyMs,
-          stickyPx,
-        });
-        return false;
+      // if near end, prefer gentler speed
+      const bias = NEAR_END ? 0.5 : 1;
+
+      // error: keep anchor a bit above center (0.45)
+      const targetRatio = 0.45;
+      const errPx = (anchorRatio - targetRatio) * vh;
+
+      const { v } = this.vel.step(errPx * bias, now);
+
+      // Apply scroll with bounds
+      const newTop = clamp(top + v, 0, dh - vh);
+      if (Number.isFinite(newTop) && Math.abs(newTop - top) > 0.1) {
+        this.io.setScrollTop(newTop);
+        this._log('scroll', { tag: 'scroll', top: newTop });
+      }
+
+      // pseudo "commit" when anchor is close to target
+      if (Math.abs(anchorRatio - targetRatio) < 0.02) {
+        this.lastCommitAt = now;
+        this._log('match:catchup:stop', {});
       }
     }
 
-    // Accept this clamp and record
-    S.lastClampY = targetY;
-    S.lastClampAt = now;
-    S.lastClampIdx = idx;
-    if (leakyPass && S.accumDir) {
-      // Reduce accumulator by the applied delta in the same direction, keep leftover to continue smooth drift
-      S.accumDelta = Math.max(0, S.accumDelta - delta);
-      S.lastLeakAt = now;
-    } else if (inCatchup) {
-      // Catch-up writes reset the leak timers/accum to avoid double-counting
-      S.accumDelta = 0;
-      S.accumDir = 0;
-      S.lastLeakAt = now;
+    /** Small manual nudge (fallback) */
+    nudge({ pixels = 12 } = {}) {
+      const top = this.io.getScrollTop();
+      const vh = Math.max(1, this.io.getViewportHeight());
+      const dh = Math.max(vh, this.io.getDocHeight());
+      const newTop = clamp(top + pixels, 0, dh - vh);
+      this.io.setScrollTop(newTop);
+      this._log('fallback-nudge', { top: newTop });
     }
-    if (inCatchup) {
-      logEv({ tag: 'scroll:clamp-catchup', targetY, last: S.lastClampY, delta });
-    }
-    return true;
-  };
 
-  // ===== Recovery spot marker (telemetry-only) =====
-  // Non-invasive: lets us record a snapshot for later rescue logic.
-  (function installRecoveryMarker() {
-    if (typeof window.__tpMarkRecoverySpot === 'function') return; // idempotent
-    const spots = [];
-    function getAnchorRatio() {
+    /** Attempt a burst catch-up (rescue) */
+    rescue() {
+      if (this.state !== 'stall') return;
+      this._log('stall:rescue:start', { method: 'catchup-burst' });
+      // simple burst: push toward 0.40 viewport ratio
+      for (let i = 0; i < 8; i++) {
+        const top = this.io.getScrollTop();
+        const vh = Math.max(1, this.io.getViewportHeight());
+        const dh = Math.max(vh, this.io.getDocHeight());
+        // bias upward slightly
+        const v = clamp(vh * 0.08, 0.2, 24);
+        const newTop = clamp(top - v, 0, dh - vh);
+        this.io.setScrollTop(newTop);
+      }
+      this.state = 'tracking';
+      this._log('stall:rescue:done', { method: 'catchup-burst' });
+    }
+
+    _markRecovery(reason) {
+      const top = this.io.getScrollTop();
+      const vh = Math.max(1, this.io.getViewportHeight());
+      const dh = Math.max(vh, this.io.getDocHeight());
+      const scrollRatio = ratio(top, Math.max(1, dh - vh));
+      const anchorRatio = this.anchorEwma.value;
+      const t = (performance.now ? performance.now() : Date.now()).toFixed(1);
+      this._log('recovery:mark', {
+        t: Number(t),
+        reason,
+        committedIdx: Math.max(0, this.lastBestIdx),
+        lastCommitAt: this.lastCommitAt || 0,
+        pendingIdx: Math.max(0, this.pendingIdx),
+        lastBestIdx: Math.max(0, this.lastBestIdx),
+        sim: 1,
+        currentIndex: this.currentIndex >= 0 ? this.currentIndex : null,
+        scrollTop: top,
+        scrollRatio,
+        anchorRatio,
+        jitter: { buf: [], max: 30, mean: Number(this.jitterEwma.value.toFixed(2)) },
+        extra: { noCommitFor: 0, pr: 0, anchorRatio },
+      });
+    }
+
+    _log(tag, payload) {
       try {
-        const viewer =
-          document.getElementById('viewer') ||
-          document.scrollingElement ||
-          document.documentElement ||
-          document.body;
-        const h = Math.max(1, viewer.clientHeight || 1);
-        // Prefer IO anchor if present
-        const vis =
-          window.__anchorObs && typeof window.__anchorObs.mostVisibleEl === 'function'
-            ? window.__anchorObs.mostVisibleEl()
-            : null;
-        const el = vis || document.querySelector('#script p.active') || null;
-        if (el && viewer && typeof el.getBoundingClientRect === 'function') {
-          const er = el.getBoundingClientRect();
-          const vr = viewer.getBoundingClientRect ? viewer.getBoundingClientRect() : { top: 0 };
-          const anchorY = er.top - vr.top;
-          return Math.max(0, Math.min(1, anchorY / h));
-        }
-      } catch {}
-      return null;
-    }
-    // Expose minimal commit metadata for stall detection
-    if (typeof window.__tpGetCommitMeta !== 'function') {
-      window.__tpGetCommitMeta = function () {
-        try {
-          return {
-            lastCommitAt: S.lastCommitAt || 0,
-            lastCommitIdx: S.lastCommitIdx || 0,
-            committedIdx: S.committedIdx || 0,
-          };
-        } catch {
-          return { lastCommitAt: 0, lastCommitIdx: 0, committedIdx: 0 };
-        }
-      };
-    }
-
-    // 🔧 Give core a way to advance the *real* commit state when the gate refuses
-    if (typeof window.__tpForceCommit !== 'function') {
-      window.__tpForceCommit = function (idx, opts = {}) {
-        try {
-          if (typeof idx !== 'number') return false;
-          const now =
-            typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-          // Only move forward
-          const target = Math.max(S.committedIdx || 0, idx);
-          S.committedIdx = target;
-          S.lastCommitIdx = target;
-          S.lastCommitAt = now;
-          // Keep global currentIndex coherent
-          try {
-            window.currentIndex = target;
-          } catch {}
-          // Optionally nudge the viewport so the HUD/anchor make sense right away
-          const doScroll = opts.scroll !== false;
-          if (doScroll && typeof window.scrollToCurrentIndex === 'function') {
-            // Call the *wrapped* scroller; our wrapper will no-op near hard-bottom
-            window.scrollToCurrentIndex(target);
-          }
-          return true;
-        } catch {
-          return false;
-        }
-      };
-    }
-
-    // Expose a direct forced commit for stall rescue
-    if (typeof window.__tpForceCommit !== 'function') {
-      window.__tpForceCommit = function (idx) {
-        try {
-          if (typeof idx !== 'number') return;
-          const now =
-            typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-          S.committedIdx = idx;
-          S.lastCommitAt = now;
-          S.lastCommitIdx = idx;
-          logEv({ tag: 'forced-commit:direct', committedIdx: idx });
-          if (typeof window.requestScroll === 'function' && window.viewer) {
-            window.requestScroll(window.viewer.scrollTop);
-          }
-        } catch {}
-      };
-    }
-    window.__tpMarkRecoverySpot = function (reason, extra) {
-      try {
-        const now =
-          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-        const viewer =
-          document.getElementById('viewer') ||
-          document.scrollingElement ||
-          document.documentElement ||
-          document.body;
-        const max = Math.max(0, (viewer.scrollHeight || 0) - (viewer.clientHeight || 0));
-        const top = viewer.scrollTop || 0;
-        const ratio = max ? top / max : 0;
-        const anchorRatio = getAnchorRatio();
-        const rec = {
-          tag: 'recovery:mark',
-          t: now,
-          reason: reason || 'manual',
-          committedIdx: S.committedIdx,
-          lastCommitAt: S.lastCommitAt,
-          pendingIdx: S.pendingIdx,
-          lastBestIdx: S.lastBestIdx,
-          sim: typeof window.__lastSimScore === 'number' ? window.__lastSimScore : null,
-          currentIndex: typeof window.currentIndex === 'number' ? window.currentIndex : null,
-          scrollTop: top,
-          scrollRatio: ratio,
-          anchorRatio,
-          jitter: window.__tpJitter || null,
-          extra: extra || null,
-        };
-        spots.push(rec);
-        try {
-          window.__tpRecoverySpots = spots;
-        } catch {}
-        _dbg(rec);
-        return rec;
-      } catch (e) {
-        _dbg({ tag: 'recovery:mark:error', e: String(e) });
-        return null;
+        this.onEvent({ tag, ...(payload || {}) });
+      } catch {
+        // never throw from user logger
       }
-    };
-  })();
-})();
+    }
+  }
+
+  return ScrollController;
+};
