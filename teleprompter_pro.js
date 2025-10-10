@@ -2628,8 +2628,9 @@
       }
 
       setInterval(() => {
-        if (!recActive) return; // only when speech sync is active
+        console.log('WATCHDOG TICK:', recActive, performance.now());
         debug?.({ tag: 'watchdog-tick', recActive, now: performance.now() });
+        if (!recActive) return; // only when speech sync is active
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
         const now = performance.now();
 
