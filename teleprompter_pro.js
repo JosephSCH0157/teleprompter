@@ -2709,9 +2709,13 @@
                 const meta = window.__tpGetCommitMeta();
                 if (meta && typeof meta.committedIdx === 'number' && idx > meta.committedIdx) {
                   if (typeof window.__tpForceCommit === 'function') {
-                    window.__tpForceCommit(idx);
-                    debug?.({ tag: 'forced-commit:direct', idx, committedIdx: idx });
-                    window.__tpStallStreak = 0;
+                    const didForce = window.__tpForceCommit(idx, { scroll: true });
+                    debug?.({
+                      tag: didForce ? 'forced-commit:override' : 'forced-commit:direct',
+                      idx,
+                      committedIdx: idx,
+                    });
+                    if (didForce) window.__tpStallStreak = 0;
                   }
                 }
               }

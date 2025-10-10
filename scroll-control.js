@@ -700,6 +700,35 @@ export function createScrollController() {
       };
     }
 
+    // 🔧 Give core a way to advance the *real* commit state when the gate refuses
+    if (typeof window.__tpForceCommit !== 'function') {
+      window.__tpForceCommit = function (idx, opts = {}) {
+        try {
+          if (typeof idx !== 'number') return false;
+          const now =
+            typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+          // Only move forward
+          const target = Math.max(S.committedIdx || 0, idx);
+          S.committedIdx = target;
+          S.lastCommitIdx = target;
+          S.lastCommitAt = now;
+          // Keep global currentIndex coherent
+          try {
+            window.currentIndex = target;
+          } catch {}
+          // Optionally nudge the viewport so the HUD/anchor make sense right away
+          const doScroll = opts.scroll !== false;
+          if (doScroll && typeof window.scrollToCurrentIndex === 'function') {
+            // Call the *wrapped* scroller; our wrapper will no-op near hard-bottom
+            window.scrollToCurrentIndex(target);
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      };
+    }
+
     // Expose a direct forced commit for stall rescue
     if (typeof window.__tpForceCommit !== 'function') {
       window.__tpForceCommit = function (idx) {
