@@ -3034,7 +3034,7 @@
     }
     try {
       const scMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-control.js'));
-      __scrollCtl = new scMod.ScrollController(() => viewer);
+      __scrollCtl = new scMod.default(() => viewer);
     } catch (e) {
       console.warn('scroll-control load failed', e);
     }
