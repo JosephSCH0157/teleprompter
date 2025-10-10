@@ -193,7 +193,18 @@ export default function createScrollController(adapters = {}, telemetry) {
      */
     forceAlignToMarker(idx, markerY) {
       const el = this.getLineElement(idx);
-      if (!el) return;
+      if (!el) {
+        console.warn('[forceAlignToMarker] No element for idx', idx);
+        return;
+      }
+      // Visual flash for debug
+      try {
+        el.style.transition = 'background 0.2s';
+        el.style.background = '#ff0';
+        setTimeout(() => {
+          el.style.background = '';
+        }, 200);
+      } catch {}
       // Get bounding rect of the line element
       const rect = el.getBoundingClientRect();
       // Get current scroll position
@@ -204,6 +215,14 @@ export default function createScrollController(adapters = {}, telemetry) {
       const delta = rect.top - markerY;
       // Set scrollTop so the line aligns with the marker
       const newScrollTop = Math.max(0, viewerTop + delta);
+      console.debug('[forceAlignToMarker]', {
+        idx,
+        markerY,
+        rectTop: rect.top,
+        viewerTop,
+        delta,
+        newScrollTop,
+      });
       A.requestScroll(newScrollTop);
       log('scroll', { tag: 'force-align', idx, markerY, newScrollTop });
     },
