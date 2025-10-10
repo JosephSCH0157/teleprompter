@@ -21,6 +21,91 @@
  * @param {(tag:string, data?:any) => void} [telemetry]
  */
 export default function createScrollController(adapters = {}, telemetry) {
+  // --- Anti-drift state ---
+  let bigErrStart = null; // timestamp when |err| > macro began
+  let lastErr = 0;
+  let lastCommitTime = 0;
+  let lastTargetTop = 0;
+
+  // Helper: check if at bottom of doc
+  function atBottom() {
+    const viewerTop = A.getViewerTop();
+    const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
+    return viewerTop >= maxScrollTop - 2; // allow small epsilon
+  }
+  /**
+   * Drop-in scroll logic for immediate/snap vs. ease mode.
+   * Call on every confirmed match or animation tick while speaking.
+   * @param {Object} params
+   * @param {number} params.yActive - Desired scroll position (target).
+   * @param {number} params.yMarker - Current marker position (highlight).
+   * @param {number} params.scrollTop - Current scroll position.
+   * @param {number} params.maxScrollTop - Maximum allowed scroll position.
+   * @param {number} params.now - Current time (optional, for future use).
+   * @returns {{targetTop:number, mode:'snap'|'ease'}|null}
+   */
+  function controlScroll({
+    yActive,
+    yMarker,
+    scrollTop,
+    maxScrollTop,
+    now,
+    markerOffset = 0,
+    sim = 1,
+    stallFired = false,
+  }) {
+    const err = yActive - yMarker;
+    const absErr = Math.abs(err);
+    const micro = 12;
+    const macro = 120;
+    const maxStep = 320;
+    const nowTs = now || (A.now ? A.now() : Date.now());
+
+    // --- Hard resync on big error ---
+    if (absErr > macro) {
+      if (!bigErrStart) bigErrStart = nowTs;
+      if (nowTs - bigErrStart > 300) {
+        // Hard snap, skip easing/debouncers
+        lastCommitTime = nowTs;
+        lastErr = 0;
+        bigErrStart = null;
+        let snapTop = yActive - markerOffset;
+        snapTop = Math.max(0, Math.min(snapTop, maxScrollTop));
+        return { targetTop: snapTop, mode: 'snap' };
+      }
+    } else {
+      bigErrStart = null;
+    }
+
+    // --- Calm mode bypass when behind or stalled ---
+    let allowFastLane = absErr > macro || (stallFired && sim >= 0.85);
+
+    // --- Bottom-of-doc safety ---
+    if (scrollTop >= maxScrollTop - 2 && absErr > 0) {
+      // At bottom, can't scroll further; shrink step to zero
+      return { targetTop: maxScrollTop, mode: 'bottom' };
+    }
+
+    // --- Small errors: gentle easing (proportional) ---
+    if (absErr <= micro) return null;
+
+    // --- Large errors: snap closer in one go (clamped) ---
+    const step = allowFastLane ? Math.min(absErr, maxStep) : Math.ceil(absErr * 0.35);
+    let targetTop = scrollTop + Math.sign(err) * step;
+    targetTop = Math.max(0, Math.min(targetTop, maxScrollTop));
+
+    // --- Clamp to marker lock after commit ---
+    if (Math.abs(targetTop - lastTargetTop) > 0) {
+      // After scroll, if |err| < micro, snap remainder
+      const postErr = yActive - (targetTop + markerOffset);
+      if (Math.abs(postErr) < micro) {
+        targetTop = yActive - markerOffset;
+      }
+      lastTargetTop = targetTop;
+    }
+
+    return { targetTop, mode: allowFastLane ? 'snap' : 'ease' };
+  }
   const log = telemetry || (() => {});
 
   // Adapters with sensible browser defaults
@@ -60,37 +145,39 @@ export default function createScrollController(adapters = {}, telemetry) {
     lastT = t;
 
     const viewerTop = A.getViewerTop();
-    const error = targetTop - viewerTop;
-
-    // INTENT FOR topDelta:
-    // topDelta measures how far we are from target NOW, independent of velocity estimate.
-    // We use it as a feed‑forward term to prevent slow drift & stalls when we fall behind.
-    const topDelta = error; // alias for clarity in formulas
-
-    // Basic PD + feed‑forward controller
-    const accel = Kp * error - Kd * v + Kff * (topDelta / Math.max(1, A.getViewportHeight()));
-    v += accel * dt * 1000; // px/s update (scaled)
-
-    // Convert to a bounded step
-    let stepPx = v * dt;
-    if (!Number.isFinite(stepPx)) stepPx = 0;
-    stepPx = Math.max(-MAX_STEP, Math.min(MAX_STEP, stepPx));
-
-    // If we're close, snap and sleep
-    if (Math.abs(error) <= SNAP_EPS) {
-      if (Math.abs(v) > 1) v *= 0.5;
-      A.requestScroll(targetTop);
-      log('scroll', { tag: 'scroll', top: targetTop, mode });
-      return; // sleep until new target arrives
-    }
-
-    const nextTop = viewerTop + stepPx;
-    A.requestScroll(nextTop);
-    log('scroll', { tag: 'scroll', top: nextTop, mode });
-
-    // Keep animating while there’s meaningful error
-    if (Math.abs(targetTop - nextTop) > WAKE_EPS) {
-      pendingRaf = A.raf(step);
+    const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
+    // Use the integrated controlScrollStep to decide scroll action
+    const ctrl = controlScroll({
+      yActive: targetTop,
+      yMarker: viewerTop,
+      scrollTop: viewerTop,
+      maxScrollTop,
+      now: t,
+    });
+    if (ctrl) {
+      if (ctrl.mode === 'snap') {
+        // Immediate set, no batching/debounce
+        A.requestScroll(ctrl.targetTop);
+        log('scroll', { tag: 'scroll', top: ctrl.targetTop, mode: 'snap' });
+      } else {
+        // Smooth path (existing logic)
+        // Basic PD + feed‑forward controller
+        const error = targetTop - viewerTop;
+        const topDelta = error;
+        const accel = Kp * error - Kd * v + Kff * (topDelta / Math.max(1, A.getViewportHeight()));
+        v += accel * dt * 1000;
+        let stepPx = v * dt;
+        if (!Number.isFinite(stepPx)) stepPx = 0;
+        stepPx = Math.max(-MAX_STEP, Math.min(MAX_STEP, stepPx));
+        const nextTop = viewerTop + stepPx;
+        A.requestScroll(nextTop);
+        log('scroll', { tag: 'scroll', top: nextTop, mode: 'ease' });
+        if (Math.abs(targetTop - nextTop) > WAKE_EPS) {
+          pendingRaf = A.raf(step);
+        }
+      }
+    } else {
+      // If ctrl is null, error is within micro threshold; do nothing
     }
   }
 
@@ -103,6 +190,18 @@ export default function createScrollController(adapters = {}, telemetry) {
   }
 
   return {
+    /**
+     * Drop-in scroll logic for immediate/snap vs. ease mode.
+     * Call on every confirmed match or animation tick while speaking.
+     * @param {Object} params
+     * @param {number} params.yActive - Desired scroll position (target).
+     * @param {number} params.yMarker - Current marker position (highlight).
+     * @param {number} params.scrollTop - Current scroll position.
+     * @param {number} params.maxScrollTop - Maximum allowed scroll position.
+     * @param {number} params.now - Current time (optional, for future use).
+     * @returns {{targetTop:number, mode:'snap'|'ease'}|null}
+     */
+    controlScrollStep: controlScroll,
     /**
      * Push a new target. If you already know the absolute top, pass it here.
      * @param {{top:number}} param0
