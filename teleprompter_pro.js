@@ -2661,6 +2661,17 @@
         );
         const stallMsAdj = inJitterSpike ? STALL_MS + 400 : STALL_MS;
         const stalled = noCommitFor > stallMsAdj;
+        if (stalled) {
+          try {
+            debug?.({
+              tag: 'stall:watchdog-stalled',
+              noCommitFor: Math.floor(noCommitFor),
+              committedIdx: window.__tpCommit.idx,
+              currentIndex,
+              streak: window.__tpStallStreak,
+            });
+          } catch {}
+        }
         // Forced commit after repeated stalls
         window.__tpStallStreak = window.__tpStallStreak || 0;
         if (stalled) {
@@ -2680,6 +2691,7 @@
             debug?.({
               tag: 'stall:reset-pause',
               idx: window.currentIndex,
+              committedIdx: window.__tpCommit.idx,
             });
           } catch {}
         }
