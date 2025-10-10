@@ -2671,7 +2671,7 @@
         if (stalled) {
           try {
             debug?.({
-              tag: 'stall:watchdog-stalled',
+              tag: 'match:stall-watchdog',
               noCommitFor: Math.floor(noCommitFor),
               committedIdx: window.__tpCommit.idx,
               currentIndex: window.currentIndex,
@@ -2694,9 +2694,10 @@
         ) {
           window.__tpCommit.ts = now;
           window.__tpStallStreak = 0;
+          console.log('STALL RESET: pause detected, resetting timer and streak');
           try {
             debug?.({
-              tag: 'stall:reset-pause-test',
+              tag: 'match:stall-reset',
               idx: window.currentIndex,
               committedIdx: window.__tpCommit.idx,
             });
