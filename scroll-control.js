@@ -187,6 +187,27 @@ export default function createScrollController(adapters = {}, telemetry) {
 
   return {
     /**
+     * Force-align the committed line to the marker line (eliminates drift).
+     * @param {number} idx - The committed line index.
+     * @param {number} markerY - The Y position of the marker line (relative to viewport).
+     */
+    forceAlignToMarker(idx, markerY) {
+      const el = this.getLineElement(idx);
+      if (!el) return;
+      // Get bounding rect of the line element
+      const rect = el.getBoundingClientRect();
+      // Get current scroll position
+      const viewerTop = A.getViewerTop();
+      // Calculate the offset from the top of the viewport to the marker
+      // markerY is relative to viewport (e.g., center of screen or fixed marker)
+      // rect.top is relative to viewport
+      const delta = rect.top - markerY;
+      // Set scrollTop so the line aligns with the marker
+      const newScrollTop = Math.max(0, viewerTop + delta);
+      A.requestScroll(newScrollTop);
+      log('scroll', { tag: 'force-align', idx, markerY, newScrollTop });
+    },
+    /**
      * Fast O(1) lookup array, built by buildLineIndex
      * @param {Array<HTMLElement|null>} lineEls
      */

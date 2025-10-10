@@ -627,7 +627,6 @@
       'wheel',
       (e) => {
         if (e.ctrlKey || e.metaKey) {
-          // eslint-disable-next-line no-restricted-syntax -- Prevent browser-level zoom to avoid app zoom conflicts
           e.preventDefault();
         }
       },
@@ -639,7 +638,6 @@
         if (e.ctrlKey || e.metaKey) {
           const k = e.key || '';
           if (k === '+' || k === '=' || k === '-' || k === '_' || k === '0') {
-            // eslint-disable-next-line no-restricted-syntax -- Prevent browser zoom/reset shortcuts (Ctrl/Meta + +/-/0)
             e.preventDefault();
           }
         }
@@ -1033,7 +1031,6 @@
     const obsTestS = document.getElementById('settingsObsTest');
     // Prevent accidental submit/reload of settings form (Enter key)
     obsForm?.addEventListener('submit', (ev) => {
-      // eslint-disable-next-line no-restricted-syntax -- Prevent settings form submit from navigating/reloading
       ev.preventDefault();
     });
     // When Settings overlay toggles OBS, mirror to main toggle (query main DOM each time)
@@ -2133,7 +2130,6 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) {
-        // eslint-disable-next-line no-restricted-syntax -- Use Shift+? to open help instead of typing '/'
         e.preventDefault();
         openHelp();
       }
@@ -2427,18 +2423,15 @@
 
       switch (e.key) {
         case ' ': // Space
-          // eslint-disable-next-line no-restricted-syntax -- Space toggles auto-scroll; prevent page scroll
           e.preventDefault();
           if (autoTimer) stopAutoScroll();
           else startAutoScroll();
           break;
         case 'ArrowUp':
-          // eslint-disable-next-line no-restricted-syntax -- ArrowUp adjusts speed; avoid default page scroll
           e.preventDefault();
           tweakSpeed(+5); // +5 px/s
           break;
         case 'ArrowDown':
-          // eslint-disable-next-line no-restricted-syntax -- ArrowDown adjusts speed; avoid default page scroll
           e.preventDefault();
           tweakSpeed(-5); // -5 px/s
           break;
@@ -2457,7 +2450,6 @@
         case '?':
         case '/':
           if (e.shiftKey) {
-            // eslint-disable-next-line no-restricted-syntax -- Open shortcuts overlay on Shift+? without typing '/'
             e.preventDefault();
             openShortcuts();
           }
@@ -3291,7 +3283,7 @@
       if (!dt) return;
       const text = dt.getData('text/plain');
       if (!text) return;
-      // eslint-disable-next-line no-restricted-syntax -- Override default paste to transform text with tags
+
       ev.preventDefault();
       const alreadyTagged = /\[(s1|s2|g1|g2)\]/i.test(text);
       const normalized = normalizeSimpleTagTypos(text);
@@ -3777,7 +3769,7 @@
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') {
         if (DEV_MODE) {
           ensureTuningPanel();
-          // eslint-disable-next-line no-restricted-syntax -- Reserve Ctrl+Alt+T for dev tuning panel
+
           e.preventDefault();
         }
       }
@@ -5050,6 +5042,19 @@
       try {
         onSpeechCommit(currentEl);
       } catch {}
+      // --- HARD ANTI-DRIFT: force align committed line to marker ---
+      try {
+        if (__scrollCtl && typeof __scrollCtl.forceAlignToMarker === 'function') {
+          // markerTop is the Y position of the marker line relative to the viewer
+          // currentIndex is the committed line index
+          // viewer.getBoundingClientRect().top is the top of the viewer in viewport
+          // markerTop is already relative to viewer, so add viewer's top to get viewport Y
+          const markerY = viewer.getBoundingClientRect().top + markerTop;
+          __scrollCtl.forceAlignToMarker(currentIndex, markerY);
+        }
+      } catch (e) {
+        if (window.__TP_DEV) console.warn('forceAlignToMarker failed', e);
+      }
       if (typeof debug === 'function')
         debug({ tag: 'scroll', top: viewer.scrollTop, mode: 'calm-commit' });
       {
@@ -6984,7 +6989,6 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   }
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.altKey && e.key?.toLowerCase?.() === 'k') {
-      // eslint-disable-next-line no-restricted-syntax -- Reserve Ctrl+Alt+K for About dialog
       e.preventDefault();
       showAbout();
     }
