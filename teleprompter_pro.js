@@ -1420,6 +1420,7 @@
   let scriptWords = [],
     paraIndex = [],
     currentIndex = 0;
+  window.currentIndex = currentIndex;
   // Paragraph token stats for rarity gating (computed on render)
   let __paraTokens = []; // Array<Array<string>> per paragraph
   let __dfMap = new Map(); // token -> in how many paragraphs it appears
@@ -2706,14 +2707,13 @@
             committedIdx: window.__tpCommit.idx,
             equal:
               stalled &&
-              typeof window.currentIndex === 'number' &&
-              window.currentIndex === window.__tpCommit.idx,
+              (typeof window.currentIndex !== 'number' ||
+                window.currentIndex === window.__tpCommit.idx),
           })
         );
         if (
           stalled &&
-          typeof window.currentIndex === 'number' &&
-          window.currentIndex === window.__tpCommit.idx
+          (typeof window.currentIndex !== 'number' || window.currentIndex === window.__tpCommit.idx)
         ) {
           window.__tpCommit.ts = now;
           window.__tpStallStreak = 0;
@@ -4920,6 +4920,7 @@
         const best = hits.sort((a, b) => b.score - a.score)[0] || null;
         if (best && best.score > 0.78) {
           currentIndex = Math.max(0, Math.min(best.idx, scriptWords.length - 1));
+          window.currentIndex = currentIndex;
           __tpLost = false;
           __tpLowSimCount = 0;
           try {
@@ -5057,6 +5058,7 @@
     } else {
       currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
     }
+    window.currentIndex = currentIndex;
     // Update commit broker
     window.__tpCommit.idx = currentIndex;
     window.__tpCommit.ts = performance.now();
@@ -6510,6 +6512,7 @@
     renderScript(editor?.value || '');
     // Reset logical position and scroll to the very top
     currentIndex = 0;
+    window.currentIndex = currentIndex;
     viewer.scrollTop = 0;
     // Reset dead-man timer state
     _wdLastIdx = -1;
