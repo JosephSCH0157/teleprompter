@@ -2585,6 +2585,8 @@
       const COOLDOWN_MS =
         typeof window.__tpStallCooldownMs === 'number' ? window.__tpStallCooldownMs : 1200;
       let _lastRescueAt = 0;
+      // Initialize commit broker state if not already set
+      window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
 
       function getAnchorRatio() {
         try {
@@ -2697,6 +2699,9 @@
                   idx,
                   committedIdx: idx,
                 });
+                // Update commit state
+                window.__tpCommit.idx = idx;
+                window.__tpCommit.ts = now;
                 if (didForce) window.__tpStallStreak = 0;
               }
             } catch {}
@@ -4979,6 +4984,9 @@
     } else {
       currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
     }
+    // Update commit broker
+    window.__tpCommit.idx = currentIndex;
+    window.__tpCommit.ts = performance.now();
 
     // Scroll toward the paragraph that contains currentIndex, gently clamped
     if (!paraIndex.length) return;
@@ -5315,6 +5323,16 @@
       } catch {}
     }
     __dfN = __paraTokens.length;
+    // Set line elements for scroll control
+    const wordLineEls = new Array(scriptWords.length);
+    for (const p of paraIndex) {
+      for (let i = p.start; i <= p.end; i++) {
+        wordLineEls[i] = p.el;
+      }
+    }
+    try {
+      __scrollCtl?.setLineElements(wordLineEls);
+    } catch {}
     // Build virtual merged lines for matcher duplicate disambiguation
     try {
       const MIN_LEN = 35,
