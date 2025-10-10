@@ -2704,39 +2704,15 @@
           // If we've stalled 6+ times in a row and not at end, force a commit to break out
           if (window.__tpStallStreak >= 6 && typeof window.currentIndex === 'number') {
             try {
+              const idx = window.currentIndex;
               if (typeof window.__tpGetCommitMeta === 'function') {
                 const meta = window.__tpGetCommitMeta();
-                const idx = window.currentIndex;
                 if (meta && typeof meta.committedIdx === 'number' && idx > meta.committedIdx) {
-                  // Try normal commit first
-                  let didForce = false;
-                  if (
-                    window.scrollToCurrentIndex &&
-                    window.scrollToCurrentIndex.__tpCommitWrapped
-                  ) {
-                    window.scrollToCurrentIndex(idx);
-                    // Check if commit succeeded, else force
-                    const meta2 = window.__tpGetCommitMeta();
-                    if (meta2 && meta2.committedIdx < idx) {
-                      // Commit gate blocked, force override
-                      meta2.committedIdx = idx;
-                      meta2.lastCommitAt = now;
-                      didForce = true;
-                      if (typeof requestScroll === 'function') requestScroll(viewer.scrollTop);
-                    }
-                  } else {
-                    // Fallback: just set committedIdx and scroll
-                    meta.committedIdx = idx;
-                    meta.lastCommitAt = now;
-                    didForce = true;
-                    if (typeof requestScroll === 'function') requestScroll(viewer.scrollTop);
+                  if (typeof window.__tpForceCommit === 'function') {
+                    window.__tpForceCommit(idx);
+                    debug?.({ tag: 'forced-commit:direct', idx, committedIdx: idx });
+                    window.__tpStallStreak = 0;
                   }
-                  debug?.({
-                    tag: didForce ? 'forced-commit:override' : 'forced-commit',
-                    idx,
-                    committedIdx: idx,
-                  });
-                  window.__tpStallStreak = 0;
                 }
               }
             } catch {}

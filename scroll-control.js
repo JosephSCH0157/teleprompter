@@ -1,3 +1,23 @@
+// Expose a direct forced commit for stall rescue (must be inside IIFE to access S)
+(function () {
+  // ...existing code...
+  if (typeof window.__tpForceCommit !== 'function') {
+    window.__tpForceCommit = function (idx) {
+      try {
+        if (typeof idx !== 'number') return;
+        const now =
+          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        S.committedIdx = idx;
+        S.lastCommitAt = now;
+        S.lastCommitIdx = idx;
+        logEv({ tag: 'forced-commit:direct', committedIdx: idx });
+        if (typeof window.requestScroll === 'function' && window.viewer) {
+          window.requestScroll(window.viewer.scrollTop);
+        }
+      } catch {}
+    };
+  }
+})();
 // Minimal PID-like auto catch-up scroll controller
 function _dbg(ev) {
   try {
@@ -99,6 +119,7 @@ export function createScrollController() {
 }
 
 // ===== Scroll & Match Gate (anti-thrash) =====
+// ===== Scroll & Match Gate (anti-thrash) =====
 (function () {
   const G = {
     // index movement policy
@@ -132,6 +153,24 @@ export function createScrollController() {
     accumDir: 0,
     lastLeakAt: 0,
   };
+
+  // Expose a direct forced commit for stall rescue
+  if (typeof window.__tpForceCommit !== 'function') {
+    window.__tpForceCommit = function (idx) {
+      try {
+        if (typeof idx !== 'number') return;
+        const now =
+          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        S.committedIdx = idx;
+        S.lastCommitAt = now;
+        S.lastCommitIdx = idx;
+        logEv({ tag: 'forced-commit:direct', committedIdx: idx });
+        if (typeof window.requestScroll === 'function' && window.viewer) {
+          window.requestScroll(window.viewer.scrollTop);
+        }
+      } catch {}
+    };
+  }
 
   // Monotonic commit with hysteresis and per-commit jump cap
   const STABLE_HITS = typeof window.__tpStableHits === 'number' ? window.__tpStableHits : 2; // require staying on candidate across frames
@@ -660,6 +699,24 @@ export function createScrollController() {
         } catch {
           return { lastCommitAt: 0, lastCommitIdx: 0, committedIdx: 0 };
         }
+      };
+    }
+
+    // Expose a direct forced commit for stall rescue
+    if (typeof window.__tpForceCommit !== 'function') {
+      window.__tpForceCommit = function (idx) {
+        try {
+          if (typeof idx !== 'number') return;
+          const now =
+            typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+          S.committedIdx = idx;
+          S.lastCommitAt = now;
+          S.lastCommitIdx = idx;
+          logEv({ tag: 'forced-commit:direct', committedIdx: idx });
+          if (typeof window.requestScroll === 'function' && window.viewer) {
+            window.requestScroll(window.viewer.scrollTop);
+          }
+        } catch {}
       };
     }
     window.__tpMarkRecoverySpot = function (reason, extra) {
