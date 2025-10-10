@@ -2668,6 +2668,21 @@
         } else {
           window.__tpStallStreak = 0;
         }
+        // Reset stall timer and streak if stalled without index advancement (speaker pause)
+        if (
+          stalled &&
+          typeof window.currentIndex === 'number' &&
+          window.currentIndex === window.__tpCommit.idx
+        ) {
+          window.__tpCommit.ts = now;
+          window.__tpStallStreak = 0;
+          try {
+            debug?.({
+              tag: 'stall:reset-pause',
+              idx: window.currentIndex,
+            });
+          } catch {}
+        }
         if (stalled || (pr !== null && pr < 0.3 && noCommitFor > LOW_PROGRESS_SEC * 1000)) {
           try {
             debug?.({
@@ -2703,6 +2718,15 @@
                 window.__tpCommit.idx = idx;
                 window.__tpCommit.ts = now;
                 if (didForce) window.__tpStallStreak = 0;
+              } else {
+                // If no force commit function or idx not greater, still reset stall by updating ts
+                window.__tpCommit.ts = now;
+                window.__tpStallStreak = 0;
+                debug?.({
+                  tag: 'stall:reset-timer',
+                  idx,
+                  committedIdx: window.__tpCommit.idx,
+                });
               }
             } catch {}
           }
