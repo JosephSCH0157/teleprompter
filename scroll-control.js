@@ -23,16 +23,12 @@
 export default function createScrollController(adapters = {}, telemetry) {
   // --- Anti-drift state ---
   let bigErrStart = null; // timestamp when |err| > macro began
-  let lastErr = 0;
-  let lastCommitTime = 0;
+  // let lastErr = 0; // (unused)
+  // let lastCommitTime = 0; // (unused)
   let lastTargetTop = 0;
 
   // Helper: check if at bottom of doc
-  function atBottom() {
-    const viewerTop = A.getViewerTop();
-    const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
-    return viewerTop >= maxScrollTop - 2; // allow small epsilon
-  }
+  // function atBottom() { ... } // (unused)
   /**
    * Drop-in scroll logic for immediate/snap vs. ease mode.
    * Call on every confirmed match or animation tick while speaking.
@@ -66,8 +62,8 @@ export default function createScrollController(adapters = {}, telemetry) {
       if (!bigErrStart) bigErrStart = nowTs;
       if (nowTs - bigErrStart > 300) {
         // Hard snap, skip easing/debouncers
-        lastCommitTime = nowTs;
-        lastErr = 0;
+        // lastCommitTime = nowTs; // (removed, unused)
+        // lastErr = 0; // (removed, unused)
         bigErrStart = null;
         let snapTop = yActive - markerOffset;
         snapTop = Math.max(0, Math.min(snapTop, maxScrollTop));
@@ -135,7 +131,7 @@ export default function createScrollController(adapters = {}, telemetry) {
   const Kd = 0.18; // derivative gain (damps overshoot)
   const Kff = 0.55; // feed‑forward gain (uses topDelta directly)
   const MAX_STEP = 1600; // max px movement per tick
-  const SNAP_EPS = 0.5; // snap when close enough
+  // const SNAP_EPS = 0.5; // snap when close enough (unused)
   const WAKE_EPS = 8; // require this error to (re)start RAF loop
 
   function step() {
@@ -190,6 +186,40 @@ export default function createScrollController(adapters = {}, telemetry) {
   }
 
   return {
+    /**
+     * Fast O(1) lookup array, built by buildLineIndex
+     * @param {Array<HTMLElement|null>} lineEls
+     */
+    setLineElements(lineEls) {
+      this._lineEls = Array.isArray(lineEls) ? lineEls : [];
+    },
+
+    /**
+     * Get element for a given bestIdx, null if missing
+     * @param {number} idx
+     * @returns {HTMLElement|null}
+     */
+    getLineElement(idx) {
+      if (!this._lineEls || idx == null) return null;
+      return this._lineEls[idx] ?? null;
+    },
+
+    /**
+     * Optional: resilient nearest lookup when exact index missing
+     * @param {number} idx
+     * @param {number} [radius=20]
+     * @returns {HTMLElement|null}
+     */
+    getNearestLineElement(idx, radius = 20) {
+      const list = this._lineEls || [];
+      if (list[idx]) return list[idx];
+      for (let d = 1; d <= radius; d++) {
+        if (idx - d >= 0 && list[idx - d]) return list[idx - d];
+        if (idx + d < list.length && list[idx + d]) return list[idx + d];
+      }
+      return null;
+    },
+    _lineEls: [],
     /**
      * Drop-in scroll logic for immediate/snap vs. ease mode.
      * Call on every confirmed match or animation tick while speaking.
@@ -255,3 +285,7 @@ export default function createScrollController(adapters = {}, telemetry) {
     },
   };
 }
+
+// import { buildLineIndex } from "./line-index.js"; // (unused)
+
+// function onScriptRendered(container, controller) { ... } // (unused)
