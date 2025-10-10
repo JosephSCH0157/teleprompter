@@ -288,7 +288,7 @@ export function createScrollController() {
             docRatio = max ? top / max : 0;
           }
         } catch {}
-        const NEAR_END = anchorRatio > 0.38 || docRatio > 0.72;
+        const NEAR_END = anchorRatio > 0.65 || docRatio > 0.95;
 
         // Hysteresis commit: only commit after stability across frames, with direction-specific thresholds
         // Respect jitter elevation from main module and allow dynamic tuning from main app (__tpGateFwdSim/__tpGateBackSim)
