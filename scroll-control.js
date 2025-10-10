@@ -1,3 +1,44 @@
+// --- Commit Broker ---
+(function () {
+  if (window.__tpCommit) return;
+  const listeners = new Set();
+  let _idx = 0;
+  let _ts = performance?.now?.() || Date.now();
+  window.__tpCommit = {
+    get idx() {
+      return _idx;
+    },
+    get ts() {
+      return _ts;
+    },
+    get() {
+      return { idx: _idx, ts: _ts };
+    },
+    set(nextIdx, src = 'unknown') {
+      if (typeof nextIdx !== 'number' || nextIdx < _idx) return false;
+      _idx = nextIdx;
+      _ts = performance?.now?.() || Date.now();
+      try {
+        listeners.forEach((fn) => fn(_idx, src));
+      } catch {}
+      try {
+        window.__tpBootPush?.(['commit', { idx: _idx, src }]);
+      } catch {}
+      return true;
+    },
+    on(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+  };
+  window.__tpForceCommit = function (idx, { scroll = true } = {}) {
+    const ok = window.__tpCommit.set(idx, 'force');
+    if (ok && scroll && typeof window.scrollToCurrentIndex === 'function') {
+      window.scrollToCurrentIndex(idx);
+    }
+    return ok;
+  };
+})();
 // Minimal PID-like auto catch-up scroll controller
 function _dbg(ev) {
   try {
@@ -116,8 +157,8 @@ export function createScrollController() {
     bigGapIdx: 18, // if gap >= this, do one-time fast catchup jump
   };
 
+  // State object, now only for legacy fields; commit state is brokered
   const S = {
-    committedIdx: 0,
     pendingIdx: 0,
     stableHits: 0,
     lastBestAt: 0,
@@ -128,47 +169,12 @@ export function createScrollController() {
     lastClampIdx: -1,
     lastBestIdx: -1,
     seenHits: 0,
-    // Leaky integrator for micro-clamps when not in catch-up
     accumDelta: 0,
     accumDir: 0,
     lastLeakAt: 0,
   };
 
-  // Expose a direct forced commit for stall rescue (must be in this scope to access S and logEv)
-  if (typeof window.__tpForceCommit !== 'function') {
-    window.__tpForceCommit = function (idx) {
-      try {
-        if (typeof idx !== 'number') return;
-        const now =
-          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-        S.committedIdx = idx;
-        S.lastCommitAt = now;
-        S.lastCommitIdx = idx;
-        logEv({ tag: 'forced-commit:direct', committedIdx: idx });
-        if (typeof window.requestScroll === 'function' && window.viewer) {
-          window.requestScroll(window.viewer.scrollTop);
-        }
-      } catch {}
-    };
-  }
-
-  // Expose a direct forced commit for stall rescue
-  if (typeof window.__tpForceCommit !== 'function') {
-    window.__tpForceCommit = function (idx) {
-      try {
-        if (typeof idx !== 'number') return;
-        const now =
-          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-        S.committedIdx = idx;
-        S.lastCommitAt = now;
-        S.lastCommitIdx = idx;
-        logEv({ tag: 'forced-commit:direct', committedIdx: idx });
-        if (typeof window.requestScroll === 'function' && window.viewer) {
-          window.requestScroll(window.viewer.scrollTop);
-        }
-      } catch {}
-    };
-  }
+  // All forced commit logic is now brokered via window.__tpCommit and window.__tpForceCommit
 
   // Monotonic commit with hysteresis and per-commit jump cap
   const STABLE_HITS = typeof window.__tpStableHits === 'number' ? window.__tpStableHits : 2; // require staying on candidate across frames
@@ -261,10 +267,14 @@ export function createScrollController() {
       }
       const now =
         typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-      S.committedIdx = commitIdx;
+      window.__tpCommit.set(commitIdx, 'auto');
       S.lastCommitAt = now;
       S.lastCommitIdx = commitIdx;
-      logEv({ tag: 'match:commit', committedIdx: S.committedIdx, sim: window.__lastSimScore ?? 1 });
+      logEv({
+        tag: 'match:commit',
+        committedIdx: window.__tpCommit.idx,
+        sim: window.__lastSimScore ?? 1,
+      });
     }, 125);
 
     function gatedScrollToCurrentIndex() {

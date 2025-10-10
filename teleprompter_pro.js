@@ -2615,13 +2615,10 @@
 
       function progressRate() {
         try {
-          const meta =
-            typeof window.__tpGetCommitMeta === 'function' ? window.__tpGetCommitMeta() : null;
-          if (!meta) return null;
-          const dt = Math.max(0.001, (performance.now() - (meta.lastCommitAt || 0)) / 1000);
+          const dt = Math.max(0.001, (performance.now() - (window.__tpCommit.ts || 0)) / 1000);
           const di = Math.max(
             0,
-            (typeof currentIndex === 'number' ? currentIndex : 0) - (meta.lastCommitIdx || 0)
+            (typeof currentIndex === 'number' ? currentIndex : 0) - (window.__tpCommit.idx || 0)
           );
           return di / dt;
         } catch {
@@ -2660,11 +2657,7 @@
         }
 
         // Phase 1: telemetry-only stall detector + forced commit after repeated stalls
-        const meta =
-          typeof window.__tpGetCommitMeta === 'function'
-            ? window.__tpGetCommitMeta()
-            : { lastCommitAt: 0, lastCommitIdx: 0, committedIdx: 0 };
-        const noCommitFor = now - (meta.lastCommitAt || 0);
+        const noCommitFor = now - (window.__tpCommit.ts || 0);
         const pr = progressRate();
         const aRatio = getAnchorRatio();
         const inJitterSpike = !!(
@@ -2689,7 +2682,7 @@
               pr,
               anchorRatio: aRatio,
               jitterSpike: inJitterSpike,
-              committedIdx: meta.committedIdx,
+              committedIdx: window.__tpCommit.idx,
               currentIndex,
               stallStreak: window.__tpStallStreak,
             });
@@ -2705,19 +2698,14 @@
           if (window.__tpStallStreak >= 6 && typeof window.currentIndex === 'number') {
             try {
               const idx = window.currentIndex;
-              if (typeof window.__tpGetCommitMeta === 'function') {
-                const meta = window.__tpGetCommitMeta();
-                if (meta && typeof meta.committedIdx === 'number' && idx > meta.committedIdx) {
-                  if (typeof window.__tpForceCommit === 'function') {
-                    const didForce = window.__tpForceCommit(idx, { scroll: true });
-                    debug?.({
-                      tag: didForce ? 'forced-commit:override' : 'forced-commit:direct',
-                      idx,
-                      committedIdx: idx,
-                    });
-                    if (didForce) window.__tpStallStreak = 0;
-                  }
-                }
+              if (typeof window.__tpForceCommit === 'function' && idx > window.__tpCommit.idx) {
+                const didForce = window.__tpForceCommit(idx, { scroll: true });
+                debug?.({
+                  tag: didForce ? 'forced-commit:override' : 'forced-commit:direct',
+                  idx,
+                  committedIdx: idx,
+                });
+                if (didForce) window.__tpStallStreak = 0;
               }
             } catch {}
           }
