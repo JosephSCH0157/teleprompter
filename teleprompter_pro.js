@@ -2629,7 +2629,7 @@
 
       setInterval(() => {
         console.log('WATCHDOG TICK:', recActive, performance.now());
-        debug?.({ tag: 'watchdog-tick', recActive, now: performance.now() });
+        console.log(JSON.stringify({ tag: 'watchdog-tick', recActive, now: performance.now() }));
         if (!recActive) return; // only when speech sync is active
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
         const now = performance.now();
@@ -2671,13 +2671,15 @@
         const stallMsAdj = inJitterSpike ? STALL_MS + 400 : STALL_MS;
         const stalled = noCommitFor > stallMsAdj;
         if (stalled) {
-          debug?.({
-            tag: 'watchdog-stalled',
-            committedIdx: window.__tpCommit.idx,
-            currentIndex: window.currentIndex,
-            noCommitFor,
-            streak: window.__tpStallStreak,
-          });
+          console.log(
+            JSON.stringify({
+              tag: 'watchdog-stalled',
+              committedIdx: window.__tpCommit.idx,
+              currentIndex: window.currentIndex,
+              noCommitFor,
+              streak: window.__tpStallStreak,
+            })
+          );
           try {
             debug?.({
               tag: 'match:stall-watchdog',
@@ -2696,16 +2698,18 @@
           window.__tpStallStreak = 0;
         }
         // Reset stall timer and streak if stalled without index advancement (speaker pause)
-        debug?.({
-          tag: 'check-reset-condition',
-          stalled,
-          currentIndex: window.currentIndex,
-          committedIdx: window.__tpCommit.idx,
-          equal:
-            stalled &&
-            typeof window.currentIndex === 'number' &&
-            window.currentIndex === window.__tpCommit.idx,
-        });
+        console.log(
+          JSON.stringify({
+            tag: 'check-reset-condition',
+            stalled,
+            currentIndex: window.currentIndex,
+            committedIdx: window.__tpCommit.idx,
+            equal:
+              stalled &&
+              typeof window.currentIndex === 'number' &&
+              window.currentIndex === window.__tpCommit.idx,
+          })
+        );
         if (
           stalled &&
           typeof window.currentIndex === 'number' &&
@@ -2713,11 +2717,13 @@
         ) {
           window.__tpCommit.ts = now;
           window.__tpStallStreak = 0;
-          debug?.({
-            tag: 'stall-reset',
-            idx: window.currentIndex,
-            committedIdx: window.__tpCommit.idx,
-          });
+          console.log(
+            JSON.stringify({
+              tag: 'stall-reset',
+              idx: window.currentIndex,
+              committedIdx: window.__tpCommit.idx,
+            })
+          );
           try {
             debug?.({
               tag: 'match:stall-reset',
