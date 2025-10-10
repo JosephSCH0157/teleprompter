@@ -1,23 +1,3 @@
-// Expose a direct forced commit for stall rescue (must be inside IIFE to access S)
-(function () {
-  // ...existing code...
-  if (typeof window.__tpForceCommit !== 'function') {
-    window.__tpForceCommit = function (idx) {
-      try {
-        if (typeof idx !== 'number') return;
-        const now =
-          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-        S.committedIdx = idx;
-        S.lastCommitAt = now;
-        S.lastCommitIdx = idx;
-        logEv({ tag: 'forced-commit:direct', committedIdx: idx });
-        if (typeof window.requestScroll === 'function' && window.viewer) {
-          window.requestScroll(window.viewer.scrollTop);
-        }
-      } catch {}
-    };
-  }
-})();
 // Minimal PID-like auto catch-up scroll controller
 function _dbg(ev) {
   try {
@@ -153,6 +133,24 @@ export function createScrollController() {
     accumDir: 0,
     lastLeakAt: 0,
   };
+
+  // Expose a direct forced commit for stall rescue (must be in this scope to access S and logEv)
+  if (typeof window.__tpForceCommit !== 'function') {
+    window.__tpForceCommit = function (idx) {
+      try {
+        if (typeof idx !== 'number') return;
+        const now =
+          typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        S.committedIdx = idx;
+        S.lastCommitAt = now;
+        S.lastCommitIdx = idx;
+        logEv({ tag: 'forced-commit:direct', committedIdx: idx });
+        if (typeof window.requestScroll === 'function' && window.viewer) {
+          window.requestScroll(window.viewer.scrollTop);
+        }
+      } catch {}
+    };
+  }
 
   // Expose a direct forced commit for stall rescue
   if (typeof window.__tpForceCommit !== 'function') {
