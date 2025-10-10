@@ -215,6 +215,7 @@ export default function createScrollController(adapters = {}, telemetry) {
       const delta = rect.top - markerY;
       // Set scrollTop so the line aligns with the marker
       const newScrollTop = Math.max(0, viewerTop + delta);
+      // Log to browser console
       console.debug('[forceAlignToMarker]', {
         idx,
         markerY,
@@ -223,8 +224,18 @@ export default function createScrollController(adapters = {}, telemetry) {
         delta,
         newScrollTop,
       });
+      // Log to HUD/dump with full detail
+      log('scroll', {
+        tag: 'force-align',
+        idx,
+        markerY,
+        rectTop: rect.top,
+        viewerTop,
+        delta,
+        newScrollTop,
+        ts: Date.now(),
+      });
       A.requestScroll(newScrollTop);
-      log('scroll', { tag: 'force-align', idx, markerY, newScrollTop });
     },
     /**
      * Fast O(1) lookup array, built by buildLineIndex
