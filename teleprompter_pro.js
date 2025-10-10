@@ -2708,17 +2708,34 @@
                 const meta = window.__tpGetCommitMeta();
                 const idx = window.currentIndex;
                 if (meta && typeof meta.committedIdx === 'number' && idx > meta.committedIdx) {
-                  window.scrollToCurrentIndex = window.scrollToCurrentIndex || (() => {});
-                  // Force commit by calling the commit gate's throttled applier directly if possible
-                  if (window.scrollToCurrentIndex.__tpCommitWrapped) {
-                    // Use the commit gate's throttled commit
+                  // Try normal commit first
+                  let didForce = false;
+                  if (
+                    window.scrollToCurrentIndex &&
+                    window.scrollToCurrentIndex.__tpCommitWrapped
+                  ) {
                     window.scrollToCurrentIndex(idx);
+                    // Check if commit succeeded, else force
+                    const meta2 = window.__tpGetCommitMeta();
+                    if (meta2 && meta2.committedIdx < idx) {
+                      // Commit gate blocked, force override
+                      meta2.committedIdx = idx;
+                      meta2.lastCommitAt = now;
+                      didForce = true;
+                      if (typeof requestScroll === 'function') requestScroll(viewer.scrollTop);
+                    }
                   } else {
                     // Fallback: just set committedIdx and scroll
                     meta.committedIdx = idx;
+                    meta.lastCommitAt = now;
+                    didForce = true;
                     if (typeof requestScroll === 'function') requestScroll(viewer.scrollTop);
                   }
-                  debug?.({ tag: 'forced-commit', idx, committedIdx: meta.committedIdx });
+                  debug?.({
+                    tag: didForce ? 'forced-commit:override' : 'forced-commit',
+                    idx,
+                    committedIdx: idx,
+                  });
                   window.__tpStallStreak = 0;
                 }
               }
