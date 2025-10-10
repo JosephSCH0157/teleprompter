@@ -2628,7 +2628,7 @@
       }
 
       setInterval(() => {
-        if (!recActive || !viewer) return; // only when speech sync is active
+        if (!recActive) return; // only when speech sync is active
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
         const now = performance.now();
 
