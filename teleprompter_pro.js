@@ -2588,6 +2588,13 @@
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
 
+      const debug = (x) => {
+        try {
+          if (typeof window.__tpDebug === 'function') window.__tpDebug(x);
+          else console.log('[DEBUG]', x);
+        } catch {}
+      };
+
       function getAnchorRatio() {
         try {
           const v = viewer;
@@ -2667,7 +2674,7 @@
               tag: 'stall:watchdog-stalled',
               noCommitFor: Math.floor(noCommitFor),
               committedIdx: window.__tpCommit.idx,
-              currentIndex,
+              currentIndex: window.currentIndex,
               streak: window.__tpStallStreak,
             });
           } catch {}
@@ -2689,7 +2696,7 @@
           window.__tpStallStreak = 0;
           try {
             debug?.({
-              tag: 'stall:reset-pause',
+              tag: 'stall:reset-pause-test',
               idx: window.currentIndex,
               committedIdx: window.__tpCommit.idx,
             });
@@ -2704,7 +2711,7 @@
               anchorRatio: aRatio,
               jitterSpike: inJitterSpike,
               committedIdx: window.__tpCommit.idx,
-              currentIndex,
+              currentIndex: window.currentIndex,
               stallStreak: window.__tpStallStreak,
             });
           } catch {}
