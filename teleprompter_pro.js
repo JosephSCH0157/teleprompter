@@ -4701,6 +4701,9 @@
   const VITERBI_ALPHA = 0.15; // transition penalty between states
   const VITERBI_BETA = 0.08; // emission penalty
   const VITERBI_LOOP_PENALTY = 0.25; // penalty for staying in same state
+  // Viterbi state for temporal path consistency
+  let __viterbiPath = []; // sequence of positions through time
+  let __viterbiIPred = 0; // predicted position from previous Viterbi step
   // Scroll correction tuning
   // TP: marker-percent — forward bias the reading line slightly to reduce lag
   const MARKER_PCT = 0.4;
@@ -5088,6 +5091,46 @@
       return token.toLowerCase().replace(/ing$|ed$|er$|est$|ly$|s$/, '');
     }
 
+    // Viterbi step: find best path through time given previous path and current scores
+    function viterbiStep(prevPath, scores, alpha, beta, loopPenalty) {
+      const candidates = Object.keys(scores)
+        .map(Number)
+        .sort((a, b) => a - b);
+      if (candidates.length === 0) return { idx: __viterbiIPred, path: prevPath };
+
+      let bestIdx = candidates[0];
+      let bestScore = -Infinity;
+
+      for (const j of candidates) {
+        let score = scores[j];
+
+        // Apply emission penalty (β)
+        score *= 1 - beta;
+
+        // Apply transition penalties from previous position
+        const prevIdx = prevPath.length > 0 ? prevPath[prevPath.length - 1] : __viterbiIPred;
+        const delta = Math.abs(j - prevIdx);
+
+        // α penalty for transitions between different states
+        if (delta > 0) {
+          score *= 1 - alpha * Math.min(delta / 20, 1);
+        }
+
+        // Loop penalty bonus for staying in same state
+        if (delta === 0) {
+          score *= 1 + loopPenalty;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = j;
+        }
+      }
+
+      const newPath = [...prevPath, bestIdx];
+      return { idx: bestIdx, path: newPath };
+    }
+
     // Line-level matching: score against concatenated line windows [i..i+2]
     let windowAhead = MATCH_WINDOW_AHEAD;
     try {
@@ -5133,101 +5176,121 @@
         }
       }
     } catch {}
-    // Line-level matching: score against concatenated line windows [i..i+2]
-    const WINDOW_SIZE = 3; // lines per window [i..i+2]
-    const SEARCH_BACK = 5; // lines to search backward
-    const SEARCH_FORWARD = 15; // lines to search forward
+    // Core loop: score candidates around i_pred from Viterbi
+    const i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
+    const candidates = [];
+    const scores = {};
 
-    const startLine = Math.max(0, Math.floor(currentIndex) - SEARCH_BACK);
-    const endLine = Math.min(
+    // Generate candidates: lines[i_pred - 40 .. i_pred + windowAhead]
+    const candidateStart = Math.max(0, Math.floor(i_pred) - 40);
+    const candidateEnd = Math.min(
       __vParaIndex ? __vParaIndex.length - 1 : paraIndex.length - 1,
-      Math.floor(currentIndex) + SEARCH_FORWARD
+      Math.floor(i_pred) + windowAhead
     );
 
-    let bestScore = -Infinity;
-    let bestWindowStart = currentIndex;
+    for (let j = candidateStart; j <= candidateEnd; j++) {
+      candidates.push(j);
+    }
 
-    // Score each possible window
-    for (let i = startLine; i <= endLine - WINDOW_SIZE + 1; i++) {
-      // Get concatenated text for this window
-      let windowText = '';
-      for (let j = 0; j < WINDOW_SIZE && i + j <= endLine; j++) {
-        const para = __vParaIndex ? __vParaIndex[i + j] : paraIndex[i + j];
-        if (para) {
-          windowText += para.key + ' ';
-        }
-      }
-      windowText = windowText.trim();
+    // Score each candidate
+    for (const j of candidates) {
+      const para = __vParaIndex ? __vParaIndex[j] : paraIndex[j];
+      if (!para) continue;
 
-      if (!windowText) continue;
+      const vis = para.key; // canonicalized script text
+      const score = computeLineSimilarity(batchTokens, vis);
 
-      // Compute similarity score using weighted components
-      let score = computeLineSimilarity(batchTokens, windowText);
-
-      // Apply Viterbi penalties
-      // β (emission penalty): general penalty for matching
-      score *= 1 - VITERBI_BETA;
-      // α (transition penalty): penalty for large position jumps
-      const positionDelta = Math.abs(i - currentIndex);
-      if (positionDelta > 5) {
-        score *= 1 - VITERBI_ALPHA * Math.min(positionDelta / 20, 1);
-      }
-      // loop_penalty: bonus for staying near current position (negative penalty)
-      if (positionDelta <= 2) {
-        score *= 1 + VITERBI_LOOP_PENALTY * 0.5; // small bonus for proximity
-      }
-
-      // Apply penalty for non-spoken lines (very high skip prior)
-      const hasNonSpoken = [];
-      for (let j = 0; j < WINDOW_SIZE && i + j <= endLine; j++) {
-        const para = __vParaIndex ? __vParaIndex[i + j] : paraIndex[i + j];
-        if (para?.isNonSpoken) {
-          hasNonSpoken.push(para);
-        }
-      }
-      if (hasNonSpoken.length > 0) {
-        // Heavy penalty for windows containing non-spoken lines, but allow rescue anchor
-        // if similarity is strong enough (rescue anchor: allow jump across if ASR matches nearby)
-        const basePenalty = 0.4; // 60% penalty (skip_prior = -0.6)
-        const rescueThreshold = 0.7; // Allow jumping across if similarity > 0.7
-        const rescueMultiplier = score > rescueThreshold ? 3.0 : 1.0; // Reduce penalty for strong matches
-        score *= basePenalty * rescueMultiplier;
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestWindowStart = i;
+      // Apply header penalty (skip_prior)
+      if (para.isNonSpoken) {
+        scores[j] = score - 0.6; // header_prior = -0.6
+      } else {
+        scores[j] = score;
       }
     }
 
-    // Find best position within the winning window by scoring subspans
-    let bestSubPos = bestWindowStart;
-    let bestSubScore = -Infinity;
+    // Viterbi step to find best temporal path (with rescue-adjusted parameters)
+    const effectiveBeta = window.__tpRescueMode?.active ? VITERBI_BETA * 0.5 : VITERBI_BETA;
+    const viterbiResult = viterbiStep(
+      __viterbiPath,
+      scores,
+      VITERBI_ALPHA,
+      effectiveBeta,
+      VITERBI_LOOP_PENALTY
+    );
+    const i_viterbi = viterbiResult.idx;
 
-    const windowParas = [];
-    for (let j = 0; j < WINDOW_SIZE && bestWindowStart + j <= endLine; j++) {
-      const para = __vParaIndex
-        ? __vParaIndex[bestWindowStart + j]
-        : paraIndex[bestWindowStart + j];
-      if (para) windowParas.push(para);
-    }
+    // Update Viterbi state
+    __viterbiPath = viterbiResult.path;
+    __viterbiIPred = i_viterbi;
 
-    // Score sliding subspans within the window
-    for (let startPara = 0; startPara < windowParas.length; startPara++) {
-      for (let endPara = startPara + 1; endPara <= windowParas.length; endPara++) {
-        const subParas = windowParas.slice(startPara, endPara);
-        const subText = subParas.map((p) => p.key).join(' ');
-        const subScore = computeLineSimilarity(batchTokens, subText);
+    // Use Viterbi result as best match
+    let bestIdx = i_viterbi;
+    let bestSim = scores[i_viterbi] || 0;
 
-        if (subScore > bestSubScore) {
-          bestSubScore = subScore;
-          bestSubPos = bestWindowStart + startPara;
+    // Stall detection and rescue mode
+    const stallDetected = (function () {
+      const now = performance.now();
+      const timeSinceLastAdvance = now - (_lastAdvanceAt || 0);
+      const simHistory = window.__tpSimHistory || [];
+      const simMean =
+        simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 1.0;
+
+      // Update similarity history (keep last 10)
+      simHistory.push(bestSim);
+      if (simHistory.length > 10) simHistory.shift();
+      window.__tpSimHistory = simHistory;
+
+      return timeSinceLastAdvance > 1400 && simMean < 0.65;
+    })();
+
+    // Rescue mode state
+    if (!window.__tpRescueMode) window.__tpRescueMode = { active: false, enteredAt: 0 };
+
+    if (stallDetected) {
+      // Enter rescue mode: widen window, relax β, try anchor scan
+      window.__tpRescueMode.active = true;
+      window.__tpRescueMode.enteredAt = performance.now();
+      windowAhead = Math.max(windowAhead, 900); // widen window
+      // β penalty is relaxed in the Viterbi step call above
+
+      // Try anchor scan for distinctive phrases
+      const anchors = extractHighIDFPhrases(batchTokens, 3);
+      if (anchors.length > 0) {
+        const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
+        const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
+        if (bestAnchor && bestAnchor.score > 0.75) {
+          bestIdx = bestAnchor.idx;
+          bestSim = bestAnchor.score;
+          try {
+            if (typeof debug === 'function')
+              debug({ tag: 'rescue:anchor', idx: bestIdx, score: bestSim });
+          } catch {}
         }
       }
-    }
 
-    let bestIdx = bestSubPos;
-    let bestSim = bestSubScore;
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'rescue:enter',
+            windowAhead,
+            simMean:
+              window.__tpSimHistory?.reduce((a, b) => a + b, 0) / window.__tpSimHistory?.length,
+          });
+      } catch {}
+    } else if (window.__tpRescueMode.active) {
+      // Check if we can exit rescue mode (progress detected)
+      const timeInRescue = performance.now() - window.__tpRescueMode.enteredAt;
+      const recentProgress = Math.abs(bestIdx - i_pred) > 2; // moved more than 2 lines
+
+      if (timeInRescue > 3000 || (recentProgress && bestSim > 0.7)) {
+        // Decay to normal mode
+        window.__tpRescueMode.active = false;
+        try {
+          if (typeof debug === 'function')
+            debug({ tag: 'rescue:exit', reason: recentProgress ? 'progress' : 'timeout' });
+        } catch {}
+      }
+    }
 
     // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
     const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
@@ -5287,7 +5350,7 @@
           sim: window.__lastSimScore,
           windowAhead: MATCH_WINDOW_AHEAD,
           viterbi: true,
-          pathLength: path.length,
+          pathLength: __viterbiPath.length,
         });
     } catch {}
 
