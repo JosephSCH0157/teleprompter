@@ -4444,17 +4444,19 @@
       }
       const h = Math.max(1, Number(viewportH) || viewer.clientHeight || 1);
       const ratio = anchorY / h; // 0=top, 1=bottom
-      if (ratio > 0.65) {
+      const THR = typeof window.__TP_ANCHOR_THR === 'number' ? window.__TP_ANCHOR_THR : 0.58; // was 0.65
+      const WAIT =
+        typeof window.__TP_ANCHOR_WAIT_MS === 'number' ? window.__TP_ANCHOR_WAIT_MS : 250; // was 500
+
+      if (ratio > THR) {
         if (!_lowStartTs) _lowStartTs = performance.now();
-        if (performance.now() - _lowStartTs > 500) {
-          // Start (or keep) the catch-up loop with our standard closures
+        if (performance.now() - _lowStartTs > WAIT) {
           tryStartCatchup();
         }
       } else {
         _lowStartTs = 0;
-        // Save CPU/jitter when we don't need it
         try {
-          __scrollCtl.stopAutoCatchup();
+          __scrollCtl.stopAutoCatchup?.();
         } catch {}
       }
     } catch {}
