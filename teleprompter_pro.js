@@ -2900,7 +2900,7 @@
             window.__tpStallRelaxUntil = now + 350;
           } catch {}
           try {
-            const step = 24; // px
+            const step = 36; // px
             const next = Math.max(0, Math.min(viewer.scrollTop + step, viewer.scrollHeight));
             if (typeof requestScroll === 'function') requestScroll(next);
             else viewer.scrollTop = next;
@@ -4055,7 +4055,7 @@
       const anchor = (el) => {
         if (!el) return;
         try {
-          const y = getYForElInScroller(el, sc, 0.5);
+          const y = getYForElInScroller(el, sc, 0.6);
           tpScrollTo(y, sc);
         } catch {}
       };
@@ -4661,7 +4661,7 @@
         document.scrollingElement ||
         document.documentElement ||
         document.body;
-      const y = getYForElInScroller(activeEl, sc, 0.5);
+      const y = getYForElInScroller(activeEl, sc, 0.6);
       tpScrollTo(y, sc);
     } catch {}
   }
