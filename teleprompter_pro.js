@@ -3855,7 +3855,7 @@
         MAX_JUMP_AHEAD_WORDS = 18;
       } else {
         // Normal/balanced defaults
-        SIM_THRESHOLD = 0.55;
+        SIM_THRESHOLD = 0.45;
         MATCH_WINDOW_AHEAD = 200;
         MATCH_WINDOW_BACK = 30;
         STRICT_FORWARD_SIM = 0.72;
@@ -5145,6 +5145,20 @@
     // Core loop: score candidates around i_pred from Viterbi
     const i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
     const candidates = [];
+
+    try {
+      if (typeof debug === 'function')
+        debug({
+          tag: 'match:setup',
+          scriptWords: scriptWords.length,
+          paraIndex: paraIndex.length,
+          currentIndex,
+          i_pred,
+          batchTokens: batchTokens.slice(0, 5), // first 5 tokens
+        });
+    } catch {}
+
+    // Generate candidates: lines[i_pred - 40 .. i_pred + windowAhead]
     const scores = {};
 
     // Generate candidates: lines[i_pred - 40 .. i_pred + windowAhead]
@@ -5173,6 +5187,21 @@
         scores[j] = score;
       }
     }
+
+    // Debug: log top scores
+    try {
+      const topScores = Object.entries(scores)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3)
+        .map(([idx, score]) => ({ idx: Number(idx), score: Number(score.toFixed(3)) }));
+      if (typeof debug === 'function')
+        debug({
+          tag: 'match:scores',
+          candidates: candidates.length,
+          topScores,
+          batchTokens: batchTokens.length,
+        });
+    } catch {}
 
     // Viterbi step to find best temporal path (with rescue-adjusted parameters)
     const effectiveBeta = window.__tpRescueMode?.active ? VITERBI_BETA * 0.5 : VITERBI_BETA;
@@ -5374,7 +5403,18 @@
       } catch {}
       bestSim = __adj;
     }
-    if (bestSim < EFF_SIM_THRESHOLD) return;
+    if (bestSim < EFF_SIM_THRESHOLD) {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:below-threshold',
+            bestSim: Number(bestSim.toFixed(3)),
+            threshold: Number(EFF_SIM_THRESHOLD.toFixed(3)),
+            bestIdx,
+          });
+      } catch {}
+      return;
+    }
 
     // Lost-mode tracker: DISABLED - replaced by new rescue mode
     // The old lost mode was causing stalls, especially near end of script
