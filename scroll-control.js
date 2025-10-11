@@ -127,9 +127,9 @@ export default function createScrollController(adapters = {}, telemetry) {
   let pendingRaf = 0;
 
   // Tunables
-  const Kp = 0.22; // proportional gain (how strongly we chase error)
+  const Kp = 0.3; // proportional gain (how strongly we chase error)
   const Kd = 0.18; // derivative gain (damps overshoot)
-  const Kff = 0.55; // feed‑forward gain (uses topDelta directly)
+  const Kff = 0.7; // feed‑forward gain (uses topDelta directly)
   const MAX_STEP = 1600; // max px movement per tick
   // const SNAP_EPS = 0.5; // snap when close enough (unused)
   const WAKE_EPS = 8; // require this error to (re)start RAF loop

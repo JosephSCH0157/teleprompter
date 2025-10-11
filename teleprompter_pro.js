@@ -4055,7 +4055,7 @@
       const anchor = (el) => {
         if (!el) return;
         try {
-          const y = getYForElInScroller(el, sc, 0.38);
+          const y = getYForElInScroller(el, sc, 0.5);
           tpScrollTo(y, sc);
         } catch {}
       };
@@ -4661,7 +4661,7 @@
         document.scrollingElement ||
         document.documentElement ||
         document.body;
-      const y = getYForElInScroller(activeEl, sc, 0.38);
+      const y = getYForElInScroller(activeEl, sc, 0.5);
       tpScrollTo(y, sc);
     } catch {}
   }
