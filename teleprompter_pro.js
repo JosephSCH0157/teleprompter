@@ -2625,15 +2625,7 @@
       const debug = (x) => {
         try {
           if (typeof window.__tpDebug === 'function') window.__tpDebug(x);
-          else {
-            // Quiet mode kills non-error logs
-            if (window.__TP_QUIET) return;
-            // Throttle logs
-            const now = performance.now();
-            if (now - __tpLogState.lastAt < window.__TP_LOG_MIN_MS) return;
-            __tpLogState.lastAt = now;
-            console.debug('[DEBUG]', x);
-          }
+          // default: no-op to avoid console spam
         } catch {}
       };
 
