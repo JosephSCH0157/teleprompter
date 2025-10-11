@@ -4865,87 +4865,121 @@
     const start = Math.max(0, currentIndex - MATCH_WINDOW_BACK);
     const end = Math.min(scriptWords.length, currentIndex + windowAhead);
 
-    // Build candidates with a fast overlap filter first
-    const candidates = [];
+    // Viterbi aligner: 3-state HMM for sequence alignment
+    // States: Stay (same line), Advance (next line), Skip k (jump k lines)
+    const K = 10; // max skip distance
+    const ALPHA = 0.15; // advance cost
+    const BETA = 0.08; // skip cost per line
+
+    // Precompute similarities for all positions in window
+    const simScores = new Array(end - start + 1).fill(-Infinity);
     for (let i = start; i <= end - spoken.length; i++) {
       const win = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
-      const fast = _overlap(spoken, win);
-      if (fast > 0) candidates.push({ i, win, fast });
+      simScores[i - start] = _sim(spoken, win);
     }
-    if (!candidates.length) return;
 
-    candidates.sort((a, b) => b.fast - a.fast);
-    const top = candidates.slice(0, 8);
+    // Viterbi DP: V[t][state] = best score to reach position t with last transition 'state'
+    // States: 0=stay, 1=advance, 2..K+1=skip k (where k=state-1)
+    const T = end - start + 1;
+    const V = new Array(T).fill().map(() => new Array(K + 2).fill(-Infinity));
+    const backpointer = new Array(T).fill().map(() => new Array(K + 2).fill(-1));
 
-    // Refine with similarity + distance-penalized scoring and rarity gating
-    const idxBefore = currentIndex; // for jitter metric
-    let bestIdx = currentIndex,
-      bestRank = -Infinity,
-      bestSim = -Infinity;
-    const phraseRarity = (() => {
-      try {
-        return spoken.reduce((s, t) => s + __idf(t), 0);
-      } catch {
-        return 0;
-      }
-    })();
-    for (const c of top) {
-      const simRaw = _sim(spoken, c.win);
-      const dist = Math.abs(c.i - currentIndex);
-      // Require distinctive phrase for long jumps
-      const needsRarity = dist > 20;
-      if (needsRarity && phraseRarity < 8) {
-        continue;
-      }
-      // Junk-anchor gate v2: forbid >6-word jumps when spoken tail is all junk
-      try {
-        const allJunk = spoken.length > 0 && spoken.every((t) => __JUNK.has(t));
-        if (dist > 6 && allJunk) {
-          continue;
+    // Initialize at current position (t=0 corresponds to start index)
+    const currentOffset = currentIndex - start;
+    if (currentOffset >= 0 && currentOffset < T) {
+      V[currentOffset][0] = simScores[currentOffset]; // stay at current
+      V[currentOffset][1] = simScores[currentOffset] - ALPHA; // advance to current
+    }
+
+    // Fill DP table
+    for (let t = 0; t < T; t++) {
+      // From each state at t, transition to t+1
+      for (let state = 0; state <= K + 1; state++) {
+        if (V[t][state] === -Infinity) continue;
+
+        // Stay: cost = -sim at next position
+        if (t + 1 < T) {
+          const stayCost = V[t][state] - simScores[t + 1];
+          if (stayCost > V[t + 1][0]) {
+            V[t + 1][0] = stayCost;
+            backpointer[t + 1][0] = state;
+          }
         }
-      } catch {}
-      // Distance penalty (~0 near, ~1 far)
-      const distancePenalty = (function () {
-        try {
-          return 1 / (1 + Math.exp(-(dist - 10)));
-        } catch {
-          return 0;
+
+        // Advance: cost = -sim + α, move to next position
+        if (t + 1 < T) {
+          const advanceCost = V[t][state] - simScores[t + 1] - ALPHA;
+          if (advanceCost > V[t + 1][1]) {
+            V[t + 1][1] = advanceCost;
+            backpointer[t + 1][1] = state;
+          }
         }
-      })();
-      const lambda = 0.35;
-      // Duplicate-line penalty using virtual lines; avoid runts jitter
-      const v = (function () {
-        try {
-          return (__vParaIndex || []).find((v) => c.i >= v.start && c.i <= v.end) || null;
-        } catch {
-          return null;
+
+        // Skip k: for k=2 to K, cost = -sim + β·k, jump k positions
+        for (let k = 2; k <= K; k++) {
+          if (t + k < T) {
+            const skipCost = V[t][state] - simScores[t + k] - BETA * k;
+            const skipState = k + 1; // state 2 = skip 2, etc.
+            if (skipCost > V[t + k][skipState]) {
+              V[t + k][skipState] = skipCost;
+              backpointer[t + k][skipState] = state;
+            }
+          }
         }
-      })();
-      const dupPenalty = (function () {
-        try {
-          return v && v.key && (__vLineFreq.get(v.key) || 0) > 1 ? 0.08 : 0;
-        } catch {
-          return 0;
-        }
-      })();
-      // Cluster penalty: repeated prefix (first 4 tokens) disambiguation
-      const sigPenalty = (function () {
-        try {
-          const n = v?.sig ? __vSigCount.get(v.sig) || 0 : 0;
-          return n > 1 ? 0.06 : 0;
-        } catch {
-          return 0;
-        }
-      })();
-      const rank = simRaw - dupPenalty - sigPenalty - lambda * distancePenalty;
-      if (rank > bestRank) {
-        bestRank = rank;
-        bestIdx = c.i;
-        bestSim = simRaw;
       }
     }
-    if (!(bestRank > -Infinity)) return; // nothing acceptable
+
+    // Find best final state
+    let bestScore = -Infinity;
+    let bestPos = currentIndex;
+    let bestState = -1;
+
+    for (let t = 0; t < T; t++) {
+      for (let state = 0; state <= K + 1; state++) {
+        if (V[t][state] > bestScore) {
+          bestScore = V[t][state];
+          bestPos = start + t;
+          bestState = state;
+        }
+      }
+    }
+
+    // Trace back to get the path (for debugging, optional)
+    const path = [];
+    let currentT = bestPos - start;
+    let currentState = bestState;
+    while (currentT >= 0 && currentState >= 0) {
+      path.unshift({ pos: start + currentT, state: currentState });
+      currentState = backpointer[currentT][currentState];
+      if (currentState === 0) {
+        currentT--; // stay
+      } else if (currentState === 1) {
+        currentT--; // advance
+      } else {
+        const k = currentState - 1;
+        currentT -= k; // skip k
+      }
+    }
+
+    // Loop penalty: if we bounce between same two indices >3 times, penalize
+    const recentPath = path.slice(-10); // last 10 transitions
+    const bounces = {};
+    for (let i = 1; i < recentPath.length; i++) {
+      const prev = recentPath[i - 1].pos;
+      const curr = recentPath[i].pos;
+      const key = `${prev}->${curr}`;
+      bounces[key] = (bounces[key] || 0) + 1;
+    }
+    const maxBounce = Math.max(...Object.values(bounces));
+    if (maxBounce > 3) {
+      bestScore -= 0.2; // penalty for bouncing
+    }
+
+    let bestIdx = bestPos;
+    let bestSim = simScores[bestPos - start];
+
     // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
+    const idxBefore = currentIndex; // for jitter metric
     try {
       window.__lastSimScore = Number(bestSim.toFixed(3));
       if (typeof debug === 'function')
@@ -4955,6 +4989,8 @@
           bestIdx,
           sim: window.__lastSimScore,
           windowAhead: MATCH_WINDOW_AHEAD,
+          viterbi: true,
+          pathLength: path.length,
         });
     } catch {}
 
