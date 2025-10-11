@@ -5227,7 +5227,7 @@
 
     // If no n-gram hits, fall back to window-based candidates
     if (candidates.size === 0) {
-      const candidateStart = Math.max(0, Math.floor(i_pred) - 40);
+      const candidateStart = Math.max(0, Math.floor(currentIndex) - MATCH_WINDOW_BACK);
       const candidateEnd = Math.min(
         __vParaIndex ? __vParaIndex.length - 1 : paraIndex.length - 1,
         Math.floor(i_pred) + windowAhead
@@ -5284,6 +5284,7 @@
           minTokensGateTriggered,
           backtrackEnabled,
           backtrackDistance,
+          ngramIndexSize: __ngramIndex.size,
         });
       }
     } catch {}
@@ -5381,27 +5382,40 @@
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
         // Cap anchor jumps: prefer within +60 tokens unless confidence >0.9
         if (bestAnchor) {
-          const anchorDistance = Math.abs(bestAnchor.idx - i_pred);
-          const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
-          if (bestAnchor.score > 0.75 && allowJump) {
-            bestIdx = bestAnchor.idx;
-            bestSim = bestAnchor.score;
-            // Update tracking for dynamic threshold
-            lastAnchorConfidence = bestAnchor.score;
-            lastAnchorAt = performance.now();
-            // Update Viterbi path to include the anchor position
-            __viterbiPath = [...__viterbiPath, bestAnchor.idx];
-            __viterbiIPred = bestAnchor.idx;
-            try {
-              if (typeof debug === 'function')
-                debug({
-                  tag: 'rescue:anchor',
-                  idx: bestIdx,
-                  score: bestSim,
-                  distance: anchorDistance,
-                  allowed: allowJump,
-                });
-            } catch {}
+          // Find the para index containing the anchor word index
+          let paraIdx = -1;
+          for (let p = 0; p < paraIndex.length; p++) {
+            if (bestAnchor.idx >= paraIndex[p].start && bestAnchor.idx <= paraIndex[p].end) {
+              paraIdx = p;
+              break;
+            }
+          }
+          if (paraIdx >= 0) {
+            const anchorDistance = Math.abs(paraIdx - i_pred);
+            const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
+            if (bestAnchor.score > 0.75 && allowJump) {
+              bestIdx = paraIdx;
+              bestSim = bestAnchor.score;
+              // Update tracking for dynamic threshold
+              lastAnchorConfidence = bestAnchor.score;
+              lastAnchorAt = performance.now();
+              // Update Viterbi path to include the anchor position
+              __viterbiPath = [...__viterbiPath, paraIdx];
+              __viterbiIPred = paraIdx;
+              // Update currentIndex to the anchor word position
+              currentIndex = bestAnchor.idx;
+              try {
+                if (typeof debug === 'function')
+                  debug({
+                    tag: 'rescue:anchor',
+                    idx: bestIdx,
+                    wordIdx: bestAnchor.idx,
+                    score: bestSim,
+                    distance: anchorDistance,
+                    allowed: allowJump,
+                  });
+              } catch {}
+            }
           }
         }
       }
