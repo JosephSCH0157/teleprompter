@@ -1417,6 +1417,11 @@
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null; // set after io-anchor.js loads
   let __scrollCtl = null; // set after scroll-control.js loads
+  // Dynamic threshold tracking
+  let lastAnchorConfidence = 0;
+  let lastAnchorAt = 0;
+  let viterbiConsistencyCount = 0;
+  let lastViterbiIdx = -1;
   // Mic selector single source of truth (settings overlay)
   const getMicSel = () => document.getElementById('settingsMicSel');
   let autoTimer = null,
@@ -5298,6 +5303,14 @@
     );
     const i_viterbi = viterbiResult.idx;
 
+    // Track Viterbi consistency for soft advance
+    if (i_viterbi === lastViterbiIdx) {
+      viterbiConsistencyCount++;
+    } else {
+      viterbiConsistencyCount = 1;
+      lastViterbiIdx = i_viterbi;
+    }
+
     // Update Viterbi state
     __viterbiPath = viterbiResult.path;
     __viterbiIPred = i_viterbi;
@@ -5336,15 +5349,27 @@
       if (anchors.length > 0) {
         const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
-        if (bestAnchor && bestAnchor.score > 0.75) {
+        // Cap anchor jumps: prefer within +60 tokens unless confidence >0.9
+        const anchorDistance = Math.abs(bestAnchor.idx - i_pred);
+        const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
+        if (bestAnchor && bestAnchor.score > 0.75 && allowJump) {
           bestIdx = bestAnchor.idx;
           bestSim = bestAnchor.score;
+          // Update tracking for dynamic threshold
+          lastAnchorConfidence = bestAnchor.score;
+          lastAnchorAt = performance.now();
           // Update Viterbi path to include the anchor position
           __viterbiPath = [...__viterbiPath, bestAnchor.idx];
           __viterbiIPred = bestAnchor.idx;
           try {
             if (typeof debug === 'function')
-              debug({ tag: 'rescue:anchor', idx: bestIdx, score: bestSim });
+              debug({
+                tag: 'rescue:anchor',
+                idx: bestIdx,
+                score: bestSim,
+                distance: anchorDistance,
+                allowed: allowJump,
+              });
           } catch {}
         }
       }
@@ -5480,6 +5505,11 @@
     const jitterElevated = typeof J.spikeUntil === 'number' && performance.now() < J.spikeUntil;
     let EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
     let EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
+    // Dynamic threshold: lower for 1-2 steps after high-confidence anchor
+    const nowThresh = performance.now();
+    const timeSinceLastAnchor = nowThresh - lastAnchorAt;
+    const dynamicLower = lastAnchorConfidence > 0.8 && timeSinceLastAnchor < 3000 ? 0.05 : 0; // lower by 0.05 for 3s after high-confidence anchor
+    EFF_SIM_THRESHOLD -= dynamicLower;
     // End-game easing: give bestSim a tiny boost near the end
     const __adj = endGameAdjust(bestIdx, bestSim);
     if (__adj !== bestSim) {
@@ -5493,6 +5523,24 @@
           });
       } catch {}
       bestSim = __adj;
+    }
+    // Soft advance: if below threshold but Viterbi consistent for last 3+ frames, advance by 1-2 tokens
+    if (bestSim < EFF_SIM_THRESHOLD && viterbiConsistencyCount >= 3) {
+      const delta = Math.min(2, Math.max(1, Math.floor(viterbiConsistencyCount / 2))); // 1-2 tokens
+      bestIdx += delta;
+      bestIdx = Math.min(bestIdx, scriptWords.length - 1);
+      bestSim = EFF_SIM_THRESHOLD - 0.01; // force proceed by setting just above threshold
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'soft-advance',
+            originalIdx: i_viterbi,
+            newIdx: bestIdx,
+            delta,
+            consistency: viterbiConsistencyCount,
+            sim: Number(bestSim.toFixed(3)),
+          });
+      } catch {}
     }
     if (bestSim < EFF_SIM_THRESHOLD) {
       try {
