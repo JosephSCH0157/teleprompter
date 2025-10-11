@@ -1448,6 +1448,7 @@
   let __vParaIndex = []; // merged paragraph index
   let __vLineFreq = new Map(); // virtual line frequencies (by merged key)
   let __vSigCount = new Map(); // prefix signature counts (first 4 tokens) for virtual lines
+  let __ngramIndex = new Map(); // ngram -> Set of paragraph indices
   function normLineKey(text) {
     // Build line keys from fully normalized tokens to ensure duplicate detection
     // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
