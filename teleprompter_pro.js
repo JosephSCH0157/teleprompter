@@ -2597,30 +2597,83 @@
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
 
-      // Quiet flag + rate limiter for debug logs
-      window.__TP_QUIET = window.__TP_QUIET ?? false;
-      window.__TP_LOG_MIN_MS = window.__TP_LOG_MIN_MS ?? 250;
-      const __tpLogState = { lastAt: 0 };
+      // Ring buffer logging system with severity filter
+      const LOG_BUFFER_SIZE = 100;
+      const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
+      const MIN_LOG_LEVEL = window.__TP_LOG_LEVEL ?? 2; // Default to info level
+
+      // Initialize ring buffer and state tracking
+      window.__tpLogBuffer = window.__tpLogBuffer || [];
+      window.__tpWatchdogState = window.__tpWatchdogState || 'OK';
+      window.__tpLastWatchdogLog = 0;
+      window.__tpMetrics = window.__tpMetrics || {
+        ticks: 0,
+        stalls: 0,
+        rescues: 0,
+        lastSample: 0,
+        samples: [],
+      };
 
       function tpLog(level, ...args) {
-        // Always allow errors
-        if (level === 'error') {
-          console.error(...args);
-          return;
+        const levelNum = LOG_LEVELS[level] ?? LOG_LEVELS.debug;
+        if (levelNum > MIN_LOG_LEVEL) return; // Filter by severity
+
+        const entry = {
+          ts: performance.now(),
+          level,
+          args: args.map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))),
+        };
+
+        // Add to ring buffer
+        window.__tpLogBuffer.push(entry);
+        if (window.__tpLogBuffer.length > LOG_BUFFER_SIZE) {
+          window.__tpLogBuffer.shift();
         }
 
-        // Quiet mode kills non-error logs
-        if (window.__TP_QUIET) return;
-
-        // Throttle non-error logs
-        const now = performance.now();
-        if (now - __tpLogState.lastAt < window.__TP_LOG_MIN_MS) return;
-        __tpLogState.lastAt = now;
-
-        if (level === 'warn') console.warn(...args);
-        else if (level === 'info') console.info(...args);
-        else console.debug(...args); // default to debug
+        // Console output only for important messages or when not in quiet mode
+        if (!window.__TP_QUIET || level === 'error') {
+          const now = performance.now();
+          // Rate limit console output to once per second
+          if (now - window.__tpLastWatchdogLog > 1000) {
+            window.__tpLastWatchdogLog = now;
+            if (level === 'error') console.error(...args);
+            else if (level === 'warn') console.warn(...args);
+            else if (level === 'info') console.info(...args);
+            else console.debug(...args);
+          }
+        }
       }
+
+      // State-aware watchdog logging (only on state changes)
+      function logWatchdogState(newState, details = {}) {
+        const oldState = window.__tpWatchdogState;
+        if (newState !== oldState) {
+          window.__tpWatchdogState = newState;
+          tpLog('info', `WATCHDOG STATE: ${oldState} → ${newState}`, details);
+        }
+      }
+
+      // High-rate metrics counter (sampled by UI every 250-500ms)
+      function incrementMetric(name) {
+        if (!window.__tpMetrics[name]) window.__tpMetrics[name] = 0;
+        window.__tpMetrics[name]++;
+      }
+
+      // Get metrics sample for UI
+      window.__tpGetMetricsSample = function () {
+        const now = performance.now();
+        const sample = { ...window.__tpMetrics, ts: now };
+        window.__tpMetrics.ticks = 0; // Reset counters after sampling
+        window.__tpMetrics.stalls = 0;
+        window.__tpMetrics.rescues = 0;
+        window.__tpMetrics.lastSample = now;
+        return sample;
+      };
+
+      // Get recent logs for UI debugging
+      window.__tpGetLogBuffer = function (maxEntries = 50) {
+        return window.__tpLogBuffer.slice(-maxEntries);
+      };
 
       const debug = (x) => {
         try {
@@ -2662,11 +2715,29 @@
       }
 
       setInterval(() => {
-        tpLog('debug', 'WATCHDOG TICK:', recActive, performance.now());
-        tpLog('debug', JSON.stringify({ tag: 'watchdog-tick', recActive, now: performance.now() }));
+        // Increment tick counter for UI sampling
+        incrementMetric('ticks');
+
+        // Only log watchdog state changes, not every tick
+        const now = performance.now();
+        const timeSinceCommit = now - (window.__tpCommit.ts || 0);
+        const progressRateVal = progressRate();
+        const isStalled = timeSinceCommit > (window.__tpStallMs || 2000);
+
+        if (isStalled) {
+          logWatchdogState('STALL', {
+            noCommitFor: Math.floor(timeSinceCommit),
+            progressRate: progressRateVal,
+            committedIdx: window.__tpCommit.idx,
+            currentIndex: window.currentIndex,
+          });
+          incrementMetric('stalls');
+        } else {
+          logWatchdogState('OK');
+        }
+
         if (!recActive) return; // only when speech sync is active
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
-        const now = performance.now();
 
         // Existing: fallback nudge if no advance recently and not in mid-sim window
         // Keep this disabled in Calm Mode, but allow stall detection/rescue to still run.
@@ -2846,6 +2917,7 @@
         ) {
           // Start a short catch-up burst to re-center
           try {
+            incrementMetric('rescues');
             debug?.({
               tag: 'stall:rescue:start',
               method: 'catchup-burst',
@@ -2929,6 +3001,7 @@
         ) {
           // Start a short catch-up burst for mid-viewport
           try {
+            incrementMetric('rescues');
             debug?.({
               tag: 'stall:rescue:start',
               method: 'mid-catchup-burst',
