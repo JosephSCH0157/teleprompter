@@ -2576,7 +2576,7 @@
     // Stall-recovery watchdog + Stall detector (Phase 1: telemetry, Phase 2: gentle catch-up burst)
     (function installStallWatchdogs() {
       const TICK_MS = 250;
-      const STALL_MS = typeof window.__tpStallMs === 'number' ? window.__tpStallMs : 1500;
+      const STALL_MS = typeof window.__tpStallMs === 'number' ? window.__tpStallMs : 1000;
       const LOW_PROGRESS_SEC =
         typeof window.__tpLowProgSec === 'number' ? window.__tpLowProgSec : 2.0;
       const BOTTOM_RATIO =
@@ -2900,7 +2900,7 @@
             window.__tpStallRelaxUntil = now + 350;
           } catch {}
           try {
-            const step = 12; // px
+            const step = 24; // px
             const next = Math.max(0, Math.min(viewer.scrollTop + step, viewer.scrollHeight));
             if (typeof requestScroll === 'function') requestScroll(next);
             else viewer.scrollTop = next;
