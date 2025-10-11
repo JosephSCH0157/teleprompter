@@ -5147,6 +5147,26 @@
       })(),
       delta,
     });
+
+    // NEW: if bestIdx hasn't moved for ~700ms but sim stays high, apply a tiny scroll nudge
+    const SAME_IDX_MS = 700;
+    const NUDGE_PX = 36;
+    if (bestIdx === window.__lastBestIdx && bestSim > 0.8) {
+      if (!window.__sameIdxSince) window.__sameIdxSince = performance.now();
+      if (performance.now() - window.__sameIdxSince > SAME_IDX_MS) {
+        try {
+          window.__tpStallRelaxUntil = performance.now() + 300; // relax clamp guard briefly
+          const next = Math.max(0, Math.min(viewer.scrollTop + NUDGE_PX, viewer.scrollHeight));
+          if (typeof requestScroll === 'function') requestScroll(next);
+          else viewer.scrollTop = next;
+        } catch {}
+        window.__sameIdxSince = performance.now(); // reset timer after nudge
+      }
+    } else {
+      window.__lastBestIdx = bestIdx;
+      window.__sameIdxSince = performance.now();
+    }
+
     if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM) {
       currentIndex += MAX_JUMP_AHEAD_WORDS;
     } else {
