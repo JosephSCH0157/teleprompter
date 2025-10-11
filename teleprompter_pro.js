@@ -2585,7 +2585,10 @@
         typeof window.__tpCatchupBurstMs === 'number' ? window.__tpCatchupBurstMs : 900;
       const COOLDOWN_MS =
         typeof window.__tpStallCooldownMs === 'number' ? window.__tpStallCooldownMs : 1200;
+      const MID_COOLDOWN_MS =
+        typeof window.__tpMidStallCooldownMs === 'number' ? window.__tpMidStallCooldownMs : 1000;
       let _lastRescueAt = 0;
+      let _lastMidRescueAt = 0;
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
 
@@ -2877,6 +2880,89 @@
                   window.__tpStallRelaxUntil = 0;
                 } catch {}
                 debug?.({ tag: 'stall:rescue:done', method: 'catchup-burst' });
+              } catch {}
+            }, CATCHUP_BURST_MS);
+          } catch {}
+        }
+
+        // Phase 2.5: mid-viewport catch-up burst if stalled mid-viewport
+        const midCooldownOk = !_lastMidRescueAt || now - _lastMidRescueAt > MID_COOLDOWN_MS;
+        if (
+          stalled &&
+          !(bottomish || docBottomish) &&
+          midCooldownOk &&
+          catchupAvailable &&
+          !catchupActive
+        ) {
+          // Start a short catch-up burst for mid-viewport
+          try {
+            debug?.({
+              tag: 'stall:rescue:start',
+              method: 'mid-catchup-burst',
+              aRatio,
+              docRatio,
+              noCommitFor: Math.floor(noCommitFor),
+            });
+          } catch {}
+          _lastMidRescueAt = now;
+          try {
+            // Build closures consistent with tryStartCatchup()
+            const markerTop = () => {
+              const pct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+              return (viewer?.clientHeight || 0) * pct;
+            };
+            const getTargetY = () => markerTop();
+            const getAnchorY = () => {
+              const vis =
+                window.__anchorObs && typeof window.__anchorObs.mostVisibleEl === 'function'
+                  ? window.__anchorObs.mostVisibleEl()
+                  : null;
+              if (vis && viewer) {
+                const rect = vis.getBoundingClientRect();
+                const vRect = viewer.getBoundingClientRect();
+                return rect.top - vRect.top;
+              }
+              const activeP = (scriptEl || viewer)?.querySelector('p.active') || null;
+              if (activeP && viewer) {
+                const rect = activeP.getBoundingClientRect();
+                const vRect = viewer.getBoundingClientRect();
+                return rect.top - vRect.top;
+              }
+              return markerTop();
+            };
+            const scrollBy = (dy) => {
+              try {
+                const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
+                if (typeof requestScroll === 'function') requestScroll(next);
+                else viewer.scrollTop = next;
+                const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+                const ratio = max
+                  ? (typeof window.__lastScrollTarget === 'number'
+                      ? window.__lastScrollTarget
+                      : viewer.scrollTop) / max
+                  : 0;
+                sendToDisplay({
+                  type: 'scroll',
+                  top:
+                    typeof window.__lastScrollTarget === 'number'
+                      ? window.__lastScrollTarget
+                      : viewer.scrollTop,
+                  ratio,
+                });
+              } catch {}
+            };
+            // During the burst, relax clamp guard stickiness/min-delta for a short window
+            try {
+              window.__tpStallRelaxUntil = now + Math.max(400, Math.min(CATCHUP_BURST_MS, 1000));
+            } catch {}
+            __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
+            setTimeout(() => {
+              try {
+                __scrollCtl.stopAutoCatchup();
+                try {
+                  window.__tpStallRelaxUntil = 0;
+                } catch {}
+                debug?.({ tag: 'stall:rescue:done', method: 'mid-catchup-burst' });
               } catch {}
             }, CATCHUP_BURST_MS);
           } catch {}
