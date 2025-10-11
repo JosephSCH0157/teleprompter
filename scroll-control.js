@@ -140,6 +140,11 @@ export default function createScrollController(adapters = {}, telemetry) {
     const dt = Math.max(0.001, (t - lastT) / 1000); // seconds
     lastT = t;
 
+    // Stop scrolling if no commit for 5 seconds to prevent drift during long pauses
+    if (performance.now() - (window.__tpCommit?.ts || 0) > 5000) {
+      return;
+    }
+
     const viewerTop = A.getViewerTop();
     const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
     // Use the integrated controlScrollStep to decide scroll action
