@@ -4921,56 +4921,22 @@
     if (now - _lastMatchAt < MATCH_INTERVAL_MS && !isFinal) return;
     _lastMatchAt = now;
 
+    // Process each transcript individually (as per pseudocode)
     const spokenAll = normTokens(transcript);
     const spoken = spokenAll.slice(-SPOKEN_N);
     if (!spoken.length) return;
 
-    // ASR batching: accumulate transcripts into 600-900ms shards
-    const BATCH_MS = 750; // 600-900ms average
-    if (!window.__tpBatchState) {
-      window.__tpBatchState = {
-        transcripts: [],
-        startTime: now,
-        totalTokens: [],
-      };
-    }
-
-    const batch = window.__tpBatchState;
-    batch.transcripts.push({ text: transcript, time: now });
-    batch.totalTokens = batch.totalTokens.concat(spokenAll);
-
-    // Process batch if enough time has passed or this is a final transcript
-    const batchAge = now - batch.startTime;
-    const shouldProcess = isFinal || batchAge >= BATCH_MS;
-
-    if (!shouldProcess) {
-      try {
-        if (typeof debug === 'function')
-          debug({ tag: 'batch:accumulate', age: batchAge, tokens: batch.totalTokens.length });
-      } catch {}
-      return;
-    }
-
-    // Process the batch
-    const batchText = batch.totalTokens.join(' ');
-    const batchTokens = normTokens(batchText);
+    // Skip batching - process each transcript immediately
+    const batchTokens = spoken;
 
     try {
       if (typeof debug === 'function')
         debug({
-          tag: 'batch:process',
-          age: batchAge,
+          tag: 'transcript:process',
           tokens: batchTokens.length,
-          transcripts: batch.transcripts.length,
+          isFinal,
         });
     } catch {}
-
-    // Reset batch state
-    window.__tpBatchState = {
-      transcripts: [],
-      startTime: now,
-      totalTokens: [],
-    };
 
     // Line-level similarity scoring function
     function computeLineSimilarity(spokenTokens, scriptText) {
@@ -5235,11 +5201,6 @@
       const simMean =
         simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 1.0;
 
-      // Update similarity history (keep last 10)
-      simHistory.push(bestSim);
-      if (simHistory.length > 10) simHistory.shift();
-      window.__tpSimHistory = simHistory;
-
       return timeSinceLastAdvance > 1400 && simMean < 0.65;
     })();
 
@@ -5261,6 +5222,9 @@
         if (bestAnchor && bestAnchor.score > 0.75) {
           bestIdx = bestAnchor.idx;
           bestSim = bestAnchor.score;
+          // Update Viterbi path to include the anchor position
+          __viterbiPath = [...__viterbiPath, bestAnchor.idx];
+          __viterbiIPred = bestAnchor.idx;
           try {
             if (typeof debug === 'function')
               debug({ tag: 'rescue:anchor', idx: bestIdx, score: bestSim });
@@ -5269,13 +5233,7 @@
       }
 
       try {
-        if (typeof debug === 'function')
-          debug({
-            tag: 'rescue:enter',
-            windowAhead,
-            simMean:
-              window.__tpSimHistory?.reduce((a, b) => a + b, 0) / window.__tpSimHistory?.length,
-          });
+        if (typeof debug === 'function') debug({ tag: 'rescue:enter', windowAhead, simMean });
       } catch {}
     } else if (window.__tpRescueMode.active) {
       // Check if we can exit rescue mode (progress detected)
@@ -5291,6 +5249,11 @@
         } catch {}
       }
     }
+
+    // Update similarity history AFTER rescue mode has potentially improved bestSim
+    simHistory.push(bestSim);
+    if (simHistory.length > 10) simHistory.shift();
+    window.__tpSimHistory = simHistory;
 
     // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
     const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
