@@ -2592,10 +2592,43 @@
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
 
+      // Quiet flag + rate limiter for debug logs
+      window.__TP_QUIET = window.__TP_QUIET ?? false;
+      window.__TP_LOG_MIN_MS = window.__TP_LOG_MIN_MS ?? 250;
+      const __tpLogState = { lastAt: 0 };
+
+      function tpLog(level, ...args) {
+        // Always allow errors
+        if (level === 'error') {
+          console.error(...args);
+          return;
+        }
+
+        // Quiet mode kills non-error logs
+        if (window.__TP_QUIET) return;
+
+        // Throttle non-error logs
+        const now = performance.now();
+        if (now - __tpLogState.lastAt < window.__TP_LOG_MIN_MS) return;
+        __tpLogState.lastAt = now;
+
+        if (level === 'warn') console.warn(...args);
+        else if (level === 'info') console.info(...args);
+        else console.debug(...args); // default to debug
+      }
+
       const debug = (x) => {
         try {
           if (typeof window.__tpDebug === 'function') window.__tpDebug(x);
-          else console.log('[DEBUG]', x);
+          else {
+            // Quiet mode kills non-error logs
+            if (window.__TP_QUIET) return;
+            // Throttle logs
+            const now = performance.now();
+            if (now - __tpLogState.lastAt < window.__TP_LOG_MIN_MS) return;
+            __tpLogState.lastAt = now;
+            console.debug('[DEBUG]', x);
+          }
         } catch {}
       };
 
@@ -2632,8 +2665,8 @@
       }
 
       setInterval(() => {
-        console.log('WATCHDOG TICK:', recActive, performance.now());
-        console.log(JSON.stringify({ tag: 'watchdog-tick', recActive, now: performance.now() }));
+        tpLog('debug', 'WATCHDOG TICK:', recActive, performance.now());
+        tpLog('debug', JSON.stringify({ tag: 'watchdog-tick', recActive, now: performance.now() }));
         if (!recActive) return; // only when speech sync is active
         if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
         const now = performance.now();

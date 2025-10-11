@@ -5,6 +5,32 @@
 (function () {
   'use strict';
 
+  // Top of file: quiet flag + rate limiter
+  window.__TP_QUIET = window.__TP_QUIET ?? false; // set true to silence info/debug
+  window.__TP_LOG_MIN_MS = window.__TP_LOG_MIN_MS ?? 250; // throttle info/debug to at most 4/sec
+
+  const __tpLogState = { lastAt: 0 };
+
+  function tpLog(level, ...args) {
+    // Always allow errors
+    if (level === 'error') {
+      console.error(...args);
+      return;
+    }
+
+    // Quiet mode kills non-error logs
+    if (window.__TP_QUIET) return;
+
+    // Throttle non-error logs
+    const now = performance.now();
+    if (now - __tpLogState.lastAt < window.__TP_LOG_MIN_MS) return;
+    __tpLogState.lastAt = now;
+
+    if (level === 'warn') console.warn(...args);
+    else if (level === 'info') console.info(...args);
+    else console.debug(...args); // default to debug
+  }
+
   const DEFAULTS = {
     hotkey: '~',
     maxRows: 400,
@@ -223,7 +249,6 @@
     // Keyboard toggle
     window.addEventListener('keydown', (e) => {
       if (e.key === opts.hotkey && !e.altKey && !e.metaKey && !e.ctrlKey) {
-        // eslint-disable-next-line no-restricted-syntax -- Reserve HUD toggle hotkey; prevent default typing
         e.preventDefault();
         toggle();
       }
@@ -260,9 +285,9 @@
           if (paused) return;
           appendRow(tag, payload);
         } catch {}
-        // Also mirror to console for trace tails
+        // Also mirror to console for trace tails (with quiet flag + rate limiter)
         try {
-          console.log('[HUD]', tag, payload);
+          tpLog('debug', '[HUD]', tag, payload);
         } catch {}
       },
       show,
