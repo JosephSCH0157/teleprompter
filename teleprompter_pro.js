@@ -4978,6 +4978,50 @@
     let bestIdx = bestPos;
     let bestSim = simScores[bestPos - start];
 
+    // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
+    const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
+    if (!window.__tpSmoothState) {
+      window.__tpSmoothState = {
+        i_smooth: bestIdx,
+        last_marker_idx: Math.floor(bestIdx),
+        marker_moved_at: performance.now(),
+      };
+    }
+
+    const smooth = window.__tpSmoothState;
+    // Update smoothed index with EMA
+    smooth.i_smooth = SMOOTH_GAMMA * bestIdx + (1 - SMOOTH_GAMMA) * smooth.i_smooth;
+
+    // Only move marker when smoothed index advances by ≥0.4 lines
+    const markerAdvanceThreshold = 0.4;
+    const currentMarkerIdx = Math.floor(smooth.i_smooth);
+    const markerDelta = currentMarkerIdx - smooth.last_marker_idx;
+
+    let useSmoothedForScroll = false;
+    if (Math.abs(markerDelta) >= markerAdvanceThreshold) {
+      smooth.last_marker_idx = currentMarkerIdx;
+      smooth.marker_moved_at = performance.now();
+      useSmoothedForScroll = true;
+    }
+
+    // Use smoothed index for scroll target, but raw index for matching logic
+    const scrollTargetIdx = useSmoothedForScroll ? smooth.i_smooth : currentIndex;
+
+    try {
+      if (typeof debug === 'function')
+        debug({
+          tag: 'smooth-scroll',
+          bestIdx,
+          i_smooth: Number(smooth.i_smooth.toFixed(2)),
+          scrollTargetIdx: Number(scrollTargetIdx.toFixed(2)),
+          markerDelta: Number(markerDelta.toFixed(2)),
+          useSmoothedForScroll,
+          scrollMarkerDistance: Math.floor(scrollMarkerDistance),
+          outOfBounds,
+          velocityMultiplier: Number(velocityMultiplier.toFixed(2)),
+        });
+    } catch {}
+
     // Dynamic stall rescue system: detect persistent stalls and apply multi-stage recovery
     const STALL_DETECT_MS = 1500; // 1.5s threshold for stall detection
     const LOW_SIM_THRESHOLD = 0.6; // sim_mean threshold for stall
@@ -5463,10 +5507,10 @@
     window.__tpCommit.idx = currentIndex;
     window.__tpCommit.ts = performance.now();
 
-    // Scroll toward the paragraph that contains currentIndex, gently clamped
+    // Scroll toward the paragraph that contains scrollTargetIdx (smoothed), gently clamped
     if (!paraIndex.length) return;
     const targetPara =
-      paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end) ||
+      paraIndex.find((p) => scrollTargetIdx >= p.start && scrollTargetIdx <= p.end) ||
       paraIndex[paraIndex.length - 1];
     // Maintain a persistent pointer to the current line element
     try {
@@ -5490,11 +5534,25 @@
             : 0.4)
     );
     const desiredTop = targetPara.el.offsetTop - markerTop; // let scheduler clamp
+
+    // Marker distance clamping: |y(active) - y(marker)| ≤ L_max (1.2 viewport lines)
+    const L_MAX = 1.2 * (viewer.clientHeight || 800); // 1.2 viewport lines
+    const activeY = targetPara.el.offsetTop;
+    const markerY = viewer.scrollTop + markerTop;
+    const scrollMarkerDistance = Math.abs(activeY - markerY);
+    const outOfBounds = scrollMarkerDistance > L_MAX;
+
+    // Apply catch-up velocity boost (1.5-2.0x) when out of bounds
+    let velocityMultiplier = 1.0;
+    if (outOfBounds) {
+      velocityMultiplier = Math.min(2.0, 1.5 + (scrollMarkerDistance - L_MAX) / L_MAX); // 1.5-2.0x based on how far out
+    }
+
     // Base cap to keep motion tame; relax near the end to avoid slowdown perception
     const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
     const progress = maxScroll ? viewer.scrollTop / maxScroll : 0;
-    let capPx = Math.floor((viewer.clientHeight || 0) * 0.6);
-    if (progress >= 0.75) capPx = Math.floor((viewer.clientHeight || 0) * 0.9);
+    let capPx = Math.floor((viewer.clientHeight || 0) * 0.6 * velocityMultiplier); // Apply velocity boost to cap
+    if (progress >= 0.75) capPx = Math.floor((viewer.clientHeight || 0) * 0.9 * velocityMultiplier);
 
     if (isFinal && window.__TP_CALM) {
       // If similarity isn't very high, cap the jump size to keep motion tame (but relax near end)
