@@ -2587,7 +2587,7 @@
       const BOTTOM_RATIO =
         typeof window.__tpBottomRatio === 'number' ? window.__tpBottomRatio : 0.7;
       const CATCHUP_BURST_MS =
-        typeof window.__tpCatchupBurstMs === 'number' ? window.__tpCatchupBurstMs : 900;
+        typeof window.__tpCatchupBurstMs === 'number' ? window.__tpCatchupBurstMs : 1500;
       const COOLDOWN_MS =
         typeof window.__tpStallCooldownMs === 'number' ? window.__tpStallCooldownMs : 1200;
       const MID_COOLDOWN_MS =
@@ -4642,7 +4642,7 @@
 
   // Coverage-based soft advance to avoid stalls when a short line is consumed
   let __tpStag = { vIdx: -1, since: performance.now() };
-  const STALL_MS = 1800; // ~1.8s feels good in speech
+  const STALL_MS = 1200; // ~1.2s feels good in speech
   const COV_THRESH = 0.82; // % of tokens matched in order
   const NEXT_SIM_FLOOR = 0.68; // allow slightly lower sim to prime next line
   // Stall instrumentation state
