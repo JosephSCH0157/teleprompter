@@ -5380,27 +5380,29 @@
         const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
         // Cap anchor jumps: prefer within +60 tokens unless confidence >0.9
-        const anchorDistance = Math.abs(bestAnchor.idx - i_pred);
-        const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
-        if (bestAnchor && bestAnchor.score > 0.75 && allowJump) {
-          bestIdx = bestAnchor.idx;
-          bestSim = bestAnchor.score;
-          // Update tracking for dynamic threshold
-          lastAnchorConfidence = bestAnchor.score;
-          lastAnchorAt = performance.now();
-          // Update Viterbi path to include the anchor position
-          __viterbiPath = [...__viterbiPath, bestAnchor.idx];
-          __viterbiIPred = bestAnchor.idx;
-          try {
-            if (typeof debug === 'function')
-              debug({
-                tag: 'rescue:anchor',
-                idx: bestIdx,
-                score: bestSim,
-                distance: anchorDistance,
-                allowed: allowJump,
-              });
-          } catch {}
+        if (bestAnchor) {
+          const anchorDistance = Math.abs(bestAnchor.idx - i_pred);
+          const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
+          if (bestAnchor.score > 0.75 && allowJump) {
+            bestIdx = bestAnchor.idx;
+            bestSim = bestAnchor.score;
+            // Update tracking for dynamic threshold
+            lastAnchorConfidence = bestAnchor.score;
+            lastAnchorAt = performance.now();
+            // Update Viterbi path to include the anchor position
+            __viterbiPath = [...__viterbiPath, bestAnchor.idx];
+            __viterbiIPred = bestAnchor.idx;
+            try {
+              if (typeof debug === 'function')
+                debug({
+                  tag: 'rescue:anchor',
+                  idx: bestIdx,
+                  score: bestSim,
+                  distance: anchorDistance,
+                  allowed: allowJump,
+                });
+            } catch {}
+          }
         }
       }
 
