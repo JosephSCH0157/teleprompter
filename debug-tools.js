@@ -627,6 +627,20 @@
       } catch {}
     })();
 
+    // Add quiet mode toggle button for dev convenience
+    try {
+      const btn = document.createElement('button');
+      btn.textContent = window.__TP_QUIET ? 'Logs: Quiet' : 'Logs: Loud';
+      btn.style.cssText =
+        'position:fixed;right:8px;bottom:60px;z-index:9999;padding:4px 8px;border:1px solid #666;background:#333;color:#fff;font-size:11px;cursor:pointer;';
+      btn.onclick = () => {
+        window.__TP_QUIET = !window.__TP_QUIET;
+        localStorage.setItem('tp_dev_loud', window.__TP_QUIET ? '0' : '1');
+        btn.textContent = window.__TP_QUIET ? 'Logs: Quiet' : 'Logs: Loud';
+      };
+      document.body.appendChild(btn);
+    } catch {}
+
     return { toggle, show, hide, log: (...a) => HUD.log(...a) };
   }
 
