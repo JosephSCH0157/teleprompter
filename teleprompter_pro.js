@@ -5241,10 +5241,16 @@
       }
       try {
         const vRect = viewer.getBoundingClientRect();
-        const anchorEl = __anchorObs?.mostVisibleEl?.() || null || targetPara.el;
-        const pRect = anchorEl.getBoundingClientRect();
-        const anchorY = pRect.top - vRect.top;
-        maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+        const anchorEl =
+          __anchorObs?.mostVisibleEl?.() ||
+          document.querySelector('#script p.active') ||
+          targetPara?.el ||
+          null;
+        if (anchorEl) {
+          const pRect = anchorEl.getBoundingClientRect();
+          const anchorY = pRect.top - vRect.top;
+          maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+        }
       } catch {}
       if (typeof markAdvance === 'function') markAdvance();
       else _lastAdvanceAt = performance.now();
