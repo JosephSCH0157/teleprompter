@@ -2581,7 +2581,7 @@
     // Stall-recovery watchdog + Stall detector (Phase 1: telemetry, Phase 2: gentle catch-up burst)
     (function installStallWatchdogs() {
       const TICK_MS = 250;
-      const STALL_MS = typeof window.__tpStallMs === 'number' ? window.__tpStallMs : 2000;
+      const STALL_MS = typeof window.__tpStallMs === 'number' ? window.__tpStallMs : 1400;
       const LOW_PROGRESS_SEC =
         typeof window.__tpLowProgSec === 'number' ? window.__tpLowProgSec : 2.0;
       const BOTTOM_RATIO =
@@ -2594,6 +2594,10 @@
         typeof window.__tpMidStallCooldownMs === 'number' ? window.__tpMidStallCooldownMs : 1000;
       let _lastRescueAt = 0;
       let _lastMidRescueAt = 0;
+      // Similarity tracking for stall detection
+      let simHistory = [];
+      const LOW_SIM_THRESHOLD = 0.65; // sim_mean threshold for stall
+
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
 
@@ -2767,6 +2771,13 @@
         // Phase 1: telemetry-only stall detector + forced commit after repeated stalls
         const noCommitFor = now - (window.__tpCommit.ts || 0);
         const pr = progressRate();
+        // Update sim history for rolling average
+        const currentSim = window.__lastSimScore ?? 0;
+        simHistory.push(currentSim);
+        if (simHistory.length > 10) simHistory.shift();
+        const simMean =
+          simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 0;
+
         const aRatio = getAnchorRatio();
         const inJitterSpike = !!(
           window.__tpJitter &&
@@ -2774,7 +2785,7 @@
           now < window.__tpJitter.spikeUntil
         );
         const stallMsAdj = inJitterSpike ? STALL_MS + 400 : STALL_MS;
-        const stalled = noCommitFor > stallMsAdj;
+        const stalled = noCommitFor > stallMsAdj && simMean < LOW_SIM_THRESHOLD;
         if (stalled) {
           tpLog(
             'debug',
@@ -4681,11 +4692,15 @@
   // Window relative to currentIndex to search
   // Tunables (let so we can adjust via the “Match aggressiveness” select)
   let MATCH_WINDOW_BACK = 30; // how far back we search around the current index
-  let MATCH_WINDOW_AHEAD = 200; // how far forward we search
+  let MATCH_WINDOW_AHEAD = 450; // how far forward we search (normal: 450, rescue: 900)
   let SIM_THRESHOLD = 0.55; // minimum similarity to accept a match (0..1)
   // Similarity thresholds and motion clamps
   let STRICT_FORWARD_SIM = 0.72; // extra gate when skipping forward a lot
   let MAX_JUMP_AHEAD_WORDS = 12; // max words to bump when pushing forward
+  // Viterbi algorithm penalties for sequence alignment
+  const VITERBI_ALPHA = 0.15; // transition penalty between states
+  const VITERBI_BETA = 0.08; // emission penalty
+  const VITERBI_LOOP_PENALTY = 0.25; // penalty for staying in same state
   // Scroll correction tuning
   // TP: marker-percent — forward bias the reading line slightly to reduce lag
   const MARKER_PCT = 0.4;
@@ -4970,7 +4985,12 @@
       // Component 4: +δ for entity matches (numbers, names, toponyms)
       const entityBonus = computeEntityBonus(spokenTokens, scriptTokens);
 
-      const finalScore = 0.5 * tfidfScore + 0.3 * charF1 + 0.2 * jaccardScore + entityBonus;
+      let finalScore = 0.5 * tfidfScore + 0.3 * charF1 + 0.2 * jaccardScore + entityBonus;
+
+      // Short-line penalty: -0.12 for lines <5 tokens
+      if (scriptTokens.length < 5) {
+        finalScore -= 0.12;
+      }
 
       return finalScore;
     }
@@ -5144,6 +5164,19 @@
       // Compute similarity score using weighted components
       let score = computeLineSimilarity(batchTokens, windowText);
 
+      // Apply Viterbi penalties
+      // β (emission penalty): general penalty for matching
+      score *= 1 - VITERBI_BETA;
+      // α (transition penalty): penalty for large position jumps
+      const positionDelta = Math.abs(i - currentIndex);
+      if (positionDelta > 5) {
+        score *= 1 - VITERBI_ALPHA * Math.min(positionDelta / 20, 1);
+      }
+      // loop_penalty: bonus for staying near current position (negative penalty)
+      if (positionDelta <= 2) {
+        score *= 1 + VITERBI_LOOP_PENALTY * 0.5; // small bonus for proximity
+      }
+
       // Apply penalty for non-spoken lines (very high skip prior)
       const hasNonSpoken = [];
       for (let j = 0; j < WINDOW_SIZE && i + j <= endLine; j++) {
@@ -5155,7 +5188,7 @@
       if (hasNonSpoken.length > 0) {
         // Heavy penalty for windows containing non-spoken lines, but allow rescue anchor
         // if similarity is strong enough (rescue anchor: allow jump across if ASR matches nearby)
-        const basePenalty = 0.1; // 90% penalty
+        const basePenalty = 0.4; // 60% penalty (skip_prior = -0.6)
         const rescueThreshold = 0.7; // Allow jumping across if similarity > 0.7
         const rescueMultiplier = score > rescueThreshold ? 3.0 : 1.0; // Reduce penalty for strong matches
         score *= basePenalty * rescueMultiplier;
@@ -5846,7 +5879,7 @@
     __vParaIndex = [];
     __vLineFreq = new Map();
     __vSigCount = new Map();
-    // Prepare rarity stats structures
+    // Prepare rarity stats structures (IDF recomputation on script changes)
     __paraTokens = [];
     __dfMap = new Map();
 
