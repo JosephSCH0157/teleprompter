@@ -16,6 +16,11 @@
     const Q = new URLSearchParams(location.search);
     const DEV = Q.has('dev') || localStorage.getItem('tp_dev_mode') === '1';
     const CALM = Q.has('calm') || localStorage.getItem('tp_calm') === '1';
+
+    // Default dev mode to quiet unless explicitly "loud"
+    const loudDev = Q.has('loud') || localStorage.getItem('tp_dev_loud') === '1';
+    window.__TP_QUIET = DEV && !loudDev; // dev by default is QUIET
+
     // Dev-time cache buster for dynamic imports
     try {
       const V =
