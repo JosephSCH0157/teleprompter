@@ -3350,8 +3350,19 @@
     lineHeightInput.addEventListener('input', applyTypography);
 
     autoToggle.addEventListener('click', () => {
-      if (autoTimer) stopAutoScroll();
-      else startAutoScroll();
+      if (autoTimer) return stopAutoScroll();
+      if (!parseFloat(autoSpeed.value)) {
+        autoSpeed.value = localStorage.getItem('autoPxSpeed') || '60';
+      }
+      startAutoScroll();
+    });
+
+    autoSpeed.addEventListener('input', () => {
+      const v = parseFloat(autoSpeed.value) || 0;
+      localStorage.setItem('autoPxSpeed', String(v));
+      if (!autoTimer) {
+        autoToggle.textContent = v > 0 ? `Auto-scroll: ${v}px/s` : 'Auto-scroll: Off';
+      }
     });
 
     // OBS enable toggle wiring (after recorder module possibly loaded)
