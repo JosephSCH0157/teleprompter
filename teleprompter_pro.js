@@ -4296,10 +4296,27 @@
     const p =
       paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end) ||
       paraIndex[paraIndex.length - 1];
+
+    // Zero scroll gravity for non-spoken lines: find next spoken paragraph
+    let scrollTarget = p;
+    if (p.isNonSpoken) {
+      // Find the next spoken paragraph after current position
+      const currentParaIndex = paraIndex.indexOf(p);
+      for (let i = currentParaIndex + 1; i < paraIndex.length; i++) {
+        if (!paraIndex[i].isNonSpoken) {
+          scrollTarget = paraIndex[i];
+          break;
+        }
+      }
+      // If no spoken paragraph found after, use the current non-spoken one
+      if (scrollTarget === p) {
+        scrollTarget = p;
+      }
+    }
     // Highlight active paragraph (optional)
     paraIndex.forEach((pi) => pi.el.classList.toggle('active', pi === p));
-    // Center-ish scroll
-    let target = Math.max(0, p.el.offsetTop - viewer.clientHeight * 0.4);
+    // Center-ish scroll (use scrollTarget for non-spoken lines)
+    let target = Math.max(0, scrollTarget.el.offsetTop - viewer.clientHeight * 0.4);
     // Anti-backscroll near bottom: avoid moving upward more than a tiny epsilon when bottomish
     try {
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
@@ -5036,7 +5053,6 @@
 
     let bestScore = -Infinity;
     let bestWindowStart = currentIndex;
-    let bestWindowText = '';
 
     // Score each possible window
     for (let i = startLine; i <= endLine - WINDOW_SIZE + 1; i++) {
@@ -5053,12 +5069,28 @@
       if (!windowText) continue;
 
       // Compute similarity score using weighted components
-      const score = computeLineSimilarity(batchTokens, windowText);
+      let score = computeLineSimilarity(batchTokens, windowText);
+
+      // Apply penalty for non-spoken lines (very high skip prior)
+      const hasNonSpoken = [];
+      for (let j = 0; j < WINDOW_SIZE && i + j <= endLine; j++) {
+        const para = __vParaIndex ? __vParaIndex[i + j] : paraIndex[i + j];
+        if (para?.isNonSpoken) {
+          hasNonSpoken.push(para);
+        }
+      }
+      if (hasNonSpoken.length > 0) {
+        // Heavy penalty for windows containing non-spoken lines, but allow rescue anchor
+        // if similarity is strong enough (rescue anchor: allow jump across if ASR matches nearby)
+        const basePenalty = 0.1; // 90% penalty
+        const rescueThreshold = 0.7; // Allow jumping across if similarity > 0.7
+        const rescueMultiplier = score > rescueThreshold ? 3.0 : 1.0; // Reduce penalty for strong matches
+        score *= basePenalty * rescueMultiplier;
+      }
 
       if (score > bestScore) {
         bestScore = score;
         bestWindowStart = i;
-        bestWindowText = windowText;
       }
     }
 
@@ -5744,11 +5776,26 @@
     // Prepare rarity stats structures
     __paraTokens = [];
     __dfMap = new Map();
+
+    // Function to detect non-spoken lines (headers, scene directions, etc.)
+    function isNonSpokenLine(text) {
+      const trimmed = text.trim();
+      // Regex: ^(act|scene|intro|outro|credits)\b|^\s*—|^\s*[A-Z ]{6,}\s*$|^\[.*\]$
+      // Modified to allow common scene heading punctuation, but keep case-sensitive for scene headings
+      return (
+        /^(act|scene|intro|outro|credits)\b/i.test(trimmed) ||
+        /^\s*—/.test(trimmed) ||
+        /^\s*[A-Z\s\.\-\:]{6,}\s*$/.test(trimmed) ||
+        /^\[.*\]$/.test(trimmed)
+      );
+    }
+
     for (const el of paras) {
       const toks = normTokens(el.textContent || '');
       const wc = toks.length || 1;
       const key = normLineKey(el.textContent || '');
-      paraIndex.push({ el, start: acc, end: acc + wc - 1, key });
+      const isNonSpoken = isNonSpokenLine(el.textContent || '');
+      paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
       acc += wc;
       __paraTokens.push(toks);
       try {
@@ -5809,6 +5856,10 @@
               key,
               sig,
               els: bufEls.slice(),
+              isNonSpoken: bufEls.some((el) => {
+                const p = paraIndex.find((pi) => pi.el === el);
+                return p?.isNonSpoken;
+              }),
             });
             if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
             if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
@@ -5852,7 +5903,15 @@
               return '';
             }
           })();
-          __vParaIndex.push({ text, start: p.start, end: p.end, key, sig, els: [p.el] });
+          __vParaIndex.push({
+            text,
+            start: p.start,
+            end: p.end,
+            key,
+            sig,
+            els: [p.el],
+            isNonSpoken: p.isNonSpoken,
+          });
           if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
           if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
         }
@@ -5873,6 +5932,10 @@
           key,
           sig,
           els: bufEls.slice(),
+          isNonSpoken: bufEls.some((el) => {
+            const p = paraIndex.find((pi) => pi.el === el);
+            return p?.isNonSpoken;
+          }),
         });
         if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
         if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
