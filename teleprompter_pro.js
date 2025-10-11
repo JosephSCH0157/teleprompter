@@ -2708,7 +2708,8 @@
         const stallMsAdj = inJitterSpike ? STALL_MS + 400 : STALL_MS;
         const stalled = noCommitFor > stallMsAdj;
         if (stalled) {
-          console.log(
+          tpLog(
+            'debug',
             JSON.stringify({
               tag: 'watchdog-stalled',
               committedIdx: window.__tpCommit.idx,
@@ -2735,7 +2736,8 @@
           window.__tpStallStreak = 0;
         }
         // Reset stall timer and streak if stalled without index advancement (speaker pause)
-        console.log(
+        tpLog(
+          'debug',
           JSON.stringify({
             tag: 'check-reset-condition',
             stalled,
@@ -2753,7 +2755,8 @@
         ) {
           window.__tpCommit.ts = now;
           window.__tpStallStreak = 0;
-          console.log(
+          tpLog(
+            'debug',
             JSON.stringify({
               tag: 'stall-reset',
               idx: window.currentIndex,
