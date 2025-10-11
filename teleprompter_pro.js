@@ -4978,6 +4978,223 @@
     let bestIdx = bestPos;
     let bestSim = simScores[bestPos - start];
 
+    // Dynamic stall rescue system: detect persistent stalls and apply multi-stage recovery
+    const STALL_DETECT_MS = 1500; // 1.5s threshold for stall detection
+    const LOW_SIM_THRESHOLD = 0.6; // sim_mean threshold for stall
+    const MAX_MARKER_DISTANCE = 200; // max distance from marker for stall detection
+
+    // Initialize rescue state if not exists
+    if (!window.__tpRescueState) {
+      window.__tpRescueState = {
+        stage: 'normal', // normal, widen-band, anchor-scan, time-model, soft-skip
+        lastAdvanceAt: performance.now(),
+        simHistory: [],
+        rescueAttempts: 0,
+        lastRescueAt: 0,
+      };
+    }
+
+    const rescue = window.__tpRescueState;
+    const rescueNow = performance.now();
+    const timeSinceLastAdvance = rescueNow - rescue.lastAdvanceAt;
+
+    // Update sim history for rolling average
+    rescue.simHistory.push(bestSim);
+    if (rescue.simHistory.length > 10) rescue.simHistory.shift();
+    const simMean = rescue.simHistory.reduce((a, b) => a + b, 0) / rescue.simHistory.length;
+
+    // Check marker distance for stall detection
+    let markerDistance = 0;
+    try {
+      const markerTop = Math.round(
+        viewer.clientHeight *
+          (typeof window.__TP_MARKER_PCT === 'number'
+            ? window.__TP_MARKER_PCT
+            : typeof MARKER_PCT === 'number'
+              ? MARKER_PCT
+              : 0.4)
+      );
+      const currentPara = paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end);
+      if (currentPara && currentPara.el) {
+        const paraTop = currentPara.el.offsetTop;
+        markerDistance = Math.abs(paraTop - (viewer.scrollTop + markerTop));
+      }
+    } catch {}
+
+    // Stall detection criteria
+    const stalled =
+      (timeSinceLastAdvance >= STALL_DETECT_MS && simMean < LOW_SIM_THRESHOLD) ||
+      markerDistance > MAX_MARKER_DISTANCE;
+
+    if (stalled) {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'stall:detected',
+            stage: rescue.stage,
+            timeSinceLastAdvance: Math.floor(timeSinceLastAdvance),
+            simMean: Number(simMean.toFixed(3)),
+            markerDistance,
+            attempts: rescue.rescueAttempts,
+          });
+      } catch {}
+
+      // Apply rescue based on current stage
+      let rescueApplied = false;
+
+      if (rescue.stage === 'normal') {
+        // Stage 1: Widen search band
+        rescue.stage = 'widen-band';
+        rescue.lastRescueAt = rescueNow;
+        const originalWindow = windowAhead;
+        windowAhead = Math.min(windowAhead * 2, MATCH_WINDOW_AHEAD * 3); // Double the search window
+
+        try {
+          if (typeof debug === 'function')
+            debug({
+              tag: 'rescue:widen-band',
+              originalWindow: originalWindow,
+              newWindow: windowAhead,
+            });
+        } catch {}
+
+        // Re-run Viterbi with wider window
+        const newEnd = Math.min(scriptWords.length, currentIndex + windowAhead);
+        const newSimScores = new Array(newEnd - start + 1).fill(-Infinity);
+        for (let i = start; i <= newEnd - spoken.length; i++) {
+          const win = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
+          newSimScores[i - start] = _sim(spoken, win);
+        }
+
+        // Find new best in widened window
+        let newBestScore = -Infinity;
+        let newBestPos = currentIndex;
+        for (let i = start; i <= newEnd - spoken.length; i++) {
+          if (newSimScores[i - start] > newBestScore) {
+            newBestScore = newSimScores[i - start];
+            newBestPos = i;
+          }
+        }
+
+        if (newBestScore > bestSim) {
+          bestIdx = newBestPos;
+          bestSim = newBestScore;
+          rescueApplied = true;
+        }
+      } else if (rescue.stage === 'widen-band' && rescueNow - rescue.lastRescueAt > 2000) {
+        // Stage 2: Anchor scan using high-IDF phrases
+        rescue.stage = 'anchor-scan';
+        rescue.lastRescueAt = rescueNow;
+
+        try {
+          const anchors = extractHighIDFPhrases(spoken, 3);
+          const scanStart = Math.max(0, currentIndex - 100);
+          const scanEnd = Math.min(scriptWords.length, currentIndex + 200);
+          const hits = searchBand(anchors, scanStart, scanEnd, spoken);
+          const bestHit = hits.sort((a, b) => b.score - a.score)[0];
+
+          if (bestHit && bestHit.score > 0.75) {
+            bestIdx = bestHit.idx;
+            bestSim = bestHit.score;
+            rescueApplied = true;
+
+            try {
+              if (typeof debug === 'function')
+                debug({
+                  tag: 'rescue:anchor-scan',
+                  anchors: anchors.length,
+                  bestScore: Number(bestHit.score.toFixed(3)),
+                  newIdx: bestIdx,
+                });
+            } catch {}
+          }
+        } catch {}
+      } else if (rescue.stage === 'anchor-scan' && rescueNow - rescue.lastRescueAt > 3000) {
+        // Stage 3: Time model handoff - use timing-based estimation
+        rescue.stage = 'time-model';
+        rescue.lastRescueAt = rescueNow;
+
+        try {
+          // Estimate position based on speech rate and time elapsed
+          const speechRate = 150; // words per minute estimate
+          const timeElapsed = (rescueNow - (window.__tpStartTime || rescueNow)) / 1000 / 60; // minutes
+          const estimatedWords = Math.floor(speechRate * timeElapsed);
+          const estimatedIdx = Math.min(scriptWords.length - 1, Math.max(0, estimatedWords));
+
+          // Look for good match around estimated position
+          const timeSearchRadius = 50;
+          const timeStart = Math.max(0, estimatedIdx - timeSearchRadius);
+          const timeEnd = Math.min(scriptWords.length, estimatedIdx + timeSearchRadius);
+
+          let timeBestSim = -1;
+          let timeBestIdx = currentIndex;
+
+          for (let i = timeStart; i <= timeEnd - spoken.length; i++) {
+            const win = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
+            const sim = _sim(spoken, win);
+            if (sim > timeBestSim) {
+              timeBestSim = sim;
+              timeBestIdx = i;
+            }
+          }
+
+          if (timeBestSim > bestSim) {
+            bestIdx = timeBestIdx;
+            bestSim = timeBestSim;
+            rescueApplied = true;
+
+            try {
+              if (typeof debug === 'function')
+                debug({
+                  tag: 'rescue:time-model',
+                  estimatedIdx,
+                  timeBestSim: Number(timeBestSim.toFixed(3)),
+                  newIdx: bestIdx,
+                });
+            } catch {}
+          }
+        } catch {}
+      } else if (rescue.stage === 'time-model' && rescueNow - rescue.lastRescueAt > 5000) {
+        // Stage 4: Soft skip - advance by estimated speech chunk
+        rescue.stage = 'soft-skip';
+        rescue.lastRescueAt = rescueNow;
+
+        const skipAmount = Math.min(20, Math.floor(spoken.length * 0.8)); // Skip ~80% of spoken length
+        const skipIdx = Math.min(scriptWords.length - 1, currentIndex + skipAmount);
+
+        bestIdx = skipIdx;
+        bestSim = 0.5; // Force acceptance with moderate confidence
+        rescueApplied = true;
+
+        try {
+          if (typeof debug === 'function')
+            debug({
+              tag: 'rescue:soft-skip',
+              skipAmount,
+              newIdx: bestIdx,
+            });
+        } catch {}
+      }
+
+      if (rescueApplied) {
+        rescue.rescueAttempts++;
+        // Reset to normal after successful rescue with some delay
+        setTimeout(() => {
+          if (window.__tpRescueState) {
+            window.__tpRescueState.stage = 'normal';
+            window.__tpRescueState.rescueAttempts = 0;
+          }
+        }, 5000); // 5 second cooldown before resetting
+      } else {
+        rescue.rescueAttempts++;
+      }
+    } else {
+      // No stall detected, reset rescue state
+      rescue.stage = 'normal';
+      rescue.rescueAttempts = 0;
+      rescue.lastAdvanceAt = now;
+    }
+
     // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
     const idxBefore = currentIndex; // for jitter metric
     try {
