@@ -4916,6 +4916,10 @@
       } catch {}
       return;
     }
+
+    // Safe initialization of simHistory at earliest load point
+    const history = window.simHistory || (window.simHistory = []);
+
     // Adopt current smoothness settings if provided
     const SC = window.__TP_SCROLL || {
       DEAD: DEAD_BAND_PX,
@@ -5237,7 +5241,7 @@
     const stallDetected = (function () {
       const now = performance.now();
       const timeSinceLastAdvance = now - (_lastAdvanceAt || 0);
-      const simHistory = window.__tpSimHistory || [];
+      const simHistory = history;
       const simMean =
         simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 1.0;
 
@@ -5291,9 +5295,9 @@
     }
 
     // Update similarity history AFTER rescue mode has potentially improved bestSim
-    simHistory.push(bestSim);
-    if (simHistory.length > 10) simHistory.shift();
-    window.__tpSimHistory = simHistory;
+    history.push(bestSim);
+    if (history.length > 10) history.shift();
+    window.__tpSimHistory = history;
 
     // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
     const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
