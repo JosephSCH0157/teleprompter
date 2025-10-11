@@ -6570,28 +6570,53 @@
     try {
       __scrollCtl?.stopAutoCatchup?.();
     } catch {}
-    const step = () => {
-      const pxPerSec = Math.max(0, Number(autoSpeed.value) || 0);
+
+    // prefer user input; fall back to last saved; else default 60
+    let pxSpeed = parseFloat(autoSpeed.value);
+    if (!pxSpeed || pxSpeed <= 0) {
+      const saved = parseFloat(localStorage.getItem('autoPxSpeed') || '');
+      pxSpeed = saved && saved > 0 ? saved : 60;
+      autoSpeed.value = String(pxSpeed); // reflect in UI
+    }
+    localStorage.setItem('autoPxSpeed', String(pxSpeed));
+
+    autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+    autoToggle.classList.add('active');
+
+    // clear any previous timer
+    if (autoTimer) clearInterval(autoTimer);
+
+    // run at 60Hz-ish for smoothness
+    autoTimer = setInterval(() => {
+      // live-update if user changes the number while running
+      const live = parseFloat(autoSpeed.value);
+      if (live && live > 0 && live !== pxSpeed) {
+        pxSpeed = live;
+        localStorage.setItem('autoPxSpeed', String(pxSpeed));
+        autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+      }
+
+      // convert px/s to px per tick
+      const dt = 1 / 60; // 60Hz interval
+      const dy = pxSpeed * dt;
+
       try {
-        scrollByPx(pxPerSec / 60);
+        scrollByPx(dy);
       } catch {
-        viewer.scrollTop += pxPerSec / 60;
+        viewer.scrollTop += dy;
       }
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? viewer.scrollTop / max : 0;
         sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
       }
-      // keep label updated with live speed
-      autoToggle.textContent = `Auto-scroll: On (${pxPerSec}px/s)`;
-    };
-    autoTimer = setInterval(step, 1000 / 60);
-    step(); // immediate tick so it feels responsive
+    }, 1000 / 60);
   }
 
   function stopAutoScroll() {
-    clearInterval(autoTimer);
+    if (autoTimer) clearInterval(autoTimer);
     autoTimer = null;
+    autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
   }
   // Resume catch-up controller if speech sync is active — via heuristic gate
