@@ -4817,7 +4817,168 @@
     const spoken = spokenAll.slice(-SPOKEN_N);
     if (!spoken.length) return;
 
-    // Search a band around currentIndex with dynamic forward window if tail looks common
+    // ASR batching: accumulate transcripts into 600-900ms shards
+    const BATCH_MS = 750; // 600-900ms average
+    if (!window.__tpBatchState) {
+      window.__tpBatchState = {
+        transcripts: [],
+        startTime: now,
+        totalTokens: [],
+      };
+    }
+
+    const batch = window.__tpBatchState;
+    batch.transcripts.push({ text: transcript, time: now });
+    batch.totalTokens = batch.totalTokens.concat(spokenAll);
+
+    // Process batch if enough time has passed or this is a final transcript
+    const batchAge = now - batch.startTime;
+    const shouldProcess = isFinal || batchAge >= BATCH_MS;
+
+    if (!shouldProcess) {
+      try {
+        if (typeof debug === 'function')
+          debug({ tag: 'batch:accumulate', age: batchAge, tokens: batch.totalTokens.length });
+      } catch {}
+      return;
+    }
+
+    // Process the batch
+    const batchText = batch.totalTokens.join(' ');
+    const batchTokens = normTokens(batchText);
+
+    try {
+      if (typeof debug === 'function')
+        debug({
+          tag: 'batch:process',
+          age: batchAge,
+          tokens: batchTokens.length,
+          transcripts: batch.transcripts.length,
+        });
+    } catch {}
+
+    // Reset batch state
+    window.__tpBatchState = {
+      transcripts: [],
+      startTime: now,
+      totalTokens: [],
+    };
+
+    // Line-level similarity scoring function
+    function computeLineSimilarity(spokenTokens, scriptText) {
+      const scriptTokens = normTokens(scriptText);
+
+      // Component 1: 0.5 · cosine(TF-IDF bi/tri-grams)
+      const tfidfScore = computeTFIDFSimilarity(spokenTokens, scriptTokens);
+
+      // Component 2: 0.3 · character F1 (normalized Levenshtein)
+      const charF1 = computeCharacterF1(spokenTokens.join(' '), scriptTokens.join(' '));
+
+      // Component 3: 0.2 · Jaccard on stemmed tokens
+      const jaccardScore = computeJaccardSimilarity(spokenTokens, scriptTokens);
+
+      // Component 4: +δ for entity matches (numbers, names, toponyms)
+      const entityBonus = computeEntityBonus(spokenTokens, scriptTokens);
+
+      const finalScore = 0.5 * tfidfScore + 0.3 * charF1 + 0.2 * jaccardScore + entityBonus;
+
+      return finalScore;
+    }
+
+    // TF-IDF cosine similarity for bi/tri-grams
+    function computeTFIDFSimilarity(tokens1, tokens2) {
+      const ngrams1 = getNgrams(tokens1, 2).concat(getNgrams(tokens1, 3));
+      const ngrams2 = getNgrams(tokens2, 2).concat(getNgrams(tokens2, 3));
+
+      const allNgrams = new Set([...ngrams1, ...ngrams2]);
+      const vec1 = [];
+      const vec2 = [];
+
+      for (const ngram of allNgrams) {
+        vec1.push(ngrams1.filter((n) => n === ngram).length);
+        vec2.push(ngrams2.filter((n) => n === ngram).length);
+      }
+
+      return cosineSimilarity(vec1, vec2);
+    }
+
+    // Character-level F1 score using normalized Levenshtein
+    function computeCharacterF1(text1, text2) {
+      const chars1 = text1.split('');
+      const chars2 = text2.split('');
+
+      // Simple character overlap for F1
+      const set1 = new Set(chars1);
+      const set2 = new Set(chars2);
+
+      const intersection = new Set([...set1].filter((x) => set2.has(x)));
+      const precision = intersection.size / set1.size;
+      const recall = intersection.size / set2.size;
+
+      return precision + recall > 0 ? (2 * (precision * recall)) / (precision + recall) : 0;
+    }
+
+    // Jaccard similarity on stemmed tokens
+    function computeJaccardSimilarity(tokens1, tokens2) {
+      const stem1 = new Set(tokens1.map(stemToken));
+      const stem2 = new Set(tokens2.map(stemToken));
+
+      const intersection = new Set([...stem1].filter((x) => stem2.has(x)));
+      const union = new Set([...stem1, ...stem2]);
+
+      return intersection.size / union.size;
+    }
+
+    // Entity bonus for numbers, names, toponyms
+    function computeEntityBonus(tokens1, tokens2) {
+      let bonus = 0;
+
+      // Number matches
+      const nums1 = tokens1.filter((t) => /^\d+(\.\d+)?$/.test(t));
+      const nums2 = tokens2.filter((t) => /^\d+(\.\d+)?$/.test(t));
+      if (nums1.length > 0 && nums2.length > 0) {
+        const numMatch = nums1.some((n1) => nums2.includes(n1)) ? 1 : 0;
+        bonus += 0.1 * numMatch;
+      }
+
+      // Name/toponym matches (capitalized words)
+      const names1 = tokens1.filter((t) => /^[A-Z][a-z]+$/.test(t));
+      const names2 = tokens2.filter((t) => /^[A-Z][a-z]+$/.test(t));
+      if (names1.length > 0 && names2.length > 0) {
+        const nameMatch = names1.some((n1) => names2.includes(n1)) ? 1 : 0;
+        bonus += 0.15 * nameMatch;
+      }
+
+      return bonus;
+    }
+
+    // Helper functions
+    function getNgrams(tokens, n) {
+      const ngrams = [];
+      for (let i = 0; i <= tokens.length - n; i++) {
+        ngrams.push(tokens.slice(i, i + n).join(' '));
+      }
+      return ngrams;
+    }
+
+    function cosineSimilarity(vec1, vec2) {
+      let dot = 0,
+        norm1 = 0,
+        norm2 = 0;
+      for (let i = 0; i < vec1.length; i++) {
+        dot += vec1[i] * vec2[i];
+        norm1 += vec1[i] * vec1[i];
+        norm2 += vec2[i] * vec2[i];
+      }
+      return norm1 && norm2 ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0;
+    }
+
+    function stemToken(token) {
+      // Simple stemming: remove common suffixes
+      return token.toLowerCase().replace(/ing$|ed$|er$|est$|ly$|s$/, '');
+    }
+
+    // Line-level matching: score against concatenated line windows [i..i+2]
     let windowAhead = MATCH_WINDOW_AHEAD;
     try {
       const TAIL_N = 3; // examine last 3 tokens for duplication nearby
@@ -4862,121 +5023,73 @@
         }
       }
     } catch {}
-    const start = Math.max(0, currentIndex - MATCH_WINDOW_BACK);
-    const end = Math.min(scriptWords.length, currentIndex + windowAhead);
+    // Line-level matching: score against concatenated line windows [i..i+2]
+    const WINDOW_SIZE = 3; // lines per window [i..i+2]
+    const SEARCH_BACK = 5; // lines to search backward
+    const SEARCH_FORWARD = 15; // lines to search forward
 
-    // Viterbi aligner: 3-state HMM for sequence alignment
-    // States: Stay (same line), Advance (next line), Skip k (jump k lines)
-    const K = 10; // max skip distance
-    const ALPHA = 0.15; // advance cost
-    const BETA = 0.08; // skip cost per line
+    const startLine = Math.max(0, Math.floor(currentIndex) - SEARCH_BACK);
+    const endLine = Math.min(
+      __vParaIndex ? __vParaIndex.length - 1 : paraIndex.length - 1,
+      Math.floor(currentIndex) + SEARCH_FORWARD
+    );
 
-    // Precompute similarities for all positions in window
-    const simScores = new Array(end - start + 1).fill(-Infinity);
-    for (let i = start; i <= end - spoken.length; i++) {
-      const win = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
-      simScores[i - start] = _sim(spoken, win);
-    }
-
-    // Viterbi DP: V[t][state] = best score to reach position t with last transition 'state'
-    // States: 0=stay, 1=advance, 2..K+1=skip k (where k=state-1)
-    const T = end - start + 1;
-    const V = new Array(T).fill().map(() => new Array(K + 2).fill(-Infinity));
-    const backpointer = new Array(T).fill().map(() => new Array(K + 2).fill(-1));
-
-    // Initialize at current position (t=0 corresponds to start index)
-    const currentOffset = currentIndex - start;
-    if (currentOffset >= 0 && currentOffset < T) {
-      V[currentOffset][0] = simScores[currentOffset]; // stay at current
-      V[currentOffset][1] = simScores[currentOffset] - ALPHA; // advance to current
-    }
-
-    // Fill DP table
-    for (let t = 0; t < T; t++) {
-      // From each state at t, transition to t+1
-      for (let state = 0; state <= K + 1; state++) {
-        if (V[t][state] === -Infinity) continue;
-
-        // Stay: cost = -sim at next position
-        if (t + 1 < T) {
-          const stayCost = V[t][state] - simScores[t + 1];
-          if (stayCost > V[t + 1][0]) {
-            V[t + 1][0] = stayCost;
-            backpointer[t + 1][0] = state;
-          }
-        }
-
-        // Advance: cost = -sim + α, move to next position
-        if (t + 1 < T) {
-          const advanceCost = V[t][state] - simScores[t + 1] - ALPHA;
-          if (advanceCost > V[t + 1][1]) {
-            V[t + 1][1] = advanceCost;
-            backpointer[t + 1][1] = state;
-          }
-        }
-
-        // Skip k: for k=2 to K, cost = -sim + β·k, jump k positions
-        for (let k = 2; k <= K; k++) {
-          if (t + k < T) {
-            const skipCost = V[t][state] - simScores[t + k] - BETA * k;
-            const skipState = k + 1; // state 2 = skip 2, etc.
-            if (skipCost > V[t + k][skipState]) {
-              V[t + k][skipState] = skipCost;
-              backpointer[t + k][skipState] = state;
-            }
-          }
-        }
-      }
-    }
-
-    // Find best final state
     let bestScore = -Infinity;
-    let bestPos = currentIndex;
-    let bestState = -1;
+    let bestWindowStart = currentIndex;
+    let bestWindowText = '';
 
-    for (let t = 0; t < T; t++) {
-      for (let state = 0; state <= K + 1; state++) {
-        if (V[t][state] > bestScore) {
-          bestScore = V[t][state];
-          bestPos = start + t;
-          bestState = state;
+    // Score each possible window
+    for (let i = startLine; i <= endLine - WINDOW_SIZE + 1; i++) {
+      // Get concatenated text for this window
+      let windowText = '';
+      for (let j = 0; j < WINDOW_SIZE && i + j <= endLine; j++) {
+        const para = __vParaIndex ? __vParaIndex[i + j] : paraIndex[i + j];
+        if (para) {
+          windowText += para.key + ' ';
+        }
+      }
+      windowText = windowText.trim();
+
+      if (!windowText) continue;
+
+      // Compute similarity score using weighted components
+      const score = computeLineSimilarity(batchTokens, windowText);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestWindowStart = i;
+        bestWindowText = windowText;
+      }
+    }
+
+    // Find best position within the winning window by scoring subspans
+    let bestSubPos = bestWindowStart;
+    let bestSubScore = -Infinity;
+
+    const windowParas = [];
+    for (let j = 0; j < WINDOW_SIZE && bestWindowStart + j <= endLine; j++) {
+      const para = __vParaIndex
+        ? __vParaIndex[bestWindowStart + j]
+        : paraIndex[bestWindowStart + j];
+      if (para) windowParas.push(para);
+    }
+
+    // Score sliding subspans within the window
+    for (let startPara = 0; startPara < windowParas.length; startPara++) {
+      for (let endPara = startPara + 1; endPara <= windowParas.length; endPara++) {
+        const subParas = windowParas.slice(startPara, endPara);
+        const subText = subParas.map((p) => p.key).join(' ');
+        const subScore = computeLineSimilarity(batchTokens, subText);
+
+        if (subScore > bestSubScore) {
+          bestSubScore = subScore;
+          bestSubPos = bestWindowStart + startPara;
         }
       }
     }
 
-    // Trace back to get the path (for debugging, optional)
-    const path = [];
-    let currentT = bestPos - start;
-    let currentState = bestState;
-    while (currentT >= 0 && currentState >= 0) {
-      path.unshift({ pos: start + currentT, state: currentState });
-      currentState = backpointer[currentT][currentState];
-      if (currentState === 0) {
-        currentT--; // stay
-      } else if (currentState === 1) {
-        currentT--; // advance
-      } else {
-        const k = currentState - 1;
-        currentT -= k; // skip k
-      }
-    }
-
-    // Loop penalty: if we bounce between same two indices >3 times, penalize
-    const recentPath = path.slice(-10); // last 10 transitions
-    const bounces = {};
-    for (let i = 1; i < recentPath.length; i++) {
-      const prev = recentPath[i - 1].pos;
-      const curr = recentPath[i].pos;
-      const key = `${prev}->${curr}`;
-      bounces[key] = (bounces[key] || 0) + 1;
-    }
-    const maxBounce = Math.max(...Object.values(bounces));
-    if (maxBounce > 3) {
-      bestScore -= 0.2; // penalty for bouncing
-    }
-
-    let bestIdx = bestPos;
-    let bestSim = simScores[bestPos - start];
+    let bestIdx = bestSubPos;
+    let bestSim = bestSubScore;
 
     // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
     const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
@@ -5022,222 +5135,7 @@
         });
     } catch {}
 
-    // Dynamic stall rescue system: detect persistent stalls and apply multi-stage recovery
-    const STALL_DETECT_MS = 1500; // 1.5s threshold for stall detection
-    const LOW_SIM_THRESHOLD = 0.6; // sim_mean threshold for stall
-    const MAX_MARKER_DISTANCE = 200; // max distance from marker for stall detection
-
-    // Initialize rescue state if not exists
-    if (!window.__tpRescueState) {
-      window.__tpRescueState = {
-        stage: 'normal', // normal, widen-band, anchor-scan, time-model, soft-skip
-        lastAdvanceAt: performance.now(),
-        simHistory: [],
-        rescueAttempts: 0,
-        lastRescueAt: 0,
-      };
-    }
-
-    const rescue = window.__tpRescueState;
-    const rescueNow = performance.now();
-    const timeSinceLastAdvance = rescueNow - rescue.lastAdvanceAt;
-
-    // Update sim history for rolling average
-    rescue.simHistory.push(bestSim);
-    if (rescue.simHistory.length > 10) rescue.simHistory.shift();
-    const simMean = rescue.simHistory.reduce((a, b) => a + b, 0) / rescue.simHistory.length;
-
-    // Check marker distance for stall detection
-    let markerDistance = 0;
-    try {
-      const markerTop = Math.round(
-        viewer.clientHeight *
-          (typeof window.__TP_MARKER_PCT === 'number'
-            ? window.__TP_MARKER_PCT
-            : typeof MARKER_PCT === 'number'
-              ? MARKER_PCT
-              : 0.4)
-      );
-      const currentPara = paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end);
-      if (currentPara && currentPara.el) {
-        const paraTop = currentPara.el.offsetTop;
-        markerDistance = Math.abs(paraTop - (viewer.scrollTop + markerTop));
-      }
-    } catch {}
-
-    // Stall detection criteria
-    const stalled =
-      (timeSinceLastAdvance >= STALL_DETECT_MS && simMean < LOW_SIM_THRESHOLD) ||
-      markerDistance > MAX_MARKER_DISTANCE;
-
-    if (stalled) {
-      try {
-        if (typeof debug === 'function')
-          debug({
-            tag: 'stall:detected',
-            stage: rescue.stage,
-            timeSinceLastAdvance: Math.floor(timeSinceLastAdvance),
-            simMean: Number(simMean.toFixed(3)),
-            markerDistance,
-            attempts: rescue.rescueAttempts,
-          });
-      } catch {}
-
-      // Apply rescue based on current stage
-      let rescueApplied = false;
-
-      if (rescue.stage === 'normal') {
-        // Stage 1: Widen search band
-        rescue.stage = 'widen-band';
-        rescue.lastRescueAt = rescueNow;
-        const originalWindow = windowAhead;
-        windowAhead = Math.min(windowAhead * 2, MATCH_WINDOW_AHEAD * 3); // Double the search window
-
-        try {
-          if (typeof debug === 'function')
-            debug({
-              tag: 'rescue:widen-band',
-              originalWindow: originalWindow,
-              newWindow: windowAhead,
-            });
-        } catch {}
-
-        // Re-run Viterbi with wider window
-        const newEnd = Math.min(scriptWords.length, currentIndex + windowAhead);
-        const newSimScores = new Array(newEnd - start + 1).fill(-Infinity);
-        for (let i = start; i <= newEnd - spoken.length; i++) {
-          const win = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
-          newSimScores[i - start] = _sim(spoken, win);
-        }
-
-        // Find new best in widened window
-        let newBestScore = -Infinity;
-        let newBestPos = currentIndex;
-        for (let i = start; i <= newEnd - spoken.length; i++) {
-          if (newSimScores[i - start] > newBestScore) {
-            newBestScore = newSimScores[i - start];
-            newBestPos = i;
-          }
-        }
-
-        if (newBestScore > bestSim) {
-          bestIdx = newBestPos;
-          bestSim = newBestScore;
-          rescueApplied = true;
-        }
-      } else if (rescue.stage === 'widen-band' && rescueNow - rescue.lastRescueAt > 2000) {
-        // Stage 2: Anchor scan using high-IDF phrases
-        rescue.stage = 'anchor-scan';
-        rescue.lastRescueAt = rescueNow;
-
-        try {
-          const anchors = extractHighIDFPhrases(spoken, 3);
-          const scanStart = Math.max(0, currentIndex - 100);
-          const scanEnd = Math.min(scriptWords.length, currentIndex + 200);
-          const hits = searchBand(anchors, scanStart, scanEnd, spoken);
-          const bestHit = hits.sort((a, b) => b.score - a.score)[0];
-
-          if (bestHit && bestHit.score > 0.75) {
-            bestIdx = bestHit.idx;
-            bestSim = bestHit.score;
-            rescueApplied = true;
-
-            try {
-              if (typeof debug === 'function')
-                debug({
-                  tag: 'rescue:anchor-scan',
-                  anchors: anchors.length,
-                  bestScore: Number(bestHit.score.toFixed(3)),
-                  newIdx: bestIdx,
-                });
-            } catch {}
-          }
-        } catch {}
-      } else if (rescue.stage === 'anchor-scan' && rescueNow - rescue.lastRescueAt > 3000) {
-        // Stage 3: Time model handoff - use timing-based estimation
-        rescue.stage = 'time-model';
-        rescue.lastRescueAt = rescueNow;
-
-        try {
-          // Estimate position based on speech rate and time elapsed
-          const speechRate = 150; // words per minute estimate
-          const timeElapsed = (rescueNow - (window.__tpStartTime || rescueNow)) / 1000 / 60; // minutes
-          const estimatedWords = Math.floor(speechRate * timeElapsed);
-          const estimatedIdx = Math.min(scriptWords.length - 1, Math.max(0, estimatedWords));
-
-          // Look for good match around estimated position
-          const timeSearchRadius = 50;
-          const timeStart = Math.max(0, estimatedIdx - timeSearchRadius);
-          const timeEnd = Math.min(scriptWords.length, estimatedIdx + timeSearchRadius);
-
-          let timeBestSim = -1;
-          let timeBestIdx = currentIndex;
-
-          for (let i = timeStart; i <= timeEnd - spoken.length; i++) {
-            const win = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
-            const sim = _sim(spoken, win);
-            if (sim > timeBestSim) {
-              timeBestSim = sim;
-              timeBestIdx = i;
-            }
-          }
-
-          if (timeBestSim > bestSim) {
-            bestIdx = timeBestIdx;
-            bestSim = timeBestSim;
-            rescueApplied = true;
-
-            try {
-              if (typeof debug === 'function')
-                debug({
-                  tag: 'rescue:time-model',
-                  estimatedIdx,
-                  timeBestSim: Number(timeBestSim.toFixed(3)),
-                  newIdx: bestIdx,
-                });
-            } catch {}
-          }
-        } catch {}
-      } else if (rescue.stage === 'time-model' && rescueNow - rescue.lastRescueAt > 5000) {
-        // Stage 4: Soft skip - advance by estimated speech chunk
-        rescue.stage = 'soft-skip';
-        rescue.lastRescueAt = rescueNow;
-
-        const skipAmount = Math.min(20, Math.floor(spoken.length * 0.8)); // Skip ~80% of spoken length
-        const skipIdx = Math.min(scriptWords.length - 1, currentIndex + skipAmount);
-
-        bestIdx = skipIdx;
-        bestSim = 0.5; // Force acceptance with moderate confidence
-        rescueApplied = true;
-
-        try {
-          if (typeof debug === 'function')
-            debug({
-              tag: 'rescue:soft-skip',
-              skipAmount,
-              newIdx: bestIdx,
-            });
-        } catch {}
-      }
-
-      if (rescueApplied) {
-        rescue.rescueAttempts++;
-        // Reset to normal after successful rescue with some delay
-        setTimeout(() => {
-          if (window.__tpRescueState) {
-            window.__tpRescueState.stage = 'normal';
-            window.__tpRescueState.rescueAttempts = 0;
-          }
-        }, 5000); // 5 second cooldown before resetting
-      } else {
-        rescue.rescueAttempts++;
-      }
-    } else {
-      // No stall detected, reset rescue state
-      rescue.stage = 'normal';
-      rescue.rescueAttempts = 0;
-      rescue.lastAdvanceAt = now;
-    }
+    // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
 
     // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
     const idxBefore = currentIndex; // for jitter metric
