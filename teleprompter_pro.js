@@ -5258,6 +5258,35 @@
       } catch {}
     }
 
+    // Instrumentation for verification
+    try {
+      if (typeof debug === 'function') {
+        const normBatch = batchTokens.join(' ');
+        const scriptSampleStart = Math.max(0, Math.floor(i_pred) - 5);
+        const scriptSampleEnd = Math.min(scriptWords.length, Math.floor(i_pred) + 5);
+        const scriptSampleTokens = scriptWords.slice(scriptSampleStart, scriptSampleEnd);
+        const normScriptSample = normTokens(scriptSampleTokens.join(' ')).join(' ');
+        const examplePositions = Array.from(candidates).slice(0, 3); // first 3 positions
+        const windowBounds =
+          candidates.size === 0 ? { start: candidateStart, end: candidateEnd } : null; // only if fallback
+        const minTokensGateTriggered = batchTokens.length < MIN_BATCH_TOKENS;
+        const backtrackEnabled = MATCH_WINDOW_BACK > 0;
+        const backtrackDistance = MATCH_WINDOW_BACK;
+
+        debug({
+          tag: 'instrumentation:batch',
+          normBatch,
+          normScriptSample,
+          nGramHits: ngramHits,
+          examplePositions,
+          windowBounds,
+          minTokensGateTriggered,
+          backtrackEnabled,
+          backtrackDistance,
+        });
+      }
+    } catch {}
+
     const candidateArray = Array.from(candidates).sort((a, b) => a - b);
     const scores = {};
 
