@@ -5413,22 +5413,18 @@
     }
     if (bestSim < EFF_SIM_THRESHOLD) return;
 
-    // Lost-mode tracker: increment low-sim runs and enter lost if jitter large
+    // Lost-mode tracker: DISABLED - replaced by new rescue mode
+    // The old lost mode was causing stalls, especially near end of script
     try {
+      // Keep counters for debugging but don't trigger lost mode
       if (bestSim < 0.6) __tpLowSimCount++;
       else __tpLowSimCount = 0;
-      if ((J.std || 0) > 12 || __tpLowSimCount >= 8) {
-        if (!__tpLost) {
-          __tpLost = true;
-          try {
-            if (typeof debug === 'function')
-              debug({ tag: 'match:lost:enter', std: J.std, lowSimCount: __tpLowSimCount });
-          } catch {}
-        }
-      }
+      // Removed: if ((J.std || 0) > 12 || __tpLowSimCount >= 8) { ... }
     } catch {}
 
-    // If we’re lost, try to recover by widening a local search around current position on distinctive anchors
+    // If we’re lost, try to recover: DISABLED - replaced by new rescue mode
+    // The old lost mode recovery was causing stalls near end of script
+    /*
     if (__tpLost) {
       try {
         const BAND_BEFORE = 35,
@@ -5458,6 +5454,7 @@
         return;
       }
     }
+    */
 
     // Coverage-based soft advance probe to prevent stalls
     // Stall instrumentation: if we haven't advanced for >1s, emit a one-line summary
