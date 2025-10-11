@@ -2772,6 +2772,9 @@
         const pr = progressRate();
         // Update sim history for rolling average
         const currentSim = window.__lastSimScore ?? 0;
+        if (!Array.isArray(window.simHistory)) {
+          window.simHistory = [];
+        }
         window.simHistory.push(currentSim);
         if (window.simHistory.length > 10) window.simHistory.shift();
         const simMean =
@@ -5238,6 +5241,9 @@
     const stallDetected = (function () {
       const now = performance.now();
       const timeSinceLastAdvance = now - (_lastAdvanceAt || 0);
+      if (!Array.isArray(window.simHistory)) {
+        return false; // No history available, assume no stall
+      }
       const simMean =
         window.simHistory.length > 0
           ? window.simHistory.reduce((a, b) => a + b, 0) / window.simHistory.length
@@ -5293,6 +5299,9 @@
     }
 
     // Update similarity history AFTER rescue mode has potentially improved bestSim
+    if (!Array.isArray(window.simHistory)) {
+      window.simHistory = [];
+    }
     window.simHistory.push(bestSim);
     if (window.simHistory.length > 10) window.simHistory.shift();
     window.__tpSimHistory = window.simHistory;
