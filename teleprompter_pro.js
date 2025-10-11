@@ -1424,8 +1424,7 @@
     chronoStart = 0;
   let scriptWords = [],
     paraIndex = [],
-    currentIndex = 0,
-    simHistory = [];
+    currentIndex = 0;
   window.currentIndex = currentIndex;
   // Paragraph token stats for rarity gating (computed on render)
   let __paraTokens = []; // Array<Array<string>> per paragraph
@@ -2773,10 +2772,12 @@
         const pr = progressRate();
         // Update sim history for rolling average
         const currentSim = window.__lastSimScore ?? 0;
-        simHistory.push(currentSim);
-        if (simHistory.length > 10) simHistory.shift();
+        window.simHistory.push(currentSim);
+        if (window.simHistory.length > 10) window.simHistory.shift();
         const simMean =
-          simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 0;
+          window.simHistory.length > 0
+            ? window.simHistory.reduce((a, b) => a + b, 0) / window.simHistory.length
+            : 0;
 
         const aRatio = getAnchorRatio();
         const inJitterSpike = !!(
@@ -4908,7 +4909,7 @@
 
   // Advance currentIndex by trying to align recognized words to the upcoming script words
   // TP: advance-by-transcript
-  function advanceByTranscript(simHistory, transcript, isFinal) {
+  function advanceByTranscript(transcript, isFinal) {
     // Hard gate: no matching when speech sync is off
     if (!speechOn) {
       try {
@@ -5238,7 +5239,9 @@
       const now = performance.now();
       const timeSinceLastAdvance = now - (_lastAdvanceAt || 0);
       const simMean =
-        simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 1.0;
+        window.simHistory.length > 0
+          ? window.simHistory.reduce((a, b) => a + b, 0) / window.simHistory.length
+          : 1.0;
 
       return timeSinceLastAdvance > 1400 && simMean < 0.65;
     })();
@@ -5290,9 +5293,9 @@
     }
 
     // Update similarity history AFTER rescue mode has potentially improved bestSim
-    simHistory.push(bestSim);
-    if (simHistory.length > 10) simHistory.shift();
-    window.__tpSimHistory = simHistory;
+    window.simHistory.push(bestSim);
+    if (window.simHistory.length > 10) window.simHistory.shift();
+    window.__tpSimHistory = window.simHistory;
 
     // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
     const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
@@ -7248,13 +7251,13 @@
         else interim += (r[0]?.transcript || '') + ' ';
       }
       // Finals = strong jumps
-      if (finals) advanceByTranscript(simHistory, finals, /*isFinal*/ true);
+      if (finals) advanceByTranscript(finals, /*isFinal*/ true);
 
       // Interims = gentle tracking (every ~150ms)
       const now = performance.now();
       if (interim && now - _lastInterimAt > 150) {
         _lastInterimAt = now;
-        advanceByTranscript(simHistory, interim, /*isFinal*/ false);
+        advanceByTranscript(interim, /*isFinal*/ false);
       }
     };
 
