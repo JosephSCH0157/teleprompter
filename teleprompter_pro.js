@@ -2884,7 +2884,13 @@
 
         // Mid-script micro-nudge: if stalled but not bottomish, gently poke the scroller forward
         // to break sticky/min-delta traps. Keep rare and small to avoid visible jumps.
-        if (stalled && !(bottomish || docBottomish) && cooldownOk && !catchupActive) {
+        if (
+          stalled &&
+          !(bottomish || docBottomish) &&
+          cooldownOk &&
+          !catchupActive &&
+          window.currentIndex !== window.__tpCommit.idx
+        ) {
           try {
             debug?.({ tag: 'stall:nudge', reason: 'mid-script' });
           } catch {}
