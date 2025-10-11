@@ -1424,7 +1424,8 @@
     chronoStart = 0;
   let scriptWords = [],
     paraIndex = [],
-    currentIndex = 0;
+    currentIndex = 0,
+    simHistory = [];
   window.currentIndex = currentIndex;
   // Paragraph token stats for rarity gating (computed on render)
   let __paraTokens = []; // Array<Array<string>> per paragraph
@@ -2594,8 +2595,7 @@
         typeof window.__tpMidStallCooldownMs === 'number' ? window.__tpMidStallCooldownMs : 1000;
       let _lastRescueAt = 0;
       let _lastMidRescueAt = 0;
-      // Similarity tracking for stall detection
-      let simHistory = [];
+      // Similarity tracking for stall detection - now uses global simHistory
       const LOW_SIM_THRESHOLD = 0.65; // sim_mean threshold for stall
 
       // Initialize commit broker state if not already set
@@ -4908,7 +4908,7 @@
 
   // Advance currentIndex by trying to align recognized words to the upcoming script words
   // TP: advance-by-transcript
-  function advanceByTranscript(transcript, isFinal) {
+  function advanceByTranscript(simHistory, transcript, isFinal) {
     // Hard gate: no matching when speech sync is off
     if (!speechOn) {
       try {
@@ -4916,10 +4916,6 @@
       } catch {}
       return;
     }
-
-    // Safe initialization of simHistory at earliest load point
-    const history = window.simHistory || (window.simHistory = []);
-
     // Adopt current smoothness settings if provided
     const SC = window.__TP_SCROLL || {
       DEAD: DEAD_BAND_PX,
@@ -5241,7 +5237,6 @@
     const stallDetected = (function () {
       const now = performance.now();
       const timeSinceLastAdvance = now - (_lastAdvanceAt || 0);
-      const simHistory = history;
       const simMean =
         simHistory.length > 0 ? simHistory.reduce((a, b) => a + b, 0) / simHistory.length : 1.0;
 
@@ -5295,9 +5290,9 @@
     }
 
     // Update similarity history AFTER rescue mode has potentially improved bestSim
-    history.push(bestSim);
-    if (history.length > 10) history.shift();
-    window.__tpSimHistory = history;
+    simHistory.push(bestSim);
+    if (simHistory.length > 10) simHistory.shift();
+    window.__tpSimHistory = simHistory;
 
     // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
     const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
@@ -7253,13 +7248,13 @@
         else interim += (r[0]?.transcript || '') + ' ';
       }
       // Finals = strong jumps
-      if (finals) advanceByTranscript(finals, /*isFinal*/ true);
+      if (finals) advanceByTranscript(simHistory, finals, /*isFinal*/ true);
 
       // Interims = gentle tracking (every ~150ms)
       const now = performance.now();
       if (interim && now - _lastInterimAt > 150) {
         _lastInterimAt = now;
-        advanceByTranscript(interim, /*isFinal*/ false);
+        advanceByTranscript(simHistory, interim, /*isFinal*/ false);
       }
     };
 
