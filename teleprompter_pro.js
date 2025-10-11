@@ -4944,6 +4944,38 @@
     // Skip batching - process each transcript immediately
     const batchTokens = spoken;
 
+    // Never score empty batches - require minimum 3 tokens
+    const MIN_BATCH_TOKENS = 3;
+    if (batchTokens.length < MIN_BATCH_TOKENS) {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'transcript:skip',
+            reason: 'insufficient-tokens',
+            tokens: batchTokens.length,
+            minRequired: MIN_BATCH_TOKENS,
+            isFinal,
+          });
+      } catch {}
+      return; // Buffer until we have enough tokens
+    }
+
+    // Debounce partials: only score finals or partials with significant new content
+    if (!isFinal) {
+      // For now, skip all partials - only process finals
+      // TODO: Implement smart partial processing based on content changes
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'transcript:skip',
+            reason: 'partial-debounced',
+            tokens: batchTokens.length,
+            isFinal,
+          });
+      } catch {}
+      return;
+    }
+
     try {
       if (typeof debug === 'function')
         debug({
@@ -5157,9 +5189,9 @@
         }
       }
     } catch {}
-    // Core loop: score candidates around i_pred from Viterbi
+    // Core loop: score candidates seeded by n-grams or window fallback
     const i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
-    const candidates = [];
+    const candidates = new Set(); // Use Set to avoid duplicates
 
     try {
       if (typeof debug === 'function')
@@ -5173,22 +5205,59 @@
         });
     } catch {}
 
-    // Generate candidates: lines[i_pred - 40 .. i_pred + windowAhead]
-    const scores = {};
+    // N-gram candidate seeding: find positions containing n-grams from batchTokens
+    const batchNgrams = new Set([...getNgrams(batchTokens, 3), ...getNgrams(batchTokens, 4)]);
 
-    // Generate candidates: lines[i_pred - 40 .. i_pred + windowAhead]
-    const candidateStart = Math.max(0, Math.floor(i_pred) - 40);
-    const candidateEnd = Math.min(
-      __vParaIndex ? __vParaIndex.length - 1 : paraIndex.length - 1,
-      Math.floor(i_pred) + windowAhead
-    );
-
-    for (let j = candidateStart; j <= candidateEnd; j++) {
-      candidates.push(j);
+    let ngramHits = 0;
+    for (const ngram of batchNgrams) {
+      const positions = __ngramIndex.get(ngram);
+      if (positions) {
+        for (const pos of positions) {
+          candidates.add(pos);
+          ngramHits++;
+        }
+      }
     }
 
+    // If no n-gram hits, fall back to window-based candidates
+    if (candidates.size === 0) {
+      const candidateStart = Math.max(0, Math.floor(i_pred) - 40);
+      const candidateEnd = Math.min(
+        __vParaIndex ? __vParaIndex.length - 1 : paraIndex.length - 1,
+        Math.floor(i_pred) + windowAhead
+      );
+
+      for (let j = candidateStart; j <= candidateEnd; j++) {
+        candidates.add(j);
+      }
+
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:candidates-fallback',
+            reason: 'no-ngram-hits',
+            windowStart: candidateStart,
+            windowEnd: candidateEnd,
+            candidates: candidates.size,
+          });
+      } catch {}
+    } else {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:candidates-ngram',
+            ngramHits,
+            uniqueCandidates: candidates.size,
+            batchNgrams: batchNgrams.size,
+          });
+      } catch {}
+    }
+
+    const candidateArray = Array.from(candidates).sort((a, b) => a - b);
+    const scores = {};
+
     // Score each candidate
-    for (const j of candidates) {
+    for (const j of candidateArray) {
       const para = __vParaIndex ? __vParaIndex[j] : paraIndex[j];
       if (!para) continue;
 
@@ -5212,7 +5281,7 @@
       if (typeof debug === 'function')
         debug({
           tag: 'match:scores',
-          candidates: candidates.length,
+          candidates: candidateArray.length,
           topScores,
           batchTokens: batchTokens.length,
         });
@@ -5967,6 +6036,8 @@
     // Prepare rarity stats structures (IDF recomputation on script changes)
     __paraTokens = [];
     __dfMap = new Map();
+    // N-gram to positions index for candidate seeding
+    __ngramIndex = new Map(); // ngram -> Set of paragraph indices
 
     // Function to detect non-spoken lines (headers, scene directions, etc.)
     function isNonSpokenLine(text) {
@@ -5986,12 +6057,25 @@
       const wc = toks.length || 1;
       const key = normLineKey(el.textContent || '');
       const isNonSpoken = isNonSpokenLine(el.textContent || '');
+      const paraIdx = paraIndex.length; // Current paragraph index
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
       acc += wc;
       __paraTokens.push(toks);
       try {
         const uniq = new Set(toks);
         uniq.forEach((t) => __dfMap.set(t, (__dfMap.get(t) || 0) + 1));
+
+        // Index n-grams (3-grams and 4-grams) for candidate seeding
+        const trigrams = getNgrams(toks, 3);
+        const tetragrams = getNgrams(toks, 4);
+        const allNgrams = [...trigrams, ...tetragrams];
+
+        for (const ngram of allNgrams) {
+          if (!__ngramIndex.has(ngram)) {
+            __ngramIndex.set(ngram, new Set());
+          }
+          __ngramIndex.get(ngram).add(paraIdx);
+        }
       } catch {}
       try {
         if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1);
