@@ -5408,7 +5408,7 @@
               __viterbiPath = [...__viterbiPath, paraIdx];
               __viterbiIPred = paraIdx;
               // Update currentIndex to the anchor word position
-              currentIndex = bestAnchor.idx;
+              currentIndex = Math.max(currentIndex, bestAnchor.idx);
               try {
                 if (typeof debug === 'function')
                   debug({
@@ -5631,7 +5631,7 @@
         );
         const best = hits.sort((a, b) => b.score - a.score)[0] || null;
         if (best && best.score > 0.78) {
-          currentIndex = Math.max(0, Math.min(best.idx, scriptWords.length - 1));
+          currentIndex = Math.max(currentIndex, Math.min(best.idx, scriptWords.length - 1));
           window.currentIndex = currentIndex;
           __tpLost = false;
           __tpLowSimCount = 0;
@@ -5789,7 +5789,7 @@
     if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM) {
       currentIndex += MAX_JUMP_AHEAD_WORDS;
     } else {
-      currentIndex = Math.max(0, Math.min(bestIdx, scriptWords.length - 1));
+      currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
     }
     window.currentIndex = currentIndex;
     // Update commit broker
