@@ -4847,7 +4847,7 @@
   let __tpStag = { vIdx: -1, since: performance.now() };
   const STALL_MS = 1200; // ~1.2s feels good in speech
   const COV_THRESH = 0.88; // Raised from 0.82 to require higher coverage before soft-advancing
-  const NEXT_SIM_FLOOR = 0.75; // Raised from 0.68 to prevent premature soft-advances
+  const SOFT_ADV_MIN_SIM = 0.54; // avoid treadmill on flimsy evidence
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
@@ -5013,7 +5013,7 @@
           const v = vList[j];
           const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
           const sim = _sim(spoken, win);
-          if (sim >= NEXT_SIM_FLOOR) {
+          if (sim >= SOFT_ADV_MIN_SIM) {
             try {
               if (typeof debug === 'function')
                 debug({
