@@ -519,12 +519,15 @@
               } catch {}
               return typeof prevStart === 'function' ? prevStart.apply(this, arguments) : undefined;
             };
-            const prevEnd = r.onend;
-            r.onend = function (_e) {
+            const prevSpeechEnd = r.onspeechend;
+            r.onspeechend = function (_e) {
               try {
-                HUD.bus.emit('speech:toggle', false);
+                // Pause breathing for natural feel
+                if (window.PLL?.onPause) window.PLL.onPause();
               } catch {}
-              return typeof prevEnd === 'function' ? prevEnd.apply(this, arguments) : undefined;
+              return typeof prevSpeechEnd === 'function'
+                ? prevSpeechEnd.apply(this, arguments)
+                : undefined;
             };
           }
         };

@@ -799,22 +799,25 @@
     frag.appendChild(
       card(
         'cardPLL',
-        'PLL Controller',
+        'Hybrid Lock (Auto + Speech)',
         'advanced',
         `
         <div class="settings-inline-row">
           <label><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''}/> Enable hybrid lock</label>
         </div>
         <div class="settings-inline-row">
+          <label>Responsiveness <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.022)}" style="width:80px"></label>
+          <label>Stability <input id="settingsKd" type="number" min="0" max="0.01" step="0.0001" value="${getVal('Kd', 0.0025)}" style="width:80px"></label>
           <label>Max bias <input id="settingsMaxBiasPct" type="number" min="0" max="0.5" step="0.01" value="${getVal('maxBiasPct', 0.12)}" style="width:80px"></label>
-          <label>Kp <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.02)}" style="width:80px"></label>
-          <label>Kd <input id="settingsKd" type="number" min="0" max="0.01" step="0.0001" value="${getVal('Kd', 0.002)}" style="width:80px"></label>
         </div>
         <div class="settings-inline-row">
-          <label>Min conf <input id="settingsConfMin" type="number" min="0" max="1" step="0.01" value="${getVal('confMin', 0.58)}" style="width:80px"></label>
-          <label>Decay ms <input id="settingsDecayMs" type="number" min="100" max="5000" step="100" value="${getVal('decayMs', 600)}" style="width:80px"></label>
+          <label>Min conf <input id="settingsConfMin" type="number" min="0" max="1" step="0.01" value="${getVal('confMin', 0.6)}" style="width:80px"></label>
+          <label>Decay ms <input id="settingsDecayMs" type="number" min="100" max="5000" step="100" value="${getVal('decayMs', 550)}" style="width:80px"></label>
         </div>
-        <div class="settings-small">PLL controller adjusts auto-scroll speed based on speech sync position. Enable for smoother hybrid scrolling.</div>`
+        <div id="pllReadout" class="settings-small" style="font-family:monospace; margin-top:8px;">
+          Lead/Lag: --px | Bias: --% | State: --
+        </div>
+        <div class="settings-small">Keeps steady auto-scroll and gently trims speed to your voice. If recognition drops, it coasts.</div>`
       )
     );
     try {
@@ -1105,13 +1108,25 @@
       try {
         PLL.tune({
           maxBias: parseFloat(maxBiasPctS?.value || 0.12),
-          Kp: parseFloat(kpS?.value || 0.02),
-          Kd: parseFloat(kdS?.value || 0.002),
-          confMin: parseFloat(confMinS?.value || 0.58),
-          decayMs: parseFloat(decayMsS?.value || 600),
+          Kp: parseFloat(kpS?.value || 0.022),
+          Kd: parseFloat(kdS?.value || 0.0025),
+          confMin: parseFloat(confMinS?.value || 0.6),
+          decayMs: parseFloat(decayMsS?.value || 550),
         });
       } catch {}
     };
+
+    // Live PLL readout
+    const updatePLLReadout = () => {
+      const readout = document.getElementById('pllReadout');
+      if (readout && localStorage.getItem('hybridLock') === '1') {
+        const err = PLL.errF.toFixed(0);
+        const bias = (PLL.biasPct * 100).toFixed(1);
+        const state = PLL.state;
+        readout.textContent = `Lead/Lag: ${err}px | Bias: ${bias}% | State: ${state}`;
+      }
+    };
+    setInterval(updatePLLReadout, 200); // Update 5x per second
 
     hybridLockS?.addEventListener('change', () => {
       try {
@@ -2614,7 +2629,7 @@
         }
 
         // 3) anchor jump (last resort)
-        if (typeof window.scrollToCurrentIndex === 'function') {
+        if (typeof window.scrollToCurrentIndex === 'function' && PLL.allowAnchor()) {
           try {
             if (typeof debug === 'function')
               debug({ tag: 'fallback-nudge', idx: bestIdx, phase: 'anchor-jump' });
@@ -4842,9 +4857,31 @@
       errF = 0,
       lastErrF = 0,
       lastT = performance.now(),
-      lastGood = performance.now();
-    const S = { Kp: 0.02, Kd: 0.002, maxBias: 0.12, confMin: 0.58, decayMs: 600, lostMs: 1800 };
-    let state = 'LOCK_SEEK';
+      lastGood = performance.now(),
+      lastAnchorTs = 0;
+    const S = { Kp: 0.022, Kd: 0.0025, maxBias: 0.12, confMin: 0.6, decayMs: 550, lostMs: 1800 };
+
+    // Telemetry counters
+    const telemetry = {
+      timeLocked: 0,
+      timeCoast: 0,
+      timeLost: 0,
+      avgLeadLag: 0,
+      samples: 0,
+      nearClampCount: 0,
+      anchorCount: 0,
+      lastSample: performance.now(),
+    };
+
+    function scriptProgress() {
+      try {
+        const total = paraIndex.length;
+        if (!total) return 0;
+        return Math.min(1, currentIndex / total);
+      } catch {
+        return 0;
+      }
+    }
 
     function update({ yMatch, yTarget, conf, dt }) {
       const now = performance.now();
@@ -4853,22 +4890,58 @@
       const err = yMatch - yTarget; // sign convention: positive = behind
       errF = 0.8 * errF + 0.2 * err;
 
+      // Update telemetry
+      const dtSample = now - telemetry.lastSample;
+      if (state === 'LOCKED') telemetry.timeLocked += dtSample;
+      else if (state === 'COAST') telemetry.timeCoast += dtSample;
+      else if (state === 'LOST') telemetry.timeLost += dtSample;
+      telemetry.avgLeadLag =
+        (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
+      telemetry.samples++;
+      if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
+      telemetry.lastSample = now;
+
+      // End-game taper (soften in last 20%)
+      const p = scriptProgress();
+      const endTaper = p > 0.8 ? 0.6 : 1.0;
+
       if (conf >= S.confMin) {
         lastGood = now;
         const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
         let bias = S.Kp * errF + S.Kd * dErr;
-        const clamp = state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8;
+        const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
         biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
         state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
       } else {
-        const alpha = Math.exp(-dts / (S.decayMs / 1000));
-        biasPct = biasPct * alpha;
+        // Forward-only bias at low conf (no accidental slow-downs)
+        if (conf < S.confMin) {
+          biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
+        } else {
+          biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
+        }
         state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
       }
       lastErrF = errF;
     }
+
+    function allowAnchor() {
+      const now = performance.now();
+      if (now - lastAnchorTs < 1200) return false; // Anchor rate-limit
+      lastAnchorTs = now;
+      telemetry.anchorCount++;
+      return true;
+    }
+
+    // Pause breathing (feels natural)
+    function onPause() {
+      PLL.tune({ decayMs: 400 });
+      setTimeout(() => PLL.tune({ decayMs: 550 }), 2000); // Reset after 2s
+    }
+
     return {
       update,
+      allowAnchor,
+      onPause,
       get biasPct() {
         return biasPct;
       },
@@ -4877,6 +4950,9 @@
       },
       get errF() {
         return errF;
+      },
+      get telemetry() {
+        return { ...telemetry };
       },
       tune(p) {
         Object.assign(S, p);
