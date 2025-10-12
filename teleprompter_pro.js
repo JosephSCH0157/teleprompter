@@ -4846,9 +4846,11 @@
 
   // Coverage-based soft advance to avoid stalls when a short line is consumed
   let __tpStag = { vIdx: -1, since: performance.now() };
+  let softAdvanceStreak = 0; // count consecutive soft-advances
   const STALL_MS = 1200; // ~1.2s feels good in speech
   const COV_THRESH = 0.88; // Raised from 0.82 to require higher coverage before soft-advancing
   const SOFT_ADV_MIN_SIM = 0.54; // avoid treadmill on flimsy evidence
+  const SOFT_ADV_MAX_STREAK = 2; // after 2 soft nudges, demand anchor or stronger sim
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
@@ -5014,7 +5016,11 @@
           const v = vList[j];
           const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
           const sim = _sim(spoken, win);
-          if (sim >= SOFT_ADV_MIN_SIM && fallbackStreak < 3) {
+          if (
+            sim >= SOFT_ADV_MIN_SIM &&
+            fallbackStreak < 3 &&
+            softAdvanceStreak < SOFT_ADV_MAX_STREAK
+          ) {
             try {
               if (typeof debug === 'function')
                 debug({
@@ -5739,6 +5745,49 @@
         }
       }
     } catch {}
+
+    // Early rescue when treadmill detected
+    if (fallbackStreak >= 3 && J.std > 90) {
+      // Trigger anchor scan for distinctive phrases
+      const anchors = extractHighIDFPhrases(batchTokens, 3);
+      if (anchors.length > 0) {
+        const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
+        const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
+        if (bestAnchor) {
+          // Find the para index containing the anchor word index
+          let anchorParaIdx = -1;
+          for (let p = 0; p < paraIndex.length; p++) {
+            const para = paraIndex[p];
+            if (bestAnchor.idx >= para.start && bestAnchor.idx <= para.end) {
+              anchorParaIdx = p;
+              break;
+            }
+          }
+          if (anchorParaIdx >= 0) {
+            // Allow anchor if not too recent and within rate limit
+            const now = performance.now();
+            if (now - lastAnchorAt > 2000 && allowAnchor()) {
+              bestIdx = anchorParaIdx;
+              bestSim = bestAnchor.score;
+              lastAnchorAt = now;
+              lastAnchorConfidence = bestAnchor.score;
+              try {
+                if (typeof debug === 'function')
+                  debug({
+                    tag: 'rescue:anchor',
+                    idx: bestAnchor.idx,
+                    wordIdx: bestAnchor.wordIdx,
+                    score: bestAnchor.score,
+                    distance: bestAnchor.distance,
+                    allowed: true,
+                  });
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+
     // Apply elevated thresholds during jitter spikes
     const J = window.__tpJitter || {};
     const jitterElevated = typeof J.spikeUntil === 'number' && performance.now() < J.spikeUntil;
@@ -5901,6 +5950,9 @@
       if (soft && soft.soft) {
         bestIdx = soft.idx;
         bestSim = soft.sim;
+        softAdvanceStreak++;
+      } else {
+        softAdvanceStreak = 0;
       }
     } catch {}
 
