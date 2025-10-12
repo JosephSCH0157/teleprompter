@@ -5881,11 +5881,11 @@
         if (window.__TP_DEV) console.warn('forceAlignToMarker failed', e);
       }
       if (typeof debug === 'function')
-        debug({ tag: 'scroll', top: viewer.scrollTop, mode: 'calm-commit' });
+        debug({ tag: 'scroll', top: desiredTop, mode: 'calm-commit' });
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-        const ratio = max ? viewer.scrollTop / max : 0;
-        sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+        const ratio = max ? desiredTop / max : 0;
+        sendToDisplay({ type: 'scroll', top: desiredTop, ratio });
       }
       try {
         const vRect = viewer.getBoundingClientRect();
