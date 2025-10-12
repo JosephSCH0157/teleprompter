@@ -5393,7 +5393,7 @@
             }
           }
           if (paraIdx >= 0) {
-            const anchorDistance = Math.abs(paraIdx - i_pred);
+            const anchorDistance = Math.abs(bestAnchor.idx - currentIndex); // Word distance, not paragraph distance
             const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
             if (bestAnchor.score > 0.75 && allowJump) {
               bestIdx = paraIndex[paraIdx].start; // Use paragraph start word index, not paragraph array index
