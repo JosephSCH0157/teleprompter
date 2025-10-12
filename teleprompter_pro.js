@@ -1632,6 +1632,7 @@
     presentBtn,
     micBtn,
     recBtn,
+    autoScrollBtn,
     refreshDevicesBtn,
     fontSizeInput,
     lineHeightInput,
@@ -3166,6 +3167,7 @@
 
     micBtn = document.getElementById('micBtn');
     recBtn = document.getElementById('recBtn');
+    autoScrollBtn = document.getElementById('autoScrollBtn');
     // (Legacy hidden micDeviceSel retained but not bound; use getMicSel())
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
 
@@ -3672,6 +3674,11 @@
 
     // Recognition on/off (placeholder toggle)
     recBtn?.addEventListener('click', toggleRec);
+
+    // Auto scroll button (placeholder)
+    autoScrollBtn?.addEventListener('click', () => {
+      console.log('Auto Scroll button clicked');
+    });
 
     // Speech availability hint: disable if unsupported
     try {
