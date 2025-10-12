@@ -2543,14 +2543,16 @@
 
         if (el) {
           const y = (el.offsetTop || 0) - Math.floor((viewer.clientHeight || 0) * 0.33);
+          // Only scroll forward, never backward
+          const targetY = Math.max(y, viewer.scrollTop + 10);
           try {
             if (typeof debug === 'function')
-              debug({ tag: 'fallback-nudge', top: y, idx: bestIdx, phase: 'mini-seek' });
+              debug({ tag: 'fallback-nudge', top: targetY, idx: bestIdx, phase: 'mini-seek' });
           } catch {}
           try {
-            viewer.scrollTo({ top: y, behavior: 'instant' });
+            viewer.scrollTo({ top: targetY, behavior: 'instant' });
           } catch {
-            viewer.scrollTop = y;
+            viewer.scrollTop = targetY;
           }
           syncDisplay();
           S.smallPushes = 0; // reset after successful mini-seek
@@ -2760,7 +2762,10 @@
           } catch {}
           const recentMid =
             typeof window.__tpLastMidSimAt === 'number' && now - window.__tpLastMidSimAt < 300;
-          if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
+          // Also check for recent match processing
+          const recentMatch =
+            typeof window.__tpCommit?.ts === 'number' && now - window.__tpCommit.ts < 1000;
+          if (now - _lastAdvanceAt > MISS_FALLBACK_MS && !recentMatch) {
             if (!recentMid) {
               try {
                 window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0));
