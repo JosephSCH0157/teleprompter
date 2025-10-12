@@ -43,6 +43,7 @@
       anchor: true,
       display: true,
       boot: true,
+      pll: true,
       other: true,
     },
   };
@@ -82,8 +83,8 @@
     if (k.includes('auto') || k.includes('timer')) return 'auto';
     if (k.includes('anchor') || k.includes('catchup')) return 'anchor';
     if (k.includes('display') || k.includes('sendtodisplay')) return 'display';
-    if (k.includes('boot') || k.includes('init')) return 'boot';
-    return 'other';
+    if (k.includes('pll') || k.includes('bias') || k.includes('lock') || k.includes('coast'))
+      return 'pll';
   }
 
   function installHUD(userOpts = {}) {
@@ -167,7 +168,7 @@
     const cbAuto = autoWrap.querySelector('input');
     const filterBar = mkEl('div', 'tp-hud-filterbar');
 
-    const tags = ['scroll', 'speech', 'match', 'auto', 'anchor', 'display', 'boot', 'other'];
+    const tags = ['scroll', 'speech', 'match', 'auto', 'anchor', 'display', 'boot', 'pll', 'other'];
     const filterChips = {};
     tags.forEach((t) => {
       const b = mkEl('button', 'chip' + (state.filters[t] ? ' on' : ''), t);

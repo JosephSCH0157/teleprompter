@@ -796,6 +796,27 @@
         <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`
       )
     );
+    frag.appendChild(
+      card(
+        'cardPLL',
+        'PLL Controller',
+        'advanced',
+        `
+        <div class="settings-inline-row">
+          <label><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''}/> Enable hybrid lock</label>
+        </div>
+        <div class="settings-inline-row">
+          <label>Max bias <input id="settingsMaxBiasPct" type="number" min="0" max="0.5" step="0.01" value="${getVal('maxBiasPct', 0.12)}" style="width:80px"></label>
+          <label>Kp <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.02)}" style="width:80px"></label>
+          <label>Kd <input id="settingsKd" type="number" min="0" max="0.01" step="0.0001" value="${getVal('Kd', 0.002)}" style="width:80px"></label>
+        </div>
+        <div class="settings-inline-row">
+          <label>Min conf <input id="settingsConfMin" type="number" min="0" max="1" step="0.01" value="${getVal('confMin', 0.58)}" style="width:80px"></label>
+          <label>Decay ms <input id="settingsDecayMs" type="number" min="100" max="5000" step="100" value="${getVal('decayMs', 600)}" style="width:80px"></label>
+        </div>
+        <div class="settings-small">PLL controller adjusts auto-scroll speed based on speech sync position. Enable for smoother hybrid scrolling.</div>`
+      )
+    );
     try {
       body.appendChild(frag);
       wireSettingsDynamic();
@@ -1072,6 +1093,39 @@
         _toast(txt, { type: (txt || '').includes('ok') ? 'ok' : 'error' });
       }, 600);
     });
+    // PLL Controller
+    const hybridLockS = document.getElementById('settingsHybridLock');
+    const maxBiasPctS = document.getElementById('settingsMaxBiasPct');
+    const kpS = document.getElementById('settingsKp');
+    const kdS = document.getElementById('settingsKd');
+    const confMinS = document.getElementById('settingsConfMin');
+    const decayMsS = document.getElementById('settingsDecayMs');
+
+    const updatePLLSettings = () => {
+      try {
+        PLL.tune({
+          maxBias: parseFloat(maxBiasPctS?.value || 0.12),
+          Kp: parseFloat(kpS?.value || 0.02),
+          Kd: parseFloat(kdS?.value || 0.002),
+          confMin: parseFloat(confMinS?.value || 0.58),
+          decayMs: parseFloat(decayMsS?.value || 600),
+        });
+      } catch {}
+    };
+
+    hybridLockS?.addEventListener('change', () => {
+      try {
+        localStorage.setItem('hybridLock', hybridLockS.checked ? '1' : '0');
+      } catch {}
+    });
+    maxBiasPctS?.addEventListener('change', updatePLLSettings);
+    kpS?.addEventListener('change', updatePLLSettings);
+    kdS?.addEventListener('change', updatePLLSettings);
+    confMinS?.addEventListener('change', updatePLLSettings);
+    decayMsS?.addEventListener('change', updatePLLSettings);
+
+    // Initialize PLL settings
+    updatePLLSettings();
   }
 
   // TP: normalize-fallback
@@ -4782,6 +4836,54 @@
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
+  // --- PLL Bias Controller for Hybrid Auto-Scroll ---
+  const PLL = (() => {
+    let biasPct = 0,
+      errF = 0,
+      lastErrF = 0,
+      lastT = performance.now(),
+      lastGood = performance.now();
+    const S = { Kp: 0.02, Kd: 0.002, maxBias: 0.12, confMin: 0.58, decayMs: 600, lostMs: 1800 };
+    let state = 'LOCK_SEEK';
+
+    function update({ yMatch, yTarget, conf, dt }) {
+      const now = performance.now();
+      const dts = (dt ?? now - lastT) / 1000;
+      lastT = now;
+      const err = yMatch - yTarget; // sign convention: positive = behind
+      errF = 0.8 * errF + 0.2 * err;
+
+      if (conf >= S.confMin) {
+        lastGood = now;
+        const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
+        let bias = S.Kp * errF + S.Kd * dErr;
+        const clamp = state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8;
+        biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
+        state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
+      } else {
+        const alpha = Math.exp(-dts / (S.decayMs / 1000));
+        biasPct = biasPct * alpha;
+        state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
+      }
+      lastErrF = errF;
+    }
+    return {
+      update,
+      get biasPct() {
+        return biasPct;
+      },
+      get state() {
+        return state;
+      },
+      get errF() {
+        return errF;
+      },
+      tune(p) {
+        Object.assign(S, p);
+      },
+    };
+  })();
+
   function tokenCoverage(lineTokens, tailTokens) {
     try {
       if (!Array.isArray(lineTokens) || !lineTokens.length) return 0;
@@ -5793,6 +5895,35 @@
     window.__tpCommit.idx = currentIndex;
     window.__tpCommit.ts = performance.now();
 
+    // PLL: Update bias controller with match position
+    try {
+      const yTarget = markerTop();
+      const matchedPara = paraIndex.find((p) => bestIdx >= p.start && bestIdx <= p.end);
+      let yMatch = yTarget;
+      if (matchedPara && viewer) {
+        const rect = matchedPara.el?.getBoundingClientRect?.();
+        const vRect = viewer.getBoundingClientRect();
+        if (rect) yMatch = rect.top - vRect.top;
+      }
+      PLL.update({
+        yMatch,
+        yTarget,
+        conf: bestSim,
+        dt: performance.now() - (window.__lastMatchTime || performance.now()),
+      });
+      window.__lastMatchTime = performance.now();
+      try {
+        window.HUD?.log?.('pll:update', {
+          state: PLL.state,
+          biasPct: PLL.biasPct.toFixed(3),
+          yMatch: yMatch.toFixed(1),
+          yTarget: yTarget.toFixed(1),
+          error: (yMatch - yTarget).toFixed(1),
+          conf: bestSim.toFixed(3),
+        });
+      } catch {}
+    } catch {}
+
     // Scroll toward the paragraph that contains scrollTargetIdx (smoothed), gently clamped
     if (!paraIndex.length) return;
     const targetPara =
@@ -6802,7 +6933,12 @@
 
       // convert px/s to px per tick
       const dt = 1 / 60; // 60Hz interval
-      const dy = pxSpeed * dt;
+      let dy = pxSpeed * dt;
+
+      // Apply PLL bias if hybrid lock is enabled
+      if (localStorage.getItem('hybridLock') === '1') {
+        dy *= 1 + PLL.biasPct;
+      }
 
       try {
         scrollByPx(dy);
