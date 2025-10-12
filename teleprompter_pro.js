@@ -1427,6 +1427,18 @@
   let autoTimer = null,
     chrono = null,
     chronoStart = 0;
+  // New auto-scroll state
+  let autoScrollState = {
+    running: false,
+    highlight: true,
+    wpm: 150,
+    mode: 'perline',
+    pxPerSec: 90,
+    t0: null,
+    last: null,
+    rafId: null,
+    activeIdx: 0,
+  };
   let scriptWords = [],
     paraIndex = [],
     currentIndex = 0;
@@ -1638,6 +1650,9 @@
     lineHeightInput,
     autoToggle,
     autoSpeed,
+    autoScrollMode,
+    autoScrollWpm,
+    autoScrollMirror,
     timerEl,
     resetBtn,
     loadSample,
@@ -3175,6 +3190,9 @@
     lineHeightInput = document.getElementById('lineHeight');
     autoToggle = document.getElementById('autoToggle');
     autoSpeed = document.getElementById('autoSpeed');
+    autoScrollMode = document.getElementById('autoScrollMode');
+    autoScrollWpm = document.getElementById('autoScrollWpm');
+    autoScrollMirror = document.getElementById('autoScrollMirror');
     const catchUpBtn = document.getElementById('catchUpBtn');
     const matchAggroSel = document.getElementById('matchAggro');
     const motionSmoothSel = document.getElementById('motionSmooth');
@@ -3376,6 +3394,21 @@
         autoToggle.textContent = v > 0 ? `Auto-scroll: ${v}px/s` : 'Auto-scroll: Off';
       }
     });
+
+    // New auto-scroll controls
+    autoScrollMode?.addEventListener('change', (e) => {
+      autoScrollState.mode = e.target.value;
+    });
+    autoScrollWpm?.addEventListener('input', (e) => {
+      autoScrollState.wpm = Math.max(60, Math.min(500, Number(e.target.value) || 150));
+    });
+    autoScrollMirror?.addEventListener('change', (e) => {
+      document.body.classList.toggle('mirror', e.target.checked);
+    });
+
+    // Initialize new auto-scroll state
+    autoScrollState.mode = autoScrollMode?.value || 'perline';
+    autoScrollState.wpm = Number(autoScrollWpm?.value) || 150;
 
     // OBS enable toggle wiring (after recorder module possibly loaded)
     if (enableObsChk) {
@@ -3676,9 +3709,7 @@
     recBtn?.addEventListener('click', toggleRec);
 
     // Auto scroll button (placeholder)
-    autoScrollBtn?.addEventListener('click', () => {
-      console.log('Auto Scroll button clicked');
-    });
+    autoScrollBtn?.addEventListener('click', toggleNewAutoScroll);
 
     // Speech availability hint: disable if unsupported
     try {
@@ -6160,6 +6191,8 @@
       const isNonSpoken = isNonSpokenLine(el.textContent || '');
       const paraIdx = paraIndex.length; // Current paragraph index
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
+      el.dataset.words = wc;
+      el.dataset.idx = paraIdx;
       acc += wc;
       __paraTokens.push(toks);
       try {
@@ -6772,6 +6805,8 @@
    * Typography + Auto‑scroll + Timer
    * ────────────────────────────────────────────────────────────── */
   function startAutoScroll() {
+    // Stop new auto-scroll if running
+    if (autoScrollState.running) stopNewAutoScroll();
     if (autoTimer) return;
     // Pause catch-up controller while auto-scroll is active
     try {
@@ -6826,6 +6861,102 @@
     autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
   }
+
+  // New auto-scroll implementation
+  function startNewAutoScroll() {
+    // Stop old auto-scroll if running
+    if (autoTimer) stopAutoScroll();
+    if (autoScrollState.running) return;
+    autoScrollState.running = true;
+    autoScrollState.t0 = null;
+    autoScrollState.last = null;
+    autoScrollState.rafId = requestAnimationFrame(newAutoScrollStep);
+    autoScrollBtn.textContent = 'Stop Auto Scroll';
+    // Reset dwell times
+    paraIndex.forEach((p) => (p.el._t = 0));
+  }
+
+  function stopNewAutoScroll() {
+    autoScrollState.running = false;
+    if (autoScrollState.rafId) {
+      cancelAnimationFrame(autoScrollState.rafId);
+      autoScrollState.rafId = null;
+    }
+    autoScrollBtn.textContent = 'Auto Scroll';
+  }
+
+  function newAutoScrollStep(now) {
+    if (!autoScrollState.running) {
+      autoScrollState.rafId = null;
+      return;
+    }
+    if (!autoScrollState.t0) autoScrollState.t0 = now;
+    const dt = autoScrollState.last ? now - autoScrollState.last : 16;
+    autoScrollState.last = now;
+
+    if (autoScrollState.mode === 'px') {
+      const dy = (autoScrollState.pxPerSec * dt) / 1000;
+      viewer.scrollTop += dy;
+    } else {
+      // per-line pacing
+      const current = getCenteredPara();
+      if (current) {
+        const words = Math.max(1, Number(current.el.dataset.words));
+        const secPerWord = 60 / autoScrollState.wpm;
+        const dwell = Math.max(0.6, words * secPerWord);
+        const targetTop = current.el.offsetTop - viewer.clientHeight * 0.35;
+        const dist = targetTop - viewer.scrollTop;
+        const k = 8;
+        viewer.scrollTop += dist * (1 - Math.exp((-k * dt) / 1000));
+        current.el._t = (current.el._t || 0) + dt / 1000;
+        if (current.el._t >= dwell) {
+          current.el._t = 0;
+          const nextIdx = current.start + 1;
+          const nextPara = paraIndex.find((p) => p.start <= nextIdx && p.end >= nextIdx);
+          if (nextPara) setActivePara(nextPara);
+        }
+      }
+    }
+
+    // Send to display
+    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const ratio = max ? viewer.scrollTop / max : 0;
+    sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+
+    autoScrollState.rafId = requestAnimationFrame(newAutoScrollStep);
+  }
+
+  function getCenteredPara() {
+    const targetY = viewer.scrollTop + viewer.clientHeight * 0.35;
+    let best = null,
+      bestDist = 1e9;
+    paraIndex.forEach((p) => {
+      const mid = p.el.offsetTop + p.el.offsetHeight / 2;
+      const d = Math.abs(mid - targetY);
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    });
+    return best;
+  }
+
+  function setActivePara(para) {
+    // Similar to existing active logic
+    const prev = scriptEl.querySelector('p.active');
+    if (prev) prev.classList.remove('active');
+    para.el.classList.add('active');
+    autoScrollState.activeIdx = paraIndex.indexOf(para);
+  }
+
+  function toggleNewAutoScroll() {
+    if (autoScrollState.running) {
+      stopNewAutoScroll();
+    } else {
+      startNewAutoScroll();
+    }
+  }
+
   // Resume catch-up controller if speech sync is active — via heuristic gate
   if (recActive) {
     try {
@@ -7791,6 +7922,36 @@
       const savedTheme = localStorage.getItem('egg.theme');
       if (savedTheme) document.body.classList.add(savedTheme);
     } catch {}
+
+    // New auto-scroll hotkeys
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      const k = e.key.toLowerCase();
+      if (k === ' ') {
+        e.preventDefault();
+        toggleNewAutoScroll();
+      }
+      if (e.key === 'ArrowUp') {
+        if (autoScrollWpm) {
+          autoScrollWpm.value = String(
+            (autoScrollState.wpm = Math.min(500, autoScrollState.wpm + 10))
+          );
+        }
+      }
+      if (e.key === 'ArrowDown') {
+        if (autoScrollWpm) {
+          autoScrollWpm.value = String(
+            (autoScrollState.wpm = Math.max(60, autoScrollState.wpm - 10))
+          );
+        }
+      }
+      if (k === 'm') {
+        if (autoScrollMirror) {
+          autoScrollMirror.checked = !autoScrollMirror.checked;
+          autoScrollMirror.dispatchEvent(new Event('change'));
+        }
+      }
+    });
 
     // ---- Konami unlock -> toggles 'savanna' class
     const konami = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];

@@ -135,6 +135,14 @@
 <button id="autoToggle">Auto-scroll: Off</button>
 </div>
 <div class="row">
+<label>Auto Scroll Mode <select id="autoScrollMode" class="select-md">
+  <option value="px">Fixed px/sec</option>
+  <option value="perline" selected>Per-line pacing</option>
+</select></label>
+<label>WPM <input id="autoScrollWpm" type="number" min="60" max="500" step="5" value="150"/></label>
+<label><input type="checkbox" id="autoScrollMirror"> Mirror</label>
+</div>
+<div class="row">
   <button id="catchUpBtn" title="Jump the script to the current line">Catch Up</button>
   <span class="chip">(Instantly centers the active line)</span>
   </div>

@@ -166,3 +166,6 @@ body.ck::after{
     color:#d67d2d; opacity:.18;
     pointer-events:none;
 }
+
+/* Mirror mode for teleprompter */
+.mirror .viewer{ transform: scaleX(-1); }
