@@ -3882,7 +3882,7 @@
       } else {
         // Normal/balanced defaults
         SIM_THRESHOLD = 0.35; // Lowered from 0.4 to accept matches around 0.34-0.39
-        MATCH_WINDOW_AHEAD = 200;
+        MATCH_WINDOW_AHEAD = 400;
         MATCH_WINDOW_BACK = 30;
         STRICT_FORWARD_SIM = 0.72;
         MAX_JUMP_AHEAD_WORDS = 12;
@@ -5233,10 +5233,7 @@
     // If no n-gram hits, fall back to window-based candidates
     if (candidates.size === 0) {
       const candidateStart = Math.max(0, Math.floor(currentIndex) - MATCH_WINDOW_BACK);
-      const candidateEnd = Math.min(
-        __vParaIndex ? __vParaIndex.length - 1 : paraIndex.length - 1,
-        Math.floor(i_pred) + windowAhead
-      );
+      const candidateEnd = Math.min(scriptWords.length - 1, Math.floor(i_pred) + windowAhead);
 
       for (let j = candidateStart; j <= candidateEnd; j++) {
         candidates.add(j);
