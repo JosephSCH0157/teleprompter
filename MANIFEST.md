@@ -1,7 +1,7 @@
 ---
-build: anvil-baseline-1.5.8
-commit: b2e23a4
-date: 2025-10-04
+build: anvil-baseline-1.6.0
+commit: main
+date: 2025-10-12
 modules:
 	- teleprompter_pro.html
 	- teleprompter_pro.js
@@ -17,8 +17,8 @@ modules:
 
 # ANVIL Manifest
 
-**Build**: 2025-10-03 21:15  
-**Baseline**: fix/scroll-geometry  
+**Build**: 2025-10-12 00:00  
+**Baseline**: feature/pll-controller  
 **Dev Mode**: ON when ?dev=1 or localStorage tp_dev_mode=1
 
 ## Entry Points

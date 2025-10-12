@@ -64,7 +64,7 @@
     const tag = (m) => `[TP-BOOT ${Date.now() % 100000}] ${m}`;
     // Publish build version for About panel and diagnostics
     try {
-      window.APP_VERSION = '1.5.8';
+      window.APP_VERSION = '1.6.0';
     } catch {}
     window.__tpBootPush = (m) => {
       try {

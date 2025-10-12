@@ -1,4 +1,4 @@
-# Teleprompter Pro (v1.5.8)
+# Teleprompter Pro (v1.6.0)
 
 This is a browser-based teleprompter with display mirroring, speech sync, camera overlay, and convenient editing helpers.
 
@@ -19,6 +19,12 @@ This is a browser-based teleprompter with display mirroring, speech sync, camera
 
 - Debug HUD
   - Toggle with `~` to view runtime match and scroll signals; useful for diagnosing alignment.
+
+- Hybrid Auto-Scroll (PLL Controller)
+  - Advanced feature that automatically adjusts scroll speed based on speech sync position.
+  - Enable in Settings → Advanced → "Hybrid Lock (Auto + Speech)".
+  - Features PID-like feedback control, state machine (LOCK_SEEK/LOCKED/COAST/LOST), and guardrails to prevent stalls or jumps.
+  - Live readout shows Lead/Lag, Bias percentage, and current state.
 
 ## Dev quickstart
 
