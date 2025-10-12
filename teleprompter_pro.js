@@ -5394,7 +5394,7 @@
       }
     } catch {}
     // Core loop: score candidates seeded by n-grams or window fallback
-    const i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
+    let i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
     const candidates = new Set(); // Use Set to avoid duplicates
 
     try {
@@ -5504,11 +5504,11 @@
     }
 
     // Debug: log top scores
+    const topScores = Object.entries(scores)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([idx, score]) => ({ idx: Number(idx), score: Number(score.toFixed(3)) }));
     try {
-      const topScores = Object.entries(scores)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 3)
-        .map(([idx, score]) => ({ idx: Number(idx), score: Number(score.toFixed(3)) }));
       if (typeof debug === 'function')
         debug({
           tag: 'match:scores',
@@ -5517,6 +5517,11 @@
           batchTokens: batchTokens.length,
         });
     } catch {}
+
+    // Reset prediction seed when window is empty
+    if (!topScores || topScores.length === 0) {
+      i_pred = currentIndex; // re-seed near the current visible line
+    }
 
     // Update fallback streak: require real evidence when n-gram misses
     const hadHits = ngramHits > 0 || (topScores && topScores.length > 0);
