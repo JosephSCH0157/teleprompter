@@ -6879,6 +6879,11 @@
     autoScrollBtn.textContent = 'Stop Auto Scroll';
     // Reset dwell times
     paraIndex.forEach((p) => (p.el._t = 0));
+    // Start with the first paragraph active, but almost ready to advance
+    if (paraIndex.length > 0) {
+      setActivePara(paraIndex[0]);
+      paraIndex[0].el._t = 1.0; // Advance after 0.5 seconds
+    }
   }
 
   function stopNewAutoScroll() {
@@ -6911,9 +6916,7 @@
       // per-line pacing
       const current = getCenteredPara();
       if (current) {
-        const words = Math.max(1, Number(current.el.dataset.words));
-        const secPerWord = 60 / autoScrollState.wpm;
-        const dwell = Math.max(0.6, words * secPerWord);
+        const dwell = 1.5; // Fixed 1.5 second dwell per paragraph for faster pacing
         const targetTop = current.el.offsetTop - viewer.clientHeight * 0.35;
         const dist = targetTop - viewer.scrollTop;
         const k = 8;
