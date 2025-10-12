@@ -4890,38 +4890,46 @@
       const err = yMatch - yTarget; // sign convention: positive = behind
       errF = 0.8 * errF + 0.2 * err;
 
-      // Update telemetry
-      const dtSample = now - telemetry.lastSample;
-      if (state === 'LOCKED') telemetry.timeLocked += dtSample;
-      else if (state === 'COAST') telemetry.timeCoast += dtSample;
-      else if (state === 'LOST') telemetry.timeLost += dtSample;
-      telemetry.avgLeadLag =
-        (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
-      telemetry.samples++;
-      if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
-      telemetry.lastSample = now;
+      function update({ yMatch, yTarget, conf, dt }) {
+        const now = performance.now();
+        const dts = (dt ?? now - lastT) / 1000;
+        lastT = now;
+        const err = yMatch - yTarget; // sign convention: positive = behind
+        errF = 0.8 * errF + 0.2 * err;
 
-      // End-game taper (soften in last 20%)
-      const p = scriptProgress();
-      const endTaper = p > 0.8 ? 0.6 : 1.0;
+        // End-game taper (soften in last 20%)
+        const p = scriptProgress();
+        const endTaper = p > 0.8 ? 0.6 : 1.0;
 
-      if (conf >= S.confMin) {
-        lastGood = now;
-        const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
-        let bias = S.Kp * errF + S.Kd * dErr;
-        const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
-        biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
-        state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
-      } else {
-        // Forward-only bias at low conf (no accidental slow-downs)
-        if (conf < S.confMin) {
-          biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
+        if (conf >= S.confMin) {
+          lastGood = now;
+          const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
+          let bias = S.Kp * errF + S.Kd * dErr;
+          const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
+          biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
+          state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
         } else {
-          biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
+          // Forward-only bias at low conf (no accidental slow-downs)
+          if (conf < S.confMin) {
+            biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
+          } else {
+            biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
+          }
+          state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
         }
-        state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
+        lastErrF = errF;
+
+        // Update telemetry after state is determined
+        const dtSample = now - telemetry.lastSample;
+        if (state === 'LOCKED') telemetry.timeLocked += dtSample;
+        else if (state === 'COAST') telemetry.timeCoast += dtSample;
+        else if (state === 'LOST') telemetry.timeLost += dtSample;
+        telemetry.avgLeadLag =
+          (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
+        telemetry.samples++;
+        if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
+        telemetry.lastSample = now;
       }
-      lastErrF = errF;
     }
 
     function allowAnchor() {
@@ -7665,9 +7673,17 @@
       }
     };
 
-    recog.onerror = (e) => {
-      console.warn('speech error', e.error);
-    };
+    // Pause breathing for natural feel
+    let __pauseTimer = null;
+    function onPauseBreath(hard = false) {
+      if (!PLL?.tune) return;
+      PLL.tune({ decayMs: hard ? 350 : 450 });
+      clearTimeout(__pauseTimer);
+      __pauseTimer = setTimeout(() => PLL.tune({ decayMs: 550 }), 900);
+    }
+
+    recog.onspeechend = () => onPauseBreath();
+    recog.onaudioend = () => onPauseBreath(true); // stronger hint
     recog.onend = () => {
       document.body.classList.remove('listening');
       try {

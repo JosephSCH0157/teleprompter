@@ -522,8 +522,7 @@
             const prevSpeechEnd = r.onspeechend;
             r.onspeechend = function (_e) {
               try {
-                // Pause breathing for natural feel
-                if (window.PLL?.onPause) window.PLL.onPause();
+                // Pause breathing handled in main teleprompter_pro.js
               } catch {}
               return typeof prevSpeechEnd === 'function'
                 ? prevSpeechEnd.apply(this, arguments)
