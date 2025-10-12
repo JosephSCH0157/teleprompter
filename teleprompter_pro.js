@@ -3398,6 +3398,11 @@
     // New auto-scroll controls
     autoScrollMode?.addEventListener('change', (e) => {
       autoScrollState.mode = e.target.value;
+      // Stop if running and mode changed
+      if (autoScrollState.running) {
+        stopNewAutoScroll();
+        startNewAutoScroll();
+      }
     });
     autoScrollWpm?.addEventListener('input', (e) => {
       autoScrollState.wpm = Math.max(60, Math.min(500, Number(e.target.value) || 150));
@@ -3407,8 +3412,8 @@
     });
 
     // Initialize new auto-scroll state
-    autoScrollState.mode = autoScrollMode?.value || 'perline';
-    autoScrollState.wpm = Number(autoScrollWpm?.value) || 150;
+    if (autoScrollMode) autoScrollState.mode = autoScrollMode.value;
+    if (autoScrollWpm) autoScrollState.wpm = Number(autoScrollWpm.value) || 150;
 
     // OBS enable toggle wiring (after recorder module possibly loaded)
     if (enableObsChk) {
@@ -6888,6 +6893,11 @@
   function newAutoScrollStep(now) {
     if (!autoScrollState.running) {
       autoScrollState.rafId = null;
+      return;
+    }
+    if (!autoScrollState || !paraIndex.length) {
+      // No script loaded yet
+      autoScrollState.rafId = requestAnimationFrame(newAutoScrollStep);
       return;
     }
     if (!autoScrollState.t0) autoScrollState.t0 = now;
