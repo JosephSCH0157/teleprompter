@@ -7402,11 +7402,11 @@
         const grammar =
           '#JSGF V1.0; grammar domain; public <term> = ' + domainTerms.join(' | ') + ' ;';
         // Small weight to gently bias without overfitting
-        list.addFromString(grammar, 0.4);
+        list.addFromString(grammar, 0.0);
         recog.grammars = list;
         try {
           if (typeof debug === 'function')
-            debug({ tag: 'speech:grammar', installed: true, terms: domainTerms, weight: 0.4 });
+            debug({ tag: 'speech:grammar', installed: true, terms: domainTerms, weight: 0.0 });
         } catch {}
       } else {
         try {
