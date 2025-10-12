@@ -2472,10 +2472,10 @@
     // ===== Progressive Fallback Nudge =====
     (function () {
       const F = {
-        stepPx: 18, // small push
+        stepPx: 12, // small push
         maxSmallPushes: 3, // after this, try mini-seek
         miniSeekIdxSpan: 6, // try ±6 indices around bestIdx
-        coolDownMs: 900, // don’t spam nudges
+        coolDownMs: 1500, // don’t spam nudges
       };
       const S = { lastAt: 0, smallPushes: 0 };
       let fbDelay = 250,
@@ -3881,7 +3881,7 @@
         MAX_JUMP_AHEAD_WORDS = 18;
       } else {
         // Normal/balanced defaults
-        SIM_THRESHOLD = 0.4; // Lowered from 0.45 to accept matches around 0.39-0.42
+        SIM_THRESHOLD = 0.35; // Lowered from 0.4 to accept matches around 0.34-0.39
         MATCH_WINDOW_AHEAD = 200;
         MATCH_WINDOW_BACK = 30;
         STRICT_FORWARD_SIM = 0.72;
@@ -5580,7 +5580,7 @@
       const delta = Math.min(2, Math.max(1, Math.floor(viterbiConsistencyCount / 2))); // 1-2 tokens
       bestIdx += delta;
       bestIdx = Math.min(bestIdx, scriptWords.length - 1);
-      bestSim = EFF_SIM_THRESHOLD - 0.01; // force proceed by setting just above threshold
+      bestSim = EFF_SIM_THRESHOLD + 0.01; // force proceed by setting just above threshold
       try {
         if (typeof debug === 'function')
           debug({
