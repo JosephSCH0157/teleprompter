@@ -3881,7 +3881,7 @@
         MAX_JUMP_AHEAD_WORDS = 18;
       } else {
         // Normal/balanced defaults
-        SIM_THRESHOLD = 0.45;
+        SIM_THRESHOLD = 0.4; // Lowered from 0.45 to accept matches around 0.39-0.42
         MATCH_WINDOW_AHEAD = 200;
         MATCH_WINDOW_BACK = 30;
         STRICT_FORWARD_SIM = 0.72;
@@ -5576,7 +5576,7 @@
       bestSim = __adj;
     }
     // Soft advance: if below threshold but Viterbi consistent for last 3+ frames, advance by 1-2 tokens
-    if (bestSim < EFF_SIM_THRESHOLD && viterbiConsistencyCount >= 3) {
+    if (bestSim < EFF_SIM_THRESHOLD && viterbiConsistencyCount >= 2) {
       const delta = Math.min(2, Math.max(1, Math.floor(viterbiConsistencyCount / 2))); // 1-2 tokens
       bestIdx += delta;
       bestIdx = Math.min(bestIdx, scriptWords.length - 1);
