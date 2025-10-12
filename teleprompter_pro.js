@@ -6767,8 +6767,6 @@
    * Typography + Auto‑scroll + Timer
    * ────────────────────────────────────────────────────────────── */
   function startAutoScroll() {
-    // Stop new auto-scroll if running
-    if (autoScrollState.running) stopNewAutoScroll();
     if (autoTimer) return;
     // Pause catch-up controller while auto-scroll is active
     try {
@@ -6822,109 +6820,6 @@
     autoTimer = null;
     autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
-  }
-
-  // New auto-scroll implementation
-  function startNewAutoScroll() {
-    // Stop old auto-scroll if running
-    if (autoTimer) stopAutoScroll();
-    if (autoScrollState.running) return;
-    autoScrollState.running = true;
-    autoScrollState.t0 = null;
-    autoScrollState.last = null;
-    autoScrollState.rafId = requestAnimationFrame(newAutoScrollStep);
-    autoScrollBtn.textContent = 'Stop Auto Scroll';
-    // Reset dwell times
-    paraIndex.forEach((p) => (p.el._t = 0));
-    // Start with the first paragraph active, but almost ready to advance
-    if (paraIndex.length > 0) {
-      setActivePara(paraIndex[0]);
-      paraIndex[0].el._t = 1.0; // Advance after 0.5 seconds
-    }
-  }
-
-  function stopNewAutoScroll() {
-    autoScrollState.running = false;
-    if (autoScrollState.rafId) {
-      cancelAnimationFrame(autoScrollState.rafId);
-      autoScrollState.rafId = null;
-    }
-    autoScrollBtn.textContent = 'Auto Scroll';
-  }
-
-  function newAutoScrollStep(now) {
-    if (!autoScrollState.running) {
-      autoScrollState.rafId = null;
-      return;
-    }
-    if (!autoScrollState || !paraIndex.length) {
-      // No script loaded yet
-      autoScrollState.rafId = requestAnimationFrame(newAutoScrollStep);
-      return;
-    }
-    if (!autoScrollState.t0) autoScrollState.t0 = now;
-    const dt = autoScrollState.last ? now - autoScrollState.last : 16;
-    autoScrollState.last = now;
-
-    if (autoScrollState.mode === 'px') {
-      const dy = (autoScrollState.pxPerSec * dt) / 1000;
-      viewer.scrollTop += dy;
-    } else {
-      // per-line pacing
-      const current = getCenteredPara();
-      if (current) {
-        const dwell = 1.5; // Fixed 1.5 second dwell per paragraph for faster pacing
-        const targetTop = current.el.offsetTop - viewer.clientHeight * 0.35;
-        const dist = targetTop - viewer.scrollTop;
-        const k = 8;
-        viewer.scrollTop += dist * (1 - Math.exp((-k * dt) / 1000));
-        current.el._t = (current.el._t || 0) + dt / 1000;
-        if (current.el._t >= dwell) {
-          current.el._t = 0;
-          const nextIdx = current.start + 1;
-          const nextPara = paraIndex.find((p) => p.start <= nextIdx && p.end >= nextIdx);
-          if (nextPara) setActivePara(nextPara);
-        }
-      }
-    }
-
-    // Send to display
-    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const ratio = max ? viewer.scrollTop / max : 0;
-    sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
-
-    autoScrollState.rafId = requestAnimationFrame(newAutoScrollStep);
-  }
-
-  function getCenteredPara() {
-    const targetY = viewer.scrollTop + viewer.clientHeight * 0.35;
-    let best = null,
-      bestDist = 1e9;
-    paraIndex.forEach((p) => {
-      const mid = p.el.offsetTop + p.el.offsetHeight / 2;
-      const d = Math.abs(mid - targetY);
-      if (d < bestDist) {
-        bestDist = d;
-        best = p;
-      }
-    });
-    return best;
-  }
-
-  function setActivePara(para) {
-    // Similar to existing active logic
-    const prev = scriptEl.querySelector('p.active');
-    if (prev) prev.classList.remove('active');
-    para.el.classList.add('active');
-    autoScrollState.activeIdx = paraIndex.indexOf(para);
-  }
-
-  function toggleNewAutoScroll() {
-    if (autoScrollState.running) {
-      stopNewAutoScroll();
-    } else {
-      startNewAutoScroll();
-    }
   }
 
   // Resume catch-up controller if speech sync is active — via heuristic gate
