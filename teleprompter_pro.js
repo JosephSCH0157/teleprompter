@@ -3881,8 +3881,8 @@
         MAX_JUMP_AHEAD_WORDS = 18;
       } else {
         // Normal/balanced defaults
-        SIM_THRESHOLD = 0.35; // Lowered from 0.4 to accept matches around 0.34-0.39
-        MATCH_WINDOW_AHEAD = 400;
+        SIM_THRESHOLD = 0.42; // Raised from 0.35 to reduce false matches
+        MATCH_WINDOW_AHEAD = 250; // Reduced from 400 to prevent false matches
         MATCH_WINDOW_BACK = 30;
         STRICT_FORWARD_SIM = 0.72;
         MAX_JUMP_AHEAD_WORDS = 12;
@@ -4777,8 +4777,8 @@
   // Coverage-based soft advance to avoid stalls when a short line is consumed
   let __tpStag = { vIdx: -1, since: performance.now() };
   const STALL_MS = 1200; // ~1.2s feels good in speech
-  const COV_THRESH = 0.82; // % of tokens matched in order
-  const NEXT_SIM_FLOOR = 0.68; // allow slightly lower sim to prime next line
+  const COV_THRESH = 0.88; // Raised from 0.82 to require higher coverage before soft-advancing
+  const NEXT_SIM_FLOOR = 0.75; // Raised from 0.68 to prevent premature soft-advances
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
@@ -5396,7 +5396,7 @@
             const anchorDistance = Math.abs(paraIdx - i_pred);
             const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
             if (bestAnchor.score > 0.75 && allowJump) {
-              bestIdx = paraIdx;
+              bestIdx = paraIndex[paraIdx].start; // Use paragraph start word index, not paragraph array index
               bestSim = bestAnchor.score;
               // Update tracking for dynamic threshold
               lastAnchorConfidence = bestAnchor.score;
