@@ -4781,6 +4781,7 @@
   let _lastMatchAt = 0;
   let _lastCorrectionAt = 0;
   let _lastAdvanceAt = performance.now(); // stall-recovery timestamp
+  let fallbackStreak = 0; // count consecutive batches with no n-gram hits
   // Throttle interim matches; how many recent spoken tokens to consider
   const MATCH_INTERVAL_MS = 120;
   const SPOKEN_N = 8;
@@ -5013,7 +5014,7 @@
           const v = vList[j];
           const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
           const sim = _sim(spoken, win);
-          if (sim >= SOFT_ADV_MIN_SIM) {
+          if (sim >= SOFT_ADV_MIN_SIM && fallbackStreak < 3) {
             try {
               if (typeof debug === 'function')
                 debug({
@@ -5510,6 +5511,10 @@
           batchTokens: batchTokens.length,
         });
     } catch {}
+
+    // Update fallback streak: require real evidence when n-gram misses
+    const hadHits = ngramHits > 0 || (topScores && topScores.length > 0);
+    fallbackStreak = hadHits ? 0 : fallbackStreak + 1;
 
     // Viterbi step to find best temporal path (with rescue-adjusted parameters)
     const effectiveBeta = window.__tpRescueMode?.active ? VITERBI_BETA * 0.5 : VITERBI_BETA;
