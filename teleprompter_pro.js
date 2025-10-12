@@ -1427,18 +1427,6 @@
   let autoTimer = null,
     chrono = null,
     chronoStart = 0;
-  // New auto-scroll state
-  let autoScrollState = {
-    running: false,
-    highlight: true,
-    wpm: 150,
-    mode: 'perline',
-    pxPerSec: 90,
-    t0: null,
-    last: null,
-    rafId: null,
-    activeIdx: 0,
-  };
   let scriptWords = [],
     paraIndex = [],
     currentIndex = 0;
@@ -1644,15 +1632,11 @@
     presentBtn,
     micBtn,
     recBtn,
-    autoScrollBtn,
     refreshDevicesBtn,
     fontSizeInput,
     lineHeightInput,
     autoToggle,
     autoSpeed,
-    autoScrollMode,
-    autoScrollWpm,
-    autoScrollMirror,
     timerEl,
     resetBtn,
     loadSample,
@@ -3182,7 +3166,6 @@
 
     micBtn = document.getElementById('micBtn');
     recBtn = document.getElementById('recBtn');
-    autoScrollBtn = document.getElementById('autoScrollBtn');
     // (Legacy hidden micDeviceSel retained but not bound; use getMicSel())
     refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
 
@@ -3190,9 +3173,6 @@
     lineHeightInput = document.getElementById('lineHeight');
     autoToggle = document.getElementById('autoToggle');
     autoSpeed = document.getElementById('autoSpeed');
-    autoScrollMode = document.getElementById('autoScrollMode');
-    autoScrollWpm = document.getElementById('autoScrollWpm');
-    autoScrollMirror = document.getElementById('autoScrollMirror');
     const catchUpBtn = document.getElementById('catchUpBtn');
     const matchAggroSel = document.getElementById('matchAggro');
     const motionSmoothSel = document.getElementById('motionSmooth');
@@ -3394,26 +3374,6 @@
         autoToggle.textContent = v > 0 ? `Auto-scroll: ${v}px/s` : 'Auto-scroll: Off';
       }
     });
-
-    // New auto-scroll controls
-    autoScrollMode?.addEventListener('change', (e) => {
-      autoScrollState.mode = e.target.value;
-      // Stop if running and mode changed
-      if (autoScrollState.running) {
-        stopNewAutoScroll();
-        startNewAutoScroll();
-      }
-    });
-    autoScrollWpm?.addEventListener('input', (e) => {
-      autoScrollState.wpm = Math.max(60, Math.min(500, Number(e.target.value) || 150));
-    });
-    autoScrollMirror?.addEventListener('change', (e) => {
-      document.body.classList.toggle('mirror', e.target.checked);
-    });
-
-    // Initialize new auto-scroll state
-    if (autoScrollMode) autoScrollState.mode = autoScrollMode.value;
-    if (autoScrollWpm) autoScrollState.wpm = Number(autoScrollWpm.value) || 150;
 
     // OBS enable toggle wiring (after recorder module possibly loaded)
     if (enableObsChk) {
@@ -3712,9 +3672,6 @@
 
     // Recognition on/off (placeholder toggle)
     recBtn?.addEventListener('click', toggleRec);
-
-    // Auto scroll button (placeholder)
-    autoScrollBtn?.addEventListener('click', toggleNewAutoScroll);
 
     // Speech availability hint: disable if unsupported
     try {
@@ -7935,36 +7892,6 @@
       const savedTheme = localStorage.getItem('egg.theme');
       if (savedTheme) document.body.classList.add(savedTheme);
     } catch {}
-
-    // New auto-scroll hotkeys
-    window.addEventListener('keydown', (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      const k = e.key.toLowerCase();
-      if (k === ' ') {
-        e.preventDefault();
-        toggleNewAutoScroll();
-      }
-      if (e.key === 'ArrowUp') {
-        if (autoScrollWpm) {
-          autoScrollWpm.value = String(
-            (autoScrollState.wpm = Math.min(500, autoScrollState.wpm + 10))
-          );
-        }
-      }
-      if (e.key === 'ArrowDown') {
-        if (autoScrollWpm) {
-          autoScrollWpm.value = String(
-            (autoScrollState.wpm = Math.max(60, autoScrollState.wpm - 10))
-          );
-        }
-      }
-      if (k === 'm') {
-        if (autoScrollMirror) {
-          autoScrollMirror.checked = !autoScrollMirror.checked;
-          autoScrollMirror.dispatchEvent(new Event('change'));
-        }
-      }
-    });
 
     // ---- Konami unlock -> toggles 'savanna' class
     const konami = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
