@@ -3376,14 +3376,13 @@
           updateDebugPosChip();
         } catch {}
       };
-      requestScroll = (y) => {
-        // Forward-only scroll while HYBRID is on
-        if (isHybrid()) {
-          const nowTop = __scrollCtl?.getViewerTop?.() || 0;
-          if (y < nowTop) return; // block backward snaps
-        }
+      requestScroll = (targetTop) => {
+        // Forward-only scroll while HYBRID is on, with epsilon for floating math
+        const now = __scrollCtl?.getViewerTop?.() || 0;
+        const EPS = 0.75; // px
+        if (isHybrid() && targetTop < now - EPS) return; // block back
         try {
-          sh.requestScroll(y);
+          sh.requestScroll(targetTop);
         } catch {
           try {
             (
