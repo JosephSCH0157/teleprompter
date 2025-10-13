@@ -5537,16 +5537,9 @@
 
     // Reset prediction seed when window is empty
     function estimateIdxFromViewport() {
-      if (!viewer || !paraIndex.length) return currentIndex;
-      const markerY = viewer.scrollTop + markerTop();
-      // Find the first paragraph whose top is at or below the marker
-      for (const p of paraIndex) {
-        if (p.el.offsetTop >= markerY) {
-          return p.start;
-        }
-      }
-      // If none found, return the last paragraph's start
-      return paraIndex[paraIndex.length - 1].start;
+      const y = viewer.scrollTop + markerTop();
+      const idx = lineIndex.nearestIdxAtY(y); // use virtual lines map
+      return Math.max(0, idx | 0);
     }
     if (!topScores || topScores.length === 0) {
       i_pred = estimateIdxFromViewport(); // nearest virtual line under yTarget
@@ -6463,6 +6456,7 @@
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
       el.dataset.words = wc;
       el.dataset.idx = paraIdx;
+      el.dataset.lineIdx = paraIdx; // for line-index.js
       acc += wc;
       __paraTokens.push(toks);
       try {
