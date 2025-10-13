@@ -4807,7 +4807,7 @@
   let __viterbiIPred = 0; // predicted position from previous Viterbi step
   // Scroll correction tuning
   // TP: marker-percent — forward bias the reading line slightly to reduce lag
-  const MARKER_PCT = 0.4;
+  const MARKER_PCT = 0.35;
   // Gentler motion to avoid jumpiness
   let DEAD_BAND_PX = 18; // ignore small errors
   // NOTE: Historical naming mismatch: some earlier code / docs referenced CORRECTION_MIN_INTERVAL_MS.
