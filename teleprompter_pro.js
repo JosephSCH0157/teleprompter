@@ -1119,7 +1119,7 @@
     // Live PLL readout
     const updatePLLReadout = () => {
       const readout = document.getElementById('pllReadout');
-      if (readout && localStorage.getItem('hybridLock') === '1') {
+      if (readout && isHybrid()) {
         const err = PLL.errF.toFixed(0);
         const bias = (PLL.biasPct * 100).toFixed(1);
         const state = PLL.state;
@@ -1130,7 +1130,7 @@
 
     hybridLockS?.addEventListener('change', () => {
       try {
-        localStorage.setItem('hybridLock', hybridLockS.checked ? '1' : '0');
+        setHybrid(hybridLockS.checked);
       } catch {}
     });
     maxBiasPctS?.addEventListener('change', updatePLLSettings);
@@ -1141,6 +1141,8 @@
 
     // Initialize PLL settings
     updatePLLSettings();
+    // Initialize hybrid state
+    setHybrid(localStorage.getItem('hybridLock') === '1');
   }
 
   // TP: normalize-fallback
@@ -1518,6 +1520,17 @@
   let __vLineFreq = new Map(); // virtual line frequencies (by merged key)
   let __vSigCount = new Map(); // prefix signature counts (first 4 tokens) for virtual lines
   let __ngramIndex = new Map(); // ngram -> Set of paragraph indices
+  // Hybrid lock state
+  let HYBRID_ON = false; // in-mem truth
+  function setHybrid(on) {
+    HYBRID_ON = !!on;
+    localStorage.setItem('hybridLock', on ? '1' : '0');
+    // Only here do we wire speed biasing:
+    // e.g., ScrollIntegrator.setBiasSupplier(on ? () => PLL.biasPct : null);
+  }
+  function isHybrid() {
+    return HYBRID_ON;
+  }
   function normLineKey(text) {
     // Build line keys from fully normalized tokens to ensure duplicate detection
     // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
@@ -3365,7 +3378,7 @@
       };
       requestScroll = (y) => {
         // Forward-only scroll while HYBRID is on
-        if (localStorage.getItem('hybridLock') === '1') {
+        if (isHybrid()) {
           const nowTop = __scrollCtl?.getViewerTop?.() || 0;
           if (y < nowTop) return; // block backward snaps
         }
@@ -7099,7 +7112,7 @@
       let dy = pxSpeed * dt;
 
       // Apply PLL bias if hybrid lock is enabled
-      if (localStorage.getItem('hybridLock') === '1') {
+      if (isHybrid()) {
         dy *= 1 + PLL.biasPct;
       }
 
@@ -7213,7 +7226,7 @@
       } catch {}
       document.body.classList.remove('listening'); // when stopping
       stopSpeechSync();
-      localStorage.setItem('hybridLock', '0');
+      setHybrid(false);
       stopAutoScroll();
       recChip.textContent = 'Speech: idle';
       recBtn.textContent = 'Start speech sync';
@@ -7251,7 +7264,7 @@
       startTimer();
       startSpeechSync();
       startAutoScroll();
-      localStorage.setItem('hybridLock', '1');
+      setHybrid(true);
       // Try to start external recorders per settings
       try {
         __recorder?.start?.();
