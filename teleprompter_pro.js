@@ -1531,6 +1531,11 @@
   function isHybrid() {
     return HYBRID_ON;
   }
+  // Auto-nudge gating for soft-advance
+  let autoBumpUntil = 0;
+  function onUserAutoNudge() {
+    autoBumpUntil = performance.now() + 800;
+  }
   function normLineKey(text) {
     // Build line keys from fully normalized tokens to ensure duplicate detection
     // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
@@ -2585,6 +2590,7 @@
       }
 
       window.__tpFallbackNudge = function (bestIdx) {
+        onUserAutoNudge(); // Gate soft-advance during active catching up
         const now = performance.now();
         if (now - S.lastAt < F.coolDownMs) {
           try {
@@ -3191,6 +3197,7 @@
           !catchupActive &&
           window.currentIndex !== window.__tpCommit.idx
         ) {
+          onUserAutoNudge(); // Gate soft-advance during mid-script micro-nudge
           try {
             debug?.({ tag: 'stall:nudge', reason: 'mid-script' });
           } catch {}
@@ -5973,7 +5980,8 @@
     } catch {}
 
     try {
-      const soft = maybeSoftAdvance(bestIdx, bestSim, spoken);
+      const allowSoftAdv = performance.now() > autoBumpUntil;
+      const soft = allowSoftAdv ? maybeSoftAdvance(bestIdx, bestSim, spoken) : null;
       if (soft && soft.soft) {
         bestIdx = soft.idx;
         bestSim = soft.sim;
@@ -6040,6 +6048,7 @@
     if (bestIdx === window.__lastBestIdx && bestSim > 0.8) {
       if (!window.__sameIdxSince) window.__sameIdxSince = performance.now();
       if (performance.now() - window.__sameIdxSince > SAME_IDX_MS) {
+        onUserAutoNudge(); // Gate soft-advance during tiny scroll nudge
         try {
           window.__tpStallRelaxUntil = performance.now() + 300; // relax clamp guard briefly
           const next = Math.max(0, Math.min(viewer.scrollTop + NUDGE_PX, viewer.scrollHeight));
@@ -7156,6 +7165,7 @@
 
   // ⬇️ keep this OUTSIDE stopAutoScroll
   function tweakSpeed(delta) {
+    onUserAutoNudge(); // Gate soft-advance during manual speed adjustments
     let v = Number(autoSpeed.value) || 0;
     v = Math.max(0, Math.min(300, v + delta));
     autoSpeed.value = String(v);
