@@ -3364,6 +3364,11 @@
         } catch {}
       };
       requestScroll = (y) => {
+        // Forward-only scroll while HYBRID is on
+        if (localStorage.getItem('hybridLock') === '1') {
+          const nowTop = __scrollCtl?.getViewerTop?.() || 0;
+          if (y < nowTop) return; // block backward snaps
+        }
         try {
           sh.requestScroll(y);
         } catch {
