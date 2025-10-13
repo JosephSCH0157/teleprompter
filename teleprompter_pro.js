@@ -5524,8 +5524,20 @@
     } catch {}
 
     // Reset prediction seed when window is empty
+    function estimateIdxFromViewport() {
+      if (!viewer || !paraIndex.length) return currentIndex;
+      const markerY = viewer.scrollTop + markerTop();
+      // Find the first paragraph whose top is at or below the marker
+      for (const p of paraIndex) {
+        if (p.el.offsetTop >= markerY) {
+          return p.start;
+        }
+      }
+      // If none found, return the last paragraph's start
+      return paraIndex[paraIndex.length - 1].start;
+    }
     if (!topScores || topScores.length === 0) {
-      i_pred = currentIndex; // re-seed near the current visible line
+      i_pred = estimateIdxFromViewport(); // nearest virtual line under yTarget
     }
 
     // Update fallback streak: require real evidence when n-gram misses
@@ -7201,6 +7213,8 @@
       } catch {}
       document.body.classList.remove('listening'); // when stopping
       stopSpeechSync();
+      localStorage.setItem('hybridLock', '0');
+      stopAutoScroll();
       recChip.textContent = 'Speech: idle';
       recBtn.textContent = 'Start speech sync';
       try {
@@ -7236,6 +7250,8 @@
       } catch {}
       startTimer();
       startSpeechSync();
+      startAutoScroll();
+      localStorage.setItem('hybridLock', '1');
       // Try to start external recorders per settings
       try {
         __recorder?.start?.();
