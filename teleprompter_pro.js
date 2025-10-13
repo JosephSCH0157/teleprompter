@@ -3425,6 +3425,13 @@
     } catch (e) {
       console.warn('scroll-control load failed', e);
     }
+    let lineIndex = null;
+    try {
+      const liMod = await import((window.__TP_ADDV || ((p) => p))('./line-index.js'));
+      window.buildLineIndex = liMod.buildLineIndex;
+    } catch (e) {
+      console.warn('line-index load failed', e);
+    }
     // Dev-only: fixture loader (?fixture=name or ?fixtureUrl=encodedURL)
     try {
       const Q = new URLSearchParams(location.search);
@@ -6465,6 +6472,7 @@
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
       el.dataset.words = wc;
       el.dataset.idx = paraIdx;
+      el.dataset.lineIdx = acc;
       el.dataset.lineIdx = paraIdx; // for line-index.js
       acc += wc;
       __paraTokens.push(toks);
@@ -6499,6 +6507,14 @@
     try {
       __scrollCtl?.setLineElements(wordLineEls);
     } catch {}
+    // Build line index for viewport estimation
+    try {
+      if (typeof window.buildLineIndex === 'function') {
+        lineIndex = window.buildLineIndex(viewer);
+      }
+    } catch (e) {
+      console.warn('line-index build failed', e);
+    }
     // Build virtual merged lines for matcher duplicate disambiguation
     try {
       const MIN_LEN = 35,
