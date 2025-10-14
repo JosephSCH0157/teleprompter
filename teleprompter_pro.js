@@ -1536,6 +1536,51 @@
   function onUserAutoNudge() {
     autoBumpUntil = performance.now() + 800;
   }
+  // Speech sync state machine
+  let mode = 'OFF'; // OFF | AUTO_ONLY | HYBRID
+  let driver = 'auto'; // auto | speech
+
+  // Restore persisted state
+  try {
+    const savedMode = localStorage.getItem('teleprompter_mode');
+    const savedDriver = localStorage.getItem('teleprompter_driver');
+    if (savedMode && ['OFF', 'AUTO_ONLY', 'HYBRID'].includes(savedMode)) {
+      mode = savedMode;
+    }
+    if (savedDriver && ['auto', 'speech'].includes(savedDriver)) {
+      driver = savedDriver;
+    }
+  } catch {}
+
+  // Restore UI state on load
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      if (mode === 'HYBRID') {
+        document.body.classList.add('listening');
+        recChip.textContent = 'Speech: listening…';
+        recBtn.textContent = 'Stop speech sync';
+        recBtn.classList.remove('btn-start');
+        recBtn.classList.add('btn-primary', 'btn-stop');
+        recBtn.title = 'Stop speech sync';
+      } else if (mode === 'AUTO_ONLY') {
+        document.body.classList.remove('listening');
+        recChip.textContent = 'Speech: unavailable';
+        recBtn.textContent = 'Start speech sync';
+        recBtn.classList.remove('btn-stop');
+        recBtn.classList.add('btn-primary', 'btn-start');
+        recBtn.title = 'Start speech sync';
+      } else {
+        // OFF
+        document.body.classList.remove('listening');
+        recChip.textContent = 'Speech: idle';
+        recBtn.textContent = 'Start speech sync';
+        recBtn.classList.remove('btn-stop');
+        recBtn.classList.add('btn-primary', 'btn-start');
+        recBtn.title = 'Start speech sync';
+      }
+    } catch {}
+  });
+
   function normLineKey(text) {
     // Build line keys from fully normalized tokens to ensure duplicate detection
     // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
@@ -3776,7 +3821,10 @@
     refreshDevicesBtn?.addEventListener('click', populateDevices);
 
     // Recognition on/off (placeholder toggle)
-    recBtn?.addEventListener('click', toggleSpeechSync);
+    recBtn?.addEventListener('click', () => {
+      const isOn = mode !== 'OFF';
+      toggleSpeechSync(!isOn);
+    });
 
     // Speech availability hint: disable if unsupported
     try {
@@ -6097,14 +6145,16 @@
       });
       window.__lastMatchTime = performance.now();
       try {
-        window.HUD?.log?.('pll:update', {
-          state: PLL.state,
-          biasPct: PLL.biasPct.toFixed(3),
-          yMatch: yMatch.toFixed(1),
-          yTarget: yTarget.toFixed(1),
-          error: (yMatch - yTarget).toFixed(1),
-          conf: bestSim.toFixed(3),
-        });
+        if (mode === 'HYBRID') {
+          window.HUD?.log?.('pll:update', {
+            state: PLL.state,
+            biasPct: PLL.biasPct.toFixed(3),
+            yMatch: yMatch.toFixed(1),
+            yTarget: yTarget.toFixed(1),
+            error: (yMatch - yTarget).toFixed(1),
+            conf: bestSim.toFixed(3),
+          });
+        }
       } catch {}
     } catch {}
 
@@ -7234,63 +7284,162 @@
     }, 1000);
   }
 
-  function toggleSpeechSync() {
-    if (recActive) {
-      // stopping (before calling recog.stop())
-      recAutoRestart = false;
-      recActive = false;
-      speechOn = false;
-      try {
-        window.HUD?.bus?.emit('speech:toggle', false);
-      } catch {}
-      document.body.classList.remove('listening'); // when stopping
-      stopSpeechSync();
+  async function toggleSpeechSync(on) {
+    try {
+      if (on) {
+        startAutoScroll(); // legacy integrator
+        driver = 'speech';
+        try {
+          window.HUD?.bus?.emit('driver:switch', { to: 'speech' });
+        } catch {}
+
+        // Update UI
+        document.body.classList.add('listening');
+        recChip.textContent = 'Speech: listening…';
+        recBtn.textContent = 'Stop speech sync';
+        try {
+          recBtn.classList.remove('btn-start');
+          recBtn.classList.add('btn-primary', 'btn-stop');
+          recBtn.title = 'Stop speech sync';
+        } catch {}
+
+        const ok = await startASRorVAD(); // wires onMatch → PLL.update(...)
+        if (!ok) {
+          // Add debounce delay for mic permission settling
+          setTimeout(() => {
+            if (mode === 'HYBRID') {
+              // still trying to go hybrid
+              mode = 'AUTO_ONLY';
+              PLL.tune({ maxBias: 0 }); // ensure no bias if ASR missing
+              // Update UI for fallback
+              document.body.classList.remove('listening');
+              recChip.textContent = 'Speech: unavailable';
+              recBtn.textContent = 'Start speech sync';
+              recBtn.classList.remove('btn-stop');
+              recBtn.classList.add('btn-primary', 'btn-start');
+              recBtn.title = 'Start speech sync';
+              // toast('Speech sync unavailable. Auto-scroll only.');
+              console.warn('Speech sync unavailable. Auto-scroll only.');
+              try {
+                window.HUD?.bus?.emit('speech:fallback', { reason: 'unavailable' });
+              } catch {}
+            }
+          }, 250);
+          return;
+        }
+
+        PLL.tune({ maxBias: 0.12 }); // restore prod default
+        setHybrid(true); // dy *= (1 + PLL.biasPct)
+        mode = 'HYBRID';
+
+        // optional: initial snap-to-nearest line, forward-only
+        snapToViewportAnchor();
+      } else {
+        setHybrid(false);
+        stopASRorVAD();
+        PLL.tune({ maxBias: 0 }); // neutralize bias quickly
+        stopAutoScroll();
+
+        driver = 'auto';
+        try {
+          window.HUD?.bus?.emit('driver:switch', { to: 'auto' });
+        } catch {}
+        mode = 'OFF';
+
+        // Update UI
+        document.body.classList.remove('listening');
+        recChip.textContent = 'Speech: idle';
+        recBtn.textContent = 'Start speech sync';
+        try {
+          recBtn.classList.remove('btn-stop');
+          recBtn.classList.add('btn-primary', 'btn-start');
+          recBtn.title = 'Start speech sync';
+        } catch {}
+        try {
+          __scrollCtl?.stopAutoCatchup?.();
+        } catch {}
+        try {
+          window.matcher?.reset?.();
+        } catch {}
+      }
+    } catch (e) {
+      console.warn(e);
+      // Safe fallback
       setHybrid(false);
+      stopASRorVAD();
+      PLL.tune({ maxBias: 0 });
       stopAutoScroll();
-      recChip.textContent = 'Speech: idle';
+      startAutoScroll(); // fallback to auto-only
+      mode = 'AUTO_ONLY';
+      driver = 'auto';
+      // Update UI for error fallback
+      document.body.classList.remove('listening');
+      recChip.textContent = 'Speech: error';
       recBtn.textContent = 'Start speech sync';
+      recBtn.classList.remove('btn-stop');
+      recBtn.classList.add('btn-primary', 'btn-start');
+      recBtn.title = 'Start speech sync';
+      // toast('Speech sync error. Reverted to auto-scroll.');
+      console.warn('Speech sync error. Reverted to auto-scroll.');
       try {
-        recBtn.classList.remove('btn-stop');
-        recBtn.classList.add('btn-primary', 'btn-start');
-        recBtn.title = 'Start speech sync';
+        window.HUD?.bus?.emit('speech:fallback', { reason: 'error' });
       } catch {}
-      try {
-        __scrollCtl?.stopAutoCatchup?.();
-      } catch {}
-      try {
-        window.matcher?.reset?.();
-      } catch {}
+    }
+
+    // Persist state
+    try {
+      localStorage.setItem('teleprompter_mode', mode);
+      localStorage.setItem('teleprompter_driver', driver);
+    } catch {}
+  }
+
+  // Helper functions for the new state machine
+  async function startASRorVAD() {
+    try {
+      const sec = Number(prerollInput?.value) || 0;
+      await new Promise((resolve, reject) => {
+        beginCountdownThen(sec, () => {
+          try {
+            startTimer();
+            startSpeechSync();
+            // Try to start external recorders per settings
+            try {
+              __recorder?.start?.();
+            } catch {}
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+      return true;
+    } catch (e) {
+      console.warn('ASR start failed:', e);
+      return false;
+    }
+  }
+
+  function stopASRorVAD() {
+    try {
+      stopSpeechSync();
       // Try to stop external recorders per settings
       try {
         __recorder?.stop?.();
       } catch {}
-      return;
+    } catch (e) {
+      console.warn('ASR stop failed:', e);
     }
+  }
 
-    const sec = Number(prerollInput?.value) || 0;
-    beginCountdownThen(sec, () => {
-      // starting:
-      recAutoRestart = true;
-      recActive = true;
-      document.body.classList.add('listening'); // when starting
-      recChip.textContent = 'Speech: listening…';
-      recBtn.textContent = 'Stop speech sync';
-      try {
-        recBtn.classList.remove('btn-start');
-        recBtn.classList.add('btn-primary', 'btn-stop');
-        recBtn.title = 'Stop speech sync';
-      } catch {}
-      startTimer();
-      startSpeechSync();
-      startAutoScroll();
-      setHybrid(true);
-      // Try to start external recorders per settings
-      try {
-        __recorder?.start?.();
-      } catch {}
-    });
-    // ...existing code...
-    // NOTE: _initCore continues far below; do not prematurely close earlier.
+  function snapToViewportAnchor() {
+    // Initial snap-to-nearest line, forward-only
+    try {
+      if (viewer && typeof scrollToCurrentIndex === 'function') {
+        scrollToCurrentIndex();
+      }
+    } catch (e) {
+      console.warn('Viewport anchor snap failed:', e);
+    }
   }
 
   // Diagnostic wrapper (placed AFTER full _initCore definition)
