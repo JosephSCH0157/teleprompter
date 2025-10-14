@@ -124,16 +124,21 @@
                 } catch {}
               };
             }
-            // Loading state until first frame
-            let firstFrame = false;
-            if (camVid) {
-              camVid.addEventListener('loadeddata', () => {
-                if (!firstFrame) { firstFrame = true; if (camWrap) camWrap.style.display='block'; if (camLoad) camLoad.style.display='none'; }
-              });
-              camVid.addEventListener('waiting', () => { if (firstFrame && camLoad) { camLoad.textContent='Reconnecting…'; camLoad.style.display='flex'; } });
-              camVid.addEventListener('playing', () => { if (camLoad) camLoad.style.display='none'; });
-              camVid.addEventListener('emptied', () => { firstFrame=false; if (camLoad){ camLoad.textContent='Connecting camera…'; camLoad.style.display='flex'; } if (camWrap) camWrap.style.display='none'; });
+            // Dynamic bottom padding so the last paragraph can sit at the marker line
+            function applyBottomPad(){
+              try{
+                const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
+                const vh = (wrap && wrap.clientHeight) || window.innerHeight || 800;
+                const needForMarker = Math.floor(vh * markerPct) + 80; // cushion like main
+                const basePad = Math.max(window.innerHeight * 0.55, 360);
+                const pad = Math.max(basePad, needForMarker);
+                if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
+              }catch{}
             }
+
+            // Call on resize
+            window.addEventListener('resize', ()=>applyBottomPad());
+
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // WebRTC camera offer/candidate handling
@@ -156,8 +161,8 @@
                 try { window.__camPC.addIceCandidate(d.candidate); } catch {}
                 return;
               }
-              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); }
-              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); }
+              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
+              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
               if(d.type==='scroll'){
                 // Guard against out-of-order scrolls using seq/ts if present
                 try{
