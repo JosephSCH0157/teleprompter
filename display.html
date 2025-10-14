@@ -139,6 +139,13 @@
             // Call on resize
             window.addEventListener('resize', ()=>applyBottomPad());
 
+            // requestScroll: absolute pixels in the same container as viewer
+            function requestScroll(value) {
+              const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+              const targetTop = Math.max(0, Math.min(max, value|0));
+              wrap.scrollTo({ top: targetTop, behavior: 'auto' });
+            }
+
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // WebRTC camera offer/candidate handling
@@ -175,12 +182,15 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
+                // Convert ratio to absolute pixels if needed, then requestScroll
+                let absoluteValue;
                 if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  wrap.scrollTop = Math.round(d.ratio * max);
+                  absoluteValue = Math.round(d.ratio * max);
                 } else {
-                  wrap.scrollTop = d.top||0;
+                  absoluteValue = d.top||0;
                 }
+                requestScroll(absoluteValue);
               }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
