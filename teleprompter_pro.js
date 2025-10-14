@@ -2642,11 +2642,6 @@
             document.querySelector('.script .active')?.dataset?.lineIdx ??
             document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
             0;
-          console.log('Main: sending scroll', {
-            top: viewer.scrollTop,
-            ratio,
-            idx: Number(activeIdx),
-          });
           sendToDisplay &&
             sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio, idx: Number(activeIdx) });
         } catch {}
