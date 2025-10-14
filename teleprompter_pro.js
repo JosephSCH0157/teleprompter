@@ -5468,7 +5468,12 @@
           // Consider it “common nearby” if appears ≥3x and average gap is small
           if (avgGap < 60) {
             const prev = windowAhead;
-            windowAhead = Math.max(20, Math.min(windowAhead, 40));
+            // Improved tail-common tuning: be more conservative with narrowing
+            // Only narrow if we have good similarity and no jitter issues
+            const safeToNarrow =
+              (typeof bestSim === 'number' ? bestSim >= 0.6 : true) &&
+              !(window.jitter && window.jitter.elevated);
+            windowAhead = safeToNarrow ? Math.max(120, Math.min(windowAhead, 40)) : 250;
             try {
               if (typeof debug === 'function')
                 debug({
@@ -5479,12 +5484,39 @@
                   avgGap,
                   windowAheadPrev: prev,
                   windowAhead,
+                  safeToNarrow,
+                  bestSim: typeof bestSim === 'number' ? Number(bestSim.toFixed(3)) : 'unknown',
                 });
             } catch {}
           }
         }
       }
     } catch {}
+
+    // LOST watchdog: widen window if similarity stays low for multiple cycles
+    try {
+      if (typeof bestSim === 'number' && bestSim < 0.5) {
+        window.__lostWatchdogCount = (window.__lostWatchdogCount || 0) + 1;
+        if (window.__lostWatchdogCount >= 3) {
+          const prev = windowAhead;
+          windowAhead = Math.max(windowAhead, 900); // widen window significantly
+          try {
+            if (typeof debug === 'function')
+              debug({
+                tag: 'match:lost-watchdog',
+                reason: 'low-sim-watchdog',
+                watchdogCount: window.__lostWatchdogCount,
+                windowAheadPrev: prev,
+                windowAhead,
+                bestSim: Number(bestSim.toFixed(3)),
+              });
+          } catch {}
+        }
+      } else {
+        window.__lostWatchdogCount = 0; // reset on good similarity
+      }
+    } catch {}
+
     // Core loop: score candidates seeded by n-grams or window fallback
     let i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
     const candidates = new Set(); // Use Set to avoid duplicates
@@ -6142,12 +6174,58 @@
     if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM) {
       currentIndex += MAX_JUMP_AHEAD_WORDS;
     } else {
-      currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
+      // Soft advance gating: only advance if similarity meets minimum threshold
+      const minAdvanceSim = 0.42; // minimum similarity for advance
+      if (bestSim >= minAdvanceSim) {
+        currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
+      } else {
+        try {
+          if (typeof debug === 'function')
+            debug({
+              tag: 'match:advance-gated',
+              reason: 'below-min-advance-sim',
+              bestSim: Number(bestSim.toFixed(3)),
+              minAdvanceSim,
+              bestIdx,
+              currentIndex,
+            });
+        } catch {}
+        // Don't advance - wait for better match
+        return;
+      }
     }
     window.currentIndex = currentIndex;
     // Update commit broker
     window.__tpCommit.idx = currentIndex;
     window.__tpCommit.ts = performance.now();
+
+    // Periodic rescue scheduling: trigger rescue if LOST for too long
+    try {
+      const now = performance.now();
+      const timeSinceLastRescue = now - (window.__lastRescueAttempt || 0);
+      const rescueIntervalMs = 5000; // try rescue every 5 seconds when LOST
+
+      if (window.__lostWatchdogCount >= 3 && timeSinceLastRescue > rescueIntervalMs) {
+        // Trigger a global scan rescue
+        window.__lastRescueAttempt = now;
+        try {
+          if (typeof debug === 'function')
+            debug({
+              tag: 'match:periodic-rescue',
+              reason: 'lost-watchdog-triggered',
+              watchdogCount: window.__lostWatchdogCount,
+              timeSinceLastRescue: Math.round(timeSinceLastRescue),
+            });
+        } catch {}
+
+        // Force a rescue by temporarily widening window and triggering search
+        const originalWindowAhead = MATCH_WINDOW_AHEAD;
+        MATCH_WINDOW_AHEAD = 1200; // very wide for rescue
+        setTimeout(() => {
+          MATCH_WINDOW_AHEAD = originalWindowAhead; // restore after rescue attempt
+        }, 100);
+      }
+    } catch {}
 
     // PLL: Update bias controller with match position
     try {
