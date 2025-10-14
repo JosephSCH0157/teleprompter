@@ -7164,8 +7164,13 @@
     // clear any previous timer
     if (autoTimer) clearInterval(autoTimer);
 
-    // run at 60Hz-ish for smoothness
-    autoTimer = setInterval(() => {
+    // Use requestAnimationFrame for smooth, accurate timing
+    let lastTime = performance.now();
+    autoTimer = () => {
+      const now = performance.now();
+      const dt = (now - lastTime) / 1000; // actual seconds elapsed
+      lastTime = now;
+
       // live-update if user changes the number while running
       const live = parseFloat(autoSpeed.value);
       if (live && live > 0 && live !== pxSpeed) {
@@ -7174,8 +7179,7 @@
         autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
       }
 
-      // convert px/s to px per tick
-      const dt = 1 / 60; // 60Hz interval
+      // convert px/s to px per frame
       let dy = pxSpeed * dt;
 
       // Apply PLL bias if hybrid lock is enabled
@@ -7188,17 +7192,24 @@
       } catch {
         viewer.scrollTop += dy;
       }
+
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? viewer.scrollTop / max : 0;
         sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
       }
-    }, 1000 / 60);
+
+      // Continue the animation loop
+      if (autoTimer) requestAnimationFrame(autoTimer);
+    };
+    requestAnimationFrame(autoTimer);
   }
 
   function stopAutoScroll() {
-    if (autoTimer) clearInterval(autoTimer);
-    autoTimer = null;
+    if (autoTimer) {
+      cancelAnimationFrame(autoTimer);
+      autoTimer = null;
+    }
     autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
   }
