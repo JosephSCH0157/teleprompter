@@ -28,6 +28,7 @@
           /* Align with main marker at 40% */
           .marker{position:sticky;top:40%;height:2px;background:#7cc4ff;box-shadow:0 0 6px #7cc4ff}
           .hud{position:fixed;right:12px;bottom:12px;font:12px/1.2 system-ui;color:#9ba7b2;opacity:.7}
+          #scrollLog{margin-top:8px;font-size:10px;text-align:left;max-width:300px;word-wrap:break-word;}
           .btn{cursor:pointer;border:1px solid var(--edge);padding:6px 8px;border-radius:8px;background:#0e141b;color:#e7ebf0;margin-left:8px}
           #preRoll{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999}
           #preRoll .card{background:#0e141b;border:1px solid var(--edge);padding:24px 32px;border-radius:16px;text-align:center}
@@ -48,7 +49,13 @@
             </div>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
-          <div class="hud">Display <button class="btn" id="flip">Flip</button> <button class="btn" id="invert">Invert</button> <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button></div>
+          <div class="hud">
+            Display
+            <button class="btn" id="flip">Flip</button>
+            <button class="btn" id="invert">Invert</button>
+            <button class="btn" id="camPiP" title="Toggle Picture-in-Picture for camera">PiP</button>
+            <div id="scrollLog"></div>
+          </div>
           <div id="mirrorCamWrap" hidden>
             <video id="mirrorCamVideo" autoplay muted></video>
             <div id="mirrorCamLoading">Connecting camera…</div>
@@ -143,20 +150,34 @@
             function requestScroll(value) {
               const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
               const targetTop = Math.max(0, Math.min(max, value|0));
+              const currentTop = wrap.scrollTop;
+              const delta = targetTop - currentTop;
 
               // Hysteresis: ignore tiny corrections
-              if (Math.abs(targetTop - wrap.scrollTop) < 6) {
+              if (Math.abs(delta) < 6) {
+                logScrollCommand(targetTop, currentTop, delta, 'N/A', 'tiny');
                 return;
               }
 
               // Monotonic guard: don't allow backward movement unless jump back is >200px
-              // (simplified version - full version would check sim >= 0.65)
-              const backJumpPx = wrap.scrollTop - targetTop;
-              if (targetTop < wrap.scrollTop && backJumpPx < 200) {
+              const backJumpPx = currentTop - targetTop;
+              const allowBack = backJumpPx >= 200;
+              if (targetTop < currentTop && !allowBack) {
+                logScrollCommand(targetTop, currentTop, delta, 'N/A', 'blocked');
                 return;
               }
 
+              logScrollCommand(targetTop, currentTop, delta, 'N/A', 'allowed');
               wrap.scrollTo({ top: targetTop, behavior: 'auto' });
+            }
+
+            // Log scroll commands to HUD
+            function logScrollCommand(cmdTop, curTop, delta, sim, status) {
+              const logEl = document.getElementById('scrollLog');
+              if (logEl) {
+                const allowBack = status === 'allowed' && delta < 0 ? 'true' : status === 'blocked' ? 'false' : 'N/A';
+                logEl.textContent = `cmdTop=${cmdTop}px | curTop=${curTop}px | Δ=${delta}px | sim=${sim} | allowBack?=${allowBack}`;
+              }
             }
 
             window.addEventListener('message', ev => {
