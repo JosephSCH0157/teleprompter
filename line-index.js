@@ -9,9 +9,15 @@
 export function buildLineIndex(container) {
   // Ensure every line has data-line-idx
   const els = Array.from(container.querySelectorAll('[data-line-idx]'));
-  const maxIdx = Math.max(-1, ...els.map((el) => +el.dataset.lineIdx));
+  const indices = els.map((el) => +el.dataset.lineIdx).filter((idx) => !isNaN(idx));
+  const maxIdx = indices.length > 0 ? Math.max(...indices) : -1;
   const lineEls = new Array(maxIdx + 1);
-  for (const el of els) lineEls[+el.dataset.lineIdx] = el;
+  for (const el of els) {
+    const idx = +el.dataset.lineIdx;
+    if (!isNaN(idx)) {
+      lineEls[idx] = el;
+    }
+  }
 
   return {
     lineEls,

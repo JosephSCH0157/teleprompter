@@ -6522,7 +6522,6 @@
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
       el.dataset.words = wc;
       el.dataset.idx = paraIdx;
-      el.dataset.lineIdx = acc;
       el.dataset.lineIdx = paraIdx; // for line-index.js
       acc += wc;
       __paraTokens.push(toks);
