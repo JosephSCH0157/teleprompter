@@ -114,6 +114,13 @@
     __tpBootPush('after-boot-block');
   } catch {}
 
+  // Listen for endgame completion
+  window.addEventListener('end:reached', (ev) => {
+    console.log('[ENDGAME] Script completed!', ev.detail);
+    // Could add UI feedback here like a toast notification
+    // or automatically prepare for next script
+  });
+
   // Calm Mode geometry helpers: unified target math and clamped scroll writes
   // These are safe to define always; callers should only use them when CALM is enabled.
   function getYForElInScroller(
