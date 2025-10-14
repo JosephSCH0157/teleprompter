@@ -27,14 +27,32 @@ export default function createScrollController(adapters = {}, telemetry) {
   // let lastCommitTime = 0; // (unused)
   let lastTargetTop = 0;
 
-  // --- Endgame taper state ---
-  const END_ENTER = 0.985; // enter taper near bottom
-  const END_EASE_MS = 600; // ease-out duration
+  // --- Endgame taper state with hysteresis ---
+  const HYS_ENTER = 0; // enter when lastLineTop <= markerY
+  const HYS_EXIT = 12; // exit if lastLineTop > markerY + 12px
+  const END_EASE_MS = 600;
   const END_MARK_PAD = 8; // px nudge to align marker
-  let endState = null; // {t0, v0, locked}
+
+  let endState = { armed: false, locked: false, t0: 0, v0: 0 };
 
   function easeOutCubic(t) {
     return 1 - Math.pow(1 - t, 3);
+  }
+
+  function lastVisibleLine(lineEls) {
+    for (let i = lineEls.length - 1; i >= 0; i--) {
+      const el = lineEls[i];
+      if (!el) continue;
+      if (el.offsetParent && el.offsetHeight > 0 && el.getClientRects().length) {
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function computeMarkerY(viewer, markerPct) {
+    const r = viewer.getBoundingClientRect();
+    return r.top + viewer.clientHeight * (markerPct ?? 0.4);
   }
 
   // Helper: check if at bottom of doc
@@ -178,55 +196,45 @@ export default function createScrollController(adapters = {}, telemetry) {
         const error = targetTop - viewerTop;
         const topDelta = error;
 
-        // --- Endgame taper & bottom lock ---
+        // --- Endgame taper & bottom lock with hysteresis ---
         const viewerEl = A.getViewerElement();
         const maxTop = viewerEl ? Math.max(0, viewerEl.scrollHeight - viewerEl.clientHeight) : 0;
-        const ratio = maxTop > 0 ? Math.min(1, viewerTop / maxTop) : 0;
         const atBottom = viewerTop >= maxTop - 0.5;
 
-        // Calculate marker position for endgame check
+        // Calculate marker position
         const markerPct =
           typeof window !== 'undefined' && typeof window.__TP_MARKER_PCT === 'number'
             ? window.__TP_MARKER_PCT
             : 0.4;
-        const markerTop = Math.round(viewerEl.clientHeight * markerPct);
-        const viewerRect = viewerEl.getBoundingClientRect();
-        const markerY = viewerRect.top + markerTop;
+        const markerY = computeMarkerY(viewerEl, markerPct);
 
-        // Check if last line has reached marker position
-        let lastLineAtMarker = false;
-        if (this._lineEls && this._lineEls.length > 0) {
-          const lastLineEl = this._lineEls[this._lineEls.length - 1];
-          if (lastLineEl) {
-            const lastLineRect = lastLineEl.getBoundingClientRect();
-            lastLineAtMarker = lastLineRect.top <= markerY;
-            // Debug logging
-            if (lastLineAtMarker && !endState) {
-              console.log('[Endgame] Last line reached marker:', {
-                lastLineTop: lastLineRect.top,
-                markerY,
-                viewerTop,
-                markerTop,
-                ratio,
-              });
+        // Find last visible line
+        const lastEl = lastVisibleLine(this._lineEls || []);
+        const lastTop = lastEl ? lastEl.getBoundingClientRect().top : Infinity;
+
+        // Hysteresis-based arming/reset
+        if (!endState.locked) {
+          if (!endState.armed && lastTop <= markerY + HYS_ENTER) {
+            endState.armed = true;
+            endState.t0 = A.now();
+            endState.v0 = v;
+            A.emit('end:armed', { lastTop, markerY });
+            // optional: small "pad" nudge so text aligns nicely
+            const target = Math.min(maxTop, Math.max(0, viewerTop + END_MARK_PAD));
+            if (target !== viewerTop) {
+              A.requestScroll(target);
+              return; // exit early for this frame
             }
+          } else if (endState.armed && lastTop > markerY + HYS_EXIT) {
+            // reader scrolled back up or new content caused reflow
+            endState = { armed: false, locked: false, t0: 0, v0: 0 };
+            A.emit('end:retracted', { lastTop, markerY });
           }
         }
 
-        // Enter ENDGAME when last line reaches marker or fallback to ratio
-        if (!endState && (lastLineAtMarker || ratio >= END_ENTER)) {
-          endState = { t0: A.now(), v0: v, locked: false };
-          // optional: small nudge to align marker area
-          const target = Math.min(maxTop, Math.max(0, viewerTop + END_MARK_PAD));
-          if (target !== viewerTop) {
-            A.requestScroll(target);
-            return; // exit early for this frame
-          }
-        }
-
-        // If in ENDGAME, ease speed down
+        // WRITES: taper & lock, one-way
         let currentV = v;
-        if (endState && !endState.locked) {
+        if (endState.armed && !endState.locked) {
           const t = Math.min(1, (A.now() - endState.t0) / END_EASE_MS);
           currentV = endState.v0 * (1 - easeOutCubic(t)); // v -> 0
 
@@ -240,8 +248,8 @@ export default function createScrollController(adapters = {}, telemetry) {
           }
         }
 
-        // Hard guard: if locked, prevent further motion
-        if (endState && endState.locked) {
+        // If locked, hard-guard
+        if (endState.locked) {
           if (!atBottom) A.requestScroll(maxTop);
           v = 0;
           return;
@@ -429,6 +437,13 @@ export default function createScrollController(adapters = {}, telemetry) {
      */
     isActive() {
       return pendingRaf !== 0 || Math.abs(targetTop - A.getViewerTop()) > 1;
+    },
+
+    /**
+     * Reset endgame state for new docs, rewinds, or mode changes.
+     */
+    resetEndgame() {
+      endState = { armed: false, locked: false, t0: 0, v0: 0 };
     },
   };
 }

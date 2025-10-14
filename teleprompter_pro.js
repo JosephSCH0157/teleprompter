@@ -6575,6 +6575,7 @@
     }
     try {
       __scrollCtl?.setLineElements(wordLineEls);
+      __scrollCtl?.resetEndgame?.(); // Reset endgame state when script changes
     } catch {}
     // Build line index for viewport estimation
     try {
@@ -6729,6 +6730,8 @@
       const basePad = Math.max(window.innerHeight * 0.55, 360);
       const pad = Math.max(basePad, needForMarker);
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
+      // Reset endgame on viewport changes that affect marker position
+      __scrollCtl?.resetEndgame?.();
     } catch {}
   }
 
@@ -8020,6 +8023,7 @@
     recog = null;
     try {
       __scrollCtl?.stopAutoCatchup?.();
+      __scrollCtl?.resetEndgame?.();
     } catch {}
   }
 
