@@ -2638,7 +2638,12 @@
           if (!viewer) return;
           const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
           const ratio = max ? viewer.scrollTop / max : 0;
-          sendToDisplay && sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+          const activeIdx =
+            document.querySelector('.script .active')?.dataset?.lineIdx ??
+            document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+            0;
+          sendToDisplay &&
+            sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio, idx: Number(activeIdx) });
         } catch {}
       }
 
@@ -3827,7 +3832,11 @@
             scrollToEl(el, offset);
             const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
             const ratio = max ? sc.scrollTop / max : 0;
-            sendToDisplay({ type: 'scroll', top: sc.scrollTop, ratio });
+            const activeIdx =
+              document.querySelector('.script .active')?.dataset?.lineIdx ??
+              document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+              0;
+            sendToDisplay({ type: 'scroll', top: sc.scrollTop, ratio, idx: Number(activeIdx) });
           }
         } catch {}
       });
@@ -3945,7 +3954,11 @@
         {
           const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
           const ratio = max ? viewer.scrollTop / max : 0;
-          sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+          const activeIdx =
+            document.querySelector('.script .active')?.dataset?.lineIdx ??
+            document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+            0;
+          sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio, idx: Number(activeIdx) });
         }
         closeDisplayBtn.disabled = false;
         // If user intended camera mirroring, (re)establish
@@ -4630,7 +4643,11 @@
     {
       const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
       const ratio = max ? viewer.scrollTop / max : 0;
-      sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+      const activeIdx =
+        document.querySelector('.script .active')?.dataset?.lineIdx ??
+        document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+        0;
+      sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio, idx: Number(activeIdx) });
     }
   }
   // Expose for other modules (e.g., scroll-control.js)
@@ -6242,7 +6259,11 @@
             try {
               const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
               const ratio = max ? limitedTop / max : 0;
-              sendToDisplay({ type: 'scroll', top: limitedTop, ratio });
+              const activeIdx =
+                document.querySelector('.script .active')?.dataset?.lineIdx ??
+                document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+                0;
+              sendToDisplay({ type: 'scroll', top: limitedTop, ratio, idx: Number(activeIdx) });
             } catch {}
             if (typeof markAdvance === 'function') markAdvance();
             else _lastAdvanceAt = performance.now();
@@ -6272,7 +6293,11 @@
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? desiredTop / max : 0;
-        sendToDisplay({ type: 'scroll', top: desiredTop, ratio });
+        const activeIdx =
+          document.querySelector('.script .active')?.dataset?.lineIdx ??
+          document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+          0;
+        sendToDisplay({ type: 'scroll', top: desiredTop, ratio, idx: Number(activeIdx) });
       }
       try {
         const vRect = viewer.getBoundingClientRect();
@@ -6344,7 +6369,11 @@
         })();
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? tTop / max : 0;
-        sendToDisplay({ type: 'scroll', top: tTop, ratio });
+        const activeIdx =
+          document.querySelector('.script .active')?.dataset?.lineIdx ??
+          document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+          0;
+        sendToDisplay({ type: 'scroll', top: tTop, ratio, idx: Number(activeIdx) });
       }
       // Evaluate whether to run the gentle catch-up loop based on anchor position
       try {
@@ -7151,7 +7180,11 @@
           // mirror to display
           const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
           const ratio = max ? sc.scrollTop / max : 0;
-          sendToDisplay({ type: 'scroll', top: sc.scrollTop, ratio });
+          const activeIdx =
+            document.querySelector('.script .active')?.dataset?.lineIdx ??
+            document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+            0;
+          sendToDisplay({ type: 'scroll', top: sc.scrollTop, ratio, idx: Number(activeIdx) });
         }
       }
       if (idx > _wdLastIdx) {
@@ -7230,7 +7263,11 @@
       {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? viewer.scrollTop / max : 0;
-        sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
+        const activeIdx =
+          document.querySelector('.script .active')?.dataset?.lineIdx ??
+          document.querySelector('.script [data-line-idx].active')?.dataset?.lineIdx ??
+          0;
+        sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio, idx: Number(activeIdx) });
       }
 
       // Continue the animation loop
@@ -7867,7 +7904,7 @@
     _wdLastTop = 0;
     _wdLastT = 0;
     try {
-      sendToDisplay({ type: 'scroll', top: 0, ratio: 0 });
+      sendToDisplay({ type: 'scroll', top: 0, ratio: 0, idx: 0 });
     } catch {}
     setStatus('Script reset to top for new take.');
   }
