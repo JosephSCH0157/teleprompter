@@ -3776,7 +3776,7 @@
     refreshDevicesBtn?.addEventListener('click', populateDevices);
 
     // Recognition on/off (placeholder toggle)
-    recBtn?.addEventListener('click', toggleRec);
+    recBtn?.addEventListener('click', toggleSpeechSync);
 
     // Speech availability hint: disable if unsupported
     try {
@@ -7234,7 +7234,7 @@
     }, 1000);
   }
 
-  function toggleRec() {
+  function toggleSpeechSync() {
     if (recActive) {
       // stopping (before calling recog.stop())
       recAutoRestart = false;
