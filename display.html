@@ -175,21 +175,18 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
-                // Try index-based alignment first (immune to rendering differences)
+                // Prioritize index-based alignment for drift-free sync
                 if (typeof d.idx === 'number' && d.idx >= 0) {
-                  try {
-                    const targetEl = scriptEl.querySelector(`[data-line-idx="${d.idx}"]`);
-                    if (targetEl) {
-                      const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
-                      const vh = wrap.clientHeight || window.innerHeight || 800;
-                      const markerY = Math.floor(vh * markerPct);
-                      const elTop = targetEl.offsetTop;
-                      wrap.scrollTop = Math.max(0, elTop - markerY);
-                      return; // success, skip ratio fallback
-                    }
-                  } catch {}
+                  const targetEl = scriptEl.querySelector(`[data-line-idx="${d.idx}"]`);
+                  if (targetEl) {
+                    const marker = document.querySelector('.marker');
+                    const markerTop = marker ? marker.offsetTop : wrap.clientHeight * 0.4;
+                    const elTop = targetEl.offsetTop;
+                    wrap.scrollTop = elTop - markerTop;
+                    return; // success, skip ratio fallback
+                  }
                 }
-                // Fallback to ratio-based scrolling
+                // Fallback to ratio/top for compatibility
                 if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                   wrap.scrollTop = Math.round(d.ratio * max);
