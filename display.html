@@ -164,7 +164,6 @@
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
               if(d.type==='scroll'){
-                console.log('Display received scroll:', d);
                 // Guard against out-of-order scrolls using seq/ts if present
                 try{
                   const seq = typeof d.seq === 'number' ? d.seq : 0;
