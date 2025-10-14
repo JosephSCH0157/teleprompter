@@ -161,11 +161,11 @@ export default function createScrollController(adapters = {}, telemetry) {
   let v = 0; // estimated velocity (px/s)
   let pendingRaf = 0;
 
-  // Tunables - adjusted for more precise control in 22-28 range
-  const Kp = 0.12; // proportional gain (reduced for finer control)
-  const Kd = 0.1; // derivative gain (reduced to damp less aggressively)
-  const Kff = 0.35; // feed-forward gain (reduced to be less dominant)
-  const MAX_STEP = 1600; // max px movement per tick
+  // Tunables - adjusted for responsive control with hysteresis
+  const Kp = 0.25; // proportional gain (more responsive)
+  const Kd = 0.15; // derivative gain (moderate damping)
+  const Kff = 0.6; // feed-forward gain (better speed tracking)
+  const MAX_STEP = 2000; // max px movement per tick (increased for faster corrections)
   // const SNAP_EPS = 0.5; // snap when close enough (unused)
   const WAKE_EPS = 8; // require this error to (re)start RAF loop
 

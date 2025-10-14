@@ -7189,10 +7189,12 @@
 
     // Use requestAnimationFrame for smooth, accurate timing
     let lastTime = performance.now();
+    let startTime = performance.now();
     autoTimer = () => {
       const now = performance.now();
       const dt = (now - lastTime) / 1000; // actual seconds elapsed
       lastTime = now;
+      const elapsed = (now - startTime) / 1000; // total elapsed time
 
       // live-update if user changes the number while running
       const live = parseFloat(autoSpeed.value);
@@ -7202,8 +7204,17 @@
         autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
       }
 
+      // Initial speed boost for first 3 seconds to get past potential matching issues
+      let effectiveSpeed = pxSpeed;
+      if (elapsed < 3.0) {
+        effectiveSpeed = Math.max(pxSpeed * 1.8, pxSpeed + 15); // 80% boost or +15px/s minimum
+        autoToggle.textContent = `Auto-scroll: ${effectiveSpeed.toFixed(0)}px/s (boost)`;
+      } else {
+        autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+      }
+
       // convert px/s to px per frame
-      let dy = pxSpeed * dt;
+      let dy = effectiveSpeed * dt;
 
       // Apply PLL bias if hybrid lock is enabled
       if (isHybrid()) {
