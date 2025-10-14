@@ -16,16 +16,17 @@ export function buildLineIndex(container) {
   return {
     lineEls,
     nearestIdxAtY(y) {
-      // Find the element whose top is closest to y (relative to container)
+      // Find the element whose top is closest to y (in container's coordinate system)
       let nearestIdx = 0;
       let minDist = Infinity;
-      const containerRect = container.getBoundingClientRect();
 
       for (let i = 0; i < lineEls.length; i++) {
         const el = lineEls[i];
         if (el) {
+          // Get position relative to container, accounting for container's scroll position
+          const containerRect = container.getBoundingClientRect();
           const elRect = el.getBoundingClientRect();
-          const elTopRelativeToContainer = elRect.top - containerRect.top;
+          const elTopRelativeToContainer = elRect.top - containerRect.top + container.scrollTop;
           const dist = Math.abs(elTopRelativeToContainer - y);
           if (dist < minDist) {
             minDist = dist;
