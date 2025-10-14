@@ -334,6 +334,14 @@ export default function createScrollController(adapters = {}, telemetry) {
       // Note: We can’t reassign consts, so damp velocity as a soft reset.
       v *= mode === 'calm' ? 0.6 : 1.0;
     },
+
+    /**
+     * Check if the controller is actively scrolling.
+     * @returns {boolean}
+     */
+    isActive() {
+      return pendingRaf !== 0 || Math.abs(targetTop - A.getViewerTop()) > 1;
+    },
   };
 }
 

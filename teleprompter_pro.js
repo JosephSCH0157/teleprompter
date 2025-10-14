@@ -1757,6 +1757,7 @@
     permChip,
     displayChip,
     recChip,
+    scrollChip,
     camRtcChip,
     debugPosChip,
     openDisplayBtn,
@@ -3297,6 +3298,8 @@
     permChip = document.getElementById('permChip');
     displayChip = document.getElementById('displayChip');
     recChip = document.getElementById('recChip');
+    scrollChip = document.getElementById('scrollChip');
+    if (scrollChip) scrollChip.textContent = 'Scroll: idle';
     camRtcChip = document.getElementById('camRtcChip');
 
     openDisplayBtn = document.getElementById('openDisplayBtn');
@@ -4751,6 +4754,7 @@
     if (!speechOn) {
       try {
         __scrollCtl?.stopAutoCatchup?.();
+        if (scrollChip) scrollChip.textContent = 'Scroll: idle';
       } catch {}
       return;
     }
@@ -4819,6 +4823,7 @@
     try {
       __scrollCtl.stopAutoCatchup();
     } catch {}
+    if (scrollChip) scrollChip.textContent = 'Scroll: active';
     __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
   }
 
@@ -4830,6 +4835,7 @@
         _lowStartTs = 0;
         try {
           __scrollCtl?.stopAutoCatchup?.();
+          if (scrollChip) scrollChip.textContent = 'Scroll: idle';
         } catch {}
         return;
       }
@@ -7367,6 +7373,7 @@
         } catch {}
         try {
           __scrollCtl?.stopAutoCatchup?.();
+          if (scrollChip) scrollChip.textContent = 'Scroll: idle';
         } catch {}
         try {
           window.matcher?.reset?.();
