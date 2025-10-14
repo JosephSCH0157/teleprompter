@@ -7868,8 +7868,9 @@
       setStatus('Speech recognition not supported in this browser.');
       return;
     }
-    // Don’t fight with auto-scroll
-    if (autoTimer) stopAutoScroll();
+    // Note: In hybrid mode, auto-scroll and speech sync work together
+    // Only stop auto-scroll if we're not in hybrid/speech mode
+    // if (autoTimer) stopAutoScroll();
 
     recog = new SR();
     recog.continuous = true;
