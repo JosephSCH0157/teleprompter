@@ -7297,15 +7297,15 @@
   async function toggleSpeechSync(on) {
     try {
       if (on) {
-        startAutoScroll(); // legacy integrator
+        // Don't start auto-scroll yet - wait for countdown to complete
         driver = 'speech';
         try {
           window.HUD?.bus?.emit('driver:switch', { to: 'speech' });
         } catch {}
 
-        // Update UI
+        // Update UI to show preparing state
         document.body.classList.add('listening');
-        recChip.textContent = 'Speech: listening…';
+        recChip.textContent = 'Speech: preparing…';
         recBtn.textContent = 'Stop speech sync';
         try {
           recBtn.classList.remove('btn-start');
@@ -7313,34 +7313,28 @@
           recBtn.title = 'Stop speech sync';
         } catch {}
 
-        const ok = await startASRorVAD(); // wires onMatch → PLL.update(...)
+        const ok = await startASRorVAD(); // does countdown, then starts speech + auto-scroll
         if (!ok) {
-          // Add debounce delay for mic permission settling
-          setTimeout(() => {
-            if (mode === 'HYBRID') {
-              // still trying to go hybrid
-              mode = 'AUTO_ONLY';
-              PLL.tune({ maxBias: 0 }); // ensure no bias if ASR missing
-              // Update UI for fallback
-              document.body.classList.remove('listening');
-              recChip.textContent = 'Speech: unavailable';
-              recBtn.textContent = 'Start speech sync';
-              recBtn.classList.remove('btn-stop');
-              recBtn.classList.add('btn-primary', 'btn-start');
-              recBtn.title = 'Start speech sync';
-              // toast('Speech sync unavailable. Auto-scroll only.');
-              console.warn('Speech sync unavailable. Auto-scroll only.');
-              try {
-                window.HUD?.bus?.emit('speech:fallback', { reason: 'unavailable' });
-              } catch {}
-            }
-          }, 250);
+          // Fallback: start auto-scroll in AUTO_ONLY mode
+          startAutoScroll();
+          mode = 'AUTO_ONLY';
+          PLL.tune({ maxBias: 0 }); // ensure no bias if ASR missing
+          // Update UI for fallback
+          recChip.textContent = 'Speech: unavailable';
+          // toast('Speech sync unavailable. Auto-scroll only.');
+          console.warn('Speech sync unavailable. Auto-scroll only.');
+          try {
+            window.HUD?.bus?.emit('speech:fallback', { reason: 'unavailable' });
+          } catch {}
           return;
         }
 
         PLL.tune({ maxBias: 0.12 }); // restore prod default
         setHybrid(true); // dy *= (1 + PLL.biasPct)
         mode = 'HYBRID';
+
+        // Update UI for successful hybrid mode
+        recChip.textContent = 'Speech: listening…';
 
         // optional: initial snap-to-nearest line, forward-only
         snapToViewportAnchor();
@@ -7410,6 +7404,7 @@
       await new Promise((resolve, reject) => {
         beginCountdownThen(sec, () => {
           try {
+            startAutoScroll(); // Start auto-scroll after countdown completes
             startTimer();
             startSpeechSync();
             // Try to start external recorders per settings
