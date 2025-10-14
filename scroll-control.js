@@ -27,6 +27,16 @@ export default function createScrollController(adapters = {}, telemetry) {
   // let lastCommitTime = 0; // (unused)
   let lastTargetTop = 0;
 
+  // --- Endgame taper state ---
+  const END_ENTER = 0.985; // enter taper near bottom
+  const END_EASE_MS = 600; // ease-out duration
+  const END_MARK_PAD = 8; // px nudge to align marker
+  let endState = null; // {t0, v0, locked}
+
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
   // Helper: check if at bottom of doc
   // function atBottom() { ... } // (unused)
   /**
@@ -115,6 +125,13 @@ export default function createScrollController(adapters = {}, telemetry) {
       }),
     getViewportHeight:
       adapters.getViewportHeight || (() => root.clientHeight || window.innerHeight || 0),
+    getViewerElement: adapters.getViewerElement || (() => document.getElementById('viewer')),
+    emit:
+      adapters.emit ||
+      ((event, data) => {
+        // Default: dispatch custom event on window
+        window.dispatchEvent(new CustomEvent(event, { detail: data }));
+      }),
     now: adapters.now || (() => (window.performance ? performance.now() : Date.now())),
     raf: adapters.raf || ((cb) => requestAnimationFrame(cb)),
   };
@@ -160,7 +177,49 @@ export default function createScrollController(adapters = {}, telemetry) {
         // Basic PD + feed‑forward controller
         const error = targetTop - viewerTop;
         const topDelta = error;
-        const accel = Kp * error - Kd * v + Kff * (topDelta / Math.max(1, A.getViewportHeight()));
+
+        // --- Endgame taper & bottom lock ---
+        const viewerEl = A.getViewerElement();
+        const maxTop = viewerEl ? Math.max(0, viewerEl.scrollHeight - viewerEl.clientHeight) : 0;
+        const ratio = maxTop > 0 ? Math.min(1, viewerTop / maxTop) : 0;
+        const atBottom = viewerTop >= maxTop - 0.5;
+
+        // Enter ENDGAME
+        if (!endState && ratio >= END_ENTER) {
+          endState = { t0: A.now(), v0: v, locked: false };
+          // optional: small nudge to align marker area
+          const target = Math.min(maxTop, Math.max(0, viewerTop + END_MARK_PAD));
+          if (target !== viewerTop) {
+            A.requestScroll(target);
+            return; // exit early for this frame
+          }
+        }
+
+        // If in ENDGAME, ease speed down
+        let currentV = v;
+        if (endState && !endState.locked) {
+          const t = Math.min(1, (A.now() - endState.t0) / END_EASE_MS);
+          currentV = endState.v0 * (1 - easeOutCubic(t)); // v -> 0
+
+          // Snap & lock when at bottom or eased ~0
+          if (atBottom || currentV < 0.5) {
+            A.requestScroll(maxTop);
+            v = 0; // reset velocity
+            endState.locked = true;
+            A.emit('end:reached', { top: maxTop, t });
+            return; // exit early
+          }
+        }
+
+        // Hard guard: if locked, prevent further motion
+        if (endState && endState.locked) {
+          if (!atBottom) A.requestScroll(maxTop);
+          v = 0;
+          return;
+        }
+
+        const accel =
+          Kp * error - Kd * currentV + Kff * (topDelta / Math.max(1, A.getViewportHeight()));
         v += accel * dt * 1000;
         let stepPx = v * dt;
         if (!Number.isFinite(stepPx)) stepPx = 0;

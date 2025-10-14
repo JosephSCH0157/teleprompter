@@ -3475,6 +3475,7 @@
           viewer.scrollTop = top;
         },
         getViewportHeight: () => viewer.clientHeight,
+        getViewerElement: () => viewer,
       });
     } catch (e) {
       console.warn('scroll-control load failed', e);
