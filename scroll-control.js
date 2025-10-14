@@ -184,8 +184,37 @@ export default function createScrollController(adapters = {}, telemetry) {
         const ratio = maxTop > 0 ? Math.min(1, viewerTop / maxTop) : 0;
         const atBottom = viewerTop >= maxTop - 0.5;
 
-        // Enter ENDGAME
-        if (!endState && ratio >= END_ENTER) {
+        // Calculate marker position for endgame check
+        const markerPct =
+          typeof window !== 'undefined' && typeof window.__TP_MARKER_PCT === 'number'
+            ? window.__TP_MARKER_PCT
+            : 0.4;
+        const markerTop = Math.round(viewerEl.clientHeight * markerPct);
+        const viewerRect = viewerEl.getBoundingClientRect();
+        const markerY = viewerRect.top + markerTop;
+
+        // Check if last line has reached marker position
+        let lastLineAtMarker = false;
+        if (this._lineEls && this._lineEls.length > 0) {
+          const lastLineEl = this._lineEls[this._lineEls.length - 1];
+          if (lastLineEl) {
+            const lastLineRect = lastLineEl.getBoundingClientRect();
+            lastLineAtMarker = lastLineRect.top <= markerY;
+            // Debug logging
+            if (lastLineAtMarker && !endState) {
+              console.log('[Endgame] Last line reached marker:', {
+                lastLineTop: lastLineRect.top,
+                markerY,
+                viewerTop,
+                markerTop,
+                ratio,
+              });
+            }
+          }
+        }
+
+        // Enter ENDGAME when last line reaches marker or fallback to ratio
+        if (!endState && (lastLineAtMarker || ratio >= END_ENTER)) {
           endState = { t0: A.now(), v0: v, locked: false };
           // optional: small nudge to align marker area
           const target = Math.min(maxTop, Math.max(0, viewerTop + END_MARK_PAD));
