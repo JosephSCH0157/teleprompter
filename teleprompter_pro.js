@@ -6511,18 +6511,6 @@
     applyBottomPad();
     // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
-    // Mirror to display (only if open & ready)
-    try {
-      if (displayWin && !displayWin.closed && displayReady) {
-        sendToDisplay({
-          type: 'render',
-          html: scriptEl.innerHTML,
-          fontSize: fontSizeInput.value,
-          lineHeight: lineHeightInput.value,
-        });
-      }
-    } catch {}
-
     // Build paragraph index
     // Rebuild IntersectionObserver and (re)observe visible paragraphs
     // Rebuild IntersectionObserver via modular anchor observer
@@ -6594,6 +6582,18 @@
         if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1);
       } catch {}
     }
+
+    // Mirror to display AFTER data attributes are set
+    try {
+      if (displayWin && !displayWin.closed && displayReady) {
+        sendToDisplay({
+          type: 'render',
+          html: scriptEl.innerHTML,
+          fontSize: fontSizeInput.value,
+          lineHeight: lineHeightInput.value,
+        });
+      }
+    } catch {}
     __dfN = __paraTokens.length;
     // Set line elements for scroll control
     const wordLineEls = new Array(scriptWords.length);
