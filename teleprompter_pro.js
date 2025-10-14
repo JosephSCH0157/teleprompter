@@ -4960,7 +4960,8 @@
       lastErrF = 0,
       lastT = performance.now(),
       lastGood = performance.now(),
-      lastAnchorTs = 0;
+      lastAnchorTs = 0,
+      state = 'LOST'; // Initialize state
     const S = { Kp: 0.022, Kd: 0.0025, maxBias: 0.12, confMin: 0.6, decayMs: 550, lostMs: 1800 };
 
     // Telemetry counters
@@ -4992,46 +4993,38 @@
       const err = yMatch - yTarget; // sign convention: positive = behind
       errF = 0.8 * errF + 0.2 * err;
 
-      function update({ yMatch, yTarget, conf, dt }) {
-        const now = performance.now();
-        const dts = (dt ?? now - lastT) / 1000;
-        lastT = now;
-        const err = yMatch - yTarget; // sign convention: positive = behind
-        errF = 0.8 * errF + 0.2 * err;
+      // End-game taper (soften in last 20%)
+      const p = scriptProgress();
+      const endTaper = p > 0.8 ? 0.6 : 1.0;
 
-        // End-game taper (soften in last 20%)
-        const p = scriptProgress();
-        const endTaper = p > 0.8 ? 0.6 : 1.0;
-
-        if (conf >= S.confMin) {
-          lastGood = now;
-          const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
-          let bias = S.Kp * errF + S.Kd * dErr;
-          const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
-          biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
-          state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
+      if (conf >= S.confMin) {
+        lastGood = now;
+        const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
+        let bias = S.Kp * errF + S.Kd * dErr;
+        const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
+        biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
+        state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
+      } else {
+        // Forward-only bias at low conf (no accidental slow-downs)
+        if (conf < S.confMin) {
+          biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
         } else {
-          // Forward-only bias at low conf (no accidental slow-downs)
-          if (conf < S.confMin) {
-            biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
-          } else {
-            biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
-          }
-          state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
+          biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
         }
-        lastErrF = errF;
-
-        // Update telemetry after state is determined
-        const dtSample = now - telemetry.lastSample;
-        if (state === 'LOCKED') telemetry.timeLocked += dtSample;
-        else if (state === 'COAST') telemetry.timeCoast += dtSample;
-        else if (state === 'LOST') telemetry.timeLost += dtSample;
-        telemetry.avgLeadLag =
-          (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
-        telemetry.samples++;
-        if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
-        telemetry.lastSample = now;
+        state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
       }
+      lastErrF = errF;
+
+      // Update telemetry after state is determined
+      const dtSample = now - telemetry.lastSample;
+      if (state === 'LOCKED') telemetry.timeLocked += dtSample;
+      else if (state === 'COAST') telemetry.timeCoast += dtSample;
+      else if (state === 'LOST') telemetry.timeLost += dtSample;
+      telemetry.avgLeadLag =
+        (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
+      telemetry.samples++;
+      if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
+      telemetry.lastSample = now;
     }
 
     function allowAnchor() {
