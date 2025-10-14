@@ -7207,7 +7207,7 @@
       // Initial speed boost for first 3 seconds to get past potential matching issues
       let effectiveSpeed = pxSpeed;
       if (elapsed < 3.0) {
-        effectiveSpeed = Math.max(pxSpeed * 1.8, pxSpeed + 15); // 80% boost or +15px/s minimum
+        effectiveSpeed = pxSpeed + 4; // +4px/s boost for smoother initial advancement
         autoToggle.textContent = `Auto-scroll: ${effectiveSpeed.toFixed(0)}px/s (boost)`;
       } else {
         autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
