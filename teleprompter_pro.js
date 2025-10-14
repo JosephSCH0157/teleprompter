@@ -8403,4 +8403,124 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     }
   });
   // end about popover
+
+  // ── Auto-scroll fine control (micro + coarse) ─────────────────────────
+  (function setupAutoSpeedControls() {
+    const AUTO_MIN = 0,
+      AUTO_MAX = 300,
+      STEP_FINE = 1,
+      STEP_COARSE = 5;
+    const speedInput = document.getElementById('autoSpeed');
+    const toggleBtn = document.getElementById('autoToggle');
+    const decBtn = document.getElementById('autoDec');
+    const incBtn = document.getElementById('autoInc');
+    if (!speedInput || !toggleBtn) return;
+
+    // restore last speed
+    try {
+      const saved = localStorage.getItem('tp_auto_speed');
+      if (saved != null && !Number.isNaN(+saved))
+        speedInput.value = String(Math.max(AUTO_MIN, Math.min(AUTO_MAX, +saved)));
+    } catch {}
+
+    const clamp = (v) => Math.max(AUTO_MIN, Math.min(AUTO_MAX, v | 0));
+    function setAutoSpeed(v, _source = 'ui') {
+      const val = clamp(v);
+      if (String(speedInput.value) !== String(val)) speedInput.value = String(val);
+      try {
+        localStorage.setItem('tp_auto_speed', String(val));
+      } catch {}
+      // reflect in button label when ON
+      if (toggleBtn.dataset.state === 'on') {
+        toggleBtn.textContent = `Auto-scroll: On — ${val} px/s`;
+      }
+      // if you have a central scroll controller, notify it here:
+      try {
+        if (window.__scrollCtl?.setSpeed) window.__scrollCtl.setSpeed(val);
+      } catch {}
+    }
+    function nudge(delta) {
+      setAutoSpeed((+speedInput.value || 0) + delta, 'nudge');
+    }
+
+    // direct edits
+    speedInput.addEventListener('input', () => setAutoSpeed(+speedInput.value || 0, 'input'));
+
+    // +/- buttons (Shift = coarse)
+    function wireNudge(btn, sign) {
+      if (!btn) return;
+      let holdTimer = 0;
+      const apply = (ev) => nudge((ev && ev.shiftKey ? STEP_COARSE : STEP_FINE) * sign);
+      btn.addEventListener('click', apply);
+      btn.addEventListener('mousedown', (ev) => {
+        apply(ev);
+        clearInterval(holdTimer);
+        let delay = 350;
+        holdTimer = setInterval(() => {
+          apply(ev);
+          delay = Math.max(60, delay - 30); // accelerate
+          clearInterval(holdTimer);
+          holdTimer = setInterval(() => apply(ev), delay);
+        }, delay);
+      });
+      ['mouseup', 'mouseleave', 'blur'].forEach((t) =>
+        btn.addEventListener(t, () => clearInterval(holdTimer))
+      );
+    }
+    wireNudge(decBtn, -1);
+    wireNudge(incBtn, +1);
+
+    // Keyboard: ↑/↓ = ±1, Shift+↑/↓ = ±5 (only when not typing in the editor/inputs)
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target && (e.target.tagName || '')).toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        nudge(e.shiftKey ? +STEP_COARSE : +STEP_FINE);
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        nudge(e.shiftKey ? -STEP_COARSE : -STEP_FINE);
+      }
+    });
+
+    // Mouse wheel over speed input: plain = ±1, Shift = ±5
+    speedInput.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        const delta = (e.deltaY > 0 ? -1 : +1) * (e.shiftKey ? STEP_COARSE : STEP_FINE);
+        nudge(delta);
+      },
+      { passive: false }
+    );
+
+    // Reflect state text when toggling ON/OFF
+    const _origToggle = toggleBtn.onclick;
+    toggleBtn.addEventListener(
+      'click',
+      () => {
+        const on = toggleBtn.dataset.state !== 'on';
+        toggleBtn.dataset.state = on ? 'on' : 'off';
+        toggleBtn.textContent = on
+          ? `Auto-scroll: On — ${clamp(+speedInput.value || 0)} px/s`
+          : 'Auto-scroll: Off';
+        if (typeof _origToggle === 'function')
+          try {
+            _origToggle();
+          } catch {}
+      },
+      { capture: true }
+    );
+
+    // initialize label if already on
+    if (toggleBtn.dataset.state === 'on') {
+      toggleBtn.textContent = `Auto-scroll: On — ${clamp(+speedInput.value || 0)} px/s`;
+    }
+
+    // expose for other modules/tests
+    try {
+      window.__setAutoSpeed = setAutoSpeed;
+    } catch {}
+  })();
 })(); // end main IIFE (restored)
