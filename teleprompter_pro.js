@@ -6189,20 +6189,21 @@
       currentEl.classList.add('current');
     } catch {}
 
-    const markerTop = Math.round(
-      viewer.clientHeight *
-        (typeof window.__TP_MARKER_PCT === 'number'
-          ? window.__TP_MARKER_PCT
-          : typeof MARKER_PCT === 'number'
-            ? MARKER_PCT
-            : 0.4)
-    );
-    const desiredTop = targetPara.el.offsetTop - markerTop; // let scheduler clamp
+    const markerTop = () =>
+      Math.round(
+        viewer.clientHeight *
+          (typeof window.__TP_MARKER_PCT === 'number'
+            ? window.__TP_MARKER_PCT
+            : typeof MARKER_PCT === 'number'
+              ? MARKER_PCT
+              : 0.4)
+      );
+    const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
 
     // Marker distance clamping: |y(active) - y(marker)| ≤ L_max (1.2 viewport lines)
     const L_MAX = 1.2 * (viewer.clientHeight || 800); // 1.2 viewport lines
     const activeY = targetPara.el.offsetTop;
-    const markerY = viewer.scrollTop + markerTop;
+    const markerY = viewer.scrollTop + markerTop();
     const scrollMarkerDistance = Math.abs(activeY - markerY);
     const outOfBounds = scrollMarkerDistance > L_MAX;
 
@@ -6254,7 +6255,7 @@
           // currentIndex is the committed line index
           // viewer.getBoundingClientRect().top is the top of the viewer in viewport
           // markerTop is already relative to viewer, so add viewer's top to get viewport Y
-          const markerY = viewer.getBoundingClientRect().top + markerTop;
+          const markerY = viewer.getBoundingClientRect().top + markerTop();
           __scrollCtl.forceAlignToMarker(currentIndex, markerY);
         }
       } catch (e) {
@@ -6311,7 +6312,7 @@
           const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
           requestScroll(limitedTop);
         } else {
-          scrollToEl(currentEl, markerTop);
+          scrollToEl(currentEl, markerTop());
         }
       } catch {
         let next;
