@@ -175,11 +175,30 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
+                // Prioritize index-based alignment for drift-free sync
+                if (typeof d.idx === 'number' && d.idx >= 0) {
+                  const targetEl = scriptEl.querySelector(`[data-line-idx="${d.idx}"]`);
+                  if (targetEl) {
+                    const marker = document.querySelector('.marker');
+                    const markerTop = marker ? marker.offsetTop : wrap.clientHeight * 0.4;
+                    const elTop = targetEl.offsetTop;
+                    wrap.scrollTop = elTop - markerTop;
+                    console.log('Display: index-based scroll', {idx: d.idx, elTop, markerTop, scrollTop: wrap.scrollTop});
+                    return; // success, skip ratio fallback
+                  } else {
+                    console.log('Display: target element not found for idx', d.idx);
+                  }
+                } else {
+                  console.log('Display: no valid idx in scroll message', d);
+                }
+                // Fallback to ratio/top for compatibility
                 if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                   wrap.scrollTop = Math.round(d.ratio * max);
+                  console.log('Display: ratio-based scroll', {ratio: d.ratio, max, scrollTop: wrap.scrollTop});
                 } else {
                   wrap.scrollTop = d.top||0;
+                  console.log('Display: top-based scroll', {top: d.top, scrollTop: wrap.scrollTop});
                 }
               }
               if(d.type==='preroll'){
