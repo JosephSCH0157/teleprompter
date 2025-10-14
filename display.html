@@ -143,6 +143,19 @@
             function requestScroll(value) {
               const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
               const targetTop = Math.max(0, Math.min(max, value|0));
+
+              // Hysteresis: ignore tiny corrections
+              if (Math.abs(targetTop - wrap.scrollTop) < 6) {
+                return;
+              }
+
+              // Monotonic guard: don't allow backward movement unless jump back is >200px
+              // (simplified version - full version would check sim >= 0.65)
+              const backJumpPx = wrap.scrollTop - targetTop;
+              if (targetTop < wrap.scrollTop && backJumpPx < 200) {
+                return;
+              }
+
               wrap.scrollTo({ top: targetTop, behavior: 'auto' });
             }
 
