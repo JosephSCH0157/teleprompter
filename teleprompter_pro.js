@@ -5611,6 +5611,15 @@
     } catch {}
 
     // Reset prediction seed when window is empty
+    const markerTop = () =>
+      Math.round(
+        viewer.clientHeight *
+          (typeof window.__TP_MARKER_PCT === 'number'
+            ? window.__TP_MARKER_PCT
+            : typeof MARKER_PCT === 'number'
+              ? MARKER_PCT
+              : 0.4)
+      );
     function estimateIdxFromViewport() {
       const y = viewer.scrollTop + markerTop();
       const idx = lineIndex.nearestIdxAtY(y); // use virtual lines map
@@ -6189,15 +6198,6 @@
       currentEl.classList.add('current');
     } catch {}
 
-    const markerTop = () =>
-      Math.round(
-        viewer.clientHeight *
-          (typeof window.__TP_MARKER_PCT === 'number'
-            ? window.__TP_MARKER_PCT
-            : typeof MARKER_PCT === 'number'
-              ? MARKER_PCT
-              : 0.4)
-      );
     const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
 
     // Marker distance clamping: |y(active) - y(marker)| ≤ L_max (1.2 viewport lines)
