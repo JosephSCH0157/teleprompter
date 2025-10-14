@@ -7085,8 +7085,8 @@
         const anchorY = r.top - vRect.top;
         pct = Math.round(Math.max(0, Math.min(100, (anchorY / vH) * 100)));
       }
-      const topStr = (viewer.scrollTop || 0).toLocaleString();
-      debugPosChip.textContent = `Anchor ${pct}% • scrollTop ${topStr}`;
+      const topStr = Math.round(viewer.scrollTop || 0).toLocaleString();
+      debugPosChip.textContent = `A:${pct}% S:${topStr}`;
     } catch {}
   }
   let __debugPosRaf = 0;
