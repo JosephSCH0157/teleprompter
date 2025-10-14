@@ -617,6 +617,7 @@
   const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
   // Default for recAutoRestart until init wires it; exposed via defineProperty later
   let recAutoRestart = false;
+  let lineIndex = null; // line index for viewport estimation
   // Mic is opt-in via explicit user request now; no auto-start
   function _toast(msg, opts) {
     // Lightweight fallback if the richer toast system was not injected
@@ -3487,7 +3488,6 @@
     } catch (e) {
       console.warn('scroll-control load failed', e);
     }
-    let lineIndex = null;
     try {
       const liMod = await import((window.__TP_ADDV || ((p) => p))('./line-index.js'));
       window.buildLineIndex = liMod.buildLineIndex;
