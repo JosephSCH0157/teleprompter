@@ -2581,11 +2581,11 @@
           break;
         case 'ArrowUp':
           e.preventDefault();
-          tweakSpeed(+5); // +5 px/s
+          tweakSpeed(+2); // +2 px/s (finer control)
           break;
         case 'ArrowDown':
           e.preventDefault();
-          tweakSpeed(-5); // -5 px/s
+          tweakSpeed(-2); // -2 px/s (finer control)
           break;
         case '1':
           wrapSelection('[s1]', '[/s1]');
@@ -3529,7 +3529,7 @@
     autoToggle.addEventListener('click', () => {
       if (autoTimer) return stopAutoScroll();
       if (!parseFloat(autoSpeed.value)) {
-        autoSpeed.value = localStorage.getItem('autoPxSpeed') || '60';
+        autoSpeed.value = localStorage.getItem('autoPxSpeed') || '25';
       }
       startAutoScroll();
     });
@@ -7176,7 +7176,7 @@
     let pxSpeed = parseFloat(autoSpeed.value);
     if (!pxSpeed || pxSpeed <= 0) {
       const saved = parseFloat(localStorage.getItem('autoPxSpeed') || '');
-      pxSpeed = saved && saved > 0 ? saved : 60;
+      pxSpeed = saved && saved > 0 ? saved : 25;
       autoSpeed.value = String(pxSpeed); // reflect in UI
     }
     localStorage.setItem('autoPxSpeed', String(pxSpeed));
@@ -8440,7 +8440,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   (function setupAutoSpeedControls() {
     const AUTO_MIN = 0,
       AUTO_MAX = 300,
-      STEP_FINE = 1,
+      STEP_FINE = 2,
       STEP_COARSE = 5;
     const speedInput = document.getElementById('autoSpeed');
     const toggleBtn = document.getElementById('autoToggle');
