@@ -2450,12 +2450,40 @@ const _toast = function (msg, opts) {
       p.style.zIndex = '99999';
       p.style.borderRadius = '8px';
       p.innerHTML =
-        '<div style="font-weight:bold;margin-bottom:6px">OBS Debug</div><div id="obsDebugMsgs"></div><div style="margin-top:6px;text-align:right"><button id="obsDebugClear">Clear</button></div>';
+        '<div style="font-weight:bold;margin-bottom:6px">OBS Debug</div><div id="obsDebugMsgs"></div><div style="margin-top:6px;text-align:right"><button id="obsDebugDump">Dump handshake</button> <button id="obsDebugClear">Clear</button></div>';
       document.body.appendChild(p);
       const clearBtn = document.getElementById('obsDebugClear');
       clearBtn?.addEventListener('click', () => {
         const msgs = document.getElementById('obsDebugMsgs');
         if (msgs) msgs.innerHTML = '';
+      });
+      const dumpBtn = document.getElementById('obsDebugDump');
+      dumpBtn?.addEventListener('click', () => {
+        try {
+          const msgs = document.getElementById('obsDebugMsgs');
+          if (!msgs) return;
+          msgs.innerHTML = '';
+          const arr =
+            window.__obsHandshakeLog && Array.isArray(window.__obsHandshakeLog)
+              ? window.__obsHandshakeLog
+              : [];
+          if (!arr.length) {
+            const el = document.createElement('div');
+            el.textContent = 'No handshake log available';
+            msgs.appendChild(el);
+            return;
+          }
+          arr.forEach((it) => {
+            const el = document.createElement('div');
+            try {
+              el.textContent = JSON.stringify(it);
+            } catch {
+              el.textContent = String(it);
+            }
+            msgs.appendChild(el);
+          });
+          msgs.scrollTop = msgs.scrollHeight;
+        } catch {}
       });
       return p;
     } catch {
