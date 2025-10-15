@@ -144,8 +144,8 @@ select { font-size: 14px; }
 
     @supports(height: 100dvh){ body{ min-height:100dvh; } }
 
-    /* Camera overlay */
-    .camWrap{ position:absolute; right:16px; bottom:16px; width:280px; aspect-ratio:16/9; border:1px solid var(--edge); border-radius:12px; overflow:hidden; box-shadow:0 6px 22px rgba(0,0,0,.45); background:#000; opacity:1; z-index:20; display:none; }
+    /* Camera overlay - fixed to viewport so it doesn't scroll with the script */
+    .camWrap{ position:fixed; right:16px; bottom:16px; width:280px; aspect-ratio:16/9; border:1px solid var(--edge); border-radius:12px; overflow:hidden; box-shadow:0 6px 22px rgba(0,0,0,.45); background:#000; opacity:1; z-index:20; display:none; }
     .camWrap.mirrored video{ transform: scaleX(-1); }
     .camWrap video{ width:100%; height:100%; object-fit:cover; display:block; }
     .toolbar{display:flex;gap:6px;flex-wrap:wrap}
