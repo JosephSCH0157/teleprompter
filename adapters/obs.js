@@ -191,7 +191,23 @@ export function createOBSAdapter() {
                 } catch (ex) {
                   void ex;
                 }
-                _candidateIndex = typeof forceVariant === 'number' ? forceVariant : 0;
+                // Prefer the OBS-standard candidate (label 'B') when available
+                if (typeof forceVariant === 'number') {
+                  _candidateIndex = forceVariant;
+                } else {
+                  var preferB = -1;
+                  try {
+                    for (var ii = 0; ii < (_candidateList || []).length; ii++) {
+                      if ((_candidateList[ii] && _candidateList[ii].label) === 'B') {
+                        preferB = ii;
+                        break;
+                      }
+                    }
+                  } catch (ex) {
+                    void ex;
+                  }
+                  _candidateIndex = preferB >= 0 ? preferB : 0;
+                }
                 if (_candidateIndex < 0) _candidateIndex = 0;
 
                 var primary = null;
