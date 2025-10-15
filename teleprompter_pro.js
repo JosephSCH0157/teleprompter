@@ -932,6 +932,15 @@
     }
   };
 
+  // Getter for stored OBS password (if any). Use sparingly; storing passwords in localStorage is insecure.
+  window.getObsPassword = function () {
+    try {
+      return localStorage.getItem('tp_obs_password') || '';
+    } catch {
+      return '';
+    }
+  };
+
   function setupSettingsTabs() {
     const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
     // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
@@ -3661,8 +3670,17 @@
           // Prefill URL/password
           try {
             if (obsUrlInput && s.configs?.obs?.url) obsUrlInput.value = s.configs.obs.url;
-            if (obsPassInput && typeof s.configs?.obs?.password === 'string')
-              obsPassInput.value = s.configs.obs.password;
+            if (obsPassInput) {
+              if (typeof s.configs?.obs?.password === 'string' && s.configs.obs.password) {
+                obsPassInput.value = s.configs.obs.password;
+              } else {
+                // Fallback to localStorage-stored password if available
+                try {
+                  const p = localStorage.getItem('tp_obs_password');
+                  if (p) obsPassInput.value = p;
+                } catch {}
+              }
+            }
           } catch {}
         } catch {}
       };
@@ -3756,6 +3774,12 @@
           password: obsPassInput?.value || prev.password || '',
         };
         __recorder.setSettings({ configs: cfgs });
+        // Also persist password to localStorage for convenience (wrapped in try/catch)
+        try {
+          if (typeof obsPassInput?.value === 'string') {
+            localStorage.setItem('tp_obs_password', obsPassInput.value);
+          }
+        } catch {}
         if (obsStatus && enableObsChk?.checked) obsStatus.textContent = 'OBS: updated';
       } catch {}
     };
