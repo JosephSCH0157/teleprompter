@@ -119,6 +119,13 @@
     console.log('[ENDGAME] Script completed!', ev.detail);
     // Could add UI feedback here like a toast notification
     // or automatically prepare for next script
+    try {
+      if (localStorage.getItem('tp_auto_record') === '1') {
+        try {
+          window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
+        } catch {}
+      }
+    } catch {}
   });
 
   // Calm Mode geometry helpers: unified target math and clamped scroll writes
@@ -797,6 +804,7 @@
         `
         <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
+          <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
@@ -3315,6 +3323,30 @@
         el.textContent = state === 'recording' ? 'Recording...' : 'Idle';
         el.style.background = state === 'recording' ? '#a33' : '';
       } catch {}
+    };
+    // Unified OBS command helper (raw socket preferred, adapter fallback)
+    window.obsCommand = function (cmd) {
+      try {
+        if (window.obsSocket && window.obsSocket.readyState === WebSocket.OPEN) {
+          window.obsSocket.send(JSON.stringify(cmd));
+          return true;
+        }
+      } catch {}
+      try {
+        if (window.__recorder && typeof window.__recorder.get === 'function') {
+          const a = window.__recorder.get('obs');
+          const t = cmd && cmd.d && cmd.d.requestType;
+          if (t === 'StartRecord' && a && typeof a.start === 'function') {
+            a.start();
+            return true;
+          }
+          if (t === 'StopRecord' && a && typeof a.stop === 'function') {
+            a.stop();
+            return true;
+          }
+        }
+      } catch {}
+      return false;
     };
     if (scrollChip) scrollChip.textContent = 'Scroll: idle';
     camRtcChip = document.getElementById('camRtcChip');
@@ -7407,10 +7439,22 @@
     }
     let n = sec;
     // TP: preroll-controls
+    let __prerollStarted = false;
     const show = (v) => {
       countNum.textContent = String(v);
       countOverlay.style.display = 'flex';
       sendToDisplay({ type: 'preroll', show: true, n: v });
+      try {
+        if (!__prerollStarted && localStorage.getItem('tp_auto_record') === '1') {
+          __prerollStarted = true;
+          try {
+            window.obsCommand({
+              op: 6,
+              d: { requestType: 'StartRecord', requestId: 'anvil-start' },
+            });
+          } catch {}
+        }
+      } catch {}
     };
     show(n);
     const id = setInterval(() => {
