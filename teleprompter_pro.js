@@ -3324,30 +3324,69 @@
         el.style.background = state === 'recording' ? '#a33' : '';
       } catch {}
     };
-    // Unified OBS command helper (raw socket preferred, adapter fallback)
+    // Unified OBS command helper: use recorder adapter exclusively (preferred)
     window.obsCommand = function (cmd) {
-      try {
-        if (window.obsSocket && window.obsSocket.readyState === WebSocket.OPEN) {
-          window.obsSocket.send(JSON.stringify(cmd));
-          return true;
-        }
-      } catch {}
       try {
         if (window.__recorder && typeof window.__recorder.get === 'function') {
           const a = window.__recorder.get('obs');
           const t = cmd && cmd.d && cmd.d.requestType;
           if (t === 'StartRecord' && a && typeof a.start === 'function') {
-            a.start();
-            return true;
+            try {
+              a.start();
+              return true;
+            } catch {}
           }
           if (t === 'StopRecord' && a && typeof a.stop === 'function') {
-            a.stop();
-            return true;
+            try {
+              a.stop();
+              return true;
+            } catch {}
           }
         }
       } catch {}
       return false;
     };
+
+    // Live OBS connection status: probe adapter and listen to raw socket open/close if present
+    (function setupObsStatus() {
+      try {
+        const statusEl = document.getElementById('obsConnStatus');
+        const updateStatus = async () => {
+          try {
+            let text = 'OBS: unknown';
+            let cls = '';
+            if (window.__recorder && typeof window.__recorder.get === 'function') {
+              const a = window.__recorder.get('obs');
+              if (a && typeof a.isAvailable === 'function') {
+                try {
+                  const ok = await a.isAvailable();
+                  text = ok ? 'OBS: ready' : 'OBS: offline';
+                  cls = ok ? 'ok' : 'error';
+                } catch {
+                  text = 'OBS: offline';
+                  cls = 'error';
+                }
+              }
+            }
+            if (statusEl) {
+              statusEl.textContent = text;
+              statusEl.className = 'chip ' + cls;
+            }
+          } catch {}
+        };
+        // Initial probe
+        setTimeout(updateStatus, 120);
+        // Also listen for raw socket events if present to reflect changes quickly
+        if (window.obsSocket && typeof window.obsSocket.addEventListener === 'function') {
+          try {
+            window.obsSocket.addEventListener('open', () => setTimeout(updateStatus, 50));
+            window.obsSocket.addEventListener('close', () => setTimeout(updateStatus, 50));
+          } catch {}
+        }
+        // Expose manual refresh
+        window.refreshObsStatus = updateStatus;
+      } catch {}
+    })();
     if (scrollChip) scrollChip.textContent = 'Scroll: idle';
     camRtcChip = document.getElementById('camRtcChip');
 
