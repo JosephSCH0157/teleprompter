@@ -1,7 +1,7 @@
 // ui/scripts-ui.js (ES module)
+import { Scripts } from '../scriptsStore.js';
 import { safeDOM } from '../utils/safe-dom.js';
 import { toast as importedToast } from './toasts.js';
-import { Scripts } from '../scriptsStore.js';
 
 let currentScriptId = null;
 const scriptSlots = safeDOM.get('scriptSlots');
