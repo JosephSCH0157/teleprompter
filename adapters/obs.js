@@ -8,6 +8,8 @@ export function createOBSAdapter() {
   let _lastErr = null;
   let cfg = { url: 'ws://127.0.0.1:4455', password: '' };
   let _triedAlternate = false;
+  let _candidateList = null;
+  let _candidateIndex = 0;
 
   function configure(newCfg = {}) {
     cfg = { ...cfg, ...newCfg };
@@ -34,30 +36,73 @@ export function createOBSAdapter() {
     return out;
   }
 
-  async function computeAuthVariants(pass, authInfo) {
-    // Compute both common OBS v5 auth variants and return them.
-    // Variant A (spec/common): authA = base64( SHA256( UTF8(password + secretB64 + challenge) ) )
-    // Variant B (alternate):     authB = base64( SHA256( UTF8(secretB64 + challenge) ) )
+  async function computeAuthCandidates(pass, authInfo) {
+    // Produce a set of likely auth candidate strings using variations in
+    // secret construction and concatenation. This is intentionally broader
+    // than the spec for diagnostic purposes (dev-only).
     if (!authInfo || !authInfo.challenge || !authInfo.salt)
-      return { secretB64: null, authA: null, authB: null };
+      return { secretB64: null, candidates: [] };
     const password = String(pass ?? '');
     const saltBytes = base64ToUint8Array(authInfo.salt);
     const passBytes = enc(password);
-    const secretInput = concatUint8(saltBytes, passBytes);
-    const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
-    const secretB64 = b64(secretBuf);
 
-    // Variant A
-    const authAInput = enc(password + secretB64 + authInfo.challenge);
-    const authABuf = await crypto.subtle.digest('SHA-256', authAInput);
-    const authA = b64(authABuf);
+    // two secret orders: salt+pass and pass+salt
+    const secretBuf1 = await crypto.subtle.digest('SHA-256', concatUint8(saltBytes, passBytes));
+    const secretBuf2 = await crypto.subtle.digest('SHA-256', concatUint8(passBytes, saltBytes));
+    const secretB641 = b64(secretBuf1);
+    const secretB642 = b64(secretBuf2);
 
-    // Variant B
-    const authBInput = enc(secretB64 + authInfo.challenge);
-    const authBBuf = await crypto.subtle.digest('SHA-256', authBInput);
-    const authB = b64(authBBuf);
+    const challengeStr = authInfo.challenge;
+    const challengeBytes = base64ToUint8Array(challengeStr);
+    const challengeUtf8 = enc(challengeStr);
 
-    return { secretB64, authA, authB };
+    const candidates = [];
+
+    // Helper to hash Uint8Array input and return base64
+    async function hashToB64FromUint8(u8) {
+      const h = await crypto.subtle.digest('SHA-256', u8);
+      return b64(h);
+    }
+
+    // Helper to hash text string (UTF-8) and return base64
+    async function hashToB64FromText(s) {
+      const h = await crypto.subtle.digest('SHA-256', enc(s));
+      return b64(h);
+    }
+
+    // A: spec-style: UTF8(password + secretB64 + challenge)
+    candidates.push({
+      label: 'A',
+      auth: await hashToB64FromText(password + secretB641 + challengeStr),
+    });
+
+    // B: alternate: UTF8(secretB64 + challenge)
+    candidates.push({ label: 'B', auth: await hashToB64FromText(secretB641 + challengeStr) });
+
+    // C: raw bytes: SHA256(secretBytes || challengeBytes)
+    candidates.push({
+      label: 'C',
+      auth: await hashToB64FromUint8(concatUint8(new Uint8Array(secretBuf1), challengeBytes)),
+    });
+
+    // D: raw bytes with utf8 challenge: SHA256(secretBytes || utf8(challengeStr))
+    candidates.push({
+      label: 'D',
+      auth: await hashToB64FromUint8(concatUint8(new Uint8Array(secretBuf1), challengeUtf8)),
+    });
+
+    // E/F/G: repeat above but with the alternate secret order
+    candidates.push({
+      label: 'E',
+      auth: await hashToB64FromText(password + secretB642 + challengeStr),
+    });
+    candidates.push({ label: 'F', auth: await hashToB64FromText(secretB642 + challengeStr) });
+    candidates.push({
+      label: 'G',
+      auth: await hashToB64FromUint8(concatUint8(new Uint8Array(secretBuf2), challengeBytes)),
+    });
+
+    return { secretB64: secretB641, candidates };
   }
 
   // Store last auth string for debug-only inspection
@@ -132,15 +177,26 @@ export function createOBSAdapter() {
                   _lastErr = new Error('OBS authentication required but no password is set.');
                   return reject(_lastErr);
                 }
-                // Compute both variants so we can try a fallback if needed
-                const {
-                  secretB64: _secretB64,
-                  authA,
-                  authB,
-                } = await computeAuthVariants(pass, authInfo);
-                // Choose variant: if forceVariant === 'A' use authA; if 'B' use authB; otherwise prefer B then A
-                const primary = forceVariant === 'A' ? authA : forceVariant === 'B' ? authB : authB;
-                const _alternate = primary === authB ? authA : authB;
+                // Compute a set of candidate authentication strings (dev-friendly)
+                const { secretB64: _secretB64, candidates } = await computeAuthCandidates(
+                  pass,
+                  authInfo
+                );
+                // Install candidate list for potential retries (dev-only behavior)
+                try {
+                  _candidateList = Array.isArray(candidates) ? candidates : [];
+                } catch {
+                  _candidateList = [];
+                }
+                _candidateIndex = typeof forceVariant === 'number' ? forceVariant : 0;
+                // pick primary candidate (fallback to B-style if none)
+                let primary =
+                  (_candidateList &&
+                    _candidateList[_candidateIndex] &&
+                    _candidateList[_candidateIndex].auth) ||
+                  null;
+                if (!primary && _candidateList && _candidateList.length)
+                  primary = _candidateList[0].auth;
                 identify.d.authentication = primary;
                 try {
                   _lastAuthSent = primary;
@@ -159,7 +215,12 @@ export function createOBSAdapter() {
                       t: Date.now(),
                       event: 'identify-sent',
                       auth: !!identify.d.authentication,
-                      variant: forceVariant || 'B-primary',
+                      variant:
+                        typeof forceVariant === 'number' &&
+                        _candidateList &&
+                        _candidateList[forceVariant]
+                          ? `candidate-${_candidateList[forceVariant].label}`
+                          : forceVariant || 'B-primary',
                     };
                     // Attach the raw payload only in dev
                     try {
