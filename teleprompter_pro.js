@@ -1752,7 +1752,13 @@ const _toast = function (msg, opts) {
     if (__rec) return __rec;
     try {
       const addV = window.__TP_ADDV || ((p) => p);
-      __rec = await import(addV('./recorders.js'));
+      const m = await import(addV('./recorders.js'));
+      console.debug(
+        '[TP-Pro] recorder module keys:',
+        Object.keys(m),
+        m.default && Object.keys(m.default)
+      );
+      __rec = m;
       if (!__rec || typeof __rec.init !== 'function') {
         console.warn('[TP-Pro] recorders.js loaded but no init() export found');
       }
