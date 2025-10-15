@@ -994,6 +994,7 @@ const _toast = function (msg, opts) {
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
+          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px">Sync & Test</button>
         </form>
         <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" style="margin-top:8px"></div>
   <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
@@ -1393,6 +1394,39 @@ const _toast = function (msg, opts) {
           type: (statusEl?.textContent || '').toLowerCase().includes('ok') ? 'ok' : 'error',
         });
       }, 600);
+    });
+
+    // One-click helper: sync Settings -> main and run the in-page OBS test helper
+    const obsSyncTestS = document.getElementById('settingsObsSyncTest');
+    obsSyncTestS?.addEventListener('click', async () => {
+      try {
+        const mainUrl = document.getElementById('obsUrl');
+        const mainPass = document.getElementById('obsPassword');
+        if (obsUrlS?.value && mainUrl) mainUrl.value = obsUrlS.value;
+        if (obsPassS?.value && mainPass) mainPass.value = obsPassS.value;
+        mainUrl?.dispatchEvent(new Event('change', { bubbles: true }));
+        mainPass?.dispatchEvent(new Event('change', { bubbles: true }));
+        try {
+          // trigger recorder reconfigure if available
+          const rec = await (window.__recorder && window.__recorder.get
+            ? window.__recorder.get('obs')
+            : null);
+          try {
+            rec?.reconfigure?.();
+          } catch {}
+        } catch {}
+        // Run the in-page test if provided
+        try {
+          if (typeof window.__tpRunObsTest === 'function') {
+            await window.__tpRunObsTest();
+          } else {
+            // fallback: click existing test button if present
+            document.getElementById('obsTestBtn')?.click();
+          }
+        } catch (e) {
+          console.warn('[TP-Pro] Sync & Test failed', e);
+        }
+      } catch {}
     });
 
     // Optional: mirror as you type so both fields stay in sync

@@ -53,6 +53,9 @@ export function createOBSAdapter() {
     return b64(authBuf);
   }
 
+  // Store last auth string for debug-only inspection
+  let _lastAuthSent = null;
+
   function isAvailable() {
     return Promise.resolve(typeof WebSocket !== 'undefined');
   }
@@ -125,6 +128,9 @@ export function createOBSAdapter() {
                 const authentication = await computeAuth(pass, authInfo);
                 identify.d.authentication = authentication;
                 try {
+                  _lastAuthSent = authentication;
+                } catch {}
+                try {
                   if (window && window.__TP_DEV)
                     console.debug('[OBS-HS] sending IDENTIFY (authentication present)');
                   try {
@@ -185,12 +191,14 @@ export function createOBSAdapter() {
               console.debug('[OBS-HS] socket close', e?.code, e?.reason);
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-              window.__obsHandshakeLog.push({
-                t: Date.now(),
-                event: 'close',
-                code: e?.code,
-                reason: e?.reason,
-              });
+              const entry = { t: Date.now(), event: 'close', code: e?.code, reason: e?.reason };
+              // If authentication failed and we're in dev, include the last auth string for comparison
+              if (e?.code === 4009 && window && window.__TP_DEV) {
+                try {
+                  entry.debugAuth = _lastAuthSent || null; // may contain sensitive data
+                } catch {}
+              }
+              window.__obsHandshakeLog.push(entry);
             } catch {}
           } catch {}
           if (!identified) {
