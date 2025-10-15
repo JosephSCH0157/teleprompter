@@ -2319,6 +2319,22 @@ const _toast = function (msg, opts) {
           if (cur && Array.from(sel.options).some((o) => o.value === cur)) sel.value = cur;
         } catch {}
       });
+      // Auto-select preferred camera (OBS Virtual Camera if present)
+      try {
+        function choosePreferredCamId(list) {
+          const obs = list.find((d) => /obs.*virtual.*camera/i.test(d.label));
+          if (obs) return obs.deviceId;
+          const hw = list.find((d) => d.label && !/droidcam|iriun|camo|epoccam/i.test(d.label));
+          if (hw) return hw.deviceId;
+          return list[0]?.deviceId || null;
+        }
+        const prefer = choosePreferredCamId(cams);
+        const sel = document.getElementById('settingsCamSel');
+        if (prefer && sel && Array.from(sel.options).some((o) => o.value === prefer)) {
+          sel.value = prefer;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } catch {}
     } catch {
       /* ignore */
     }
@@ -4226,6 +4242,19 @@ const _toast = function (msg, opts) {
             } catch {}
           }
         });
+        // Friendly hint: recommend OBS Virtual Camera when OBS is enabled
+        try {
+          const enableObs = document.getElementById('enableObs');
+          enableObs?.addEventListener('change', () => {
+            try {
+              const on = !!enableObs.checked;
+              const hint = document.getElementById('sidebarMediaHint');
+              if (on && hint)
+                hint.querySelector('.chip').textContent =
+                  'OBS enabled — select “OBS Virtual Camera” above for Anvil view.';
+            } catch {}
+          });
+        } catch {}
       } catch {}
     }
 
@@ -8566,6 +8595,9 @@ const _toast = function (msg, opts) {
       camVideo.setAttribute('webkit-playsinline', '');
       camVideo.srcObject = stream;
       try {
+        watchCamTracks(stream);
+      } catch {}
+      try {
         await camVideo.play();
       } catch (err) {
         // Autoplay might be blocked (iOS). Provide a simple tap-to-start fallback.
@@ -8596,6 +8628,20 @@ const _toast = function (msg, opts) {
     } catch {
       warn('startCamera failed', e);
     }
+  }
+  function watchCamTracks(stream) {
+    try {
+      stream?.getVideoTracks().forEach((t) => {
+        t.onended = async () => {
+          try {
+            _toast && _toast('Camera ended — attempting to recover…');
+          } catch {}
+          try {
+            await startCamera();
+          } catch {}
+        };
+      });
+    } catch {}
   }
   function updateCamRtcChip(msg) {
     try {
