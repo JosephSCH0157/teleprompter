@@ -4537,6 +4537,37 @@ const _toast = function (msg, opts) {
         try {
           buildSettingsContent();
         } catch {}
+        // Auto-sync OBS fields from Settings -> main so adapters see values immediately
+        try {
+          const setUrl = document.getElementById('settingsObsUrl');
+          const setPass = document.getElementById('settingsObsPass');
+          const setRem = document.getElementById('settingsObsRemember');
+          const mainUrl = document.getElementById('obsUrl');
+          const mainPass = document.getElementById('obsPassword');
+          if (setUrl && mainUrl && setUrl.value && setUrl.value.trim()) {
+            mainUrl.value = setUrl.value.trim();
+            try {
+              mainUrl.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch {}
+          }
+          if (setPass && mainPass && setPass.value && setPass.value.trim()) {
+            mainPass.value = setPass.value;
+            try {
+              // Fire both input and change so any listeners update
+              mainPass.dispatchEvent(new Event('input', { bubbles: true }));
+              mainPass.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch {}
+          }
+          // Mirror remember checkbox into main UI if present (no main checkbox exists, but persist preference)
+          try {
+            if (setRem) {
+              localStorage.setItem('tp_obs_remember', setRem.checked ? '1' : '0');
+            }
+          } catch {}
+          try {
+            if (window.__TP_DEV) console.debug('[TP-Pro] synced Settings -> main (obs url/pass)');
+          } catch {}
+        } catch {}
         settingsOverlay.classList.remove('hidden');
         settingsBtn.setAttribute('aria-expanded', 'true');
       };
