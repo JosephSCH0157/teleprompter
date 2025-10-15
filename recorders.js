@@ -324,7 +324,7 @@ let _cfgBridge = {
   onRecordState: () => {},
 };
 
-export function init(opts = {}) {
+export function initBridge(opts = {}) {
   _cfgBridge = { ..._cfgBridge, ...opts };
   try {
     if (_cfgBridge.isEnabled()) connect();
@@ -479,4 +479,45 @@ export function connect({ testOnly } = {}) {
 
 export function isConnected() {
   return _identified;
+}
+
+// Public initializer for UI wiring. Maps simple UI hooks into the registry settings
+export function init({ getUrl, getPass, isEnabled, onStatus, onRecordState } = {}) {
+  try {
+    if (typeof onStatus === 'function') onStatus('recorder loaded', true);
+
+    if (getUrl || getPass) {
+      try {
+        setSettings({
+          configs: {
+            obs: {
+              url: getUrl ? getUrl() : undefined,
+              password: getPass ? getPass() : undefined,
+            },
+          },
+        });
+      } catch {}
+    }
+    try {
+      applyConfigs();
+    } catch {}
+
+    try {
+      if (isEnabled && isEnabled()) {
+        // startSelected alias
+        start();
+      }
+    } catch {}
+
+    // Also initialize the inline bridge if present so it can use the same hooks
+    try {
+      if (typeof initBridge === 'function') {
+        initBridge({ getUrl, getPass, isEnabled, onStatus, onRecordState });
+      }
+    } catch {}
+
+    return true;
+  } catch {
+    return false;
+  }
 }
