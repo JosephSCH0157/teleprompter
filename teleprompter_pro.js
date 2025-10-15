@@ -10,6 +10,11 @@
 
 // Reinstate IIFE wrapper (was removed causing brace imbalance)
 import { toast as moduleToast } from './ui/toasts.js';
+// Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
+import * as RecorderModule from './recorders.js';
+try {
+  if (typeof window !== 'undefined') window.__recorder = RecorderModule;
+} catch {}
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 const _toast = function (msg, opts) {
