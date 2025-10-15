@@ -120,7 +120,7 @@
     // Could add UI feedback here like a toast notification
     // or automatically prepare for next script
     try {
-      if (localStorage.getItem('tp_auto_record') === '1') {
+      if (window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
         try {
           window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
         } catch {}
@@ -804,6 +804,7 @@
         `
         <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
+          <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
           <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
@@ -890,6 +891,23 @@
       if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
     } catch {}
     try {
+      const autoRec = document.getElementById('autoRecordToggle');
+      if (autoRec) {
+        try {
+          autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
+        } catch {}
+        autoRec.addEventListener('change', () => {
+          try {
+            localStorage.setItem('tp_auto_record', autoRec.checked ? '1' : '0');
+            // refresh obs status when toggling
+            try {
+              window.refreshObsStatus && window.refreshObsStatus();
+            } catch {}
+          } catch {}
+        });
+      }
+    } catch {}
+    try {
       const obsUrlS = document.getElementById('settingsObsUrl');
       const mainUrl = document.getElementById('obsUrl');
       if (obsUrlS && mainUrl && typeof mainUrl.value === 'string') obsUrlS.value = mainUrl.value;
@@ -904,6 +922,15 @@
   try {
     __tpBootPush('after-syncSettingsValues-def');
   } catch {}
+
+  // Getter for auto-record preference
+  window.getAutoRecordEnabled = function () {
+    try {
+      return localStorage.getItem('tp_auto_record') === '1';
+    } catch {
+      return false;
+    }
+  };
 
   function setupSettingsTabs() {
     const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
@@ -7484,7 +7511,7 @@
       countOverlay.style.display = 'flex';
       sendToDisplay({ type: 'preroll', show: true, n: v });
       try {
-        if (!__prerollStarted && localStorage.getItem('tp_auto_record') === '1') {
+        if (!__prerollStarted && window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
           __prerollStarted = true;
           try {
             window.obsCommand({
