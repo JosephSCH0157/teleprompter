@@ -19,7 +19,7 @@ function _write(list) {
   } catch {}
 }
 
-export const Scripts = {
+const Scripts = {
   init() {
     if (!_read().length) _write([]);
   },
@@ -62,3 +62,8 @@ export const Scripts = {
     _write(_read().filter((s) => s.id !== id));
   },
 };
+
+// Also expose as a global for non-module consumption
+try {
+  if (typeof window !== 'undefined') window.Scripts = Scripts;
+} catch {}
