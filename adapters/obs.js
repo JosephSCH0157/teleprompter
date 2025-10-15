@@ -33,7 +33,11 @@ export function createOBSAdapter() {
         _lastErr = null;
         const obs = await getObs();
         if (obs?.identified) return true;
-        await obs.connect(_cfg.url, _cfg.password);
+        // Prefer configured password, otherwise use window.getObsPassword() if available
+        const pw =
+          _cfg.password ||
+          (typeof window !== 'undefined' && window.getObsPassword ? window.getObsPassword() : '');
+        await obs.connect(_cfg.url, pw);
         return true;
       } catch (e) {
         _lastErr = e;
@@ -46,7 +50,12 @@ export function createOBSAdapter() {
     },
     async start() {
       const obs = await getObs();
-      if (!obs?.identified) await obs.connect(_cfg.url, _cfg.password);
+      if (!obs?.identified) {
+        const pw =
+          _cfg.password ||
+          (typeof window !== 'undefined' && window.getObsPassword ? window.getObsPassword() : '');
+        await obs.connect(_cfg.url, pw);
+      }
       await obs.call('StartRecord');
       active = true;
       _lastErr = null;

@@ -808,6 +808,7 @@
           <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
+          <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
         </form>
         <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`
@@ -934,11 +935,19 @@
 
   // Getter for stored OBS password (if any). Use sparingly; storing passwords in localStorage is insecure.
   window.getObsPassword = function () {
+    // Prefer sessionStorage (session-only, more private), then localStorage if remember checked
     try {
-      return localStorage.getItem('tp_obs_password') || '';
-    } catch {
-      return '';
-    }
+      try {
+        const s = sessionStorage.getItem('tp_obs_password');
+        if (s) return s;
+      } catch {}
+      try {
+        const rem = document.getElementById('settingsObsRemember');
+        const p = localStorage.getItem('tp_obs_password');
+        if (p && rem && rem.checked) return p;
+      } catch {}
+    } catch {}
+    return '';
   };
 
   function setupSettingsTabs() {
@@ -3674,10 +3683,18 @@
               if (typeof s.configs?.obs?.password === 'string' && s.configs.obs.password) {
                 obsPassInput.value = s.configs.obs.password;
               } else {
-                // Fallback to localStorage-stored password if available
+                // Prefer sessionStorage (secure-by-default), then localStorage if Remember checked
                 try {
-                  const p = localStorage.getItem('tp_obs_password');
-                  if (p) obsPassInput.value = p;
+                  const pSess = sessionStorage.getItem('tp_obs_password');
+                  if (pSess) {
+                    obsPassInput.value = pSess;
+                  } else {
+                    try {
+                      const rem = document.getElementById('settingsObsRemember');
+                      const pLocal = localStorage.getItem('tp_obs_password');
+                      if (rem && rem.checked && pLocal) obsPassInput.value = pLocal;
+                    } catch {}
+                  }
                 } catch {}
               }
             }
@@ -3774,10 +3791,23 @@
           password: obsPassInput?.value || prev.password || '',
         };
         __recorder.setSettings({ configs: cfgs });
-        // Also persist password to localStorage for convenience (wrapped in try/catch)
+        // Persist password to sessionStorage by default; optionally to localStorage when 'remember' is checked
         try {
           if (typeof obsPassInput?.value === 'string') {
-            localStorage.setItem('tp_obs_password', obsPassInput.value);
+            try {
+              sessionStorage.setItem('tp_obs_password', obsPassInput.value);
+            } catch {}
+            try {
+              const rem = document.getElementById('settingsObsRemember');
+              if (rem && rem.checked) {
+                localStorage.setItem('tp_obs_password', obsPassInput.value);
+              } else {
+                // If not remembering, remove any long-lived stored password
+                try {
+                  localStorage.removeItem('tp_obs_password');
+                } catch {}
+              }
+            } catch {}
           }
         } catch {}
         if (obsStatus && enableObsChk?.checked) obsStatus.textContent = 'OBS: updated';
