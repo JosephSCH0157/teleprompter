@@ -226,12 +226,16 @@
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
 </div>
 <div class="row">
-<label>Script
-          <select id="scriptSelect" class="select-md" ></select>
-</label>
-<button id="saveAsBtn">Save As</button>
-<button id="loadBtn">Load</button>
-<button id="deleteBtn">Delete</button>
+  <label>Saved Scripts</label>
+  <select id="scriptSlots" class="select-md"></select>
+</div>
+<div class="row">
+  <label>Title <input id="scriptTitle" type="text" placeholder="Untitled"/></label>
+  <button id="scriptSaveBtn">Save</button>
+  <button id="scriptSaveAsBtn">Save As</button>
+  <button id="scriptLoadBtn">Load</button>
+  <button id="scriptDeleteBtn">Delete</button>
+  <button id="scriptRenameBtn">Rename</button>
 </div>
 <div class="row">
 <button id="resetScriptBtn">Reset Script</button>

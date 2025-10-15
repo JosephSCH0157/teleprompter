@@ -3405,6 +3405,145 @@
     legendEl = document.getElementById('legend');
     debugPosChip = document.getElementById('debugPosChip');
 
+    // --- Scripts Store UI wiring (dynamic import to keep boot small) ---
+    let ScriptsModule = null;
+    let currentScriptId = null;
+    const scriptSlots = document.getElementById('scriptSlots');
+    const scriptTitle = document.getElementById('scriptTitle');
+    const scriptSaveBtn = document.getElementById('scriptSaveBtn');
+    const scriptSaveAsBtn = document.getElementById('scriptSaveAsBtn');
+    const scriptLoadBtn = document.getElementById('scriptLoadBtn');
+    const scriptDeleteBtn = document.getElementById('scriptDeleteBtn');
+    const scriptRenameBtn = document.getElementById('scriptRenameBtn');
+
+    function getEditorContent() {
+      return editor ? editor.value : '';
+    }
+    function setEditorContent(txt) {
+      if (editor) editor.value = String(txt || '');
+    }
+
+    async function initScriptsUI() {
+      try {
+        if (!ScriptsModule) ScriptsModule = await import('./scriptsStore.js');
+        ScriptsModule.Scripts.init();
+        refreshScriptsDropdown();
+      } catch (e) {
+        console.debug('Scripts init failed', e);
+      }
+    }
+
+    function refreshScriptsDropdown() {
+      try {
+        if (!ScriptsModule) return;
+        const list = ScriptsModule.Scripts.list().sort((a, b) =>
+          b.updated.localeCompare(a.updated)
+        );
+        if (!scriptSlots) return;
+        scriptSlots.innerHTML = list
+          .map((s) => `<option value="${s.id}">${s.title}</option>`)
+          .join('');
+        if (currentScriptId) scriptSlots.value = currentScriptId;
+      } catch {}
+    }
+
+    async function onScriptSave() {
+      try {
+        if (!ScriptsModule) ScriptsModule = await import('./scriptsStore.js');
+        const title = scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled';
+        currentScriptId = ScriptsModule.Scripts.save({
+          id: currentScriptId,
+          title,
+          content: getEditorContent(),
+        });
+        refreshScriptsDropdown();
+        _toast('Script saved', { type: 'ok' });
+      } catch (e) {
+        console.debug('Scripts.save error', e);
+        _toast('Save failed', { type: 'error' });
+      }
+    }
+
+    async function onScriptSaveAs() {
+      currentScriptId = null;
+      await onScriptSave();
+    }
+
+    function onScriptLoad() {
+      try {
+        if (!ScriptsModule) return;
+        const id = scriptSlots && scriptSlots.value;
+        if (!id) return;
+        const s = ScriptsModule.Scripts.get(id);
+        if (!s) return;
+        currentScriptId = s.id;
+        if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
+        setEditorContent(s.content || '');
+        _toast('Script loaded', { type: 'ok' });
+      } catch (e) {
+        console.debug('Scripts.load error', e);
+        _toast('Load failed', { type: 'error' });
+      }
+    }
+
+    function onScriptDelete() {
+      try {
+        if (!ScriptsModule || !currentScriptId) return;
+        ScriptsModule.Scripts.remove(currentScriptId);
+        currentScriptId = null;
+        scriptTitle && (scriptTitle.value = '');
+        refreshScriptsDropdown();
+        _toast('Script deleted', {});
+      } catch (e) {
+        console.debug('Scripts.delete error', e);
+        _toast('Delete failed', { type: 'error' });
+      }
+    }
+
+    function onScriptRename() {
+      try {
+        if (!ScriptsModule || !currentScriptId) return;
+        const t = prompt(
+          'Rename script to:',
+          scriptTitle ? scriptTitle.value || 'Untitled' : 'Untitled'
+        );
+        if (t) {
+          ScriptsModule.Scripts.rename(currentScriptId, t);
+          scriptTitle && (scriptTitle.value = t);
+          refreshScriptsDropdown();
+        }
+      } catch (e) {
+        console.debug('Scripts.rename error', e);
+      }
+    }
+
+    // wire buttons if present
+    try {
+      scriptSaveBtn && scriptSaveBtn.addEventListener('click', onScriptSave);
+      scriptSaveAsBtn && scriptSaveAsBtn.addEventListener('click', onScriptSaveAs);
+      scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
+      scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
+      scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
+      if (scriptSlots)
+        scriptSlots.addEventListener('change', () => {
+          /* no-op: load via Load button */
+        });
+    } catch {}
+
+    // autosave debounce (optional)
+    let _autosaveTimer = null;
+    if (editor) {
+      editor.addEventListener('input', () => {
+        clearTimeout(_autosaveTimer);
+        _autosaveTimer = setTimeout(() => {
+          if (currentScriptId) onScriptSave();
+        }, 1000);
+      });
+    }
+
+    // initialize scripts UI after boot
+    setTimeout(initScriptsUI, 200);
+
     permChip = document.getElementById('permChip');
     displayChip = document.getElementById('displayChip');
     recChip = document.getElementById('recChip');
