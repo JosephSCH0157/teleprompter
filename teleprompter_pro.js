@@ -1028,6 +1028,23 @@ const _toast = function (msg, opts) {
       if (obsPassS && mainPass && typeof mainPass.value === 'string')
         obsPassS.value = mainPass.value;
     } catch {}
+
+    // restore the 'remember password' checkbox from persisted preference
+    try {
+      const rem = document.getElementById('settingsObsRemember');
+      if (rem) {
+        try {
+          rem.checked = localStorage.getItem('tp_obs_remember') === '1';
+        } catch {}
+        // ensure changes to the checkbox re-run save logic
+        rem.addEventListener('change', () => {
+          try {
+            // re-run save logic which will persist or remove stored password based on the checkbox
+            saveObsConfig();
+          } catch {}
+        });
+      }
+    } catch {}
   }
   try {
     __tpBootPush('after-syncSettingsValues-def');
@@ -4122,6 +4139,10 @@ const _toast = function (msg, opts) {
             } catch {}
             try {
               const rem = document.getElementById('settingsObsRemember');
+              // persist the user's remember preference so the checkbox is stable across reloads
+              try {
+                localStorage.setItem('tp_obs_remember', rem && rem.checked ? '1' : '0');
+              } catch {}
               if (rem && rem.checked) {
                 localStorage.setItem('tp_obs_password', obsPassInput.value);
               } else {
