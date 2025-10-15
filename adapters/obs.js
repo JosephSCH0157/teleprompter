@@ -146,16 +146,26 @@ export function createOBSAdapter() {
                   _lastAuthSent = primary;
                 } catch {}
                 try {
-                  if (window && window.__TP_DEV)
+                  if (window && window.__TP_DEV) {
                     console.debug('[OBS-HS] sending IDENTIFY (authentication present)');
+                    try {
+                      // Log the full identify payload in dev for exact-byte comparison
+                      console.debug('[OBS-HS] IDENTIFY payload:', identify);
+                    } catch {}
+                  }
                   try {
                     window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-                    window.__obsHandshakeLog.push({
+                    const logEntry = {
                       t: Date.now(),
                       event: 'identify-sent',
                       auth: !!identify.d.authentication,
                       variant: forceVariant || 'B-primary',
-                    });
+                    };
+                    // Attach the raw payload only in dev
+                    try {
+                      if (window && window.__TP_DEV) logEntry.identifyPayload = identify;
+                    } catch {}
+                    window.__obsHandshakeLog.push(logEntry);
                   } catch {}
                 } catch {}
               }
