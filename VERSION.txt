@@ -1,4 +1,4 @@
-1.6.0
-ANVIL build: 2025-10-12 00:00
-Baseline: feature/pll-controller
-Notes: PLL bias controller for hybrid auto-scroll, production defaults, guardrails, telemetry
+1.6.1
+ANVIL build: 2025-10-15 00:00
+Baseline: mainframe
+Notes: Bridge refactor, OBS guardrails (disk check, scene sanity, reconnect), UI updates and docs

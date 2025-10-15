@@ -1,4 +1,4 @@
-# Teleprompter Pro (v1.6.0)
+# Teleprompter Pro (v1.6.1)
 
 This is a browser-based teleprompter with display mirroring, speech sync, camera overlay, and convenient editing helpers.
 
