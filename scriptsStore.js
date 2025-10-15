@@ -22,7 +22,7 @@ function _write(list) {
   }
 }
 
-const Scripts = {
+export const Scripts = {
   init() {
     if (!_read().length) _write([]);
   },
@@ -66,9 +66,5 @@ const Scripts = {
   },
 };
 
-// Also expose as a global for non-module consumption
-try {
-  if (typeof window !== 'undefined') window.Scripts = Scripts;
-} catch (e) {
-  console.debug('scriptsStore expose failed', e);
-}
+// Also export default for convenience
+export default Scripts;

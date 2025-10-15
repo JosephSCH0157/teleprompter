@@ -1,6 +1,7 @@
 // ui/scripts-ui.js (ES module)
 import { safeDOM } from '../utils/safe-dom.js';
 import { toast as importedToast } from './toasts.js';
+import { Scripts } from '../scriptsStore.js';
 
 let currentScriptId = null;
 const scriptSlots = safeDOM.get('scriptSlots');
@@ -30,9 +31,10 @@ function setEditorContent(txt) {
 
 function refreshScriptsDropdown() {
   try {
-    const list = (window.Scripts || {}).list
-      ? window.Scripts.list().sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))
-      : [];
+    const list =
+      Scripts && typeof Scripts.list === 'function'
+        ? Scripts.list().sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))
+        : [];
     if (!scriptSlots) return;
     scriptSlots.innerHTML = list.map((s) => `<option value="${s.id}">${s.title}</option>`).join('');
     if (currentScriptId) scriptSlots.value = currentScriptId;
@@ -43,7 +45,7 @@ function refreshScriptsDropdown() {
 
 export function initScriptsUI() {
   try {
-    (window.Scripts || {}).init && window.Scripts.init();
+    Scripts && typeof Scripts.init === 'function' && Scripts.init();
     refreshScriptsDropdown();
   } catch (e) {
     console.debug('initScriptsUI', e);
@@ -53,9 +55,10 @@ export function initScriptsUI() {
 function onScriptSave() {
   try {
     const title = scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled';
-    currentScriptId = (window.Scripts || {}).save
-      ? window.Scripts.save({ id: currentScriptId, title, content: getEditorContent() })
-      : null;
+    currentScriptId =
+      Scripts && typeof Scripts.save === 'function'
+        ? Scripts.save({ id: currentScriptId, title, content: getEditorContent() })
+        : null;
     refreshScriptsDropdown();
     toastFn('Script saved', { type: 'ok' });
   } catch (e) {
@@ -71,7 +74,7 @@ function onScriptLoad() {
   try {
     const id = scriptSlots && scriptSlots.value;
     if (!id) return;
-    const s = (window.Scripts || {}).get ? window.Scripts.get(id) : null;
+    const s = Scripts && typeof Scripts.get === 'function' ? Scripts.get(id) : null;
     if (!s) return;
     currentScriptId = s.id;
     if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
@@ -85,7 +88,7 @@ function onScriptLoad() {
 function onScriptDelete() {
   try {
     if (!currentScriptId) return;
-    (window.Scripts || {}).remove && window.Scripts.remove(currentScriptId);
+    Scripts && typeof Scripts.remove === 'function' && Scripts.remove(currentScriptId);
     currentScriptId = null;
     scriptTitle && (scriptTitle.value = '');
     refreshScriptsDropdown();
@@ -103,7 +106,7 @@ function onScriptRename() {
       scriptTitle ? scriptTitle.value || 'Untitled' : 'Untitled'
     );
     if (t) {
-      (window.Scripts || {}).rename && window.Scripts.rename(currentScriptId, t);
+      Scripts && typeof Scripts.rename === 'function' && Scripts.rename(currentScriptId, t);
       scriptTitle && (scriptTitle.value = t);
       refreshScriptsDropdown();
     }
