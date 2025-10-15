@@ -28,6 +28,59 @@ try {
   }
 } catch {}
 
+// Developer helper: run the OBS adapter test from the page console and print structured logs.
+try {
+  window.__tpRunObsTest = async function __tpRunObsTest() {
+    try {
+      console.info('[TP-Pro] __tpRunObsTest: starting');
+      const r = window.__recorder;
+      if (!r) {
+        console.error('[TP-Pro] __tpRunObsTest: no window.__recorder found');
+        return;
+      }
+      if (typeof r.initBuiltIns === 'function') {
+        try {
+          console.info('[TP-Pro] __tpRunObsTest: awaiting initBuiltIns()');
+          await r.initBuiltIns();
+        } catch (e) {
+          console.warn('[TP-Pro] initBuiltIns() threw', e);
+        }
+      }
+      const obs = typeof r.get === 'function' ? r.get('obs') : null;
+      if (!obs) {
+        console.error(
+          '[TP-Pro] __tpRunObsTest: obs adapter missing; adapters:',
+          typeof r.all === 'function' ? r.all().map((a) => a.id || a.label) : '(unknown)'
+        );
+        return;
+      }
+      console.info('[TP-Pro] __tpRunObsTest: found obs adapter', obs);
+      try {
+        if (typeof obs.test === 'function') {
+          console.info('[TP-Pro] __tpRunObsTest: calling obs.test()');
+          await obs.test();
+          console.info('[TP-Pro] __tpRunObsTest: obs.test() succeeded');
+        } else if (typeof obs.isAvailable === 'function') {
+          console.info('[TP-Pro] __tpRunObsTest: calling obs.isAvailable()');
+          const ok = await obs.isAvailable();
+          console.info('[TP-Pro] __tpRunObsTest: isAvailable ->', ok);
+        } else {
+          console.warn('[TP-Pro] __tpRunObsTest: obs adapter has no test/isAvailable methods');
+        }
+      } catch (e) {
+        console.error(
+          '[TP-Pro] __tpRunObsTest: obs test failed',
+          e,
+          'adapterLastErr=',
+          typeof obs.getLastError === 'function' ? obs.getLastError() : null
+        );
+      }
+    } catch (outer) {
+      console.error('[TP-Pro] __tpRunObsTest: unexpected error', outer);
+    }
+  };
+} catch {}
+
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 const _toast = function (msg, opts) {
   try {
