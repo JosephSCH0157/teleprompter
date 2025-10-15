@@ -249,6 +249,41 @@ export async function initBuiltIns() {
       const a = m?.createOBSAdapter?.();
       if (a) adapters.push(a);
     } catch {}
+    try {
+      // If obsBridge exists, register a thin adapter that delegates to it. This keeps
+      // backwards compatibility for code that expects an adapter with id 'obs'.
+      if (typeof window !== 'undefined' && window.__obsBridge) {
+        const bridge = window.__obsBridge;
+        const wrapper = {
+          id: 'obs',
+          label: 'OBS (WebSocket) - bridge',
+          configure(cfg) {
+            try {
+              bridge.configure(cfg);
+            } catch {}
+          },
+          async isAvailable() {
+            try {
+              return bridge.isConnected
+                ? bridge.isConnected()
+                : bridge.isConnected && bridge.isConnected();
+            } catch {
+              return !!bridge.isConnected && bridge.isConnected();
+            }
+          },
+          async start() {
+            return bridge.start();
+          },
+          async stop() {
+            return bridge.stop();
+          },
+          async test() {
+            return bridge.getRecordStatus();
+          },
+        };
+        adapters.push(wrapper);
+      }
+    } catch {}
     for (const a of adapters) {
       try {
         register(a);
