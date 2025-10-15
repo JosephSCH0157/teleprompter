@@ -631,12 +631,53 @@
   let recAutoRestart = false;
   let lineIndex = null; // line index for viewport estimation
   // Mic is opt-in via explicit user request now; no auto-start
-  function _toast(msg, opts) {
-    // Lightweight fallback if the richer toast system was not injected
-    try {
-      console.debug('[toast]', msg, opts || '');
-    } catch {}
-  }
+  // Simple toast system: creates a floating container and places up to 3 toasts.
+  (function () {
+    const CONTAINER_ID = 'tp_toast_container';
+    const MAX_VISIBLE = 3;
+    const AUTO_FADE_MS = 4000;
+    function ensureContainer() {
+      let c = document.getElementById(CONTAINER_ID);
+      if (c) return c;
+      c = document.createElement('div');
+      c.id = CONTAINER_ID;
+      c.className = 'tp-toast-container';
+      document.body.appendChild(c);
+      return c;
+    }
+    function prune(container) {
+      const children = Array.from(container.children || []);
+      while (children.length > MAX_VISIBLE) {
+        const first = children.shift();
+        if (first && first.remove) first.remove();
+      }
+    }
+    window._toast = function (msg, opts) {
+      try {
+        const container = ensureContainer();
+        prune(container);
+        const t = document.createElement('div');
+        t.className = 'tp-toast show ' + (opts && opts.type ? String(opts.type) : '');
+        t.textContent = String(msg || '');
+        t.addEventListener('click', () => {
+          t.classList.remove('show');
+          setTimeout(() => t.remove(), 120);
+        });
+        container.appendChild(t);
+        // ensure max visible
+        prune(container);
+        // auto-fade
+        setTimeout(() => {
+          t.classList.remove('show');
+          setTimeout(() => t.remove(), 120);
+        }, AUTO_FADE_MS);
+      } catch {
+        try {
+          console.debug('[toast]', msg, opts || '');
+        } catch {}
+      }
+    };
+  })();
 
   window.addEventListener('error', (e) => setStatus('Boot error: ' + (e?.message || e)));
   window.addEventListener('unhandledrejection', (e) =>
@@ -3373,8 +3414,16 @@
       try {
         const el = document.getElementById('recChip');
         if (!el) return;
-        el.textContent = state === 'recording' ? 'Recording...' : 'Idle';
-        el.style.background = state === 'recording' ? '#a33' : '';
+        // normalize incoming states
+        const s = String(state || '').toLowerCase();
+        el.classList.remove('rec-recording', 'idle');
+        if (s === 'recording' || s === 'record') {
+          el.textContent = 'Recording...';
+          el.classList.add('rec-recording');
+        } else {
+          el.textContent = 'Idle';
+          el.classList.add('idle');
+        }
       } catch {}
     };
     // OBS runtime flags (safe defaults)
@@ -3437,7 +3486,12 @@
             }
             if (statusEl) {
               statusEl.textContent = text;
-              statusEl.className = 'chip ' + cls;
+              // map to semantic chip classes
+              statusEl.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
+              if (cls === 'ok') statusEl.classList.add('obs-connected');
+              else if (/offline|error|disconnect/i.test(text || ''))
+                statusEl.classList.add('obs-reconnecting');
+              else statusEl.classList.add('idle');
             }
           } catch {}
         };

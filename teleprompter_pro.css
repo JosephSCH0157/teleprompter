@@ -71,9 +71,11 @@ select { font-size: 14px; }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
-    .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10}
+    /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
+    .topbar{display:flex;align-items:baseline;gap:8px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10}
     .topbar strong{letter-spacing:.2px}
-    .chip{font-size:12px;color:var(--muted)}
+    /* top-bar label rhythm & consistency */
+    .chip{font-size:0.9rem;font-weight:600;color:var(--muted);border-radius:.5rem;padding:6px 8px}
     #debugPosChip{font-family:monospace; width:160px; flex-shrink:0; text-align:center}
 .legend{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
 .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--edge);border-radius:999px;font-size:12px;background:#0e141b}
@@ -91,7 +93,16 @@ select { font-size: 14px; }
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
     .panel h2{margin:0 0 12px;font-size:18px}
     .panel .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-    button,select,input[type="number"],input[type="text"]{background:#0e141b;color:var(--fg);border:1px solid var(--edge);padding:8px 10px;border-radius:10px;cursor:pointer}
+    /* buttons/inputs: consistent radius and rhythm (multiples of 4/8) */
+    :root{ --btn-radius: .5rem; }
+    button,select,input[type="number"],input[type="text"]{background:#0e141b;color:var(--fg);border:1px solid var(--edge);padding:8px 12px;border-radius:var(--btn-radius);cursor:pointer}
+
+    /* subtle focus ring for keyboard accessibility */
+    button:focus, input:focus, select:focus, textarea:focus{ outline:2px solid rgba(255,255,255,.08); outline-offset:2px; }
+    button:focus-visible{ outline:2px solid rgba(255,255,255,.3); }
+
+    /* hover/active transitions for smoothness */
+    button, .chip, input, select, textarea{ transition: all 0.1s ease-out; }
 
     /* Make the Auto-scroll speed input easier to adjust with mouse/touch
        - slightly wider for click targets
@@ -114,7 +125,7 @@ select { font-size: 14px; }
     .btn-subtle{opacity:.9}
     textarea{width:100%;min-height:160px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px}
     .status{font-size:12px;color:var(--muted)}
-    .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:8px 0}
+    .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:0 0 0 8px}
 
     .viewer{position:relative;overflow:auto;min-height:0}
     .script{max-width:900px;margin:0 auto;padding:40px}
@@ -145,8 +156,8 @@ select { font-size: 14px; }
 .obs-status{opacity:.75}
 .obs-url{min-width:210px}
 .obs-pass{min-width:140px}
-/* Settings overlay */
 .settings-sheet{max-width:860px}
+.settings-sheet .sheet{max-height:80vh; overflow-y:auto}
 .settings-title{margin:0}
 .settings-body{display:flex;flex-direction:column;gap:18px}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
@@ -182,3 +193,17 @@ body.ck::after{
 
 /* Mirror mode for teleprompter */
 .mirror .viewer{ transform: scaleX(-1); }
+
+/* Toast system */
+.tp-toast-container{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:2147483646;max-width:320px}
+.tp-toast{background:#0e141b;border:1px solid var(--edge);color:var(--fg);padding:10px 12px;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.6);opacity:0;transform:translateY(6px) scale(.99);transition:all 0.1s ease-out}
+.tp-toast.show{opacity:1;transform:translateY(0) scale(1)}
+.tp-toast.warn{border-color:#E0A43C}
+.tp-toast.error{border-color:#E03E3E}
+.tp-toast.ok{border-color:#3CE07A}
+
+/* status color tokens for chips */
+.chip.rec-recording{background:#3e0b0b;color:#ffd6d6;border-color:#E03E3E}
+.chip.obs-connected{background:#06371a;color:#dfffe8;border-color:#3CE07A}
+.chip.obs-reconnecting{background:#31250f;color:#fff6e8;border-color:#E0A43C}
+.chip.idle{background:#0e141b;color:var(--muted);border-color:var(--edge)}
