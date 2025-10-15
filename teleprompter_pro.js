@@ -4079,7 +4079,9 @@ const _toast = function (msg, opts) {
               isEnabled: () => !!enableObsChk?.checked,
               onStatus: (txt, ok) => {
                 try {
-                  if (obsStatus) obsStatus.textContent = txt || '';
+                  const chip =
+                    document.getElementById('obsStatus') || document.getElementById('recChip');
+                  if (chip) chip.textContent = `OBS: ${txt || ''}`;
                 } catch {}
                 try {
                   _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
