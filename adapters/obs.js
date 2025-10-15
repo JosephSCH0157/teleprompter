@@ -36,7 +36,7 @@ export function createOBSAdapter() {
         } catch {}
         identified = false;
         _lastErr = null;
-        const url = cfg.url || 'ws://127.0.0.1:4455';
+        const url = cfg.url || 'ws://192.168.1.198:4455';
         ws = new WebSocket(url);
 
         ws.onmessage = async (ev) => {
