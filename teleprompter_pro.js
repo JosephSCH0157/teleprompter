@@ -3910,7 +3910,7 @@
       try {
         saveObsConfig();
         if (typeof window !== 'undefined' && window.__obsBridge) {
-          const s = await window.__obsBridge.getRecordStatus();
+          await window.__obsBridge.getRecordStatus();
           if (obsStatus) obsStatus.textContent = 'OBS: ok';
         } else if (__recorder?.get && __recorder.get('obs')?.test) {
           await __recorder.get('obs').test();
@@ -7657,49 +7657,97 @@
     let __prerollStarted = false;
     // Helper: minimal recording ensure using adapter (GetRecordStatus -> StartRecord)
     async function ensureRecordingMini() {
+      const bridge =
+        typeof window !== 'undefined' && window.__obsBridge ? window.__obsBridge : null;
+      if (!bridge && !window.__obsConnected && !(window.__recorder && window.__recorder.get))
+        return false;
+      const a = bridge ? null : window.__recorder?.get?.('obs');
+
+      // 1) Disk space check (best-effort)
       try {
-        if (!window.__obsConnected && !(window.__recorder && window.__recorder.get)) return false;
-        const a = window.__recorder?.get?.('obs');
-        if (a) {
+        if (bridge && typeof bridge.getStats === 'function') {
+          const stats = await bridge.getStats();
+          const free = stats?.recording?.freeDiskSpace || stats?.free_disk_space || null;
+          let freeBytes = null;
+          if (typeof free === 'number') freeBytes = free;
+          else if (typeof free === 'string' && /^\d+$/.test(free)) freeBytes = Number(free);
+          if (freeBytes !== null) {
+            const minBytes = 2 * 1024 * 1024 * 1024; // 2 GB
+            if (freeBytes < minBytes) {
+              _toast('Low disk space on OBS host — recording may fail', { type: 'warn' });
+            }
+          }
+        }
+      } catch {
+        // ignore stats errors
+      }
+
+      // 2) If already recording, skip StartRecord
+      try {
+        const s = bridge
+          ? await bridge.getRecordStatus()
+          : await (a.call ? a.call('GetRecordStatus') : a.getStatus?.());
+        if (s && s.outputActive) {
           try {
-            const s = await (a.call ? a.call('GetRecordStatus') : a.getStatus?.());
-            if (s && s.outputActive) return true;
+            window.setRecChip && window.setRecChip('recording');
           } catch {}
-          // Scene sanity: if settings include a preferred scene, set it before starting
+          return true;
+        }
+      } catch {
+        // ignore GetRecordStatus errors and continue
+      }
+
+      // 3) Scene sanity (preferred scene or fallback)
+      try {
+        const settings = __recorder.getSettings?.() || {};
+        let sceneName = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
+        if (!sceneName) sceneName = 'Anvil-Default';
+        if (sceneName) {
           try {
-            const settings = __recorder.getSettings?.() || {};
-            const sceneName =
-              settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
-            if (sceneName) {
-              try {
-                if (a.call) await a.call('SetCurrentProgramScene', { sceneName });
-                else if (typeof a.setCurrentProgramScene === 'function')
-                  await a.setCurrentProgramScene(sceneName);
-                else if (window.obsSocket && typeof window.obsSocket.call === 'function')
-                  await window.obsSocket.call('SetCurrentProgramScene', { sceneName });
-              } catch {}
-            }
-          } catch {}
-          try {
-            if (typeof a.start === 'function') {
-              await a.start();
-              try {
-                window.setRecChip('recording');
-                window.__obsLastRecEventAt = Date.now();
-              } catch {}
-              return true;
-            }
-            if (a.call) {
-              await a.call('StartRecord');
-              try {
-                window.setRecChip('recording');
-                window.__obsLastRecEventAt = Date.now();
-              } catch {}
-              return true;
-            }
+            if (bridge && typeof bridge.setCurrentProgramScene === 'function')
+              await bridge.setCurrentProgramScene(sceneName);
+            else if (a && a.call) await a.call('SetCurrentProgramScene', { sceneName });
+            else if (typeof a.setCurrentProgramScene === 'function')
+              await a.setCurrentProgramScene(sceneName);
+            else if (window.obsSocket && typeof window.obsSocket.call === 'function')
+              await window.obsSocket.call('SetCurrentProgramScene', { sceneName });
           } catch {}
         }
       } catch {}
+
+      // 4) Start recording (bridge preferred)
+      try {
+        if (bridge) {
+          await bridge.start();
+          try {
+            window.setRecChip('recording');
+            window.__obsLastRecEventAt = Date.now();
+          } catch {}
+          return true;
+        }
+        if (a) {
+          if (typeof a.start === 'function') {
+            await a.start();
+            try {
+              window.setRecChip('recording');
+              window.__obsLastRecEventAt = Date.now();
+            } catch {}
+            return true;
+          }
+          if (a.call) {
+            await a.call('StartRecord');
+            try {
+              window.setRecChip('recording');
+              window.__obsLastRecEventAt = Date.now();
+            } catch {}
+            return true;
+          }
+        }
+      } catch {
+        // start failed
+        return false;
+      }
+
       return false;
     }
     const show = (v) => {
@@ -7729,19 +7777,19 @@
                     }
                   } catch {}
                 } else {
-                  // Wait briefly for adapter/websocket event to confirm; if not seen, warn
+                  // Wait ~1.5s for RecordStateChanged confirmation; show clickable retry on failure
                   const t0 = Date.now();
                   const saw = await new Promise((resolve) => {
                     const id = setInterval(() => {
                       if (
                         window.__obsLastRecEventAt &&
-                        Date.now() - window.__obsLastRecEventAt < 1200
+                        Date.now() - window.__obsLastRecEventAt < 1600
                       ) {
                         clearInterval(id);
                         resolve(true);
                         return;
                       }
-                      if (Date.now() - t0 > 1100) {
+                      if (Date.now() - t0 > 1500) {
                         clearInterval(id);
                         resolve(false);
                         return;
@@ -7749,7 +7797,15 @@
                     }, 150);
                   });
                   if (!saw) {
-                    _toast('OBS not recording — click to retry', { type: 'error' });
+                    _toast("OBS didn't confirm recording — click to retry", {
+                      type: 'error',
+                      onClick: async () => {
+                        _toast('Retrying OBS start…');
+                        try {
+                          await ensureRecordingMini();
+                        } catch {}
+                      },
+                    });
                   }
                 }
               } catch {}

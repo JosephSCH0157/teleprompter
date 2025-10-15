@@ -23,6 +23,18 @@ function _getElem(id) {
   }
 }
 
+// Return OBS stats (GetStats) if available
+async function _getStats() {
+  try {
+    await _connectOnce();
+    if (!_obsClient) return null;
+    return await _obsClient.call('GetStats');
+  } catch (e) {
+    _emit('error', e);
+    return null;
+  }
+}
+
 function _setObsConnChip(connected) {
   try {
     window.__obsConnected = !!connected;
@@ -161,6 +173,9 @@ const bridge = {
       _emit('error', e);
       return { outputActive: false };
     }
+  },
+  async getStats() {
+    return _getStats();
   },
   async setCurrentProgramScene(sceneName) {
     try {
