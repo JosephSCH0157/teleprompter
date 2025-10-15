@@ -715,7 +715,6 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     if (window.__help?.showCopyDialog) return window.__help.showCopyDialog(text, title);
     // fallback: simple alert
     alert(String(title)+"\n\n"+String(text||''));
-  }
 
   // Global helper: show validation output in the Help overlay's panel with copy support
   window.showValidation = function showValidation(text){
@@ -1215,28 +1214,7 @@ function ensureHelpUI(){
   }
 
     // Scripts UI wiring moved to ui/scripts-ui.js to reduce main file size and fragility.
-          });
-        }
-      }
-      const pre = panel.querySelector('#validateOut');
-      pre.textContent = (String(text||'').trim()) || 'No issues found.';
-      panel.classList.remove('hidden');
-      // focus so Ctrl/Cmd+C works immediately
-      pre.focus();
-      // auto-select all for instant copy
-      try {
-        const sel = window.getSelection(); const r = document.createRange();
-        r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
-      } catch {}
-    };
-
-    validateBtn.onclick = () => {
-      let msg;
-      try { msg = window.validateStandardTags ? window.validateStandardTags(true) : 'Validator missing.'; }
-      catch(e){ msg = 'Validation error: ' + (e?.message||e); }
-      try { window.showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); }
-    };
-  }
+    // (End of ensureHelpUI function)
 }
 try { __tpBootPush('after-ensureHelpUI-def'); } catch {}
 
@@ -1427,117 +1405,12 @@ async function _initCore() {
         break;
       case '1':
         wrapSelection('[s1]', '[/s1]');
-          // Toast shim: delegate to `window.toast` provided by ui/toasts.js when available,
-          // otherwise fallback to console debug. Keeps legacy _toast callers functional.
-          (function(){
-            window._toast = function(msg, opts){
-              try{
-                if (typeof window !== 'undefined' && typeof window.toast === 'function'){
-                  try{ window.toast(msg, opts); return; }catch(e){ /* fallthrough */ }
-                }
-                console.debug('[toast]', msg, opts || '');
-              }catch{}
-            };
-          })();
-    let fbDelay = 250, fbTimer = 0;
-    window.__tpScheduleFallback = function(fn){
-      if (fbTimer) return;
-      fbTimer = setTimeout(async () => {
-        fbTimer = 0;
-        let didSomething = false;
-        try { didSomething = !!(await fn()); } catch {}
-        fbDelay = didSomething ? 250 : Math.min(fbDelay * 2, 2000);
-      }, fbDelay);
-    };
-
-    function syncDisplay(){
-      try{
-        const viewer = document.getElementById('viewer');
-        if (!viewer) return;
-        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-        const ratio = max ? (viewer.scrollTop / max) : 0;
-        sendToDisplay && sendToDisplay({ type:'scroll', top: viewer.scrollTop, ratio });
-      } catch {}
+        break;
+      // Add more cases as needed
+      default:
+        break;
     }
-
-    window.__tpFallbackNudge = function(bestIdx){
-      const now = performance.now();
-      if (now - S.lastAt < F.coolDownMs) {
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge:cooldown' }); } catch {}
-        return false;
-      }
-      S.lastAt = now;
-
-      const viewer = document.getElementById('viewer');
-      if (!viewer) return false;
-
-      // 1) small push phase
-      if (S.smallPushes < F.maxSmallPushes) {
-        const to = viewer.scrollTop + F.stepPx;
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: to, idx: bestIdx, phase:'small' }); } catch {}
-        try { viewer.scrollTo({ top: to, behavior: 'instant' }); } catch { viewer.scrollTop = to; }
-        syncDisplay();
-        S.smallPushes++;
-        return true;
-      }
-
-      // 2) mini-seek: try to locate an element around bestIdx
-      const tryIdxs = [];
-      for (let k = -F.miniSeekIdxSpan; k <= F.miniSeekIdxSpan; k++) tryIdxs.push(bestIdx + k);
-      const el = tryIdxs
-        .map(i => document.querySelector(`[data-idx="${i}"],[data-token-idx="${i}"],.line[data-i="${i}"]`))
-        .find(Boolean);
-
-      if (el) {
-        const y = (el.offsetTop || 0) - Math.floor((viewer.clientHeight || 0) * 0.33);
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', top: y, idx: bestIdx, phase:'mini-seek' }); } catch {}
-        try { viewer.scrollTo({ top: y, behavior: 'instant' }); } catch { viewer.scrollTop = y; }
-        syncDisplay();
-        S.smallPushes = 0; // reset after successful mini-seek
-        return true;
-      }
-
-      // 3) anchor jump (last resort)
-      if (typeof window.scrollToCurrentIndex === 'function') {
-        try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'anchor-jump' }); } catch {}
-        const prev = window.currentIndex;
-        window.currentIndex = bestIdx;
-        try { window.scrollToCurrentIndex(); } finally { window.currentIndex = prev; }
-        S.smallPushes = 0;
-        syncDisplay();
-        return true;
-      }
-
-      // If nothing else, log and bail
-      try { if (typeof debug === 'function') debug({ tag:'fallback-nudge', idx: bestIdx, phase:'noop' }); } catch {}
-      return false;
-    };
-  })();
-
-  // Stall-recovery watchdog: if matching goes quiet, nudge forward gently
-  setInterval(() => {
-    if (window.__TP_DISABLE_NUDGES) return;
-    // Only run nudges while recognizer is actively listening
-    if (!speechOn || !viewer) return;
-    if (typeof autoTimer !== 'undefined' && autoTimer) return; // don't fight auto-scroll
-    const now = performance.now();
-  const MISS_FALLBACK_MS = 1800;   // no matches for ~1.8s
-    // If similarity has been in the mid band (0.72–0.80) very recently, wait a couple frames (~300ms)
-    try {
-      const sim = (window.__lastSimScore ?? null);
-      if (sim !== null && sim >= 0.72 && sim < 0.80) {
-        window.__tpLastMidSimAt = now;
-      }
-    } catch {}
-    const recentMid = (typeof window.__tpLastMidSimAt === 'number') && ((now - window.__tpLastMidSimAt) < 300);
-    if (now - _lastAdvanceAt > MISS_FALLBACK_MS) {
-      if (recentMid) { return; }
-      try { window.__tpScheduleFallback?.(() => window.__tpFallbackNudge?.(currentIndex || 0)); } catch {}
-      _lastAdvanceAt = now; // cool-off gate for next nudge check
-      // dead-man watchdog after logical index adjustment
-      try { deadmanWatchdog(currentIndex); } catch {}
-    }
-  }, 250);
+  });
 
   // After wiring open/close for the overlay:
   (window.__help?.ensureHelpUI || ensureHelpUI)();  // <- renames “Shortcuts” to “Help” and injects Normalize + Validate
@@ -4328,4 +4201,6 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 // end about popover
-})(); // end main IIFE (restored)
+}
+// <-- add this closing brace to end the IIFE
+})();
