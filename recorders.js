@@ -404,11 +404,34 @@ export function connect({ testOnly } = {}) {
               const rpcVersion = 1;
               let auth;
               if (challenge && salt && pass) {
+                // Decode base64 salt to bytes
+                const base64ToUint8Array = (b64Str) => {
+                  try {
+                    const bin = atob(b64Str);
+                    const a = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+                    return a;
+                  } catch {
+                    return new Uint8Array();
+                  }
+                };
+                const concatUint8 = (a, b) => {
+                  const out = new Uint8Array(a.length + b.length);
+                  out.set(a, 0);
+                  out.set(b, a.length);
+                  return out;
+                };
                 const enc = (s) => new TextEncoder().encode(s);
                 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-                const sha = (s) => crypto.subtle.digest('SHA-256', enc(s));
-                const secret = await sha(salt + pass);
-                const authBuf = await sha(pass + b64(secret) + challenge);
+
+                const saltBytes = base64ToUint8Array(salt);
+                const passBytes = enc(pass);
+                const secretInput = concatUint8(saltBytes, passBytes);
+                const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
+                const secretB64 = b64(secretBuf);
+
+                const authInputStr = pass + secretB64 + challenge;
+                const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
                 auth = b64(authBuf);
               }
               _ws.send(JSON.stringify({ op: 1, d: { rpcVersion, authentication: auth } }));

@@ -14,13 +14,41 @@ export function createOBSAdapter() {
 
   const enc = (s) => new TextEncoder().encode(s);
   const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-  const sha = (s) => crypto.subtle.digest('SHA-256', enc(s));
+
+  function base64ToUint8Array(b64) {
+    try {
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return arr;
+    } catch {
+      return new Uint8Array();
+    }
+  }
+
+  function concatUint8(a, b) {
+    const out = new Uint8Array(a.length + b.length);
+    out.set(a, 0);
+    out.set(b, a.length);
+    return out;
+  }
 
   async function computeAuth(pass, authInfo) {
+    // Follow OBS WebSocket v5 spec:
+    // secret = SHA256(saltBytes + UTF8(password)) where salt is base64-decoded
+    // auth = base64(SHA256( UTF8(password + base64(secret)) + challenge ))
     if (!authInfo || !authInfo.challenge || !authInfo.salt) return undefined;
     const password = String(pass ?? '');
-    const secret = await sha(authInfo.salt + password);
-    const authBuf = await sha(password + b64(secret) + authInfo.challenge);
+    // salt is provided as base64; decode to bytes
+    const saltBytes = base64ToUint8Array(authInfo.salt);
+    const passBytes = enc(password);
+    const secretInput = concatUint8(saltBytes, passBytes);
+    const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
+    const secretB64 = b64(secretBuf);
+
+    // compute authentication: SHA256( UTF8(password + secretB64 + challenge) )
+    const authInputStr = password + secretB64 + authInfo.challenge;
+    const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
     return b64(authBuf);
   }
 
