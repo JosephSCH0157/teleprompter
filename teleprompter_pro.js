@@ -1034,6 +1034,13 @@ const _toast = function (msg, opts) {
   } catch {}
 
   function syncSettingsValues() {
+    // Ensure OBS fields are hydrated from storage and persistence is wired before we mirror values
+    try {
+      hydrateObsFieldsFromStore();
+    } catch {}
+    try {
+      wireObsPersistence();
+    } catch {}
     // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
     const micSel = document.getElementById('settingsMicSel');
     if (micSel && !micSel.options.length) {
@@ -1091,13 +1098,19 @@ const _toast = function (msg, opts) {
     try {
       const obsUrlS = document.getElementById('settingsObsUrl');
       const mainUrl = document.getElementById('obsUrl');
-      if (obsUrlS && mainUrl && typeof mainUrl.value === 'string') obsUrlS.value = mainUrl.value;
-    } catch {}
-    try {
       const obsPassS = document.getElementById('settingsObsPass');
       const mainPass = document.getElementById('obsPassword');
-      if (obsPassS && mainPass && typeof mainPass.value === 'string')
-        obsPassS.value = mainPass.value;
+      // Only mirror non-empty -> empty, never empty -> non-empty
+      try {
+        if (obsUrlS && mainUrl && !obsUrlS.value && mainUrl.value) obsUrlS.value = mainUrl.value;
+        if (mainUrl && obsUrlS && !mainUrl.value && obsUrlS.value) mainUrl.value = obsUrlS.value;
+      } catch {}
+      try {
+        if (obsPassS && mainPass && !obsPassS.value && mainPass.value)
+          obsPassS.value = mainPass.value;
+        if (mainPass && obsPassS && !mainPass.value && obsPassS.value)
+          mainPass.value = obsPassS.value;
+      } catch {}
     } catch {}
 
     // restore the 'remember password' checkbox from persisted preference
@@ -2344,6 +2357,80 @@ const _toast = function (msg, opts) {
     } catch {
       /* ignore */
     }
+  }
+
+  // Hydrate OBS fields from persistent store (do this early, before settings sync)
+  function hydrateObsFieldsFromStore() {
+    try {
+      const loadObsCreds = function () {
+        try {
+          const url = localStorage.getItem('tp_obs_url') || '';
+          const pass =
+            sessionStorage.getItem('tp_obs_password') ||
+            localStorage.getItem('tp_obs_password') ||
+            '';
+          const remember = localStorage.getItem('tp_obs_remember') === '1';
+          return { url, pass, remember };
+        } catch {
+          return { url: '', pass: '', remember: false };
+        }
+      };
+      const { url, pass, remember } = loadObsCreds();
+      const urlMain = document.getElementById('obsUrl');
+      const passMain = document.getElementById('obsPassword');
+      const urlSet = document.getElementById('settingsObsUrl');
+      const passSet = document.getElementById('settingsObsPass');
+      const chkMain = document.getElementById('rememberObs');
+      const chkSet = document.getElementById('settingsObsRemember');
+
+      if (url && urlMain && !urlMain.value) urlMain.value = url;
+      if (url && urlSet && !urlSet.value) urlSet.value = url;
+      if (pass && passMain && !passMain.value) passMain.value = pass;
+      if (pass && passSet && !passSet.value) passSet.value = pass;
+
+      if (chkMain) chkMain.checked = !!remember;
+      if (chkSet) chkSet.checked = !!remember;
+    } catch {}
+  }
+
+  function wireObsPersistence() {
+    try {
+      const urlMain = document.getElementById('obsUrl');
+      const passMain = document.getElementById('obsPassword');
+      const chkMain = document.getElementById('rememberObs');
+      const getVals = () => ({
+        url: urlMain?.value?.trim() || '',
+        pass: passMain?.value || '',
+        remember: !!chkMain?.checked,
+      });
+      const commit = () => {
+        try {
+          const v = getVals();
+          if (!v.url && !v.pass) return;
+          try {
+            sessionStorage.setItem('tp_obs_password', v.pass);
+          } catch {}
+          try {
+            localStorage.setItem('tp_obs_url', v.url);
+          } catch {}
+          try {
+            localStorage.setItem('tp_obs_remember', v.remember ? '1' : '0');
+          } catch {}
+          if (!v.remember) {
+            try {
+              localStorage.removeItem('tp_obs_password');
+            } catch {}
+          } else {
+            try {
+              localStorage.setItem('tp_obs_password', v.pass);
+            } catch {}
+          }
+        } catch {}
+      };
+      urlMain?.addEventListener('change', commit);
+      passMain?.addEventListener('change', commit);
+      chkMain?.addEventListener('change', commit);
+    } catch {}
   }
 
   // TP: init-minimal
