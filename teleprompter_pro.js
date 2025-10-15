@@ -115,15 +115,20 @@
   } catch {}
 
   // Listen for endgame completion
-  window.addEventListener('end:reached', (ev) => {
+  window.addEventListener('end:reached', async (ev) => {
     console.log('[ENDGAME] Script completed!', ev.detail);
-    // Could add UI feedback here like a toast notification
-    // or automatically prepare for next script
+    // Stop recording if auto-record enabled
     try {
       if (window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
         try {
-          window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
-        } catch {}
+          if (typeof ensureStopped === 'function') await ensureStopped();
+          else
+            window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
+        } catch {
+          try {
+            window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
+          } catch {}
+        }
       }
     } catch {}
   });
@@ -3369,6 +3374,10 @@
         el.style.background = state === 'recording' ? '#a33' : '';
       } catch {}
     };
+    // OBS runtime flags (safe defaults)
+    window.__obsConnected = false;
+    window.__obsRecArmed = false;
+    window.__obsLastRecEventAt = 0;
     // Unified OBS command helper: use recorder adapter exclusively (preferred)
     window.obsCommand = function (cmd) {
       try {
@@ -3738,10 +3747,24 @@
             const msg = JSON.parse(e.data || '{}');
             if (msg && msg.op === 5 && msg.d && msg.d.eventType === 'RecordStateChanged') {
               const active = !!(msg.d.eventData && msg.d.eventData.outputActive);
+              window.__obsLastRecEventAt = Date.now();
               window.setRecChip(active ? 'recording' : 'idle');
+              // clear armed flag when we see recording
+              if (active) window.__obsRecArmed = false;
             }
           } catch {}
         });
+        // reflect socket open/close on UI chip
+        try {
+          window.obsSocket.addEventListener('open', () => {
+            window.__obsConnected = true;
+            window.refreshObsStatus && window.refreshObsStatus();
+          });
+          window.obsSocket.addEventListener('close', () => {
+            window.__obsConnected = false;
+            window.refreshObsStatus && window.refreshObsStatus();
+          });
+        } catch {}
       }
     } catch {}
 
@@ -7560,6 +7583,30 @@
     let n = sec;
     // TP: preroll-controls
     let __prerollStarted = false;
+    // Helper: minimal recording ensure using adapter (GetRecordStatus -> StartRecord)
+    async function ensureRecordingMini() {
+      try {
+        if (!window.__obsConnected && !(window.__recorder && window.__recorder.get)) return false;
+        const a = window.__recorder?.get?.('obs');
+        if (a) {
+          try {
+            const s = await (a.call ? a.call('GetRecordStatus') : a.getStatus?.());
+            if (s && s.outputActive) return true;
+          } catch {}
+          try {
+            if (typeof a.start === 'function') {
+              await a.start();
+              return true;
+            }
+            if (a.call) {
+              await a.call('StartRecord');
+              return true;
+            }
+          } catch {}
+        }
+      } catch {}
+      return false;
+    }
     const show = (v) => {
       countNum.textContent = String(v);
       countOverlay.style.display = 'flex';
@@ -7568,10 +7615,50 @@
         if (!__prerollStarted && window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
           __prerollStarted = true;
           try {
-            window.obsCommand({
-              op: 6,
-              d: { requestType: 'StartRecord', requestId: 'anvil-start' },
-            });
+            if (window.__obsRecArmed) return;
+            window.__obsRecArmed = true;
+            (async () => {
+              try {
+                const ok = await ensureRecordingMini();
+                if (!ok) {
+                  _toast("Couldn't start OBS recording", { type: 'error' });
+                  // allow manual retry via top rec chip
+                  try {
+                    const c = document.getElementById('recChip');
+                    if (c) {
+                      c.style.cursor = 'pointer';
+                      c.onclick = async () => {
+                        _toast('Retrying OBS start…');
+                        await ensureRecordingMini();
+                      };
+                    }
+                  } catch {}
+                } else {
+                  // Wait briefly for adapter/websocket event to confirm; if not seen, warn
+                  const t0 = Date.now();
+                  const saw = await new Promise((resolve) => {
+                    const id = setInterval(() => {
+                      if (
+                        window.__obsLastRecEventAt &&
+                        Date.now() - window.__obsLastRecEventAt < 1200
+                      ) {
+                        clearInterval(id);
+                        resolve(true);
+                        return;
+                      }
+                      if (Date.now() - t0 > 1100) {
+                        clearInterval(id);
+                        resolve(false);
+                        return;
+                      }
+                    }, 150);
+                  });
+                  if (!saw) {
+                    _toast('OBS not recording — click to retry', { type: 'error' });
+                  }
+                }
+              } catch {}
+            })();
           } catch {}
         }
       } catch {}
