@@ -175,6 +175,22 @@ export function createOBSAdapter() {
                 _candidateList = Array.isArray(computed && computed.candidates)
                   ? computed.candidates
                   : [];
+                // Dev-only: record the full computed candidate list so we can map labels to auth strings
+                try {
+                  if (window && window.__TP_DEV) {
+                    window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+                    window.__obsHandshakeLog.push({
+                      t: Date.now(),
+                      event: 'candidates-computed',
+                      secretB64: computed && computed.secretB64,
+                      candidates: (_candidateList || []).map(function (c) {
+                        return { label: c.label, auth: c.auth };
+                      }),
+                    });
+                  }
+                } catch (ex) {
+                  void ex;
+                }
                 _candidateIndex = typeof forceVariant === 'number' ? forceVariant : 0;
                 if (_candidateIndex < 0) _candidateIndex = 0;
 
