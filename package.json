@@ -6,6 +6,8 @@
   "scripts": {
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
+    "dev": "npx live-server --port=8080 --no-browser --watch=.",
+    "smoke": "node ./tools/smoke_test.js",
     "types": "tsc -p jsconfig.json --noEmit",
     "check": "npm run lint && npm run types",
     "prepare": "husky"
@@ -18,6 +20,10 @@
     "lint-staged": "^16.2.3",
     "prettier": "^3.3.0",
     "typescript": "^5.6.0"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.40.0",
+    "puppeteer": "^20.0.0"
   },
   "lint-staged": {
     "*.{js,jsx}": [

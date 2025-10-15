@@ -38,3 +38,23 @@ Notes
 - The dev task in VS Code (`Serve (live-server)`) uses `npx live-server` to provide live-reload when files change.
 - If you prefer not to use live reload, start the server via `npx http-server -p 8080 -c-1` instead.
 - Modules are used for small helpers; serve over HTTP (file:// may block module imports).
+
+NPM helpers
+
+1. Install dev deps (optional — live-server will also work via npx):
+
+```powershell
+npm install
+```
+
+2. Run the dev script via npm (alternative to dev-start.ps1):
+
+```powershell
+npm run dev
+```
+
+3. Run the smoke test (requires Playwright or Puppeteer):
+
+```powershell
+npm run smoke
+```
