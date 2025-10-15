@@ -7593,13 +7593,36 @@
             const s = await (a.call ? a.call('GetRecordStatus') : a.getStatus?.());
             if (s && s.outputActive) return true;
           } catch {}
+          // Scene sanity: if settings include a preferred scene, set it before starting
+          try {
+            const settings = __recorder.getSettings?.() || {};
+            const sceneName =
+              settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
+            if (sceneName) {
+              try {
+                if (a.call) await a.call('SetCurrentProgramScene', { sceneName });
+                else if (typeof a.setCurrentProgramScene === 'function')
+                  await a.setCurrentProgramScene(sceneName);
+                else if (window.obsSocket && typeof window.obsSocket.call === 'function')
+                  await window.obsSocket.call('SetCurrentProgramScene', { sceneName });
+              } catch {}
+            }
+          } catch {}
           try {
             if (typeof a.start === 'function') {
               await a.start();
+              try {
+                window.setRecChip('recording');
+                window.__obsLastRecEventAt = Date.now();
+              } catch {}
               return true;
             }
             if (a.call) {
               await a.call('StartRecord');
+              try {
+                window.setRecChip('recording');
+                window.__obsLastRecEventAt = Date.now();
+              } catch {}
               return true;
             }
           } catch {}
