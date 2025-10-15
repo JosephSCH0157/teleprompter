@@ -1214,144 +1214,7 @@ function ensureHelpUI(){
     st.id = 'helpStyles'; st.textContent = css; document.head.appendChild(st);
   }
 
-  // --- ensure Help button exists in the top bar ---
-  const topBarEl = document.querySelector('.topbar');
-  let helpBtn = document.getElementById('shortcutsBtn');
-  if (!helpBtn) {
-    helpBtn = Object.assign(document.createElement('button'), {
-      id: 'shortcutsBtn', className: 'chip', textContent: 'Help',
-      ariaHasPopup: 'dialog', ariaExpanded: 'false'
-    });
-  topBarEl && topBarEl.appendChild(helpBtn);
-  } else {
-    helpBtn.textContent = 'Help';
-  }
-
-  // --- ensure overlay exists ---
-  let overlay = document.getElementById('shortcutsOverlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'shortcutsOverlay';
-    overlay.className = 'overlay hidden';
-    overlay.setAttribute('role','dialog');
-    overlay.setAttribute('aria-modal','true');
-    overlay.setAttribute('aria-labelledby','shortcutsTitle');
-    overlay.innerHTML = `
-      <div class="sheet">
-        <header>
-          <h3 id="shortcutsTitle">Help</h3>
-          <button id="shortcutsClose" class="btn-chip">Close</button>
-        </header>
-
-        <div class="shortcuts-grid" style="margin-bottom:8px">
-          <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-          <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed</div>
-          <div><strong>Shift + ?</strong></div><div>Open Help</div>
-          <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
-          <div><strong>~</strong></div><div>Debug HUD</div>
-          <div><strong>?v=clear</strong></div><div>Force refresh</div>
-        </div>
-
-        <hr class="hr" />
-        <div>
-          <h4 style="margin:8px 0 6px">Official Teleprompter Tags</h4>
-          <p style="margin:0 0 8px; color:#96a0aa">Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.</p>
-          <!-- Tag guide will be augmented below if missing Normalize/Validate -->
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-  }
-
-  // If we reused an existing overlay, inject Tag Guide only if a Tags heading is NOT already present
-  if (overlay && !overlay.querySelector('#normalizeBtn') && !overlay.querySelector('#guideNormalize')){
-    const sheet = overlay.querySelector('.sheet') || overlay;
-    const hasTagsHeading = !!sheet.querySelector('h4') && Array.from(sheet.querySelectorAll('h4')).some(h=>/Official\s+Teleprompter\s+Tags/i.test(h.textContent||''));
-    if (!hasTagsHeading){
-      const container = document.createElement('div');
-      container.innerHTML = `
-        <hr class="hr" />
-        <div class="tp-tags-block">
-          <h4 style="margin:8px 0 6px">Official Teleprompter Tags</h4>
-          <p style="margin:0 0 8px; color:#96a0aa">
-            Speakers: <code>[s1] ... [/s1]</code>, <code>[s2] ... [/s2]</code>. Notes: <code>[note] ... [/note]</code>.
-          </p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
-            <button id="normalizeBtn" class="btn-chip">Normalize current script</button>
-            <button id="validateBtn" class="btn-chip">Validate markup</button>
-          </div>
-        </div>`;
-      sheet.appendChild(container);
-    }
-  }
-
-  // If missing, append the optional Advanced section (hidden by default)
-  if (overlay && !overlay.querySelector('#helpAdvanced')){
-    const sheet = overlay.querySelector('.sheet') || overlay;
-    const adv = document.createElement('div');
-    adv.innerHTML = `
-<div id="helpAdvanced" class="hidden" style="margin-top:12px">
-  <h4 style="margin:0 0 6px">Advanced</h4>
-  <div class="shortcuts-grid">
-    <div><strong>Alt-click title</strong></div><div>Toggle this section</div>
-    <div><strong>~</strong></div><div>Debug HUD</div>
-    <div><strong>?v=clear</strong></div><div>Force refresh</div>
-  </div>
-</div>`;
-    sheet.appendChild(adv.firstElementChild);
-  }
-
-  // --- wire open/close ---
-  const closeBtn = overlay.querySelector('#shortcutsClose');
-  function openHelp(){ overlay.classList.remove('hidden'); helpBtn.setAttribute('aria-expanded','true'); }
-  function closeHelp(){ overlay.classList.add('hidden'); helpBtn.setAttribute('aria-expanded','false'); }
-  if (helpBtn) helpBtn.onclick = openHelp;
-  if (closeBtn) closeBtn.onclick = closeHelp;
-  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeHelp(); });
-  document.addEventListener('keydown', (e)=>{ if(e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) { e.preventDefault(); openHelp(); } });
-
-  // --- Normalize button wiring ---
-  wireNormalizeButton(overlay.querySelector('#normalizeBtn'));
-
-  // --- Validate tags quickly ---
-  const validateBtn = overlay.querySelector('#validateBtn');
-  if (validateBtn) {
-    const showValidation = (text) => {
-      const sheet = overlay.querySelector('.sheet') || overlay;
-      let panel = sheet.querySelector('#validatePanel');
-      if (!panel) {
-        const frag = document.createElement('div');
-        frag.innerHTML = `
-<div id="validatePanel" class="sheet-section hidden">
-  <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-    <h4 style="margin:0">Validation results</h4>
-    <button id="copyValidateBtn" class="btn-chip">Copy</button>
-  </header>
-  <pre id="validateOut" tabindex="0" style="white-space:pre-wrap; user-select:text; margin-top:8px"></pre>
-</div>`;
-        panel = frag.firstElementChild;
-        sheet.appendChild(panel);
-        const copyBtn = panel.querySelector('#copyValidateBtn');
-        if (copyBtn && !copyBtn.dataset.wired) {
-          copyBtn.dataset.wired = '1';
-          copyBtn.addEventListener('click', async () => {
-            const pre = panel.querySelector('#validateOut');
-            const txt = pre?.textContent || '';
-            try {
-              await navigator.clipboard.writeText(txt);
-              try { setStatus && setStatus('Validation copied ✓'); } catch {}
-            } catch {
-              // fallback if clipboard API blocked
-              try {
-                const sel = window.getSelection(); const r = document.createRange();
-                r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
-                document.execCommand('copy');
-                try { setStatus && setStatus('Validation copied ✓'); } catch {}
-              } catch (e) {
-                try { setStatus && setStatus('Copy failed: ' + (e?.message||e)); } catch {}
-              }
-            }
+    // Scripts UI wiring moved to ui/scripts-ui.js to reduce main file size and fragility.
           });
         }
       }
@@ -1564,32 +1427,18 @@ async function _initCore() {
         break;
       case '1':
         wrapSelection('[s1]', '[/s1]');
-        break;
-      case '2':
-        wrapSelection('[s2]', '[/s2]');
-        break;
-      case '3':
-        wrapSelection('[g1]', '[/g1]');
-        break;
-      case '4':
-        wrapSelection('[g2]', '[/g2]');
-        break;
-      case '?':
-      case '/':
-        if (e.shiftKey) { e.preventDefault(); openShortcuts(); }
-        break;
-    }
-  });
-
-  // ===== Progressive Fallback Nudge =====
-  (function(){
-    const F = {
-      stepPx: 18,            // small push
-      maxSmallPushes: 3,     // after this, try mini-seek
-      miniSeekIdxSpan: 6,    // try ±6 indices around bestIdx
-      coolDownMs: 900,       // don’t spam nudges
-    };
-    const S = { lastAt: 0, smallPushes: 0 };
+          // Toast shim: delegate to `window.toast` provided by ui/toasts.js when available,
+          // otherwise fallback to console debug. Keeps legacy _toast callers functional.
+          (function(){
+            window._toast = function(msg, opts){
+              try{
+                if (typeof window !== 'undefined' && typeof window.toast === 'function'){
+                  try{ window.toast(msg, opts); return; }catch(e){ /* fallthrough */ }
+                }
+                console.debug('[toast]', msg, opts || '');
+              }catch{}
+            };
+          })();
     let fbDelay = 250, fbTimer = 0;
     window.__tpScheduleFallback = function(fn){
       if (fbTimer) return;
