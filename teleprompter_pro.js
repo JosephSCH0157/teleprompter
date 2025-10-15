@@ -1359,15 +1359,46 @@ const _toast = function (msg, opts) {
         mainPass.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
-    // Proxy test button and surface result via toast
+    // Proxy test button: push settings -> main immediately, reconfigure recorder, then run main test
     obsTestS?.addEventListener('click', async () => {
-      const mainTest = document.getElementById('obsTestBtn');
-      mainTest?.click();
+      const mainUrl = document.getElementById('obsUrl');
+      const mainPass = document.getElementById('obsPassword');
+
+      // Copy from Settings inputs into main inputs if non-empty
+      if (obsUrlS?.value && mainUrl) mainUrl.value = obsUrlS.value;
+      if (obsPassS?.value && mainPass) mainPass.value = obsPassS.value;
+
+      // dispatch change so any listeners fire
+      mainUrl?.dispatchEvent(new Event('change', { bubbles: true }));
+      mainPass?.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // make the adapter re-read getUrl/getPass
+      try {
+        const rec = await loadRecorder();
+        try {
+          rec?.reconfigure?.();
+        } catch {}
+      } catch {}
+
+      // now run the existing main test
+      document.getElementById('obsTestBtn')?.click();
+
       setTimeout(() => {
         const statusEl = document.getElementById('obsStatus');
-        const txt = statusEl?.textContent || 'OBS test';
-        _toast(txt, { type: (txt || '').includes('ok') ? 'ok' : 'error' });
+        _toast(statusEl?.textContent || 'OBS test', {
+          type: (statusEl?.textContent || '').toLowerCase().includes('ok') ? 'ok' : 'error',
+        });
       }, 600);
+    });
+
+    // Optional: mirror as you type so both fields stay in sync
+    obsUrlS?.addEventListener('input', () => {
+      const m = document.getElementById('obsUrl');
+      if (m) m.value = obsUrlS.value;
+    });
+    obsPassS?.addEventListener('input', () => {
+      const m = document.getElementById('obsPassword');
+      if (m) m.value = obsPassS.value;
     });
     // PLL Controller
     const hybridLockS = document.getElementById('settingsHybridLock');
@@ -2495,8 +2526,14 @@ const _toast = function (msg, opts) {
         try {
           if (rec && typeof rec.init === 'function') {
             rec.init({
-              getUrl: () => document.getElementById('obsUrl')?.value?.trim() || DEFAULT_OBS_URL,
-              getPass: () => document.getElementById('obsPassword')?.value ?? '',
+              getUrl: () =>
+                document.getElementById('settingsObsUrl')?.value?.trim() ||
+                document.getElementById('obsUrl')?.value?.trim() ||
+                DEFAULT_OBS_URL,
+              getPass: () =>
+                document.getElementById('settingsObsPass')?.value ??
+                document.getElementById('obsPassword')?.value ??
+                '',
               isEnabled: () => !!document.getElementById('enableObs')?.checked,
               onStatus: (txt, ok) => {
                 try {
@@ -4216,8 +4253,12 @@ const _toast = function (msg, opts) {
         try {
           if (rec && typeof rec.init === 'function') {
             rec.init({
-              getUrl: () => obsUrlInput?.value?.trim(),
-              getPass: () => obsPassInput?.value ?? '',
+              getUrl: () =>
+                document.getElementById('settingsObsUrl')?.value?.trim() ||
+                obsUrlInput?.value?.trim() ||
+                DEFAULT_OBS_URL,
+              getPass: () =>
+                document.getElementById('settingsObsPass')?.value ?? obsPassInput?.value ?? '',
               isEnabled: () => !!enableObsChk?.checked,
               onStatus: (txt, ok) => {
                 try {
