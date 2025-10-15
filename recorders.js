@@ -305,3 +305,178 @@ export async function start() {
 export async function stop() {
   return stopSelected();
 }
+
+/* ------------------------------------------------------------------
+ * Minimal inline OBS v5 bridge (safe, idempotent)
+ * Exposes: init, setEnabled, reconfigure, test, connect, disconnect, isConnected
+ * This is a lightweight client implementing the minimal Identify handshake
+ * so the rest of the app can call connect/test without needing adapters/obs.js.
+ * ------------------------------------------------------------------ */
+
+let _ws = null,
+  _connecting = false,
+  _identified = false;
+let _cfgBridge = {
+  getUrl: () => 'ws://127.0.0.1:4455',
+  getPass: () => '',
+  isEnabled: () => false,
+  onStatus: (txt, ok) => console.log('[OBS]', txt, ok),
+  onRecordState: () => {},
+};
+
+export function init(opts = {}) {
+  _cfgBridge = { ..._cfgBridge, ...opts };
+  try {
+    if (_cfgBridge.isEnabled()) connect();
+  } catch {}
+}
+
+export function setEnabled(on) {
+  try {
+    if (on) connect();
+    else disconnect();
+  } catch {}
+}
+export function reconfigure() {
+  try {
+    if (_identified) reconnectSoon();
+  } catch {}
+}
+export async function test() {
+  try {
+    await connect({ testOnly: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+export function disconnect() {
+  try {
+    _identified = false;
+    _connecting = false;
+    try {
+      _ws && _ws.close(1000, 'manual');
+    } catch {}
+    _ws = null;
+    try {
+      _cfgBridge.onStatus?.('disconnected', false);
+    } catch {}
+  } catch {}
+}
+
+let _reconnTimer = 0;
+function reconnectSoon(ms = 400) {
+  try {
+    clearTimeout(_reconnTimer);
+    _reconnTimer = setTimeout(() => {
+      connect();
+    }, ms);
+  } catch {}
+}
+
+export function connect({ testOnly } = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!_cfgBridge.isEnabled() && !testOnly) return reject(new Error('disabled'));
+      const url = _cfgBridge.getUrl?.() || 'ws://127.0.0.1:4455';
+      const pass = _cfgBridge.getPass?.() || '';
+      try {
+        _ws && _ws.close(1000, 'reconnect');
+      } catch {}
+      _identified = false;
+      _connecting = true;
+      try {
+        _cfgBridge.onStatus?.('connecting…', false);
+      } catch {}
+
+      _ws = new WebSocket(url);
+
+      _ws.onopen = () => {
+        /* wait for Hello */
+      };
+
+      _ws.onmessage = async (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.op === 0) {
+            try {
+              const { challenge, salt } = msg.d.authentication || {};
+              const rpcVersion = 1;
+              let auth;
+              if (challenge && salt && pass) {
+                const enc = (s) => new TextEncoder().encode(s);
+                const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+                const sha = (s) => crypto.subtle.digest('SHA-256', enc(s));
+                const secret = await sha(salt + pass);
+                const authBuf = await sha(pass + b64(secret) + challenge);
+                auth = b64(authBuf);
+              }
+              _ws.send(JSON.stringify({ op: 1, d: { rpcVersion, authentication: auth } }));
+            } catch {
+              try {
+                _cfgBridge.onStatus?.('auth compute error', false);
+              } catch {}
+              return _ws.close(4000, 'auth-error');
+            }
+          } else if (msg.op === 2) {
+            _identified = true;
+            _connecting = false;
+            try {
+              _cfgBridge.onStatus?.('connected', true);
+            } catch {}
+            if (testOnly) {
+              try {
+                _ws.close(1000, 'test-ok');
+              } catch {}
+              resolve(true);
+            }
+          } else if (msg.op === 7) {
+            const evType = msg.d?.eventType;
+            if (evType === 'RecordStateChanged') {
+              const st = msg.d?.eventData?.outputState?.toLowerCase() || 'idle';
+              try {
+                _cfgBridge.onRecordState?.(st);
+              } catch {}
+            }
+          }
+        } catch {
+          try {
+            _cfgBridge.onStatus?.('msg-parse-error', false);
+          } catch {}
+        }
+      };
+
+      _ws.onerror = (_e) => {
+        try {
+          _cfgBridge.onStatus?.('socket error', false);
+        } catch {}
+        _connecting = false;
+      };
+
+      _ws.onclose = (e) => {
+        try {
+          const code = e?.code || 0;
+          const reason = e?.reason || '';
+          _identified = false;
+          _connecting = false;
+          try {
+            _cfgBridge.onStatus?.(`closed ${code} ${reason}`.trim(), false);
+          } catch {}
+          if (!testOnly && _cfgBridge.isEnabled() && code !== 1000) reconnectSoon(800);
+          if (testOnly) reject(new Error(`close ${code}`));
+        } catch (ee) {
+          if (testOnly) reject(ee);
+        }
+      };
+    } catch (outer) {
+      try {
+        _cfgBridge.onStatus?.('connect-exception', false);
+      } catch {}
+      return reject(outer);
+    }
+  });
+}
+
+export function isConnected() {
+  return _identified;
+}
