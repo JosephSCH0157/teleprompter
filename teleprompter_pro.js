@@ -919,6 +919,7 @@ const _toast = function (msg, opts) {
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
         </form>
+        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" style="margin-top:8px"></div>
   <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
   <div class="settings-small" style="margin-top:6px; font-size:0.9em; color:#444">Recommended OBS settings: set Recording Filename to <code>Anvil-{date}-{time}</code> (optionally include <code>{scene}</code> or <code>{profile}</code>), and set Container to <strong>mp4</strong> (or use <strong>mkv</strong> with auto-remux on stop for crash-safe recordings).</div>`
       )
@@ -4278,41 +4279,62 @@ const _toast = function (msg, opts) {
     refreshScriptSelect();
 
     // Save As -> writes to browser draft and refreshes dropdown
-    saveAsBtn?.addEventListener('click', () => {
-      saveToLocal();
-      refreshScriptSelect();
-    });
-    // Load button -> loads the draft from LS
-    loadBtn?.addEventListener('click', () => {
-      loadFromLocal();
-    });
-    // Delete -> clears the draft from LS
-    deleteBtn?.addEventListener('click', () => {
+    obsTestBtn?.addEventListener('click', async () => {
+      const msgEl = document.getElementById('settingsObsTestMsg');
+      if (msgEl) {
+        msgEl.textContent = '';
+        msgEl.classList.remove('obs-test-ok', 'obs-test-error');
+      }
+      if (obsStatus) obsStatus.textContent = 'OBS: testing…';
       try {
-        localStorage.removeItem(LS_KEY);
-      } catch {}
-      refreshScriptSelect();
-      setStatus('Deleted browser draft.');
-    });
-    // Download current script in chosen format
-    const fmtSel = document.getElementById('downloadFormat');
-    downloadFileBtn?.addEventListener('click', () => {
-      const fmt = fmtSel?.value || 'txt';
-      const name = `script.${fmt}`;
-      let mime = 'text/plain';
-      if (fmt === 'md') mime = 'text/markdown';
-      else if (fmt === 'rtf') mime = 'application/rtf';
-      else if (fmt === 'text') mime = 'text/plain';
-      // For future docx support, we will generate a blob via Mammoth or a docx builder.
-      downloadAsFile(name, editor.value, mime);
-    });
-
-    uploadFileBtn?.addEventListener('click', () => uploadFileInput?.click());
-    uploadFileInput?.addEventListener('change', async (e) => {
-      const f = e.target.files?.[0];
-      if (!f) return;
-      await uploadFromFile(f);
-      uploadFileInput.value = '';
+        saveObsConfig();
+        if (typeof window !== 'undefined' && window.__obsBridge) {
+          await window.__obsBridge.getRecordStatus();
+          if (obsStatus) obsStatus.textContent = 'OBS: ok';
+          if (msgEl) {
+            msgEl.textContent = 'OBS test: OK';
+            msgEl.classList.add('obs-test-ok');
+          }
+        } else if (__recorder?.get && __recorder.get('obs')?.test) {
+          await __recorder.get('obs').test();
+          if (obsStatus) obsStatus.textContent = 'OBS: ok';
+          if (msgEl) {
+            msgEl.textContent = 'OBS test: OK';
+            msgEl.classList.add('obs-test-ok');
+          }
+        } else {
+          if (obsStatus) obsStatus.textContent = 'OBS: missing';
+          if (msgEl) {
+            msgEl.textContent = 'OBS test: adapter missing';
+            msgEl.classList.add('obs-test-error');
+          }
+        }
+      } catch (e) {
+        let errMsg = '';
+        try {
+          errMsg =
+            (typeof window !== 'undefined' && window.__obsBridge && e?.message) ||
+            __recorder.get('obs')?.getLastError?.() ||
+            e?.message ||
+            String(e);
+        } catch {
+          errMsg = String(e);
+        }
+        if (obsStatus) {
+          obsStatus.textContent = 'OBS: failed';
+          obsStatus.title = errMsg;
+        }
+        if (msgEl) {
+          msgEl.textContent = 'OBS test failed: ' + (errMsg || 'unknown error');
+          msgEl.classList.add('obs-test-error');
+        }
+        try {
+          _toast('OBS test failed: ' + (errMsg || 'unknown error'), { type: 'error' });
+        } catch {}
+        try {
+          console.warn('[OBS TEST] failed', { err: e, derived: errMsg, url: obsUrlInput?.value });
+        } catch {}
+      }
     });
 
     editor.addEventListener('input', () => renderScript(editor.value));
