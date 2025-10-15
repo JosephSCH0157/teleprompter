@@ -46,7 +46,23 @@ export function createOBSAdapter() {
               const authInfo = msg.d?.authentication;
               let identify = { op: 1, d: { rpcVersion: 1 } };
               if (authInfo) {
-                const pass = (cfg.password ?? '').trim();
+                // Prefer configured password, otherwise fall back to DOM #obsPassword if present
+                let pass = (cfg.password ?? '').trim();
+                if (!pass) {
+                  try {
+                    const domPass =
+                      typeof document !== 'undefined' && document.getElementById('obsPassword')
+                        ? document.getElementById('obsPassword').value || ''
+                        : '';
+                    if (domPass && domPass.trim()) {
+                      pass = domPass.trim();
+                      try {
+                        if (window && window.__TP_DEV)
+                          console.debug('[OBS adapter] using DOM password fallback');
+                      } catch {}
+                    }
+                  } catch {}
+                }
                 if (!pass) {
                   try {
                     ws.close(4009, 'password-empty');

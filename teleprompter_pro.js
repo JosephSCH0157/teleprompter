@@ -2397,6 +2397,56 @@ const _toast = function (msg, opts) {
     } catch {}
   }
 
+  // Simple on-page debug panel for OBS events (only shown when __TP_DEV)
+  function ensureObsDebugPanel() {
+    try {
+      if (!window.__TP_DEV) return null;
+      let p = document.getElementById('obsDebugPanel');
+      if (p) return p;
+      p = document.createElement('div');
+      p.id = 'obsDebugPanel';
+      p.style.position = 'fixed';
+      p.style.right = '12px';
+      p.style.bottom = '12px';
+      p.style.width = '320px';
+      p.style.maxHeight = '40vh';
+      p.style.overflow = 'auto';
+      p.style.background = 'rgba(10,12,15,0.95)';
+      p.style.color = '#cfe';
+      p.style.fontSize = '12px';
+      p.style.border = '1px solid #334';
+      p.style.padding = '8px';
+      p.style.zIndex = '99999';
+      p.style.borderRadius = '8px';
+      p.innerHTML =
+        '<div style="font-weight:bold;margin-bottom:6px">OBS Debug</div><div id="obsDebugMsgs"></div><div style="margin-top:6px;text-align:right"><button id="obsDebugClear">Clear</button></div>';
+      document.body.appendChild(p);
+      const clearBtn = document.getElementById('obsDebugClear');
+      clearBtn?.addEventListener('click', () => {
+        const msgs = document.getElementById('obsDebugMsgs');
+        if (msgs) msgs.innerHTML = '';
+      });
+      return p;
+    } catch {
+      return null;
+    }
+  }
+
+  function obsDebugLog(msg) {
+    try {
+      if (!window.__TP_DEV) return;
+      const p = ensureObsDebugPanel();
+      if (!p) return;
+      const msgs = document.getElementById('obsDebugMsgs');
+      if (!msgs) return;
+      const el = document.createElement('div');
+      el.textContent = `${new Date().toLocaleTimeString()}: ${msg}`;
+      msgs.appendChild(el);
+      // keep scroll at bottom
+      msgs.scrollTop = msgs.scrollHeight;
+    } catch {}
+  }
+
   function wireObsPersistence() {
     try {
       const urlMain = document.getElementById('obsUrl');
@@ -2450,13 +2500,11 @@ const _toast = function (msg, opts) {
               isEnabled: () => !!document.getElementById('enableObs')?.checked,
               onStatus: (txt, ok) => {
                 try {
-                  console.debug(
-                    '[OBS] status via',
-                    document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL,
-                    txt
-                  );
+                  const via = document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL;
+                  console.debug('[OBS] status via', via, txt);
                   const chip = document.getElementById('obsStatus');
                   if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                  obsDebugLog(`status: ${txt || '(empty)'} (via ${via})`);
                 } catch {}
                 try {
                   _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
@@ -2466,6 +2514,7 @@ const _toast = function (msg, opts) {
                 try {
                   const chip = document.getElementById('recChip');
                   if (chip) chip.textContent = `Speech: ${state}`;
+                  obsDebugLog(`record-state: ${state}`);
                 } catch {}
               },
             });
@@ -4172,9 +4221,11 @@ const _toast = function (msg, opts) {
               isEnabled: () => !!enableObsChk?.checked,
               onStatus: (txt, ok) => {
                 try {
+                  const via = document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL;
                   const chip =
                     document.getElementById('obsStatus') || document.getElementById('recChip');
                   if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                  obsDebugLog(`status: ${txt || '(empty)'} (via ${via})`);
                 } catch {}
                 try {
                   _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
@@ -4184,6 +4235,7 @@ const _toast = function (msg, opts) {
                 try {
                   const chip = document.getElementById('recChip');
                   if (chip) chip.textContent = `Speech: ${state}`;
+                  obsDebugLog(`record-state: ${state}`);
                 } catch {}
               },
             });
