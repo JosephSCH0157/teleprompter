@@ -1,4 +1,4 @@
-// ui/toasts.js
+// ui/toasts.js (ES module)
 // Lightweight toast system, no dependencies. Exposes `toast(msg, opts)` and auto-inits a container.
 const CONTAINER_ID = 'tp_toast_container';
 const MAX_VISIBLE = 3;
@@ -21,7 +21,7 @@ function prune(container) {
   }
 }
 
-function toast(msg, opts) {
+export function toast(msg, opts) {
   try {
     const container = ensureContainer();
     prune(container);
@@ -48,11 +48,11 @@ function toast(msg, opts) {
 }
 
 // auto-init container for scripts that want to ensure it's available early
-function initToastContainer() {
+export function initToastContainer() {
   ensureContainer();
 }
 
-// expose globally for non-module callers
+// Backwards-compat: attach to window for existing non-module consumers
 try {
   if (typeof window !== 'undefined') {
     window.toast = toast;

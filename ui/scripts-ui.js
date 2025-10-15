@@ -1,15 +1,25 @@
-// ui/scripts-ui.js
-// Moves the scripts UI wiring out of teleprompter_pro.js to harden the main file.
-// Uses global `Scripts` exposed by scriptsStore.js
+// ui/scripts-ui.js (ES module)
+import { safeDOM } from '../utils/safe-dom.js';
+import { toast as importedToast } from './toasts.js';
+
 let currentScriptId = null;
-const scriptSlots = document.getElementById('scriptSlots');
-const scriptTitle = document.getElementById('scriptTitle');
-const scriptSaveBtn = document.getElementById('scriptSaveBtn');
-const scriptSaveAsBtn = document.getElementById('scriptSaveAsBtn');
-const scriptLoadBtn = document.getElementById('scriptLoadBtn');
-const scriptDeleteBtn = document.getElementById('scriptDeleteBtn');
-const scriptRenameBtn = document.getElementById('scriptRenameBtn');
-const editor = document.getElementById('editor');
+const scriptSlots = safeDOM.get('scriptSlots');
+const scriptTitle = safeDOM.get('scriptTitle');
+const scriptSaveBtn = safeDOM.get('scriptSaveBtn');
+const scriptSaveAsBtn = safeDOM.get('scriptSaveAsBtn');
+const scriptLoadBtn = safeDOM.get('scriptLoadBtn');
+const scriptDeleteBtn = safeDOM.get('scriptDeleteBtn');
+const scriptRenameBtn = safeDOM.get('scriptRenameBtn');
+const editor = safeDOM.get('editor');
+
+const toastFn = (msg, opts) => {
+  try {
+    if (typeof importedToast === 'function') return importedToast(msg, opts);
+  } catch (e) {}
+  try {
+    if (window && window.toast) return window.toast(msg, opts);
+  } catch (e) {}
+};
 
 function getEditorContent() {
   return editor ? editor.value : '';
@@ -21,7 +31,7 @@ function setEditorContent(txt) {
 function refreshScriptsDropdown() {
   try {
     const list = (window.Scripts || {}).list
-      ? window.Scripts.list().sort((a, b) => b.updated.localeCompare(a.updated))
+      ? window.Scripts.list().sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))
       : [];
     if (!scriptSlots) return;
     scriptSlots.innerHTML = list.map((s) => `<option value="${s.id}">${s.title}</option>`).join('');
@@ -31,7 +41,7 @@ function refreshScriptsDropdown() {
   }
 }
 
-function initScriptsUI() {
+export function initScriptsUI() {
   try {
     (window.Scripts || {}).init && window.Scripts.init();
     refreshScriptsDropdown();
@@ -47,11 +57,10 @@ function onScriptSave() {
       ? window.Scripts.save({ id: currentScriptId, title, content: getEditorContent() })
       : null;
     refreshScriptsDropdown();
-    if (typeof window !== 'undefined' && typeof window.toast === 'function')
-      window.toast('Script saved', { type: 'ok' });
+    toastFn('Script saved', { type: 'ok' });
   } catch (e) {
     console.debug('onScriptSave', e);
-    if (window.toast) window.toast('Save failed', { type: 'error' });
+    toastFn('Save failed', { type: 'error' });
   }
 }
 function onScriptSaveAs() {
@@ -67,10 +76,10 @@ function onScriptLoad() {
     currentScriptId = s.id;
     if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
     setEditorContent(s.content || '');
-    if (window.toast) window.toast('Script loaded', { type: 'ok' });
+    toastFn('Script loaded', { type: 'ok' });
   } catch (e) {
     console.debug('onScriptLoad', e);
-    if (window.toast) window.toast('Load failed', { type: 'error' });
+    toastFn('Load failed', { type: 'error' });
   }
 }
 function onScriptDelete() {
@@ -80,10 +89,10 @@ function onScriptDelete() {
     currentScriptId = null;
     scriptTitle && (scriptTitle.value = '');
     refreshScriptsDropdown();
-    if (window.toast) window.toast('Script deleted');
+    toastFn('Script deleted');
   } catch (e) {
     console.debug('onScriptDelete', e);
-    if (window.toast) window.toast('Delete failed', { type: 'error' });
+    toastFn('Delete failed', { type: 'error' });
   }
 }
 function onScriptRename() {
@@ -126,4 +135,11 @@ if (editor) {
 }
 
 // init after a short delay to let DOM settle
-setTimeout(initScriptsUI, 200);
+setTimeout(() => initScriptsUI(), 200);
+
+// Backwards-compat: attach to window
+try {
+  if (typeof window !== 'undefined') window.initScriptsUI = initScriptsUI;
+} catch (e) {
+  console.debug('scripts-ui attach failed', e);
+}
