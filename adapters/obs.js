@@ -7,6 +7,7 @@ export function createOBSAdapter() {
   let identified = false;
   let _lastErr = null;
   let cfg = { url: 'ws://127.0.0.1:4455', password: '' };
+  let _triedAlternate = false;
 
   function configure(newCfg = {}) {
     cfg = { ...cfg, ...newCfg };
@@ -33,24 +34,30 @@ export function createOBSAdapter() {
     return out;
   }
 
-  async function computeAuth(pass, authInfo) {
-    // Follow OBS WebSocket v5 spec:
-    // secret = SHA256(saltBytes + UTF8(password)) where salt is base64-decoded
-    // auth = base64(SHA256( UTF8(password + base64(secret)) + challenge ))
-    if (!authInfo || !authInfo.challenge || !authInfo.salt) return undefined;
+  async function computeAuthVariants(pass, authInfo) {
+    // Compute both common OBS v5 auth variants and return them.
+    // Variant A (spec/common): authA = base64( SHA256( UTF8(password + secretB64 + challenge) ) )
+    // Variant B (alternate):     authB = base64( SHA256( UTF8(secretB64 + challenge) ) )
+    if (!authInfo || !authInfo.challenge || !authInfo.salt)
+      return { secretB64: null, authA: null, authB: null };
     const password = String(pass ?? '');
-    // salt is provided as base64; decode to bytes
     const saltBytes = base64ToUint8Array(authInfo.salt);
     const passBytes = enc(password);
     const secretInput = concatUint8(saltBytes, passBytes);
     const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
     const secretB64 = b64(secretBuf);
 
-    // compute authentication per alternate OBS v5 spec variant:
-    // auth = base64( SHA256( UTF8(secretB64 + challenge) ) ) — omit password here
-    const authInputStr = secretB64 + authInfo.challenge;
-    const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
-    return b64(authBuf);
+    // Variant A
+    const authAInput = enc(password + secretB64 + authInfo.challenge);
+    const authABuf = await crypto.subtle.digest('SHA-256', authAInput);
+    const authA = b64(authABuf);
+
+    // Variant B
+    const authBInput = enc(secretB64 + authInfo.challenge);
+    const authBBuf = await crypto.subtle.digest('SHA-256', authBInput);
+    const authB = b64(authBBuf);
+
+    return { secretB64, authA, authB };
   }
 
   // Store last auth string for debug-only inspection
@@ -60,7 +67,7 @@ export function createOBSAdapter() {
     return Promise.resolve(typeof WebSocket !== 'undefined');
   }
 
-  function _connect({ testOnly = false } = {}) {
+  function _connect({ testOnly = false, forceVariant = undefined } = {}) {
     return new Promise((resolve, reject) => {
       try {
         try {
@@ -125,10 +132,18 @@ export function createOBSAdapter() {
                   _lastErr = new Error('OBS authentication required but no password is set.');
                   return reject(_lastErr);
                 }
-                const authentication = await computeAuth(pass, authInfo);
-                identify.d.authentication = authentication;
+                // Compute both variants so we can try a fallback if needed
+                const {
+                  secretB64: _secretB64,
+                  authA,
+                  authB,
+                } = await computeAuthVariants(pass, authInfo);
+                // Choose variant: if forceVariant === 'A' use authA; if 'B' use authB; otherwise prefer B then A
+                const primary = forceVariant === 'A' ? authA : forceVariant === 'B' ? authB : authB;
+                const _alternate = primary === authB ? authA : authB;
+                identify.d.authentication = primary;
                 try {
-                  _lastAuthSent = authentication;
+                  _lastAuthSent = primary;
                 } catch {}
                 try {
                   if (window && window.__TP_DEV)
@@ -139,6 +154,7 @@ export function createOBSAdapter() {
                       t: Date.now(),
                       event: 'identify-sent',
                       auth: !!identify.d.authentication,
+                      variant: forceVariant || 'B-primary',
                     });
                   } catch {}
                 } catch {}
@@ -202,6 +218,20 @@ export function createOBSAdapter() {
             } catch {}
           } catch {}
           if (!identified) {
+            // If authentication failed and we haven't tried the alternate variant yet, attempt once
+            if (e?.code === 4009 && !_triedAlternate) {
+              try {
+                _triedAlternate = true;
+                if (window && window.__TP_DEV)
+                  console.debug('[OBS-HS] auth failed, retrying with alternate variant');
+                // small backoff then retry with forceVariant='A'
+                setTimeout(() => {
+                  // call a fresh _connect with forceVariant = 'A'
+                  _connect({ testOnly, forceVariant: 'A' }).then(resolve).catch(reject);
+                }, 250);
+                return;
+              } catch {}
+            }
             const err = new Error(`close ${e?.code || 0} ${e?.reason || ''}`.trim());
             _lastErr = err;
             return reject(err);
