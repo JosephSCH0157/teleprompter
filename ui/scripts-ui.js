@@ -78,6 +78,13 @@ function onScriptLoad() {
     currentScriptId = s.id;
     if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
     setEditorContent(s.content || '');
+    // Trigger the main app's render/update flow (editor input handler)
+    try {
+      if (editor) editor.dispatchEvent(new Event('input', { bubbles: true }));
+      else if (typeof window.renderScript === 'function') window.renderScript(s.content || '');
+    } catch (e) {
+      console.debug('scripts-ui: trigger render failed', e);
+    }
     toastFn('Script loaded', { type: 'ok' });
   } catch (e) {
     console.debug('onScriptLoad', e);
