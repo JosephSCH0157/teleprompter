@@ -38,10 +38,12 @@ function toast(msg, opts) {
       t.classList.remove('show');
       setTimeout(() => t.remove(), 120);
     }, AUTO_FADE_MS);
-  } catch {
+  } catch (e) {
     try {
-      console.debug('[toast]', msg, opts || '');
-    } catch {}
+      console.debug('[toast] failed to render', e, msg, opts || '');
+    } catch (e2) {
+      console.debug('toast fallback log failed', e2);
+    }
   }
 }
 
@@ -56,4 +58,6 @@ try {
     window.toast = toast;
     window.initToastContainer = initToastContainer;
   }
-} catch {}
+} catch (e) {
+  console.debug('toasts expose failed', e);
+}

@@ -740,10 +740,12 @@
         try {
           if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
           else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-        } catch {
+        } catch (e) {
           try {
             alert('Normalize error: ' + (e?.message || e));
-          } catch {}
+          } catch (innerErr) {
+            console.debug('alert failed', innerErr);
+          }
         }
       });
     } catch {}
@@ -893,7 +895,7 @@
       syncSettingsValues();
       setupSettingsTabs();
       if (body.querySelector('.settings-card')) _settingsBuilt = true;
-    } catch {
+    } catch (e) {
       console.warn('Settings build failed, will retry', e);
       _settingsBuilt = false;
     }
@@ -1274,8 +1276,8 @@
       const ev = new Event('input');
       ta.dispatchEvent(ev);
       alert('Basic normalization applied.');
-    } catch {
-      alert('Normalize fallback failed: ' + e.message);
+    } catch (e) {
+      alert('Normalize fallback failed: ' + (e && e.message));
     }
   }
   try {
