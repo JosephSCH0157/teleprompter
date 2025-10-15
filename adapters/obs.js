@@ -377,8 +377,31 @@ export function createOBSAdapter() {
   async function test() {
     return _connect({ testOnly: true });
   }
+  // Dev helper: test a single candidate index
+  async function testCandidate(idx) {
+    return _connect({ testOnly: true, forceVariant: idx });
+  }
   function getLastError() {
     return _lastErr ? _lastErr.message || String(_lastErr) : null;
+  }
+
+  // Dev-only: expose a quick helper to test a specific candidate from the console
+  try {
+    if (typeof window !== 'undefined' && window.__TP_DEV) {
+      try {
+        window.__obsTestCandidate = function (i) {
+          try {
+            return testCandidate(i);
+          } catch (ex) {
+            return Promise.reject(ex);
+          }
+        };
+      } catch (ex) {
+        void ex;
+      }
+    }
+  } catch (ex) {
+    void ex;
   }
 
   return {
@@ -389,6 +412,7 @@ export function createOBSAdapter() {
     start: start,
     stop: stop,
     test: test,
+    testCandidate: testCandidate,
     getLastError: getLastError,
   };
 }
