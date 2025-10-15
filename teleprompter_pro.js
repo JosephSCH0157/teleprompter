@@ -10,6 +10,8 @@
 
 // Reinstate IIFE wrapper (was removed causing brace imbalance)
 import { toast as moduleToast } from './ui/toasts.js';
+// 1) LAN default for OBS
+const DEFAULT_OBS_URL = 'ws://192.168.1.198:4455';
 // Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
 import * as RecorderModule from './recorders.js';
 try {
@@ -2383,7 +2385,9 @@ const _toast = function (msg, opts) {
       const chkMain = document.getElementById('rememberObs');
       const chkSet = document.getElementById('settingsObsRemember');
 
-      if (url && urlMain && !urlMain.value) urlMain.value = url;
+      // If no stored URL, prefer the DEFAULT_OBS_URL for hydration (prevents 127.0.0.1 fallback)
+      const hydratedUrl = (url && url.trim()) || DEFAULT_OBS_URL;
+      if (hydratedUrl && urlMain && !urlMain.value) urlMain.value = hydratedUrl;
       if (url && urlSet && !urlSet.value) urlSet.value = url;
       if (pass && passMain && !passMain.value) passMain.value = pass;
       if (pass && passSet && !passSet.value) passSet.value = pass;
@@ -2436,42 +2440,38 @@ const _toast = function (msg, opts) {
   // TP: init-minimal
   // Minimal init to wire the meter pieces and help overlay (internal helper)
   async function __initMinimal() {
-    // Help UI
     try {
-      ensureHelpUI();
-    } catch {}
-
-    // Query essentials
-    permChip = document.getElementById('permChip');
-    micBtn = document.getElementById('micBtn');
-    // (Removed micDeviceSel rebinding; use getMicSel())
-    refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
-    dbMeterTop = document.getElementById('dbMeterTop');
-    const normalizeTopBtn = document.getElementById('normalizeTopBtn');
-
-    // Build both meters
-    buildDbBars(dbMeterTop);
-
-    // TP: mic-wire
-    // Wire mic + devices (explicit)
-    micBtn?.addEventListener('click', requestMic);
-    const releaseMicBtn = document.getElementById('releaseMicBtn');
-    releaseMicBtn?.addEventListener('click', releaseMic);
-    refreshDevicesBtn?.addEventListener('click', populateDevices);
-    try {
-      await populateDevices();
-      // Pre-select last device if present
-      try {
-        const last = localStorage.getItem(DEVICE_KEY);
-        if (last) {
-          const sel = document.getElementById('settingsMicSel');
-          if (sel && Array.from(sel.options).some((o) => o.value === last)) {
-            sel.value = last;
+      loadRecorder().then((rec) => {
+        try {
+          if (rec && typeof rec.init === 'function') {
+            rec.init({
+              getUrl: () => document.getElementById('obsUrl')?.value?.trim() || DEFAULT_OBS_URL,
+              getPass: () => document.getElementById('obsPassword')?.value ?? '',
+              isEnabled: () => !!document.getElementById('enableObs')?.checked,
+              onStatus: (txt, ok) => {
+                try {
+                  console.debug(
+                    '[OBS] status via',
+                    document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL,
+                    txt
+                  );
+                  const chip = document.getElementById('obsStatus');
+                  if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                } catch {}
+                try {
+                  _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
+                } catch {}
+              },
+              onRecordState: (state) => {
+                try {
+                  const chip = document.getElementById('recChip');
+                  if (chip) chip.textContent = `Speech: ${state}`;
+                } catch {}
+              },
+            });
           }
-          pendingAutoStart = true;
-        }
-      } catch {}
-      // No automatic mic start; user must click Request mic
+        } catch {}
+      });
     } catch {}
 
     // TP: normalize-top-btn
