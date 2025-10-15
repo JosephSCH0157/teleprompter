@@ -818,7 +818,8 @@
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
         </form>
-        <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`
+  <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
+  <div class="settings-small" style="margin-top:6px; font-size:0.9em; color:#444">Recommended OBS settings: set Recording Filename to <code>Anvil-{date}-{time}</code> (optionally include <code>{scene}</code> or <code>{profile}</code>), and set Container to <strong>mp4</strong> (or use <strong>mkv</strong> with auto-remux on stop for crash-safe recordings).</div>`
       )
     );
     frag.appendChild(

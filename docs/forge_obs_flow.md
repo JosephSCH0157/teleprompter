@@ -62,3 +62,13 @@ Troubleshooting
 Contact
 
 For additional help, open an issue in the project repository or contact the maintainer.
+
+Recommended OBS Recording Settings
+
+- Recording Filename Formatting: Anvil-{date}-{time}
+  - Optionally include {scene} or {profile} if you run multiple setups. Example: Anvil-{date}-{time}-{scene}
+- Container: mp4 if you stop recordings cleanly. If you prefer safer behavior against crashes, use mkv and enable "Automatically remux to mp4" on stop in OBS.
+- Encoder: use your hardware encoder (NVENC, QuickSync) when available for lower CPU usage.
+- Recording path: choose a drive with plenty of free space; the UI warns when free space (as reported by OBS) is under 2GB.
+
+These recommendations ensure predictable filenames and minimize risk of corrupt recordings if OBS or the host crashes during recording.
