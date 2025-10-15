@@ -677,6 +677,44 @@
         } catch {}
       }
     };
+    // Ensure a global `_toast` alias (so calls to `_toast(...)` work reliably)
+    try {
+      if (typeof _toast === 'undefined') {
+        // define non-configurable global alias in a safe way
+        try {
+          self._toast = window._toast;
+        } catch {}
+        try {
+          // also create a var in current scope if allowed
+          _toast = window._toast;
+        } catch {}
+      } else {
+        _toast = window._toast;
+      }
+    } catch {}
+
+    // Try to dynamically import the module-based toast and prefer it when available.
+    (async function () {
+      try {
+        const m = await import('./ui/toasts.js');
+        if (m && typeof m.toast === 'function') {
+          try {
+            window._toast = m.toast;
+          } catch {}
+          try {
+            self._toast = m.toast;
+          } catch {}
+          try {
+            _toast = m.toast;
+          } catch {}
+        }
+      } catch (e) {
+        // module not available yet or import failed; keep fallback
+        try {
+          console.debug('toast module import failed', e);
+        } catch {}
+      }
+    })();
   })();
 
   window.addEventListener('error', (e) => setStatus('Boot error: ' + (e?.message || e)));
