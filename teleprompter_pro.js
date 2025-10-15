@@ -811,6 +811,8 @@
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
           <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
           <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
+          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px"></label>
+          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''}/> Auto-reconnect</label>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
@@ -3409,7 +3411,17 @@
           try {
             let text = 'OBS: unknown';
             let cls = '';
-            if (window.__recorder && typeof window.__recorder.get === 'function') {
+            // Prefer the new obsBridge if available
+            if (typeof window !== 'undefined' && window.__obsBridge) {
+              try {
+                const ok = window.__obsBridge.isConnected();
+                text = ok ? 'OBS: ready' : 'OBS: offline';
+                cls = ok ? 'ok' : 'error';
+              } catch {
+                text = 'OBS: offline';
+                cls = 'error';
+              }
+            } else if (window.__recorder && typeof window.__recorder.get === 'function') {
               const a = window.__recorder.get('obs');
               if (a && typeof a.isAvailable === 'function') {
                 try {
@@ -3430,13 +3442,25 @@
         };
         // Initial probe
         setTimeout(updateStatus, 120);
-        // Also listen for raw socket events if present to reflect changes quickly
-        if (window.obsSocket && typeof window.obsSocket.addEventListener === 'function') {
-          try {
-            window.obsSocket.addEventListener('open', () => setTimeout(updateStatus, 50));
-            window.obsSocket.addEventListener('close', () => setTimeout(updateStatus, 50));
-          } catch {}
-        }
+        // If obsBridge exists, subscribe to its events for immediate updates
+        try {
+          if (typeof window !== 'undefined' && window.__obsBridge) {
+            try {
+              window.__obsBridge.on('connect', () => setTimeout(updateStatus, 50));
+              window.__obsBridge.on('disconnect', () => setTimeout(updateStatus, 50));
+              window.__obsBridge.on('recordstate', (active) => {
+                try {
+                  window.setRecChip(active ? 'recording' : 'idle');
+                } catch {}
+              });
+            } catch {}
+          } else if (window.obsSocket && typeof window.obsSocket.addEventListener === 'function') {
+            try {
+              window.obsSocket.addEventListener('open', () => setTimeout(updateStatus, 50));
+              window.obsSocket.addEventListener('close', () => setTimeout(updateStatus, 50));
+            } catch {}
+          }
+        } catch {}
         // Expose manual refresh
         window.refreshObsStatus = updateStatus;
       } catch {}
@@ -3708,6 +3732,28 @@
               }
             }
           } catch {}
+          // load default scene and reconnect preference
+          try {
+            const sceneEl = document.getElementById('settingsObsScene');
+            if (sceneEl)
+              sceneEl.value = s.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
+            const recEl = document.getElementById('settingsObsReconnect');
+            if (recEl)
+              recEl.checked =
+                typeof s.configs?.obs?.reconnect === 'boolean'
+                  ? s.configs.obs.reconnect
+                  : localStorage.getItem('tp_obs_reconnect') === '1';
+            // If bridge exists, configure it
+            if (typeof window !== 'undefined' && window.__obsBridge) {
+              try {
+                window.__obsBridge.configure({
+                  url: obsUrlInput?.value || s.configs?.obs?.url,
+                  password: obsPassInput?.value || s.configs?.obs?.password || '',
+                });
+                window.__obsBridge.enableAutoReconnect(!!recEl?.checked);
+              } catch {}
+            }
+          } catch {}
         } catch {}
       };
       applyFromSettings();
@@ -3833,6 +3879,25 @@
             } catch {}
           }
         } catch {}
+        // Save scene and reconnect preference
+        try {
+          const sceneEl = document.getElementById('settingsObsScene');
+          if (sceneEl && typeof sceneEl.value === 'string') {
+            try {
+              localStorage.setItem('tp_obs_scene', sceneEl.value);
+            } catch {}
+          }
+          const recEl = document.getElementById('settingsObsReconnect');
+          if (recEl) {
+            try {
+              localStorage.setItem('tp_obs_reconnect', recEl.checked ? '1' : '0');
+            } catch {}
+            try {
+              if (typeof window !== 'undefined' && window.__obsBridge)
+                window.__obsBridge.enableAutoReconnect(!!recEl.checked);
+            } catch {}
+          }
+        } catch {}
         if (obsStatus && enableObsChk?.checked) obsStatus.textContent = 'OBS: updated';
       } catch {}
     };
@@ -3841,19 +3906,26 @@
 
     // Test button
     obsTestBtn?.addEventListener('click', async () => {
-      if (!__recorder?.get || !__recorder.get('obs')) {
-        if (obsStatus) obsStatus.textContent = 'OBS: adapter missing';
-        return;
-      }
       if (obsStatus) obsStatus.textContent = 'OBS: testing…';
       try {
         saveObsConfig();
-        const _ok = await __recorder.get('obs').test();
-        if (obsStatus) obsStatus.textContent = 'OBS: ok';
-      } catch {
+        if (typeof window !== 'undefined' && window.__obsBridge) {
+          const s = await window.__obsBridge.getRecordStatus();
+          if (obsStatus) obsStatus.textContent = 'OBS: ok';
+        } else if (__recorder?.get && __recorder.get('obs')?.test) {
+          await __recorder.get('obs').test();
+          if (obsStatus) obsStatus.textContent = 'OBS: ok';
+        } else {
+          if (obsStatus) obsStatus.textContent = 'OBS: missing';
+        }
+      } catch (e) {
         if (obsStatus) obsStatus.textContent = 'OBS: failed';
         try {
-          const errMsg = __recorder.get('obs').getLastError?.() || e?.message || String(e);
+          const errMsg =
+            (typeof window !== 'undefined' && window.__obsBridge && e?.message) ||
+            __recorder.get('obs')?.getLastError?.() ||
+            e?.message ||
+            String(e);
           obsStatus.title = errMsg;
         } catch {}
       }
