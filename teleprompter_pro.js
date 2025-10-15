@@ -3718,11 +3718,24 @@ const _toast = function (msg, opts) {
         try {
           if (typeof window !== 'undefined' && window.__obsBridge) {
             try {
-              window.__obsBridge.on('connect', () => setTimeout(updateStatus, 50));
-              window.__obsBridge.on('disconnect', () => setTimeout(updateStatus, 50));
+              window.__obsBridge.on('connect', () => {
+                try {
+                  if (window.__TP_DEV) console.info('[OBS Bridge] connect');
+                } catch {}
+                setTimeout(updateStatus, 50);
+              });
+              window.__obsBridge.on('disconnect', () => {
+                try {
+                  if (window.__TP_DEV) console.info('[OBS Bridge] disconnect');
+                } catch {}
+                setTimeout(updateStatus, 50);
+              });
               window.__obsBridge.on('recordstate', (active) => {
                 try {
                   window.setRecChip(active ? 'recording' : 'idle');
+                } catch {}
+                try {
+                  if (window.__TP_DEV) console.debug('[OBS Bridge] recordstate', active);
                 } catch {}
               });
             } catch {}
@@ -4062,6 +4075,10 @@ const _toast = function (msg, opts) {
       if (window.obsSocket && typeof window.obsSocket.addEventListener === 'function') {
         window.obsSocket.addEventListener('message', (e) => {
           try {
+            // Dev: raw message dump when TP_DEV enabled
+            try {
+              if (window.__TP_DEV) console.debug('[OBS WS] raw message', e.data);
+            } catch {}
             const msg = JSON.parse(e.data || '{}');
             if (msg && msg.op === 5 && msg.d && msg.d.eventType === 'RecordStateChanged') {
               const active = !!(msg.d.eventData && msg.d.eventData.outputActive);
@@ -4070,18 +4087,37 @@ const _toast = function (msg, opts) {
               // clear armed flag when we see recording
               if (active) window.__obsRecArmed = false;
             }
-          } catch {}
+          } catch (err) {
+            try {
+              if (window.__TP_DEV) console.warn('[OBS WS] message parse failed', err);
+            } catch {}
+          }
         });
         // reflect socket open/close on UI chip
         try {
           window.obsSocket.addEventListener('open', () => {
             window.__obsConnected = true;
+            try {
+              if (window.__TP_DEV)
+                console.info('[OBS WS] opened', obsUrlInput?.value || '<unknown>');
+            } catch {}
             window.refreshObsStatus && window.refreshObsStatus();
           });
-          window.obsSocket.addEventListener('close', () => {
+          window.obsSocket.addEventListener('close', (e) => {
             window.__obsConnected = false;
+            try {
+              if (window.__TP_DEV) console.info('[OBS WS] closed', e && e.code ? e.code : 'close');
+            } catch {}
             window.refreshObsStatus && window.refreshObsStatus();
           });
+          // Extra: surface low-level errors when available
+          try {
+            window.obsSocket.addEventListener('error', (err) => {
+              try {
+                if (window.__TP_DEV) console.warn('[OBS WS] error', err);
+              } catch {}
+            });
+          } catch {}
         } catch {}
       }
     } catch {}
