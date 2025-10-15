@@ -169,6 +169,10 @@ const _toast = function (msg, opts) {
         } catch {}
       }
     };
+    // Ensure handshake log exists early so the Debug Dump can read it even before adapters run
+    try {
+      window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+    } catch {}
     __tpBootPush('script-enter');
     _origLog(tag('entered main IIFE'));
     window.addEventListener('DOMContentLoaded', () => {
@@ -2469,7 +2473,8 @@ const _toast = function (msg, opts) {
               : [];
           if (!arr.length) {
             const el = document.createElement('div');
-            el.textContent = 'No handshake log available';
+            el.textContent =
+              'No handshake log available — try enabling dev mode (add ?dev=1 or set window.__TP_DEV = true) and re-run the in-page test (window.__tpRunObsTest()) or click Settings → Test.';
             msgs.appendChild(el);
             return;
           }
