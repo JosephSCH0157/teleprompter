@@ -307,7 +307,7 @@
       var V = window.__TP_DEV_VERSION || (new URLSearchParams(location.search).get('v') || (DEV ? Date.now().toString(36) : 'dev-20251007'));
       var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
       // Load a few small helper modules as ES modules first (backwards compatible)
-      var moduleFiles = [ add('./utils/safe-dom.js'), add('./ui/toasts.js'), add('./ui/scripts-ui.js') ];
+      var moduleFiles = [ add('./utils/safe-dom.js'), add('./ui/toasts.js'), add('./ui/scripts-ui.js'), add('teleprompter_pro.js') ];
       moduleFiles.forEach(function(m){
         var s = document.createElement('script');
         s.type = 'module';
@@ -315,7 +315,7 @@
         document.head.appendChild(s);
       });
       // Then load the remaining classic scripts
-      var jsFiles = [ add('./debug-tools.js'), add('./debug-seed.js'), add('./sim-history.js'), add('teleprompter_pro.js') ];
+      var jsFiles = [ add('./debug-tools.js'), add('./debug-seed.js'), add('./sim-history.js') ];
       jsFiles.forEach(function(src) {
         var script = document.createElement('script');
         script.src = src;

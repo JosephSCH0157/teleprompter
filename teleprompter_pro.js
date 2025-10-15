@@ -9,6 +9,26 @@
 */
 
 // Reinstate IIFE wrapper (was removed causing brace imbalance)
+import { toast as moduleToast } from './ui/toasts.js';
+
+// Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
+const _toast = function (msg, opts) {
+  try {
+    if (typeof moduleToast === 'function') return moduleToast(msg, opts);
+  } catch (e) {
+    try {
+      console.debug('module toast access failed', e);
+    } catch {}
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof window._toast === 'function')
+      return window._toast(msg, opts);
+  } catch {}
+  try {
+    console.debug('[toast]', msg, opts || '');
+  } catch {}
+};
+
 (function () {
   'use strict';
   // Flags (URL or localStorage): ?calm=1&dev=1
