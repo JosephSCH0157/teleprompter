@@ -16,10 +16,9 @@ const editor = safeDOM.get('editor');
 const toastFn = (msg, opts) => {
   try {
     if (typeof importedToast === 'function') return importedToast(msg, opts);
-  } catch (e) {}
-  try {
-    if (window && window.toast) return window.toast(msg, opts);
-  } catch (e) {}
+  } catch (e) {
+    console.debug('toastFn import failed', e);
+  }
 };
 
 function getEditorContent() {
@@ -140,9 +139,4 @@ if (editor) {
 // init after a short delay to let DOM settle
 setTimeout(() => initScriptsUI(), 200);
 
-// Backwards-compat: attach to window
-try {
-  if (typeof window !== 'undefined') window.initScriptsUI = initScriptsUI;
-} catch (e) {
-  console.debug('scripts-ui attach failed', e);
-}
+// Note: no legacy window shim; callers should import { initScriptsUI } from this module

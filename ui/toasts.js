@@ -52,12 +52,5 @@ export function initToastContainer() {
   ensureContainer();
 }
 
-// Backwards-compat: attach to window for existing non-module consumers
-try {
-  if (typeof window !== 'undefined') {
-    window.toast = toast;
-    window.initToastContainer = initToastContainer;
-  }
-} catch (e) {
-  console.debug('toasts expose failed', e);
-}
+// Note: we intentionally do NOT attach this API to `window` here.
+// Consumers should import { toast } from './ui/toasts.js'.

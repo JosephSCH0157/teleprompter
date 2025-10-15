@@ -92,6 +92,8 @@ export function roarOverlay() {
   });
 }
 
+import { toast } from './ui/toasts.js';
+
 export function installCKEgg() {
   const enable = (silent = false) => {
     document.body.classList.add('ck');
@@ -99,7 +101,10 @@ export function installCKEgg() {
     try {
       if (window.sendToDisplay) window.sendToDisplay({ type: 'toggle-ck', on: true });
     } catch {}
-    if (!silent && typeof window.toast === 'function') window.toast('CK on');
+    if (!silent)
+      try {
+        toast('CK on');
+      } catch {}
   };
   const disable = (silent = false) => {
     document.body.classList.remove('ck');
@@ -107,7 +112,10 @@ export function installCKEgg() {
     try {
       if (window.sendToDisplay) window.sendToDisplay({ type: 'toggle-ck', on: false });
     } catch {}
-    if (!silent && typeof window.toast === 'function') window.toast('CK off');
+    if (!silent)
+      try {
+        toast('CK off');
+      } catch {}
   };
   // restore
   if (localStorage.getItem('egg.ck')) enable(true);
@@ -117,7 +125,6 @@ export function installCKEgg() {
   // Secret keys: Ctrl+Alt+C toggles
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'c') {
-      // eslint-disable-next-line no-restricted-syntax -- Reserve Ctrl+Alt+C to toggle CK mode
       e.preventDefault();
       document.body.classList.contains('ck') ? disable() : enable();
     }
@@ -165,7 +172,6 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   }
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.altKey && e.key?.toLowerCase?.() === 'k') {
-      // eslint-disable-next-line no-restricted-syntax -- Reserve Ctrl+Alt+K for About dialog
       e.preventDefault();
       showAbout();
     }
