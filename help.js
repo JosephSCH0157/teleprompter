@@ -309,7 +309,6 @@ export function ensureHelpUI() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) {
-      // eslint-disable-next-line no-restricted-syntax -- Use Shift+? to open help instead of typing '/'
       e.preventDefault();
       openHelp();
     }
