@@ -33,10 +33,21 @@ export function createOBSAdapter() {
         _lastErr = null;
         const obs = await getObs();
         if (obs?.identified) return true;
-        // Prefer configured password, otherwise use window.getObsPassword() if available
+        // Prefer configured password, otherwise prefer current DOM value, then window.getObsPassword()
+        const domPw =
+          typeof document !== 'undefined' && document.getElementById('obsPassword')
+            ? document.getElementById('obsPassword').value || ''
+            : '';
         const pw =
           _cfg.password ||
+          domPw ||
           (typeof window !== 'undefined' && window.getObsPassword ? window.getObsPassword() : '');
+        try {
+          if (window.__TP_DEV) {
+            const src = _cfg.password ? 'cfg' : domPw ? 'dom' : 'stored';
+            console.debug('[OBS] connecting, pw source:', src);
+          }
+        } catch {}
         await obs.connect(_cfg.url, pw);
         return true;
       } catch (e) {
@@ -51,9 +62,20 @@ export function createOBSAdapter() {
     async start() {
       const obs = await getObs();
       if (!obs?.identified) {
+        const domPw =
+          typeof document !== 'undefined' && document.getElementById('obsPassword')
+            ? document.getElementById('obsPassword').value || ''
+            : '';
         const pw =
           _cfg.password ||
+          domPw ||
           (typeof window !== 'undefined' && window.getObsPassword ? window.getObsPassword() : '');
+        try {
+          if (window.__TP_DEV) {
+            const src = _cfg.password ? 'cfg' : domPw ? 'dom' : 'stored';
+            console.debug('[OBS] connecting (start), pw source:', src);
+          }
+        } catch {}
         await obs.connect(_cfg.url, pw);
       }
       await obs.call('StartRecord');
