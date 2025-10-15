@@ -1364,6 +1364,36 @@ const _toast = function (msg, opts) {
         mainPass.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
+    // Mirror as-you-type so password is available immediately (not just on blur)
+    obsPassS?.addEventListener('input', async () => {
+      try {
+        const mainPass = document.getElementById('obsPassword');
+        if (mainPass) {
+          mainPass.value = obsPassS.value;
+          mainPass.dispatchEvent(new Event('input', { bubbles: true }));
+          mainPass.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        // Persist to sessionStorage immediately (safer than localStorage)
+        try {
+          sessionStorage.setItem('tp_obs_password', obsPassS.value || '');
+        } catch {}
+        // Respect 'Remember' checkbox for localStorage
+        try {
+          const rem = document.getElementById('settingsObsRemember');
+          if (rem && rem.checked) localStorage.setItem('tp_obs_password', obsPassS.value || '');
+          else localStorage.removeItem('tp_obs_password');
+        } catch {}
+        // Attempt to reconfigure recorder adapter so it re-reads password getters
+        try {
+          const recModule = await loadRecorder();
+          const rec =
+            recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+          try {
+            rec?.reconfigure?.();
+          } catch {}
+        } catch {}
+      } catch {}
+    });
     // Proxy test button: push settings -> main immediately, reconfigure recorder, then run main test
     obsTestS?.addEventListener('click', async () => {
       const mainUrl = document.getElementById('obsUrl');
