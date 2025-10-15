@@ -397,6 +397,41 @@ export function createOBSAdapter() {
   async function testCandidate(idx) {
     return _connect({ testOnly: true, forceVariant: idx });
   }
+  // Dev helper: probe multiple ws URLs (host+port) and return which one authenticates.
+  // Accepts an array of url strings (e.g. ['ws://host:4455','ws://host:64376']).
+  async function probePorts(urls) {
+    if (!Array.isArray(urls)) throw new Error('urls must be an array');
+    const orig = cfg.url;
+    const results = [];
+    for (let u of urls) {
+      try {
+        cfg.url = u;
+        try {
+          const ok = await _connect({ testOnly: true });
+          results.push({ url: u, ok: !!ok });
+          if (ok) {
+            // restore and return early with success
+            cfg.url = orig;
+            return { success: true, url: u, results };
+          }
+        } catch (err) {
+          results.push({
+            url: u,
+            ok: false,
+            error: String(err && err.message ? err.message : err),
+          });
+        }
+      } catch (outer) {
+        results.push({
+          url: u,
+          ok: false,
+          error: String(outer && outer.message ? outer.message : outer),
+        });
+      }
+    }
+    cfg.url = orig;
+    return { success: false, results };
+  }
   function getLastError() {
     return _lastErr ? _lastErr.message || String(_lastErr) : null;
   }
@@ -408,6 +443,13 @@ export function createOBSAdapter() {
         window.__obsTestCandidate = function (i) {
           try {
             return testCandidate(i);
+          } catch (ex) {
+            return Promise.reject(ex);
+          }
+        };
+        window.__obsProbePorts = function (urls) {
+          try {
+            return probePorts(urls);
           } catch (ex) {
             return Promise.reject(ex);
           }
