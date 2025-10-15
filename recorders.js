@@ -430,7 +430,8 @@ export function connect({ testOnly } = {}) {
                 const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
                 const secretB64 = b64(secretBuf);
 
-                const authInputStr = pass + secretB64 + challenge;
+                // Alternate variant: SHA256(secretB64 + challenge)
+                const authInputStr = secretB64 + challenge;
                 const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
                 auth = b64(authBuf);
               }

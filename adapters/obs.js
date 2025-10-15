@@ -46,8 +46,9 @@ export function createOBSAdapter() {
     const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
     const secretB64 = b64(secretBuf);
 
-    // compute authentication: SHA256( UTF8(password + secretB64 + challenge) )
-    const authInputStr = password + secretB64 + authInfo.challenge;
+    // compute authentication per alternate OBS v5 spec variant:
+    // auth = base64( SHA256( UTF8(secretB64 + challenge) ) ) — omit password here
+    const authInputStr = secretB64 + authInfo.challenge;
     const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
     return b64(authBuf);
   }
