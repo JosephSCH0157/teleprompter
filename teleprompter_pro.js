@@ -15,6 +15,18 @@ import * as RecorderModule from './recorders.js';
 try {
   if (typeof window !== 'undefined') window.__recorder = RecorderModule;
 } catch {}
+try {
+  // Emit a lightweight startup log so developers can see adapter availability in the browser console
+  try {
+    const list =
+      window.__recorder && typeof window.__recorder.all === 'function'
+        ? window.__recorder.all().map((a) => a.id || a.label || '(unknown)')
+        : [];
+    console.info('[TP-Pro] __recorder assigned — adapters:', list);
+  } catch (e) {
+    console.info('[TP-Pro] __recorder assigned (no list available)');
+  }
+} catch {}
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 const _toast = function (msg, opts) {
