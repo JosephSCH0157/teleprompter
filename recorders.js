@@ -379,7 +379,7 @@ export function connect({ testOnly } = {}) {
     try {
       if (!_cfgBridge.isEnabled() && !testOnly) return reject(new Error('disabled'));
       const url = _cfgBridge.getUrl?.() || 'ws://127.0.0.1:4455';
-      const pass = _cfgBridge.getPass?.() || '';
+      const pass = _cfgBridge.getPass?.() || ''; // Original line for context
       try {
         _ws && _ws.close(1000, 'reconnect');
       } catch {}
