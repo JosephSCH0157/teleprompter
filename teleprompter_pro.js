@@ -8950,7 +8950,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   (function setupAutoSpeedControls() {
     const AUTO_MIN = 0,
       AUTO_MAX = 300,
-      STEP_FINE = 2,
+      STEP_FINE = 1,
       STEP_COARSE = 5;
     const speedInput = document.getElementById('autoSpeed');
     const toggleBtn = document.getElementById('autoToggle');
