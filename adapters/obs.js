@@ -39,9 +39,26 @@ export function createOBSAdapter() {
         const url = cfg.url || 'ws://192.168.1.198:4455';
         ws = new WebSocket(url);
 
+        ws.onopen = () => {
+          try {
+            if (window && window.__TP_DEV) console.debug('[OBS-HS] socket open', url);
+            try {
+              window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+              window.__obsHandshakeLog.push({ t: Date.now(), event: 'open', url });
+            } catch {}
+          } catch {}
+        };
+
         ws.onmessage = async (ev) => {
           try {
             const msg = JSON.parse(ev.data);
+            try {
+              if (window && window.__TP_DEV) console.debug('[OBS-HS] recv op=' + msg.op, msg.d);
+              try {
+                window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+                window.__obsHandshakeLog.push({ t: Date.now(), op: msg.op, data: msg.d });
+              } catch {}
+            } catch {}
             if (msg.op === 0) {
               const authInfo = msg.d?.authentication;
               let identify = { op: 1, d: { rpcVersion: 1 } };
@@ -72,10 +89,33 @@ export function createOBSAdapter() {
                 }
                 const authentication = await computeAuth(pass, authInfo);
                 identify.d.authentication = authentication;
+                try {
+                  if (window && window.__TP_DEV)
+                    console.debug('[OBS-HS] sending IDENTIFY (authentication present)');
+                  try {
+                    window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+                    window.__obsHandshakeLog.push({
+                      t: Date.now(),
+                      event: 'identify-sent',
+                      auth: !!identify.d.authentication,
+                    });
+                  } catch {}
+                } catch {}
               }
               ws.send(JSON.stringify(identify));
             } else if (msg.op === 2) {
               identified = true;
+              try {
+                if (window && window.__TP_DEV) console.debug('[OBS-HS] IDENTIFIED', msg.d);
+                try {
+                  window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+                  window.__obsHandshakeLog.push({
+                    t: Date.now(),
+                    event: 'identified',
+                    data: msg.d,
+                  });
+                } catch {}
+              } catch {}
               if (testOnly) {
                 try {
                   ws.close(1000, 'test-ok');
@@ -94,11 +134,30 @@ export function createOBSAdapter() {
           }
         };
 
-        ws.onerror = () => {
-          /* will be surfaced onclose */
+        ws.onerror = (ev) => {
+          try {
+            if (window && window.__TP_DEV) console.debug('[OBS-HS] socket error', ev);
+            try {
+              window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+              window.__obsHandshakeLog.push({ t: Date.now(), event: 'error', data: ev });
+            } catch {}
+          } catch {}
         };
 
         ws.onclose = (e) => {
+          try {
+            if (window && window.__TP_DEV)
+              console.debug('[OBS-HS] socket close', e?.code, e?.reason);
+            try {
+              window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+              window.__obsHandshakeLog.push({
+                t: Date.now(),
+                event: 'close',
+                code: e?.code,
+                reason: e?.reason,
+              });
+            } catch {}
+          } catch {}
           if (!identified) {
             const err = new Error(`close ${e?.code || 0} ${e?.reason || ''}`.trim());
             _lastErr = err;
