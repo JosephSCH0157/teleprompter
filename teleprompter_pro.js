@@ -797,6 +797,7 @@
         `
         <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
+          <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
@@ -1104,6 +1105,20 @@
         _toast(txt, { type: (txt || '').includes('ok') ? 'ok' : 'error' });
       }, 600);
     });
+    // Auto-record toggle: persist to localStorage
+    try {
+      const autoRec = document.getElementById('autoRecordToggle');
+      if (autoRec) {
+        try {
+          autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
+        } catch {}
+        autoRec.addEventListener('change', () => {
+          try {
+            localStorage.setItem('tp_auto_record', autoRec.checked ? '1' : '0');
+          } catch {}
+        });
+      }
+    } catch {}
     // PLL Controller
     const hybridLockS = document.getElementById('settingsHybridLock');
     const maxBiasPctS = document.getElementById('settingsMaxBiasPct');
@@ -1151,6 +1166,14 @@
     updatePLLSettings();
     // Initialize hybrid state
     setHybrid(localStorage.getItem('hybridLock') === '1');
+    // Global getter for auto-record preference
+    window.getAutoRecordEnabled = function () {
+      try {
+        return localStorage.getItem('tp_auto_record') === '1';
+      } catch {
+        return false;
+      }
+    };
   }
 
   // TP: normalize-fallback
