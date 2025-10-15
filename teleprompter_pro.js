@@ -4194,15 +4194,32 @@ const _toast = function (msg, opts) {
           if (obsStatus) obsStatus.textContent = 'OBS: missing';
         }
       } catch (e) {
-        if (obsStatus) obsStatus.textContent = 'OBS: failed';
-        try {
-          const errMsg =
-            (typeof window !== 'undefined' && window.__obsBridge && e?.message) ||
-            __recorder.get('obs')?.getLastError?.() ||
-            e?.message ||
-            String(e);
-          obsStatus.title = errMsg;
-        } catch {}
+        if (obsStatus) {
+          obsStatus.textContent = 'OBS: failed';
+          try {
+            const errMsg =
+              (typeof window !== 'undefined' && window.__obsBridge && e?.message) ||
+              __recorder.get('obs')?.getLastError?.() ||
+              e?.message ||
+              String(e);
+            obsStatus.title = errMsg;
+            // show a visible toast with the error and a console hint
+            try {
+              _toast('OBS test failed: ' + (errMsg || 'unknown error'), { type: 'error' });
+            } catch {}
+            try {
+              console.warn('[OBS TEST] failed', {
+                err: e,
+                derived: errMsg,
+                url: obsUrlInput?.value,
+              });
+            } catch {}
+          } catch (inner) {
+            try {
+              obsStatus.title = String(e);
+            } catch {}
+          }
+        }
       }
     });
 
