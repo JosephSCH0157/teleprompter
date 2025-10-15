@@ -1746,6 +1746,22 @@ const _toast = function (msg, opts) {
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null; // set after io-anchor.js loads
   let __scrollCtl = null; // set after scroll-control.js loads
+  // Recorder lazy loader
+  let __rec = null;
+  async function loadRecorder() {
+    if (__rec) return __rec;
+    try {
+      const addV = window.__TP_ADDV || ((p) => p);
+      __rec = await import(addV('./recorders.js'));
+      if (!__rec || typeof __rec.init !== 'function') {
+        console.warn('[TP-Pro] recorders.js loaded but no init() export found');
+      }
+      return __rec;
+    } catch (e) {
+      console.error('[TP-Pro] Failed to import recorders.js', e);
+      return null;
+    }
+  }
   // Dynamic threshold tracking
   let lastAnchorConfidence = 0;
   let lastAnchorAt = 0;
@@ -4036,6 +4052,37 @@ const _toast = function (msg, opts) {
     window.__tpInitSuccess = true;
     console.log('[TP-Pro] _initCore mid (core UI wired)');
 
+    // Kick recorder init (don't await; let it initialize in background)
+    try {
+      loadRecorder().then((rec) => {
+        try {
+          if (rec && typeof rec.init === 'function') {
+            rec.init({
+              getUrl: () => obsUrlInput?.value?.trim(),
+              getPass: () => obsPassInput?.value ?? '',
+              isEnabled: () => !!enableObsChk?.checked,
+              onStatus: (txt, ok) => {
+                try {
+                  if (obsStatus) obsStatus.textContent = txt || '';
+                } catch {}
+                try {
+                  _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
+                } catch {}
+              },
+              onRecordState: (state) => {
+                try {
+                  const chip = document.getElementById('recChip');
+                  if (chip) chip.textContent = `Speech: ${state}`;
+                } catch {}
+              },
+            });
+          }
+        } catch (e) {
+          console.warn('[TP-Pro] recorder.init() threw', e);
+        }
+      });
+    } catch {}
+
     fontSizeInput.addEventListener('input', applyTypography);
     lineHeightInput.addEventListener('input', applyTypography);
 
@@ -4138,6 +4185,48 @@ const _toast = function (msg, opts) {
           }
         } catch {}
       });
+
+      // Also wire module-backed controls to the dynamic recorder (if present)
+      try {
+        // Toggle “Enable OBS” — update module enabled state and attempt connect/disconnect
+        document.getElementById('enableObs')?.addEventListener('change', async (e) => {
+          try {
+            const rec = await loadRecorder();
+            if (rec?.setEnabled) rec.setEnabled(!!e.target.checked);
+            if (e.target.checked) rec?.connect?.();
+            else rec?.disconnect?.();
+          } catch {}
+        });
+
+        // URL / Password change ⇒ nudge reconnect (module may debounce)
+        document.getElementById('obsUrl')?.addEventListener('change', async () => {
+          try {
+            const rec = await loadRecorder();
+            if (rec?.reconfigure) rec.reconfigure();
+          } catch {}
+        });
+        document.getElementById('obsPassword')?.addEventListener('change', async () => {
+          try {
+            const rec = await loadRecorder();
+            if (rec?.reconfigure) rec.reconfigure();
+          } catch {}
+        });
+
+        // Test button
+        document.getElementById('obsTestBtn')?.addEventListener('click', async () => {
+          try {
+            const rec = await loadRecorder();
+            const ok = await (rec?.test ? rec.test() : Promise.resolve(false));
+            const el = document.getElementById('obsStatus');
+            if (el) el.textContent = ok ? 'OBS test: ok' : 'OBS test: failed';
+          } catch (e) {
+            try {
+              const el = document.getElementById('obsStatus');
+              if (el) el.textContent = 'OBS test: error';
+            } catch {}
+          }
+        });
+      } catch {}
     }
 
     // If an OBS raw websocket is exposed, listen for record state events to update UI
