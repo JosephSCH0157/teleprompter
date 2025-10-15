@@ -21,11 +21,13 @@
     "prettier": "^3.3.0",
     "typescript": "^5.6.0"
   },
-  
   "lint-staged": {
     "*.{js,jsx}": [
       "eslint --fix",
       "prettier --write"
     ]
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.6"
   }
 }
