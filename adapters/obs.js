@@ -384,6 +384,7 @@ export function createOBSAdapter() {
     isAvailable: isAvailable,
     start: start,
     stop: stop,
+    connect: connect,
     test: test,
     // testCandidate removed; use __obsProbePorts or adapter.test()
     getLastError: getLastError,
