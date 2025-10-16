@@ -95,7 +95,19 @@ export function createOBSAdapter() {
               var authInfo = msg.d && msg.d.authentication;
               var identify = { op: 1, d: { rpcVersion: 1 } };
               if (authInfo) {
-                var pass = (cfg.password || '').toString().trim();
+                // Read password without trimming or normalization. Prefer configured value, then cfg.getPass(), then DOM fallbacks.
+                var pass = '';
+                try {
+                  if (typeof cfg.password !== 'undefined' && cfg.password !== null)
+                    pass = String(cfg.password);
+                  else if (typeof cfg.getPass === 'function') pass = String(cfg.getPass());
+                } catch {
+                  try {
+                    pass = String(cfg.password || '');
+                  } catch {
+                    pass = '';
+                  }
+                }
                 if (!pass) {
                   try {
                     var domPass = '';
@@ -103,14 +115,14 @@ export function createOBSAdapter() {
                       typeof document !== 'undefined' && document.getElementById('settingsObsPass');
                     var mainEl =
                       typeof document !== 'undefined' && document.getElementById('obsPassword');
-                    if (setEl && setEl.value && setEl.value.trim()) domPass = setEl.value.trim();
-                    else if (mainEl && mainEl.value && mainEl.value.trim())
-                      domPass = mainEl.value.trim();
+                    // Do NOT trim — spaces are valid characters
+                    if (setEl && setEl.value) domPass = setEl.value;
+                    else if (mainEl && mainEl.value) domPass = mainEl.value;
                     if (domPass) pass = domPass;
                     if (domPass && window && window.__TP_DEV)
                       console.debug('[OBS adapter] using DOM password fallback (settings/main)');
-                  } catch (ex) {
-                    void ex;
+                  } catch {
+                    /* ignore */
                   }
                 }
                 if (!pass) {
