@@ -4537,6 +4537,20 @@ const _toast = function (msg, opts) {
               if (on && hint)
                 hint.querySelector('.chip').textContent =
                   'OBS enabled — select “OBS Virtual Camera” above for Anvil view.';
+              try {
+                const obsAdapter = __recorder?.get && __recorder.get('obs');
+                if (on) {
+                  const s = document.getElementById('obsStatus');
+                  if (s) s.textContent = 'OBS: connecting…';
+                  obsAdapter?.connect?.();
+                } else {
+                  obsAdapter?.stop?.();
+                  const s = document.getElementById('obsStatus');
+                  if (s) s.textContent = 'OBS: disabled';
+                }
+              } catch (ex) {
+                void ex;
+              }
             } catch {}
           });
         } catch {}
@@ -4641,6 +4655,26 @@ const _toast = function (msg, opts) {
           buildSettingsContent();
         } catch {}
       }, 0);
+      // Dev-only: render a compact OBS handshake log into #obsDevPane when present
+      try {
+        if (window && window._TP_DEV) {
+          setInterval(() => {
+            try {
+              const pane = document.getElementById('obsDevPane');
+              if (!pane) return;
+              const logs = window.__obsLog || [];
+              const tail = logs
+                .slice(-20)
+                .map((x) => ({ t: new Date(x.t).toLocaleTimeString(), ev: x.ev, data: x.data }));
+              pane.textContent = tail.map((l) => JSON.stringify(l)).join('\n');
+            } catch (ex) {
+              void ex;
+            }
+          }, 500);
+        }
+      } catch (ex) {
+        void ex;
+      }
       const closeSettings = () => {
         settingsOverlay.classList.add('hidden');
         settingsBtn.setAttribute('aria-expanded', 'false');
@@ -4719,6 +4753,57 @@ const _toast = function (msg, opts) {
     };
     obsUrlInput?.addEventListener('change', saveObsConfig);
     obsPassInput?.addEventListener('change', saveObsConfig);
+
+    // When OBS fields change, reconfigure adapter immediately so it has latest values
+    try {
+      ['settingsObsUrl', 'obsUrl', 'settingsObsPass', 'obsPassword'].forEach((id) => {
+        try {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('change', () => {
+            try {
+              const obsAdapter = __recorder?.get && __recorder.get('obs');
+              if (obsAdapter && typeof obsAdapter.configure === 'function') {
+                const url =
+                  (document.getElementById('obsUrl') || document.getElementById('settingsObsUrl'))
+                    ?.value || '';
+                const password =
+                  (
+                    document.getElementById('obsPassword') ||
+                    document.getElementById('settingsObsPass')
+                  )?.value || '';
+                try {
+                  obsAdapter.configure({
+                    url: url,
+                    password: password,
+                    isEnabled: () => !!document.getElementById('enableObs')?.checked,
+                    onStatus: (s, ok, meta) => {
+                      try {
+                        const st = document.getElementById('obsStatus');
+                        if (st) {
+                          st.textContent = 'OBS: ' + (ok ? 'connected' : String(s || 'failed'));
+                          st.title = String(s || '');
+                        }
+                      } catch (e) {
+                        void e;
+                      }
+                    },
+                  });
+                } catch (e) {
+                  void e;
+                }
+              }
+            } catch (ex) {
+              void ex;
+            }
+          });
+        } catch (ex) {
+          void ex;
+        }
+      });
+    } catch (ex) {
+      void ex;
+    }
 
     // Test button
     obsTestBtn?.addEventListener('click', async () => {

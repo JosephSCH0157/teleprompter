@@ -15,6 +15,28 @@ export function createOBSAdapter() {
   var _retryingCandidates = false;
   // reconnect/backoff state
   var _backoff = 800;
+  var _attempts = 0;
+
+  // lightweight dev log (keeps short history when window._TP_DEV is enabled)
+  try {
+    if (typeof window !== 'undefined') {
+      window.__obsLog = window.__obsLog || [];
+      window.__obsLogMax = window.__obsLogMax || 500;
+      window.logObs = function (ev, data) {
+        try {
+          if (!window._TP_DEV) return;
+          window.__obsLog.push({ t: Date.now(), ev: ev, data: data });
+          if (window.__obsLog.length > window.__obsLogMax) {
+            window.__obsLog.splice(0, window.__obsLog.length - window.__obsLogMax);
+          }
+        } catch (ex) {
+          void ex;
+        }
+      };
+    }
+  } catch (ex) {
+    void ex;
+  }
 
   var _enc = function (s) {
     return new TextEncoder().encode(s);
@@ -75,9 +97,16 @@ export function createOBSAdapter() {
             window.__obsHandshakeLog.push({ t: Date.now(), event: 'open', url: url });
             try {
               _backoff = 800;
+              _attempts = 0;
             } catch {}
             try {
               cfg.onStatus && cfg.onStatus('connected', true);
+              try {
+                // dev log
+                window.logObs && window.logObs('open', { url: url });
+              } catch (ex) {
+                void ex;
+              }
             } catch {}
           } catch (ex) {
             void ex;
@@ -101,6 +130,11 @@ export function createOBSAdapter() {
 
             if (msg.op === 0) {
               var authInfo = msg.d && msg.d.authentication;
+              try {
+                window.logObs && window.logObs('hello', { authentication: authInfo });
+              } catch (ex) {
+                void ex;
+              }
               var identify = { op: 1, d: { rpcVersion: 1 } };
               if (authInfo) {
                 // Read password without trimming or normalization. Prefer configured value, then cfg.getPass(), then DOM fallbacks.
@@ -165,6 +199,8 @@ export function createOBSAdapter() {
                     };
                     if (window && window.__TP_DEV) ent.identifyPayload = identify;
                     window.__obsHandshakeLog.push(ent);
+                    window.logObs &&
+                      window.logObs('identify-sent', { auth: !!identify.d.authentication });
                   } catch (ex) {
                     void ex;
                   }
@@ -194,6 +230,11 @@ export function createOBSAdapter() {
               try {
                 window.__obsHandshakeLog = window.__obsHandshakeLog || [];
                 window.__obsHandshakeLog.push({ t: Date.now(), event: 'identified', data: msg.d });
+                try {
+                  window.logObs && window.logObs('identified', { data: msg.d });
+                } catch (ex) {
+                  void ex;
+                }
               } catch (ex) {
                 void ex;
               }
@@ -223,6 +264,11 @@ export function createOBSAdapter() {
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
               window.__obsHandshakeLog.push({ t: Date.now(), event: 'error', data: ev });
+              try {
+                window.logObs && window.logObs('error', { data: ev });
+              } catch (ex) {
+                void ex;
+              }
             } catch (ex) {
               void ex;
             }
@@ -252,12 +298,28 @@ export function createOBSAdapter() {
               }
               window.__obsHandshakeLog.push(entry);
               try {
+                window.logObs &&
+                  window.logObs('close', {
+                    code: (e && e.code) || 0,
+                    reason: (e && e.reason) || '',
+                  });
+              } catch (ex) {
+                void ex;
+              }
+              try {
+                // increment attempts and advance backoff for retry reporting
+                _attempts = (_attempts || 0) + 1;
+                _backoff = Math.min(Math.floor((_backoff || 800) * 1.6), 8000);
                 cfg.onStatus &&
-                  cfg.onStatus(
-                    'closed ' + ((e && e.code) || 0) + ' ' + ((e && e.reason) || ''),
-                    false
-                  );
-              } catch {}
+                  cfg.onStatus('closed', false, {
+                    code: (e && e.code) || 0,
+                    reason: (e && e.reason) || '',
+                    attempt: _attempts,
+                    backoffMs: _backoff,
+                  });
+              } catch (ex) {
+                void ex;
+              }
             } catch (ex) {
               void ex;
             }
@@ -283,9 +345,6 @@ export function createOBSAdapter() {
                       connect();
                     } catch {}
                   }, _backoff);
-                } catch {}
-                try {
-                  _backoff = Math.min(Math.floor(_backoff * 1.6), 8000);
                 } catch {}
               }
             } catch {}
