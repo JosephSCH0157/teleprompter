@@ -9,14 +9,39 @@
 */
 
 // Reinstate IIFE wrapper (was removed causing brace imbalance)
-import { toast as moduleToast } from './ui/toasts.js';
-// 1) LAN default for OBS
-const DEFAULT_OBS_URL = 'ws://192.168.1.198:4455';
-// Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
-import * as RecorderModule from './recorders.js';
+// runtime-safe import fallback: try require() first, then window globals, then leave undefined
+var moduleToast = null;
 try {
-  if (typeof window !== 'undefined') window.__recorder = RecorderModule;
-} catch {}
+  if (typeof require === 'function') {
+    try {
+      moduleToast = require('./ui/toasts.js').toast;
+    } catch (e) {
+      moduleToast = null;
+    }
+  }
+} catch (e) {}
+try {
+  if (!moduleToast && typeof window !== 'undefined' && window.toast) moduleToast = window.toast;
+} catch (e) {}
+// 1) LAN default for OBS
+var DEFAULT_OBS_URL = 'ws://192.168.1.198:4455';
+// Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
+try {
+  if (typeof require === 'function') {
+    try {
+      var RecorderModule = require('./recorders.js');
+      if (typeof window !== 'undefined') window.__recorder = RecorderModule;
+    } catch (e) {
+      /* fallthrough */
+    }
+  }
+} catch (e) {}
+try {
+  if (typeof window !== 'undefined' && !window.__recorder) {
+    // last-resort: maybe the module already attached itself globally
+    if (window.__recorder);
+  }
+} catch (e) {}
 try {
   // Emit a lightweight startup log so developers can see adapter availability in the browser console
   try {
@@ -995,6 +1020,7 @@ const _toast = function (msg, opts) {
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
           <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px">Sync & Test</button>
+          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px">Poke</button>
         </form>
         <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" style="margin-top:8px"></div>
   <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
@@ -1364,6 +1390,39 @@ const _toast = function (msg, opts) {
         mainPass.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
+    // Poke button: trigger adapter pokeStatusTest for quick smoke checks
+    try {
+      const obsPoke = document.getElementById('settingsObsPoke');
+      obsPoke?.addEventListener('click', async () => {
+        try {
+          const rec = await loadRecorder();
+          const obsAdapter = rec?.get ? rec.get('obs') : null;
+          let ok = false;
+          try {
+            if (obsAdapter && typeof obsAdapter.pokeStatusTest === 'function')
+              ok = !!obsAdapter.pokeStatusTest();
+          } catch (ex) {
+            void ex;
+          }
+          const msgEl = document.getElementById('settingsObsTestMsg');
+          if (msgEl) {
+            msgEl.textContent = ok ? 'Poke sent' : 'Poke not available';
+            msgEl.classList.toggle('obs-test-ok', !!ok);
+            msgEl.classList.toggle('obs-test-error', !ok);
+          }
+        } catch (e) {
+          try {
+            const msgEl = document.getElementById('settingsObsTestMsg');
+            if (msgEl) {
+              msgEl.textContent = 'Poke failed';
+              msgEl.classList.add('obs-test-error');
+            }
+          } catch {}
+        }
+      });
+    } catch (ex) {
+      void ex;
+    }
     // Mirror as-you-type so password is available immediately (not just on blur)
     obsPassS?.addEventListener('input', async () => {
       try {
