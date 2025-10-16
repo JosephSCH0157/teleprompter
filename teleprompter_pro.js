@@ -655,13 +655,42 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
           if (mainPass && setPass) { mainPass.value = setPass.value; mainPass.dispatchEvent(new Event('change',{bubbles:true})); }
         } catch(e) { /* ignore */ }
 
+        // Ensure adapter is configured with latest URL/password and status callbacks
+        try {
+          const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
+          const setUrl = document.getElementById('settingsObsUrl');
+          const setPass = document.getElementById('settingsObsPass');
+          const enableChk = document.getElementById('enableObs');
+          const obsStatusEl = document.getElementById('obsStatus');
+          if (adapter && typeof adapter.configure === 'function') {
+            try {
+              adapter.configure({
+                url: (setUrl && setUrl.value) || (document.getElementById('obsUrl')?.value) || undefined,
+                password: (setPass && setPass.value) || (document.getElementById('obsPassword')?.value) || undefined,
+                isEnabled: () => !!(enableChk && enableChk.checked),
+                onStatus: (s, ok) => {
+                  try {
+                    if (obsStatusEl) {
+                      if (ok) obsStatusEl.textContent = 'OBS: connected';
+                      else obsStatusEl.textContent = 'OBS: ' + (String(s || '').length ? String(s) : 'failed');
+                      obsStatusEl.title = String(s || '');
+                    }
+                  } catch(e) { /* ignore */ }
+                }
+              });
+            } catch(e) { /* ignore */ }
+          }
+        } catch(e) { /* ignore */ }
+
         // Trigger existing UI test button behavior
         try { obsTestBtn?.click(); } catch {}
 
-        // Also call recorder adapter test directly (uses adapter's test implementation)
+        // Also configure and call recorder adapter test directly (uses adapter's test implementation)
         try {
-          if (window.__recorder?.get && window.__recorder.get('obs')?.test) {
-            await window.__recorder.get('obs').test();
+          const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
+          if (adapter) {
+            // adapter.configure already called above; run test()
+            if (typeof adapter.test === 'function') await adapter.test();
           }
         } catch(e) { console.warn('OBS adapter test failed', e); }
 
@@ -1651,6 +1680,23 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         const pass = window.readObsPassword ? window.readObsPassword() : (document.getElementById('settingsObsPass')?.value || document.getElementById('obsPassword')?.value);
         if (initHas && adapter && typeof adapter.connect === 'function' && url && pass) {
           try {
+            // configure adapter with live getters/status callbacks
+            try {
+              adapter.configure({
+                url: url,
+                password: pass,
+                isEnabled: () => !!(enableObsChk && enableObsChk.checked),
+                onStatus: (s, ok) => {
+                  try {
+                    if (obsStatus) {
+                      if (ok) obsStatus.textContent = 'OBS: connected';
+                      else obsStatus.textContent = 'OBS: ' + (String(s || '').length ? String(s) : 'failed');
+                      obsStatus.title = String(s || '');
+                    }
+                  } catch {}
+                }
+              });
+            } catch {}
             if (obsStatus) obsStatus.textContent = 'OBS: connecting…';
             // call connect() but don't block init
             adapter.connect().catch(e=>{
