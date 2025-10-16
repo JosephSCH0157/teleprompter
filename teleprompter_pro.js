@@ -60,9 +60,12 @@ try {
         : [];
     console.info('[TP-Pro] __recorder assigned — adapters:', list);
   } catch (e) {
+    void e;
     console.info('[TP-Pro] __recorder assigned (no list available)');
   }
-} catch {}
+} catch (e) {
+  void e;
+}
 
 // Developer helper: run the OBS adapter test from the page console and print structured logs.
 try {
@@ -118,18 +121,22 @@ try {
 } catch {}
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
-const _toast = function (msg, opts) {
+let _toast = function (msg, opts) {
   try {
     if (typeof moduleToast === 'function') return moduleToast(msg, opts);
   } catch (e) {
     try {
       console.debug('module toast access failed', e);
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   }
   try {
     if (typeof window !== 'undefined' && typeof window._toast === 'function')
       return window._toast(msg, opts);
-  } catch {}
+  } catch (e) {
+    void e;
+  }
   try {
     console.debug('[toast]', msg, opts || '');
   } catch {}
@@ -161,7 +168,9 @@ const _toast = function (msg, opts) {
           return p;
         }
       };
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     // Dev-only cache bust handled via __TP_ADDV and HTML loader; no top-level await here
     try {
       window.__TP_DEV = DEV;
@@ -182,7 +191,9 @@ const _toast = function (msg, opts) {
     try {
       if (CALM) console.info('[TP-Pro] Calm Mode enabled');
     } catch {}
-  } catch {}
+  } catch (e) {
+    void e;
+  }
   // Boot instrumentation (added)
   try {
     window.__TP_BOOT_TRACE = [];
@@ -222,7 +233,9 @@ const _toast = function (msg, opts) {
           t: Date.now(),
           m: 'onerror:' + (ev?.error?.message || ev?.message),
         });
-      } catch {}
+      } catch (e) {
+        void e;
+      }
       try {
         console.error('[TP-BOOT onerror]', ev?.error || ev?.message || ev);
       } catch {}
@@ -239,7 +252,9 @@ const _toast = function (msg, opts) {
       } catch {}
     });
     _origLog(tag('installed global error hooks'));
-  } catch {}
+  } catch (e) {
+    void e;
+  }
   try {
     __tpBootPush('after-boot-block');
   } catch {}
@@ -262,7 +277,9 @@ const _toast = function (msg, opts) {
           }
         }
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   });
 
   // Calm Mode geometry helpers: unified target math and clamped scroll writes
@@ -322,7 +339,9 @@ const _toast = function (msg, opts) {
           });
         } catch {}
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   }
 
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
@@ -831,7 +850,9 @@ const _toast = function (msg, opts) {
       } else {
         _toast = window._toast;
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
 
     // Try to dynamically import the module-based toast and prefer it when available.
     (async function () {
@@ -926,7 +947,9 @@ const _toast = function (msg, opts) {
           }
         }
       });
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   }
   try {
     __tpBootPush('after-wireNormalizeButton');
@@ -1089,10 +1112,14 @@ const _toast = function (msg, opts) {
     // Ensure OBS fields are hydrated from storage and persistence is wired before we mirror values
     try {
       hydrateObsFieldsFromStore();
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     try {
       wireObsPersistence();
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
     const micSel = document.getElementById('settingsMicSel');
     if (micSel && !micSel.options.length) {
@@ -1129,13 +1156,17 @@ const _toast = function (msg, opts) {
       const obsEnable = document.getElementById('settingsEnableObs');
       const mainEnable = document.getElementById('enableObs');
       if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     try {
       const autoRec = document.getElementById('autoRecordToggle');
       if (autoRec) {
         try {
           autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
-        } catch {}
+        } catch (e) {
+          void e;
+        }
         autoRec.addEventListener('change', () => {
           try {
             localStorage.setItem('tp_auto_record', autoRec.checked ? '1' : '0');
@@ -1171,7 +1202,9 @@ const _toast = function (msg, opts) {
       if (rem) {
         try {
           rem.checked = localStorage.getItem('tp_obs_remember') === '1';
-        } catch {}
+        } catch (e) {
+          void e;
+        }
         // ensure changes to the checkbox re-run save logic
         rem.addEventListener('change', () => {
           try {
@@ -1184,7 +1217,9 @@ const _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('after-syncSettingsValues-def');
-  } catch {}
+  } catch (e) {
+    void e;
+  }
 
   // Getter for auto-record preference
   window.getAutoRecordEnabled = function () {
@@ -1295,7 +1330,9 @@ const _toast = function (msg, opts) {
       setTimeout(() => {
         try {
           runSelfChecks();
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       }, 120);
     }
   } catch {}
@@ -1312,7 +1349,9 @@ const _toast = function (msg, opts) {
       micSel.addEventListener('change', () => {
         try {
           localStorage.setItem(DEVICE_KEY, micSel.value);
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       });
     }
     reqMicBtn?.addEventListener('click', async () => {
@@ -1402,75 +1441,43 @@ const _toast = function (msg, opts) {
       }
     });
     // Mirror password
-    obsPassS?.addEventListener('change', () => {
-      const mainPass = document.getElementById('obsPassword');
-      if (mainPass && typeof obsPassS.value === 'string') {
-        mainPass.value = obsPassS.value;
-        mainPass.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-    // Poke button: trigger adapter pokeStatusTest for quick smoke checks
-    try {
-      const obsPoke = document.getElementById('settingsObsPoke');
-      obsPoke?.addEventListener('click', async () => {
-        try {
-          const rec = await loadRecorder();
-          const obsAdapter = rec?.get ? rec.get('obs') : null;
-          let ok = false;
-          try {
-            if (obsAdapter && typeof obsAdapter.pokeStatusTest === 'function')
-              ok = !!obsAdapter.pokeStatusTest();
-          } catch (ex) {
-            void ex;
-          }
-          const msgEl = document.getElementById('settingsObsTestMsg');
-          if (msgEl) {
-            msgEl.textContent = ok ? 'Poke sent' : 'Poke not available';
-            msgEl.classList.toggle('obs-test-ok', !!ok);
-            msgEl.classList.toggle('obs-test-error', !ok);
-          }
-        } catch (e) {
-          try {
-            const msgEl = document.getElementById('settingsObsTestMsg');
-            if (msgEl) {
-              msgEl.textContent = 'Poke failed';
-              msgEl.classList.add('obs-test-error');
-            }
-          } catch {}
-        }
-      });
-    } catch (ex) {
-      void ex;
-    }
-    // Mirror as-you-type so password is available immediately (not just on blur)
-    obsPassS?.addEventListener('input', async () => {
+    obsPassS?.addEventListener('change', async () => {
       try {
         const mainPass = document.getElementById('obsPassword');
-        if (mainPass) {
+        if (mainPass && typeof obsPassS.value === 'string') {
           mainPass.value = obsPassS.value;
           mainPass.dispatchEvent(new Event('input', { bubbles: true }));
           mainPass.dispatchEvent(new Event('change', { bubbles: true }));
         }
-        // Persist to sessionStorage immediately (safer than localStorage)
+      } catch (e) {
+        void e;
+      }
+
+      try {
+        sessionStorage.setItem('tp_obs_password', obsPassS.value || '');
+      } catch (e) {
+        void e;
+      }
+
+      try {
+        const rem = document.getElementById('settingsObsRemember');
+        if (rem && rem.checked) localStorage.setItem('tp_obs_password', obsPassS.value || '');
+        else localStorage.removeItem('tp_obs_password');
+      } catch (e) {
+        void e;
+      }
+
+      try {
+        const recModule = await loadRecorder();
+        const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
         try {
-          sessionStorage.setItem('tp_obs_password', obsPassS.value || '');
-        } catch {}
-        // Respect 'Remember' checkbox for localStorage
-        try {
-          const rem = document.getElementById('settingsObsRemember');
-          if (rem && rem.checked) localStorage.setItem('tp_obs_password', obsPassS.value || '');
-          else localStorage.removeItem('tp_obs_password');
-        } catch {}
-        // Attempt to reconfigure recorder adapter so it re-reads password getters
-        try {
-          const recModule = await loadRecorder();
-          const rec =
-            recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
-          try {
-            rec?.reconfigure?.();
-          } catch {}
-        } catch {}
-      } catch {}
+          rec?.reconfigure?.();
+        } catch (e) {
+          void e;
+        }
+      } catch (e) {
+        void e;
+      }
     });
     // Proxy test button: push settings -> main immediately, reconfigure recorder, then run main test
     obsTestS?.addEventListener('click', async () => {
@@ -1491,7 +1498,9 @@ const _toast = function (msg, opts) {
         try {
           rec?.reconfigure?.();
         } catch {}
-      } catch {}
+      } catch (e) {
+        void e;
+      }
 
       // now run the existing main test
       document.getElementById('obsTestBtn')?.click();
@@ -1522,7 +1531,9 @@ const _toast = function (msg, opts) {
           try {
             rec?.reconfigure?.();
           } catch {}
-        } catch {}
+        } catch (e) {
+          void e;
+        }
         // Run the in-page test if provided
         try {
           if (typeof window.__tpRunObsTest === 'function') {
@@ -1620,7 +1631,9 @@ const _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('after-fallbackNormalize-def');
-  } catch {}
+  } catch (e) {
+    void e;
+  }
 
   // TP: normalize-strict
   // Strict normalizer (single source of truth)
@@ -1907,7 +1920,9 @@ const _toast = function (msg, opts) {
         ta.addEventListener('scroll', rebuild, { passive: true });
         wrap.appendChild(overlay);
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
 
     // Return the textual report for callers (e.g., Help overlay validate button)
     return msg;
@@ -1925,7 +1940,9 @@ const _toast = function (msg, opts) {
         recAutoRestart = !!v;
         try {
           localStorage.setItem('tp_rec_autorestart_v1', recAutoRestart ? '1' : '0');
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       },
     });
   } catch {}
@@ -2248,9 +2265,9 @@ const _toast = function (msg, opts) {
     clearText,
     _saveLocalBtn,
     _loadLocalBtn,
-    downloadFileBtn,
-    uploadFileBtn,
-    uploadFileInput,
+    _downloadFileBtn,
+    _uploadFileBtn,
+    _uploadFileInput,
     wrapBold,
     wrapItalic,
     wrapUnderline,
@@ -2446,21 +2463,27 @@ const _toast = function (msg, opts) {
       audioStream = stream;
       try {
         permChip && (permChip.textContent = 'Mic: allowed');
-      } catch {}
+      } catch (e) {
+        void e;
+      }
       startDbMeter(stream);
       // Persist chosen device
       try {
         if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId);
-      } catch {}
+      } catch (e) {
+        void e;
+      }
     } catch {
       warn('Mic denied or failed', e);
       try {
         permChip && (permChip.textContent = 'Mic: denied');
-      } catch {}
+      } catch (e) {
+        void e;
+      }
     }
   }
 
-  function releaseMic() {
+  function _releaseMic() {
     try {
       if (audioStream) {
         audioStream.getTracks().forEach((t) => {
@@ -2469,7 +2492,9 @@ const _toast = function (msg, opts) {
           } catch {}
         });
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     audioStream = null;
     try {
       permChip && (permChip.textContent = 'Mic: released');
@@ -2499,7 +2524,9 @@ const _toast = function (msg, opts) {
             micSelB.appendChild(o);
           });
           if (cur && Array.from(micSelB.options).some((o) => o.value === cur)) micSelB.value = cur;
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       }
 
       const camSelA = typeof camDeviceSel !== 'undefined' ? camDeviceSel : null;
@@ -2532,7 +2559,9 @@ const _toast = function (msg, opts) {
           sel.value = prefer;
           sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      } catch {}
+      } catch (e) {
+        void e;
+      }
     } catch {
       /* ignore */
     }
@@ -2571,7 +2600,9 @@ const _toast = function (msg, opts) {
 
       if (chkMain) chkMain.checked = !!remember;
       if (chkSet) chkSet.checked = !!remember;
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   }
 
   // Simple on-page debug panel for OBS events (only shown when __TP_DEV)
@@ -2630,7 +2661,9 @@ const _toast = function (msg, opts) {
             msgs.appendChild(el);
           });
           msgs.scrollTop = msgs.scrollHeight;
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       });
       return p;
     } catch {
@@ -2685,7 +2718,9 @@ const _toast = function (msg, opts) {
               localStorage.setItem('tp_obs_password', v.pass);
             } catch {}
           }
-        } catch {}
+        } catch (e) {
+          void e;
+        }
       };
       urlMain?.addEventListener('change', commit);
       passMain?.addEventListener('change', commit);
@@ -3011,7 +3046,9 @@ const _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('after-ensureHelpUI-def');
-  } catch {}
+  } catch (e) {
+    void e;
+  }
 
   function _injectHelpPanel() {
     try {
@@ -3978,7 +4015,9 @@ const _toast = function (msg, opts) {
           .map((s) => `<option value="${s.id}">${s.title}</option>`)
           .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
-      } catch {}
+      } catch (e) {
+        void e;
+      }
     }
 
     async function onScriptSave() {
@@ -4097,7 +4136,9 @@ const _toast = function (msg, opts) {
           el.textContent = 'Idle';
           el.classList.add('idle');
         }
-      } catch {}
+      } catch (e) {
+        void e;
+      }
     };
     // OBS runtime flags (safe defaults)
     window.__obsConnected = false;
@@ -4122,7 +4163,9 @@ const _toast = function (msg, opts) {
             } catch {}
           }
         }
-      } catch {}
+      } catch (e) {
+        void e;
+      }
       return false;
     };
 
@@ -4235,9 +4278,9 @@ const _toast = function (msg, opts) {
     uploadFileBtn = document.getElementById('uploadFileBtn');
     uploadFileInput = document.getElementById('uploadFile');
     const scriptSelect = document.getElementById('scriptSelect');
-    const saveAsBtn = document.getElementById('saveAsBtn');
-    const loadBtn = document.getElementById('loadBtn');
-    const deleteBtn = document.getElementById('deleteBtn');
+    const _saveAsBtn = document.getElementById('saveAsBtn');
+    const _loadBtn = document.getElementById('loadBtn');
+    const _deleteBtn = document.getElementById('deleteBtn');
     const resetScriptBtn = document.getElementById('resetScriptBtn');
 
     wrapBold = document.getElementById('wrap-bold');
@@ -4406,7 +4449,9 @@ const _toast = function (msg, opts) {
         renderScript(txt);
         console.info('[TP-Pro] Loaded fixture:', url);
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     // …keep the rest of your init() as-is…
 
     // Wire UI
@@ -4418,7 +4463,9 @@ const _toast = function (msg, opts) {
       openDisplayBtn.__listenerAttached = true;
       closeDisplayBtn.__listenerAttached = true;
       presentBtn.__listenerAttached = true;
-    } catch {}
+    } catch (e) {
+      void e;
+    }
     window.__tpInitSuccess = true;
     console.log('[TP-Pro] _initCore mid (core UI wired)');
 
@@ -4460,7 +4507,9 @@ const _toast = function (msg, opts) {
           console.warn('[TP-Pro] recorder.init() threw', e);
         }
       });
-    } catch {}
+    } catch (e) {
+      void e;
+    }
 
     fontSizeInput.addEventListener('input', applyTypography);
     lineHeightInput.addEventListener('input', applyTypography);
@@ -4599,10 +4648,13 @@ const _toast = function (msg, opts) {
             const el = document.getElementById('obsStatus');
             if (el) el.textContent = ok ? 'OBS test: ok' : 'OBS test: failed';
           } catch (e) {
+            void e;
             try {
               const el = document.getElementById('obsStatus');
               if (el) el.textContent = 'OBS test: error';
-            } catch {}
+            } catch (e) {
+              void e;
+            }
           }
         });
         // Friendly hint: recommend OBS Virtual Camera when OBS is enabled
@@ -4629,7 +4681,9 @@ const _toast = function (msg, opts) {
               } catch (ex) {
                 void ex;
               }
-            } catch {}
+            } catch (e) {
+              void e;
+            }
           });
         } catch {}
       } catch {}
@@ -4685,7 +4739,9 @@ const _toast = function (msg, opts) {
           } catch {}
         } catch {}
       }
-    } catch {}
+    } catch (e) {
+      void e;
+    }
 
     // Settings overlay wiring
     if (settingsBtn && settingsOverlay && settingsClose && settingsBody) {
@@ -4940,9 +4996,12 @@ const _toast = function (msg, opts) {
               });
             } catch {}
           } catch (inner) {
+            void inner;
             try {
               obsStatus.title = String(e);
-            } catch {}
+            } catch (e) {
+              void e;
+            }
           }
         }
       }
@@ -9382,7 +9441,7 @@ const _toast = function (msg, opts) {
    * Local storage + File I/O (DOCX supported)
    * ────────────────────────────────────────────────────────────── */
   const LS_KEY = 'tp_script_v1';
-  function saveToLocal() {
+  function _saveToLocal() {
     try {
       localStorage.setItem(LS_KEY, editor.value || '');
       setStatus('Saved to browser.');
@@ -9390,7 +9449,7 @@ const _toast = function (msg, opts) {
       setStatus('Save failed.');
     }
   }
-  function loadFromLocal() {
+  function _loadFromLocal() {
     try {
       const v = localStorage.getItem(LS_KEY) || '';
       editor.value = v;
@@ -9425,7 +9484,7 @@ const _toast = function (msg, opts) {
     setStatus('Script reset to top for new take.');
   }
 
-  function downloadAsFile(name, text, mime = 'text/plain') {
+  function _downloadAsFile(name, text, mime = 'text/plain') {
     try {
       let type = String(mime || 'text/plain');
       if (type.startsWith('text/') && !/charset=/i.test(type)) type += ';charset=utf-8';
@@ -9625,7 +9684,7 @@ const _toast = function (msg, opts) {
   }
 
   // TP: upload-file
-  async function uploadFromFile(file) {
+  async function _uploadFromFile(file) {
     const lower = (file.name || '').toLowerCase();
     const isDocx =
       lower.endsWith('.docx') ||
