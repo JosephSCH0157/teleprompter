@@ -1643,6 +1643,24 @@ shortcutsClose   = document.getElementById('shortcutsClose');
         } catch {}
       };
       applyFromSettings();
+      // Auto-connect on boot if enabled and has url+password
+      try {
+        const initHas = enableObsChk.checked;
+        const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
+        const url = window.readObsUrl ? window.readObsUrl() : (document.getElementById('settingsObsUrl')?.value || document.getElementById('obsUrl')?.value);
+        const pass = window.readObsPassword ? window.readObsPassword() : (document.getElementById('settingsObsPass')?.value || document.getElementById('obsPassword')?.value);
+        if (initHas && adapter && typeof adapter.connect === 'function' && url && pass) {
+          try {
+            if (obsStatus) obsStatus.textContent = 'OBS: connecting…';
+            // call connect() but don't block init
+            adapter.connect().catch(e=>{
+              try { if (obsStatus) { obsStatus.textContent = 'OBS: failed'; obsStatus.title = adapter.getLastError?.() || String(e); } } catch {}
+            }).then(()=>{
+              try { if (obsStatus) obsStatus.textContent = 'OBS: connected'; } catch {}
+            });
+          } catch(e) { /* ignore */ }
+        }
+      } catch {}
       enableObsChk.addEventListener('change', async ()=>{
         try {
           if (!__recorder?.getSettings || !__recorder?.setSettings) return;
