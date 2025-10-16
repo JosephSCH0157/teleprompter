@@ -4274,9 +4274,9 @@ let _toast = function (msg, opts) {
     loadSample = document.getElementById('loadSample');
     clearText = document.getElementById('clearText');
 
-    downloadFileBtn = document.getElementById('downloadFile');
-    uploadFileBtn = document.getElementById('uploadFileBtn');
-    uploadFileInput = document.getElementById('uploadFile');
+    _downloadFileBtn = document.getElementById('downloadFile');
+    _uploadFileBtn = document.getElementById('uploadFileBtn');
+    _uploadFileInput = document.getElementById('uploadFile');
     const scriptSelect = document.getElementById('scriptSelect');
     const _saveAsBtn = document.getElementById('saveAsBtn');
     const _loadBtn = document.getElementById('loadBtn');
