@@ -22,7 +22,7 @@ function _write(list) {
   }
 }
 
-export const Scripts = {
+const Scripts = {
   init() {
     if (!_read().length) _write([]);
   },
@@ -66,5 +66,9 @@ export const Scripts = {
   },
 };
 
-// Also export default for convenience
-export default Scripts;
+// CommonJS export for environments that don't use ES modules
+try {
+  if (typeof window !== 'undefined') window.Scripts = Scripts;
+} catch (e) {
+  void e;
+}

@@ -21,7 +21,7 @@ function prune(container) {
   }
 }
 
-export function toast(msg, opts) {
+function toast(msg, opts) {
   try {
     const container = ensureContainer();
     prune(container);
@@ -48,9 +48,21 @@ export function toast(msg, opts) {
 }
 
 // auto-init container for scripts that want to ensure it's available early
-export function initToastContainer() {
+function initToastContainer() {
   ensureContainer();
 }
+
+// Attach to window when possible for non-module consumers
+try {
+  if (typeof window !== 'undefined') {
+    window.toast = toast;
+    window.initToastContainer = initToastContainer;
+  }
+} catch (e) {
+  void e;
+}
+
+// No module.exports here to avoid referencing 'module' in non-CommonJS lint environments
 
 // Note: we intentionally do NOT attach this API to `window` here.
 // Consumers should import { toast } from './ui/toasts.js'.

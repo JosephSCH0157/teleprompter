@@ -1,7 +1,57 @@
-// ui/scripts-ui.js (ES module)
-import { Scripts } from '../scriptsStore.js';
-import { safeDOM } from '../utils/safe-dom.js';
-import { toast as importedToast } from './toasts.js';
+// ui/scripts-ui.js (runtime-safe)
+let Scripts = null;
+try {
+  const _req = typeof globalThis !== 'undefined' ? globalThis['require'] : undefined;
+  if (typeof _req === 'function') {
+    try {
+      Scripts = _req('../scriptsStore.js')?.Scripts || _req('../scriptsStore.js');
+    } catch (e) {
+      void e;
+    }
+  }
+} catch (e) {
+  void e;
+}
+try {
+  if (!Scripts && typeof window !== 'undefined' && window.Scripts) Scripts = window.Scripts;
+} catch (e) {
+  void e;
+}
+let safeDOM = null;
+let importedToast = null;
+// minimal safeDOM fallback
+const _safeDOM_fallback = {
+  get: (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null),
+};
+try {
+  const _req = typeof globalThis !== 'undefined' ? globalThis['require'] : undefined;
+  if (typeof _req === 'function') {
+    try {
+      safeDOM =
+        _req('../utils/safe-dom.js')?.safeDOM ||
+        (typeof window !== 'undefined' && window.safeDOM) ||
+        _safeDOM_fallback;
+    } catch (e) {
+      void e;
+    }
+    try {
+      importedToast =
+        _req('./toasts.js')?.toast || (typeof window !== 'undefined' && window.toast) || null;
+    } catch (e) {
+      void e;
+      importedToast = (typeof window !== 'undefined' && window.toast) || null;
+    }
+  } else {
+    try {
+      safeDOM = (typeof window !== 'undefined' && window.safeDOM) || null;
+      importedToast = (typeof window !== 'undefined' && window.toast) || null;
+    } catch (e) {
+      void e;
+    }
+  }
+} catch (e) {
+  void e;
+}
 
 let currentScriptId = null;
 const scriptSlots = safeDOM.get('scriptSlots');
@@ -42,13 +92,19 @@ function refreshScriptsDropdown() {
   }
 }
 
-export function initScriptsUI() {
+function initScriptsUI() {
   try {
     Scripts && typeof Scripts.init === 'function' && Scripts.init();
     refreshScriptsDropdown();
   } catch (e) {
     console.debug('initScriptsUI', e);
   }
+}
+
+try {
+  if (typeof window !== 'undefined') window.initScriptsUI = initScriptsUI;
+} catch (e) {
+  void e;
 }
 
 function onScriptSave() {
