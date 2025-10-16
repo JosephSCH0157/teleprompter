@@ -4781,8 +4781,29 @@ const _toast = function (msg, opts) {
                       try {
                         const st = document.getElementById('obsStatus');
                         if (st) {
-                          st.textContent = 'OBS: ' + (ok ? 'connected' : String(s || 'failed'));
-                          st.title = String(s || '');
+                          // If meta contains attempt/backoffMs, include them for richer feedback
+                          let suffix = '';
+                          try {
+                            if (meta && typeof meta === 'object') {
+                              const a = meta.attempt || meta.attempt === 0 ? meta.attempt : null;
+                              const b =
+                                meta.backoffMs || meta.backoffMs === 0 ? meta.backoffMs : null;
+                              if (a !== null && b !== null)
+                                suffix = ` (attempt ${a}; retry ${b}ms)`;
+                              else if (a !== null) suffix = ` (attempt ${a})`;
+                              else if (b !== null) suffix = ` (retry ${b}ms)`;
+                            }
+                          } catch (ex) {
+                            void ex;
+                          }
+                          st.textContent =
+                            'OBS: ' + (ok ? 'connected' : String(s || 'failed')) + suffix;
+                          // Keep full string in title for hover
+                          try {
+                            st.title = String(s || '') + (suffix ? ' ' + suffix : '');
+                          } catch (e) {
+                            void e;
+                          }
                         }
                       } catch (e) {
                         void e;
