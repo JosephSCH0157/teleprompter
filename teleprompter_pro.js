@@ -72,9 +72,19 @@ try {
   window.__tpRunObsTest = async function __tpRunObsTest() {
     try {
       console.info('[TP-Pro] __tpRunObsTest: starting');
-      const r = window.__recorder;
+      let r = window.__recorder;
       if (!r) {
-        console.error('[TP-Pro] __tpRunObsTest: no window.__recorder found');
+        console.warn(
+          '[TP-Pro] __tpRunObsTest: no window.__recorder found — polling for registration (2s max)'
+        );
+        // Poll briefly in case the recorder module registers slightly later
+        for (let i = 0; i < 20 && !r; i++) {
+          await new Promise((res) => setTimeout(res, 100));
+          r = window.__recorder;
+        }
+      }
+      if (!r) {
+        console.error('[TP-Pro] __tpRunObsTest: no window.__recorder found after waiting');
         return;
       }
       if (typeof r.initBuiltIns === 'function') {
