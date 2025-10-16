@@ -629,7 +629,61 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
       obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
       obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
-      obsTestS?.addEventListener('click', async ()=> { obsTestBtn?.click(); setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600); });
+      // Settings Test: persist when "Remember" is checked, mirror inputs, and run adapter test
+      obsTestS?.addEventListener('click', async ()=>{
+        try {
+          const rem = document.getElementById('settingsObsRemember');
+          const urlEl = document.getElementById('settingsObsUrl');
+          const passEl = document.getElementById('settingsObsPass');
+          if (rem?.checked) {
+            try { if (urlEl?.value) localStorage.setItem('obsUrl', urlEl.value); } catch {}
+            try { if (passEl?.value) localStorage.setItem('obsPassword', passEl.value); } catch {}
+            try { localStorage.setItem('obsRemember','1'); } catch {}
+          } else {
+            try { localStorage.removeItem('obsPassword'); } catch {}
+            try { localStorage.setItem('obsRemember','0'); } catch {}
+          }
+        } catch(e) { /* ignore */ }
+
+        // Mirror into main inputs so recorder wiring sees the latest values
+        try {
+          const mainUrl = document.getElementById('obsUrl');
+          const mainPass = document.getElementById('obsPassword');
+          const setUrl = document.getElementById('settingsObsUrl');
+          const setPass = document.getElementById('settingsObsPass');
+          if (mainUrl && setUrl) { mainUrl.value = setUrl.value; mainUrl.dispatchEvent(new Event('change',{bubbles:true})); }
+          if (mainPass && setPass) { mainPass.value = setPass.value; mainPass.dispatchEvent(new Event('change',{bubbles:true})); }
+        } catch(e) { /* ignore */ }
+
+        // Trigger existing UI test button behavior
+        try { obsTestBtn?.click(); } catch {}
+
+        // Also call recorder adapter test directly (uses adapter's test implementation)
+        try {
+          if (window.__recorder?.get && window.__recorder.get('obs')?.test) {
+            await window.__recorder.get('obs').test();
+          }
+        } catch(e) { console.warn('OBS adapter test failed', e); }
+
+        setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600);
+      });
+
+      // Helper: read OBS URL from settings/main/localStorage with sane fallback
+      window.readObsUrl = function () {
+        try {
+          return document.getElementById('settingsObsUrl')?.value?.trim() || document.getElementById('obsUrl')?.value?.trim() || localStorage.getItem('obsUrl') || 'ws://127.0.0.1:4455';
+        } catch(e) { return 'ws://127.0.0.1:4455'; }
+      };
+
+      // Helper: read OBS password from settings/main/localStorage depending on "Remember" flag
+      window.readObsPassword = function () {
+        try {
+          const s = document.getElementById('settingsObsPass')?.value ?? document.getElementById('obsPassword')?.value ?? '';
+          if (s) return s;
+          try { if (localStorage.getItem('obsRemember') === '1') return localStorage.getItem('obsPassword') || ''; } catch {}
+          return '';
+        } catch(e) { return ''; }
+      };
     }
 
   // TP: normalize-fallback
