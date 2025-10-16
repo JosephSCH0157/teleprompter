@@ -1,3 +1,9 @@
+// Node-only helper: compute OBS auth candidate values (A..G)
+// This file is intended to run under Node.js (uses Buffer/process/require).
+// It guards access to Node globals so static checkers won't flag undefined globals.
+// @ts-nocheck
+
+/* global require, Buffer, process, atob, btoa */
 // Compute OBS auth candidate values (A..G) in Node.js
 // Usage:
 //   node tools/compute_obs_candidates.js <password> <challenge_b64> <salt_b64>
