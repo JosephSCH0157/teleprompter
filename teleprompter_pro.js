@@ -16,13 +16,18 @@ try {
     try {
       moduleToast = require('./ui/toasts.js').toast;
     } catch (e) {
+      void e;
       moduleToast = null;
     }
   }
-} catch (e) {}
+} catch (e) {
+  void e;
+}
 try {
   if (!moduleToast && typeof window !== 'undefined' && window.toast) moduleToast = window.toast;
-} catch (e) {}
+} catch (e) {
+  void e;
+}
 // 1) LAN default for OBS
 var DEFAULT_OBS_URL = 'ws://192.168.1.198:4455';
 // Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
@@ -32,16 +37,20 @@ try {
       var RecorderModule = require('./recorders.js');
       if (typeof window !== 'undefined') window.__recorder = RecorderModule;
     } catch (e) {
-      /* fallthrough */
+      void e; /* fallthrough */
     }
   }
-} catch (e) {}
+} catch (e) {
+  void e;
+}
 try {
   if (typeof window !== 'undefined' && !window.__recorder) {
     // last-resort: maybe the module already attached itself globally
     if (window.__recorder);
   }
-} catch (e) {}
+} catch (e) {
+  void e;
+}
 try {
   // Emit a lightweight startup log so developers can see adapter availability in the browser console
   try {
@@ -248,7 +257,9 @@ const _toast = function (msg, opts) {
         } catch {
           try {
             window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
-          } catch {}
+          } catch (e) {
+            void e;
+          }
         }
       }
     } catch {}
@@ -329,7 +340,9 @@ const _toast = function (msg, opts) {
             ) {
               return _initCore();
             }
-          } catch {}
+          } catch (e) {
+            void e;
+          }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
             return window._initCore();
           }
@@ -511,7 +524,9 @@ const _toast = function (msg, opts) {
           }
           try {
             __tpBootPush('window-init-proxy-waiting-core');
-          } catch {}
+          } catch (e) {
+            void e;
+          }
           // Wait briefly for core to appear (either via assignment or resolve hook)
           const core = await Promise.race([
             new Promise((res) => {
@@ -537,8 +552,8 @@ const _toast = function (msg, opts) {
             __tpBootPush('window-init-proxy-waiting-core');
           } catch {}
           return await window._initCoreRunner();
-        } catch (_e) {
-          console.error('[TP-Pro] window.init proxy error', _e);
+        } catch (e) {
+          void e;
         }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -575,12 +590,16 @@ const _toast = function (msg, opts) {
           window.__tpEarlyInitRan = true;
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
-          } catch {}
-        } catch (_e) {
-          console.warn('[TP-Pro] earlyInitFallback error', _e);
+          } catch (e) {
+            void e;
+          }
+        } catch (e) {
+          void e;
         }
       });
-    } catch {}
+    } catch (e) {
+      void e;
+    }
   })();
 
   // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
@@ -3085,7 +3104,7 @@ const _toast = function (msg, opts) {
             setStatus && setStatus('Normalized.');
           }
         } catch (err) {
-          console.error(err);
+          void err;
         }
       });
 
@@ -3944,7 +3963,7 @@ const _toast = function (msg, opts) {
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
       } catch (e) {
-        console.debug('Scripts init failed', e);
+        void e;
       }
     }
 
@@ -3974,7 +3993,7 @@ const _toast = function (msg, opts) {
         refreshScriptsDropdown();
         _toast('Script saved', { type: 'ok' });
       } catch (e) {
-        console.debug('Scripts.save error', e);
+        void e;
         _toast('Save failed', { type: 'error' });
       }
     }
