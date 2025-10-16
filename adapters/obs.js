@@ -13,6 +13,8 @@ export function createOBSAdapter() {
   var _lastAuthSent = null;
   var _lastCandidateIndexUsed = null;
   var _retryingCandidates = false;
+  // reconnect/backoff state
+  var _backoff = 800;
 
   var _enc = function (s) {
     return new TextEncoder().encode(s);
@@ -71,6 +73,12 @@ export function createOBSAdapter() {
           try {
             window.__obsHandshakeLog = window.__obsHandshakeLog || [];
             window.__obsHandshakeLog.push({ t: Date.now(), event: 'open', url: url });
+            try {
+              _backoff = 800;
+            } catch {}
+            try {
+              cfg.onStatus && cfg.onStatus('connected', true);
+            } catch {}
           } catch (ex) {
             void ex;
           }
@@ -243,6 +251,13 @@ export function createOBSAdapter() {
                 }
               }
               window.__obsHandshakeLog.push(entry);
+              try {
+                cfg.onStatus &&
+                  cfg.onStatus(
+                    'closed ' + ((e && e.code) || 0) + ' ' + ((e && e.reason) || ''),
+                    false
+                  );
+              } catch {}
             } catch (ex) {
               void ex;
             }
@@ -255,6 +270,25 @@ export function createOBSAdapter() {
               ('close ' + ((e && e.code) || 0) + ' ' + ((e && e.reason) || '')).trim()
             );
             _lastErr = err;
+            try {
+              if (
+                cfg &&
+                typeof cfg.isEnabled === 'function' &&
+                cfg.isEnabled() &&
+                (e && e.code) !== 1000
+              ) {
+                try {
+                  setTimeout(function () {
+                    try {
+                      connect();
+                    } catch {}
+                  }, _backoff);
+                } catch {}
+                try {
+                  _backoff = Math.min(Math.floor(_backoff * 1.6), 8000);
+                } catch {}
+              }
+            } catch {}
             return reject(err);
           }
         };
@@ -265,8 +299,13 @@ export function createOBSAdapter() {
     });
   }
 
+  // wrapper to call _connect in non-test mode; returns a promise
+  function connect() {
+    return _connect({ testOnly: false });
+  }
+
   async function start() {
-    await _connect({ testOnly: false });
+    await connect();
   }
   async function stop() {
     identified = false;
