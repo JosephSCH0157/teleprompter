@@ -417,6 +417,29 @@ export function createOBSAdapter() {
     return _lastErr ? _lastErr.message || String(_lastErr) : null;
   }
 
+  // Small runtime helper: from the page console call __recorder.get('obs').pokeStatusTest()
+  // This triggers cfg.onStatus if present and logs a short dev entry.
+  function pokeStatusTest() {
+    try {
+      const meta = { now: Date.now(), note: 'poke' };
+      try {
+        window.logObs && window.logObs('poke', meta);
+      } catch (ex) {
+        void ex;
+      }
+      cfg.onStatus && cfg.onStatus('poke', true, meta);
+      try {
+        if (window && window.__TP_DEV) console.info('[OBS adapter] pokeStatusTest fired', meta);
+      } catch (ex) {
+        void ex;
+      }
+      return true;
+    } catch (ex) {
+      void ex;
+      return false;
+    }
+  }
+
   // Dev-only: expose a quick helper to test a specific candidate from the console
   try {
     if (typeof window !== 'undefined' && window.__TP_DEV) {
@@ -445,6 +468,7 @@ export function createOBSAdapter() {
     stop: stop,
     connect: connect,
     test: test,
+    pokeStatusTest: pokeStatusTest,
     // testCandidate removed; use __obsProbePorts or adapter.test()
     getLastError: getLastError,
   };
