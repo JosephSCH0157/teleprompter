@@ -59,8 +59,8 @@ async function main() {
                   this.addEventListener('open', () => {
                     try { OPENED.push({ t: Date.now(), url }); } catch (e) {}
                     try {
-                      // simulate server HELLO so clients IDENTIFY
-                      this.onmessage && this.onmessage({ data: JSON.stringify({ op: 0, d: { authentication: { salt: 'stub-salt', challenge: 'stub-chal' } } }) });
+                      // simulate server HELLO so clients IDENTIFY — simple heartbeat-based hello
+                      this.onmessage && this.onmessage({ data: JSON.stringify({ op: 0, d: { heartbeat_interval: 45000 } }) });
                     } catch (e) {}
                   });
                 } catch (e) {}
