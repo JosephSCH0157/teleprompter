@@ -1987,6 +1987,124 @@ let _toast = function (msg, opts) {
       return null;
     }
   }
+  // ==================================================
+  // OBS adapter helper: ensure adapter availability + wrapper
+  // ==================================================
+  let __obsAdapterWrapper = null;
+  async function ensureObsAdapter({ timeoutMs = 5000, pollInterval = 200 } = {}) {
+    try {
+      if (__obsAdapterWrapper) return __obsAdapterWrapper;
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        try {
+          const reg = await loadRecorder();
+          if (reg && typeof reg.get === 'function') {
+            const a = reg.get('obs');
+            if (a) {
+              // Wrap once and return
+              __obsAdapterWrapper = wrapObsAdapter(a);
+              return __obsAdapterWrapper;
+            }
+          }
+        } catch (e) {
+          void e;
+        }
+        // brief pause
+        await new Promise((res) => setTimeout(res, pollInterval));
+      }
+      return null;
+    } catch (e) {
+      void e;
+      return null;
+    }
+  }
+
+  function appendObsLogLine(msg) {
+    try {
+      console.debug('[OBS-DBG]', msg);
+      let el = document.getElementById('obsAdapterLog');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'obsAdapterLog';
+        el.style.cssText =
+          'position:fixed;right:8px;bottom:8px;max-width:320px;max-height:200px;overflow:auto;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:6px;border-radius:6px;z-index:99999';
+        try {
+          document.body.appendChild(el);
+        } catch (e) {
+          void e;
+        }
+      }
+      const line = document.createElement('div');
+      line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
+      el.appendChild(line);
+      // Trim to last 40 lines
+      while (el.childNodes.length > 40) el.removeChild(el.firstChild);
+    } catch (e) {
+      void e;
+    }
+  }
+
+  function wrapObsAdapter(adapter) {
+    try {
+      if (!adapter || adapter.__wrapped) return adapter;
+      const methods = [
+        'connect',
+        'disconnect',
+        'test',
+        'isAvailable',
+        'setEnabled',
+        'reconfigure',
+        'configure',
+      ];
+      for (const m of methods) {
+        try {
+          if (typeof adapter[m] === 'function') {
+            const orig = adapter[m].bind(adapter);
+            adapter[`__orig_${m}`] = orig;
+            adapter[m] = async function (...args) {
+              try {
+                appendObsLogLine(
+                  `adapter.${m}(${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(',')})`
+                );
+              } catch (e) {
+                void e;
+              }
+              try {
+                const res = await orig(...args);
+                try {
+                  appendObsLogLine(`adapter.${m} -> ok`);
+                } catch (e) {
+                  void e;
+                }
+                return res;
+              } catch (err) {
+                try {
+                  appendObsLogLine(
+                    `adapter.${m} -> error ${err && err.message ? err.message : String(err)}`
+                  );
+                } catch (e) {
+                  void e;
+                }
+                throw err;
+              }
+            };
+          }
+        } catch (e) {
+          void e;
+        }
+      }
+      try {
+        adapter.__wrapped = true;
+      } catch (e) {
+        void e;
+      }
+      appendObsLogLine('adapter wrapped');
+      return adapter;
+    } catch (e) {
+      void e;
+      return adapter;
+    }
+  }
   // Dynamic threshold tracking
   let lastAnchorConfidence = 0;
   let lastAnchorAt = 0;
@@ -4649,21 +4767,21 @@ let _toast = function (msg, opts) {
         // URL / Password change ⇒ nudge reconnect (module may debounce)
         document.getElementById('obsUrl')?.addEventListener('change', async () => {
           try {
-            const rec = await loadRecorder();
-            if (rec?.reconfigure) rec.reconfigure();
+            const rec = await ensureObsAdapter();
+            if (rec?.reconfigure) await rec.reconfigure();
           } catch {}
         });
         document.getElementById('obsPassword')?.addEventListener('change', async () => {
           try {
-            const rec = await loadRecorder();
-            if (rec?.reconfigure) rec.reconfigure();
+            const rec = await ensureObsAdapter();
+            if (rec?.reconfigure) await rec.reconfigure();
           } catch {}
         });
 
         // Test button
         document.getElementById('obsTestBtn')?.addEventListener('click', async () => {
           try {
-            const rec = await loadRecorder();
+            const rec = await ensureObsAdapter();
             const ok = await (rec?.test ? rec.test() : Promise.resolve(false));
             const el = document.getElementById('obsStatus');
             if (el) el.textContent = ok ? 'OBS test: ok' : 'OBS test: failed';
