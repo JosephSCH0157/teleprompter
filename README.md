@@ -39,3 +39,22 @@ There is a small `tools/` folder with developer helpers (Puppeteer runner, safe 
 - If the camera doesn’t start automatically on iOS, tap the video area to trigger playback.
 - DOCX import: tries Mammoth from a CDN first (unpkg, jsDelivr). If offline, it will attempt a local fallback at `vendor/mammoth/mammoth.browser.min.js` if present.
 - After importing a `.docx`, the app auto-runs Normalize so the script lands in the exact standard immediately.
+
+## Continuous Integration
+
+This repository includes a GitHub Actions workflow that enforces code quality on pull requests and pushes to `main`.
+
+- Workflow: `.github/workflows/check.yml`
+- What it runs: `npm ci` followed by `npm run check` (which runs `eslint` and `tsc` per the `package.json`).
+- Purpose: prevent merges that would introduce lint or type errors.
+
+If you maintain the repository you can run the same check locally before pushing:
+
+PowerShell:
+
+```powershell
+npm ci
+npm run check
+```
+
+If you prefer a faster developer loop, run `npm run lint` and `npm run types` separately while coding.
