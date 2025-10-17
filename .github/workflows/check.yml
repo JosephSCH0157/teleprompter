@@ -6,11 +6,109 @@ on:
     branches: [ main, master ]
 
 jobs:
-  name: checks
+  lint-types:
+    runs-on: ubuntu-latest
+    name: checks
 
-  on:
-    pull_request:
-    push:
+    on:
+      pull_request:
+      push:
+        branches: [ main, master ]
+
+    jobs:
+      lint-types:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          - uses: actions/setup-node@v4
+            with:
+              node-version: 20
+          - run: npm ci
+          - run: npm run check
+
+      smoke:
+        runs-on: ubuntu-latest
+        needs: [lint-types]
+        steps:
+          - uses: actions/checkout@v4
+          - uses: actions/setup-node@v4
+            with:
+              node-version: 20
+          - run: npm ci
+
+          - name: Run smoke
+            id: smoke
+            run: |
+              set -eo pipefail
+              node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
+
+              # Extract the single report line
+              LINE="$(grep -F '[SMOKE-REPORT]' smoke.log || true)"
+              if [ -z "$LINE" ]; then
+                echo "No [SMOKE-REPORT] line found"
+                exit 2
+              fi
+
+              # Save raw line and JSON to outputs/files
+              echo "REPORT_LINE<<EOF" >> "$GITHUB_OUTPUT"
+              echo "$LINE" >> "$GITHUB_OUTPUT"
+              echo "EOF" >> "$GITHUB_OUTPUT"
+
+              # Parse and hard-fail if ok=false or assertions trip
+              node -e "
+                const line = process.env.LINE;
+                const json = JSON.parse(line.split('] ')[1] || '{}');
+                const ok = !!json.ok;
+                const as = json.asserts || {};
+                const hardFail = !ok || as.hasIdentify === false || as.wsCountsMatch === false;
+                if (hardFail) {
+                  console.error('Smoke failed:', JSON.stringify(json, null, 2));
+                  process.exit(2);
+                }
+              " <<<"$LINE"
+
+          - name: Upload smoke artifact
+            uses: actions/upload-artifact@v4
+            with:
+              name: smoke-log
+              path: smoke.log
+
+          - name: Summarize smoke in PR checks
+            if: always()
+            run: |
+              node -e "
+                const fs=require('fs');
+                const log=fs.readFileSync('smoke.log','utf8');
+                const line=(log.split('\n').find(l=>l.startsWith('[SMOKE-REPORT]'))||'');
+                if(!line){ process.exit(0); }
+                const j=JSON.parse(line.split('] ')[1]||'{}');
+
+                const badge = j.ok ? '✅ **OK**' : '❌ **FAIL**';
+                const tbl = (o) => Object.entries(o||{}).map(([k,v])=>`| ${k} | ${typeof v==='object' ? '`'+JSON.stringify(v)+'`' : String(v)} |`).join('\n');
+
+                let md = '';
+                md += `### Smoke report ${badge}\n\n`;
+                md += `**appVersion:** ${j.appVersion ?? '—'}  \n`;
+                if (j.ci) md += `**CI:** sha=${j.ci.sha ?? '—'}, ref=${j.ci.ref ?? '—'}  \n`;
+                md += '\n**Core**\n';
+                md += '| key | value |\n|---|---|\n';
+                md += tbl({ tBootMs:j.tBootMs, recorderReady:j.recorderReady, adapterReady:j.adapterReady, testRan:j.testRan });
+
+                md += '\n\n**WebSocket**\n';
+                md += '| key | value |\n|---|---|\n';
+                md += tbl({ wsSentCount:j.wsSentCount, wsOps:j.wsOps, wsOpened:j.wsOpened });
+
+                md += '\n\n**Assertions**\n';
+                md += '| key | value |\n|---|---|\n';
+                md += tbl(j.asserts||{});
+
+                if (Array.isArray(j.notes) && j.notes.length) {
+                  md += '\n\n**Notes**\n';
+                  md += j.notes.map(n=>'- '+String(n)).join('\n');
+                }
+
+                fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+              "
       branches: [ main, master ]
 
   jobs:

@@ -313,13 +313,12 @@ async function main() {
     }, { stubObs: !!STUB_OBS });
     // Attach CI metadata (sha/ref) and print a single-line JSON report for CI
     try {
-      smoke.ci = {
-        sha: process.env.GITHUB_SHA || null,
-        ref: process.env.GITHUB_REF_NAME || process.env.GITHUB_REF || null,
-        runner: 'teleprompter_e2e.js'
-      };
+      // Guard process for environments where it's not defined (static linters)
+      const _sha = (typeof process !== 'undefined' && process && process.env && process.env.GITHUB_SHA) ? process.env.GITHUB_SHA : null;
+      const _ref = (typeof process !== 'undefined' && process && process.env && (process.env.GITHUB_REF_NAME || process.env.GITHUB_REF)) ? (process.env.GITHUB_REF_NAME || process.env.GITHUB_REF) : null;
+      smoke.ci = { sha: _sha, ref: _ref, runner: 'teleprompter_e2e.js' };
       console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke));
-    } catch (e) { console.log('[SMOKE-REPORT] {}'); }
+    } catch { console.log('[SMOKE-REPORT] {}'); }
     try { await browser.close(); } catch (e) { /* ignore */ }
     try { server.close(); } catch (e) { /* ignore */ }
     // Use exit code 0 on success, 2 on smoke failure (easy to distinguish in CI)
