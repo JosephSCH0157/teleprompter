@@ -7,18 +7,23 @@ async function main() {
   const repoRoot = path.resolve(__dirname, '..');
   const port = process.env.PORT || 8080;
 
+  // ---- flags -------------------------------------------------
   const argv = process.argv.slice(2);
-  const flags = new Map(argv.flatMap((a, i) =>
-    a.startsWith('--') ? [[a.toLowerCase(), argv[i + 1] && !String(argv[i + 1]).startsWith('--') ? argv[i + 1] : true]] : []
-  ));
-  const HEADLESS = flags.has('--headless') || process.env.HEADLESS === '1';
-  const RUN_SMOKE = flags.has('--runsmoke') || process.env.RUN_SMOKE === '1';
+  const flag = (n) => argv.includes(n) || argv.includes(n.toLowerCase());
+  const kv = (k, d) => {
+    const a = argv.find((s) => s.startsWith(`--${k}=`) || s.startsWith(`--${k.toLowerCase()}=`));
+    return a ? a.split('=')[1] : d;
+  };
 
-  const OBS_HOST = flags.get('--obshost') || process.env.OBS_HOST || '127.0.0.1';
-  const OBS_PORT = Number(flags.get('--obsport') || process.env.OBS_PORT || 4455);
-  const OBS_PASS = flags.get('--obspass') || process.env.OBS_PASS || '';
-  const STUB_OBS = flags.has('--stubobs') || process.env.STUB_OBS === '1';
-  const SHIM_RECORDER = flags.has('--shimrecorder') || process.env.SHIM_RECORDER === '1';
+  const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke');
+  const STUB_OBS = flag('--stubObs') || flag('--stubobs');
+  const SHIM_RECORDER = flag('--shimRecorder') || flag('--shimrecorder');
+  const TIMEOUT_MS = Number(kv('timeout', process.env.SMOKE_TIMEOUT_MS || '30000')) || 30000; // default 30s
+  const HEADLESS = flag('--headless') || process.env.HEADLESS === '1';
+
+  const OBS_HOST = kv('obsHost', process.env.OBS_HOST || '127.0.0.1');
+  const OBS_PORT = Number(kv('obsPort', process.env.OBS_PORT || 4455));
+  const OBS_PASS = kv('obsPass', process.env.OBS_PASS || '');
 
   // Start the static server in-process
   console.log('[e2e] starting static server...');
@@ -177,7 +182,7 @@ async function main() {
     /* ignore */
   }
 
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }).catch((e) => {
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: TIMEOUT_MS }).catch((e) => {
     console.error('[e2e] page.goto error', e);
   });
 
@@ -185,11 +190,11 @@ async function main() {
   try {
     await page.waitForFunction(
       () => !!(window.__recorder || (window.App && window.App.recorder)),
-      { timeout: 30000, polling: 100 }
+      { timeout: TIMEOUT_MS, polling: 100 }
     );
     console.log('[e2e] recorder detected by waitForFunction');
   } catch (e) {
-    console.warn('[e2e] recorder not detected within 30s wait; continuing to page-level checks');
+    console.warn('[e2e] recorder not detected within timeout; continuing to page-level checks');
   }
 
   // Try invoking the in-page helper to ensure adapters initialize and optionally run a quick test.
@@ -215,8 +220,8 @@ async function main() {
     console.log('[e2e] running non-interactive smoke test...');
 
     // drive init -> connect -> test -> report inside the page to keep adapter context local
-    const smoke = await page.evaluate(async () => {
-      const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], notes: [] };
+    const smoke = await page.evaluate(async ({ stubObs }) => {
+      const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], wsOpened: 0, notes: [] };
       const T0 = Date.now();
 
       const rec = globalThis.__recorder || globalThis.App?.recorder;
@@ -265,11 +270,40 @@ async function main() {
       const newSent = SENT.length - baseSent;
       report.wsSentCount = Math.max(0, newSent);
       report.wsOps = SENT.slice(-report.wsSentCount).map((m) => { try { const j = typeof m === 'string' ? JSON.parse(m) : m; return j?.op ?? j?.opcode ?? 'unknown'; } catch { return 'raw'; } });
-      report.notes.push('wsOpened=' + (Array.isArray(OPENED) ? OPENED.length : 0));
+      report.wsOpened = Array.isArray(OPENED) ? OPENED.length : 0;
 
-      report.ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
-      return report;
-    });
+      // app version (best-effort)
+      const appVersion = (window.APP_VERSION) || (window.VERSION) || ((window.App && window.App.version) || null);
+
+      // Invariants
+      const hasIdentify = Array.isArray(report.wsOps) && report.wsOps.includes(1);
+      const wsCountsMatch = report.wsSentCount === (Array.isArray(report.wsOps) ? report.wsOps.length : 0);
+
+      // Evaluate assertions into ok
+      let ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
+      if (stubObs && !hasIdentify) {
+        ok = false;
+        report.notes.push('assert: missing IDENTIFY opcode (1) under --stubObs');
+      }
+      if (!wsCountsMatch) {
+        ok = false;
+        report.notes.push(`assert: wsSentCount (${report.wsSentCount}) !== wsOps.length (${(report.wsOps||[]).length})`);
+      }
+
+      return {
+        ok,
+        tBootMs: report.tBootMs,
+        recorderReady: report.recorderReady,
+        adapterReady: report.adapterReady,
+        testRan: report.testRan,
+        wsSentCount: report.wsSentCount,
+        wsOps: report.wsOps,
+        wsOpened: report.wsOpened,
+        notes: report.notes,
+        appVersion,
+        asserts: { hasIdentify, wsCountsMatch }
+      };
+    }, { stubObs: !!STUB_OBS });
     // Print a single-line JSON report and exit deterministically for CI
     try { console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke)); } catch (e) { console.log('[SMOKE-REPORT] {}'); }
     try { await browser.close(); } catch (e) { /* ignore */ }

@@ -46,6 +46,22 @@ jobs:
         with:
           name: smoke-log
           path: smoke.log
+
+      - name: Summarize smoke in PR checks
+        if: always()
+        run: |
+          node -e "
+            const fs=require('fs');
+            const log=fs.readFileSync('smoke.log','utf8');
+            const line=(log.split('\n').find(l=>l.startsWith('[SMOKE-REPORT]'))||'');
+            if(!line){ console.error('No [SMOKE-REPORT] line found'); process.exit(0); }
+            const j=JSON.parse(line.split('] ')[1]||'{}');
+            const esc = (v)=>typeof v==='object' ? '`'+JSON.stringify(v)+'`' : String(v);
+            let md = '### Smoke report\n\n';
+            md += '| key | value |\n|---|---|\n';
+            for(const k of Object.keys(j)) md += `| ${k} | ${esc(j[k])} |\n`;
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          "
 name: checks
 
 on:
