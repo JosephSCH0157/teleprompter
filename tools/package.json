@@ -9,11 +9,3 @@
     "puppeteer": "^20.0.0"
   }
 }
-{
-  "name": "tp-obs-test",
-  "version": "0.0.0",
-  "private": true,
-  "dependencies": {
-    "obs-websocket-js": "^5.0.4"
-  }
-}
