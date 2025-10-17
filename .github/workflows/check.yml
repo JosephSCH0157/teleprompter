@@ -1,6 +1,11 @@
 name: checks
 
 on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
   name: checks
 
   on:
@@ -102,19 +107,6 @@ on:
 
               fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
             "
-    branches: [ main, master ]
-
-jobs:
-  lint-types:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run check
-
   smoke:
     runs-on: ubuntu-latest
     needs: [lint-types]
