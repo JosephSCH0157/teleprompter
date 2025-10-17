@@ -272,8 +272,15 @@ async function main() {
       report.wsOps = SENT.slice(-report.wsSentCount).map((m) => { try { const j = typeof m === 'string' ? JSON.parse(m) : m; return j?.op ?? j?.opcode ?? 'unknown'; } catch { return 'raw'; } });
       report.wsOpened = Array.isArray(OPENED) ? OPENED.length : 0;
 
-      // app version (best-effort)
-      const appVersion = (window.APP_VERSION) || (window.VERSION) || ((window.App && window.App.version) || null);
+      // app version (best-effort) - normalize newlines into a single-line value for CI
+      const appVersionRaw =
+        (window.APP_VERSION) ||
+        (window.VERSION) ||
+        ((window.App && window.App.version) || null);
+
+      const appVersion = appVersionRaw == null
+        ? null
+        : String(appVersionRaw).replace(/\r?\n/g, ' | ').trim();
 
       // Invariants
       const hasIdentify = Array.isArray(report.wsOps) && report.wsOps.includes(1);
@@ -304,8 +311,15 @@ async function main() {
         asserts: { hasIdentify, wsCountsMatch }
       };
     }, { stubObs: !!STUB_OBS });
-    // Print a single-line JSON report and exit deterministically for CI
-    try { console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke)); } catch (e) { console.log('[SMOKE-REPORT] {}'); }
+    // Attach CI metadata (sha/ref) and print a single-line JSON report for CI
+    try {
+      smoke.ci = {
+        sha: process.env.GITHUB_SHA || null,
+        ref: process.env.GITHUB_REF_NAME || process.env.GITHUB_REF || null,
+        runner: 'teleprompter_e2e.js'
+      };
+      console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke));
+    } catch (e) { console.log('[SMOKE-REPORT] {}'); }
     try { await browser.close(); } catch (e) { /* ignore */ }
     try { server.close(); } catch (e) { /* ignore */ }
     // Use exit code 0 on success, 2 on smoke failure (easy to distinguish in CI)
