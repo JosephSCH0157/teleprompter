@@ -3,7 +3,21 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const PORT = parseInt(process.env.PORT || process.argv[2] || '8080', 10);
+
+// Choose a numeric port robustly. Prefer PORT env, otherwise look for the
+// first purely-numeric argv token, otherwise default to 8080. This avoids
+// accidentally picking up flag tokens like `--headless` as the port.
+let PORT = 8080;
+const envPort = parseInt(process.env.PORT, 10);
+if (!Number.isNaN(envPort) && envPort >= 0 && envPort < 65536) {
+  PORT = envPort;
+} else {
+  const argNum = process.argv.find((a) => /^\d+$/.test(String(a)));
+  const argPort = argNum ? parseInt(argNum, 10) : NaN;
+  if (!Number.isNaN(argPort) && argPort >= 0 && argPort < 65536) {
+    PORT = argPort;
+  }
+}
 
 function contentType(p) {
   if (p.endsWith('.html')) return 'text/html; charset=utf-8';
