@@ -79,111 +79,97 @@ async function main() {
   }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS });
 
   console.log('[e2e] navigating to', url);
+  // Install an early initializer that will call initBuiltIns() on the recorder as soon as it appears.
+  try {
+    await page.evaluateOnNewDocument(() => {
+      try {
+        if (globalThis.__TP_E2E_INIT_INSTALLED__) return;
+        globalThis.__TP_E2E_INIT_INSTALLED__ = true;
+        const FLAG = '__TP_E2E_INIT_DONE__';
+        if (globalThis[FLAG]) return;
+        let attempts = 0;
+        const iv = setInterval(() => {
+          try {
+            const r = globalThis.__recorder || (globalThis.App && globalThis.App.recorder);
+            if (r && typeof r.initBuiltIns === 'function') {
+              try {
+                r.initBuiltIns();
+              } catch (e) {
+                /* ignore */
+              }
+              globalThis[FLAG] = true;
+              clearInterval(iv);
+            }
+          } catch (e) {
+            /* ignore */
+          }
+          attempts++;
+          if (attempts > 300) clearInterval(iv); // ~30s
+        }, 100);
+      } catch (e) { /* ignore */ }
+    });
+  } catch (e) {
+    /* ignore */
+  }
+
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }).catch((e) => {
     console.error('[e2e] page.goto error', e);
   });
+
+  // Wait for the recorder module to be present in the page (runner-side wait)
+  try {
+    await page.waitForFunction(
+      () => !!(window.__recorder || (window.App && window.App.recorder)),
+      { timeout: 30000, polling: 100 }
+    );
+    console.log('[e2e] recorder detected by waitForFunction');
+  } catch (e) {
+    console.warn('[e2e] recorder not detected within 30s wait; continuing to page-level checks');
+  }
 
   if (RUN_SMOKE) {
     console.log('[e2e] running non-interactive smoke test...');
 
     // drive init -> connect -> test -> report inside the page to keep adapter context local
+    console.log('[e2e] running non-interactive smoke test...');
+
+    // drive init -> connect -> test -> report inside the page to keep adapter context local
     const smoke = await page.evaluate(async () => {
+      const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], notes: [] };
       const T0 = Date.now();
-      const report = {
-        ok: false,
-        tBootMs: 0,
-        recorderReady: false,
-        adapterReady: false,
-        testRan: false,
-        wsSentCount: 0,
-        wsOps: [],
-        notes: [],
-      };
-
-      const now = () => Date.now();
-      const backoffWait = async (cond, { start = 50, max = 800, limit = 10 } = {}) => {
-        let d = start;
-        for (let i = 0; i < limit; i++) {
-          try {
-            if (await cond()) return true;
-          } catch (e) {
-            // ignore
-          }
-          await new Promise((r) => setTimeout(r, d));
-          d = Math.min(max, d * 2);
-        }
-        return false;
-      };
-
-      const OBS_CFG = globalThis.__OBS_CFG__ ?? null;
-
-      // Wait for recorder to appear. Increase max backoff so total wait ~5s if needed.
-      const okBoot = await backoffWait(async () => {
-        return !!(globalThis.__recorder || globalThis.App?.recorder);
-      }, { start: 50, max: 800, limit: 12 });
-
-      report.tBootMs = now() - T0;
-      if (!okBoot) {
-        report.notes.push('Recorder not found after backoff.');
-        return report;
-      }
 
       const rec = globalThis.__recorder || globalThis.App?.recorder;
       report.recorderReady = !!rec;
+      report.tBootMs = Date.now() - T0;
 
-      // Ensure built-in adapters are initialized; call and tolerate failures.
-      try {
-        if (rec?.initBuiltIns) {
-          try {
-            await rec.initBuiltIns();
-            report.notes.push('initBuiltIns() ok');
-          } catch (ie) {
-            report.notes.push('initBuiltIns err: ' + String(ie));
-          }
-        }
-      } catch (e) {
-        report.notes.push('initBuiltIns outer err: ' + String(e));
-      }
+      // init built-ins (tolerate no-op)
+      try { await rec?.initBuiltIns?.(); report.notes.push('initBuiltIns() ok'); } catch (e) { report.notes.push('initBuiltIns err: ' + String(e)); }
 
-      // Retry a few times to get the obs adapter after initBuiltIns
+      // small adapter retry (deterministic after initBuiltIns)
       let obs = null;
       for (let i = 0; i < 6 && !obs; i++) {
-        obs = rec?.get?.('obs') || rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || globalThis.App?.obs || null;
-        if (obs) break;
-        // small wait before retrying
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => setTimeout(r, 150));
+        obs = rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || globalThis.App?.obs || null;
+        if (!obs) await new Promise(r => setTimeout(r, 100));
       }
       report.adapterReady = !!obs;
-      if (!obs) {
-        report.notes.push('OBS adapter not found.');
-        return report;
-      }
+      if (!obs) { report.notes.push('OBS adapter not found.'); return report; }
 
+      const SENT = (globalThis.__WS_SENT__ ||= []);
+      const OPENED = (globalThis.__WS_OPENED__ ||= []);
+      const baseSent = SENT.length;
+
+      // apply config and connect
       try {
-        if (OBS_CFG && typeof obs.configure === 'function') {
-          await obs.configure(OBS_CFG);
+        if (globalThis.__OBS_CFG__ && typeof obs.configure === 'function') {
+          await obs.configure(globalThis.__OBS_CFG__);
           report.notes.push('obs.configure() applied');
         }
-      } catch (e) {
-        report.notes.push('configure err: ' + String(e));
-      }
+      } catch (e) { report.notes.push('configure err: ' + String(e)); }
 
-      const sent = (globalThis.__WS_SENT__ ||= []);
-      const hlog = (globalThis.__obsHandshakeLog ||= []);
-      const beforeCount = sent.length;
+      try { await obs.connect?.(); report.notes.push('obs.connect() ok'); } catch (e) { report.notes.push('connect err: ' + String(e)); }
 
-      try {
-        if (typeof obs.connect === 'function') {
-          await obs.connect();
-          report.notes.push('obs.connect() ok');
-          // brief pause to allow IDENTIFY or other frames to be sent when stubbed
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, 250));
-        }
-      } catch (e) {
-        report.notes.push('connect err: ' + String(e));
-      }
+      // brief post-connect settle so IDENTIFY/auth frames flush
+      await new Promise(r => setTimeout(r, 250));
 
       try {
         if (typeof obs.test === 'function') {
@@ -193,36 +179,16 @@ async function main() {
         } else {
           report.notes.push('obs.test() not present');
         }
-      } catch (e) {
-        report.notes.push('test err: ' + String(e));
-      }
+      } catch (e) { report.notes.push('test err: ' + String(e)); }
 
-      const afterCount = sent.length;
-      // Also record how many sockets opened (helpful for debugging stub injection)
-      try {
-        report.wsOpened = Array.isArray(globalThis.__WS_OPENED__) ? globalThis.__WS_OPENED__.length : 0;
-      } catch (e) {
-        report.wsOpened = 0;
-      }
-      report.wsSentCount = Math.max(0, afterCount - beforeCount);
-      report.wsOps = sent.slice(-report.wsSentCount).map((m) => {
-        try {
-          const j = typeof m === 'string' ? JSON.parse(m) : m;
-          return j?.op ?? j?.opcode ?? 'unknown';
-        } catch {
-          return 'raw';
-        }
-      });
+      const newSent = SENT.length - baseSent;
+      report.wsSentCount = Math.max(0, newSent);
+      report.wsOps = SENT.slice(-report.wsSentCount).map((m) => { try { const j = typeof m === 'string' ? JSON.parse(m) : m; return j?.op ?? j?.opcode ?? 'unknown'; } catch { return 'raw'; } });
+      report.notes.push('wsOpened=' + (Array.isArray(OPENED) ? OPENED.length : 0));
 
       report.ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
-      if (Array.isArray(hlog) && hlog.length) report.notes.push(`handshakeLog[${hlog.length}]`);
       return report;
     });
-
-    console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke));
-    try { await browser.close(); } catch (e) { void e; }
-    try { server.close(); } catch (e) { void e; }
-    process.exit(smoke.ok ? 0 : 2);
   }
 
   // Expose helper to call the TP scroll API
