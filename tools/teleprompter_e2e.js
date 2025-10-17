@@ -18,6 +18,7 @@ async function main() {
   const OBS_PORT = Number(flags.get('--obsport') || process.env.OBS_PORT || 4455);
   const OBS_PASS = flags.get('--obspass') || process.env.OBS_PASS || '';
   const STUB_OBS = flags.has('--stubobs') || process.env.STUB_OBS === '1';
+  const SHIM_RECORDER = flags.has('--shimrecorder') || process.env.SHIM_RECORDER === '1';
 
   // Start the static server in-process
   console.log('[e2e] starting static server...');
@@ -81,7 +82,7 @@ async function main() {
   // If we're stubbing OBS, also inject a tiny recorder shim early so the page sees a recorder
   // and the smoke-drive can locate an obs adapter reliably. The shim uses the global WebSocket
   // (which will be proxied above) so send/open events are captured in __WS_SENT__/__WS_OPENED__.
-  if (STUB_OBS) {
+  if (STUB_OBS && SHIM_RECORDER) {
     try {
       await page.evaluateOnNewDocument((cfg) => {
         try {

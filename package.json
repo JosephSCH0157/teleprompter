@@ -7,7 +7,8 @@
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
-    "smoke": "node ./tools/smoke_test.js",
+  "smoke": "node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
+  "smoke:strict": "node tools/teleprompter_e2e.js --runSmoke --headless",
     "types": "tsc -p jsconfig.json --noEmit",
     "check": "npm run lint && npm run types",
     "prepare": "husky"

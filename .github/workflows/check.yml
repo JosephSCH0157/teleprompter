@@ -1,3 +1,97 @@
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  lint-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run check
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: [lint-types]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+
+      - name: Run smoke
+        id: smoke
+        run: |
+          set -eo pipefail
+          node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
+
+          # Extract the smoke-report line
+          LINE=$(grep -F "[SMOKE-REPORT]" smoke.log || true)
+          echo "REPORT_LINE<<EOF" >> $GITHUB_OUTPUT
+          echo "$LINE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Fail early in CI if smoke reported not ok
+          echo "$LINE" | node -e "const s=require('fs').readFileSync(0,'utf8');const j=JSON.parse(s.split('] ')[1]||'{}');if(!j.ok){console.error('Smoke not ok');process.exit(2)}"
+
+      - name: Upload smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-log
+          path: smoke.log
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  lint-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run check
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: [lint-types]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+
+      - name: Run smoke
+        id: smoke
+        run: |
+          set -eo pipefail
+          node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
+
+          LINE=$(grep -F "[SMOKE-REPORT]" smoke.log || true)
+          echo "REPORT_LINE<<EOF" >> $GITHUB_OUTPUT
+          echo "$LINE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "$LINE" | node -e "const s=require('fs').readFileSync(0,'utf8');const j=JSON.parse(s.split('] ')[1]||'{}');if(!j.ok){console.error('Smoke not ok');process.exit(2)}"
+
+      - name: Upload smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-log
+          path: smoke.log
 name: Check (lint & types)
 
 on:
