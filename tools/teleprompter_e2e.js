@@ -8,23 +8,16 @@ async function main() {
   const port = process.env.PORT || 8080;
 
   const argv = process.argv.slice(2);
-  const runSmoke = argv.find((a) => /^--runsmoke$/i.test(a));
-  const stubObs = argv.find((a) => /^--stubObs$/i.test(a) || /^--stubobs$/i.test(a));
+  const flags = new Map(argv.flatMap((a, i) =>
+    a.startsWith('--') ? [[a.toLowerCase(), argv[i + 1] && !String(argv[i + 1]).startsWith('--') ? argv[i + 1] : true]] : []
+  ));
+  const HEADLESS = flags.has('--headless') || process.env.HEADLESS === '1';
+  const RUN_SMOKE = flags.has('--runsmoke') || process.env.RUN_SMOKE === '1';
 
-  // OBS connection overrides: env or CLI
-  // env: OBS_HOST, OBS_PORT, OBS_PASS
-  const cliGet = (long, short) => {
-    const v = argv.find((a) => a.startsWith(`--${long}=`));
-    if (v) return v.split('=')[1];
-    if (short) {
-      const s = argv.find((a) => a.startsWith(`-${short}=`));
-      if (s) return s.split('=')[1];
-    }
-    return undefined;
-  };
-  const obsHost = cliGet('obsHost') || process.env.OBS_HOST || '127.0.0.1';
-  const obsPort = cliGet('obsPort') || process.env.OBS_PORT || '4455';
-  const obsPass = cliGet('obsPass') || process.env.OBS_PASS || process.env.OBS_PASSWORD || '';
+  const OBS_HOST = flags.get('--obshost') || process.env.OBS_HOST || '127.0.0.1';
+  const OBS_PORT = Number(flags.get('--obsport') || process.env.OBS_PORT || 4455);
+  const OBS_PASS = flags.get('--obspass') || process.env.OBS_PASS || '';
+  const STUB_OBS = flags.has('--stubobs') || process.env.STUB_OBS === '1';
 
   // Start the static server in-process
   console.log('[e2e] starting static server...');
@@ -33,157 +26,155 @@ async function main() {
   // Wait briefly for server to be ready (it's synchronous listen)
   const puppeteer = require('puppeteer');
   console.log('[e2e] launching browser...');
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+  const isHeadless = HEADLESS === true || HEADLESS === '1' || HEADLESS === 1 || HEADLESS === undefined || HEADLESS === null ? true : Boolean(HEADLESS);
+  const browser = await puppeteer.launch({ headless: isHeadless, args: ['--no-sandbox'] });
   const page = await browser.newPage();
 
   page.on('console', (msg) => {
     try {
-      const text = msg.text();
-      console.log('[PAGE]', text);
+      const args = msg.args && msg.args().length ? ' ' + msg.args().map((a) => String(a)).join(' ') : '';
+      console.log(`[page:${msg.type()}] ${msg.text()}${args}`);
     } catch (e) {
-      void e;
+      try { console.log('[page] (console) ', msg.text()); } catch (e2) { /* ignore */ }
     }
   });
 
   const url = `http://127.0.0.1:${port}/teleprompter_pro.html`;
+  // Prepare injection of config and optional stub before the page runs any scripts
+  await page.evaluateOnNewDocument((cfg) => {
+    try {
+      window.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass };
+      if (cfg.stub) {
+        const RealWS = window.WebSocket;
+        const sent = [];
+        class StubWS {
+          constructor(url) {
+            this.url = url;
+            this.readyState = 1;
+            this._sent = sent;
+            // fire open, then simulate a server HELLO (op:0) so the adapter will attempt IDENTIFY
+            setTimeout(() => {
+              try { this.onopen && this.onopen({}); } catch (e) { /* ignore */ }
+              try {
+                // small delay before sending HELLO
+                setTimeout(() => {
+                  try {
+                    const hello = JSON.stringify({ op: 0, d: { authentication: { salt: 'stub-salt', challenge: 'stub-chal' } } });
+                    this.onmessage && this.onmessage({ data: hello });
+                  } catch (e2) { /* ignore */ }
+                }, 20);
+              } catch (e3) { /* ignore */ }
+            }, 10);
+          }
+          send(data) {
+            try { sent.push(data); } catch (e) { /* ignore */ }
+            try { this.onmessage && this.onmessage({ data: JSON.stringify({ op: 'echo', d: data }) }); } catch (e) { /* ignore */ }
+          }
+          close() { this.readyState = 3; this.onclose && this.onclose({}); }
+          addEventListener(type, cb) { this['on' + type] = cb; }
+          removeEventListener(type) { this['on' + type] = null; }
+        }
+        window.WebSocket = StubWS;
+        window.__WS_SENT__ = sent;
+        window.__WS_RESTORE__ = () => { window.WebSocket = RealWS; };
+      }
+    } catch (e) {
+      // ignore injection errors
+    }
+  }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS });
+
   console.log('[e2e] navigating to', url);
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }).catch((e) => {
     console.error('[e2e] page.goto error', e);
   });
 
-  if (runSmoke) {
-    // Non-interactive smoke path: wait for page init, gather OBS handshake logs,
-    // call page test helper if available, and exit with status 0.
+  if (RUN_SMOKE) {
     console.log('[e2e] running non-interactive smoke test...');
-    // Optional: inject stub WebSocket before any script runs
-    if (stubObs) {
-      console.log('[e2e] injecting WebSocket stub into page');
-      await page.evaluateOnNewDocument(() => {
-        // Basic shim that records messages sent to the server
-        window.__wsStub = { sent: [], opened: true };
-        class StubWebSocket {
-          constructor(url) {
-            this.url = url;
-            this.readyState = 1; // OPEN
-            window.__wsStub.opened = true;
-            this.send = (data) => {
-              try {
-                window.__wsStub.sent.push(data);
-              } catch (e) {
-                // ignore
-              }
-            };
-            this.close = () => { this.readyState = 3; };
-            // minimal event handler support
-            this.addEventListener = () => {};
-            this.removeEventListener = () => {};
+
+    // generic waitFor with exponential backoff
+    async function waitFor(fn, opts = {}) {
+      const timeout = opts.timeout || 25000;
+      let delay = opts.startDelay || 100;
+      const factor = opts.factor || 1.4;
+      const maxDelay = opts.max || 1200;
+      const start = Date.now();
+      let lastErr = null;
+      while (Date.now() - start < timeout) {
+        try {
+          const v = await fn();
+          if (v) return v;
+        } catch (e) {
+          lastErr = e;
+        }
+        await new Promise((r) => setTimeout(r, delay));
+        delay = Math.min(maxDelay, Math.floor(delay * factor));
+      }
+      throw lastErr || new Error('waitFor timeout');
+    }
+
+    // 1) Wait for app boot
+    await waitFor(() => page.evaluate(() => !!(window.Teleprompter || window.App || window.__tpBootFinished || window.__recorder)), { timeout: 15000 }).catch(() => null);
+
+    // 2) Wait for recorder/adapter registered (or handshake logs)
+    const recorderReady = await waitFor(() => page.evaluate(() => {
+      try {
+        const r = window.__recorder || (window.App && window.App.recorder);
+        if (r && (r.isReady || r.ready)) return true;
+        if (Array.isArray(window.__obsHandshakeLog) && window.__obsHandshakeLog.length) return true;
+        return false;
+      } catch (e) { return false; }
+    }), { timeout: 15000 }).catch(() => false);
+
+    // 3) run in-page helper if present and gather logs
+    const result = await page.evaluate(async () => {
+      try {
+        const run = window.__tpRunObsTest || (window.tp && window.tp.runObsTest) || (window.App && window.App.tests && window.App.tests.runObsTest);
+        let ok = false;
+        let detail = 'no helper present';
+        if (typeof run === 'function') {
+          try {
+            const r = await run();
+            // If helper returns nothing (void), treat execution without exception as success.
+            if (typeof r === 'undefined') {
+              ok = true;
+              detail = 'helper-executed-no-return';
+            } else {
+              ok = !!(r?.ok ?? r === true);
+              detail = r?.detail || (r?.result ? 'helper-return' : (ok ? 'ok' : 'failed'));
+            }
+          } catch (e) {
+            ok = false;
+            detail = 'helper-throw: ' + (e?.message || String(e));
           }
         }
-        window.WebSocket = StubWebSocket;
-      });
-    }
-
-    // Wait for app boot and adapter registration using exponential backoff up to ~30s
-    const maxWaitMs = 30000;
-    const start = Date.now();
-    let attempt = 0;
-    let recorderPresent = false;
-    while (Date.now() - start < maxWaitMs) {
-      attempt += 1;
-      // check for recorder or debug token
-      recorderPresent = await page.evaluate(() => !!window.__recorder);
-      if (recorderPresent) break;
-      const waitMs = Math.min(1000 * Math.pow(2, Math.min(attempt, 5)), 5000);
-      await new Promise((r) => setTimeout(r, waitMs));
-    }
-
-    // Collect logs: handshake log, adapter log, and console buffer
-    const handshakeLog = await page.evaluate(() => {
-      try {
-        return Array.isArray(window.__obsHandshakeLog) ? window.__obsHandshakeLog : (window.__obsHandshakeLog ? [window.__obsHandshakeLog] : []);
+        return {
+          ok,
+          detail,
+          handshakeLog: window.__obsHandshakeLog || [],
+          obsLog: window.__obsLog || [],
+          wsSent: window.__WS_SENT__ || [],
+          recorderPresent: !!window.__recorder
+        };
       } catch (e) {
-        return [`err:${String(e)}`];
+        return { ok: false, detail: 'evaluate error: ' + String(e), handshakeLog: [], obsLog: [], wsSent: [], recorderPresent: false };
       }
     });
 
-    const obsLog = await page.evaluate(() => {
-      try { return window.__obsLog || []; } catch (e) { return [`err:${String(e)}`]; }
-    });
-
-    // Grab console messages captured by the runner (assumes page console logged earlier)
-    // Note: we already log page console to stdout; retrieve any page-held console buffer if present
-    const pageConsoleBuffer = await page.evaluate(() => window.__pageConsoleBuffer || []);
-
-    console.log('[e2e] handshakeLog:', handshakeLog);
-    console.log('[e2e] obsLog tail:', obsLog.slice(-20));
-    console.log('[e2e] pageConsoleBuffer tail:', pageConsoleBuffer.slice(-20));
-
-    // Set OBS config in-page if recorder exposes a configure API
-    try {
-      await page.evaluate((h, p, pass) => {
-        try {
-          if (window.__recorder && typeof window.__recorder.configure === 'function') {
-            window.__recorder.configure({ host: h, port: Number(p), password: pass });
-            return true;
-          }
-        } catch (e) {
-          return String(e);
-        }
-        return false;
-      }, obsHost, obsPort, obsPass);
-    } catch (e) {
-      // ignore
-    }
-
-    // If the page exposes the test helper, call it and capture return
-    const hasHelper = await page.evaluate(() => typeof window.__tpRunObsTest === 'function');
-    let helperRes = null;
-    if (hasHelper) {
-      console.log('[e2e] invoking window.__tpRunObsTest()...');
-      helperRes = await page.evaluate(() => {
-        try {
-          const p = window.__tpRunObsTest();
-          if (p && typeof p.then === 'function') return p.then((r) => ({ok: true, result: r})).catch((e) => ({ok: false, error: String(e)}));
-          return {ok: true, result: p};
-        } catch (e) {
-          return {ok: false, error: String(e)};
-        }
-      });
-      console.log('[e2e] __tpRunObsTest result:', helperRes);
-    } else {
-      console.log('[e2e] page test helper window.__tpRunObsTest() not present');
-    }
-
-    // If stub mode is active, capture WebSocket stub messages
-    let wsStub = null;
-    if (stubObs) {
-      wsStub = await page.evaluate(() => {
-        try { return window.__wsStub || null; } catch (e) { return { err: String(e) }; }
-      });
-      console.log('[e2e] wsStub:', wsStub && wsStub.sent ? wsStub.sent.slice(-50) : wsStub);
-    }
-
-    // Prepare JSON summary
-    const summary = {
-      timestamp: new Date().toISOString(),
-      recorderPresent: !!recorderPresent,
-      handshakeLog: handshakeLog,
-      obsLogTail: obsLog.slice(-200),
-      pageConsoleTail: pageConsoleBuffer.slice(-200),
-      helperRes: helperRes,
-      wsStub: wsStub,
-      obsConfig: { host: obsHost, port: obsPort, passProvided: !!obsPass }
+    const report = {
+      ok: !!result.ok,
+      recorderReady: !!recorderReady || !!result.recorderPresent,
+      detail: result.detail,
+      handshakeLogCount: (result.handshakeLog && result.handshakeLog.length) || 0,
+      obsLogTail: (result.obsLog && result.obsLog.slice(-10)) || [],
+      wsSentCount: (result.wsSent && result.wsSent.length) || 0
     };
 
-    console.log('[e2e] JSON_SUMMARY:', JSON.stringify(summary));
-
-    // Exit with code 0 if helper returned ok or if wsStub recorded activity in stub mode
-    let exitCode = 1;
-    if ((helperRes && helperRes.ok) || (stubObs && wsStub && Array.isArray(wsStub.sent) && wsStub.sent.length > 0)) exitCode = 0;
+    console.log('[SMOKE-REPORT]', JSON.stringify(report));
 
     try { await browser.close(); } catch (e) { void e; }
     try { server.close(); } catch (e) { void e; }
-    process.exit(exitCode);
+
+    process.exit(report.ok ? 0 : 2);
   }
 
   // Expose helper to call the TP scroll API

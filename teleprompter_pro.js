@@ -104,6 +104,41 @@ try {
         return;
       }
       console.info('[TP-Pro] __tpRunObsTest: found obs adapter', obs);
+      // If the smoke runner injected an OBS config, apply it to the adapter before testing
+      try {
+        if (typeof window !== 'undefined' && window.__OBS_CFG__ && obs && typeof obs.configure === 'function') {
+          try {
+            const c = window.__OBS_CFG__ || {};
+            // Build a ws:// URL if host/port provided, else pass through any url
+            let url = c.url || c.u || '';
+            try {
+              if (!url && c.host) {
+                const host = String(c.host || '').replace(/\/+$/, '');
+                const port = c.port ? String(c.port) : '';
+                url = host.match(/^wss?:\//i) ? host + (port ? ':' + port : '') : 'ws://' + host + (port ? ':' + port : '');
+              }
+            } catch (e) {
+              void e;
+            }
+            const passwd = c.password || c.pass || c.pwd || '';
+            const cfgPatch = {};
+            if (url) cfgPatch.url = url;
+            if (passwd) cfgPatch.password = passwd;
+            if (Object.keys(cfgPatch).length) {
+              try {
+                obs.configure(cfgPatch);
+                console.info('[TP-Pro] __tpRunObsTest: applied __OBS_CFG__ to obs adapter', cfgPatch);
+              } catch (e) {
+                console.warn('[TP-Pro] __tpRunObsTest: failed to apply __OBS_CFG__', e);
+              }
+            }
+          } catch (e) {
+            void e;
+          }
+        }
+      } catch (e) {
+        void e;
+      }
       try {
         if (typeof obs.test === 'function') {
           console.info('[TP-Pro] __tpRunObsTest: calling obs.test()');
