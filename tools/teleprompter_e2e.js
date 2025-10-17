@@ -269,6 +269,12 @@ async function main() {
       report.ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
       return report;
     });
+    // Print a single-line JSON report and exit deterministically for CI
+    try { console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke)); } catch (e) { console.log('[SMOKE-REPORT] {}'); }
+    try { await browser.close(); } catch (e) { /* ignore */ }
+    try { server.close(); } catch (e) { /* ignore */ }
+    // Use exit code 0 on success, 2 on smoke failure (easy to distinguish in CI)
+    process.exit(smoke.ok ? 0 : 2);
   }
 
   // Expose helper to call the TP scroll API
