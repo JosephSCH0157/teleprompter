@@ -117,9 +117,10 @@ async function main() {
 
       const OBS_CFG = globalThis.__OBS_CFG__ ?? null;
 
+      // Wait for recorder to appear. Increase max backoff so total wait ~5s if needed.
       const okBoot = await backoffWait(async () => {
         return !!(globalThis.__recorder || globalThis.App?.recorder);
-      }, { start: 50, max: 500, limit: 12 });
+      }, { start: 50, max: 800, limit: 12 });
 
       report.tBootMs = now() - T0;
       if (!okBoot) {
@@ -130,16 +131,29 @@ async function main() {
       const rec = globalThis.__recorder || globalThis.App?.recorder;
       report.recorderReady = !!rec;
 
+      // Ensure built-in adapters are initialized; call and tolerate failures.
       try {
         if (rec?.initBuiltIns) {
-          await rec.initBuiltIns();
-          report.notes.push('initBuiltIns() ok');
+          try {
+            await rec.initBuiltIns();
+            report.notes.push('initBuiltIns() ok');
+          } catch (ie) {
+            report.notes.push('initBuiltIns err: ' + String(ie));
+          }
         }
       } catch (e) {
-        report.notes.push('initBuiltIns err: ' + String(e));
+        report.notes.push('initBuiltIns outer err: ' + String(e));
       }
 
-      const obs = rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || globalThis.App?.obs || null;
+      // Retry a few times to get the obs adapter after initBuiltIns
+      let obs = null;
+      for (let i = 0; i < 6 && !obs; i++) {
+        obs = rec?.get?.('obs') || rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || globalThis.App?.obs || null;
+        if (obs) break;
+        // small wait before retrying
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 150));
+      }
       report.adapterReady = !!obs;
       if (!obs) {
         report.notes.push('OBS adapter not found.');
@@ -163,6 +177,9 @@ async function main() {
         if (typeof obs.connect === 'function') {
           await obs.connect();
           report.notes.push('obs.connect() ok');
+          // brief pause to allow IDENTIFY or other frames to be sent when stubbed
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 250));
         }
       } catch (e) {
         report.notes.push('connect err: ' + String(e));
@@ -181,6 +198,12 @@ async function main() {
       }
 
       const afterCount = sent.length;
+      // Also record how many sockets opened (helpful for debugging stub injection)
+      try {
+        report.wsOpened = Array.isArray(globalThis.__WS_OPENED__) ? globalThis.__WS_OPENED__.length : 0;
+      } catch (e) {
+        report.wsOpened = 0;
+      }
       report.wsSentCount = Math.max(0, afterCount - beforeCount);
       report.wsOps = sent.slice(-report.wsSentCount).map((m) => {
         try {
