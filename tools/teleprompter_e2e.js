@@ -78,6 +78,70 @@ async function main() {
     } catch (e) { /* ignore */ }
   }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS });
 
+  // If we're stubbing OBS, also inject a tiny recorder shim early so the page sees a recorder
+  // and the smoke-drive can locate an obs adapter reliably. The shim uses the global WebSocket
+  // (which will be proxied above) so send/open events are captured in __WS_SENT__/__WS_OPENED__.
+  if (STUB_OBS) {
+    try {
+      await page.evaluateOnNewDocument((cfg) => {
+        try {
+          if (globalThis.__REC_SHIM_INSTALLED__) return;
+          globalThis.__REC_SHIM_INSTALLED__ = true;
+          // Simple obs adapter
+          const makeObsAdapter = (cfg) => {
+            let ws = null;
+            let lastCfg = { url: cfg && cfg.url ? cfg.url : (cfg && cfg.host ? ('ws://' + cfg.host + (cfg.port ? ':' + cfg.port : '')) : 'ws://127.0.0.1:4455'), password: cfg && cfg.password ? cfg.password : '' };
+            return {
+              configure(newCfg) {
+                try { lastCfg = Object.assign({}, lastCfg, newCfg || {}); } catch (e) { }
+              },
+              connect() {
+                return new Promise((res, rej) => {
+                  try {
+                    try { if (ws) ws.close(1000, 'reconnect'); } catch (e) {}
+                    ws = new WebSocket(lastCfg.url);
+                    ws.addEventListener('open', () => res(true));
+                    ws.addEventListener('error', (ev) => { rej(new Error('ws-error')); });
+                    ws.addEventListener('close', () => { /* ignore */ });
+                  } catch (ex) { rej(ex); }
+                });
+              },
+              test() {
+                return new Promise(async (res) => {
+                  try {
+                    // Ensure connected
+                    if (!ws || ws.readyState !== 1) {
+                      try { await this.connect(); } catch {}
+                    }
+                    try {
+                      // Send a minimal IDENTIFY-like payload so the stub records it
+                      const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
+                      ws && ws.send && ws.send(id);
+                    } catch {}
+                  } catch {}
+                  setTimeout(() => res(true), 100);
+                });
+              },
+              getLastError() { return null; }
+            };
+          };
+
+          try {
+            // Only install if none exists
+            if (!globalThis.__recorder) {
+              globalThis.__recorder = {
+                initBuiltIns() { return Promise.resolve(true); },
+                getAdapter(id) { return id === 'obs' ? makeObsAdapter(cfg || {}) : null; },
+                get(id) { return id === 'obs' ? makeObsAdapter(cfg || {}) : null; },
+                adapters: { obs: makeObsAdapter(cfg || {}) },
+              };
+            }
+          } catch (e) { /* ignore */ }
+        } catch (e) { /* ignore */ }
+      }, { host: OBS_HOST, port: OBS_PORT, url: '', password: OBS_PASS });
+    } catch (e) { /* ignore */ }
+  }
+
   console.log('[e2e] navigating to', url);
   // Install an early initializer that will call initBuiltIns() on the recorder as soon as it appears.
   try {
