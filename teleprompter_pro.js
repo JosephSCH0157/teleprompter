@@ -1470,12 +1470,47 @@ let _toast = function (msg, opts) {
       ev.preventDefault();
     });
     // When Settings overlay toggles OBS, mirror to main toggle (query main DOM each time)
-    obsEnable?.addEventListener('change', () => {
+    obsEnable?.addEventListener('change', async () => {
       const mainEnable = document.getElementById('enableObs');
       if (mainEnable) {
         mainEnable.checked = !!obsEnable.checked;
         mainEnable.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
       }
+
+      // Fallback: apply directly via recorder when main toggle isn't in the DOM
+      try {
+        if (!window.__recorder?.getSettings || !window.__recorder?.setSettings) return;
+        const s = __recorder.getSettings();
+        let selected = (s && Array.isArray(s.selected) ? s.selected.slice() : []).filter((id) => id !== 'obs');
+        if (obsEnable.checked) selected.push('obs');
+
+        const cfgs = { ...(s.configs || {}) };
+        if (!cfgs.obs) {
+          cfgs.obs = {
+            url: obsUrlS?.value || DEFAULT_OBS_URL,
+            password: obsPassS?.value || '',
+          };
+        } else {
+          // keep any current cfg, but honor current settings fields if present
+          if (obsUrlS?.value) cfgs.obs.url = obsUrlS.value;
+          if (typeof obsPassS?.value === 'string') cfgs.obs.password = obsPassS.value;
+        }
+
+        __recorder.setSettings({ selected, configs: cfgs });
+
+        // Optional quick availability check for UX feedback
+        if (obsEnable.checked && __recorder.get('obs')?.isAvailable) {
+          try {
+            const ok = await __recorder.get('obs').isAvailable();
+            _toast(ok ? 'OBS: ready' : 'OBS: offline', { type: ok ? 'ok' : 'error' });
+          } catch {
+            _toast('OBS: offline');
+          }
+        } else {
+          _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
+        }
+      } catch {}
     });
     // Mirror URL
     obsUrlS?.addEventListener('change', () => {
@@ -1524,38 +1559,40 @@ let _toast = function (msg, opts) {
         void e;
       }
     });
-    // Proxy test button: push settings -> main immediately, reconfigure recorder, then run main test
+    // Proxy test button and surface result via toast
     obsTestS?.addEventListener('click', async () => {
-      const mainUrl = document.getElementById('obsUrl');
-      const mainPass = document.getElementById('obsPassword');
-
-      // Copy from Settings inputs into main inputs if non-empty
-      if (obsUrlS?.value && mainUrl) mainUrl.value = obsUrlS.value;
-      if (obsPassS?.value && mainPass) mainPass.value = obsPassS.value;
-
-      // dispatch change so any listeners fire
-      mainUrl?.dispatchEvent(new Event('change', { bubbles: true }));
-      mainPass?.dispatchEvent(new Event('change', { bubbles: true }));
-
-      // make the adapter re-read getUrl/getPass
-      try {
-        const rec = await loadRecorder();
-        try {
-          rec?.reconfigure?.();
-        } catch {}
-      } catch (e) {
-        void e;
+      const mainTest = document.getElementById('obsTestBtn');
+      if (mainTest) {
+        mainTest.click();
+        setTimeout(() => {
+          const statusEl = document.getElementById('obsStatus');
+          const txt = statusEl?.textContent || 'OBS test';
+          _toast(txt, { type: (txt || '').toLowerCase().includes('ok') ? 'ok' : 'error' });
+        }, 600);
+        return;
       }
 
-      // now run the existing main test
-      document.getElementById('obsTestBtn')?.click();
+      // Fallback: direct test via recorder
+      try {
+        if (!__recorder?.get || !__recorder.get('obs')) {
+          _toast('OBS: adapter missing');
+          return;
+        }
+        // ensure cfgs reflect the Settings fields before testing
+        try {
+          const s = __recorder.getSettings?.() || { selected: [], configs: {} };
+          const cfgs = { ...(s.configs || {}), obs: { ...(s.configs?.obs || {}) } };
+          if (obsUrlS?.value) cfgs.obs.url = obsUrlS.value;
+          if (typeof obsPassS?.value === 'string') cfgs.obs.password = obsPassS.value;
+          __recorder.setSettings({ configs: cfgs });
+        } catch {}
 
-      setTimeout(() => {
-        const statusEl = document.getElementById('obsStatus');
-        _toast(statusEl?.textContent || 'OBS test', {
-          type: (statusEl?.textContent || '').toLowerCase().includes('ok') ? 'ok' : 'error',
-        });
-      }, 600);
+        _toast('OBS: testing…');
+        const ok = await __recorder.get('obs').isAvailable?.();
+        _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
+      } catch (e) {
+        _toast('OBS: failed');
+      }
     });
 
     // One-click helper: sync Settings -> main and run the in-page OBS test helper
