@@ -4629,10 +4629,20 @@ let _toast = function (msg, opts) {
         // Toggle “Enable OBS” — update module enabled state and attempt connect/disconnect
         document.getElementById('enableObs')?.addEventListener('change', async (e) => {
           try {
-            const rec = await loadRecorder();
-            if (rec?.setEnabled) rec.setEnabled(!!e.target.checked);
-            if (e.target.checked) rec?.connect?.();
-            else rec?.disconnect?.();
+            const reg = await loadRecorder();
+            const rec = reg && typeof reg.get === 'function' ? reg.get('obs') : null;
+            if (!rec) return;
+            try {
+              if (typeof rec.setEnabled === 'function') rec.setEnabled(!!e.target.checked);
+            } catch (err) {
+              void err;
+            }
+            try {
+              if (e.target.checked) await (rec.connect ? rec.connect() : Promise.resolve());
+              else await (rec.disconnect ? rec.disconnect() : Promise.resolve());
+            } catch (err) {
+              void err;
+            }
           } catch {}
         });
 
