@@ -127,6 +127,22 @@ async function main() {
     console.warn('[e2e] recorder not detected within 30s wait; continuing to page-level checks');
   }
 
+  // Try invoking the in-page helper to ensure adapters initialize and optionally run a quick test.
+  try {
+    const kick = await Promise.race([
+      page.evaluate(() => {
+        try {
+          if (typeof window.__tpRunObsTest === 'function') return window.__tpRunObsTest();
+        } catch (e) {}
+        return null;
+      }),
+      new Promise((r) => setTimeout(() => r(null), 10000)), // 10s cap
+    ]);
+    if (kick) console.log('[e2e] __tpRunObsTest invoked (runner-side)');
+  } catch (e) {
+    /* ignore */
+  }
+
   if (RUN_SMOKE) {
     console.log('[e2e] running non-interactive smoke test...');
 
