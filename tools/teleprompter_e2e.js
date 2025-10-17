@@ -40,47 +40,42 @@ async function main() {
   });
 
   const url = `http://127.0.0.1:${port}/teleprompter_pro.html`;
-  // Prepare injection of config and optional stub before the page runs any scripts
+  // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
+    try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (e) { /* ignore */ }
     try {
-      window.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass };
       if (cfg.stub) {
-        const RealWS = window.WebSocket;
-        const sent = [];
-        class StubWS {
-          constructor(url) {
-            this.url = url;
-            this.readyState = 1;
-            this._sent = sent;
-            // fire open, then simulate a server HELLO (op:0) so the adapter will attempt IDENTIFY
-            setTimeout(() => {
-              try { this.onopen && this.onopen({}); } catch (e) { /* ignore */ }
-              try {
-                // small delay before sending HELLO
-                setTimeout(() => {
-                  try {
-                    const hello = JSON.stringify({ op: 0, d: { authentication: { salt: 'stub-salt', challenge: 'stub-chal' } } });
-                    this.onmessage && this.onmessage({ data: hello });
-                  } catch (e2) { /* ignore */ }
-                }, 20);
-              } catch (e3) { /* ignore */ }
-            }, 10);
-          }
-          send(data) {
-            try { sent.push(data); } catch (e) { /* ignore */ }
-            try { this.onmessage && this.onmessage({ data: JSON.stringify({ op: 'echo', d: data }) }); } catch (e) { /* ignore */ }
-          }
-          close() { this.readyState = 3; this.onclose && this.onclose({}); }
-          addEventListener(type, cb) { this['on' + type] = cb; }
-          removeEventListener(type) { this['on' + type] = null; }
-        }
-        window.WebSocket = StubWS;
-        window.__WS_SENT__ = sent;
-        window.__WS_RESTORE__ = () => { window.WebSocket = RealWS; };
+        (function () {
+          try {
+            const SENT = (globalThis.__WS_SENT__ = globalThis.__WS_SENT__ || []);
+            const OPENED = (globalThis.__WS_OPENED__ = globalThis.__WS_OPENED__ || []);
+            const RealWS = globalThis.WebSocket;
+            if (!RealWS || RealWS.__patched_for_smoke__) return;
+
+            class WSProxy extends RealWS {
+              constructor(url, protocols) {
+                super(url, protocols);
+                try {
+                  this.addEventListener('open', () => {
+                    try { OPENED.push({ t: Date.now(), url }); } catch (e) {}
+                    try {
+                      // simulate server HELLO so clients IDENTIFY
+                      this.onmessage && this.onmessage({ data: JSON.stringify({ op: 0, d: { authentication: { salt: 'stub-salt', challenge: 'stub-chal' } } }) });
+                    } catch (e) {}
+                  });
+                } catch (e) {}
+              }
+              send(data) {
+                try { SENT.push(typeof data === 'string' ? data : String(data)); } catch (e) {}
+                try { return super.send(data); } catch (e) { return; }
+              }
+            }
+            WSProxy.__patched_for_smoke__ = true;
+            globalThis.WebSocket = WSProxy;
+          } catch (e) { /* ignore */ }
+        })();
       }
-    } catch (e) {
-      // ignore injection errors
-    }
+    } catch (e) { /* ignore */ }
   }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS });
 
   console.log('[e2e] navigating to', url);
@@ -91,90 +86,120 @@ async function main() {
   if (RUN_SMOKE) {
     console.log('[e2e] running non-interactive smoke test...');
 
-    // generic waitFor with exponential backoff
-    async function waitFor(fn, opts = {}) {
-      const timeout = opts.timeout || 25000;
-      let delay = opts.startDelay || 100;
-      const factor = opts.factor || 1.4;
-      const maxDelay = opts.max || 1200;
-      const start = Date.now();
-      let lastErr = null;
-      while (Date.now() - start < timeout) {
-        try {
-          const v = await fn();
-          if (v) return v;
-        } catch (e) {
-          lastErr = e;
-        }
-        await new Promise((r) => setTimeout(r, delay));
-        delay = Math.min(maxDelay, Math.floor(delay * factor));
-      }
-      throw lastErr || new Error('waitFor timeout');
-    }
+    // drive init -> connect -> test -> report inside the page to keep adapter context local
+    const smoke = await page.evaluate(async () => {
+      const T0 = Date.now();
+      const report = {
+        ok: false,
+        tBootMs: 0,
+        recorderReady: false,
+        adapterReady: false,
+        testRan: false,
+        wsSentCount: 0,
+        wsOps: [],
+        notes: [],
+      };
 
-    // 1) Wait for app boot
-    await waitFor(() => page.evaluate(() => !!(window.Teleprompter || window.App || window.__tpBootFinished || window.__recorder)), { timeout: 15000 }).catch(() => null);
-
-    // 2) Wait for recorder/adapter registered (or handshake logs)
-    const recorderReady = await waitFor(() => page.evaluate(() => {
-      try {
-        const r = window.__recorder || (window.App && window.App.recorder);
-        if (r && (r.isReady || r.ready)) return true;
-        if (Array.isArray(window.__obsHandshakeLog) && window.__obsHandshakeLog.length) return true;
-        return false;
-      } catch (e) { return false; }
-    }), { timeout: 15000 }).catch(() => false);
-
-    // 3) run in-page helper if present and gather logs
-    const result = await page.evaluate(async () => {
-      try {
-        const run = window.__tpRunObsTest || (window.tp && window.tp.runObsTest) || (window.App && window.App.tests && window.App.tests.runObsTest);
-        let ok = false;
-        let detail = 'no helper present';
-        if (typeof run === 'function') {
+      const now = () => Date.now();
+      const backoffWait = async (cond, { start = 50, max = 800, limit = 10 } = {}) => {
+        let d = start;
+        for (let i = 0; i < limit; i++) {
           try {
-            const r = await run();
-            // If helper returns nothing (void), treat execution without exception as success.
-            if (typeof r === 'undefined') {
-              ok = true;
-              detail = 'helper-executed-no-return';
-            } else {
-              ok = !!(r?.ok ?? r === true);
-              detail = r?.detail || (r?.result ? 'helper-return' : (ok ? 'ok' : 'failed'));
-            }
+            if (await cond()) return true;
           } catch (e) {
-            ok = false;
-            detail = 'helper-throw: ' + (e?.message || String(e));
+            // ignore
           }
+          await new Promise((r) => setTimeout(r, d));
+          d = Math.min(max, d * 2);
         }
-        return {
-          ok,
-          detail,
-          handshakeLog: window.__obsHandshakeLog || [],
-          obsLog: window.__obsLog || [],
-          wsSent: window.__WS_SENT__ || [],
-          recorderPresent: !!window.__recorder
-        };
-      } catch (e) {
-        return { ok: false, detail: 'evaluate error: ' + String(e), handshakeLog: [], obsLog: [], wsSent: [], recorderPresent: false };
+        return false;
+      };
+
+      const OBS_CFG = globalThis.__OBS_CFG__ ?? null;
+
+      const okBoot = await backoffWait(async () => {
+        return !!(globalThis.__recorder || globalThis.App?.recorder);
+      }, { start: 50, max: 500, limit: 12 });
+
+      report.tBootMs = now() - T0;
+      if (!okBoot) {
+        report.notes.push('Recorder not found after backoff.');
+        return report;
       }
+
+      const rec = globalThis.__recorder || globalThis.App?.recorder;
+      report.recorderReady = !!rec;
+
+      try {
+        if (rec?.initBuiltIns) {
+          await rec.initBuiltIns();
+          report.notes.push('initBuiltIns() ok');
+        }
+      } catch (e) {
+        report.notes.push('initBuiltIns err: ' + String(e));
+      }
+
+      const obs = rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || globalThis.App?.obs || null;
+      report.adapterReady = !!obs;
+      if (!obs) {
+        report.notes.push('OBS adapter not found.');
+        return report;
+      }
+
+      try {
+        if (OBS_CFG && typeof obs.configure === 'function') {
+          await obs.configure(OBS_CFG);
+          report.notes.push('obs.configure() applied');
+        }
+      } catch (e) {
+        report.notes.push('configure err: ' + String(e));
+      }
+
+      const sent = (globalThis.__WS_SENT__ ||= []);
+      const hlog = (globalThis.__obsHandshakeLog ||= []);
+      const beforeCount = sent.length;
+
+      try {
+        if (typeof obs.connect === 'function') {
+          await obs.connect();
+          report.notes.push('obs.connect() ok');
+        }
+      } catch (e) {
+        report.notes.push('connect err: ' + String(e));
+      }
+
+      try {
+        if (typeof obs.test === 'function') {
+          await obs.test();
+          report.testRan = true;
+          report.notes.push('obs.test() ok');
+        } else {
+          report.notes.push('obs.test() not present');
+        }
+      } catch (e) {
+        report.notes.push('test err: ' + String(e));
+      }
+
+      const afterCount = sent.length;
+      report.wsSentCount = Math.max(0, afterCount - beforeCount);
+      report.wsOps = sent.slice(-report.wsSentCount).map((m) => {
+        try {
+          const j = typeof m === 'string' ? JSON.parse(m) : m;
+          return j?.op ?? j?.opcode ?? 'unknown';
+        } catch {
+          return 'raw';
+        }
+      });
+
+      report.ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
+      if (Array.isArray(hlog) && hlog.length) report.notes.push(`handshakeLog[${hlog.length}]`);
+      return report;
     });
 
-    const report = {
-      ok: !!result.ok,
-      recorderReady: !!recorderReady || !!result.recorderPresent,
-      detail: result.detail,
-      handshakeLogCount: (result.handshakeLog && result.handshakeLog.length) || 0,
-      obsLogTail: (result.obsLog && result.obsLog.slice(-10)) || [],
-      wsSentCount: (result.wsSent && result.wsSent.length) || 0
-    };
-
-    console.log('[SMOKE-REPORT]', JSON.stringify(report));
-
+    console.log('[SMOKE-REPORT] ' + JSON.stringify(smoke));
     try { await browser.close(); } catch (e) { void e; }
     try { server.close(); } catch (e) { void e; }
-
-    process.exit(report.ok ? 0 : 2);
+    process.exit(smoke.ok ? 0 : 2);
   }
 
   // Expose helper to call the TP scroll API
