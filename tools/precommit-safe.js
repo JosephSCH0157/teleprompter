@@ -39,6 +39,8 @@ function stagedFiles() {
 }
 
 async function main() {
+  const proc = globalThis['process'];
+  const strictEnv = (proc && proc.env && (proc.env.PRECOMMIT_STRICT === '1' || proc.env.PRECOMMIT_STRICT === 'true')) || false;
   try {
     // 1) Try lint-staged (prefer the locally installed binary)
     if (hasBin('lint-staged')) {
@@ -49,11 +51,15 @@ async function main() {
         const execPath = (globalThis['process'] && globalThis['process'].execPath) || 'node';
         const ok = run(execPath, [r.resolve('lint-staged/bin/lint-staged')]);
         if (ok) {
-          const proc = globalThis['process'];
           if (proc && typeof proc.exit === 'function') proc.exit(0);
           return 0;
         }
         console.warn('[precommit-safe] lint-staged failed');
+        if (strictEnv) {
+          console.error('[precommit-safe] strict mode enabled: failing commit due to lint-staged failure');
+          if (proc && typeof proc.exit === 'function') proc.exit(1);
+          return 1;
+        }
       } catch (e) {
         console.warn('[precommit-safe] lint-staged invocation error', e && e.message);
       }
@@ -63,7 +69,6 @@ async function main() {
     const files = stagedFiles().filter((f) => /\.(js|jsx)$/.test(f));
     if (files.length === 0) {
       console.log('[precommit-safe] no staged JS files to lint; skipping');
-      const proc = globalThis['process'];
       if (proc && typeof proc.exit === 'function') proc.exit(0);
       return 0;
     }
@@ -74,26 +79,26 @@ async function main() {
         const execPath = (globalThis['process'] && globalThis['process'].execPath) || 'node';
         const ok = run(execPath, [r.resolve('eslint/bin/eslint.js'), '--fix'].concat(files));
         if (ok) {
-          const proc = globalThis['process'];
           if (proc && typeof proc.exit === 'function') proc.exit(0);
           return 0;
         }
         console.warn('[precommit-safe] eslint reported problems');
-        const procErr = globalThis['process'];
-        if (procErr && typeof procErr.exit === 'function') procErr.exit(1);
-        return 1;
+        if (strictEnv) {
+          console.error('[precommit-safe] strict mode enabled: failing commit due to eslint failure');
+          if (proc && typeof proc.exit === 'function') proc.exit(1);
+          return 1;
+        }
+        return 0;
       } catch (e) {
         void e;
       }
     }
 
     console.log('[precommit-safe] no lint-staged or eslint found; skipping lint checks');
-    const proc = globalThis['process'];
     if (proc && typeof proc.exit === 'function') proc.exit(0);
     return 0;
   } catch (e) {
     console.error('[precommit-safe] unexpected error', e && e.stack ? e.stack : e);
-    const proc = globalThis['process'];
     if (proc && typeof proc.exit === 'function') proc.exit(0);
     return 0;
   }

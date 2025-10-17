@@ -30,6 +30,10 @@ This is a browser-based teleprompter with display mirroring, speech sync, camera
 
 Open `teleprompter_pro.html` in a modern browser (Chromium-based recommended). Grant mic permissions if you want speech sync or the dB meter.
 
+## Tools & developer helpers
+
+There is a small `tools/` folder with developer helpers (Puppeteer runner, safe pre-commit helper). See `TOOLS-README.md` for usage and installation instructions.
+
 ## Troubleshooting
 
 - If the camera doesn’t start automatically on iOS, tap the video area to trigger playback.
