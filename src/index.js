@@ -11,7 +11,7 @@ import { initTelemetry } from './features/telemetry.js';
 import { initToasts } from './features/toasts.js';
 import * as UI from './ui/dom.js';
 
-export async function boot() {
+async function boot() {
   try {
     console.log('[src/index] boot()');
     await Core.init();
@@ -36,3 +36,5 @@ export async function boot() {
 
 // Auto-run boot when loaded as a module, but also export boot for manual invocation.
 boot();
+
+export { boot };

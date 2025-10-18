@@ -2,9 +2,20 @@
 
 export function bindStaticDom() {
   console.log('[src/ui/dom] bindStaticDom');
-  // Wire up very small, safe DOM references here if needed.
+  // All DOM reads/writes should be centralized here.
+  // For now this is a no-op placeholder to keep responsibilities clear.
 }
 
 export function query(selector) {
   return document.querySelector(selector);
+}
+
+export function readText(selector) {
+  const el = document.querySelector(selector);
+  return el ? el.textContent : null;
+}
+
+export function setText(selector, txt) {
+  const el = document.querySelector(selector);
+  if (el) el.textContent = String(txt);
 }
