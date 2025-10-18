@@ -2,8 +2,7 @@
 // Minimal smoke test: launches a headless browser, opens teleprompter_pro.html, checks for toast container and scripts UI elements.
 // Uses Playwright if available, otherwise Puppeteer if available, else prints instructions.
 
-const path = require('path');
-const fs = require('fs');
+// path/fs not required for minimal smoke test
 
 const URL = 'http://localhost:8080/teleprompter_pro.html';
 
@@ -13,7 +12,7 @@ async function run() {
     let playwright;
     try {
       playwright = require('playwright');
-    } catch (e) {}
+    } catch {}
 
     if (playwright) {
       console.log('Using Playwright');
@@ -33,7 +32,7 @@ async function run() {
     let puppeteer;
     try {
       puppeteer = require('puppeteer');
-    } catch (e) {}
+    } catch {}
     if (puppeteer) {
       console.log('Using Puppeteer');
       const browser = await puppeteer.launch();

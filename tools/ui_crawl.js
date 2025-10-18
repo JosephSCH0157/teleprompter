@@ -12,7 +12,7 @@ const fs = require('fs');
       try {
         const loc = msg.location ? msg.location() : {};
         out.console.push({ type: msg.type(), text: msg.text(), location: loc });
-      } catch (err) {
+      } catch (_err) {
         out.console.push({ type: 'console', text: msg.text() });
       }
     });
@@ -21,9 +21,7 @@ const fs = require('fs');
       if (res.status() >= 400) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
     });
   // start static server in-process so the page is reachable
-  try { require('./static_server.js'); } catch (e) { /* ignore */ }
-
-    try { require('./static_server.js'); } catch (e) { /* ignore */ }
+  try { require('./static_server.js'); } catch { /* ignore */ }
 
     await page.evaluateOnNewDocument((cfg) => {
       try { globalThis.__OBS_CFG__ = cfg; } catch {}

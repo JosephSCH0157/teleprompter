@@ -27,7 +27,7 @@ for (const f of files) {
     try {
       // Try parsing as module first (handles import/export files)
       acorn.parse(src, { ecmaVersion: 2022, locations: true, sourceType: 'module' });
-    } catch (eModule) {
+    } catch {
       try {
         // Fallback to script parsing
         acorn.parse(src, { ecmaVersion: 2022, locations: true, sourceType: 'script' });

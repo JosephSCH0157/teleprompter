@@ -48,7 +48,7 @@ async function main() {
   const url = `http://127.0.0.1:${port}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
-    try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (e) { /* ignore */ }
+    try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (_e) { /* ignore */ }
     try {
       if (cfg.stub) {
         (function () {
@@ -61,27 +61,27 @@ async function main() {
             class WSProxy extends RealWS {
               constructor(url, protocols) {
                 super(url, protocols);
-                try {
-                  this.addEventListener('open', () => {
-                    try { OPENED.push({ t: Date.now(), url }); } catch (e) {}
-                    try {
-                      // simulate server HELLO so clients IDENTIFY — simple heartbeat-based hello
-                      this.onmessage && this.onmessage({ data: JSON.stringify({ op: 0, d: { heartbeat_interval: 45000 } }) });
-                    } catch (e) {}
-                  });
-                } catch (e) {}
+                  try {
+                    this.addEventListener('open', () => {
+                      try { OPENED.push({ t: Date.now(), url }); } catch (_e) {}
+                      try {
+                        // simulate server HELLO so clients IDENTIFY — simple heartbeat-based hello
+                        this.onmessage && this.onmessage({ data: JSON.stringify({ op: 0, d: { heartbeat_interval: 45000 } }) });
+                      } catch (_e) {}
+                    });
+                  } catch (_e) {}
               }
               send(data) {
-                try { SENT.push(typeof data === 'string' ? data : String(data)); } catch (e) {}
-                try { return super.send(data); } catch (e) {  }
+                  try { SENT.push(typeof data === 'string' ? data : String(data)); } catch (_e) {}
+                  try { return super.send(data); } catch (_e) {  }
               }
             }
             WSProxy.__patched_for_smoke__ = true;
             globalThis.WebSocket = WSProxy;
-          } catch (e) { /* ignore */ }
+          } catch (_e) { /* ignore */ }
         })();
       }
-    } catch (e) { /* ignore */ }
+    } catch (_e) { /* ignore */ }
   }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS });
 
   // If we're stubbing OBS, also inject a tiny recorder shim early so the page sees a recorder
@@ -142,10 +142,10 @@ async function main() {
                 adapters: { obs: makeObsAdapter(cfg || {}) },
               };
             }
-          } catch (e) { /* ignore */ }
+          } catch (_e) { /* ignore */ }
         } catch (e) { /* ignore */ }
       }, { host: OBS_HOST, port: OBS_PORT, url: '', password: OBS_PASS });
-    } catch (e) { /* ignore */ }
+    } catch (_e) { /* ignore */ }
   }
 
   console.log('[e2e] navigating to', url);

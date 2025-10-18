@@ -3,7 +3,7 @@
 // It guards access to Node globals so static checkers won't flag undefined globals.
 // @ts-nocheck
 
-/* global require, Buffer, process, atob, btoa */
+// Node-only script; relies on Node globals (require, Buffer, process)
 // Compute OBS auth candidate values (A..G) in Node.js
 // Usage:
 //   node tools/compute_obs_candidates.js <password> <challenge_b64> <salt_b64>
