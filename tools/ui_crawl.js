@@ -6,8 +6,15 @@ const fs = require('fs');
   try{
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
+    page.setDefaultTimeout(20000);
+    page.setDefaultNavigationTimeout(30000);
     page.on('console', msg => {
-      try { out.console.push({ type: msg.type(), text: msg.text() }); } catch(e){}
+      try {
+        const loc = msg.location ? msg.location() : {};
+        out.console.push({ type: msg.type(), text: msg.text(), location: loc });
+      } catch (err) {
+        out.console.push({ type: 'console', text: msg.text() });
+      }
     });
     page.on('pageerror', err => { out.errors.push({ type: 'pageerror', message: String(err) }); });
     page.on('response', res => {
@@ -16,7 +23,9 @@ const fs = require('fs');
   // start static server in-process so the page is reachable
   try { require('./static_server.js'); } catch (e) { /* ignore */ }
 
-  await page.evaluateOnNewDocument((cfg) => {
+    try { require('./static_server.js'); } catch (e) { /* ignore */ }
+
+    await page.evaluateOnNewDocument((cfg) => {
       try { globalThis.__OBS_CFG__ = cfg; } catch {}
       try {
         // lightweight stub recorder if none exists
@@ -37,20 +46,23 @@ const fs = require('fs');
     // wait a little for UI to settle
     await page.waitForTimeout(1000);
 
-    // gather candidate interactive elements
-    const candidates = await page.evaluate(() => {
+    // gather candidate interactive elements (avoid file inputs, download anchors, and known problematic IDs)
+    const blacklist = ['wrap-bg','autoTagBtn','downloadFile','uploadFileBtn','scriptSaveBtn','scriptSaveAsBtn','scriptLoadBtn','scriptDeleteBtn','scriptRenameBtn','resetScriptBtn'];
+    const candidates = await page.evaluate((blacklist) => {
       const sel = Array.from(document.querySelectorAll('button, [role="button"], input[type="button"], input[type="checkbox"], input[type="submit"]'));
-      return sel.map((el) => {
-        return {
-          tag: el.tagName,
-          id: el.id || null,
-          text: el.textContent && el.textContent.trim().slice(0,80) || null,
-          rect: el.getBoundingClientRect ? {
-            w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height
-          } : null
-        };
-      }).filter(x => x.rect && x.rect.w > 6 && x.rect.h > 6).slice(0,200);
-    });
+      return sel
+        .filter(el => {
+          if (!el.getBoundingClientRect) return false;
+          const r = el.getBoundingClientRect();
+          if (r.width < 6 || r.height < 6) return false;
+          if (el.tagName === 'INPUT' && el.type === 'file') return false;
+          if (el.tagName === 'A' && el.hasAttribute('download')) return false;
+          if (el.id && blacklist.includes(el.id)) return false;
+          return true;
+        })
+        .map((el) => ({ tag: el.tagName, id: el.id || null, text: el.textContent && el.textContent.trim().slice(0,80) || null }))
+        .slice(0,300);
+    }, blacklist);
     out.notes.push(`Found ${candidates.length} candidate controls`);
 
     // Click them by id where possible
@@ -58,11 +70,14 @@ const fs = require('fs');
       try {
         if (!c.id) continue;
         await page.evaluate(id => { const el = document.getElementById(id); if (el) el.scrollIntoView({behavior:'instant', block:'center'}); }, c.id);
-        await page.click('#' + c.id).catch(()=>{});
+        // Try a safe click: use the element handle and click with delay
+        const handle = await page.$('#' + c.id);
+        if (!handle) continue;
+        await handle.click({ delay: 60 }).catch(() => {});
         out.clicked.push({ id: c.id, text: c.text });
-        await page.waitForTimeout(120);
-      } catch (e) {
-        out.errors.push({ type: 'click', id: c.id, err: String(e) });
+        await page.waitForTimeout(300);
+      } catch (err) {
+        out.errors.push({ type: 'click', id: c.id, err: String(err) });
       }
     }
 
@@ -70,9 +85,9 @@ const fs = require('fs');
     try {
       const boxes = await page.$$('[type=checkbox]');
       for (let i=0;i<boxes.length && i<6;i++){
-        try { await boxes[i].click(); out.clicked.push({ checkboxIndex: i }); await page.waitForTimeout(80); } catch(e){ out.errors.push({ type:'checkbox', i, err:String(e) }); }
+        try { await boxes[i].click({ delay: 40 }); out.clicked.push({ checkboxIndex: i }); await page.waitForTimeout(120); } catch(err){ out.errors.push({ type:'checkbox', i, err:String(err) }); }
       }
-    } catch(e){ out.errors.push({ type:'checkbox-scan', err:String(e) }); }
+    } catch(err){ out.errors.push({ type:'checkbox-scan', err:String(err) }); }
 
     await page.waitForTimeout(500);
     await browser.close();

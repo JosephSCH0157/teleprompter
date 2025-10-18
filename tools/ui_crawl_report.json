@@ -192,11 +192,11 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 44529] entered main IIFE"
+      "text": "[TP-BOOT 91794] entered main IIFE"
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 44529] installed global error hooks"
+      "text": "[TP-BOOT 91794] installed global error hooks"
     },
     {
       "type": "log",
