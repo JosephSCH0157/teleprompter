@@ -13,7 +13,10 @@ const fs = require('fs');
     page.on('response', res => {
       if (res.status() >= 400) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
     });
-    await page.evaluateOnNewDocument((cfg) => {
+  // start static server in-process so the page is reachable
+  try { require('./static_server.js'); } catch (e) { /* ignore */ }
+
+  await page.evaluateOnNewDocument((cfg) => {
       try { globalThis.__OBS_CFG__ = cfg; } catch {}
       try {
         // lightweight stub recorder if none exists
