@@ -4477,6 +4477,30 @@ let _toast = function (msg, opts) {
     _downloadFileBtn = document.getElementById('downloadFile');
     _uploadFileBtn = document.getElementById('uploadFileBtn');
     _uploadFileInput = document.getElementById('uploadFile');
+    // Wire upload button to hidden file input and handle file change
+    try {
+      if (_uploadFileBtn && _uploadFileInput && !_uploadFileBtn.__wired) {
+        _uploadFileBtn.__wired = true;
+        _uploadFileBtn.addEventListener('click', function () {
+          try {
+            _uploadFileInput.click();
+          } catch {}
+        });
+        _uploadFileInput.addEventListener('change', async function () {
+          try {
+            const f = _uploadFileInput.files && _uploadFileInput.files[0];
+            if (!f) return;
+            try {
+              await _uploadFromFile(f);
+            } catch (err) {
+              try { console.warn('uploadFromFile failed', err); } catch {}
+            }
+          } finally {
+            try { _uploadFileInput.value = ''; } catch {}
+          }
+        });
+      }
+    } catch {}
     const scriptSelect = document.getElementById('scriptSelect');
     const _saveAsBtn = document.getElementById('saveAsBtn');
     const _loadBtn = document.getElementById('loadBtn');
