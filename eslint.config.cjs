@@ -156,10 +156,20 @@ module.exports = [
     },
     rules: {
       'no-undef': 'off',
+      // legacy file uses preventDefault widely and other patterns we don't want to enforce
+      'no-restricted-syntax': 'off',
       'no-unused-vars': [
         'warn',
         { varsIgnorePattern: '^_|^camAwaitingAnswer$|^log$', argsIgnorePattern: '^_' },
       ],
+    },
+  },
+
+  // Legacy UI and helper files: relax the preventDefault restriction and similar
+  {
+    files: ['debug-tools.js', 'eggs.js', 'help.js', 'ui/**/*.js', 'utils/**/*.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 ];
