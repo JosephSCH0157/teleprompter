@@ -1,11 +1,345 @@
 {
-  "clicked": [],
-  "errors": [
+  "clicked": [
     {
-      "type": "fatal",
-      "message": "Error: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:8080/teleprompter_pro.html"
+      "id": "presentBtn",
+      "text": "Present Mode"
+    },
+    {
+      "id": "settingsBtn",
+      "text": "Settings"
+    },
+    {
+      "id": "shortcutsBtn",
+      "text": "Help"
+    },
+    {
+      "id": "openDisplayBtn",
+      "text": "Open display window"
+    },
+    {
+      "id": "closeDisplayBtn",
+      "text": "Close display window"
+    },
+    {
+      "id": "micBtn",
+      "text": "Request mic"
+    },
+    {
+      "id": "releaseMicBtn",
+      "text": "Release mic"
+    },
+    {
+      "id": "recBtn",
+      "text": "Start speech sync"
+    },
+    {
+      "id": "autoDec",
+      "text": "–"
+    },
+    {
+      "id": "autoInc",
+      "text": "+"
+    },
+    {
+      "id": "autoToggle",
+      "text": "Auto-scroll: Off"
+    },
+    {
+      "id": "startCam",
+      "text": "Start camera"
+    },
+    {
+      "id": "stopCam",
+      "text": "Stop camera"
+    },
+    {
+      "id": "camMirror",
+      "text": null
+    },
+    {
+      "id": "camPiP",
+      "text": "Picture-in-Picture"
+    },
+    {
+      "id": "catchUpBtn",
+      "text": "Catch Up"
+    },
+    {
+      "id": "resetBtn",
+      "text": "Reset timer"
+    },
+    {
+      "id": "loadSample",
+      "text": "Load sample text"
+    },
+    {
+      "id": "normalizeTopBtn",
+      "text": "Normalize"
+    },
+    {
+      "id": "clearText",
+      "text": "Clear"
+    },
+    {
+      "id": "toggleSpeakers",
+      "text": "Hide"
+    },
+    {
+      "id": "wrap-s1",
+      "text": "Wrap ➜ S1"
+    },
+    {
+      "id": "wrap-s2",
+      "text": "Wrap ➜ S2"
+    },
+    {
+      "id": "wrap-g1",
+      "text": "Wrap ➜ G1"
+    },
+    {
+      "id": "wrap-g2",
+      "text": "Wrap ➜ G2"
+    },
+    {
+      "id": "wrap-bold",
+      "text": "B"
+    },
+    {
+      "id": "wrap-italic",
+      "text": "I"
+    },
+    {
+      "id": "wrap-underline",
+      "text": "U"
+    },
+    {
+      "id": "wrap-note",
+      "text": "Note"
+    },
+    {
+      "id": "wrap-color",
+      "text": "Color…"
     }
   ],
-  "console": [],
-  "notes": []
+  "errors": [
+    {
+      "type": "pageerror",
+      "message": "ReferenceError: e is not defined"
+    },
+    {
+      "type": "click",
+      "id": "wrap-bg",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "autoTagBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "downloadFile",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "uploadFileBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "scriptSaveBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "scriptSaveAsBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "scriptLoadBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "scriptDeleteBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "scriptRenameBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "click",
+      "id": "resetScriptBtn",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    },
+    {
+      "type": "checkbox-scan",
+      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+    }
+  ],
+  "console": [
+    {
+      "type": "info",
+      "text": "[TP-Pro] __recorder assigned — adapters: JSHandle@array"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] script-enter"
+    },
+    {
+      "type": "log",
+      "text": "[TP-BOOT 44529] entered main IIFE"
+    },
+    {
+      "type": "log",
+      "text": "[TP-BOOT 44529] installed global error hooks"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-boot-block"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] window-init-proxy-installed"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] minimal-boot"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] post-minimalBoot"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] pre-init-scheduling-early"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] init-scheduling-early-exited"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-zoom-guard"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-wireNormalizeButton"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-buildSettingsContent-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-syncSettingsValues-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-setupSettingsTabs-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-fallbackNormalize-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-normalizeToStandard-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-validateStandardTags-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-ensureHelpUI-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore end"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-_initCore-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] pre-init-scheduling"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] init-scheduling-exited"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] late-init-fallback-scheduled"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] early-init-invoking"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] init() wrapper start"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore start"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] early-init-fallback"
+    },
+    {
+      "type": "debug",
+      "text": "[TP-Pro] recorder module keys: JSHandle@array "
+    },
+    {
+      "type": "debug",
+      "text": "[OBS] status via ws://192.168.1.198:4455 recorder loaded"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore mid (core UI wired)"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] init() wrapper end (success)"
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] perf:reflow-risk JSHandle@object"
+    },
+    {
+      "type": "info",
+      "text": "WATCHDOG STATE: OK → STALL JSHandle@object"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] dom-content-loaded"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete"
+    },
+    {
+      "type": "error",
+      "text": "[TP-BOOT unhandled] JSHandle@error"
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] speech:grammar JSHandle@object"
+    }
+  ],
+  "notes": [
+    "Found 41 candidate controls"
+  ]
 }

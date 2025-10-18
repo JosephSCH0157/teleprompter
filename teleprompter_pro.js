@@ -253,9 +253,9 @@ let _toast = function (msg, opts) {
         const rec = { t: Date.now(), m };
         window.__TP_BOOT_TRACE.push(rec);
         console.log('[TP-TRACE]', rec.m);
-      } catch {
+      } catch (err) {
         try {
-          console.warn('[TP-TRACE-FAIL]', e);
+          console.warn('[TP-TRACE-FAIL]', err);
         } catch {}
       }
     };
