@@ -161,7 +161,7 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 61209] entered main IIFE",
+      "text": "[TP-BOOT 95916] entered main IIFE",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
         "lineNumber": 266,
@@ -170,7 +170,7 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 61209] installed global error hooks",
+      "text": "[TP-BOOT 95916] installed global error hooks",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
         "lineNumber": 298,
@@ -486,87 +486,6 @@
     {
       "type": "debug",
       "text": "[HUD] speech:grammar JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
         "lineNumber": 30,
