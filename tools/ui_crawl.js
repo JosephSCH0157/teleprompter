@@ -81,13 +81,39 @@ const fs = require('fs');
       }
     }
 
-    // attempt to toggle a few checkboxes
+    // attempt to toggle a few checkboxes (use evaluate to avoid 'not clickable' issues)
     try {
-      const boxes = await page.$$('[type=checkbox]');
-      for (let i=0;i<boxes.length && i<6;i++){
-        try { await boxes[i].click({ delay: 40 }); out.clicked.push({ checkboxIndex: i }); await page.waitForTimeout(120); } catch(err){ out.errors.push({ type:'checkbox', i, err:String(err) }); }
+      const boxCount = await page.evaluate(() => document.querySelectorAll('[type=checkbox]').length);
+      for (let i = 0; i < boxCount && i < 6; i++) {
+        try {
+          const ok = await page.evaluate((idx) => {
+            try {
+              const boxes = Array.from(document.querySelectorAll('[type=checkbox]'));
+              const el = boxes[idx];
+              if (!el) return false;
+              // toggle and emit change
+              el.checked = !el.checked;
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+            } catch (e) {
+              return { err: String(e) };
+            }
+          }, i);
+          if (ok && ok.err) {
+            out.errors.push({ type: 'checkbox', i, err: ok.err });
+          } else if (ok) {
+            out.clicked.push({ checkboxIndex: i });
+          } else {
+            out.errors.push({ type: 'checkbox', i, err: 'not-found' });
+          }
+          await page.waitForTimeout(120);
+        } catch (err) {
+          out.errors.push({ type: 'checkbox', i, err: String(err) });
+        }
       }
-    } catch(err){ out.errors.push({ type:'checkbox-scan', err:String(err) }); }
+    } catch (err) {
+      out.errors.push({ type: 'checkbox-scan', err: String(err) });
+    }
 
     await page.waitForTimeout(500);
     await browser.close();

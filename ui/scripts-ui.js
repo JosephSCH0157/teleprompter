@@ -46,8 +46,15 @@ try {
       safeDOM = (typeof window !== 'undefined' && window.safeDOM) || null;
       importedToast = (typeof window !== 'undefined' && window.toast) || null;
     } catch (e) {
-      void e;
-    }
+    void e;
+  }
+
+  // Ensure we always have a minimal safeDOM implementation
+  try {
+    if (!safeDOM) safeDOM = _safeDOM_fallback;
+  } catch (e) {
+    void e;
+  }
   }
 } catch (e) {
   void e;
