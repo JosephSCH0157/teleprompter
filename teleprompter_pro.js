@@ -9099,7 +9099,7 @@ let _toast = function (msg, opts) {
                       if (Date.now() - t0 > 1500) {
                         clearInterval(id);
                         resolve(false);
-                        return;
+                        
                       }
                     }, 150);
                   });
