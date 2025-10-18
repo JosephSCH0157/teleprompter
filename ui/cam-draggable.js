@@ -11,14 +11,14 @@ function loadPos() {
     if (!s) return null;
     const o = JSON.parse(s);
     if (typeof o.x === 'number' && typeof o.y === 'number') return o;
-  } catch (e) {}
+  } catch {}
   return null;
 }
 
 function savePos(x, y) {
   try {
     localStorage.setItem(KEY, JSON.stringify({ x: Math.round(x), y: Math.round(y) }));
-  } catch (e) {}
+  } catch {}
 }
 
 export function initCamDraggable() {
@@ -80,7 +80,7 @@ export function initCamDraggable() {
     dragging = false;
     try {
       el.releasePointerCapture(ev.pointerId);
-    } catch (e) {}
+    } catch {}
     el.style.cursor = 'grab';
     const rect = el.getBoundingClientRect();
     savePos(rect.left, rect.top);
@@ -94,7 +94,7 @@ export function initCamDraggable() {
     el.style.bottom = '16px';
     try {
       localStorage.removeItem(KEY);
-    } catch (e) {}
+    } catch {}
   }
 
   el.addEventListener('pointerdown', onPointerDown);
@@ -107,7 +107,7 @@ export function initCamDraggable() {
 document.addEventListener('DOMContentLoaded', function () {
   try {
     initCamDraggable();
-  } catch (e) {}
+  } catch {}
 });
 
 export default { initCamDraggable };

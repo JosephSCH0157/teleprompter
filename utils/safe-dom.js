@@ -5,16 +5,16 @@
 function get(id) {
   try {
     return document.getElementById(id) || null;
-  } catch (e) {
-    console.debug('safeDOM.get failed', id, e);
+  } catch {
+    console.debug('safeDOM.get failed', id);
     return null;
   }
 }
 function q(sel) {
   try {
     return document.querySelector(sel) || null;
-  } catch (e) {
-    console.debug('safeDOM.q failed', sel, e);
+  } catch {
+    console.debug('safeDOM.q failed', sel);
     return null;
   }
 }
@@ -23,8 +23,8 @@ function on(el, ev, fn, opts) {
     if (!el) return false;
     el.addEventListener(ev, fn, opts || false);
     return true;
-  } catch (e) {
-    console.debug('safeDOM.on failed', el, ev, e);
+  } catch {
+    console.debug('safeDOM.on failed', el, ev);
     return false;
   }
 }
@@ -33,8 +33,8 @@ function off(el, ev, fn, opts) {
     if (!el) return false;
     el.removeEventListener(ev, fn, opts || false);
     return true;
-  } catch (e) {
-    console.debug('safeDOM.off failed', el, ev, e);
+  } catch {
+    console.debug('safeDOM.off failed', el, ev);
     return false;
   }
 }
@@ -43,6 +43,6 @@ export const safeDOM = { get, q, on, off };
 // Backwards-compat: attach to window for existing non-module consumers
 try {
   if (typeof window !== 'undefined') window.safeDOM = safeDOM;
-} catch (e) {
+} catch {
   /* ignore */
 }

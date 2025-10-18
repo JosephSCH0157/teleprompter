@@ -1590,7 +1590,7 @@ let _toast = function (msg, opts) {
         _toast('OBS: testing…');
         const ok = await __recorder.get('obs').isAvailable?.();
         _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
-      } catch (e) {
+      } catch {
         _toast('OBS: failed');
       }
     });

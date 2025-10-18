@@ -12,7 +12,7 @@ const fs = require('fs');
       try {
         const loc = msg.location ? msg.location() : {};
         out.console.push({ type: msg.type(), text: msg.text(), location: loc });
-      } catch (_err) {
+      } catch {
         out.console.push({ type: 'console', text: msg.text() });
       }
     });
@@ -37,8 +37,8 @@ const fs = require('fs');
             adapters: { obs: makeObs() }
           };
         }
-      }catch(e){}
-    }, { url: 'ws://127.0.0.1:4455', password: '' });
+  }catch{}
+  }, { url: 'ws://127.0.0.1:4455', password: '' });
 
     await page.goto('http://127.0.0.1:8080/teleprompter_pro.html', { waitUntil: 'networkidle2', timeout: 30000 });
     // wait a little for UI to settle
@@ -115,7 +115,7 @@ const fs = require('fs');
 
     await page.waitForTimeout(500);
     await browser.close();
-  }catch(e){ out.errors.push({ type:'fatal', message: String(e) }); }
+  }catch(_e){ out.errors.push({ type:'fatal', message: String(_e) }); }
   const p = 'tools/ui_crawl_report.json'; fs.writeFileSync(p, JSON.stringify(out,null,2));
   console.log('[UI-CRAWL] Wrote', p);
   if (out.errors.length) process.exit(2);
