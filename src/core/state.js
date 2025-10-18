@@ -5,13 +5,6 @@
 //   get(path?) -> value
 //   set(pathOrObj, value?) -> void
 //   subscribe(pathOrCallback, callback?) -> unsubscribe()
-// Central core state module
-// Small, well-tested store exported as an ES module.
-// API:
-//   init(initialState?) -> Promise<void>
-//   get(path?) -> value
-//   set(pathOrObj, value?) -> void
-//   subscribe(pathOrCallback, callback?) -> unsubscribe()
 
 const DEFAULT = {
   appVersion: null,
@@ -121,5 +114,4 @@ export const scroll = {
   },
 };
 
-export default { init, get, set, subscribe, getState, scroll };
 export default { init, get, set, subscribe, getState, scroll };

@@ -7,34 +7,56 @@ module.exports = [
   {
     ignores: ['releases/**', '**/*.min.js', 'node_modules/**', '.vscode/**'],
   },
-  // Always treat line-index.js as an ES module
+  // Default: treat all .js files as ES modules so import/export parse by default.
   {
-    files: ['line-index.js'],
+    files: ['**/*.js'],
     languageOptions: {
-      sourceType: 'module',
       ecmaVersion: 2021,
+      sourceType: 'module',
+    },
+    rules: {
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+      'no-console': 'off',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-useless-escape': 'off',
+      'no-restricted-globals': ['error', { name: 'event', message: 'Use explicit event param' }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='preventDefault']",
+          message: 'Avoid preventDefault unless absolutely necessary',
+        },
+      ],
+      'no-unsafe-optional-chaining': 'error',
+      'no-useless-return': 'warn',
     },
   },
-  // Config for the config file itself
+
+  // Tools: Node scripts, CommonJS-style (allow require/process)
   {
-    files: ['eslint.config.js'],
+    files: ['tools/**/*.js', 'tools/*.js'],
     languageOptions: {
-      sourceType: 'commonjs',
+      ecmaVersion: 2021,
+      sourceType: 'script',
       globals: {
-        module: 'writable',
         require: 'readonly',
-        __dirname: 'readonly',
         process: 'readonly',
+        module: 'writable',
+        __dirname: 'readonly',
+        __filename: 'readonly',
       },
     },
     rules: {
       'no-undef': 'off',
     },
   },
-  // All other JS files (browser scripts)
+
+  // Legacy browser scripts: treat a small set of known legacy files as scripts with browser globals
   {
-    files: ['**/*.js'],
-    excludedFiles: ['line-index.js', 'eslint.config.js'],
+    files: [
+      'teleprompter_pro.js',
+      'display*.js',
+    ],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'script',
@@ -68,11 +90,10 @@ module.exports = [
     },
     rules: {
       'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
-      'no-undef': 'error',
+      'no-undef': 'off',
       'no-console': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-useless-escape': 'off',
-      // Teleprompter-specific sanity rules
       'no-restricted-globals': ['error', { name: 'event', message: 'Use explicit event param' }],
       'no-restricted-syntax': [
         'error',
@@ -85,16 +106,54 @@ module.exports = [
       'no-useless-return': 'warn',
     },
   },
-  // scroll-control.js: allow undefined (globals injected at runtime)
+  // Config for the config files themselves - eslint.config.js is an ESM wrapper (module),
+  // eslint.config.cjs is CommonJS (script)
   {
-    files: ['scroll-control.js'],
+    files: ['eslint.config.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'module',
+      globals: {
+        module: 'writable',
+        require: 'readonly',
+        __dirname: 'readonly',
+        process: 'readonly',
+      },
+    },
     rules: {
       'no-undef': 'off',
     },
   },
-  // teleprompter_pro.js: allow undefined and some unused vars
+  {
+    files: ['eslint.config.cjs'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'script',
+      globals: {
+        module: 'writable',
+        require: 'readonly',
+        __dirname: 'readonly',
+        process: 'readonly',
+      },
+    },
+    rules: {
+      'no-undef': 'off',
+    },
+  },
+  // Note: default module rules above apply; special script overrides (tools, legacy files)
+  // will adjust sourceType to 'script' where needed.
+  // scroll-control.js: allow undefined (globals injected at runtime)
+  // teleprompter_pro.js: allow undefined and some unused vars (special-case)
   {
     files: ['teleprompter_pro.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'script',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+      },
+    },
     rules: {
       'no-undef': 'off',
       'no-unused-vars': [
