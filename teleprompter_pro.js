@@ -699,15 +699,15 @@ let _toast = function (msg, opts) {
           try {
             if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch {
-            console.warn('Mini normalize failed', e);
-          }
+          } catch (e) {
+              console.warn('Mini normalize failed', e);
+            }
         });
       }
       try {
         __tpBootPush('minimal-boot');
       } catch {}
-    } catch {
+    } catch (e) {
       console.warn('[TP-Pro] minimalBoot error', e);
     }
   }
@@ -728,7 +728,7 @@ let _toast = function (msg, opts) {
         window.__tpInitCalled = true;
         init();
       }
-    } catch {
+        } catch (e) {
       console.error('[TP-Pro] early force init error', e);
     }
   }, 0);
@@ -763,7 +763,7 @@ let _toast = function (msg, opts) {
           try {
             await window._initCore();
             console.log('[TP-Pro] _initCore early path end (success)');
-          } catch {
+          } catch (e) {
             console.error('[TP-Pro] _initCore failed (early path):', e);
           }
         })();
@@ -799,7 +799,7 @@ let _toast = function (msg, opts) {
         Promise.resolve().then(whenInitReady);
       }
     }
-  } catch {
+    } catch (e) {
     console.warn('early init scheduling error', e);
   }
   try {
@@ -3406,13 +3406,13 @@ let _toast = function (msg, opts) {
           VIEWER_HEIGHT_BASE
         );
       }
-    } catch {
+    } catch (e) {
       console.warn('[TP-Pro Calm] scroller lock failed', e);
     }
     // Run minimal wiring first (meters, help overlay, normalize button)
     try {
       __initMinimal();
-    } catch {
+    } catch (e) {
       console.warn('Minimal init failed', e);
     }
     // ⬇️ grab these *first*

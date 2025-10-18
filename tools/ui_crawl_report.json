@@ -119,6 +119,9 @@
     {
       "id": "wrap-color",
       "text": "Color…"
+    },
+    {
+      "checkboxIndex": 0
     }
   ],
   "errors": [
@@ -127,219 +130,407 @@
       "message": "ReferenceError: e is not defined"
     },
     {
-      "type": "click",
-      "id": "wrap-bg",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+      "type": "pageerror",
+      "message": "ReferenceError: e is not defined"
     },
     {
-      "type": "click",
-      "id": "autoTagBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+      "type": "checkbox",
+      "i": 1,
+      "err": "Error: Node is either not clickable or not an HTMLElement"
     },
     {
-      "type": "click",
-      "id": "downloadFile",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+      "type": "checkbox",
+      "i": 2,
+      "err": "Error: Node is either not clickable or not an HTMLElement"
     },
     {
-      "type": "click",
-      "id": "uploadFileBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+      "type": "checkbox",
+      "i": 3,
+      "err": "Error: Node is either not clickable or not an HTMLElement"
     },
     {
-      "type": "click",
-      "id": "scriptSaveBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+      "type": "checkbox",
+      "i": 4,
+      "err": "Error: Node is either not clickable or not an HTMLElement"
     },
     {
-      "type": "click",
-      "id": "scriptSaveAsBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
-    },
-    {
-      "type": "click",
-      "id": "scriptLoadBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
-    },
-    {
-      "type": "click",
-      "id": "scriptDeleteBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
-    },
-    {
-      "type": "click",
-      "id": "scriptRenameBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
-    },
-    {
-      "type": "click",
-      "id": "resetScriptBtn",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
-    },
-    {
-      "type": "checkbox-scan",
-      "err": "ProtocolError: Runtime.callFunctionOn timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+      "type": "checkbox",
+      "i": 5,
+      "err": "Error: Node is either not clickable or not an HTMLElement"
     }
   ],
   "console": [
     {
       "type": "info",
-      "text": "[TP-Pro] __recorder assigned — adapters: JSHandle@array"
+      "text": "[TP-Pro] __recorder assigned — adapters: JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 60,
+        "columnNumber": 12
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] script-enter"
+      "text": "[TP-TRACE] script-enter",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 91794] entered main IIFE"
+      "text": "[TP-BOOT 61061] entered main IIFE",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 266,
+        "columnNumber": 4
+      }
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 91794] installed global error hooks"
+      "text": "[TP-BOOT 61061] installed global error hooks",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 298,
+        "columnNumber": 4
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-boot-block"
+      "text": "[TP-TRACE] after-boot-block",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] window-init-proxy-installed"
+      "text": "[TP-TRACE] window-init-proxy-installed",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] minimal-boot"
+      "text": "[TP-TRACE] minimal-boot",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] post-minimalBoot"
+      "text": "[TP-TRACE] post-minimalBoot",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled"
+      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling-early"
+      "text": "[TP-TRACE] pre-init-scheduling-early",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] init-scheduling-early-exited"
+      "text": "[TP-TRACE] init-scheduling-early-exited",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-zoom-guard"
+      "text": "[TP-TRACE] after-zoom-guard",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-wireNormalizeButton"
+      "text": "[TP-TRACE] after-wireNormalizeButton",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-buildSettingsContent-def"
+      "text": "[TP-TRACE] after-buildSettingsContent-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-syncSettingsValues-def"
+      "text": "[TP-TRACE] after-syncSettingsValues-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-setupSettingsTabs-def"
+      "text": "[TP-TRACE] after-setupSettingsTabs-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-fallbackNormalize-def"
+      "text": "[TP-TRACE] after-fallbackNormalize-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-normalizeToStandard-def"
+      "text": "[TP-TRACE] after-normalizeToStandard-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-validateStandardTags-def"
+      "text": "[TP-TRACE] after-validateStandardTags-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-ensureHelpUI-def"
+      "text": "[TP-TRACE] after-ensureHelpUI-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-Pro] _initCore end"
+      "text": "[TP-Pro] _initCore end",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 5948,
+        "columnNumber": 10
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-_initCore-def"
+      "text": "[TP-TRACE] after-_initCore-def",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling"
+      "text": "[TP-TRACE] pre-init-scheduling",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] init-scheduling-exited"
+      "text": "[TP-TRACE] init-scheduling-exited",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] late-init-fallback-scheduled"
+      "text": "[TP-TRACE] late-init-fallback-scheduled",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] early-init-invoking"
+      "text": "[TP-TRACE] early-init-invoking",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "log",
-      "text": "[TP-Pro] init() wrapper start"
+      "text": "[TP-Pro] init() wrapper start",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 9291,
+        "columnNumber": 12
+      }
     },
     {
       "type": "log",
-      "text": "[TP-Pro] _initCore start"
+      "text": "[TP-Pro] _initCore start",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 3383,
+        "columnNumber": 12
+      }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] early-init-fallback"
+      "text": "[TP-TRACE] early-init-fallback",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "debug",
-      "text": "[TP-Pro] recorder module keys: JSHandle@array "
+      "text": "[TP-Pro] recorder module keys: JSHandle@array ",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 2046,
+        "columnNumber": 14
+      }
     },
     {
       "type": "debug",
-      "text": "[OBS] status via ws://192.168.1.198:4455 recorder loaded"
+      "text": "[OBS] status via ws://192.168.1.198:4455 recorder loaded",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 2950,
+        "columnNumber": 26
+      }
     },
     {
       "type": "log",
-      "text": "[TP-Pro] _initCore mid (core UI wired)"
+      "text": "[TP-Pro] _initCore mid (core UI wired)",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 4669,
+        "columnNumber": 12
+      }
     },
     {
       "type": "log",
-      "text": "[TP-Pro] init() wrapper end (success)"
+      "text": "[TP-Pro] init() wrapper end (success)",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 9294,
+        "columnNumber": 14
+      }
     },
     {
       "type": "debug",
-      "text": "[HUD] perf:reflow-risk JSHandle@object"
+      "text": "[HUD] perf:reflow-risk JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] dom-content-loaded",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
     },
     {
       "type": "info",
-      "text": "WATCHDOG STATE: OK → STALL JSHandle@object"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] dom-content-loaded"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] rs:complete"
+      "text": "WATCHDOG STATE: OK → STALL JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 3666,
+        "columnNumber": 47
+      }
     },
     {
       "type": "error",
-      "text": "[TP-BOOT unhandled] JSHandle@error"
+      "text": "[TP-BOOT unhandled] JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 295,
+        "columnNumber": 16
+      }
     },
     {
       "type": "debug",
-      "text": "[HUD] speech:grammar JSHandle@object"
+      "text": "[HUD] speech:grammar JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "error",
+      "text": "[TP-BOOT unhandled] JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 295,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
     }
   ],
   "notes": [
-    "Found 41 candidate controls"
+    "Found 31 candidate controls"
   ]
 }
