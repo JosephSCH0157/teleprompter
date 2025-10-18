@@ -2673,12 +2673,12 @@ let _toast = function (msg, opts) {
       } catch (e) {
         void e;
       }
-    } catch {
+    } catch (e) {
       warn('Mic denied or failed', e);
       try {
         permChip && (permChip.textContent = 'Mic: denied');
-      } catch (e) {
-        void e;
+      } catch (e2) {
+        void e2;
       }
     }
   }
@@ -9630,7 +9630,7 @@ let _toast = function (msg, opts) {
         sendToDisplay({ type: 'cam-opacity', opacity: op });
         sendToDisplay({ type: 'cam-mirror', on: !!camMirror.checked });
       } catch {}
-    } catch {
+    } catch (e) {
       warn('switchCamera failed', e);
       throw e;
     }
@@ -9642,7 +9642,7 @@ let _toast = function (msg, opts) {
       } else {
         await camVideo.requestPictureInPicture();
       }
-    } catch {
+    } catch (e) {
       warn('PiP failed', e);
     }
   }

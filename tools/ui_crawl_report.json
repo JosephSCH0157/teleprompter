@@ -127,11 +127,13 @@
   "errors": [
     {
       "type": "pageerror",
-      "message": "ReferenceError: e is not defined"
+      "message": "TypeError: Cannot read properties of null (reading 'get')",
+      "stack": "TypeError: Cannot read properties of null (reading 'get')\n    at <anonymous> (http://127.0.0.1:8080/ui/scripts-ui.js?v=dev-20251007:56:28)"
     },
     {
       "type": "pageerror",
-      "message": "ReferenceError: e is not defined"
+      "message": "ReferenceError: e is not defined",
+      "stack": "ReferenceError: e is not defined\n    at togglePiP (http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007:9645:25)"
     },
     {
       "type": "checkbox",
@@ -180,7 +182,7 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 61061] entered main IIFE",
+      "text": "[TP-BOOT 22905] entered main IIFE",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
         "lineNumber": 266,
@@ -189,7 +191,7 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 61061] installed global error hooks",
+      "text": "[TP-BOOT 22906] installed global error hooks",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
         "lineNumber": 298,
@@ -422,6 +424,24 @@
       }
     },
     {
+      "type": "log",
+      "text": "[TP-TRACE] dom-content-loaded",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
+    },
+    {
       "type": "debug",
       "text": "[TP-Pro] recorder module keys: JSHandle@array ",
       "location": {
@@ -467,24 +487,6 @@
       }
     },
     {
-      "type": "log",
-      "text": "[TP-TRACE] dom-content-loaded",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 254,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] rs:complete",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 254,
-        "columnNumber": 16
-      }
-    },
-    {
       "type": "info",
       "text": "WATCHDOG STATE: OK → STALL JSHandle@object",
       "location": {
@@ -494,12 +496,12 @@
       }
     },
     {
-      "type": "error",
-      "text": "[TP-BOOT unhandled] JSHandle@error",
+      "type": "warning",
+      "text": "[TP-Pro] Mic denied or failed JSHandle@error",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 295,
-        "columnNumber": 16
+        "lineNumber": 812,
+        "columnNumber": 33
       }
     },
     {

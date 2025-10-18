@@ -16,7 +16,7 @@ const fs = require('fs');
         out.console.push({ type: 'console', text: msg.text() });
       }
     });
-    page.on('pageerror', err => { out.errors.push({ type: 'pageerror', message: String(err) }); });
+  page.on('pageerror', err => { out.errors.push({ type: 'pageerror', message: String(err), stack: err && err.stack ? err.stack : null }); });
     page.on('response', res => {
       if (res.status() >= 400) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
     });
