@@ -1,0 +1,11 @@
+{
+  "clicked": [],
+  "errors": [
+    {
+      "type": "fatal",
+      "message": "Error: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:8080/teleprompter_pro.html"
+    }
+  ],
+  "console": [],
+  "notes": []
+}
