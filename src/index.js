@@ -2,14 +2,14 @@
 // This file intentionally performs a very small set of init actions and
 // delegates the heavy lifting to the legacy loader until a full migration is done.
 
-import * as Core from './core/state.js';
-import * as UI from './ui/dom.js';
 import * as Adapters from './adapters/index.js';
-import { initScroll } from './features/scroll.js';
+import * as Core from './core/state.js';
 import { initHotkeys } from './features/hotkeys.js';
-import { initToasts } from './features/toasts.js';
 import { initPersistence } from './features/persistence.js';
+import { initScroll } from './features/scroll.js';
 import { initTelemetry } from './features/telemetry.js';
+import { initToasts } from './features/toasts.js';
+import * as UI from './ui/dom.js';
 
 export async function boot() {
   try {

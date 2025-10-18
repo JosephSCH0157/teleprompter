@@ -161,7 +161,7 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 42040] entered main IIFE",
+      "text": "[TP-BOOT 84582] entered main IIFE",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
         "lineNumber": 266,
@@ -170,7 +170,7 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 42040] installed global error hooks",
+      "text": "[TP-BOOT 84582] installed global error hooks",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
         "lineNumber": 298,
@@ -439,24 +439,6 @@
       }
     },
     {
-      "type": "log",
-      "text": "[TP-TRACE] dom-content-loaded",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 254,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] rs:complete",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 254,
-        "columnNumber": 16
-      }
-    },
-    {
       "type": "debug",
       "text": "[HUD] perf:reflow-risk JSHandle@object",
       "location": {
@@ -475,6 +457,24 @@
       }
     },
     {
+      "type": "log",
+      "text": "[TP-TRACE] dom-content-loaded",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete",
+      "location": {
+        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
+        "lineNumber": 254,
+        "columnNumber": 16
+      }
+    },
+    {
       "type": "warning",
       "text": "[TP-Pro] Mic denied or failed JSHandle@error",
       "location": {
@@ -486,6 +486,24 @@
     {
       "type": "debug",
       "text": "[HUD] speech:grammar JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
         "lineNumber": 30,
