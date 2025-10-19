@@ -4261,7 +4261,9 @@ let _toast = function (msg, opts) {
             // Prefer the new obsBridge if available
             if (typeof window !== 'undefined' && window.__obsBridge) {
               try {
-                const ok = window.__obsBridge.isConnected();
+                // support sync or async isConnected() implementations
+                let ok = window.__obsBridge.isConnected();
+                if (ok && typeof ok.then === 'function') ok = await ok;
                 text = ok ? 'OBS: ready' : 'OBS: offline';
                 cls = ok ? 'ok' : 'error';
               } catch {
@@ -4294,6 +4296,32 @@ let _toast = function (msg, opts) {
         };
         // Initial probe
         setTimeout(updateStatus, 120);
+        // Poll for status updates for a short period so that late-loading recorder/bridge
+        // will replace the initial 'unknown' state. Poll every 2s up to ~30s.
+        try {
+          let tries = 0;
+          const maxTries = 15;
+          const pollId = setInterval(async () => {
+            try {
+              await updateStatus();
+              tries++;
+              // stop polling once status is no longer 'unknown' or max tries reached
+              try {
+                if (statusEl) {
+                  const t = (statusEl.textContent || '').toLowerCase();
+                  if (t.indexOf('unknown') < 0 || tries >= maxTries) clearInterval(pollId);
+                } else if (tries >= maxTries) {
+                  clearInterval(pollId);
+                }
+              } catch {
+                if (tries >= maxTries) clearInterval(pollId);
+              }
+            } catch {
+              tries++;
+              if (tries >= maxTries) clearInterval(pollId);
+            }
+          }, 2000);
+        } catch {}
         // If obsBridge exists, subscribe to its events for immediate updates
         try {
           if (typeof window !== 'undefined' && window.__obsBridge) {
@@ -4594,9 +4622,19 @@ let _toast = function (msg, opts) {
               onStatus: (txt, ok) => {
                 try {
                   const via = document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL;
-                  const chip =
-                    document.getElementById('obsStatus') || document.getElementById('recChip');
+                  const chip = document.getElementById('obsStatus') || document.getElementById('recChip');
                   if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                  // also mirror status into the settings-level connection chip (obsConnStatus)
+                  try {
+                    const connChip = document.getElementById('obsConnStatus');
+                    if (connChip) {
+                      connChip.textContent = txt ? `OBS: ${txt}` : 'OBS: unknown';
+                      connChip.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
+                      if (ok) connChip.classList.add('obs-connected');
+                      else if (/offline|error|disconnect/i.test(String(txt || ''))) connChip.classList.add('obs-reconnecting');
+                      else connChip.classList.add('idle');
+                    }
+                  } catch {}
                   obsDebugLog(`status: ${txt || '(empty)'} (via ${via})`);
                 } catch {}
                 try {
