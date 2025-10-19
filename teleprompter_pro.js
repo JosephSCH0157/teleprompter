@@ -8419,8 +8419,14 @@ let _toast = function (msg, opts) {
   /* ──────────────────────────────────────────────────────────────
    * Smart Tagging (names → roles)
    * ────────────────────────────────────────────────────────────── */
+  // Delegating stub: prefer window.normalizeSimpleTagTypos (from ui/normalize.js or TS build)
   function normalizeSimpleTagTypos(text) {
-    // Fix common bracket typos like [ s1 ]
+    try {
+      if (typeof window.normalizeSimpleTagTypos === 'function' && window.normalizeSimpleTagTypos !== normalizeSimpleTagTypos) {
+        return window.normalizeSimpleTagTypos(text);
+      }
+    } catch {}
+    // Fallback (same behavior as legacy)
     return String(text || '')
       .replace(/\[\s*(s1|s2|g1|g2)\s*\]/gi, '[$1]')
       .replace(/\[\s*\/(s1|s2|g1|g2)\s*\]/gi, '[/$1]');

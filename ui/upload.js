@@ -1,7 +1,19 @@
 // ui/upload.js
 // Extracted upload handling from teleprompter_pro.js
 // Exposes window._uploadFromFile(file) for legacy callers.
-(async function () {
+
+/**
+ * @typedef {{ saveScript(text:string): Promise<{ok:boolean,id?:string}> }} Storage
+ */
+
+/**
+ * @param {Storage} [storage]
+ */
+(async function (_storage) {
+  /**
+   * Ensure mammoth is available. Delegates to window.mammoth or loads a CDN
+   * @returns {Promise<any|null>}
+   */
   async function ensureMammoth() {
     if (typeof window.mammoth !== 'undefined') return window.mammoth;
     // try to load via global vendor or CDN fallback (kept minimal here)
@@ -17,6 +29,10 @@
     }
   }
 
+  /**
+   * @param {File} file
+   * @returns {Promise<void>}
+   */
   async function _uploadFromFileImpl(file) {
     const lower = (file.name || '').toLowerCase();
     const isDocx =
@@ -47,9 +63,9 @@
         } catch {}
         try { window.renderScript && window.renderScript(window.editor.value); } catch {}
         try { window.setStatus && window.setStatus(`Loaded "${file.name}" (.docx)${normalized ? ' and normalized' : ''}.`); } catch {}
-      } catch (e) {
-        try { window.err && window.err(e); } catch {}
-        try { window.setStatus && window.setStatus('Failed to read .docx: ' + (e?.message || e)); } catch {}
+      } catch {
+        try { window.err && window.err(new Error('Failed to read .docx')); } catch {}
+        try { window.setStatus && window.setStatus('Failed to read .docx'); } catch {}
       }
       return;
     }
@@ -61,16 +77,17 @@
       try { window.normalizeToStandard && window.normalizeToStandard(); } catch {}
       try { window.renderScript && window.renderScript(window.editor.value); } catch {}
       try { window.setStatus && window.setStatus(`Loaded "${file.name}"`); } catch {}
-    } catch (e) {
-      try { window.err && window.err(e); } catch {}
+    } catch {
+      try { window.err && window.err(new Error('Upload failed')); } catch {}
       try { window.setStatus && window.setStatus('Upload failed.'); } catch {}
     }
   }
 
   // Expose for legacy callers
   try {
+    /** @type {(file: File) => Promise<void>} */
     window._uploadFromFile = _uploadFromFileImpl;
-  } catch (e) {
+  } catch {
     // ignore
   }
 })();
