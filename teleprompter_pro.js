@@ -7881,16 +7881,20 @@ let _toast = function (msg, opts) {
     return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
   }
 
+  // Delegating stub: prefer window.formatInlineMarkup (ui/format.js or TS build)
   function formatInlineMarkup(text) {
+    try {
+      if (typeof window.formatInlineMarkup === 'function' && window.formatInlineMarkup !== formatInlineMarkup) {
+        return window.formatInlineMarkup(text);
+      }
+    } catch {}
+    // Fallback legacy inline implementation (kept minimal to match previous behavior)
     let s = escapeHtml(text);
-    // basic
     s = s
       .replace(/\[b\]([\s\S]+?)\[\/b\]/gi, '<strong>$1<\/strong>')
       .replace(/\[i\]([\s\S]+?)\[\/i\]/gi, '<em>$1<\/em>')
       .replace(/\[u\]([\s\S]+?)\[\/u\]/gi, '<span class="u">$1<\/span>')
-      // Notes render as block-level for clarity
       .replace(/\[note\]([\s\S]+?)\[\/note\]/gi, '<div class="note">$1<\/div>');
-    // color/bg
     s = s.replace(/\[color=([^\]]+)\]([\s\S]+?)\[\/color\]/gi, (_, col, inner) => {
       const c = safeColor(col);
       return c ? `<span style="color:${c}">${inner}</span>` : inner;
@@ -7901,25 +7905,13 @@ let _toast = function (msg, opts) {
         ? `<span style="background:${c};padding:0 .15em;border-radius:.2em">${inner}</span>`
         : inner;
     });
-    // roles (standardized: only s1/s2 are colorized; g1/g2 and guest wrappers are stripped)
-    // Colorize s1 and s2
-    s = s.replace(
-      /\[s1\]([\s\S]+?)\[\/s1\]/gi,
-      (_, inner) => `<span style="${roleStyle('s1')}">${inner}<\/span>`
-    );
-    s = s.replace(
-      /\[s2\]([\s\S]+?)\[\/s2\]/gi,
-      (_, inner) => `<span style="${roleStyle('s2')}">${inner}<\/span>`
-    );
-    // Strip g1/g2 wrappers, keep content
+    s = s.replace(/\[s1\]([\s\S]+?)\[\/s1\]/gi, (_, inner) => `<span style="${roleStyle('s1')}">${inner}<\/span>`);
+    s = s.replace(/\[s2\]([\s\S]+?)\[\/s2\]/gi, (_, inner) => `<span style="${roleStyle('s2')}">${inner}<\/span>`);
     s = s.replace(/\[(g1|g2)\]([\s\S]+?)\[\/\1\]/gi, '$2');
-    // Map [speaker=1|2] to s1/s2 styling; strip [guest=*]
-    s = s.replace(
-      /\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi,
-      (_, idx, inner) => `<span style="${roleStyle('s' + idx)}">${inner}<\/span>`
+    s = s.replace(/\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi, (_, idx, inner) =>
+      `<span style="${roleStyle('s' + idx)}">${inner}<\/span>`
     );
     s = s.replace(/\[guest\s*=\s*(1|2)\]([\s\S]+?)\[\/guest\]/gi, '$2');
-    // final scrub: remove any stray speaker tags that slipped into inline text (notes are handled as blocks)
     s = s.replace(/\[\/?(?:s1|s2|g1|g2)\]/gi, '');
     return s;
   }
