@@ -8985,20 +8985,31 @@ let _toast = function (msg, opts) {
             try {
               if (Array.isArray(scenes)) sceneNames = scenes.map((s) => s && s.sceneName ? s.sceneName : s && s.name ? s.name : s);
             } catch {}
+            // Dev diagnostic: log discovered scenes and current program
+            try {
+              if (window.__TP_DEV) {
+                try { console.debug('[OBS-SCENE] preferredScene=', preferredScene); } catch {}
+                try { console.debug('[OBS-SCENE] currentProgram=', currentProgram); } catch {}
+                try { console.debug('[OBS-SCENE] sceneNames=', sceneNames); } catch {}
+              }
+            } catch {}
 
             // Only proceed if preferredScene exists in the scene list (exact match)
             const exists = Array.isArray(sceneNames) ? sceneNames.indexOf(preferredScene) >= 0 : false;
             if (!exists) {
               // Preferred scene not found: do nothing (leave program scene as-is)
+              try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene not found; skipping'); } catch {}
             } else {
               // If the preferred scene is already the current program scene, do nothing
               if (currentProgram && String(currentProgram) === String(preferredScene)) {
-                // already set
+                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene already active; skipping'); } catch {}
               } else {
+                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene exists and differs; will set when quiet'); } catch {}
                 // Defer actual SetCurrentProgramScene until no transition is active.
                 // We listen for a TransitionEnd-like event or wait a short quiet window of 500ms.
                 const doSet = async () => {
                   try {
+                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] invoking SetCurrentProgramScene ->', preferredScene); } catch {}
                     if (bridge && typeof bridge.setCurrentProgramScene === 'function') {
                       await bridge.setCurrentProgramScene(preferredScene);
                     } else if (a && a.call) {
@@ -9008,7 +9019,10 @@ let _toast = function (msg, opts) {
                     } else if (window.obsSocket && typeof window.obsSocket.call === 'function') {
                       await window.obsSocket.call('SetCurrentProgramScene', { sceneName: preferredScene });
                     }
-                  } catch {}
+                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] SetCurrentProgramScene complete'); } catch {}
+                  } catch (se) {
+                    try { if (window.__TP_DEV) console.error('[OBS-SCENE] SetCurrentProgramScene failed', se); } catch {}
+                  }
                 };
 
                 // Try to detect a transition API; otherwise wait 500ms quiet and set
@@ -9035,7 +9049,9 @@ let _toast = function (msg, opts) {
                       await doSet();
                     }, 600);
                   }
-                } catch {}
+                } catch (e) {
+                  try { if (window.__TP_DEV) console.error('[OBS-SCENE] transition detection failed', e); } catch {}
+                }
               }
             }
           } catch {}
