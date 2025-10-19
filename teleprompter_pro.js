@@ -1,121 +1,4 @@
-/* Teleprompter Pro — JS CLEAN (v1.5.8)
-   - Display handshake + retry pump
-   - SmartTag supports: Name:, Name —, Name >, and block headers >> NAME:
-   - DOCX import via Mammoth (auto‑loads on demand)
-   - dB meter + mic selector
-   - Camera overlay (mirror/size/opacity/PiP)
-   - Auto‑scroll + timer
-   - NEW: Speakers section hide/show with persistence
-*/
-
-// Reinstate IIFE wrapper (was removed causing brace imbalance)
-// runtime-safe import fallback: try require() first, then window globals, then leave undefined
-var moduleToast = null;
-try {
-  if (typeof require === 'function') {
-    try {
-      moduleToast = require('./ui/toasts.js').toast;
-    } catch {}
-  }
-} catch {}
-
-// Developer helper: run the OBS adapter test from the page console and print structured logs.
-try {
-  window.__tpRunObsTest = async function __tpRunObsTest() {
-    try {
-      console.info('[TP-Pro] __tpRunObsTest: starting');
-      let r = window.__recorder;
-      if (!r) {
-        console.warn(
-          '[TP-Pro] __tpRunObsTest: no window.__recorder found — polling for registration (2s max)'
-        );
-        // Poll briefly in case the recorder module registers slightly later
-        for (let i = 0; i < 20 && !r; i++) {
-          await new Promise((res) => setTimeout(res, 100));
-          r = window.__recorder;
-        }
-      }
-      if (!r) {
-        console.error('[TP-Pro] __tpRunObsTest: no window.__recorder found after waiting');
-        return;
-      }
-      if (typeof r.initBuiltIns === 'function') {
-        try {
-          console.info('[TP-Pro] __tpRunObsTest: awaiting initBuiltIns()');
-          await r.initBuiltIns();
-        } catch (e) {
-          console.warn('[TP-Pro] initBuiltIns() threw', e);
-        }
-      }
-      const obs = typeof r.get === 'function' ? r.get('obs') : null;
-      if (!obs) {
-        console.error(
-          '[TP-Pro] __tpRunObsTest: obs adapter missing; adapters:',
-          typeof r.all === 'function' ? r.all().map((a) => a.id || a.label) : '(unknown)'
-        );
-        return;
-      }
-      console.info('[TP-Pro] __tpRunObsTest: found obs adapter', obs);
-      // If the smoke runner injected an OBS config, apply it to the adapter before testing
-      try {
-        if (typeof window !== 'undefined' && window.__OBS_CFG__ && obs && typeof obs.configure === 'function') {
-          try {
-            const c = window.__OBS_CFG__ || {};
-            // Build a ws:// URL if host/port provided, else pass through any url
-            let url = c.url || c.u || '';
-            try {
-              if (!url && c.host) {
-                const host = String(c.host || '').replace(/\/+$/, '');
-                const port = c.port ? String(c.port) : '';
-                url = host.match(/^wss?:\//i) ? host + (port ? ':' + port : '') : 'ws://' + host + (port ? ':' + port : '');
-              }
-            } catch (e) {
-              void e;
-            }
-            const passwd = c.password || c.pass || c.pwd || '';
-            const cfgPatch = {};
-            if (url) cfgPatch.url = url;
-            if (passwd) cfgPatch.password = passwd;
-            if (Object.keys(cfgPatch).length) {
-              try {
-                obs.configure(cfgPatch);
-                console.info('[TP-Pro] __tpRunObsTest: applied __OBS_CFG__ to obs adapter', cfgPatch);
-              } catch (e) {
-                console.warn('[TP-Pro] __tpRunObsTest: failed to apply __OBS_CFG__', e);
-              }
-            }
-          } catch (e) {
-            void e;
-          }
-        }
-      } catch (e) {
-        void e;
-      }
-      try {
-        if (typeof obs.test === 'function') {
-          console.info('[TP-Pro] __tpRunObsTest: calling obs.test()');
-          await obs.test();
-          console.info('[TP-Pro] __tpRunObsTest: obs.test() succeeded');
-        } else if (typeof obs.isAvailable === 'function') {
-          console.info('[TP-Pro] __tpRunObsTest: calling obs.isAvailable()');
-          const ok = await obs.isAvailable();
-          console.info('[TP-Pro] __tpRunObsTest: isAvailable ->', ok);
-        } else {
-          console.warn('[TP-Pro] __tpRunObsTest: obs adapter has no test/isAvailable methods');
-        }
-      } catch (e) {
-        console.error(
-          '[TP-Pro] __tpRunObsTest: obs test failed',
-          e,
-          'adapterLastErr=',
-          typeof obs.getLastError === 'function' ? obs.getLastError() : null
-        );
-      }
-    } catch (outer) {
-      console.error('[TP-Pro] __tpRunObsTest: unexpected error', outer);
-    }
-  };
-} catch {}
+/* Teleprompter Pro — JS CLEAN (v1.5.8) */
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 let _toast = function (msg, opts) {
@@ -9838,11 +9721,10 @@ let _toast = function (msg, opts) {
   }
 
   // TP: docx-mammoth (delegated to ui/upload.js)
-  async function ensureMammoth() {
+  // Renamed to _ensureMammoth so unused-vars lint rule (allowed /^_/) doesn't complain.
+  async function _ensureMammoth() {
     try {
-      if (typeof window.ensureMammoth === 'function' && window.ensureMammoth !== ensureMammoth) {
-        return await window.ensureMammoth();
-      }
+      if (typeof window.ensureMammoth === 'function') return await window.ensureMammoth();
     } catch {}
     return null;
   }
