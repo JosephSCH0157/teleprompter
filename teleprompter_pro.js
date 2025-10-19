@@ -8317,17 +8317,19 @@ let _toast = function (msg, opts) {
   }, 1500);
 
   // --- Token normalization (used by DOCX import, renderScript, and matcher) ---
+  // Delegating stub: prefer window.normTokens (from ui/normTokens.js or TS build)
   function normTokens(text) {
+    try {
+      if (typeof window.normTokens === 'function' && window.normTokens !== normTokens) {
+        return window.normTokens(text);
+      }
+    } catch {}
+    // Fallback inline legacy implementation (kept behaviorally equivalent)
     let t = String(text)
       .toLowerCase()
       .replace(/’/g, "'")
-      // expand common contractions
       .replace(/\b(won't)\b/g, 'will not')
-      // generic n't expansion for common auxiliaries/verbs (avoid 'won't' which is handled above)
-      .replace(
-        /\b(can|do|does|is|are|was|were|has|have|had|would|should|could|did)n['’]t\b/g,
-        '$1 not'
-      )
+      .replace(/\b(can|do|does|is|are|was|were|has|have|had|would|should|could|did)n['’]t\b/g, '$1 not')
       .replace(/\b(\w+)'re\b/g, '$1 are')
       .replace(/\b(\w+)'ll\b/g, '$1 will')
       .replace(/\b(\w+)'ve\b/g, '$1 have')
@@ -8336,61 +8338,28 @@ let _toast = function (msg, opts) {
       .replace(/\bit's\b/g, 'it is')
       .replace(/\bthat's\b/g, 'that is');
 
-    // split number ranges: 76–86, 8-7 → "76 86", "8 7"
     t = t.replace(/(\d+)\s*[\u2010-\u2015-]\s*(\d+)/g, '$1 $2');
-
-    // turn percent into a word so "86 %" ≈ "eighty six percent"
     t = t.replace(/%/g, ' percent');
-
-    // split hyphenated words into what you actually say: matter-of-fact → matter of fact
     t = t.replace(/([a-z])[\u2010-\u2015-]([a-z])/gi, '$1 $2');
 
-    // strip punctuation broadly (unicode-aware) + long dashes
     try {
       t = t.replace(/[^\p{L}\p{N}\s]/gu, ' ');
     } catch {
       t = t.replace(/[.,!?;:()"\[\]`]/g, ' ');
     }
     t = t.replace(/[\u2010-\u2015]/g, ' ');
-
-    // collapse whitespace (pre-tokenization)
     t = t.replace(/\s+/g, ' ').trim();
-
     const raw = t.split(/\s+/).filter(Boolean);
 
-    // numerals 0..99 → words (helps overlap)
     const ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-    const teens = [
-      'ten',
-      'eleven',
-      'twelve',
-      'thirteen',
-      'fourteen',
-      'fifteen',
-      'sixteen',
-      'seventeen',
-      'eighteen',
-      'nineteen',
-    ];
-    const tens = [
-      '',
-      '',
-      'twenty',
-      'thirty',
-      'forty',
-      'fifty',
-      'sixty',
-      'seventy',
-      'eighty',
-      'ninety',
-    ];
+    const teens = ['ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+    const tens = ['','', 'twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
     const numToWords = (n) => {
       n = Number(n);
       if (Number.isNaN(n) || n < 0 || n > 99) return null;
       if (n < 10) return ones[n];
       if (n < 20) return teens[n - 10];
-      const t = Math.floor(n / 10),
-        o = n % 10;
+      const t = Math.floor(n / 10), o = n % 10;
       return o ? `${tens[t]} ${ones[o]}` : tens[t];
     };
 

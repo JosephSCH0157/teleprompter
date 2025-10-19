@@ -4,6 +4,8 @@ declare global {
     _uploadFromFile?: (file: File) => Promise<void>;
     ensureMammoth?: () => Promise<any>;
     runSelfChecks?: any;
+    normalizeSimpleTagTypos?: (text: string) => string;
+    formatInlineMarkup?: (text: string) => string;
   }
 }
 
