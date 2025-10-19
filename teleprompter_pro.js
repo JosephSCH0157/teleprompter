@@ -4066,8 +4066,25 @@ let _toast = function (msg, opts) {
         refreshScriptsDropdown();
         _toast('Script saved', { type: 'ok' });
       } catch (e) {
-        void e;
-        _toast('Save failed', { type: 'error' });
+        try {
+          console.error('[Scripts.save] error', e);
+        } catch (err) {
+          void err;
+        }
+        try {
+          // expose last save error for diagnostics and attach a session fallback
+          window.__lastScriptSaveError = { message: e && e.message, stack: e && e.stack };
+          const _fallback = { title: scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled', content: getEditorContent(), at: Date.now() };
+          try {
+            sessionStorage.setItem('tp_last_unsaved_script', JSON.stringify(_fallback));
+            _toast('Save failed — content saved to session storage', { type: 'error' });
+          } catch (se) {
+            // session fallback failed too
+            _toast('Save failed', { type: 'error' });
+          }
+        } catch (ee) {
+          _toast('Save failed', { type: 'error' });
+        }
       }
     }
 

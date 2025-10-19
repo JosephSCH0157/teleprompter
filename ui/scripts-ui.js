@@ -17,6 +17,22 @@ try {
 } catch (e) {
   void e;
 }
+// If Scripts isn't available at load time, attempt to dynamically import the fixed module as a fallback
+(async function () {
+  try {
+    if (!Scripts && typeof window !== 'undefined') {
+      try {
+        const mod = await import('../scriptsStore_fixed.js');
+        if (mod && mod.Scripts) Scripts = mod.Scripts;
+      } catch (e) {
+        // ignore dynamic import failures here; the module may be loaded later by the main app
+        void e;
+      }
+    }
+  } catch (e) {
+    void e;
+  }
+})();
 let safeDOM = null;
 let importedToast = null;
 // minimal safeDOM fallback
@@ -124,7 +140,11 @@ function onScriptSave() {
     refreshScriptsDropdown();
     toastFn('Script saved', { type: 'ok' });
   } catch (e) {
-    console.debug('onScriptSave', e);
+    try {
+      console.error('onScriptSave error', e);
+    } catch (err) {
+      void err;
+    }
     toastFn('Save failed', { type: 'error' });
   }
 }
