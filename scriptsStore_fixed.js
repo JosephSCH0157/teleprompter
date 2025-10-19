@@ -72,3 +72,6 @@ try {
 } catch (e) {
   void e;
 }
+// Export as an ES module so dynamic imports receive the Scripts symbol
+export { Scripts };
+export default Scripts;

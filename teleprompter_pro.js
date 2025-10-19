@@ -4030,11 +4030,34 @@ let _toast = function (msg, opts) {
 
     async function initScriptsUI() {
       try {
-  if (!ScriptsModule) ScriptsModule = await import('./scriptsStore_fixed.js');
+  if (!ScriptsModule) {
+          try {
+            ScriptsModule = await import('./scriptsStore_fixed.js');
+          } catch (impErr) {
+            try {
+              console.error('[ScriptsModule] import ./scriptsStore_fixed.js failed', impErr);
+            } catch {}
+            // Try to recover by using a global window.Scripts if present
+            if (typeof window !== 'undefined' && window.Scripts) {
+              ScriptsModule = { Scripts: window.Scripts };
+            } else {
+              // final fallback: try the legacy path
+              try {
+                ScriptsModule = await import('./scriptsStore.js');
+              } catch (legacyErr) {
+                try {
+                  console.error('[ScriptsModule] fallback import ./scriptsStore.js failed', legacyErr);
+                } catch {}
+                ScriptsModule = null;
+              }
+            }
+          }
+        }
+        if (!ScriptsModule || !ScriptsModule.Scripts) throw new Error('Scripts module not available');
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
       } catch (e) {
-        void e;
+        console.error('initScriptsUI failed', e);
       }
     }
 
@@ -4056,13 +4079,21 @@ let _toast = function (msg, opts) {
 
     async function onScriptSave() {
       try {
-  if (!ScriptsModule) ScriptsModule = await import('./scriptsStore_fixed.js');
+  if (!ScriptsModule) {
+          try {
+            ScriptsModule = await import('./scriptsStore_fixed.js');
+          } catch (impErr) {
+            try {
+              console.error('[ScriptsModule] import failed in onScriptSave', impErr);
+            } catch {}
+            if (typeof window !== 'undefined' && window.Scripts) ScriptsModule = { Scripts: window.Scripts };
+          }
+        }
         const title = scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled';
-        currentScriptId = ScriptsModule.Scripts.save({
-          id: currentScriptId,
-          title,
-          content: getEditorContent(),
-        });
+        if (!ScriptsModule || !ScriptsModule.Scripts || typeof ScriptsModule.Scripts.save !== 'function') {
+          throw new Error('Scripts.save not available');
+        }
+        currentScriptId = ScriptsModule.Scripts.save({ id: currentScriptId, title, content: getEditorContent() });
         refreshScriptsDropdown();
         _toast('Script saved', { type: 'ok' });
       } catch (e) {
@@ -4071,18 +4102,17 @@ let _toast = function (msg, opts) {
         } catch (err) {
           void err;
         }
+        // expose last save error for diagnostics and attach a session fallback
         try {
-          // expose last save error for diagnostics and attach a session fallback
           window.__lastScriptSaveError = { message: e && e.message, stack: e && e.stack };
           const _fallback = { title: scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled', content: getEditorContent(), at: Date.now() };
           try {
             sessionStorage.setItem('tp_last_unsaved_script', JSON.stringify(_fallback));
             _toast('Save failed — content saved to session storage', { type: 'error' });
-          } catch (se) {
-            // session fallback failed too
+          } catch {
             _toast('Save failed', { type: 'error' });
           }
-        } catch (ee) {
+        } catch {
           _toast('Save failed', { type: 'error' });
         }
       }
