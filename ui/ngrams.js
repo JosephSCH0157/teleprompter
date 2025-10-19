@@ -1,8 +1,8 @@
 // ui/ngrams.js - runtime shim exposing getNgrams
 (function(){
-  function getNgrams(tokens, n) {
+    function getNgrams(tokens, n) {
     if (window && typeof window.getNgramsImpl === 'function') {
-      try { return window.getNgramsImpl(tokens, n); } catch (e) { /* fallthrough to local */ }
+  try { return window.getNgramsImpl(tokens, n); } catch { /* fallthrough to local */ }
     }
     var ngrams = [];
     for (var i = 0; i <= tokens.length - n; i++) {

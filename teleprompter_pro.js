@@ -6816,7 +6816,7 @@ let _toast = function (msg, opts) {
     function getNgrams(tokens, n) {
       try {
         if (window && typeof window.getNgrams === 'function') return window.getNgrams(tokens, n);
-      } catch (e) {}
+      } catch { }
       const ngrams = [];
       for (let i = 0; i <= tokens.length - n; i++) {
         ngrams.push(tokens.slice(i, i + n).join(' '));
