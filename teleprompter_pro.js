@@ -8944,20 +8944,100 @@ let _toast = function (msg, opts) {
         // ignore GetRecordStatus errors and continue
       }
 
-      // 3) Scene sanity (preferred scene or fallback)
+      // 3) Scene sanity — SAFE flow
+      // Default behavior: do nothing. If the user has a preferred scene configured,
+      // treat it as optional: validate it exists first and only switch if it differs
+      // from the current program scene and the connection is stable.
       try {
         const settings = __recorder.getSettings?.() || {};
-        let sceneName = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
-        if (!sceneName) sceneName = 'Anvil-Default';
-        if (sceneName) {
+        let preferredScene = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
+        // If no explicit preferred scene, skip any scene changes entirely
+        if (preferredScene) {
           try {
-            if (bridge && typeof bridge.setCurrentProgramScene === 'function')
-              await bridge.setCurrentProgramScene(sceneName);
-            else if (a && a.call) await a.call('SetCurrentProgramScene', { sceneName });
-            else if (typeof a.setCurrentProgramScene === 'function')
-              await a.setCurrentProgramScene(sceneName);
-            else if (window.obsSocket && typeof window.obsSocket.call === 'function')
-              await window.obsSocket.call('SetCurrentProgramScene', { sceneName });
+            // wait a small quiet window to ensure connection is stable
+            await new Promise((r) => setTimeout(r, 600));
+
+            // helper to read current program scene and scene list from bridge/adapters
+            let currentProgram = null;
+            let scenes = null;
+            try {
+              if (bridge && typeof bridge.getCurrentProgramScene === 'function')
+                currentProgram = await bridge.getCurrentProgramScene();
+              else if (a && a.call) {
+                try {
+                  const r = await a.call('GetCurrentProgramScene');
+                  currentProgram = r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName);
+                } catch {}
+              }
+            } catch {}
+            try {
+              if (bridge && typeof bridge.getSceneList === 'function') scenes = await bridge.getSceneList();
+              else if (a && a.call) {
+                try {
+                  const res = await a.call('GetSceneList');
+                  scenes = res && (res.scenes || res.sceneList || null);
+                } catch {}
+              }
+            } catch {}
+
+            // Normalize scenes names to an array of string names if possible
+            let sceneNames = null;
+            try {
+              if (Array.isArray(scenes)) sceneNames = scenes.map((s) => s && s.sceneName ? s.sceneName : s && s.name ? s.name : s);
+            } catch {}
+
+            // Only proceed if preferredScene exists in the scene list (exact match)
+            const exists = Array.isArray(sceneNames) ? sceneNames.indexOf(preferredScene) >= 0 : false;
+            if (!exists) {
+              // Preferred scene not found: do nothing (leave program scene as-is)
+            } else {
+              // If the preferred scene is already the current program scene, do nothing
+              if (currentProgram && String(currentProgram) === String(preferredScene)) {
+                // already set
+              } else {
+                // Defer actual SetCurrentProgramScene until no transition is active.
+                // We listen for a TransitionEnd-like event or wait a short quiet window of 500ms.
+                const doSet = async () => {
+                  try {
+                    if (bridge && typeof bridge.setCurrentProgramScene === 'function') {
+                      await bridge.setCurrentProgramScene(preferredScene);
+                    } else if (a && a.call) {
+                      await a.call('SetCurrentProgramScene', { sceneName: preferredScene });
+                    } else if (typeof a.setCurrentProgramScene === 'function') {
+                      await a.setCurrentProgramScene(preferredScene);
+                    } else if (window.obsSocket && typeof window.obsSocket.call === 'function') {
+                      await window.obsSocket.call('SetCurrentProgramScene', { sceneName: preferredScene });
+                    }
+                  } catch {}
+                };
+
+                // Try to detect a transition API; otherwise wait 500ms quiet and set
+                let transitionHandled = false;
+                try {
+                  if (bridge && typeof bridge.on === 'function') {
+                    const off = bridge.on('TransitionEnd', async () => {
+                      if (transitionHandled) return;
+                      transitionHandled = true;
+                      try {
+                        off && off();
+                      } catch {}
+                      await doSet();
+                    });
+                    // fallback: set a timeout in case TransitionEnd never fires
+                    setTimeout(async () => {
+                      if (transitionHandled) return;
+                      transitionHandled = true;
+                      await doSet();
+                    }, 800);
+                  } else {
+                    // no transition API: wait a short quiet window then set
+                    setTimeout(async () => {
+                      await doSet();
+                    }, 600);
+                  }
+                } catch {}
+              }
+            }
           } catch {}
         }
       } catch {}

@@ -174,6 +174,41 @@ const bridge = {
       return { outputActive: false };
     }
   },
+  async getSceneList() {
+    try {
+      await _connectOnce();
+      if (!_obsClient) return null;
+      const res = await _obsClient.call('GetSceneList');
+      // res.scenes expected
+      return res && (res.scenes || res.sceneList || null);
+    } catch (e) {
+      _emit('error', e);
+      return null;
+    }
+  },
+  async getCurrentProgramScene() {
+    try {
+      await _connectOnce();
+      if (!_obsClient) return null;
+      // try likely method names
+      try {
+        const r = await _obsClient.call('GetCurrentProgramScene');
+        return r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName || null);
+      } catch (e) {
+        // fallback name
+        try {
+          const r2 = await _obsClient.call('GetProgramScene');
+          return r2 && (r2.currentProgramScene || r2.sceneName || null);
+        } catch (e2) {
+          _emit('error', e2);
+          return null;
+        }
+      }
+    } catch (e) {
+      _emit('error', e);
+      return null;
+    }
+  },
   async getStats() {
     return _getStats();
   },
