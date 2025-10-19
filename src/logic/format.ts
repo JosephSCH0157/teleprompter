@@ -20,7 +20,8 @@ export function formatInlineMarkup(
   const roleStyle = deps?.roleStyle || ((k: string) => '');
   const escapeHtml =
     deps?.escapeHtml ||
-    ((s: string) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])));
+    ((s: string) =>
+      String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? '')));
 
   let s = escapeHtml(text);
   // basic
