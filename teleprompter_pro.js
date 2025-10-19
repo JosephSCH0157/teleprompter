@@ -2777,6 +2777,18 @@ let _toast = function (msg, opts) {
   // Minimal init to wire the meter pieces and help overlay (internal helper)
   async function __initMinimal() {
     try {
+      // Ensure obsBridge module is imported early so window.__obsBridge
+      // is available even if recorder initialization lags. Fire-and-forget.
+      (async () => {
+        try {
+          const path = window.__TP_ADDV ? window.__TP_ADDV('./adapters/obsBridge.js') : './adapters/obsBridge.js';
+          await import(path);
+          try { if (window.__TP_DEV) console.debug('[TP-Pro] early obsBridge import attempted'); } catch {}
+        } catch (e) {
+          try { if (window.__TP_DEV) console.debug('[TP-Pro] early obsBridge import failed', e); } catch {}
+        }
+      })();
+
       loadRecorder().then((rec) => {
         try {
           if (rec && typeof rec.init === 'function') {
