@@ -2412,6 +2412,13 @@ let _toast = function (msg, opts) {
     }
     const ctx = new AC();
     audioCtx = ctx; // retain for suspend/resume when tab visibility changes
+    try {
+      if (typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+        try {
+          await ctx.resume();
+        } catch {}
+      }
+    } catch {}
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
@@ -4304,6 +4311,10 @@ let _toast = function (msg, opts) {
     _downloadFileBtn = document.getElementById('downloadFile');
     _uploadFileBtn = document.getElementById('uploadFileBtn');
     _uploadFileInput = document.getElementById('uploadFile');
+    // ensure we have a reference to the top dB meter container
+    try {
+      dbMeterTop = document.getElementById('dbMeterTop');
+    } catch {}
     // Wire upload button to hidden file input and handle file change
     try {
       if (_uploadFileBtn && _uploadFileInput && !_uploadFileBtn.__wired) {
