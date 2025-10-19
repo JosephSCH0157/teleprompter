@@ -92,6 +92,17 @@ let _toast = function (msg, opts) {
         try {
           console.warn('[TP-TRACE-FAIL]', err);
         } catch {}
+        // Long-running low-cost poll: keep checking every 5s so that
+        // bridge/recorder instances created later than the initial poll
+        // will still update the status chip. This is intentionally light.
+        try {
+          setInterval(() => {
+            try {
+              if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
+              updateStatus();
+            } catch {}
+          }, 5000);
+        } catch {}
       }
     };
     // Ensure handshake log exists early so the Debug Dump can read it even before adapters run
