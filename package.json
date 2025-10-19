@@ -14,6 +14,7 @@
     "types": "tsc -p jsconfig.json --noEmit",
   "check": "npm run lint && npm run types",
   "test:save-ci": "node tools/test_save_ci.js",
+  "test:obs-scene-ci": "node tools/test_obs_scene_ci.js",
     "prepare": "husky"
   },
   "devDependencies": {
