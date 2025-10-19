@@ -6814,6 +6814,9 @@ let _toast = function (msg, opts) {
 
     // Helper functions
     function getNgrams(tokens, n) {
+      try {
+        if (window && typeof window.getNgrams === 'function') return window.getNgrams(tokens, n);
+      } catch (e) {}
       const ngrams = [];
       for (let i = 0; i <= tokens.length - n; i++) {
         ngrams.push(tokens.slice(i, i + n).join(' '));
@@ -8393,7 +8396,14 @@ let _toast = function (msg, opts) {
       .replace(/\[\s*\/(s1|s2|g1|g2)\s*\]/gi, '[/$1]');
   }
 
+  // Delegating stub: prefer window.smartTag (from ui/smartTag.js or TS build)
   function smartTag(input, opts = {}) {
+    try {
+      if (typeof window.smartTag === 'function' && window.smartTag !== smartTag) {
+        return window.smartTag(input, opts);
+      }
+    } catch {}
+    // Fallback: inline legacy implementation
     // if already tagged, do nothing (prevents double-wrapping on re-run)
     if (/\[(s1|s2|g1|g2)\]/i.test(input)) return input;
 
