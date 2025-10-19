@@ -4023,7 +4023,7 @@ let _toast = function (msg, opts) {
 
     async function initScriptsUI() {
       try {
-        if (!ScriptsModule) ScriptsModule = await import('./scriptsStore.js');
+  if (!ScriptsModule) ScriptsModule = await import('./scriptsStore_fixed.js');
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
       } catch (e) {
@@ -4049,7 +4049,7 @@ let _toast = function (msg, opts) {
 
     async function onScriptSave() {
       try {
-        if (!ScriptsModule) ScriptsModule = await import('./scriptsStore.js');
+  if (!ScriptsModule) ScriptsModule = await import('./scriptsStore_fixed.js');
         const title = scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled';
         currentScriptId = ScriptsModule.Scripts.save({
           id: currentScriptId,
