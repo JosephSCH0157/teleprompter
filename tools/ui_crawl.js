@@ -114,6 +114,25 @@ const fs = require('fs');
     }
 
     await page.waitForTimeout(500);
+    // collect file input metadata (hidden state / size / aria-label)
+    try {
+      const fileInputs = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('input[type=file]')).map((el) => {
+          const r = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          return {
+            id: el.id || null,
+            hidden: el.hasAttribute('hidden') || style.display === 'none' || style.visibility === 'hidden' || r.width < 6 || r.height < 6,
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+            ariaLabel: el.getAttribute('aria-label') || null,
+          };
+        })
+      );
+      out.fileInputs = fileInputs;
+    } catch {
+      out.fileInputs = [];
+    }
     await browser.close();
   }catch(_e){ out.errors.push({ type:'fatal', message: String(_e) }); }
   const p = 'tools/ui_crawl_report.json'; fs.writeFileSync(p, JSON.stringify(out,null,2));

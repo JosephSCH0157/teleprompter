@@ -24,6 +24,19 @@ jobs:
       - name: Run smoke (headless)
         run: node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless --timeout=120000
 
+      - name: Run UI crawl
+        run: node tools/ui_crawl.js
+
+      - name: Validate UI crawl
+        run: node tools/validate_ui_crawl.js
+
+      - name: Upload UI crawl report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-crawl-report
+          path: tools/ui_crawl_report.json
+
       - name: Archive smoke logs
         if: always()
         uses: actions/upload-artifact@v4

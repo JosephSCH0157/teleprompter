@@ -21,6 +21,8 @@ try {
 }
 
 const clicked = Array.isArray(report.clicked) ? report.clicked : [];
+const fileInputs = Array.isArray(report.fileInputs) ? report.fileInputs : [];
+const consoleEntries = Array.isArray(report.console) ? report.console : [];
 
 function findByIdCandidates(ids) {
   return clicked.find((c) => c && c.id && ids.includes(c.id));
@@ -77,9 +79,40 @@ for (const ex of expectations) {
   }
 }
 
+// Check file input wiring: expect at least one file input and prefer hidden inputs wired to UI
+const fileOk = fileInputs.length > 0 && fileInputs.some(fi => fi.hidden === true || (fi.ariaLabel && fi.ariaLabel.length > 0));
+if (fileOk) {
+  console.log(`PASS upload-wiring — found ${fileInputs.length} file input(s); example: ${JSON.stringify(fileInputs[0])}`);
+} else {
+  console.error('FAIL upload-wiring — no hidden or labelled file input detected');
+  allOk = false;
+}
+
+// Accessibility: ensure matched controls have either id+text or close aria-labels (basic heuristic)
+for (const ex of expectations) {
+  const candidate = clicked.find(c => c && ( (c.id && ex.ids && ex.ids.includes(c.id)) || (c.text && ex.text && ex.text.test(c.text)) ));
+  if (candidate) {
+    // require either text or a non-empty id
+    if (!(candidate.text && candidate.text.trim().length > 0) && !(candidate.id && candidate.id.trim().length > 0)) {
+      console.warn(`WARN ${ex.name}-a11y — matched but no visible label or id for accessibility`);
+    }
+  }
+}
+
+// Fail on any console errors recorded during crawl
+const hasConsoleError = consoleEntries.some(e => e && (e.type === 'error' || e.type === 'warning' || (e.type==='log' && /error/i.test(e.text))));
+if (hasConsoleError) {
+  console.error('FAIL console-errors — console contains errors or warnings; sample:');
+  const sample = consoleEntries.filter(e => e && (e.type === 'error' || e.type === 'warning' || (e.type==='log' && /error/i.test(e.text)))).slice(0,5);
+  console.error(JSON.stringify(sample, null, 2));
+  allOk = false;
+} else {
+  console.log('PASS console — no errors/warnings detected in console entries');
+}
+
 if (!allOk) {
-  console.error('\nOne or more required UI controls are missing from the crawl report.');
+  console.error('\nOne or more required UI controls or checks failed.');
   process.exit(1);
 }
-console.log('\nAll required UI controls found.');
+console.log('\nAll required UI controls and checks passed.');
 process.exit(0);
