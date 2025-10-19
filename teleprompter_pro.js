@@ -1314,38 +1314,15 @@ let _toast = function (msg, opts) {
         return;
       }
 
-      // Fallback: apply directly via recorder when main toggle isn't in the DOM
+      // If main toggle not present, update recorder settings directly
       try {
-        if (!window.__recorder?.getSettings || !window.__recorder?.setSettings) return;
-        const s = __recorder.getSettings();
-        let selected = (s && Array.isArray(s.selected) ? s.selected.slice() : []).filter((id) => id !== 'obs');
-        if (obsEnable.checked) selected.push('obs');
-
-        const cfgs = { ...(s.configs || {}) };
-        if (!cfgs.obs) {
-          cfgs.obs = {
-            url: obsUrlS?.value || DEFAULT_OBS_URL,
-            password: obsPassS?.value || '',
-          };
-        } else {
-          // keep any current cfg, but honor current settings fields if present
-          if (obsUrlS?.value) cfgs.obs.url = obsUrlS.value;
-          if (typeof obsPassS?.value === 'string') cfgs.obs.password = obsPassS.value;
+        if (__recorder?.getSettings && __recorder?.setSettings) {
+          const s = __recorder.getSettings();
+          let sel = (s.selected || []).filter((id) => id !== 'obs');
+          if (obsEnable.checked) sel.push('obs');
+          __recorder.setSettings({ selected: sel });
         }
-
-        __recorder.setSettings({ selected, configs: cfgs });
-
-        // Optional quick availability check for UX feedback
-        if (obsEnable.checked && __recorder.get('obs')?.isAvailable) {
-          try {
-            const ok = await __recorder.get('obs').isAvailable();
-            _toast(ok ? 'OBS: ready' : 'OBS: offline', { type: ok ? 'ok' : 'error' });
-          } catch {
-            _toast('OBS: offline');
-          }
-        } else {
-          _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
-        }
+        _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
       } catch {}
     });
     // Mirror URL
@@ -1408,24 +1385,24 @@ let _toast = function (msg, opts) {
         return;
       }
 
-      // Fallback: direct test via recorder
+      // Fallback: direct test via recorder adapter
       try {
         if (!__recorder?.get || !__recorder.get('obs')) {
           _toast('OBS: adapter missing');
           return;
         }
-        // ensure cfgs reflect the Settings fields before testing
+        // ensure latest settings from Settings fields are saved first
         try {
-          const s = __recorder.getSettings?.() || { selected: [], configs: {} };
-          const cfgs = { ...(s.configs || {}), obs: { ...(s.configs?.obs || {}) } };
-          if (obsUrlS?.value) cfgs.obs.url = obsUrlS.value;
-          if (typeof obsPassS?.value === 'string') cfgs.obs.password = obsPassS.value;
-          __recorder.setSettings({ configs: cfgs });
+          saveObsConfig();
         } catch {}
 
         _toast('OBS: testing…');
-        const ok = await __recorder.get('obs').isAvailable?.();
-        _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
+        try {
+          const ok = await __recorder.get('obs').test?.();
+          _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
+        } catch (e) {
+          _toast('OBS: failed', { type: 'error' });
+        }
       } catch {
         _toast('OBS: failed');
       }
@@ -4904,11 +4881,12 @@ let _toast = function (msg, opts) {
         const s = __recorder.getSettings();
         const cfgs = { ...(s.configs || {}) };
         const prev = cfgs.obs || {};
-        cfgs.obs = {
-          ...prev,
-          url: obsUrlInput?.value || prev.url || 'ws://192.168.1.198:4455',
-          password: obsPassInput?.value || prev.password || '',
-        };
+        // Prefer main panel inputs when present; otherwise fall back to Settings inputs
+        const urlEl = obsUrlInput || document.getElementById('settingsObsUrl');
+        const passEl = obsPassInput || document.getElementById('settingsObsPass');
+        const url = urlEl?.value || prev.url || 'ws://192.168.1.198:4455';
+        const password = passEl?.value ?? prev.password ?? '';
+        cfgs.obs = { ...prev, url, password };
         __recorder.setSettings({ configs: cfgs });
         // Persist password to sessionStorage by default; optionally to localStorage when 'remember' is checked
         try {
@@ -4955,8 +4933,8 @@ let _toast = function (msg, opts) {
         if (obsStatus && enableObsChk?.checked) obsStatus.textContent = 'OBS: updated';
       } catch {}
     };
-    obsUrlInput?.addEventListener('change', saveObsConfig);
-    obsPassInput?.addEventListener('change', saveObsConfig);
+  obsUrlInput?.addEventListener('change', saveObsConfig);
+  obsPassInput?.addEventListener('change', saveObsConfig);
 
     // When OBS fields change, reconfigure adapter immediately so it has latest values
     try {
