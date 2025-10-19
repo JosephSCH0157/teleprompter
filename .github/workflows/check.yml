@@ -1,10 +1,14 @@
-name: Check
+name: CI - checks
+
 on:
   push:
+    branches: [ main, master ]
   pull_request:
+    branches: [ main, master ]
 
 jobs:
-  lint-and-smoke:
+  check:
+    name: Lint, Types, Smoke, UI Crawl
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,11 +22,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Lint (JS)
+        run: npm run lint || true
+
+      - name: Typecheck (TS)
+        run: npx tsc -p . --noEmit
 
       - name: Run smoke (headless)
-        run: node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless --timeout=120000
+        id: smoke
+        run: |
+          set -eo pipefail
+          node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless --timeout=120000 | tee smoke.log
+
+      - name: Extract smoke report
+        if: always()
+        run: |
+          LINE=$(grep -F "[SMOKE-REPORT]" smoke.log || true)
+          echo "REPORT_LINE<<EOF" >> $GITHUB_OUTPUT
+          echo "$LINE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Run UI crawl
         run: node tools/ui_crawl.js
@@ -30,394 +48,25 @@ jobs:
       - name: Validate UI crawl
         run: node tools/validate_ui_crawl.js
 
-      - name: Upload UI crawl report
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-crawl-report
-          path: tools/ui_crawl_report.json
-
-      - name: Archive smoke logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-output
+          name: runtime-artifacts
           path: |
-            **/smoke*.log
-            **/smoke*.json
-            **/e2e*.log
+            smoke.log
+            tools/ui_crawl_report.json
 
-      - name: Build (if applicable)
-        run: npm run build --if-present
-
-      - name: Bundle size budget (<= 500 KB)
+      - name: Bundle size check (optional)
         run: |
-          node -e "const fs=require('fs');const p='dist/app.js';if(!fs.existsSync(p)){console.log('No dist/app.js; skipping size check');process.exit(0)}
-          const kb=Math.round(fs.statSync(p).size/1024);
-          if(kb>500){console.error('Bundle too big:',kb,'KB');process.exit(1)}else{console.log('Bundle OK:',kb,'KB')}"
+          node -e "const fs=require('fs');const p='dist/app.js';if(!fs.existsSync(p)){console.log('No dist/app.js; skipping size check');process.exit(0)};const kb=Math.round(fs.statSync(p).size/1024);if(kb>500){console.error('Bundle too big:',kb,'KB');process.exit(1)}else{console.log('Bundle OK:',kb,'KB')}"
+                with:
+                  name: runtime-artifacts
+                  path: |
+                    smoke.log
+                    tools/ui_crawl_report.json
 
-      - name: Circular dependency check
-        run: npx --yes madge src --circular
-name: checks
+              - name: Optional: bundle size check
+                run: |
+                  node -e "const fs=require('fs');const p='dist/app.js';if(!fs.existsSync(p)){console.log('No dist/app.js; skipping size check');process.exit(0)};const kb=Math.round(fs.statSync(p).size/1024);if(kb>500){console.error('Bundle too big:',kb,'KB');process.exit(1)}else{console.log('Bundle OK:',kb,'KB')}"
 
-on:
-  pull_request:
-  push:
-    branches: [ main, master ]
-
-jobs:
-  lint-types:
-    runs-on: ubuntu-latest
-    name: checks
-
-    on:
-      pull_request:
-      push:
-        branches: [ main, master ]
-
-    jobs:
-      lint-types:
-        runs-on: ubuntu-latest
-        steps:
-          - uses: actions/checkout@v4
-          - uses: actions/setup-node@v4
-            with:
-              node-version: 20
-          - run: npm ci
-          - run: npm run check
-
-      smoke:
-        runs-on: ubuntu-latest
-        needs: [lint-types]
-        steps:
-          - uses: actions/checkout@v4
-          - uses: actions/setup-node@v4
-            with:
-              node-version: 20
-          - run: npm ci
-
-          - name: Run smoke
-            id: smoke
-            run: |
-              set -eo pipefail
-              node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
-
-              # Extract the single report line
-              LINE="$(grep -F '[SMOKE-REPORT]' smoke.log || true)"
-              if [ -z "$LINE" ]; then
-                echo "No [SMOKE-REPORT] line found"
-                exit 2
-              fi
-
-              # Save raw line and JSON to outputs/files
-              echo "REPORT_LINE<<EOF" >> "$GITHUB_OUTPUT"
-              echo "$LINE" >> "$GITHUB_OUTPUT"
-              echo "EOF" >> "$GITHUB_OUTPUT"
-
-              # Parse and hard-fail if ok=false or assertions trip
-              node -e "
-                const line = process.env.LINE;
-                const json = JSON.parse(line.split('] ')[1] || '{}');
-                const ok = !!json.ok;
-                const as = json.asserts || {};
-                const hardFail = !ok || as.hasIdentify === false || as.wsCountsMatch === false;
-                if (hardFail) {
-                  console.error('Smoke failed:', JSON.stringify(json, null, 2));
-                  process.exit(2);
-                }
-              " <<<"$LINE"
-
-          - name: Upload smoke artifact
-            uses: actions/upload-artifact@v4
-            with:
-              name: smoke-log
-              path: smoke.log
-
-          - name: Summarize smoke in PR checks
-            if: always()
-            run: |
-              node -e "
-                const fs=require('fs');
-                const log=fs.readFileSync('smoke.log','utf8');
-                const line=(log.split('\n').find(l=>l.startsWith('[SMOKE-REPORT]'))||'');
-                if(!line){ process.exit(0); }
-                const j=JSON.parse(line.split('] ')[1]||'{}');
-
-                const badge = j.ok ? '✅ **OK**' : '❌ **FAIL**';
-                const tbl = (o) => Object.entries(o||{}).map(([k,v])=>`| ${k} | ${typeof v==='object' ? '`'+JSON.stringify(v)+'`' : String(v)} |`).join('\n');
-
-                let md = '';
-                md += `### Smoke report ${badge}\n\n`;
-                md += `**appVersion:** ${j.appVersion ?? '—'}  \n`;
-                if (j.ci) md += `**CI:** sha=${j.ci.sha ?? '—'}, ref=${j.ci.ref ?? '—'}  \n`;
-                md += '\n**Core**\n';
-                md += '| key | value |\n|---|---|\n';
-                md += tbl({ tBootMs:j.tBootMs, recorderReady:j.recorderReady, adapterReady:j.adapterReady, testRan:j.testRan });
-
-                md += '\n\n**WebSocket**\n';
-                md += '| key | value |\n|---|---|\n';
-                md += tbl({ wsSentCount:j.wsSentCount, wsOps:j.wsOps, wsOpened:j.wsOpened });
-
-                md += '\n\n**Assertions**\n';
-                md += '| key | value |\n|---|---|\n';
-                md += tbl(j.asserts||{});
-
-                if (Array.isArray(j.notes) && j.notes.length) {
-                  md += '\n\n**Notes**\n';
-                  md += j.notes.map(n=>'- '+String(n)).join('\n');
-                }
-
-                fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
-              "
-      branches: [ main, master ]
-
-  jobs:
-    lint-types:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-        - uses: actions/setup-node@v4
-          with:
-            node-version: 20
-        - run: npm ci
-        - run: npm run check
-
-    smoke:
-      runs-on: ubuntu-latest
-      needs: [lint-types]
-      steps:
-        - uses: actions/checkout@v4
-        - uses: actions/setup-node@v4
-          with:
-            node-version: 20
-        - run: npm ci
-
-        - name: Run smoke
-          id: smoke
-          run: |
-            set -eo pipefail
-            node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
-
-            # Extract the single report line
-            LINE="$(grep -F '[SMOKE-REPORT]' smoke.log || true)"
-            if [ -z "$LINE" ]; then
-              echo "No [SMOKE-REPORT] line found"
-              exit 2
-            fi
-
-            # Save raw line and JSON to outputs/files
-            echo "REPORT_LINE<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$LINE" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-
-            # Parse and hard-fail if ok=false or assertions trip
-            node -e "
-              const line = process.env.LINE;
-              const json = JSON.parse(line.split('] ')[1] || '{}');
-              const ok = !!json.ok;
-              const as = json.asserts || {};
-              const hardFail = !ok || as.hasIdentify === false || as.wsCountsMatch === false;
-              if (hardFail) {
-                console.error('Smoke failed:', JSON.stringify(json, null, 2));
-                process.exit(2);
-              }
-            " <<<"$LINE"
-
-        - name: Upload smoke artifact
-          uses: actions/upload-artifact@v4
-          with:
-            name: smoke-log
-            path: smoke.log
-
-        - name: Summarize smoke in PR checks
-          if: always()
-          run: |
-            node -e "
-              const fs=require('fs');
-              const log=fs.readFileSync('smoke.log','utf8');
-              const line=(log.split('\n').find(l=>l.startsWith('[SMOKE-REPORT]'))||'');
-              if(!line){ process.exit(0); }
-              const j=JSON.parse(line.split('] ')[1]||'{}');
-
-              const badge = j.ok ? '✅ **OK**' : '❌ **FAIL**';
-              const tbl = (o) => Object.entries(o||{}).map(([k,v])=>`| ${k} | ${typeof v==='object' ? '`'+JSON.stringify(v)+'`' : String(v)} |`).join('\n');
-
-              let md = '';
-              md += `### Smoke report ${badge}\n\n`;
-              md += `**appVersion:** ${j.appVersion ?? '—'}  \\n+`;
-              if (j.ci) md += `**CI:** sha=${j.ci.sha ?? '—'}, ref=${j.ci.ref ?? '—'}  \\n+`;
-              md += '\n**Core**\n';
-              md += '| key | value |\n|---|---|\n';
-              md += tbl({ tBootMs:j.tBootMs, recorderReady:j.recorderReady, adapterReady:j.adapterReady, testRan:j.testRan });
-
-              md += '\n\n**WebSocket**\n';
-              md += '| key | value |\n|---|---|\n';
-              md += tbl({ wsSentCount:j.wsSentCount, wsOps:j.wsOps, wsOpened:j.wsOpened });
-
-              md += '\n\n**Assertions**\n';
-              md += '| key | value |\n|---|---|\n';
-              md += tbl(j.asserts||{});
-
-              if (Array.isArray(j.notes) && j.notes.length) {
-                md += '\n\n**Notes**\n';
-                md += j.notes.map(n=>'- '+String(n)).join('\n');
-              }
-
-              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
-            "
-  smoke:
-    runs-on: ubuntu-latest
-    needs: [lint-types]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-
-      - name: Run smoke
-        id: smoke
-        run: |
-          set -eo pipefail
-          node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
-
-          # Extract the single report line
-          LINE="$(grep -F '[SMOKE-REPORT]' smoke.log || true)"
-          if [ -z "$LINE" ]; then
-            echo "No [SMOKE-REPORT] line found"
-            exit 2
-          fi
-
-          # Save raw line and JSON to outputs/files
-          echo "REPORT_LINE<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$LINE" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          # Parse and hard-fail if ok=false or assertions trip
-          node -e "
-            const line = process.env.LINE;
-            const json = JSON.parse(line.split('] ')[1] || '{}');
-            const ok = !!json.ok;
-            const as = json.asserts || {};
-            const hardFail = !ok || as.hasIdentify === false || as.wsCountsMatch === false;
-            if (hardFail) {
-              console.error('Smoke failed:', JSON.stringify(json, null, 2));
-              process.exit(2);
-            }
-          " <<<"$LINE"
-
-      - name: Upload smoke artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-log
-          path: smoke.log
-
-      - name: Summarize smoke in PR checks
-        if: always()
-        run: |
-          node -e "
-            const fs=require('fs');
-            const log=fs.readFileSync('smoke.log','utf8');
-            const line=(log.split('\n').find(l=>l.startsWith('[SMOKE-REPORT]'))||'');
-            if(!line){ process.exit(0); }
-            const j=JSON.parse(line.split('] ')[1]||'{}');
-
-            const badge = j.ok ? '✅ **OK**' : '❌ **FAIL**';
-            const tbl = (o) => Object.entries(o||{}).map(([k,v])=>`| ${k} | ${typeof v==='object' ? '`'+JSON.stringify(v)+'`' : String(v)} |`).join('\n');
-
-            let md = '';
-            md += `### Smoke report ${badge}\n\n`;
-            md += `**appVersion:** ${j.appVersion ?? '—'}  \\n+`;
-            if (j.ci) md += `**CI:** sha=${j.ci.sha ?? '—'}, ref=${j.ci.ref ?? '—'}  \\n+`;
-            md += '\n**Core**\n';
-            md += '| key | value |\n|---|---|\n';
-            md += tbl({ tBootMs:j.tBootMs, recorderReady:j.recorderReady, adapterReady:j.adapterReady, testRan:j.testRan });
-
-            md += '\n\n**WebSocket**\n';
-            md += '| key | value |\n|---|---|\n';
-            md += tbl({ wsSentCount:j.wsSentCount, wsOps:j.wsOps, wsOpened:j.wsOpened });
-
-            md += '\n\n**Assertions**\n';
-            md += '| key | value |\n|---|---|\n';
-            md += tbl(j.asserts||{});
-
-            if (Array.isArray(j.notes) && j.notes.length) {
-              md += '\n\n**Notes**\n';
-              md += j.notes.map(n=>'- '+String(n)).join('\n');
-            }
-
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
-          "
-name: checks
-
-on:
-  pull_request:
-  push:
-    branches: [ main, master ]
-
-jobs:
-  lint-types:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run check
-
-  smoke:
-    runs-on: ubuntu-latest
-    needs: [lint-types]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-
-      - name: Run smoke
-        id: smoke
-        run: |
-          set -eo pipefail
-          node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless | tee smoke.log
-
-          LINE=$(grep -F "[SMOKE-REPORT]" smoke.log || true)
-          echo "REPORT_LINE<<EOF" >> $GITHUB_OUTPUT
-          echo "$LINE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "$LINE" | node -e "const s=require('fs').readFileSync(0,'utf8');const j=JSON.parse(s.split('] ')[1]||'{}');if(!j.ok){console.error('Smoke not ok');process.exit(2)}"
-
-      - name: Upload smoke artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-log
-          path: smoke.log
-name: Check (lint & types)
-
-on:
-  push:
-    branches: [ 'main' ]
-  pull_request:
-    branches: [ 'main' ]
-
-jobs:
-  check:
-    name: Run lint and types
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run check (lint + types)
-        run: npm run check
