@@ -15,57 +15,9 @@ try {
   if (typeof require === 'function') {
     try {
       moduleToast = require('./ui/toasts.js').toast;
-    } catch (e) {
-      void e;
-      moduleToast = null;
-    }
+    } catch {}
   }
-} catch (e) {
-  void e;
-}
-try {
-  if (!moduleToast && typeof window !== 'undefined' && window.toast) moduleToast = window.toast;
-} catch (e) {
-  void e;
-}
-// 1) LAN default for OBS
-var DEFAULT_OBS_URL = 'ws://192.168.1.198:4455';
-// Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
-try {
-  if (typeof require === 'function') {
-    try {
-      var RecorderModule = require('./recorders.js');
-      if (typeof window !== 'undefined') window.__recorder = RecorderModule;
-    } catch (e) {
-      void e; /* fallthrough */
-    }
-  }
-} catch (e) {
-  void e;
-}
-try {
-  if (typeof window !== 'undefined' && !window.__recorder) {
-    // last-resort: maybe the module already attached itself globally
-    if (window.__recorder);
-  }
-} catch (e) {
-  void e;
-}
-try {
-  // Emit a lightweight startup log so developers can see adapter availability in the browser console
-  try {
-    const list =
-      window.__recorder && typeof window.__recorder.all === 'function'
-        ? window.__recorder.all().map((a) => a.id || a.label || '(unknown)')
-        : [];
-    console.info('[TP-Pro] __recorder assigned — adapters:', list);
-  } catch (e) {
-    void e;
-    console.info('[TP-Pro] __recorder assigned (no list available)');
-  }
-} catch (e) {
-  void e;
-}
+} catch {}
 
 // Developer helper: run the OBS adapter test from the page console and print structured logs.
 try {
@@ -811,7 +763,8 @@ let _toast = function (msg, opts) {
    * ────────────────────────────────────────────────────────────── */
   const log = (...a) => console.log('[TP-Pro]', ...a);
   const warn = (...a) => console.warn('[TP-Pro]', ...a);
-  const err = (...a) => console.error('[TP-Pro]', ...a);
+  const _err = (...a) => console.error('[TP-Pro]', ...a);
+  try { window.err = _err; } catch {}
 
   // Missing constants / safe fallbacks (restored)
   const DEVICE_KEY = 'tp_mic_device_v1';
@@ -9884,85 +9837,32 @@ let _toast = function (msg, opts) {
     } catch {}
   }
 
-  // TP: docx-mammoth
+  // TP: docx-mammoth (delegated to ui/upload.js)
   async function ensureMammoth() {
-    if (window.mammoth) return window.mammoth;
-    const loadScript = (src) =>
-      new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.async = true;
-        s.onload = res;
-        s.onerror = () => rej(new Error('Failed to load ' + src));
-        document.head.appendChild(s);
-      });
-    // Try primary CDN, then alternate, then local vendor copy if present
-    const sources = [
-      'https://unpkg.com/mammoth/mammoth.browser.min.js',
-      'https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js',
-      // Optional local fallback (place file at d:/teleprompter/vendor/mammoth/mammoth.browser.min.js)
-      'vendor/mammoth/mammoth.browser.min.js',
-    ];
-    let lastErr;
-    for (const src of sources) {
-      try {
-        await loadScript(src);
-        if (window.mammoth) return window.mammoth;
-      } catch {
-        lastErr = e;
+    try {
+      if (typeof window.ensureMammoth === 'function' && window.ensureMammoth !== ensureMammoth) {
+        return await window.ensureMammoth();
       }
-    }
-    throw new Error(
-      'Mammoth failed to load from CDN and local fallback. ' + (lastErr?.message || '')
-    );
+    } catch {}
+    return null;
   }
 
-  // TP: upload-file
+  // TP: upload-file (delegates to extracted module)
   async function _uploadFromFile(file) {
-    const lower = (file.name || '').toLowerCase();
-    const isDocx =
-      lower.endsWith('.docx') ||
-      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-    if (isDocx) {
-      try {
-        const mammoth = await ensureMammoth();
-        const arrayBuffer = await file.arrayBuffer();
-        const { value } = await mammoth.extractRawText({ arrayBuffer });
-        const text = String(value || '')
-          .replace(/\r\n/g, '\n')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-        // Pipeline: raw (Mammoth) -> Normalize (if available) -> render normalized
-        editor.value = text;
-        let normalized = false;
-        try {
-          if (typeof window.normalizeToStandard === 'function') {
-            window.normalizeToStandard();
-            normalized = true;
-          } else if (typeof window.fallbackNormalize === 'function') {
-            window.fallbackNormalize();
-            normalized = true;
-          }
-        } catch {}
-        renderScript(editor.value);
-        setStatus(`Loaded "${file.name}" (.docx)${normalized ? ' and normalized' : ''}.`);
-      } catch (e) {
-        err(e);
-        setStatus('Failed to read .docx: ' + (e?.message || e));
-      }
-      return;
+    try {
+      if (typeof window._uploadFromFile === 'function') return window._uploadFromFile(file);
+      const s = document.createElement('script');
+      s.src = './ui/upload.js';
+      s.async = true;
+      document.head.appendChild(s);
+      await new Promise((res, rej) => {
+        s.onload = res;
+        s.onerror = rej;
+      });
+      if (typeof window._uploadFromFile === 'function') return window._uploadFromFile(file);
+    } catch (e) {
+      try { console.warn('upload delegate failed', e); } catch {}
     }
-
-    // Plain text / md / rtf / .text → read as text (RTF will include markup)
-    const reader = new FileReader();
-    reader.onload = () => {
-      editor.value = reader.result || '';
-      renderScript(editor.value);
-      setStatus(`Loaded “${file.name}”.`);
-    };
-    reader.onerror = () => setStatus('Failed to read file.');
-    reader.readAsText(file, 'utf-8');
   }
 
   // Debug HUD moved to debug-tools.js
