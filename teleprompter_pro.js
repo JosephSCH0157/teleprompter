@@ -1236,8 +1236,22 @@ let _toast = function (msg, opts) {
       });
     }
     reqMicBtn?.addEventListener('click', async () => {
-      await micBtn?.click();
-      _toast('Mic requested', { type: 'ok' });
+      try {
+        if (typeof requestMic === 'function') {
+          await requestMic();
+          _toast('Mic requested', { type: 'ok' });
+          return;
+        }
+      } catch {
+        try { console.warn('requestMic() failed'); } catch {}
+      }
+      try {
+        // Fallback to clicking main button if requestMic isn't available
+        await micBtn?.click();
+        _toast('Mic requested', { type: 'ok' });
+      } catch {
+        _toast('Mic request failed', { type: 'error' });
+      }
     });
     // Camera
     const startCamS = document.getElementById('settingsStartCam');
