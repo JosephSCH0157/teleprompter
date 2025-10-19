@@ -6764,6 +6764,7 @@ let _toast = function (msg, opts) {
 
     // Character-level F1 score using normalized Levenshtein
     function computeCharacterF1(text1, text2) {
+      try { if (window && typeof window.computeCharacterF1 === 'function') return window.computeCharacterF1(text1, text2); } catch {};
       const chars1 = text1.split('');
       const chars2 = text2.split('');
 
@@ -6772,25 +6773,27 @@ let _toast = function (msg, opts) {
       const set2 = new Set(chars2);
 
       const intersection = new Set([...set1].filter((x) => set2.has(x)));
-      const precision = intersection.size / set1.size;
-      const recall = intersection.size / set2.size;
+      const precision = set1.size ? intersection.size / set1.size : 0;
+      const recall = set2.size ? intersection.size / set2.size : 0;
 
       return precision + recall > 0 ? (2 * (precision * recall)) / (precision + recall) : 0;
     }
 
     // Jaccard similarity on stemmed tokens
     function computeJaccardSimilarity(tokens1, tokens2) {
+      try { if (window && typeof window.computeJaccardSimilarity === 'function') return window.computeJaccardSimilarity(tokens1, tokens2); } catch {};
       const stem1 = new Set(tokens1.map(stemToken));
       const stem2 = new Set(tokens2.map(stemToken));
 
       const intersection = new Set([...stem1].filter((x) => stem2.has(x)));
       const union = new Set([...stem1, ...stem2]);
 
-      return intersection.size / union.size;
+      return union.size ? intersection.size / union.size : 0;
     }
 
     // Entity bonus for numbers, names, toponyms
     function computeEntityBonus(tokens1, tokens2) {
+      try { if (window && typeof window.computeEntityBonus === 'function') return window.computeEntityBonus(tokens1, tokens2); } catch {};
       let bonus = 0;
 
       // Number matches
@@ -6825,6 +6828,7 @@ let _toast = function (msg, opts) {
     }
 
     function cosineSimilarity(vec1, vec2) {
+      try { if (window && typeof window.cosineSimilarity === 'function') return window.cosineSimilarity(vec1, vec2); } catch {};
       let dot = 0,
         norm1 = 0,
         norm2 = 0;
