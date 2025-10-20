@@ -1093,15 +1093,15 @@ let _toast = function (msg, opts) {
       const rem = document.getElementById('settingsObsRemember');
       if (rem) {
         try {
-          rem.checked = localStorage.getItem('tp_obs_remember') === '1';
+          // Do not auto-set from storage while diagnosing auth issues; keep unchecked.
+          rem.checked = false;
         } catch (e) {
           void e;
         }
-        // ensure changes to the checkbox re-run save logic
+        // Keep "Remember password" inert for now; notify user when toggled.
         rem.addEventListener('change', () => {
           try {
-            // re-run save logic which will persist or remove stored password based on the checkbox
-            saveObsConfig();
+            _toast && _toast('Remember password disabled for diagnostics', { type: 'info' });
           } catch {}
         });
       }
@@ -1124,17 +1124,14 @@ let _toast = function (msg, opts) {
 
   // Getter for stored OBS password (if any). Use sparingly; storing passwords in localStorage is insecure.
   window.getObsPassword = function () {
-    // Prefer sessionStorage (session-only, more private), then localStorage if remember checked
+    // For diagnostics, only consult the live DOM inputs; do not use persisted storage.
     try {
-      try {
-        const s = sessionStorage.getItem('tp_obs_password');
-        if (s) return s;
-      } catch {}
-      try {
-        const rem = document.getElementById('settingsObsRemember');
-        const p = localStorage.getItem('tp_obs_password');
-        if (p && rem && rem.checked) return p;
-      } catch {}
+      const set = document.getElementById('settingsObsPass');
+      if (set && set.value) return set.value;
+    } catch {}
+    try {
+      const main = document.getElementById('obsPassword');
+      if (main && main.value) return main.value;
     } catch {}
     return '';
   };
@@ -1371,19 +1368,7 @@ let _toast = function (msg, opts) {
         void e;
       }
 
-      try {
-        sessionStorage.setItem('tp_obs_password', obsPassS.value || '');
-      } catch (e) {
-        void e;
-      }
-
-      try {
-        const rem = document.getElementById('settingsObsRemember');
-        if (rem && rem.checked) localStorage.setItem('tp_obs_password', obsPassS.value || '');
-        else localStorage.removeItem('tp_obs_password');
-      } catch (e) {
-        void e;
-      }
+      // Do NOT persist OBS password to storage during diagnostics - use live DOM only.
 
       try {
         const recModule = await loadRecorder();
