@@ -40,9 +40,9 @@ function toast(msg, opts) {
     }, AUTO_FADE_MS);
   } catch {
     try {
-      console.debug('[toast] failed to render', e, msg, opts || '');
+      console.debug('[toast] failed to render', String(msg || ''), opts || '');
     } catch {
-      console.debug('toast fallback log failed', e2);
+      console.debug('toast fallback log failed');
     }
   }
 }
