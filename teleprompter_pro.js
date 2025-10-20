@@ -1420,25 +1420,38 @@ let _toast = function (msg, opts) {
         return;
       }
 
-      // Fallback: direct test via recorder adapter
+      // Fallback: lazy-load bridge or recorder adapter and run test
       try {
-        if (!__recorder?.get || !__recorder.get('obs')) {
+        saveObsConfig();
+      } catch {}
+      try {
+        const bridge = await ensureObsBridge();
+        if (bridge && typeof bridge.getRecordStatus === 'function') {
+          try {
+            await bridge.getRecordStatus();
+            _toast('OBS: ok', { type: 'ok' });
+            return;
+          } catch {
+            // continue to recorder fallback
+          }
+        }
+      } catch {}
+      try {
+        const recModule = await loadRecorder();
+        const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+        if (!rec || typeof rec.test !== 'function') {
           _toast('OBS: adapter missing');
           return;
         }
-        // ensure latest settings from Settings fields are saved first
-        try {
-          saveObsConfig();
-        } catch {}
-
         _toast('OBS: testing…');
         try {
-          const ok = await __recorder.get('obs').test?.();
+          const ok = await rec.test();
           _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
         } catch {
           _toast('OBS: failed', { type: 'error' });
         }
-      } catch {
+      } catch (e) {
+        console.warn('[TP-Pro] settings obs test failed', e);
         _toast('OBS: failed');
       }
     });
@@ -1885,6 +1898,8 @@ let _toast = function (msg, opts) {
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null; // set after io-anchor.js loads
   let __scrollCtl = null; // set after scroll-control.js loads
+  // Small helper: add version/cache-buster if provided by the host (kept local)
+  const addV = (p) => (window.__TP_ADDV ? window.__TP_ADDV(p) : p);
   // Recorder lazy loader
   let __rec = null;
   async function loadRecorder() {
@@ -1907,6 +1922,25 @@ let _toast = function (msg, opts) {
       return null;
     }
   }
+
+  // Lazy-load the OBS bridge module on-demand. Returns window.__obsBridge when available.
+  let __obsBridgeLoaded = null;
+  async function ensureObsBridge() {
+    try {
+      if (typeof window !== 'undefined' && window.__obsBridge) return window.__obsBridge;
+      if (__obsBridgeLoaded) return __obsBridgeLoaded;
+      const path = addV('./adapters/obsBridge.js');
+      await import(path);
+      __obsBridgeLoaded = typeof window !== 'undefined' ? window.__obsBridge || null : null;
+      return __obsBridgeLoaded;
+    } catch (err) {
+      try { console.warn('[TP-Pro] ensureObsBridge failed', err); } catch {}
+      return null;
+    }
+  }
+
+  // Note: camera recorder is lazy-loaded via loadRecorder(); DOCX/mammoth is handled by
+  // ui/upload.js and exposed via window.ensureMammoth/_ensureMammoth later in this file.
   // ==================================================
   // OBS adapter helper: ensure adapter availability + wrapper
   // ==================================================
@@ -2787,17 +2821,10 @@ let _toast = function (msg, opts) {
   // Minimal init to wire the meter pieces and help overlay (internal helper)
   async function __initMinimal() {
     try {
-      // Ensure obsBridge module is imported early so window.__obsBridge
-      // is available even if recorder initialization lags. Fire-and-forget.
-      (async () => {
-        try {
-          const path = window.__TP_ADDV ? window.__TP_ADDV('./adapters/obsBridge.js') : './adapters/obsBridge.js';
-          await import(path);
-          try { if (window.__TP_DEV) console.debug('[TP-Pro] early obsBridge import attempted'); } catch {}
-        } catch {
-          try { if (window.__TP_DEV) console.debug('[TP-Pro] early obsBridge import failed', e); } catch {}
-        }
-      })();
+      // NOTE: previously we eagerly imported obsBridge here which forced the OBS adapter
+      // to initialize during page load. To reduce startup work and make the app
+      // deterministic for CI, we now lazy-load the OBS bridge on-demand via
+      // ensureObsBridge() when the user interacts with OBS controls.
 
       loadRecorder().then((rec) => {
         try {
@@ -5195,49 +5222,40 @@ let _toast = function (msg, opts) {
       void ex;
     }
 
-    // Test button
+    // Test button (lazy-load bridge/recorder as needed)
     obsTestBtn?.addEventListener('click', async () => {
       if (obsStatus) obsStatus.textContent = 'OBS: testing…';
       try {
         saveObsConfig();
-        if (typeof window !== 'undefined' && window.__obsBridge) {
-          await window.__obsBridge.getRecordStatus();
+        // Try bridge first (lazy-import)
+        const bridge = await ensureObsBridge();
+        if (bridge && typeof bridge.getRecordStatus === 'function') {
+          await bridge.getRecordStatus();
           if (obsStatus) obsStatus.textContent = 'OBS: ok';
-        } else if (__recorder?.get && __recorder.get('obs')?.test) {
-          await __recorder.get('obs').test();
-          if (obsStatus) obsStatus.textContent = 'OBS: ok';
+          return;
+        }
+        // Fallback: ensure recorder module and call adapter test
+        const recModule = await loadRecorder();
+        const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+        if (rec && typeof rec.test === 'function') {
+          const ok = await rec.test();
+          if (obsStatus) obsStatus.textContent = ok ? 'OBS: ok' : 'OBS: failed';
         } else {
           if (obsStatus) obsStatus.textContent = 'OBS: missing';
         }
-      } catch {
+      } catch (e) {
         if (obsStatus) {
           obsStatus.textContent = 'OBS: failed';
           try {
-            const errMsg =
-              (typeof window !== 'undefined' && window.__obsBridge && e?.message) ||
-              __recorder.get('obs')?.getLastError?.() ||
-              e?.message ||
-              String(e);
+            const errMsg = (e && e.message) || String(e || '');
             obsStatus.title = errMsg;
-            // show a visible toast with the error and a console hint
             try {
               _toast('OBS test failed: ' + (errMsg || 'unknown error'), { type: 'error' });
             } catch {}
             try {
-              console.warn('[OBS TEST] failed', {
-                err: e,
-                derived: errMsg,
-                url: obsUrlInput?.value,
-              });
+              console.warn('[OBS TEST] failed', { err: e, derived: errMsg, url: obsUrlInput?.value });
             } catch {}
-          } catch {
-            void inner;
-            try {
-              obsStatus.title = String(e);
-            } catch {
-              void e;
-            }
-          }
+          } catch {}
         }
       }
     });
