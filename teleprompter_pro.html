@@ -2,74 +2,82 @@
 
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>Teleprompter — Pro v1_6_1</title>
-<link href="data:," rel="icon"/>
-<script defer src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
-<script>
-  // DEV gating for build label: add a class on <html> if dev is enabled
-  (function(){
-    try {
-      var Q = new URLSearchParams(location.search);
-      var DEV = Q.has('dev') || (function(){ try { return localStorage.getItem('tp_dev_mode') === '1'; } catch(e){ return false; } })() || (location.hash||'').indexOf('dev') !== -1;
-      if (DEV) { document.documentElement.classList.add('tp-dev'); }
-    } catch {}
-  })();
-  // Note: teleprompter_pro.js will also set window.__TP_DEV
-</script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- Safe requestScroll polyfill: defined early so callers can rely on it -->
-<script>
-  (function(){
-    try {
-      if (!window.requestScroll) {
-        window.requestScroll = function(arg){
-          try {
-            var top = (typeof arg === 'object') ? Number(arg && arg.top) : Number(arg);
-            if (!isFinite(top)) top = 0;
-            var behavior = (typeof arg === 'object' && arg && arg.behavior) ? String(arg.behavior) : 'smooth';
-            if (typeof window.scrollTo === 'function') {
-              window.scrollTo({ top: top, behavior: behavior });
-            } else {
-              (document.scrollingElement || document.documentElement || document.body).scrollTop = top;
-            }
-          } catch {}
-        };
-      }
-    } catch {}
-  })();
-  // In-app helpers will override this with a coalesced scroller scheduler when ready
-</script>
+  <title>Teleprompter — Pro v1_6_1</title>
+  <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="theme-color" content="#0b0f19" />
+  <meta name="color-scheme" content="dark light" />
 
-<script>
-  (function(){
-    try{
-      var DEV = document.documentElement.classList.contains('tp-dev');
-      var qs = new URLSearchParams(location.search);
-      var V = qs.get('v') || (DEV ? Date.now().toString(36) : 'dev-20251007');
-      var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = add('teleprompter_pro.css');
-      document.head.appendChild(link);
-      // publish V for JS to use in dynamic imports
-      window.__TP_DEV = DEV; window.__TP_DEV_VERSION = V;
-    }catch(e){
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'teleprompter_pro.css?v=dev-20251007';
-      document.head.appendChild(link);
-    }
-  })();
-</script>
-<style>
-  #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui, sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
-  html.tp-dev #anvil-build-label{display:block}
-  @media print{#anvil-build-label{display:none}}
-  @media (max-width: 420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
-</style>
+  <!-- Canonical helps SEO (avoid /index.html vs /) -->
+  <link rel="canonical" href="https://example.com/teleprompter/" />
+
+  <!-- Favicons -->
+  <link rel="icon" href="data:," />
+
+  <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
+  <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
+  <!-- If you serve fonts or CDN assets, add preconnects for those origins, too -->
+
+  <!-- Critical CSS: preload + swap to avoid render-blocking -->
+  <link rel="preload" href="teleprompter_pro.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="teleprompter_pro.css"></noscript>
+
+  <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
+  <script>
+    (function(){
+      try {
+        var Q=new URLSearchParams(location.search);
+        var DEV = Q.has('dev') || (function(){try{return localStorage.getItem('tp_dev_mode')==='1'}catch(e){return false}})() || (location.hash||'').indexOf('dev')!==-1;
+        if (DEV) document.documentElement.classList.add('tp-dev');
+        window.__TP_DEV = DEV;
+      } catch {}
+    })();
+  </script>
+
+  <!-- Safe requestScroll polyfill (kept) -->
+  <script>
+    (function(){
+      try {
+        if (!window.requestScroll) {
+          window.requestScroll = function(arg){
+            try {
+              var top = (typeof arg==='object')?Number(arg&&arg.top):Number(arg);
+              if (!isFinite(top)) top = 0;
+              var behavior = (typeof arg==='object'&&arg&&arg.behavior)?String(arg.behavior):'smooth';
+              if (typeof window.scrollTo==='function') window.scrollTo({top,behavior});
+              else (document.scrollingElement||document.documentElement||document.body).scrollTop = top;
+            } catch {}
+          };
+        }
+      } catch {}
+    })();
+  </script>
+
+  <!-- Third-party (kept defer); consider dynamic import when used to save idle time -->
+  <script defer src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
+  <!-- Debug HUD helper BEFORE main app so ~ works -->
+  <script defer src="debug-tools.js"></script>
+
+  <!-- Main app -->
+  <script defer src="teleprompter_pro.js"></script>
+
+  <!-- Build badge (dev only) -->
+  <style>
+    #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui,sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
+    html.tp-dev #anvil-build-label{display:block}
+    @media print{#anvil-build-label{display:none}}
+    @media (max-width:420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
+  </style>
+
+  <!-- (Optional, prod) Tight CSP once everything is settled
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://unpkg.com; connect-src 'self' http://192.168.1.200:4455 ws://192.168.1.200:4455;"/>
+  -->
 </head>
+
 <body>
 <div class="topbar">
 <strong>Teleprompter_Pro</strong>
