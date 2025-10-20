@@ -58,9 +58,9 @@ try {
     window.toast = toast;
     window.initToastContainer = initToastContainer;
   }
-} catch (e) {
-  void e;
-}
+  } catch {
+    void 0;
+  }
 
 // No module.exports here to avoid referencing 'module' in non-CommonJS lint environments
 

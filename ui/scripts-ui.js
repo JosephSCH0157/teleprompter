@@ -5,12 +5,12 @@ try {
   if (typeof _req === 'function') {
     try {
       Scripts = _req('../scriptsStore.js')?.Scripts || _req('../scriptsStore.js');
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
   }
-} catch (e) {
-  void e;
+} catch {
+  void 0;
 }
 try {
   if (!Scripts && typeof window !== 'undefined' && window.Scripts) Scripts = window.Scripts;
@@ -47,8 +47,8 @@ try {
         _req('../utils/safe-dom.js')?.safeDOM ||
         (typeof window !== 'undefined' && window.safeDOM) ||
         _safeDOM_fallback;
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
     try {
       importedToast =
@@ -110,8 +110,8 @@ function refreshScriptsDropdown() {
     if (!scriptSlots) return;
     scriptSlots.innerHTML = list.map((s) => `<option value="${s.id}">${s.title}</option>`).join('');
     if (currentScriptId) scriptSlots.value = currentScriptId;
-  } catch (e) {
-    console.debug('refreshScriptsDropdown', e);
+  } catch {
+    console.debug('refreshScriptsDropdown');
   }
 }
 
@@ -119,8 +119,8 @@ function initScriptsUI() {
   try {
     Scripts && typeof Scripts.init === 'function' && Scripts.init();
     refreshScriptsDropdown();
-  } catch (e) {
-    console.debug('initScriptsUI', e);
+  } catch {
+    console.debug('initScriptsUI');
   }
 }
 
@@ -139,11 +139,11 @@ function onScriptSave() {
         : null;
     refreshScriptsDropdown();
     toastFn('Script saved', { type: 'ok' });
-  } catch (e) {
+  } catch {
     try {
-      console.error('onScriptSave error', e);
-    } catch (err) {
-      void err;
+      console.error('onScriptSave error');
+    } catch {
+      void 0;
     }
     toastFn('Save failed', { type: 'error' });
   }
@@ -165,12 +165,12 @@ function onScriptLoad() {
     try {
       if (editor) editor.dispatchEvent(new Event('input', { bubbles: true }));
       else if (typeof window.renderScript === 'function') window.renderScript(s.content || '');
-    } catch (e) {
-      console.debug('scripts-ui: trigger render failed', e);
+    } catch {
+      console.debug('scripts-ui: trigger render failed');
     }
     toastFn('Script loaded', { type: 'ok' });
-  } catch (e) {
-    console.debug('onScriptLoad', e);
+  } catch {
+    console.debug('onScriptLoad');
     toastFn('Load failed', { type: 'error' });
   }
 }
@@ -182,8 +182,8 @@ function onScriptDelete() {
     scriptTitle && (scriptTitle.value = '');
     refreshScriptsDropdown();
     toastFn('Script deleted');
-  } catch (e) {
-    console.debug('onScriptDelete', e);
+  } catch {
+    console.debug('onScriptDelete');
     toastFn('Delete failed', { type: 'error' });
   }
 }
@@ -199,8 +199,8 @@ function onScriptRename() {
       scriptTitle && (scriptTitle.value = t);
       refreshScriptsDropdown();
     }
-  } catch (e) {
-    console.debug('onScriptRename', e);
+  } catch {
+    console.debug('onScriptRename');
   }
 }
 
@@ -211,8 +211,8 @@ try {
   scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
   scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
   scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
-} catch (e) {
-  console.debug('scripts-ui wiring', e);
+} catch {
+  console.debug('scripts-ui wiring');
 }
 
 // autosave

@@ -14,8 +14,8 @@ let _toast = function (msg, opts) {
   try {
     if (typeof window !== 'undefined' && typeof window._toast === 'function')
       return window._toast(msg, opts);
-  } catch (e) {
-    void e;
+  } catch {
+    void 0;
   }
   try {
     console.debug('[toast]', msg, opts || '');
