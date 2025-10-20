@@ -4211,23 +4211,57 @@ let _toast = function (msg, opts) {
     displayChip = document.getElementById('displayChip');
     recChip = document.getElementById('recChip');
     scrollChip = document.getElementById('scrollChip');
-    // Rec chip UI helper
-    window.setRecChip = function (state) {
+    // Rec chip accessibility helper: setRec(text, {tone, assertive})
+    window.setRec = function (text, { tone = 'neutral', assertive = false } = {}) {
       try {
         const el = document.getElementById('recChip');
         if (!el) return;
-        // normalize incoming states
+        // Choose polite vs assertive dynamically
+        try {
+          el.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+          el.setAttribute('aria-atomic', 'true');
+        } catch {}
+        try {
+          if (tone) el.dataset.tone = String(tone);
+          else el.removeAttribute('data-tone');
+        } catch {}
+        try {
+          el.textContent = String(text || '');
+        } catch {}
+      } catch {
+        void 0;
+      }
+    };
+
+    // Backwards-compatible wrapper: keep setRecChip(state) mapping to setRec
+    window.setRecChip = function (state) {
+      try {
         const s = String(state || '').toLowerCase();
-        el.classList.remove('rec-recording', 'idle');
         if (s === 'recording' || s === 'record') {
-          el.textContent = 'Recording...';
-          el.classList.add('rec-recording');
+          window.setRec('Recording...', { tone: 'ok', assertive: false });
+          try {
+            const el = document.getElementById('recChip');
+            el.classList && el.classList.remove('idle');
+            el.classList && el.classList.add('rec-recording');
+          } catch {}
+        } else if (s === 'listening' || /listen/.test(s)) {
+          window.setRec('Speech: listening…', { tone: 'ok', assertive: false });
+        } else if (s === 'preparing') {
+          window.setRec('Speech: preparing…', { tone: 'neutral' });
+        } else if (s === 'error') {
+          window.setRec('Speech: error', { tone: 'error', assertive: true });
+        } else if (s === 'unsupported') {
+          window.setRec('Speech: unsupported', { tone: 'warn', assertive: true });
         } else {
-          el.textContent = 'Idle';
-          el.classList.add('idle');
+          window.setRec('Speech: idle', { tone: 'neutral', assertive: false });
+          try {
+            const el = document.getElementById('recChip');
+            el.classList && el.classList.remove('rec-recording');
+            el.classList && el.classList.add('idle');
+          } catch {}
         }
       } catch {
-        void e;
+        void 0;
       }
     };
     // OBS runtime flags (safe defaults)
