@@ -164,6 +164,31 @@ let _toast = function (msg, opts) {
         report: () => { try { const m = performance.getEntriesByType('measure'); console.table(m.map(x=>({name:x.name,duration:Math.round(x.duration)}))); } catch {} }
       };
     } catch {}
+    // Dev-only paint vitals: capture LCP and CLS when available to pair with perf marks
+    try {
+      if (window.__TP_DEV && typeof PerformanceObserver !== 'undefined') {
+        try {
+          const po = new PerformanceObserver((list) => {
+            try {
+              for (const e of list.getEntries()) {
+                try {
+                  if (e.entryType === 'largest-contentful-paint') {
+                    console.info('[TP-Pro] LCP', Math.round(e.startTime));
+                  } else if (e.entryType === 'layout-shift' && !e.hadRecentInput) {
+                    window.__tpCLS = (window.__tpCLS || 0) + (e.value || 0);
+                    try {
+                      console.info('[TP-Pro] CLS+', (e.value || 0).toFixed(4), 'total=', (window.__tpCLS || 0).toFixed(4));
+                    } catch {}
+                  }
+                } catch {}
+              }
+            } catch {}
+          });
+          try { po.observe({ type: 'largest-contentful-paint', buffered: true }); } catch {}
+          try { po.observe({ type: 'layout-shift', buffered: true }); } catch {}
+        } catch {}
+      }
+    } catch {}
   try {
     __tpBootPush('after-boot-block');
   } catch {}
