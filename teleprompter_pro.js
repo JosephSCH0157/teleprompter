@@ -4211,55 +4211,65 @@ let _toast = function (msg, opts) {
     displayChip = document.getElementById('displayChip');
     recChip = document.getElementById('recChip');
     scrollChip = document.getElementById('scrollChip');
-    // Rec chip accessibility helper: setRec(text, {tone, assertive})
-    window.setRec = function (text, { tone = 'neutral', assertive = false } = {}) {
+    // Rec chip UI helper — accessible API
+    // Usage:
+    // window.setRecChip('recording') // backward-compatible
+    // window.setRecChip({ text: 'Speech: listening…', tone: 'ok', assertive: false, busy: true })
+    window.setRecChip = function (state) {
       try {
         const el = document.getElementById('recChip');
         if (!el) return;
-        // Choose polite vs assertive dynamically
-        try {
-          el.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
-          el.setAttribute('aria-atomic', 'true');
-        } catch {}
-        try {
-          if (tone) el.dataset.tone = String(tone);
-          else el.removeAttribute('data-tone');
-        } catch {}
-        try {
-          el.textContent = String(text || '');
-        } catch {}
-      } catch {
-        void 0;
-      }
-    };
 
-    // Backwards-compatible wrapper: keep setRecChip(state) mapping to setRec
-    window.setRecChip = function (state) {
-      try {
-        const s = String(state || '').toLowerCase();
-        if (s === 'recording' || s === 'record') {
-          window.setRec('Recording...', { tone: 'ok', assertive: false });
+        // Helper to actually set the text and attributes
+        const apply = ({ text = '', tone = 'neutral', assertive = false, busy = false } = {}) => {
           try {
-            const el = document.getElementById('recChip');
-            el.classList && el.classList.remove('idle');
-            el.classList && el.classList.add('rec-recording');
-          } catch {}
-        } else if (s === 'listening' || /listen/.test(s)) {
-          window.setRec('Speech: listening…', { tone: 'ok', assertive: false });
-        } else if (s === 'preparing') {
-          window.setRec('Speech: preparing…', { tone: 'neutral' });
-        } else if (s === 'error') {
-          window.setRec('Speech: error', { tone: 'error', assertive: true });
-        } else if (s === 'unsupported') {
-          window.setRec('Speech: unsupported', { tone: 'warn', assertive: true });
-        } else {
-          window.setRec('Speech: idle', { tone: 'neutral', assertive: false });
-          try {
-            const el = document.getElementById('recChip');
-            el.classList && el.classList.remove('rec-recording');
-            el.classList && el.classList.add('idle');
-          } catch {}
+            // set aria-live depending on severity
+            el.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+            el.setAttribute('aria-atomic', 'true');
+            if (busy) el.setAttribute('aria-busy', 'true');
+            else el.removeAttribute('aria-busy');
+
+            // optional styling hook
+            try {
+              el.dataset.tone = tone;
+            } catch {}
+
+            // update classes for visual state mapping
+            el.classList.remove('rec-recording', 'idle');
+            const txt = String(text || '');
+            if (/record/i.test(txt)) el.classList.add('rec-recording');
+            else el.classList.add('idle');
+
+            // update content last so screen readers pick up changes
+            el.textContent = txt || 'Idle';
+          } catch {
+            // noop
+          }
+        };
+
+        // Backwards-compatible simple string handling
+        if (typeof state === 'string' || typeof state === 'number') {
+          const s = String(state || '').toLowerCase();
+          if (s === 'recording' || s === 'record') {
+            apply({ text: 'Recording...', tone: 'ok', assertive: false, busy: true });
+          } else if (/listening|listening\u2026|preparing/i.test(s)) {
+            apply({ text: 'Speech: listening…', tone: 'ok', assertive: false, busy: true });
+          } else if (/unavailable|unsupported|error/i.test(s)) {
+            apply({ text: 'Speech: unavailable', tone: 'error', assertive: true, busy: false });
+          } else {
+            apply({ text: 'Idle', tone: 'neutral', assertive: false, busy: false });
+          }
+          return;
         }
+
+        // If an object is passed, accept keys: text, tone, assertive, busy
+        if (state && typeof state === 'object') {
+          apply(state);
+          return;
+        }
+
+        // fallback
+        apply({ text: 'Idle', tone: 'neutral', assertive: false, busy: false });
       } catch {
         void 0;
       }
