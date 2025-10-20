@@ -61,6 +61,12 @@
   <!-- Debug HUD helper BEFORE main app so ~ works -->
   <script defer src="debug-tools.js"></script>
 
+  <!-- Preload critical modules and scripts to shorten main-thread work and reduce LCP delay -->
+  <link rel="preload" as="script" href="teleprompter_pro.js">
+  <link rel="modulepreload" href="recorders.js">
+  <link rel="modulepreload" href="adapters/obs.js">
+  <link rel="modulepreload" href="adapters/obsBridge.js">
+
   <!-- Main app -->
   <script defer src="teleprompter_pro.js"></script>
 

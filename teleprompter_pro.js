@@ -76,6 +76,11 @@ let _toast = function (msg, opts) {
   }
   // Boot instrumentation (added)
   try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      try { performance.mark('app-init-start'); } catch { }
+    }
+  } catch {}
+  try {
     window.__TP_BOOT_TRACE = [];
     const _origLog = console.log.bind(console);
     const tag = (m) => `[TP-BOOT ${Date.now() % 100000}] ${m}`;
@@ -143,9 +148,22 @@ let _toast = function (msg, opts) {
       } catch {}
     });
     _origLog(tag('installed global error hooks'));
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          try { performance.mark('boot-global-hooks-installed'); } catch {}
+        }
+      } catch {}
   } catch {
     void e;
   }
+    // Expose a small perf helper to measure sections during runtime
+    try {
+      window.__tpPerf = {
+        mark: (n) => { try { performance && performance.mark && performance.mark(n); } catch {} },
+        measure: (name, start, end) => { try { performance && performance.measure && performance.measure(name, start, end); } catch {} },
+        report: () => { try { const m = performance.getEntriesByType('measure'); console.table(m.map(x=>({name:x.name,duration:Math.round(x.duration)}))); } catch {} }
+      };
+    } catch {}
   try {
     __tpBootPush('after-boot-block');
   } catch {}
@@ -650,6 +668,12 @@ let _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('init-scheduling-early-exited');
+  } catch {}
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      try { performance.mark('app-init-end'); } catch {}
+      try { performance.measure('app-init', 'app-init-start', 'app-init-end'); } catch {}
+    }
   } catch {}
 
   /* ──────────────────────────────────────────────────────────────
