@@ -1,6 +1,6 @@
 // Local OBS websocket test script
 // Usage:
-//   node tools/obs_test_local.js ws://192.168.1.198:4455 password
+//   node tools/obs_test_local.js ws://192.168.1.200:4455 password
 // Or with npx if you don't want to add a dependency:
 //   npx node -e "(async()=>{ /* ... */ })()"
 

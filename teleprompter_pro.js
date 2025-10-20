@@ -949,7 +949,7 @@ let _toast = function (msg, opts) {
           <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
           <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px"></label>
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''}/> Auto-reconnect</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
+          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.200:4455')}" placeholder="ws://host:port" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
           <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
@@ -4766,7 +4766,7 @@ let _toast = function (msg, opts) {
           const cfgs = { ...(s.configs || {}) };
           if (!cfgs.obs)
             cfgs.obs = {
-              url: obsUrlInput?.value || 'ws://192.168.1.198:4455',
+              url: obsUrlInput?.value || 'ws://192.168.1.200:4455',
               password: obsPassInput?.value || '',
             };
           __recorder.setSettings({ selected: sel, configs: cfgs });
@@ -5017,7 +5017,7 @@ let _toast = function (msg, opts) {
         // Prefer main panel inputs when present; otherwise fall back to Settings inputs
         const urlEl = obsUrlInput || document.getElementById('settingsObsUrl');
         const passEl = obsPassInput || document.getElementById('settingsObsPass');
-        const url = urlEl?.value || prev.url || 'ws://192.168.1.198:4455';
+  const url = urlEl?.value || prev.url || 'ws://192.168.1.200:4455';
         const password = passEl?.value ?? prev.password ?? '';
         cfgs.obs = { ...prev, url, password };
         __recorder.setSettings({ configs: cfgs });

@@ -35,8 +35,8 @@ const LS_KEY = 'tp_rec_settings_v1';
 let settings = {
   mode: 'multi',
   selected: ['obs', 'descript'],
-  configs: {
-    obs: { url: 'ws://192.168.1.198:4455', password: '' },
+    configs: {
+      obs: { url: 'ws://192.168.1.200:4455', password: '' },
     companion: { url: 'http://127.0.0.1:8000', buttonId: '1.1' },
     bridge: { startUrl: 'http://127.0.0.1:5723/record/start', stopUrl: '' },
     descript: { startHotkey: 'Ctrl+R', via: 'bridge' },
