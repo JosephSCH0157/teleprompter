@@ -48,8 +48,9 @@
       await obs.disconnect();
     } catch {}
     process.exit(0);
-  } catch (e) {
+  } catch {
     console.error('[smoke] ERROR', e && e.message ? e.message : e);
     process.exit(3);
   }
 })();
+

@@ -15,7 +15,7 @@ const raw = fs.readFileSync(reportPath, 'utf8');
 let report;
 try {
   report = JSON.parse(raw);
-} catch (err) {
+} catch {
   console.error('failed to parse JSON:', err && err.message);
   process.exit(2);
 }
@@ -116,3 +116,4 @@ if (!allOk) {
 }
 console.log('\nAll required UI controls and checks passed.');
 process.exit(0);
+

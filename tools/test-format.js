@@ -43,7 +43,8 @@ try {
     }
   }
   process.exit(ok ? 0 : 1);
-} catch (e) {
+} catch {
   console.error('ERROR running test:', e);
   process.exit(3);
 }
+

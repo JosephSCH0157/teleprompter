@@ -29,7 +29,7 @@ async function _getStats() {
     await _connectOnce();
     if (!_obsClient) return null;
     return await _obsClient.call('GetStats');
-  } catch (e) {
+  } catch {
     _emit('error', e);
     return null;
   }
@@ -105,7 +105,7 @@ async function _connectOnce() {
     _emit('connect');
     _connecting = false;
     return true;
-  } catch (e) {
+  } catch {
     _connecting = false;
     _connected = false;
     _setObsConnChip(false);
@@ -150,7 +150,7 @@ const bridge = {
       await _connectOnce();
       if (!_obsClient) throw new Error('OBS client not available');
       await _obsClient.call('StartRecord');
-    } catch (e) {
+    } catch {
       _emit('error', e);
       throw e;
     }
@@ -159,7 +159,7 @@ const bridge = {
     try {
       if (!_obsClient) return;
       await _obsClient.call('StopRecord');
-    } catch (e) {
+    } catch {
       _emit('error', e);
       throw e;
     }
@@ -169,7 +169,7 @@ const bridge = {
       await _connectOnce();
       if (!_obsClient) return { outputActive: false };
       return await _obsClient.call('GetRecordStatus');
-    } catch (e) {
+    } catch {
       _emit('error', e);
       return { outputActive: false };
     }
@@ -181,7 +181,7 @@ const bridge = {
       const res = await _obsClient.call('GetSceneList');
       // res.scenes expected
       return res && (res.scenes || res.sceneList || null);
-    } catch (e) {
+    } catch {
       _emit('error', e);
       return null;
     }
@@ -194,17 +194,17 @@ const bridge = {
       try {
         const r = await _obsClient.call('GetCurrentProgramScene');
         return r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName || null);
-      } catch (e) {
+      } catch {
         // fallback name
         try {
           const r2 = await _obsClient.call('GetProgramScene');
           return r2 && (r2.currentProgramScene || r2.sceneName || null);
-        } catch (e2) {
+        } catch {
           _emit('error', e2);
           return null;
         }
       }
-    } catch (e) {
+    } catch {
       _emit('error', e);
       return null;
     }
@@ -217,7 +217,7 @@ const bridge = {
       await _connectOnce();
       if (!_obsClient) throw new Error('Not connected');
       return await _obsClient.call('SetCurrentProgramScene', { sceneName });
-    } catch (e) {
+    } catch {
       _emit('error', e);
       throw e;
     }
@@ -251,3 +251,4 @@ try {
 } catch {}
 
 export default bridge;
+

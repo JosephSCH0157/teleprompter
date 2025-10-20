@@ -4,10 +4,10 @@
 let _toast = function (msg, opts) {
   try {
     if (typeof moduleToast === 'function') return moduleToast(msg, opts);
-  } catch (e) {
+  } catch {
     try {
       console.debug('module toast access failed', e);
-    } catch (e) {
+    } catch {
       void e;
     }
   }
@@ -48,7 +48,7 @@ let _toast = function (msg, opts) {
           return p;
         }
       };
-    } catch (e) {
+    } catch {
       void e;
     }
     // Dev-only cache bust handled via __TP_ADDV and HTML loader; no top-level await here
@@ -71,7 +71,7 @@ let _toast = function (msg, opts) {
     try {
       if (CALM) console.info('[TP-Pro] Calm Mode enabled');
     } catch {}
-  } catch (e) {
+  } catch {
     void e;
   }
   // Boot instrumentation (added)
@@ -88,7 +88,7 @@ let _toast = function (msg, opts) {
         const rec = { t: Date.now(), m };
         window.__TP_BOOT_TRACE.push(rec);
         console.log('[TP-TRACE]', rec.m);
-      } catch (err) {
+      } catch {
         try {
           console.warn('[TP-TRACE-FAIL]', err);
         } catch {}
@@ -124,7 +124,7 @@ let _toast = function (msg, opts) {
           t: Date.now(),
           m: 'onerror:' + (ev?.error?.message || ev?.message),
         });
-      } catch (e) {
+      } catch {
         void e;
       }
       try {
@@ -143,7 +143,7 @@ let _toast = function (msg, opts) {
       } catch {}
     });
     _origLog(tag('installed global error hooks'));
-  } catch (e) {
+  } catch {
     void e;
   }
   try {
@@ -163,12 +163,12 @@ let _toast = function (msg, opts) {
         } catch {
           try {
             window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
-          } catch (e) {
+          } catch {
             void e;
           }
         }
       }
-    } catch (e) {
+    } catch {
       void e;
     }
   });
@@ -230,7 +230,7 @@ let _toast = function (msg, opts) {
           });
         } catch {}
       }
-    } catch (e) {
+    } catch {
       void e;
     }
   }
@@ -250,7 +250,7 @@ let _toast = function (msg, opts) {
             ) {
               return _initCore();
             }
-          } catch (e) {
+          } catch {
             void e;
           }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
@@ -434,7 +434,7 @@ let _toast = function (msg, opts) {
           }
           try {
             __tpBootPush('window-init-proxy-waiting-core');
-          } catch (e) {
+          } catch {
             void e;
           }
           // Wait briefly for core to appear (either via assignment or resolve hook)
@@ -462,7 +462,7 @@ let _toast = function (msg, opts) {
             __tpBootPush('window-init-proxy-waiting-core');
           } catch {}
           return await window._initCoreRunner();
-        } catch (e) {
+        } catch {
           void e;
         }
       };
@@ -500,14 +500,14 @@ let _toast = function (msg, opts) {
           window.__tpEarlyInitRan = true;
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
-          } catch (e) {
+          } catch {
             void e;
           }
-        } catch (e) {
+        } catch {
           void e;
         }
       });
-    } catch (e) {
+    } catch {
       void e;
     }
   })();
@@ -545,7 +545,7 @@ let _toast = function (msg, opts) {
           try {
             if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch (e) {
+          } catch {
               console.warn('Mini normalize failed', e);
             }
         });
@@ -553,7 +553,7 @@ let _toast = function (msg, opts) {
       try {
         __tpBootPush('minimal-boot');
       } catch {}
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro] minimalBoot error', e);
     }
   }
@@ -574,7 +574,7 @@ let _toast = function (msg, opts) {
         window.__tpInitCalled = true;
         init();
       }
-        } catch (e) {
+        } catch {
       console.error('[TP-Pro] early force init error', e);
     }
   }, 0);
@@ -609,7 +609,7 @@ let _toast = function (msg, opts) {
           try {
             await window._initCore();
             console.log('[TP-Pro] _initCore early path end (success)');
-          } catch (e) {
+          } catch {
             console.error('[TP-Pro] _initCore failed (early path):', e);
           }
         })();
@@ -645,7 +645,7 @@ let _toast = function (msg, opts) {
         Promise.resolve().then(whenInitReady);
       }
     }
-    } catch (e) {
+    } catch {
     console.warn('early init scheduling error', e);
   }
   try {
@@ -742,7 +742,7 @@ let _toast = function (msg, opts) {
       } else {
         _toast = window._toast;
       }
-    } catch (e) {
+    } catch {
       void e;
     }
 
@@ -761,7 +761,7 @@ let _toast = function (msg, opts) {
             _toast = m.toast;
           } catch {}
         }
-      } catch (e) {
+      } catch {
         // module not available yet or import failed; keep fallback
         try {
           console.debug('toast module import failed', e);
@@ -831,15 +831,15 @@ let _toast = function (msg, opts) {
         try {
           if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
           else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-        } catch (e) {
+        } catch {
           try {
             alert('Normalize error: ' + (e?.message || e));
-          } catch (innerErr) {
+          } catch {
             console.debug('alert failed', innerErr);
           }
         }
       });
-    } catch (e) {
+    } catch {
       void e;
     }
   }
@@ -943,20 +943,21 @@ let _toast = function (msg, opts) {
         'Recording',
         'recording',
         `
-        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
-          <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
+        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
+          <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
+          <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false'}/> Enable OBS</label>
           <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
-          <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
-          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px"></label>
-          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''}/> Auto-reconnect</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.200:4455')}" placeholder="ws://host:port" />
-          <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
+          <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
+          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene"></label>
+          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
+          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.200:4455')}" placeholder="ws://host:port" aria-label="OBS websocket URL" />
+          <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" aria-label="OBS password" />
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
-          <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
-          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px">Sync & Test</button>
-          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px">Poke</button>
+          <button id="settingsObsTest" type="button" class="btn-chip" aria-label="Test OBS connection">Test</button>
+          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px" aria-label="Sync and Test OBS">Sync & Test</button>
+          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px" aria-label="Poke OBS">Poke</button>
         </form>
-        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" style="margin-top:8px"></div>
+        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" aria-atomic="true" style="margin-top:8px"></div>
   <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
   <div class="settings-small" style="margin-top:6px; font-size:0.9em; color:#444">Recommended OBS settings: set Recording Filename to <code>Anvil-{date}-{time}</code> (optionally include <code>{scene}</code> or <code>{profile}</code>), and set Container to <strong>mp4</strong> (or use <strong>mkv</strong> with auto-remux on stop for crash-safe recordings).</div>`
       )
@@ -991,7 +992,7 @@ let _toast = function (msg, opts) {
       syncSettingsValues();
       setupSettingsTabs();
       if (body.querySelector('.settings-card')) _settingsBuilt = true;
-    } catch (e) {
+    } catch {
       console.warn('Settings build failed, will retry', e);
       _settingsBuilt = false;
     }
@@ -1004,12 +1005,12 @@ let _toast = function (msg, opts) {
     // Ensure OBS fields are hydrated from storage and persistence is wired before we mirror values
     try {
       hydrateObsFieldsFromStore();
-    } catch (e) {
+    } catch {
       void e;
     }
     try {
       wireObsPersistence();
-    } catch (e) {
+    } catch {
       void e;
     }
     // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
@@ -1048,7 +1049,7 @@ let _toast = function (msg, opts) {
       const obsEnable = document.getElementById('settingsEnableObs');
       const mainEnable = document.getElementById('enableObs');
       if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
-    } catch (e) {
+    } catch {
       void e;
     }
     try {
@@ -1056,7 +1057,7 @@ let _toast = function (msg, opts) {
       if (autoRec) {
         try {
           autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
-        } catch (e) {
+        } catch {
           void e;
         }
         autoRec.addEventListener('change', () => {
@@ -1095,7 +1096,7 @@ let _toast = function (msg, opts) {
         try {
           // Do not auto-set from storage while diagnosing auth issues; keep unchecked.
           rem.checked = false;
-        } catch (e) {
+        } catch {
           void e;
         }
         // Keep "Remember password" inert for now; notify user when toggled.
@@ -1109,7 +1110,7 @@ let _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('after-syncSettingsValues-def');
-  } catch (e) {
+  } catch {
     void e;
   }
 
@@ -1219,7 +1220,7 @@ let _toast = function (msg, opts) {
       setTimeout(() => {
         try {
           runSelfChecks();
-        } catch (e) {
+        } catch {
           void e;
         }
       }, 120);
@@ -1238,7 +1239,7 @@ let _toast = function (msg, opts) {
       micSel.addEventListener('change', () => {
         try {
           localStorage.setItem(DEVICE_KEY, micSel.value);
-        } catch (e) {
+        } catch {
           void e;
         }
       });
@@ -1364,7 +1365,7 @@ let _toast = function (msg, opts) {
           mainPass.dispatchEvent(new Event('input', { bubbles: true }));
           mainPass.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      } catch (e) {
+      } catch {
         void e;
       }
 
@@ -1375,10 +1376,10 @@ let _toast = function (msg, opts) {
         const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
         try {
           rec?.reconfigure?.();
-        } catch (e) {
+        } catch {
           void e;
         }
-      } catch (e) {
+      } catch {
         void e;
       }
     });
@@ -1410,7 +1411,7 @@ let _toast = function (msg, opts) {
         try {
           const ok = await __recorder.get('obs').test?.();
           _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
-        } catch (e) {
+        } catch {
           _toast('OBS: failed', { type: 'error' });
         }
       } catch {
@@ -1436,7 +1437,7 @@ let _toast = function (msg, opts) {
           try {
             rec?.reconfigure?.();
           } catch {}
-        } catch (e) {
+        } catch {
           void e;
         }
         // Run the in-page test if provided
@@ -1447,7 +1448,7 @@ let _toast = function (msg, opts) {
             // fallback: click existing test button if present
             document.getElementById('obsTestBtn')?.click();
           }
-        } catch (e) {
+        } catch {
           console.warn('[TP-Pro] Sync & Test failed', e);
         }
       } catch {}
@@ -1530,13 +1531,13 @@ let _toast = function (msg, opts) {
       const ev = new Event('input');
       ta.dispatchEvent(ev);
       alert('Basic normalization applied.');
-    } catch (e) {
+    } catch {
       alert('Normalize fallback failed: ' + (e && e.message));
     }
   }
   try {
     __tpBootPush('after-fallbackNormalize-def');
-  } catch (e) {
+  } catch {
     void e;
   }
 
@@ -1825,7 +1826,7 @@ let _toast = function (msg, opts) {
         ta.addEventListener('scroll', rebuild, { passive: true });
         wrap.appendChild(overlay);
       }
-    } catch (e) {
+    } catch {
       void e;
     }
 
@@ -1845,7 +1846,7 @@ let _toast = function (msg, opts) {
         recAutoRestart = !!v;
         try {
           localStorage.setItem('tp_rec_autorestart_v1', recAutoRestart ? '1' : '0');
-        } catch (e) {
+        } catch {
           void e;
         }
       },
@@ -1877,7 +1878,7 @@ let _toast = function (msg, opts) {
         console.warn('[TP-Pro] recorders.js loaded but no init() export found');
       }
       return __rec;
-    } catch (e) {
+    } catch {
       console.error('[TP-Pro] Failed to import recorders.js', e);
       return null;
     }
@@ -1901,14 +1902,14 @@ let _toast = function (msg, opts) {
               return __obsAdapterWrapper;
             }
           }
-        } catch (e) {
+        } catch {
           void e;
         }
         // brief pause
         await new Promise((res) => setTimeout(res, pollInterval));
       }
       return null;
-    } catch (e) {
+    } catch {
       void e;
       return null;
     }
@@ -1925,7 +1926,7 @@ let _toast = function (msg, opts) {
           'position:fixed;right:8px;bottom:8px;max-width:320px;max-height:200px;overflow:auto;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:6px;border-radius:6px;z-index:99999';
         try {
           document.body.appendChild(el);
-        } catch (e) {
+        } catch {
           void e;
         }
       }
@@ -1934,7 +1935,7 @@ let _toast = function (msg, opts) {
       el.appendChild(line);
       // Trim to last 40 lines
       while (el.childNodes.length > 40) el.removeChild(el.firstChild);
-    } catch (e) {
+    } catch {
       void e;
     }
   }
@@ -1961,41 +1962,41 @@ let _toast = function (msg, opts) {
                 appendObsLogLine(
                   `adapter.${m}(${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(',')})`
                 );
-              } catch (e) {
+              } catch {
                 void e;
               }
               try {
                 const res = await orig(...args);
                 try {
                   appendObsLogLine(`adapter.${m} -> ok`);
-                } catch (e) {
+                } catch {
                   void e;
                 }
                 return res;
-              } catch (err) {
+              } catch {
                 try {
                   appendObsLogLine(
                     `adapter.${m} -> error ${err && err.message ? err.message : String(err)}`
                   );
-                } catch (e) {
+                } catch {
                   void e;
                 }
                 throw err;
               }
             };
           }
-        } catch (e) {
+        } catch {
           void e;
         }
       }
       try {
         adapter.__wrapped = true;
-      } catch (e) {
+      } catch {
         void e;
       }
       appendObsLogLine('adapter wrapped');
       return adapter;
-    } catch (e) {
+    } catch {
       void e;
       return adapter;
     }
@@ -2493,21 +2494,21 @@ let _toast = function (msg, opts) {
       audioStream = stream;
       try {
         permChip && (permChip.textContent = 'Mic: allowed');
-      } catch (e) {
+      } catch {
         void e;
       }
       startDbMeter(stream);
       // Persist chosen device
       try {
         if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId);
-      } catch (e) {
+      } catch {
         void e;
       }
-    } catch (e) {
+    } catch {
       warn('Mic denied or failed', e);
       try {
         permChip && (permChip.textContent = 'Mic: denied');
-      } catch (e2) {
+      } catch {
         void e2;
       }
     }
@@ -2522,7 +2523,7 @@ let _toast = function (msg, opts) {
           } catch {}
         });
       }
-    } catch (e) {
+    } catch {
       void e;
     }
     audioStream = null;
@@ -2554,7 +2555,7 @@ let _toast = function (msg, opts) {
             micSelB.appendChild(o);
           });
           if (cur && Array.from(micSelB.options).some((o) => o.value === cur)) micSelB.value = cur;
-        } catch (e) {
+        } catch {
           void e;
         }
       }
@@ -2589,7 +2590,7 @@ let _toast = function (msg, opts) {
           sel.value = prefer;
           sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      } catch (e) {
+      } catch {
         void e;
       }
     } catch {
@@ -2630,7 +2631,7 @@ let _toast = function (msg, opts) {
 
       if (chkMain) chkMain.checked = !!remember;
       if (chkSet) chkSet.checked = !!remember;
-    } catch (e) {
+    } catch {
       void e;
     }
   }
@@ -2691,7 +2692,7 @@ let _toast = function (msg, opts) {
             msgs.appendChild(el);
           });
           msgs.scrollTop = msgs.scrollHeight;
-        } catch (e) {
+        } catch {
           void e;
         }
       });
@@ -2748,7 +2749,7 @@ let _toast = function (msg, opts) {
               localStorage.setItem('tp_obs_password', v.pass);
             } catch {}
           }
-        } catch (e) {
+        } catch {
           void e;
         }
       };
@@ -2769,7 +2770,7 @@ let _toast = function (msg, opts) {
           const path = window.__TP_ADDV ? window.__TP_ADDV('./adapters/obsBridge.js') : './adapters/obsBridge.js';
           await import(path);
           try { if (window.__TP_DEV) console.debug('[TP-Pro] early obsBridge import attempted'); } catch {}
-        } catch (e) {
+        } catch {
           try { if (window.__TP_DEV) console.debug('[TP-Pro] early obsBridge import failed', e); } catch {}
         }
       })();
@@ -3075,7 +3076,7 @@ let _toast = function (msg, opts) {
           msg = window.validateStandardTags
             ? window.validateStandardTags(true)
             : 'Validator missing.';
-        } catch (_e) {
+        } catch {
           msg = 'Validation error: ' + (_e?.message || _e);
         }
         try {
@@ -3088,7 +3089,7 @@ let _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('after-ensureHelpUI-def');
-  } catch (e) {
+  } catch {
     void e;
   }
 
@@ -3182,7 +3183,7 @@ let _toast = function (msg, opts) {
             if (typeof renderScript === 'function') renderScript(out);
             setStatus && setStatus('Normalized.');
           }
-        } catch (err) {
+        } catch {
           void err;
         }
       });
@@ -3197,11 +3198,11 @@ let _toast = function (msg, opts) {
           } else {
             alert('Validation is not available in this build.');
           }
-        } catch (err) {
+        } catch {
           console.error(err);
         }
       });
-    } catch (err) {
+    } catch {
       console.error('Help injection failed', err);
     }
   }
@@ -3248,13 +3249,13 @@ let _toast = function (msg, opts) {
           VIEWER_HEIGHT_BASE
         );
       }
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro Calm] scroller lock failed', e);
     }
     // Run minimal wiring first (meters, help overlay, normalize button)
     try {
       __initMinimal();
-    } catch (e) {
+    } catch {
       console.warn('Minimal init failed', e);
     }
     // ⬇️ grab these *first*
@@ -4041,7 +4042,7 @@ let _toast = function (msg, opts) {
   if (!ScriptsModule) {
           try {
             ScriptsModule = await import('./scriptsStore_fixed.js');
-          } catch (impErr) {
+          } catch {
             try {
               console.error('[ScriptsModule] import ./scriptsStore_fixed.js failed', impErr);
             } catch {}
@@ -4052,7 +4053,7 @@ let _toast = function (msg, opts) {
               // final fallback: try the legacy path
               try {
                 ScriptsModule = await import('./scriptsStore.js');
-              } catch (legacyErr) {
+              } catch {
                 try {
                   console.error('[ScriptsModule] fallback import ./scriptsStore.js failed', legacyErr);
                 } catch {}
@@ -4064,7 +4065,7 @@ let _toast = function (msg, opts) {
         if (!ScriptsModule || !ScriptsModule.Scripts) throw new Error('Scripts module not available');
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
-      } catch (e) {
+      } catch {
         console.error('initScriptsUI failed', e);
       }
     }
@@ -4080,7 +4081,7 @@ let _toast = function (msg, opts) {
           .map((s) => `<option value="${s.id}">${s.title}</option>`)
           .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
-      } catch (e) {
+      } catch {
         void e;
       }
     }
@@ -4090,7 +4091,7 @@ let _toast = function (msg, opts) {
   if (!ScriptsModule) {
           try {
             ScriptsModule = await import('./scriptsStore_fixed.js');
-          } catch (impErr) {
+          } catch {
             try {
               console.error('[ScriptsModule] import failed in onScriptSave', impErr);
             } catch {}
@@ -4104,10 +4105,10 @@ let _toast = function (msg, opts) {
         currentScriptId = ScriptsModule.Scripts.save({ id: currentScriptId, title, content: getEditorContent() });
         refreshScriptsDropdown();
         _toast('Script saved', { type: 'ok' });
-      } catch (e) {
+      } catch {
         try {
           console.error('[Scripts.save] error', e);
-        } catch (err) {
+        } catch {
           void err;
         }
         // expose last save error for diagnostics and attach a session fallback
@@ -4142,7 +4143,7 @@ let _toast = function (msg, opts) {
         if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
         setEditorContent(s.content || '');
         _toast('Script loaded', { type: 'ok' });
-      } catch (e) {
+      } catch {
         console.debug('Scripts.load error', e);
         _toast('Load failed', { type: 'error' });
       }
@@ -4156,7 +4157,7 @@ let _toast = function (msg, opts) {
         scriptTitle && (scriptTitle.value = '');
         refreshScriptsDropdown();
         _toast('Script deleted', {});
-      } catch (e) {
+      } catch {
         console.debug('Scripts.delete error', e);
         _toast('Delete failed', { type: 'error' });
       }
@@ -4174,7 +4175,7 @@ let _toast = function (msg, opts) {
           scriptTitle && (scriptTitle.value = t);
           refreshScriptsDropdown();
         }
-      } catch (e) {
+      } catch {
         console.debug('Scripts.rename error', e);
       }
     }
@@ -4225,7 +4226,7 @@ let _toast = function (msg, opts) {
           el.textContent = 'Idle';
           el.classList.add('idle');
         }
-      } catch (e) {
+      } catch {
         void e;
       }
     };
@@ -4252,7 +4253,7 @@ let _toast = function (msg, opts) {
             } catch {}
           }
         }
-      } catch (e) {
+      } catch {
         void e;
       }
       return false;
@@ -4413,7 +4414,7 @@ let _toast = function (msg, opts) {
             if (!f) return;
             try {
               await _uploadFromFile(f);
-            } catch (err) {
+            } catch {
               try { console.warn('uploadFromFile failed', err); } catch {}
             }
           } finally {
@@ -4545,7 +4546,7 @@ let _toast = function (msg, opts) {
           updateDebugPosChip();
         } catch {}
       };
-    } catch (e) {
+    } catch {
       console.warn('scroll-helpers load failed', e);
     }
 
@@ -4559,7 +4560,7 @@ let _toast = function (msg, opts) {
           } catch {}
         }
       );
-    } catch (e) {
+    } catch {
       console.warn('io-anchor load failed', e);
     }
     try {
@@ -4572,13 +4573,13 @@ let _toast = function (msg, opts) {
         getViewportHeight: () => viewer.clientHeight,
         getViewerElement: () => viewer,
       });
-    } catch (e) {
+    } catch {
       console.warn('scroll-control load failed', e);
     }
     try {
       const liMod = await import((window.__TP_ADDV || ((p) => p))('./line-index.js'));
       window.buildLineIndex = liMod.buildLineIndex;
-    } catch (e) {
+    } catch {
       console.warn('line-index load failed', e);
     }
     // Dev-only: fixture loader (?fixture=name or ?fixtureUrl=encodedURL)
@@ -4594,7 +4595,7 @@ let _toast = function (msg, opts) {
         renderScript(txt);
         console.info('[TP-Pro] Loaded fixture:', url);
       }
-    } catch (e) {
+    } catch {
       void e;
     }
     // …keep the rest of your init() as-is…
@@ -4608,7 +4609,7 @@ let _toast = function (msg, opts) {
       openDisplayBtn.__listenerAttached = true;
       closeDisplayBtn.__listenerAttached = true;
       presentBtn.__listenerAttached = true;
-    } catch (e) {
+    } catch {
       void e;
     }
     window.__tpInitSuccess = true;
@@ -4658,11 +4659,11 @@ let _toast = function (msg, opts) {
               },
             });
           }
-        } catch (e) {
+        } catch {
           console.warn('[TP-Pro] recorder.init() threw', e);
         }
       });
-    } catch (e) {
+    } catch {
       void e;
     }
 
@@ -4779,13 +4780,13 @@ let _toast = function (msg, opts) {
             if (!rec) return;
             try {
               if (typeof rec.setEnabled === 'function') rec.setEnabled(!!e.target.checked);
-            } catch (err) {
+            } catch {
               void err;
             }
             try {
               if (e.target.checked) await (rec.connect ? rec.connect() : Promise.resolve());
               else await (rec.disconnect ? rec.disconnect() : Promise.resolve());
-            } catch (err) {
+            } catch {
               void err;
             }
           } catch {}
@@ -4812,12 +4813,12 @@ let _toast = function (msg, opts) {
             const ok = await (rec?.test ? rec.test() : Promise.resolve(false));
             const el = document.getElementById('obsStatus');
             if (el) el.textContent = ok ? 'OBS test: ok' : 'OBS test: failed';
-          } catch (e) {
+          } catch {
             void e;
             try {
               const el = document.getElementById('obsStatus');
               if (el) el.textContent = 'OBS test: error';
-            } catch (e) {
+            } catch {
               void e;
             }
           }
@@ -4843,10 +4844,10 @@ let _toast = function (msg, opts) {
                   const s = document.getElementById('obsStatus');
                   if (s) s.textContent = 'OBS: disabled';
                 }
-              } catch (ex) {
+              } catch {
                 void ex;
               }
-            } catch (e) {
+            } catch {
               void e;
             }
           });
@@ -4871,7 +4872,7 @@ let _toast = function (msg, opts) {
               // clear armed flag when we see recording
               if (active) window.__obsRecArmed = false;
             }
-          } catch (err) {
+          } catch {
             try {
               if (window.__TP_DEV) console.warn('[OBS WS] message parse failed', err);
             } catch {}
@@ -4904,7 +4905,7 @@ let _toast = function (msg, opts) {
           } catch {}
         } catch {}
       }
-    } catch (e) {
+    } catch {
       void e;
     }
 
@@ -4966,12 +4967,12 @@ let _toast = function (msg, opts) {
                 .slice(-20)
                 .map((x) => ({ t: new Date(x.t).toLocaleTimeString(), ev: x.ev, data: x.data }));
               pane.textContent = tail.map((l) => JSON.stringify(l)).join('\n');
-            } catch (ex) {
+            } catch {
               void ex;
             }
           }, 500);
         }
-      } catch (ex) {
+      } catch {
         void ex;
       }
       const closeSettings = () => {
@@ -5093,7 +5094,7 @@ let _toast = function (msg, opts) {
                               else if (a !== null) suffix = ` (attempt ${a})`;
                               else if (b !== null) suffix = ` (retry ${b}ms)`;
                             }
-                          } catch (ex) {
+                          } catch {
                             void ex;
                           }
                           st.textContent =
@@ -5101,28 +5102,28 @@ let _toast = function (msg, opts) {
                           // Keep full string in title for hover
                           try {
                             st.title = String(s || '') + (suffix ? ' ' + suffix : '');
-                          } catch (e) {
+                          } catch {
                             void e;
                           }
                         }
-                      } catch (e) {
+                      } catch {
                         void e;
                       }
                     },
                   });
-                } catch (e) {
+                } catch {
                   void e;
                 }
               }
-            } catch (ex) {
+            } catch {
               void ex;
             }
           });
-        } catch (ex) {
+        } catch {
           void ex;
         }
       });
-    } catch (ex) {
+    } catch {
       void ex;
     }
 
@@ -5140,7 +5141,7 @@ let _toast = function (msg, opts) {
         } else {
           if (obsStatus) obsStatus.textContent = 'OBS: missing';
         }
-      } catch (e) {
+      } catch {
         if (obsStatus) {
           obsStatus.textContent = 'OBS: failed';
           try {
@@ -5161,11 +5162,11 @@ let _toast = function (msg, opts) {
                 url: obsUrlInput?.value,
               });
             } catch {}
-          } catch (inner) {
+          } catch {
             void inner;
             try {
               obsStatus.title = String(e);
-            } catch (e) {
+            } catch {
               void e;
             }
           }
@@ -5258,7 +5259,7 @@ let _toast = function (msg, opts) {
             msgEl.classList.add('obs-test-error');
           }
         }
-      } catch (e) {
+      } catch {
         let errMsg = '';
         try {
           errMsg =
@@ -6200,7 +6201,7 @@ let _toast = function (msg, opts) {
         document.addEventListener('DOMContentLoaded', () => {
           try {
             init();
-          } catch (e) {
+          } catch {
             console.error('init failed', e);
           }
         });
@@ -6208,7 +6209,7 @@ let _toast = function (msg, opts) {
         Promise.resolve().then(() => {
           try {
             init();
-          } catch (e) {
+          } catch {
             console.error('init failed', e);
           }
         });
@@ -6226,7 +6227,7 @@ let _toast = function (msg, opts) {
         console.warn('[TP-Pro] Late init fallback firing');
         if (typeof init === 'function') init();
       }
-    } catch (e) {
+    } catch {
       console.error('[TP-Pro] Late init fallback failed', e);
     }
   }, 1500);
@@ -6280,7 +6281,7 @@ let _toast = function (msg, opts) {
           } else if (id === 'micBtn') {
             requestMic();
           }
-        } catch (err) {
+        } catch {
           console.warn('Delegated handler error', err);
         }
       };
@@ -7877,7 +7878,7 @@ let _toast = function (msg, opts) {
           const markerY = viewer.getBoundingClientRect().top + markerTop();
           __scrollCtl.forceAlignToMarker(currentIndex, markerY);
         }
-      } catch (e) {
+      } catch {
         if (window.__TP_DEV) console.warn('forceAlignToMarker failed', e);
       }
       if (typeof debug === 'function')
@@ -8187,7 +8188,7 @@ let _toast = function (msg, opts) {
       if (typeof window.buildLineIndex === 'function') {
         lineIndex = window.buildLineIndex(viewer);
       }
-    } catch (e) {
+    } catch {
       console.warn('line-index build failed', e);
     }
     // Build virtual merged lines for matcher duplicate disambiguation
@@ -9017,7 +9018,7 @@ let _toast = function (msg, opts) {
                       await window.obsSocket.call('SetCurrentProgramScene', { sceneName: preferredScene });
                     }
                     try { if (window.__TP_DEV) console.debug('[OBS-SCENE] SetCurrentProgramScene complete'); } catch {}
-                  } catch (se) {
+                  } catch {
                     try { if (window.__TP_DEV) console.error('[OBS-SCENE] SetCurrentProgramScene failed', se); } catch {}
                   }
                 };
@@ -9046,7 +9047,7 @@ let _toast = function (msg, opts) {
                       await doSet();
                     }, 600);
                   }
-                } catch (e) {
+                } catch {
                   try { if (window.__TP_DEV) console.error('[OBS-SCENE] transition detection failed', e); } catch {}
                 }
               }
@@ -9239,7 +9240,7 @@ let _toast = function (msg, opts) {
           window.matcher?.reset?.();
         } catch {}
       }
-    } catch (e) {
+    } catch {
       console.warn(e);
       // Safe fallback
       setHybrid(false);
@@ -9285,13 +9286,13 @@ let _toast = function (msg, opts) {
               __recorder?.start?.();
             } catch {}
             resolve();
-          } catch (e) {
+          } catch {
             reject(e);
           }
         });
       });
       return true;
-    } catch (e) {
+    } catch {
       console.warn('ASR start failed:', e);
       return false;
     }
@@ -9304,7 +9305,7 @@ let _toast = function (msg, opts) {
       try {
         __recorder?.stop?.();
       } catch {}
-    } catch (e) {
+    } catch {
       console.warn('ASR stop failed:', e);
     }
   }
@@ -9315,7 +9316,7 @@ let _toast = function (msg, opts) {
       if (viewer && typeof scrollToCurrentIndex === 'function') {
         scrollToCurrentIndex();
       }
-    } catch (e) {
+    } catch {
       console.warn('Viewport anchor snap failed:', e);
     }
   }
@@ -9340,11 +9341,11 @@ let _toast = function (msg, opts) {
           if (el) el.textContent = v;
           // 3) HUD header will pick up APP_VERSION automatically
           if (window.HUD) HUD.log('boot:version', { v });
-        } catch (e) {
+        } catch {
           if (window.HUD) HUD.log('boot:version-error', String(e));
         }
       })();
-    } catch (e) {
+    } catch {
       console.error('[TP-Pro] init() failed:', e);
       try {
         (window.__TP_BOOT_TRACE || []).push({
@@ -9365,7 +9366,7 @@ let _toast = function (msg, opts) {
           } catch {}
           window.__tpInitSuccess = true;
         }
-      } catch (err2) {
+      } catch {
         console.error('[TP-Pro] fallback init failed', err2);
       }
       throw e;
@@ -9401,7 +9402,7 @@ let _toast = function (msg, opts) {
       } catch {}
       try {
         await camVideo.play();
-      } catch (err) {
+      } catch {
         // Autoplay might be blocked (iOS). Provide a simple tap-to-start fallback.
         warn('Camera autoplay blocked, waiting for user gesture', err);
         setStatus('Tap the video to start the camera');
@@ -9663,7 +9664,7 @@ let _toast = function (msg, opts) {
         sendToDisplay({ type: 'cam-opacity', opacity: op });
         sendToDisplay({ type: 'cam-mirror', on: !!camMirror.checked });
       } catch {}
-    } catch (e) {
+    } catch {
       warn('switchCamera failed', e);
       throw e;
     }
@@ -9675,7 +9676,7 @@ let _toast = function (msg, opts) {
       } else {
         await camVideo.requestPictureInPicture();
       }
-    } catch (e) {
+    } catch {
       warn('PiP failed', e);
     }
   }
@@ -9747,7 +9748,7 @@ let _toast = function (msg, opts) {
         } catch {}
         a.remove();
       }, 1000);
-    } catch (e) {
+    } catch {
       try {
         alert('Download failed: ' + (e?.message || e));
       } catch {}
@@ -9794,7 +9795,7 @@ let _toast = function (msg, opts) {
             debug({ tag: 'speech:grammar', installed: false, reason: 'no-SpeechGrammarList' });
         } catch {}
       }
-    } catch (e) {
+    } catch {
       try {
         if (typeof debug === 'function') debug({ tag: 'speech:grammar:error', e: String(e) });
       } catch {}
@@ -9915,7 +9916,7 @@ let _toast = function (msg, opts) {
         s.onerror = rej;
       });
       if (typeof window._uploadFromFile === 'function') return window._uploadFromFile(file);
-    } catch (e) {
+    } catch {
       try { console.warn('upload delegate failed', e); } catch {}
     }
   }
@@ -10092,7 +10093,7 @@ let _toast = function (msg, opts) {
       bar.onclick = () => {
         panel.classList.toggle('hidden');
       };
-    } catch (e) {
+    } catch {
       try {
         console.warn('Self-checks UI failed:', e);
       } catch {}
@@ -10368,3 +10369,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     } catch {}
   })();
 })(); // end main IIFE (restored)
+

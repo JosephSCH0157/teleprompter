@@ -40,6 +40,20 @@ select { font-size: 14px; }
     .select-md { font-size: 14px; }  /* tweak to taste */
     .hidden { display: none !important; }
 
+/* Utility: visually hidden (accessible label) */
+.visually-hidden{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap;border:0;padding:0;margin:-1px}
+
+/* Stronger focus indicators for accessibility */
+/* Use :focus-visible where supported to show only for keyboard focus */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .chip:focus-visible {
+    outline: 3px solid #2b90ff; /* high-contrast blue */
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(43,144,255,0.12);
+}
+
+/* Ensure chips can be focused for screen-reader users (if they are interactive spans) */
+.chip[tabindex]{ cursor: pointer; }
+
 /* Inline utility classes (deduped & merged) */
 .inl-x3{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px;min-width:200px}
 .inl-x2{font-size:14px;color:#96a0aa;margin-top:16px}

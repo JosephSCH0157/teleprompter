@@ -152,14 +152,14 @@ export async function startSelected() {
       try {
         const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.start);
         if (!avail) return { id, ok: false, error: 'unavailable' };
-      } catch (e) {
+      } catch {
         return { id, ok: false, error: String(e?.message || e) };
       }
       try {
         await callWithTimeout(() => a.start(), settings.timeouts.start);
         started.push(id);
         return { id, ok: true };
-      } catch (e) {
+      } catch {
         return { id, ok: false, error: String(e?.message || e) };
       }
     };
@@ -191,13 +191,13 @@ export async function stopSelected() {
         try {
           const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.stop);
           if (!avail) return { id, ok: false, error: 'unavailable' };
-        } catch (e) {
+        } catch {
           return { id, ok: false, error: String(e?.message || e) };
         }
         try {
           await callWithTimeout(() => a.stop(), settings.timeouts.stop);
           return { id, ok: true };
-        } catch (e) {
+        } catch {
           return { id, ok: false, error: String(e?.message || e) };
         }
       })
@@ -488,11 +488,11 @@ export function connect({ testOnly } = {}) {
           } catch {}
           if (!testOnly && _cfgBridge.isEnabled() && code !== 1000) reconnectSoon(800);
           if (testOnly) reject(new Error(`close ${code}`));
-        } catch (ee) {
+        } catch {
           if (testOnly) reject(ee);
         }
       };
-    } catch (outer) {
+    } catch {
       try {
         _cfgBridge.onStatus?.('connect-exception', false);
       } catch {}
@@ -545,3 +545,4 @@ export function init({ getUrl, getPass, isEnabled, onStatus, onRecordState } = {
     return false;
   }
 }
+

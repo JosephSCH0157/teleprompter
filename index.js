@@ -32,7 +32,7 @@
     try {
       inject(p);
       console.log('[index.js] injected', p);
-    } catch (err) {
+    } catch {
       console.warn('[index.js] failed to inject', p, err);
     }
   });
@@ -46,8 +46,9 @@
     m.src = 'src/index.js';
     document.head.appendChild(m);
     console.log('[index.js] loaded src/index.js as module');
-  } catch (err) {
+  } catch {
     console.warn('[index.js] failed to load src/index.js module', err);
   }
 })();
 // (end of file)
+

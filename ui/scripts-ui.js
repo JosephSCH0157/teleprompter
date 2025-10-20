@@ -14,7 +14,7 @@ try {
 }
 try {
   if (!Scripts && typeof window !== 'undefined' && window.Scripts) Scripts = window.Scripts;
-} catch (e) {
+} catch {
   void e;
 }
 // If Scripts isn't available at load time, attempt to dynamically import the fixed module as a fallback
@@ -24,12 +24,12 @@ try {
       try {
         const mod = await import('../scriptsStore_fixed.js');
         if (mod && mod.Scripts) Scripts = mod.Scripts;
-      } catch (e) {
+      } catch {
         // ignore dynamic import failures here; the module may be loaded later by the main app
         void e;
       }
     }
-  } catch (e) {
+  } catch {
     void e;
   }
 })();
@@ -53,7 +53,7 @@ try {
     try {
       importedToast =
         _req('./toasts.js')?.toast || (typeof window !== 'undefined' && window.toast) || null;
-    } catch (e) {
+    } catch {
       void e;
       importedToast = (typeof window !== 'undefined' && window.toast) || null;
     }
@@ -61,18 +61,18 @@ try {
     try {
       safeDOM = (typeof window !== 'undefined' && window.safeDOM) || null;
       importedToast = (typeof window !== 'undefined' && window.toast) || null;
-    } catch (e) {
+    } catch {
     void e;
   }
 
   // Ensure we always have a minimal safeDOM implementation
   try {
     if (!safeDOM) safeDOM = _safeDOM_fallback;
-  } catch (e) {
+  } catch {
     void e;
   }
   }
-} catch (e) {
+} catch {
   void e;
 }
 
@@ -89,7 +89,7 @@ const editor = safeDOM.get('editor');
 const toastFn = (msg, opts) => {
   try {
     if (typeof importedToast === 'function') return importedToast(msg, opts);
-  } catch (e) {
+  } catch {
     console.debug('toastFn import failed', e);
   }
 };
@@ -126,7 +126,7 @@ function initScriptsUI() {
 
 try {
   if (typeof window !== 'undefined') window.initScriptsUI = initScriptsUI;
-} catch (e) {
+} catch {
   void e;
 }
 
@@ -230,3 +230,4 @@ if (editor) {
 setTimeout(() => initScriptsUI(), 200);
 
 // Note: no legacy window shim; callers should import { initScriptsUI } from this module
+

@@ -49,10 +49,11 @@ async function run() {
     console.error('No Playwright or Puppeteer installed. Install one to run the smoke test:');
     console.error('  npm install -D playwright  # or puppeteer');
     process.exit(3);
-  } catch (e) {
+  } catch {
     console.error('Smoke test error', e);
     process.exit(4);
   }
 }
 
 run();
+
