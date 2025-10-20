@@ -105,7 +105,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     /* Peak hold indicator */
     #dbMeterTop .peak-marker{position:absolute;top:-3px;height:3px;width:6px;background:#fff;border-radius:1px;box-shadow:0 0 4px rgba(255,255,255,.6);opacity:.85;transition:transform .08s linear, opacity .3s ease, background-color .15s linear, box-shadow .15s linear;}
 
-    .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr var(--statusbar-h);flex:1 1 auto;min-height:100vh}
+    /* app contains sidebar + main viewer; topbar is outside .app in the DOM, so keep rows out of this grid */
+    .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;flex:1 1 auto;min-height:0}
     .sidebar{width:var(--sidebar-w)}
     .statusbar{height:var(--statusbar-h);box-sizing:border-box}
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
