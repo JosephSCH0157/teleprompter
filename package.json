@@ -6,11 +6,11 @@
   "scripts": {
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
-  "lint:ts": "eslint \"**/*.{ts,tsx}\"",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
     "build:logic": "tsc -b src/logic",
     "typecheck": "npm run build:logic && tsc -p tsconfig.json --noEmit",
-    "smoke": "node tools/static_server.js & node tools/smoke_test.js --calm --timeout=120000",
+  "smoke": "node tools/static_server.js & node tools/smoke_test.js --calm --timeout=120000",
+  "lint:ts": "eslint \"**/*.{ts,tsx}\"",
     "smoke:ci": "node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
     "smoke:strict": "node tools/teleprompter_e2e.js --runSmoke --headless",
     "smoke:strict:slow": "node tools/teleprompter_e2e.js --runSmoke --timeout=60000 --headless",
