@@ -2071,17 +2071,19 @@ let _toast = function (msg, opts) {
     try {
       const addV = window.__TP_ADDV || ((p) => p);
       const m = await import(addV('./recorders.js'));
-      console.debug(
-        '[TP-Pro] recorder module keys:',
-        Object.keys(m),
-        m.default && Object.keys(m.default)
-      );
+      try {
+        const modKeys = m && typeof m === 'object' ? Object.keys(m) : [];
+        const defaultKeys = m && m.default && typeof m.default === 'object' ? Object.keys(m.default) : [];
+        console.debug('[TP-Pro] recorder module keys:', modKeys.length, modKeys, defaultKeys.length, defaultKeys);
+      } catch {
+        try { console.debug('[TP-Pro] recorder module keys: <uninspectable module>'); } catch {}
+      }
       __rec = m;
       if (!__rec || typeof __rec.init !== 'function') {
         console.warn('[TP-Pro] recorders.js loaded but no init() export found');
       }
       return __rec;
-    } catch {
+    } catch (e) {
       console.error('[TP-Pro] Failed to import recorders.js', e);
       return null;
     }
@@ -9222,6 +9224,7 @@ let _toast = function (msg, opts) {
     try {
       __scrollCtl?.stopAutoCatchup?.();
     } catch {}
+    try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
 
     // prefer user input; fall back to last saved; else default 60
     let pxSpeed = parseFloat(autoSpeed.value);
@@ -9295,6 +9298,7 @@ let _toast = function (msg, opts) {
       cancelAnimationFrame(autoTimer);
       autoTimer = null;
     }
+    try { if (!speechOn) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
     autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
   }
@@ -10288,6 +10292,7 @@ let _toast = function (msg, opts) {
       try {
         window.HUD?.bus?.emit('speech:toggle', true);
       } catch {}
+      try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
     };
 
     let _lastInterimAt = 0;
@@ -10330,6 +10335,7 @@ let _toast = function (msg, opts) {
       try {
         window.HUD?.bus?.emit('speech:toggle', false);
       } catch {}
+      try { if (!autoTimer) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
       try {
         __scrollCtl?.stopAutoCatchup?.();
       } catch {}
