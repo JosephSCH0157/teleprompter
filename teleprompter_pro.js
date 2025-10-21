@@ -5465,27 +5465,17 @@ let _toast = function (msg, opts) {
         const password = passEl?.value ?? prev.password ?? '';
         cfgs.obs = { ...prev, url, password };
         __recorder.setSettings({ configs: cfgs });
-        // Persist password to sessionStorage by default; optionally to localStorage when 'remember' is checked
+        // Persist password in-memory and to sessionStorage only (do NOT write to localStorage)
         try {
           if (typeof obsPassInput?.value === 'string') {
             try {
-              sessionStorage.setItem('tp_obs_password', obsPassInput.value);
+              window.__obsPass = obsPassInput.value || '';
             } catch {}
             try {
-              const rem = document.getElementById('settingsObsRemember');
-              // persist the user's remember preference so the checkbox is stable across reloads
-              try {
-                localStorage.setItem('tp_obs_remember', rem && rem.checked ? '1' : '0');
-              } catch {}
-              if (rem && rem.checked) {
-                localStorage.setItem('tp_obs_password', obsPassInput.value);
-              } else {
-                // If not remembering, remove any long-lived stored password
-                try {
-                  localStorage.removeItem('tp_obs_password');
-                } catch {}
-              }
+              // sessionStorage is session-scoped (tab lifetime) and used only for convenience
+              sessionStorage.setItem('tp_obs_password', obsPassInput.value || '');
             } catch {}
+            // Keep the "Remember" checkbox visual only (disabled) — do not persist long-lived passwords
           }
         } catch {}
         // Save scene and reconnect preference
@@ -5563,6 +5553,24 @@ let _toast = function (msg, opts) {
       secureEl.checked = !!cfg.secure;
       enableEl.checked = !!cfg.enabled;
 
+      // Initialize session-only password from sessionStorage if present
+      try {
+        if (typeof window.__obsPass === 'undefined') {
+          window.__obsPass = sessionStorage.getItem('tp_obs_password') || '';
+        }
+        const passEl = document.getElementById('settingsObsPass');
+        if (passEl && !passEl.value) passEl.value = window.__obsPass || '';
+        // keep session var updated as user types
+        passEl?.addEventListener('input', () => {
+          try {
+            window.__obsPass = passEl.value || '';
+            try {
+              sessionStorage.setItem('tp_obs_password', window.__obsPass);
+            } catch {}
+          } catch {}
+        });
+      } catch {}
+
       const apply = async (change = {}) => {
         const next = {
           host: urlEl.value || OBS_DEFAULTS.host,
@@ -5590,17 +5598,18 @@ let _toast = function (msg, opts) {
           updateObsStatus('connecting…');
           try {
             // Try to reconfigure inline bridge or adapter
+            const pw = window.__obsPass || document.getElementById('settingsObsPass')?.value || '';
             if (typeof window !== 'undefined' && window.__obsBridge && typeof window.__obsBridge.configure === 'function') {
-              window.__obsBridge.configure({ url: `${next.secure ? 'wss' : 'ws'}://${next.host}:${next.port}`, password: document.getElementById('settingsObsPass')?.value || '' });
+              window.__obsBridge.configure({ url: `${next.secure ? 'wss' : 'ws'}://${next.host}:${next.port}`, password: pw });
             }
             // Recorder surface
             if (typeof recorder !== 'undefined' && recorder && typeof recorder.reconfigure === 'function') {
-              await recorder.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure });
+              await recorder.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure, password: pw });
             } else {
               const rm = await loadRecorder();
               const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
               try {
-                if (r && typeof r.reconfigure === 'function') await r.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure });
+                if (r && typeof r.reconfigure === 'function') await r.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure, password: pw });
               } catch {}
             }
             // Connect via recorder surface preferred

@@ -343,6 +343,16 @@ export async function reconfigure(cfg = {}) {
   try {
     if (cfg && typeof cfg === 'object') {
       obsCfg = { ...obsCfg, ...cfg, port: Number(cfg.port) || obsCfg.port };
+      // Keep password available for the inline bridge connect logic
+      if (cfg.password != null) {
+        try {
+          obsCfg.password = String(cfg.password || '');
+        } catch {}
+      }
+      // Update the bridge getter so connect() picks up the latest password
+      try {
+        _cfgBridge.getPass = () => obsCfg.password || '';
+      } catch {}
     }
     // If already connected, reconnect soon to apply changes
     try {
