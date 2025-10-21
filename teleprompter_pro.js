@@ -26,8 +26,12 @@ let _toast = function (msg, opts) {
   'use strict';
   // Prevent double-loading in the same window/context
   try {
+    // dev flag early so we can silence noisy warnings in production
+    const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
+    // idle flag — don't start heavy subsystems until a script exists
+    if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
     if (window.__TP_ALREADY_BOOTED__) {
-      console.warn('[TP-BOOT] duplicate load blocked');
+      if (__dev) console.warn('[TP-BOOT] duplicate load blocked');
       return;
     }
     window.__TP_ALREADY_BOOTED__ = true;
@@ -1107,7 +1111,7 @@ let _toast = function (msg, opts) {
           <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false'}/> Enable OBS</label>
           <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
           <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
-          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene"></label>
+          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.200:4455')}" placeholder="ws://host:port" aria-label="OBS websocket URL" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" aria-label="OBS password" />
@@ -6496,17 +6500,25 @@ let _toast = function (msg, opts) {
     __tpBootPush('init-scheduling-exited');
   } catch {}
 
-  // Hard fallback: if init hasn't marked success soon, force-call it (guards against missed events or earlier silent exceptions)
-  setTimeout(() => {
-    try {
-      if (!window.__tpInitSuccess) {
-        console.warn('[TP-Pro] Late init fallback firing');
-        if (typeof init === 'function') init();
-      }
-    } catch {
-      console.error('[TP-Pro] Late init fallback failed', e);
+  // Hard fallback: only schedule if nothing else started; guard runner to skip when init started elsewhere
+  try {
+    if (!window.__tp_init_running && !window.__tp_init_done) {
+      setTimeout(() => {
+        try {
+          if (window.__tp_init_running || window.__tp_init_done) {
+            try { console.debug('[TP-TRACE] late-init-fallback-skip'); } catch {}
+            return;
+          }
+          if (!window.__tpInitSuccess) {
+            console.warn('[TP-Pro] Late init fallback firing');
+            if (typeof init === 'function') init();
+          }
+        } catch {
+          console.error('[TP-Pro] Late init fallback failed', e);
+        }
+      }, 1500);
     }
-  }, 1500);
+  } catch {}
   try {
     __tpBootPush('late-init-fallback-scheduled');
   } catch {}
