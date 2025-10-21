@@ -48,6 +48,9 @@
   html.tp-dev #anvil-build-label{display:block}
   @media print{#anvil-build-label{display:none}}
   @media (max-width: 420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
+  /* small helper for sidebar OBS toggle row */
+  .obs-row { display:flex; align-items:center; gap:8px; }
+  .obs-status { margin-left:8px; }
 </style>
 </head>
 <body>
@@ -85,6 +88,14 @@
  <div class="row" id="sidebarMediaHint">
    <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings ▶ Recording/Media</span>
  </div>
+<!-- Add a visible, labeled OBS toggle in the sidebar for quick access -->
+<div class="row obs-row">
+  <label>
+    <input type="checkbox" id="enableObs" />
+    <span>Enable OBS</span>
+  </label>
+  <span class="chip obs-status" id="obsStatus" aria-live="polite">OBS: idle</span>
+</div>
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
 <div class="row">
