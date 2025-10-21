@@ -529,6 +529,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
 
     function setupSettingsTabs(){
       const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
+    // Guard against duplicate wiring: some builds accidentally contain
+    // duplicated wiring blocks. Make this idempotent so calling the
+    // function multiple times won't attach listeners twice.
+    if (window.__tpTabsWired) return;
+    window.__tpTabsWired = true;
       // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
       const sb = document.getElementById('settingsBody');
       const cards = sb ? Array.from(sb.querySelectorAll('.settings-card')) : [];
