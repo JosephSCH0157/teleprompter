@@ -6,6 +6,7 @@
   "scripts": {
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
+  "lint:ts": "eslint \"**/*.{ts,tsx}\"",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
     "build:logic": "tsc -b src/logic",
     "typecheck": "npm run build:logic && tsc -p tsconfig.json --noEmit",

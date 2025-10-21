@@ -7,6 +7,21 @@ module.exports = [
   {
     ignores: ['releases/**', '**/*.min.js', 'node_modules/**', '.vscode/**'],
   },
+  // TypeScript files: enable parser and rules for TS
+  // Requires @typescript-eslint/parser and @typescript-eslint/eslint-plugin in devDependencies
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parser: require('@typescript-eslint/parser'),
+      parserOptions: { project: ['./tsconfig.json'] },
+    },
+    plugins: { '@typescript-eslint': require('@typescript-eslint/eslint-plugin') },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/consistent-type-imports': 'warn',
+    },
+  },
   // Default: treat all .js files as ES modules so import/export parse by default.
   {
     files: ['**/*.js'],

@@ -110,6 +110,15 @@ const fs = require('fs');
       shouldSet: false,
     });
 
+    // Case 4: preferred missing, current unknown -> should skip without calling set
+    await runCase('preferred-missing-current-unknown', {
+      preferred: 'PreferredScene',
+      useLocalStorage: false,
+      sceneList: [{ sceneName: 'Other' }, { sceneName: 'Another' }],
+      currentProgram: 'StrayScene',
+      shouldSet: false,
+    });
+
     await browser.close();
     out.ok = out.cases.every(c=>c.ok);
   }catch(e){ out.errors.push({ type:'fatal', message: String(e), stack: e && e.stack ? e.stack : null }); }

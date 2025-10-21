@@ -671,6 +671,12 @@
           if (window.__tpHudMetrics && window.__tpHudMetrics[group]) {
             window.__tpHudMetrics[group][key] = (window.__tpHudMetrics[group][key] || 0) + amt;
           }
+          // Also update ultra-light global counters if present
+          try {
+            if (window.__hudCounters && window.__hudCounters[group]) {
+              window.__hudCounters[group][key] = (window.__hudCounters[group][key] || 0) + amt;
+            }
+          } catch {}
           // Also attempt to update any live HUD instance metrics if present
           try {
             if (window.__tpHudInstance && window.__tpHudInstance.metrics && window.__tpHudInstance.metrics[group]) {

@@ -194,6 +194,26 @@ let _toast = function (msg, opts) {
   } catch {
     void e;
   }
+  // HUD counters for quick tuning telemetry
+  try {
+    if (!window.__hudCounters) {
+      window.__hudCounters = {
+        drops: { command: 0, oov: 0, meta: 0 },
+        softAdv: { allowed: 0, blockedLost: 0, frozen: 0 },
+        rescue: { count: 0 },
+      };
+      setInterval(() => {
+        try {
+          console.log('[HUD:counts]', JSON.stringify(window.__hudCounters || {}));
+        } catch {}
+      }, 1000);
+    }
+  } catch {}
+
+  // Freeze soft-advance by batches (decremented per match cycle)
+  try {
+    if (typeof window.__freezeBatches === 'undefined') window.__freezeBatches = 0;
+  } catch {}
     // Expose a small perf helper to measure sections during runtime
     try {
       window.__tpPerf = {
@@ -6841,6 +6861,14 @@ let _toast = function (msg, opts) {
 
   function maybeSoftAdvance(bestIdx, bestSim, spoken) {
     try {
+      // Respect batch-based freeze if set by rescue logic
+      try {
+        if ((window.__freezeBatches || 0) > 0) {
+          window.__freezeBatches = Math.max(0, (window.__freezeBatches || 0) - 1);
+          try { window.__tpHudInc && window.__tpHudInc('softAdv', 'frozen', 1); } catch {}
+          return { idx: bestIdx, sim: bestSim, soft: false };
+        }
+      } catch {}
       // Find current virtual line context
       const vList = __vParaIndex && __vParaIndex.length ? __vParaIndex : null;
       if (!vList) return { idx: bestIdx, sim: bestSim, soft: false };
@@ -6875,9 +6903,12 @@ let _toast = function (msg, opts) {
           const v = vList[j];
           const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
           const sim = _sim(spoken, win);
-          // LOST-mode stricter gating
+          // LOST-mode stricter gating (jitter-aware)
           const LOST = PLL.state === 'LOST' || __tpLost;
-          const minSim = LOST ? 0.62 : SOFT_ADV_MIN_SIM;
+          const jitterStd = (window.__tpJitter && window.__tpJitter.std) || 0;
+          let LOST_MIN = 0.62;
+          if (LOST && jitterStd > 25) LOST_MIN += 0.04; // raise when noisy
+          const minSim = LOST ? LOST_MIN : SOFT_ADV_MIN_SIM;
           const streakCap = LOST ? 1 : SOFT_ADV_MAX_STREAK;
           // require at least an n-gram hit or an anchor nearby when LOST
           const ngramHitsNear = (() => {
@@ -7575,7 +7606,7 @@ let _toast = function (msg, opts) {
               } catch {}
               // Freeze soft-advance for next ~2 batches and issue a catch-up to marker
               try {
-                window.__tpSoftAdvanceFreeze.until = performance.now() + 200; // ~2 batches at 10Hz
+                window.__freezeBatches = 2; // freeze next 2 match cycles
                 softAdvanceStreak = 0;
                 try { window.__tpHudInc && window.__tpHudInc('softAdv', 'frozen', 1); } catch {}
                 const el = lineEls && lineEls[Math.max(0, bestIdx)] ? lineEls[Math.max(0, bestIdx)] : null;
