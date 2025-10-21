@@ -1714,6 +1714,75 @@ let _toast = function (msg, opts) {
       const m = document.getElementById('obsPassword');
       if (m) m.value = obsPassS.value;
     });
+
+    // Persist and wire the top-level Enable OBS toggle
+    const OBS_ENABLED_KEY = 'tp_obs_enabled'; // '1' | '0'
+    function getObsEnabled() {
+      try {
+        return localStorage.getItem(OBS_ENABLED_KEY) === '1';
+      } catch {
+        return false;
+      }
+    }
+    function setObsEnabled(v) {
+      try {
+        localStorage.setItem(OBS_ENABLED_KEY, v ? '1' : '0');
+      } catch {}
+    }
+
+    async function wireObsToggle() {
+      try {
+        const settingsToggle = document.getElementById('settingsEnableObs');
+        if (!settingsToggle) return;
+
+        // initial state
+        settingsToggle.checked = getObsEnabled();
+
+        // keep a badge/pill in sync if present
+        const updateBadge = (txt) => {
+          const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+          if (pill) {
+            // If obsStatus contains full text like 'OBS: ...', try to update only inner text
+            if (pill.id === 'obsStatus' && pill.tagName.toLowerCase() !== 'span') {
+              pill.textContent = txt;
+            } else {
+              pill.textContent = txt;
+            }
+          }
+        };
+
+        settingsToggle.addEventListener('change', async (e) => {
+          const on = !!e.currentTarget.checked;
+          setObsEnabled(on);
+          try {
+            // prefer recorder adapter
+            const recModule = await loadRecorder();
+            const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+            if (on) {
+              // init may be safe/no-op if already initialized
+              try {
+                await (rec?.init?.() ?? Promise.resolve());
+              } catch {}
+              try {
+                await (rec?.connect?.() ?? Promise.resolve());
+              } catch {}
+              updateBadge('connecting…');
+            } else {
+              try {
+                await (rec?.disconnect?.() ?? Promise.resolve());
+              } catch {}
+              updateBadge('disabled');
+            }
+          } catch (err) {
+            console.warn('[OBS] toggle error', err);
+            updateBadge('error');
+          }
+        });
+      } catch {}
+    }
+
+    // Call wiring after settings are present
+    try { wireObsToggle(); } catch {}
     // PLL Controller
     const hybridLockS = document.getElementById('settingsHybridLock');
     const maxBiasPctS = document.getElementById('settingsMaxBiasPct');
