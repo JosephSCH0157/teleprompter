@@ -240,8 +240,28 @@ let _toast = function (msg, opts) {
         softAdv: { allowed: 0, blockedLost: 0, frozen: 0 },
         rescue: { count: 0 },
       };
+      // Watchdog arm state: only report HUD and run watchdog when armed
+      window.__tp_wd_armed = false;
+      window.tpArmWatchdog = function (on) {
+        try {
+          const prev = !!window.__tp_wd_armed;
+          window.__tp_wd_armed = !!on;
+          if (prev === window.__tp_wd_armed) return;
+          // Reset counters/state when disarming
+          if (!window.__tp_wd_armed) {
+            try {
+              window.__tpMetrics = { ticks: 0, stalls: 0, rescues: 0, lastSample: 0, samples: [] };
+              window.__tpWatchdogState = 'OK';
+            } catch {}
+          }
+          try {
+            if (window.__TP_DEV) console.debug('[TP-TRACE] watchdog', window.__tp_wd_armed ? 'ARM' : 'DISARM');
+          } catch {}
+        } catch {}
+      };
       setInterval(() => {
         try {
+          if (!window.__tp_has_script || !window.__tp_wd_armed) return; // idle
           console.log('[HUD:counts]', JSON.stringify(window.__hudCounters || {}));
         } catch {}
       }, 1000);
@@ -9060,6 +9080,7 @@ let _toast = function (msg, opts) {
       }
       displayReady = false;
       displayChip.textContent = 'Display: open';
+  try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
       closeDisplayBtn.disabled = true; // will be enabled by global DISPLAY_READY handler
       // Kick off handshake retry pings: every 300ms up to ~3s or until READY.
       if (displayHelloTimer) {
@@ -9094,6 +9115,7 @@ let _toast = function (msg, opts) {
     displayReady = false;
     closeDisplayBtn.disabled = true;
     displayChip.textContent = 'Display: closed';
+    try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
   }
   // TP: display-send
   function sendToDisplay(payload) {
