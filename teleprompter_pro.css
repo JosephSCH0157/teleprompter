@@ -280,3 +280,34 @@ body.ck::after{
 /* Settings: consistent checkbox label alignment/visibility */
 .tp-check{display:inline-flex;align-items:center;gap:.5rem}
 .tp-check input{vertical-align:middle}
+
+/* Settings row layout */
+.settings-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+
+/* Label + field */
+.tp-field { display:inline-flex; flex-direction:column; gap:6px; }
+.tp-field > span { font-size:.85rem; color: var(--muted); line-height:1; }
+.input-url { width: 240px; }
+.input-port { width: 96px; }
+
+/* Checkbox label */
+.tp-check { display:inline-flex; align-items:center; gap:.5rem; }
+
+/* Inputs visible on dark panels */
+.settings-card input[type="text"],
+.settings-card input[type="password"],
+.settings-card input[type="number"]{
+    color: var(--fg);
+    background: var(--panel, #0e141b);
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+.settings-card input::placeholder{ color: var(--muted); opacity: .9; }
+
+/* Status pill */
+.obs-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    padding: 4px 8px; border-radius: 999px;
+    background: rgba(255,255,255,.06); color: var(--muted);
+}
