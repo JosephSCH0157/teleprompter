@@ -24,6 +24,22 @@ let _toast = function (msg, opts) {
 
 (function () {
   'use strict';
+  // Prevent double-loading in the same window/context
+  try {
+    if (window.__TP_ALREADY_BOOTED__) {
+      console.warn('[TP-BOOT] duplicate load blocked');
+      return;
+    }
+    window.__TP_ALREADY_BOOTED__ = true;
+  } catch {}
+  // Derive a short context tag for logs (Main vs Display)
+  const TP_CTX = (function () {
+    try {
+      if (window.opener) return 'Display';
+      if (window.name) return window.name;
+    } catch {}
+    return 'Main';
+  })();
   // Flags (URL or localStorage): ?calm=1&dev=1
   try {
     const Q = new URLSearchParams(location.search);
@@ -83,7 +99,7 @@ let _toast = function (msg, opts) {
   try {
     window.__TP_BOOT_TRACE = [];
     const _origLog = console.log.bind(console);
-    const tag = (m) => `[TP-BOOT ${Date.now() % 100000}] ${m}`;
+  const tag = (m) => `[${TP_CTX}] [TP-BOOT ${Date.now() % 100000}] ${m}`;
     // Publish build version for About panel and diagnostics
     try {
       window.APP_VERSION = '1.6.1';
@@ -92,7 +108,11 @@ let _toast = function (msg, opts) {
       try {
         const rec = { t: Date.now(), m };
         window.__TP_BOOT_TRACE.push(rec);
-        console.log('[TP-TRACE]', rec.m);
+        try {
+          console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
+        } catch {
+          console.log('[TP-TRACE]', rec.m);
+        }
       } catch {
         try {
           console.warn('[TP-TRACE-FAIL]', err);
@@ -114,8 +134,8 @@ let _toast = function (msg, opts) {
     try {
       window.__obsHandshakeLog = window.__obsHandshakeLog || [];
     } catch {}
-    __tpBootPush('script-enter');
-    _origLog(tag('entered main IIFE'));
+  __tpBootPush('script-enter');
+  _origLog(tag('entered main IIFE'));
     window.addEventListener('DOMContentLoaded', () => {
       __tpBootPush('dom-content-loaded');
     });
@@ -471,9 +491,18 @@ let _toast = function (msg, opts) {
     if (typeof window.init !== 'function') {
       window.init = async function () {
         try {
+          // Prevent concurrent or duplicate init runs
+          if (window.__tp_init_running || window.__tp_init_done) return;
+          window.__tp_init_running = true;
           // If core is already available, run immediately
           if (typeof _initCore === 'function' || typeof window._initCore === 'function') {
-            return (window._initCore || _initCore)();
+            try {
+              const res = await (window._initCore || _initCore)();
+              window.__tp_init_done = true;
+              return res;
+            } finally {
+              window.__tp_init_running = false;
+            }
           }
           try {
             __tpBootPush('window-init-proxy-waiting-core');
@@ -497,16 +526,29 @@ let _toast = function (msg, opts) {
             window.__tpCoreReady?.then(() => window._initCore || _initCore).catch(() => null),
           ]);
           if (typeof core === 'function') {
-            return core();
+            try {
+              const res = await core();
+              window.__tp_init_done = true;
+              return res;
+            } finally {
+              window.__tp_init_running = false;
+            }
           }
           console.warn('[TP-Pro] window.init proxy: core not ready after wait');
           // Use the stable runner which waits until core is ready
           try {
             __tpBootPush('window-init-proxy-waiting-core');
           } catch {}
-          return await window._initCoreRunner();
+          try {
+            const res = await window._initCoreRunner();
+            window.__tp_init_done = true;
+            return res;
+          } finally {
+            window.__tp_init_running = false;
+          }
         } catch {
-          void e;
+          window.__tp_init_running = false;
+          throw e;
         }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -8271,6 +8313,10 @@ let _toast = function (msg, opts) {
   }
 
   function renderScript(text) {
+    try {
+      if (window.__tp_rs_done) return;
+      window.__tp_rs_done = true;
+    } catch {}
     const t = String(text || '');
 
     // Tokenize for speech sync (strip tags so only spoken words are matched)

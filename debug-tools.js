@@ -107,6 +107,10 @@
       frameReads: 0,
       frameWrites: 0,
       lastRAF: 0,
+        // counters requested for CI/HUD diagnostics
+        drops: { command: 0, oov: 0, meta: 0 },
+        softAdv: { allowed: 0, blockedLost: 0, frozen: 0 },
+        rescue: { count: 0, rescuesPerMin: 0 },
     };
 
     // Styles (scoped)
@@ -619,7 +623,15 @@
           try {
             const had = { r: metrics.frameReads || 0, w: metrics.frameWrites || 0 };
             if (had.r > 0 && had.w > 0) {
-              HUD.log('perf:reflow-risk', had);
+              // Log a JSON-friendly summary for Puppeteer to capture cleanly
+              try {
+                const summary = { perf: had, drops: metrics.drops, softAdv: metrics.softAdv, rescue: metrics.rescue };
+                HUD.log('perf:reflow-risk', summary);
+                // also write a plain console.log for raw capture
+                try { console.log('[HUD]', JSON.stringify(summary)); } catch {}
+              } catch {
+                HUD.log('perf:reflow-risk', had);
+              }
             }
             metrics.frameReads = 0;
             metrics.frameWrites = 0;

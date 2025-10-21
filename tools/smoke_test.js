@@ -1,61 +1,132 @@
 // tools/smoke_test.js
-// Minimal smoke test: launches a headless browser, opens teleprompter_pro.html, checks for toast container and scripts UI elements.
-// Uses Playwright if available, otherwise Puppeteer if available, else prints instructions.
+/* Minimal-but-solid smoke runner:
+   - Prefers Playwright, falls back to Puppeteer.
+   - Waits for key UI bits and init flags.
+   - Detects duplicate boots via console log counting.
+   - Emits one-line [SMOKE-REPORT] JSON for CI.
+   Usage examples:
+     node tools/smoke_test.js --calm --timeout=120000
+     node tools/smoke_test.js --url=http://127.0.0.1:8080/teleprompter_pro.html
+*/
 
-// path/fs not required for minimal smoke test
+const DEFAULT_URL = 'http://localhost:8080/teleprompter_pro.html';
+const ARG_URL = (process.argv.find(a => a.startsWith('--url=')) || '').split('=')[1];
+const ARG_TIMEOUT = Number((process.argv.find(a => a.startsWith('--timeout=')) || '').split('=')[1]) || 60000;
+const ARG_CALM = process.argv.includes('--calm');
 
-const URL = 'http://localhost:8080/teleprompter_pro.html';
-
-async function run() {
-  try {
-    // Ensure static server is running so the page can be loaded
-    try { require('./static_server.js'); } catch {}
-    // Prefer Playwright
-    let playwright;
-    try {
-      playwright = require('playwright');
-    } catch {}
-
-    if (playwright) {
-      console.log('Using Playwright');
-      const browser = await playwright.chromium.launch();
-      const page = await browser.newPage();
-      await page.goto(URL, { waitUntil: 'networkidle' });
-      // Check for toast container
-      const hasToast = await page.$('#tp_toast_container');
-      const hasScripts = await page.$('#scriptSlots');
-      console.log('tp_toast_container:', !!hasToast);
-      console.log('scriptSlots:', !!hasScripts);
-      await browser.close();
-      process.exit(hasToast && hasScripts ? 0 : 2);
-    }
-
-    // Try Puppeteer
-    let puppeteer;
-    try {
-      puppeteer = require('puppeteer');
-    } catch {}
-    if (puppeteer) {
-      console.log('Using Puppeteer');
-      const browser = await puppeteer.launch();
-      const page = await browser.newPage();
-      await page.goto(URL, { waitUntil: 'networkidle0' });
-      const hasToast = await page.$('#tp_toast_container');
-      const hasScripts = await page.$('#scriptSlots');
-      console.log('tp_toast_container:', !!hasToast);
-      console.log('scriptSlots:', !!hasScripts);
-      await browser.close();
-      process.exit(hasToast && hasScripts ? 0 : 2);
-    }
-
-    console.error('No Playwright or Puppeteer installed. Install one to run the smoke test:');
-    console.error('  npm install -D playwright  # or puppeteer');
-    process.exit(3);
-  } catch (e) {
-    console.error('Smoke test error', e);
-    process.exit(4);
-  }
+function withParam(url, key, val = '1') {
+  const u = new URL(url);
+  if (!u.searchParams.has(key)) u.searchParams.set(key, val);
+  return u.toString();
 }
 
-run();
+const RAW_URL = ARG_URL || process.env.TP_URL || DEFAULT_URL;
+const URL_TO_OPEN = ARG_CALM ? withParam(RAW_URL, 'calm', '1') : RAW_URL;
 
+(async function run() {
+  try {
+    // Try to spin up static server if present (ignore errors if it self-manages or is already running)
+    try { require('./static_server.js'); } catch {}
+
+    // Prefer Playwright
+    let playwright;
+    try { playwright = require('playwright'); } catch {}
+
+    const ciArgs = process.env.CI ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
+
+    // Common runner harness
+    async function runWithPage(makeBrowser, type) {
+      const browser = await makeBrowser();
+      const page = await browser.newPage();
+
+      // Collect console + errors to detect dup boot and failures
+      let bootCount = 0, scriptEnterCount = 0, rsCompleteCount = 0, errorLogs = [], warnLogs = [];
+
+      page.on('console', msg => {
+        const text = msg.text ? msg.text() : String(msg);
+        const t = typeof text === 'string' ? text : String(text);
+
+        if (t.includes('[TP-BOOT')) bootCount++;
+        if (t.includes('script-enter')) scriptEnterCount++;
+        if (t.includes('rs:complete')) rsCompleteCount++;
+
+        if (msg.type && msg.type() === 'error') errorLogs.push(t);
+        else if (msg.type && msg.type() === 'warning') warnLogs.push(t);
+      });
+      page.on('pageerror', err => errorLogs.push(String(err && err.message || err)));
+      page.on('requestfailed', req => warnLogs.push(`[requestfailed] ${req.url()} ${req.failure()?.errorText || ''}`));
+
+      // Open page
+      await page.goto(URL_TO_OPEN, { waitUntil: type === 'playwright' ? 'networkidle' : 'networkidle0', timeout: ARG_TIMEOUT });
+
+      // Wait for UI bits (race tolerant)
+      const waitFor = async (selector) => {
+        try { await page.waitForSelector(selector, { timeout: Math.min(ARG_TIMEOUT, 15000) }); return true; }
+        catch { return false; }
+      };
+
+      const hasToast = await waitFor('#tp_toast_container'); // toast container
+      const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
+
+      // Grab a couple runtime flags if present
+      const { initDone, appVersion, ctx } = await page.evaluate(() => ({
+        initDone: !!(window.__tp_init_done || (window.App && (window.App.inited || window.App.initDone))),
+        appVersion: (window.App && (window.App.version || window.App.appVersion)) || null,
+        ctx: window.opener ? 'Display' : (window.name || 'Main'),
+      }));
+
+      // Duplicate boot detection: if we saw multiple script-enter or TP-BOOT lines, flag it
+      const dupBoot = Math.max(bootCount, scriptEnterCount) > 1;
+
+      const ok = hasToast && hasScripts && initDone && !dupBoot && errorLogs.length === 0;
+
+      const report = {
+        ok,
+        runner: type,
+        url: URL_TO_OPEN,
+        timeoutMs: ARG_TIMEOUT,
+        ctx,
+        initDone,
+        appVersion,
+        ui: { toast: hasToast, scripts: hasScripts },
+        counts: { boot: bootCount, scriptEnter: scriptEnterCount, rsComplete: rsCompleteCount },
+        logs: {
+          errors: errorLogs.slice(0, 5), // cap for CI readability
+          warnings: warnLogs.slice(0, 5),
+        }
+      };
+
+      // One-line CI summary
+      console.log(`[SMOKE-REPORT] ${JSON.stringify(report)}`);
+
+      await browser.close();
+
+      if (!hasToast || !hasScripts) process.exit(2);
+      if (dupBoot) process.exit(5);
+      if (!ok) process.exit(4);
+      process.exit(0);
+    }
+
+    if (playwright) {
+      const makeBrowser = () => playwright.chromium.launch({ headless: true, args: ciArgs });
+      return await runWithPage(makeBrowser, 'playwright');
+    }
+
+    // Puppeteer fallback
+    let puppeteer;
+    try { puppeteer = require('puppeteer'); } catch {}
+    if (puppeteer) {
+      const makeBrowser = () => puppeteer.launch({ headless: 'new', args: ciArgs });
+      return await runWithPage(makeBrowser, 'puppeteer');
+    }
+
+    console.error('No Playwright or Puppeteer installed. Install one to run the smoke test:\n  npm i -D playwright  # or puppeteer');
+    process.exit(3);
+  } catch (e) {
+    console.error('[SMOKE-ERROR]', e && e.stack || e);
+    // Emit a report so CI still has a JSON artifact
+    const fallback = { ok: false, runner: null, url: URL_TO_OPEN, timeoutMs: ARG_TIMEOUT, error: String(e && e.message || e) };
+    console.log(`[SMOKE-REPORT] ${JSON.stringify(fallback)}`);
+    process.exit(4);
+  }
+})();
