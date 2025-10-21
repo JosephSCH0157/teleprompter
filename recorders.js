@@ -316,6 +316,8 @@ export async function stop() {
 let _ws = null,
   _connecting = false,
   _identified = false;
+// Config for inline bridge connection when used directly
+let obsCfg = { host: '127.0.0.1', port: 4455, secure: false };
 let _cfgBridge = {
   getUrl: () => 'ws://127.0.0.1:4455',
   getPass: () => '',
@@ -337,9 +339,21 @@ export function setEnabled(on) {
     else disconnect();
   } catch {}
 }
-export function reconfigure() {
+export async function reconfigure(cfg = {}) {
   try {
-    if (_identified) reconnectSoon();
+    if (cfg && typeof cfg === 'object') {
+      obsCfg = { ...obsCfg, ...cfg, port: Number(cfg.port) || obsCfg.port };
+    }
+    // If already connected, reconnect soon to apply changes
+    try {
+      if (_ws) {
+        try {
+          // best-effort: close then reconnect
+          _ws.close(1000, 'reconfig');
+        } catch {}
+        reconnectSoon(200);
+      }
+    } catch {}
   } catch {}
 }
 export async function test() {
@@ -350,7 +364,7 @@ export async function test() {
     return false;
   }
 }
-export function disconnect() {
+export async function disconnect() {
   try {
     _identified = false;
     _connecting = false;
@@ -362,6 +376,7 @@ export function disconnect() {
       _cfgBridge.onStatus?.('disconnected', false);
     } catch {}
   } catch {}
+  return true;
 }
 
 let _reconnTimer = 0;
@@ -378,8 +393,10 @@ export function connect({ testOnly } = {}) {
   return new Promise((resolve, reject) => {
     try {
       if (!_cfgBridge.isEnabled() && !testOnly) return reject(new Error('disabled'));
-      const url = _cfgBridge.getUrl?.() || 'ws://127.0.0.1:4455';
-      const pass = _cfgBridge.getPass?.() || ''; // Original line for context
+  // Prefer an explicitly provided bridge URL, otherwise build from obsCfg
+  const cfgUrl = obsCfg && obsCfg.host ? `${obsCfg.secure ? 'wss' : 'ws'}://${obsCfg.host}:${obsCfg.port}` : null;
+  const url = _cfgBridge.getUrl?.() || cfgUrl || 'ws://127.0.0.1:4455';
+  const pass = _cfgBridge.getPass?.() || '';
       try {
         _ws && _ws.close(1000, 'reconnect');
       } catch {}
