@@ -8490,9 +8490,10 @@ let _toast = function (msg, opts) {
   }
 
   function renderScript(text) {
+    // transient in-flight guard to prevent re-entrant renders
     try {
-      if (window.__tp_rs_done) return;
-      window.__tp_rs_done = true;
+      if (window.__tp_rs_inflight) return;
+      window.__tp_rs_inflight = true;
     } catch {}
     const t = String(text || '');
 
@@ -8803,7 +8804,7 @@ let _toast = function (msg, opts) {
       paraIndex[0]?.el ||
       null;
     if (currentEl) currentEl.classList.add('active');
-    // Notify presence of script (hasScript) for gating heavy subsystems
+  // Notify presence of script (hasScript) for gating heavy subsystems
     try {
       const totalLines = (__paraTokens && __paraTokens.length) || 0;
       try {
@@ -8820,6 +8821,8 @@ let _toast = function (msg, opts) {
       } catch {}
       try { window.__tpHudInc && window.__tpHudInc('render', 'lines', totalLines); } catch {}
     } catch {}
+    // clear transient in-flight guard so subsequent renders are allowed
+    try { window.__tp_rs_inflight = false; } catch {}
   }
 
   // Dynamic bottom padding so the marker can sit over the final paragraphs
