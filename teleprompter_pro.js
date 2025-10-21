@@ -1124,7 +1124,7 @@ let _toast = function (msg, opts) {
         <div class="settings-inline-row">
           <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${getVal('camSize', 28)}" style="width:70px"></label>
           <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${getVal('camOpacity', 100)}" style="width:80px"></label>
-          <label><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror') ? 'checked' : ''}/> Mirror</label>
+          <label class="tp-check"><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror') ? 'checked' : ''} aria-label="Mirror camera" /><span>Mirror</span></label>
         </div>
         <div class="settings-small">Camera overlay floats over the script.</div>`
       )
@@ -1150,7 +1150,10 @@ let _toast = function (msg, opts) {
         `
         <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
           <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
-          <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false'}/> Enable OBS</label>
+          <label class="tp-check">
+            <input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false' }" aria-label="Enable OBS" />
+            <span>Enable OBS</span>
+          </label>
           <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
           <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
           <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
@@ -1174,7 +1177,7 @@ let _toast = function (msg, opts) {
         'advanced',
         `
         <div class="settings-inline-row">
-          <label><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''}/> Enable hybrid lock</label>
+          <label class="tp-check"><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''} aria-label="Enable hybrid lock" /><span>Enable hybrid lock</span></label>
         </div>
         <div class="settings-inline-row">
           <label>Responsiveness <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.022)}" style="width:80px"></label>

@@ -276,3 +276,7 @@ body.ck::after{
 .obs-test-msg{font-size:13px;padding:6px 8px;border-radius:8px}
 .obs-test-ok{background:rgba(56,161,105,0.08);color:#b7f4c9;border:1px solid rgba(56,161,105,0.18)}
 .obs-test-error{background:rgba(224,62,62,0.06);color:#ffd6d6;border:1px solid rgba(224,62,62,0.12)}
+
+/* Settings: consistent checkbox label alignment/visibility */
+.tp-check{display:inline-flex;align-items:center;gap:.5rem}
+.tp-check input{vertical-align:middle}
