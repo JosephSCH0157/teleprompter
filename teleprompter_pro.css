@@ -90,6 +90,34 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
     .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10;height:var(--topbar-h);box-sizing:border-box}
     .topbar strong{letter-spacing:.2px}
+
+    /* Robust topbar hairline / overlay
+       - Add a thin overlay separator so the topbar appears crisp over varying backgrounds.
+       - Use a pseudo-element to avoid layout shift and to keep the rule high-specificity but low-impact.
+       - Provide a fallback hairline for high-DPI by using transform translateZ(0.001px) to force a hairline in some browsers.
+    */
+    .topbar::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%; /* sit just below the bar */
+        height: 1px;
+        pointer-events: none;
+        background: linear-gradient(rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+        z-index: 160;
+        transform: translateZ(0.001px);
+    }
+
+    /* A subtle overlay when the player is in front/display mode to ensure separation from content */
+    .topbar.overlay {
+        background: rgba(0,0,0,0.35);
+    }
+
+    /* Optional hairline variant for very dark backgrounds */
+    .topbar.hairline-strong::after {
+        background: linear-gradient(rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+    }
     /* top-bar label rhythm & consistency */
     .chip{font-size:0.9rem;font-weight:600;color:var(--muted);border-radius:.5rem;padding:6px 8px}
     #debugPosChip{font-family:monospace; width:160px; flex-shrink:0; text-align:center}
