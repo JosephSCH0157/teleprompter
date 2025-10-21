@@ -1053,6 +1053,15 @@ let _toast = function (msg, opts) {
   function buildSettingsContent() {
     const body = document.getElementById('settingsBody');
     if (!body) return;
+    // Idempotency guard: if cards already exist, treat as already-built and sync values.
+    try {
+      if (body.querySelector('.settings-card')) {
+        _settingsBuilt = true;
+        try { syncSettingsValues(); } catch {}
+        try { setupSettingsTabs(); } catch {}
+        return;
+      }
+    } catch {}
     if (_settingsBuilt) {
       if (!body.querySelector('.settings-card')) {
         _settingsBuilt = false;
@@ -5225,7 +5234,10 @@ let _toast = function (msg, opts) {
     }
 
     // Settings overlay wiring
-    if (settingsBtn && settingsOverlay && settingsClose && settingsBody) {
+      if (settingsBtn && settingsOverlay && settingsClose && settingsBody) {
+        // Avoid wiring multiple times if script executed twice for any reason
+        if (settingsBtn.dataset && settingsBtn.dataset.wired) return;
+        try { settingsBtn.dataset.wired = '1'; } catch {}
       const openSettings = () => {
         try {
           buildSettingsContent();
