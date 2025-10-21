@@ -55,11 +55,11 @@
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 74710] entered main IIFE"
+      "text": "[TP-BOOT 77839] entered main IIFE"
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 74710] installed global error hooks"
+      "text": "[TP-BOOT 77839] installed global error hooks"
     },
     {
       "type": "log",
@@ -159,11 +159,103 @@
     },
     {
       "type": "log",
+      "text": "[TP-TRACE] dom-content-loaded"
+    },
+    {
+      "type": "log",
       "text": "[TP-TRACE] early-init-fallback"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] dom-content-loaded"
+      "text": "[TP-TRACE] script-enter"
+    },
+    {
+      "type": "log",
+      "text": "[TP-BOOT 77935] entered main IIFE"
+    },
+    {
+      "type": "log",
+      "text": "[TP-BOOT 77935] installed global error hooks"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-boot-block"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] post-minimalBoot"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] pre-init-scheduling-early"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] init-scheduling-early-exited"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-zoom-guard"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-wireNormalizeButton"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-buildSettingsContent-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-syncSettingsValues-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-setupSettingsTabs-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-fallbackNormalize-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-normalizeToStandard-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-validateStandardTags-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-ensureHelpUI-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore end"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] after-_initCore-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] pre-init-scheduling"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] init-scheduling-exited"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] late-init-fallback-scheduled"
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete"
     },
     {
       "type": "log",
@@ -180,6 +272,10 @@
     {
       "type": "log",
       "text": "[TP-Pro] init() wrapper end (success)"
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] perf:reflow-risk JSHandle@object"
     },
     {
       "type": "debug",
