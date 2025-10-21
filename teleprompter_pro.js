@@ -1150,15 +1150,34 @@ let _toast = function (msg, opts) {
         `
         <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
           <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
-          <label class="tp-check">
-            <input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false' }" aria-label="Enable OBS" />
-            <span>Enable OBS</span>
-          </label>
+          <div class="settings-row">
+            <label class="tp-check">
+              <input id="settingsEnableObs" type="checkbox" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false' }" aria-label="Enable OBS" />
+              <span>Enable OBS</span>
+            </label>
+
+            <span class="obs-pill">OBS: <strong id="obsStatusText">unknown</strong></span>
+
+            <label class="tp-field">
+              <span>URL</span>
+              <input id="settingsObsUrl" class="input-url" type="text" placeholder="127.0.0.1" inputmode="url" autocomplete="off" value="${getVal('obsUrl', '')}" />
+            </label>
+
+            <label class="tp-field">
+              <span>Port</span>
+              <input id="settingsObsPort" class="input-port" type="text" placeholder="4455" inputmode="numeric" pattern="[0-9]+" autocomplete="off" value="" />
+            </label>
+
+            <label class="tp-check" title="Use secure WebSocket (wss)">
+              <input id="settingsObsSecure" type="checkbox" ${isChecked('obsSecure') ? 'checked' : ''} />
+              <span>Secure (wss)</span>
+            </label>
+          </div>
+
           <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
           <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
           <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.200:4455')}" placeholder="ws://host:port" aria-label="OBS websocket URL" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" aria-label="OBS password" />
           <label class="tp-check" style="margin-left:6px">
             <input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''} disabled aria-label="Remember password (disabled)" />
@@ -4730,6 +4749,10 @@ let _toast = function (msg, opts) {
                 statusEl.classList.add('obs-reconnecting');
               else statusEl.classList.add('idle');
             }
+            try {
+              const tEl = document.getElementById('obsStatusText');
+              if (tEl) tEl.textContent = (String(text || '') || 'unknown').replace(/^OBS:\s*/i, '');
+            } catch {}
           } catch {}
         };
         // Initial probe
