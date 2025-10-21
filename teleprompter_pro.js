@@ -32,6 +32,24 @@ let _toast = function (msg, opts) {
     }
     window.__TP_ALREADY_BOOTED__ = true;
   } catch {}
+  // --- Init-done marker (for smoke/CI) ---
+  (function ensureInitMarker(){
+    if (window.__tp_init_done == null) window.__tp_init_done = false;
+    if (!window.tpMarkInitDone) {
+      window.tpMarkInitDone = function(reason = 'unspecified'){
+        if (window.__tp_init_done) return;
+        window.__tp_init_done = true;
+        try {
+          const ctx = window.opener ? 'Display' : (window.name || 'Main');
+          const v = (window.App && (window.App.version || window.App.appVersion)) || null;
+          // JSON pulse for runners
+          console.log('[TP-INIT]', JSON.stringify({ tp_init_done: true, ctx, appVersion: v, reason }));
+          // Optional: event for listeners
+          window.dispatchEvent(new CustomEvent('tp:init:done', { detail: { ctx, appVersion: v, reason } }));
+  } catch {}
+      };
+    }
+  })();
   // Derive a short context tag for logs (Main vs Display)
   const TP_CTX = (function () {
     try {
@@ -9654,7 +9672,8 @@ let _toast = function (msg, opts) {
     console.log('[TP-Pro] init() wrapper start');
     try {
       await _initCore();
-      console.log('[TP-Pro] init() wrapper end (success)');
+  console.log('[TP-Pro] init() wrapper end (success)');
+  try { window.tpMarkInitDone && window.tpMarkInitDone('init-wrapper-end'); } catch {}
       // After DOM ready and core init, fetch and propagate the build version
       (async function attachVersionEverywhere() {
         try {
