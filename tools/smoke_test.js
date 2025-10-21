@@ -8,6 +8,8 @@ const URL = 'http://localhost:8080/teleprompter_pro.html';
 
 async function run() {
   try {
+    // Ensure static server is running so the page can be loaded
+    try { require('./static_server.js'); } catch {}
     // Prefer Playwright
     let playwright;
     try {
@@ -49,7 +51,7 @@ async function run() {
     console.error('No Playwright or Puppeteer installed. Install one to run the smoke test:');
     console.error('  npm install -D playwright  # or puppeteer');
     process.exit(3);
-  } catch {
+  } catch (e) {
     console.error('Smoke test error', e);
     process.exit(4);
   }
