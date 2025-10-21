@@ -44,6 +44,8 @@ let _toast = function (msg, opts) {
         if (window.__tp_init_done) return;
         window.__tp_init_done = true;
         try {
+          // Cancel any pending late-init fallback timer when init completes
+          try { if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
           const ctx = window.opener ? 'Display' : (window.name || 'Main');
           const v = (window.App && (window.App.version || window.App.appVersion)) || null;
           // JSON pulse for runners
@@ -188,6 +190,8 @@ let _toast = function (msg, opts) {
     } catch {}
   __tpBootPush('script-enter');
   _origLog(tag('entered main IIFE'));
+  // Late-init timer handle: used to avoid scheduling fallback when init starts later
+  let _lateInitTimer = null;
     window.addEventListener('DOMContentLoaded', () => {
       __tpBootPush('dom-content-loaded');
     });
@@ -566,6 +570,7 @@ let _toast = function (msg, opts) {
           // Prevent concurrent or duplicate init runs
           if (window.__tp_init_running || window.__tp_init_done) return;
           window.__tp_init_running = true;
+          try { if (typeof lateInitTimer !== 'undefined' && lateInitTimer) { clearTimeout(lateInitTimer); lateInitTimer = null; } } catch {}
           // If core is already available, run immediately
           if (typeof _initCore === 'function' || typeof window._initCore === 'function') {
             try {
@@ -6480,17 +6485,22 @@ let _toast = function (msg, opts) {
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
           try {
+            // mark running early and cancel any late-init timer
+            try { window.__tp_init_running = true; if (_lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
             init();
           } catch {
             console.error('init failed', e);
+            try { window.__tp_init_running = false; } catch {}
           }
         });
       } else {
         Promise.resolve().then(() => {
           try {
+            try { window.__tp_init_running = true; if (_lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
             init();
           } catch {
             console.error('init failed', e);
+            try { window.__tp_init_running = false; } catch {}
           }
         });
       }
@@ -6502,8 +6512,9 @@ let _toast = function (msg, opts) {
 
   // Hard fallback: only schedule if nothing else started; guard runner to skip when init started elsewhere
   try {
-    if (!window.__tp_init_running && !window.__tp_init_done) {
-      setTimeout(() => {
+    if (!window.__tp_init_running && !window.__tp_init_done && !_lateInitTimer) {
+      _lateInitTimer = setTimeout(() => {
+        _lateInitTimer = null;
         try {
           if (window.__tp_init_running || window.__tp_init_done) {
             try { console.debug('[TP-TRACE] late-init-fallback-skip'); } catch {}
@@ -6516,7 +6527,7 @@ let _toast = function (msg, opts) {
         } catch {
           console.error('[TP-Pro] Late init fallback failed', e);
         }
-      }, 1500);
+  }, 1500);
     }
   } catch {}
   try {
