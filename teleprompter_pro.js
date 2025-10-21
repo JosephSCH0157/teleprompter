@@ -1392,6 +1392,8 @@ let _toast = function (msg, opts) {
 
     const apply = (name) => {
       const sel = name || 'general';
+      // Preserve current scroll position so switching tabs doesn't jump the sheet
+      const prevScroll = sb ? sb.scrollTop : 0;
       try {
         localStorage.setItem('tp_settings_tab', sel);
       } catch {}
@@ -1401,8 +1403,22 @@ let _toast = function (msg, opts) {
         if (show) showCard(c);
         else hideCard(c);
       });
+      // Restore scroll after layout/animation frame
+      try {
+        if (sb) requestAnimationFrame(() => {
+          try { sb.scrollTop = prevScroll; } catch {}
+        });
+      } catch {}
     };
-    tabs.forEach((t) => t.addEventListener('click', () => apply(t.dataset.tab)));
+    tabs.forEach((t) => {
+      t.addEventListener('click', (ev) => {
+        try {
+          apply(t.dataset.tab);
+          // Blur the button to avoid focus-induced scrolling in some browsers
+          try { ev.currentTarget && ev.currentTarget.blur && ev.currentTarget.blur(); } catch {}
+        } catch {}
+      });
+    });
     let last = 'general';
     try {
       last = localStorage.getItem('tp_settings_tab') || 'general';
