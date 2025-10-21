@@ -470,12 +470,14 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         </div>
         <div class="settings-small">Manage speaker tags & quick normalization.</div>`));
       frag.appendChild(card('cardRecording','Recording','recording',`
-        <div class="settings-inline-row">
-          <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs')?'checked':''}/> Enable OBS</label>
+        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
+          <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
+          <label style="margin-left:6px"><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs')?'checked':''} aria-checked="${isChecked('enableObs') ? 'true' : 'false'}/> Enable OBS</label>
           <input id="settingsObsUrl" class="obs-url" type="text" value="${getVal('obsUrl','ws://127.0.0.1:4455')}" placeholder="ws://host:port" />
-          <input id="settingsObsPass" class="obs-pass" type="password" value="${getVal('obsPassword','')}" placeholder="password" />
+          <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword','')}" placeholder="password" aria-label="OBS password" />
+          <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" disabled aria-disabled="true" tabindex="-1"/> Remember password</label>
           <button id="settingsObsTest" class="btn-chip">Test</button>
-        </div>
+        </form>
         <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>`));
       try {
         body.appendChild(frag);
@@ -641,6 +643,24 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const obsUrlS = document.getElementById('settingsObsUrl');
       const obsPassS = document.getElementById('settingsObsPass');
       const obsTestS = document.getElementById('settingsObsTest');
+      // Make the "Remember password" control inert and ensure password input is ephemeral
+      try {
+        const remEl = document.getElementById('settingsObsRemember');
+        if (remEl) {
+          try { remEl.disabled = true; } catch {}
+          try { remEl.setAttribute('aria-disabled', 'true'); } catch {}
+          try { remEl.tabIndex = -1; } catch {}
+          try { const lab = remEl.closest && remEl.closest('label'); if (lab) lab.classList.add('dim'); } catch {}
+          try { remEl.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); }); } catch {}
+        }
+        const passEl = document.getElementById('settingsObsPass');
+        if (passEl) {
+          try { passEl.setAttribute('autocomplete', 'current-password'); } catch {}
+          try { passEl.setAttribute('spellcheck', 'false'); } catch {}
+          try { passEl.setAttribute('inputmode', 'text'); } catch {}
+          try { passEl.setAttribute('enterkeyhint', 'done'); } catch {}
+        }
+      } catch(e) { /* defensive */ }
       obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
       obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
       obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
@@ -649,13 +669,11 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
         try {
           const rem = document.getElementById('settingsObsRemember');
           const urlEl = document.getElementById('settingsObsUrl');
-          const passEl = document.getElementById('settingsObsPass');
+          // Password persistence is intentionally disabled until a secure store is available.
           if (rem?.checked) {
             try { if (urlEl?.value) localStorage.setItem('obsUrl', urlEl.value); } catch {}
-            try { if (passEl?.value) localStorage.setItem('obsPassword', passEl.value); } catch {}
             try { localStorage.setItem('obsRemember','1'); } catch {}
           } else {
-            try { localStorage.removeItem('obsPassword'); } catch {}
             try { localStorage.setItem('obsRemember','0'); } catch {}
           }
         } catch(e) { /* ignore */ }
@@ -722,10 +740,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       // Helper: read OBS password from settings/main/localStorage depending on "Remember" flag
       window.readObsPassword = function () {
         try {
+          // Prefer in-DOM inputs; we intentionally do NOT read the persisted localStorage password
           const s = document.getElementById('settingsObsPass')?.value ?? document.getElementById('obsPassword')?.value ?? '';
-          if (s) return s;
-          try { if (localStorage.getItem('obsRemember') === '1') return localStorage.getItem('obsPassword') || ''; } catch {}
-          return '';
+          return s || '';
         } catch(e) { return ''; }
       };
     }
