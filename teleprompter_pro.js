@@ -5370,7 +5370,7 @@ let _toast = function (msg, opts) {
         try {
           buildSettingsContent();
         } catch {}
-        // Auto-sync OBS fields from Settings -> main so adapters see values immediately
+  // Auto-sync OBS fields from Settings -> main so adapters see values immediately
         try {
           const setUrl = document.getElementById('settingsObsUrl');
           const setPass = document.getElementById('settingsObsPass');
@@ -5397,6 +5397,8 @@ let _toast = function (msg, opts) {
               localStorage.setItem('tp_obs_remember', setRem.checked ? '1' : '0');
             }
           } catch {}
+          // Wire the OBS-specific settings controls when the sheet opens
+          try { wireObsSettings && wireObsSettings(); } catch {}
           try {
             if (window.__TP_DEV) console.debug('[TP-Pro] synced Settings -> main (obs url/pass)');
           } catch {}
@@ -5408,6 +5410,7 @@ let _toast = function (msg, opts) {
       setTimeout(() => {
         try {
           buildSettingsContent();
+          try { wireObsSettings && wireObsSettings(); } catch {}
         } catch {}
       }, 0);
       // Dev-only: render a compact OBS handshake log into #obsDevPane when present
@@ -5509,6 +5512,126 @@ let _toast = function (msg, opts) {
     };
   obsUrlInput?.addEventListener('change', saveObsConfig);
   obsPassInput?.addEventListener('change', saveObsConfig);
+
+  // --- New OBS config helpers (host/port/secure/enabled) ---
+  const OBS_HOST_KEY = 'tp_obs_host';
+  const OBS_PORT_KEY = 'tp_obs_port';
+  const OBS_SECURE_KEY = 'tp_obs_secure';
+  const OBS_ENABLED_KEY = 'tp_obs_enabled';
+  const OBS_DEFAULTS = { host: '127.0.0.1', port: '4455', secure: false, enabled: false };
+
+  function getObsConfig() {
+    try {
+      return {
+        host: localStorage.getItem(OBS_HOST_KEY) || OBS_DEFAULTS.host,
+        port: localStorage.getItem(OBS_PORT_KEY) || OBS_DEFAULTS.port,
+        secure: localStorage.getItem(OBS_SECURE_KEY) === '1',
+        enabled: localStorage.getItem(OBS_ENABLED_KEY) === '1',
+      };
+    } catch {
+      return { ...OBS_DEFAULTS };
+    }
+  }
+
+  function saveObsConfigFields({ host, port, secure, enabled } = {}) {
+    try {
+      if (host != null) localStorage.setItem(OBS_HOST_KEY, String(host).trim());
+      if (port != null) localStorage.setItem(OBS_PORT_KEY, String(port).trim());
+      if (secure != null) localStorage.setItem(OBS_SECURE_KEY, secure ? '1' : '0');
+      if (enabled != null) localStorage.setItem(OBS_ENABLED_KEY, enabled ? '1' : '0');
+    } catch {}
+  }
+
+  function updateObsStatus(text) {
+    try {
+      const pill = document.getElementById('obsStatusText');
+      if (pill) pill.textContent = String(text || 'unknown');
+    } catch {}
+  }
+
+  async function wireObsSettings() {
+    try {
+      const urlEl = document.getElementById('settingsObsUrl');
+      const portEl = document.getElementById('settingsObsPort');
+      const secureEl = document.getElementById('settingsObsSecure');
+      const enableEl = document.getElementById('settingsEnableObs');
+      if (!urlEl || !portEl || !secureEl || !enableEl) return;
+
+      const cfg = getObsConfig();
+      urlEl.value = cfg.host;
+      portEl.value = cfg.port;
+      secureEl.checked = !!cfg.secure;
+      enableEl.checked = !!cfg.enabled;
+
+      const apply = async (change = {}) => {
+        const next = {
+          host: urlEl.value || OBS_DEFAULTS.host,
+          port: portEl.value || OBS_DEFAULTS.port,
+          secure: secureEl.checked,
+          enabled: enableEl.checked,
+          ...change,
+        };
+        saveObsConfigFields(next);
+
+        try {
+          if (!next.enabled) {
+            updateObsStatus('disabled');
+            try {
+              // prefer the exported recorder surface if present
+              if (typeof recorder !== 'undefined' && recorder && typeof recorder.disconnect === 'function') await recorder.disconnect();
+              else {
+                const rm = await loadRecorder();
+                const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
+                if (r && typeof r.disconnect === 'function') await r.disconnect();
+              }
+            } catch {}
+            return;
+          }
+          updateObsStatus('connecting…');
+          try {
+            // Try to reconfigure inline bridge or adapter
+            if (typeof window !== 'undefined' && window.__obsBridge && typeof window.__obsBridge.configure === 'function') {
+              window.__obsBridge.configure({ url: `${next.secure ? 'wss' : 'ws'}://${next.host}:${next.port}`, password: document.getElementById('settingsObsPass')?.value || '' });
+            }
+            // Recorder surface
+            if (typeof recorder !== 'undefined' && recorder && typeof recorder.reconfigure === 'function') {
+              await recorder.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure });
+            } else {
+              const rm = await loadRecorder();
+              const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
+              try {
+                if (r && typeof r.reconfigure === 'function') await r.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure });
+              } catch {}
+            }
+            // Connect via recorder surface preferred
+            if (typeof recorder !== 'undefined' && recorder && typeof recorder.connect === 'function') {
+              await recorder.connect();
+            } else {
+              const rm = await loadRecorder();
+              const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
+              if (r && typeof r.connect === 'function') await r.connect();
+            }
+            updateObsStatus('connected');
+          } catch (err) {
+            console.warn('[OBS] config/apply error', err);
+            updateObsStatus('error');
+          }
+        } catch (err) {
+          console.warn('[OBS] apply outer error', err);
+          updateObsStatus('error');
+        }
+      };
+
+      enableEl.addEventListener('change', () => apply());
+      secureEl.addEventListener('change', () => apply());
+      urlEl.addEventListener('change', () => apply());
+      portEl.addEventListener('change', () => apply());
+
+      // Reflect initial state; do not auto-connect unless enabled
+      updateObsStatus(enableEl.checked ? 'connecting…' : 'disabled');
+      if (enableEl.checked) apply().catch(() => {});
+    } catch {}
+  }
 
     // When OBS fields change, reconfigure adapter immediately so it has latest values
     try {
