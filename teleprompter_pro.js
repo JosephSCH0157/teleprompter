@@ -2261,7 +2261,7 @@ let _toast = function (msg, opts) {
     'is',
     'are',
   ]);
-  function extractHighIDFPhrases(tokens, n = 3, topK = 6) {
+  function extractHighIDFPhrases(tokens, n = 3, topK = 10) {
     const out = [];
     if (!Array.isArray(tokens) || tokens.length < n) return out;
     for (let i = 0; i <= tokens.length - n; i++) {
@@ -2300,6 +2300,29 @@ let _toast = function (msg, opts) {
       }
     }
     return hits;
+  }
+  // Helper: compute in-vocab token ratio for spoken overlap gating
+  function inVocabRatio(tokens, vocabSet) {
+    try {
+      if (!Array.isArray(tokens) || tokens.length === 0) return 0;
+      let n = 0;
+      for (const t of tokens) if (vocabSet.has(t)) n++;
+      return n / tokens.length;
+    } catch {
+      return 0;
+    }
+  }
+
+  const COMMAND_TOKENS = new Set(['scroll', 'ok', 'okay', 'test', 'testing', 'uh', 'um', 'you', 'need', 'to']);
+  function looksLikeCommand(tokens) {
+    try {
+      if (!Array.isArray(tokens) || tokens.length === 0) return false;
+      let c = 0;
+      for (const t of tokens) if (COMMAND_TOKENS.has(t)) c++;
+      return c / Math.max(1, tokens.length) > 0.4;
+    } catch {
+      return false;
+    }
   }
   // Hard-bound current line tracking
   let currentEl = null; // currently active <p> element
@@ -5653,12 +5676,28 @@ let _toast = function (msg, opts) {
       })();
     try {
       const savedAggro = localStorage.getItem(AGGRO_KEY);
-      if (savedAggro && matchAggroSel) matchAggroSel.value = savedAggro;
+      // If Calm mode is requested (e.g. ?calm=1) force conservative behavior for tests.
+      if (typeof CALM !== 'undefined' && CALM && matchAggroSel) {
+        matchAggroSel.value = '1';
+      } else if (savedAggro && matchAggroSel) {
+        matchAggroSel.value = savedAggro;
+      } else if (matchAggroSel) {
+        // No saved preference: default to Conservative for deterministic runs
+        matchAggroSel.value = '1';
+      }
     } catch {}
     const SMOOTH_KEY = 'tp_motion_smooth_v1';
     try {
       const savedSmooth = localStorage.getItem(SMOOTH_KEY);
-      if (savedSmooth && motionSmoothSel) motionSmoothSel.value = savedSmooth;
+      // Calm mode prefers the calm/stable motion profile
+      if (typeof CALM !== 'undefined' && CALM && motionSmoothSel) {
+        motionSmoothSel.value = 'stable';
+      } else if (savedSmooth && motionSmoothSel) {
+        motionSmoothSel.value = savedSmooth;
+      } else if (motionSmoothSel) {
+        // Default to Stable for deterministic runs
+        motionSmoothSel.value = 'stable';
+      }
     } catch {}
 
     // TP: initial-render
@@ -6745,7 +6784,11 @@ let _toast = function (msg, opts) {
 
       // Compute coverage of current virtual line by spoken tail
       const lineTokens = scriptWords.slice(vList[vIdx].start, vList[vIdx].end + 1);
-      const cov = tokenCoverage(lineTokens, spoken);
+  const cov = tokenCoverage(lineTokens, spoken);
+  const SCRIPT_VOCAB = window.__SCRIPT_VOCAB || new Set();
+  const oovRatio = 1 - inVocabRatio(spoken, SCRIPT_VOCAB);
+  if (oovRatio > 0.5) return { idx: bestIdx, sim: bestSim, soft: false }; // too many OOVs
+  if (looksLikeCommand(spoken)) return { idx: bestIdx, sim: bestSim, soft: false };
 
       if (stagnantMs >= STALL_MS && cov >= COV_THRESH) {
         // Probe the next few virtual lines for a prefix match
@@ -6754,10 +6797,33 @@ let _toast = function (msg, opts) {
           const v = vList[j];
           const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
           const sim = _sim(spoken, win);
+          // LOST-mode stricter gating
+          const LOST = PLL.state === 'LOST' || __tpLost;
+          const minSim = LOST ? 0.62 : SOFT_ADV_MIN_SIM;
+          const streakCap = LOST ? 1 : SOFT_ADV_MAX_STREAK;
+          // require at least an n-gram hit or an anchor nearby when LOST
+          const ngramHitsNear = (() => {
+            try {
+              const g = getNgrams(spoken, 3);
+              for (const gk of g) if (__ngramIndex.has(gk)) return 1;
+            } catch {}
+            return 0;
+          })();
+          const anchorsNear = (() => {
+            try {
+              const anchors = extractHighIDFPhrases(spoken, 3);
+              if (!anchors.length) return 0;
+              const hits = searchBand(anchors, v.start - 300, v.end + 300, spoken);
+              return hits.length;
+            } catch {
+              return 0;
+            }
+          })();
           if (
-            sim >= SOFT_ADV_MIN_SIM &&
+            sim >= minSim &&
             fallbackStreak < 3 &&
-            softAdvanceStreak < SOFT_ADV_MAX_STREAK
+            softAdvanceStreak < streakCap &&
+            (LOST ? (ngramHitsNear > 0 || anchorsNear > 0) : true)
           ) {
             try {
               if (typeof debug === 'function')
@@ -7273,9 +7339,17 @@ let _toast = function (msg, opts) {
       const score = computeLineSimilarity(batchTokens, vis);
 
       // Apply header penalty (skip_prior)
-      if (para.isNonSpoken) {
-        scores[j] = score - 0.6; // header_prior = -0.6
-      } else {
+      // Devalue/ignore meta/branding lines
+      try {
+        if (para.isMeta) {
+          // apply heavy penalty so these lines don't win soft-advance
+          scores[j] = score * 0.5 - 0.2;
+        } else if (para.isNonSpoken) {
+          scores[j] = score - 0.6; // header_prior = -0.6
+        } else {
+          scores[j] = score;
+        }
+      } catch {
         scores[j] = score;
       }
     }
@@ -7362,6 +7436,8 @@ let _toast = function (msg, opts) {
 
     // Rescue mode state
     if (!window.__tpRescueMode) window.__tpRescueMode = { active: false, enteredAt: 0 };
+    // Soft-advance freeze after anchor rescue
+    if (typeof window.__tpSoftAdvanceFreeze === 'undefined') window.__tpSoftAdvanceFreeze = { until: 0 };
 
     if (stallDetected) {
       // Enter rescue mode: widen window, relax β, try anchor scan
@@ -7409,6 +7485,18 @@ let _toast = function (msg, opts) {
                     distance: anchorDistance,
                     allowed: allowJump,
                   });
+              } catch {}
+              // Freeze soft-advance for next ~2 batches and issue a catch-up to marker
+              try {
+                window.__tpSoftAdvanceFreeze.until = performance.now() + 200; // ~2 batches at 10Hz
+                softAdvanceStreak = 0;
+                const el = lineEls && lineEls[Math.max(0, bestIdx)] ? lineEls[Math.max(0, bestIdx)] : null;
+                if (el) {
+                  try {
+                    const y = getYForElInScroller(el);
+                    tpScrollTo(y);
+                  } catch {}
+                }
               } catch {}
             }
           }
@@ -7742,7 +7830,8 @@ let _toast = function (msg, opts) {
     } catch {}
 
     try {
-      const allowSoftAdv = performance.now() > autoBumpUntil;
+      const nowPerf = performance.now();
+      const allowSoftAdv = nowPerf > autoBumpUntil && nowPerf > (window.__tpSoftAdvanceFreeze?.until || 0);
       const soft = allowSoftAdv ? maybeSoftAdvance(bestIdx, bestSim, spoken) : null;
       if (soft && soft.soft) {
         bestIdx = soft.idx;
@@ -8244,7 +8333,22 @@ let _toast = function (msg, opts) {
       const key = normLineKey(el.textContent || '');
       const isNonSpoken = isNonSpokenLine(el.textContent || '');
       const paraIdx = paraIndex.length; // Current paragraph index
-      paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
+      // Mark meta/branding lines: short or repeated headers
+      const isMeta = (function () {
+        try {
+          const low = key || '';
+          if (!low) return false;
+          if (low.startsWith('bs with joe')) return true;
+          const tokCount = (low.split(/\s+/) || []).length;
+          if (tokCount <= 5) return true;
+          const sig = normTokens((el.textContent || '')).slice(0, 4).join(' ');
+          const vSigCount = __vSigCount.get(sig) || 0;
+          return vSigCount > 1;
+        } catch {
+          return false;
+        }
+      })();
+      paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken, isMeta });
       el.dataset.words = wc;
       el.dataset.idx = paraIdx;
       el.dataset.lineIdx = paraIdx; // for line-index.js
@@ -8270,6 +8374,12 @@ let _toast = function (msg, opts) {
         if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1);
       } catch {}
     }
+    // Build a script vocab set for quick overlap checks (used by inVocabRatio)
+    try {
+      const vocab = new Set();
+      for (const toks of __paraTokens) for (const t of toks) vocab.add(t);
+      window.__SCRIPT_VOCAB = vocab;
+    } catch {}
 
     // Mirror to display AFTER data attributes are set
     try {
