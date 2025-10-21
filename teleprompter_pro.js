@@ -50,6 +50,36 @@ let _toast = function (msg, opts) {
       };
     }
   })();
+  // Gate heavy subsystems until a real script is present
+  try {
+    if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
+    if (!window.tpSetHasScript) {
+      window.tpSetHasScript = function (has) {
+        try {
+          const prev = !!window.__tp_has_script;
+          window.__tp_has_script = !!has;
+          if (prev === window.__tp_has_script) return;
+          console.log('[TP-Pro] tpSetHasScript ->', window.__tp_has_script);
+          // Emit event for test harnesses / debug tools
+          try {
+            window.dispatchEvent(new CustomEvent('tp:script:presence', { detail: { has: window.__tp_has_script } }));
+          } catch {}
+          // Light control hooks: stop/start optional subsystems
+          try {
+            if (!window.__tp_has_script) {
+              // pause any sampling loops / matcher engines if present
+              window.__pll_running = false;
+              window.__hud_running = false;
+            } else {
+              // consumers may start when they see the event
+              window.__pll_running = true;
+              window.__hud_running = true;
+            }
+          } catch {}
+        } catch {}
+      };
+    }
+  } catch {}
   // Derive a short context tag for logs (Main vs Display)
   const TP_CTX = (function () {
     try {
@@ -3775,6 +3805,10 @@ let _toast = function (msg, opts) {
       }
 
       setInterval(() => {
+        // If there is no script loaded, skip watchdog activity to save cycles and avoid noisy logs
+        try {
+          if (!window.__tp_has_script) return;
+        } catch {}
         // Increment tick counter for UI sampling
         incrementMetric('ticks');
 
@@ -8689,6 +8723,12 @@ let _toast = function (msg, opts) {
       paraIndex[0]?.el ||
       null;
     if (currentEl) currentEl.classList.add('active');
+    // Notify presence of script (hasScript) for gating heavy subsystems
+    try {
+      const totalLines = (__paraTokens && __paraTokens.length) || 0;
+      try { window.tpSetHasScript && window.tpSetHasScript(totalLines > 0); } catch {}
+      try { window.__tpHudInc && window.__tpHudInc('render', 'lines', totalLines); } catch {}
+    } catch {}
   }
 
   // Dynamic bottom padding so the marker can sit over the final paragraphs
@@ -8723,6 +8763,8 @@ let _toast = function (msg, opts) {
       let tId = 0;
       const loop = () => {
         try {
+          // Skip end-drift behavior when there is no script loaded
+          try { if (!window.__tp_has_script) { tId = setTimeout(loop, TICK_MS); return; } } catch {}
           const now = performance.now();
           const sc = viewer;
           if (!sc) return;
