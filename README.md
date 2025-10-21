@@ -58,3 +58,63 @@ npm run check
 ```
 
 If you prefer a faster developer loop, run `npm run lint` and `npm run types` separately while coding.
+
+## Testing → Smoke Test
+
+Minimal headless check that Anvil boots and the key UI renders.
+
+**Run locally**
+```bash
+node tools/static_server.js &
+node tools/smoke_test.js --calm --timeout=120000
+```
+
+What it checks
+
+- `#tp_toast_container` (toast host)
+- `#scriptSlots` (scripts UI area)
+- `window.__tp_init_done` (set by `tpMarkInitDone()` at the end of init)
+
+Captures console to flag duplicate boot attempts
+
+Duplicate boot handling
+
+By default, duplicate boot is a warning if `initDone=true` (guard blocks side effects).
+
+Set `SMOKE_STRICT_DUPBOOT=1` to fail CI on duplicate boot:
+
+```bash
+SMOKE_STRICT_DUPBOOT=1 node tools/smoke_test.js --calm
+```
+
+The smoke prints a one-line JSON summary:
+
+```
+[SMOKE-REPORT] {"ok":true,"runner":"puppeteer","dupBoot":true,...}
+```
+
+### TypeScript in a hybrid JS/TS repo
+
+The repo contains legacy JS plus new TS. We stage the migration:
+
+1. Build references first (they emit `.d.ts`):
+  ```bash
+  npm run build:logic
+  ```
+
+2. Type-check without emitting JS:
+
+```bash
+npm run typecheck
+```
+
+Why exclude `src/build-logic/**`?
+Those are prebuilt declaration artifacts; excluding them avoids TS6305 “expected outputs” churn while we incrementally convert.
+
+Why `checkJs: false` (temporary)?
+Legacy JS is noisy under TS. We'll re-enable it per-folder as we migrate (see “Migration plan” below).
+
+Flip `checkJs` back on later by:
+
+- adding `// @ts-check` to files you're ready to enforce, or
+- using folder `tsconfig.json` with `checkJs: true` scoped to the new TS/JS you want strict.

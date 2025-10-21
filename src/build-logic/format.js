@@ -4,11 +4,23 @@
  * Format inline markup into safe HTML. Dependencies (safeColor, roleStyle, escapeHtml)
  * are injected to keep this module pure and testable.
  */
-export function formatInlineMarkup(text, deps) {
-    const safeColor = deps?.safeColor || ((c) => (c || '').trim());
-    const roleStyle = deps?.roleStyle || ((k) => '');
-    const escapeHtml = deps?.escapeHtml ||
-        ((s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? '')));
+export type SafeColorFn = (c?: string) => string;
+export type RoleStyleFn = (k: string) => string;
+export type EscapeHtmlFn = (s: unknown) => string;
+
+export interface FormatDeps {
+    safeColor?: SafeColorFn;
+    roleStyle?: RoleStyleFn;
+    escapeHtml?: EscapeHtmlFn;
+}
+
+export function formatInlineMarkup(text: string, deps?: FormatDeps): string {
+    const safeColor: SafeColorFn = deps?.safeColor || ((c) => (c || '').trim());
+    const roleStyle: RoleStyleFn = deps?.roleStyle || ((k) => '');
+    const escapeHtml: EscapeHtmlFn =
+        deps?.escapeHtml ||
+        ((s) =>
+            String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? '')));
     let s = escapeHtml(text);
     // basic
     s = s

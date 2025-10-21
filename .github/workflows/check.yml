@@ -1,3 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+
+      # Start simple static server (yours auto-noops if already running)
+      - name: Start static server
+        run: node tools/static_server.js &
+      
+      # Non-strict on PRs
+      - name: Smoke (PR - non-strict)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: node tools/smoke_test.js --calm --timeout=120000
+
+      # Strict on pushes to main
+      - name: Smoke (push - strict dupBoot)
+        if: ${{ github.event_name == 'push' }}
+        env:
+          SMOKE_STRICT_DUPBOOT: "1"
+        run: node tools/smoke_test.js --calm --timeout=120000
+
+      - name: Save smoke report
+        if: always()
+        run: |
+          # Grab the first SMOKE-REPORT line from the step summary or logs
+          grep -a "SMOKE-REPORT" -m 1 $GITHUB_STEP_SUMMARY || true
 name: CI - checks
 
 on:
@@ -25,14 +63,16 @@ jobs:
       - name: Lint (JS)
         run: npm run lint || true
 
-      - name: Typecheck (TS)
-        run: npx tsc -p . --noEmit
+      - name: TypeScript (build logic + typecheck)
+        run: |
+          npm run build:logic
+          npm run typecheck
 
       - name: Run smoke (headless)
         id: smoke
         run: |
           set -eo pipefail
-          node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless --timeout=120000 | tee smoke.log
+          npm run smoke | tee smoke.log
 
       - name: Extract smoke report
         if: always()
