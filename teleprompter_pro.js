@@ -71,26 +71,22 @@ let _toast = function (msg, opts) {
     if (!window.tpSetHasScript) {
       window.tpSetHasScript = function (has) {
         try {
-          const prev = !!window.__tp_has_script;
-          window.__tp_has_script = !!has;
-          if (prev === window.__tp_has_script) return;
-          console.log('[TP-Pro] tpSetHasScript ->', window.__tp_has_script);
+          // Only set the 'has script' flag once and only when true.
+          // This centralizes the decision and avoids flip-flopping during wiring.
+          if (!has) return; // ignore false/disarm calls
+          if (window.__tp_has_script) return; // already armed
+          window.__tp_has_script = true;
           // Emit event for test harnesses / debug tools
           try {
             window.dispatchEvent(new CustomEvent('tp:script:presence', { detail: { has: window.__tp_has_script } }));
           } catch {}
-          // Light control hooks: stop/start optional subsystems
+          // Light control hooks: start optional subsystems
           try {
-            if (!window.__tp_has_script) {
-              // pause any sampling loops / matcher engines if present
-              window.__pll_running = false;
-              window.__hud_running = false;
-            } else {
-              // consumers may start when they see the event
-              window.__pll_running = true;
-              window.__hud_running = true;
-            }
+            window.__pll_running = true;
+            window.__hud_running = true;
           } catch {}
+          // Dev-only trace to indicate the script presence was set
+          try { if (window.__TP_DEV) console.debug('[TP-TRACE] tpSetHasScript -> true'); } catch {}
         } catch {}
       };
     }
@@ -779,35 +775,29 @@ let _toast = function (msg, opts) {
     __tpBootPush('pre-init-scheduling-early');
   } catch {}
   try {
-      const callInitOnce = () => {
+    const callInitOnce = () => {
       if (window.__tpInitCalled) return;
       if (typeof init === 'function') {
         window.__tpInitCalled = true;
         try {
           try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
-          try {
-            __tpBootPush('early-init-invoking');
-          } catch {}
-          try {
-            init();
-          } catch {
-            console.error('init failed (early)', e);
-          }
+          try { __tpBootPush('early-init-invoking'); } catch {}
+          try { init(); } catch (e) { console.error('init failed (early)', e); }
+        } catch {}
       } else if (typeof window._initCore === 'function') {
         window.__tpInitCalled = true;
         try {
-            try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
+          try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
+          try { __tpBootPush('early-core-invoking'); } catch {}
+          (async () => {
             try {
-              __tpBootPush('early-core-invoking');
-            } catch {}
-            (async () => {
-              try {
-                await window._initCore();
-                console.log('[TP-Pro] _initCore early path end (success)');
-              } catch {
-                console.error('[TP-Pro] _initCore failed (early path):', e);
-              }
-            })();
+              await window._initCore();
+              console.log('[TP-Pro] _initCore early path end (success)');
+            } catch (e) {
+              console.error('[TP-Pro] _initCore failed (early path):', e);
+            }
+          })();
+        } catch {}
       } else {
         // Shouldn’t happen due to guard, but reset flag to allow later retry
         window.__tpInitCalled = false;
@@ -8771,8 +8761,8 @@ let _toast = function (msg, opts) {
           .map((s) => (s || '').trim())
           .filter((s) => s && !/^\[(?:note|s\d+|guest\d+)\]$/i.test(s) && !/^\[\/(?:note|s\d+|guest\d+)\]$/i.test(s)).length;
         const hasScript = tokenCount >= 20 && nonMetaLines >= 3;
-        try { window.tpSetHasScript && window.tpSetHasScript(hasScript); } catch {}
-        try { console.log('[TP-TRACE]', hasScript ? 'rs:complete' : 'rs:empty'); } catch {}
+        try { if (hasScript) window.tpSetHasScript && window.tpSetHasScript(true); } catch {}
+        try { if (hasScript) console.log('[TP-TRACE]', 'rs:complete'); } catch {}
       } catch {}
       try { window.__tpHudInc && window.__tpHudInc('render', 'lines', totalLines); } catch {}
     } catch {}
