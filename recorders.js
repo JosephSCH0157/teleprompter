@@ -546,3 +546,118 @@ export function init({ getUrl, getPass, isEnabled, onStatus, onRecordState } = {
   }
 }
 
+// --- Compatibility recorder surface used by the app ---
+// Provides a small surface with idempotent lifecycle and status events.
+export const recorder = (function () {
+  let _state = 'disabled'; // disabled | connecting… | connected | disconnected | error
+  let _initted = false;
+  let _enabled = false;
+
+  function emitStatus(txt, ok) {
+    _state = txt || _state;
+    // Call the inline bridge onStatus if configured
+    try {
+      _cfgBridge.onStatus?.(txt, !!ok);
+    } catch {}
+    // Dispatch a DOM CustomEvent so UI can listen
+    try {
+      const ev = new CustomEvent('tp-recorder-status', { detail: { state: txt, ok: !!ok } });
+      if (typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(ev);
+    } catch {}
+  }
+
+  async function initSurface() {
+    if (_initted) return true;
+    _initted = true;
+    try {
+      // ensure built-ins loaded so adapters are registered
+      await initBuiltIns();
+      emitStatus('recorder initialized', true);
+      return true;
+  } catch {
+      emitStatus('init error', false);
+      return false;
+    }
+  }
+
+  async function connectSurface() {
+    // idempotent: if already connected, return
+    if (isConnected()) {
+      emitStatus('connected', true);
+      return true;
+    }
+    emitStatus('connecting…', false);
+    try {
+      // prefer the inline bridge connect (if present) as a convenience
+      if (typeof connect === 'function') {
+        await connect();
+        if (isConnected()) {
+          emitStatus('connected', true);
+          return true;
+        }
+      }
+      // Try adapter-based connect: find an 'obs' adapter
+      const a = registry.get('obs');
+      if (a && typeof a.start === 'function') {
+        await a.start();
+        emitStatus('connected', true);
+        return true;
+      }
+      emitStatus('disconnected', false);
+      return false;
+  } catch {
+      emitStatus('error', false);
+      return false;
+    }
+  }
+
+  async function disconnectSurface() {
+    try {
+      if (typeof disconnect === 'function') {
+        try {
+          disconnect();
+        } catch {}
+      }
+      const a = registry.get('obs');
+      if (a && typeof a.stop === 'function') {
+        try {
+          await a.stop();
+        } catch {}
+      }
+      emitStatus('disconnected', false);
+      return true;
+  } catch {
+      emitStatus('error', false);
+      return false;
+    }
+  }
+
+  return {
+    get state() {
+      return _state;
+    },
+    async init() {
+      return initSurface();
+    },
+    async connect() {
+      _enabled = true;
+      return connectSurface();
+    },
+    async disconnect() {
+      _enabled = false;
+      return disconnectSurface();
+    },
+    setEnabled(on) {
+      try {
+        _enabled = !!on;
+        if (_enabled) {
+          // don't await to avoid UI blocking; connectSurface is idempotent
+          void connectSurface();
+        } else {
+          void disconnectSurface();
+        }
+      } catch {}
+    },
+  };
+})();
+

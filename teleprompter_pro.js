@@ -22,7 +22,7 @@ let _toast = function (msg, opts) {
   } catch {}
 };
 
-(function () {
+  (function(){
   'use strict';
   // Prevent double-loading in the same window/context
   try {
@@ -1160,7 +1160,10 @@ let _toast = function (msg, opts) {
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
           <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.200:4455')}" placeholder="ws://host:port" aria-label="OBS websocket URL" />
           <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" aria-label="OBS password" />
-          <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
+          <label class="tp-check" style="margin-left:6px">
+            <input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''} disabled aria-label="Remember password (disabled)" />
+            <span>Remember password</span>
+          </label>
           <button id="settingsObsTest" type="button" class="btn-chip" aria-label="Test OBS connection">Test</button>
           <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px" aria-label="Sync and Test OBS">Sync & Test</button>
           <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px" aria-label="Poke OBS">Poke</button>
