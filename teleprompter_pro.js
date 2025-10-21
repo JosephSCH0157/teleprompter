@@ -9129,6 +9129,18 @@ let _toast = function (msg, opts) {
         return false;
       const a = bridge ? null : window.__recorder?.get?.('obs');
 
+      // Guard: if OBS is not enabled in recorder settings or the UI checkbox, skip OBS actions
+      try {
+        const settings = __recorder && __recorder.getSettings ? __recorder.getSettings() : null;
+        const obsEnabledInSettings = settings && Array.isArray(settings.selected) ? settings.selected.indexOf('obs') >= 0 : false;
+        const enableObsUi = !!document.getElementById('enableObs')?.checked;
+        if (!obsEnabledInSettings && !enableObsUi) {
+          // OBS explicitly disabled — do not attempt scene switching or starting the recorder
+          if (window.__TP_DEV) console.debug('[OBS] ensureRecordingMini: OBS disabled by settings/UI — skipping');
+          return false;
+        }
+      } catch {}
+
       // 1) Disk space check (best-effort)
       try {
         if (bridge && typeof bridge.getStats === 'function') {
