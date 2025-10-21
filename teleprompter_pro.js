@@ -2301,6 +2301,18 @@ let _toast = function (msg, opts) {
     }
     return hits;
   }
+  // Anchor search band helper: return surrounding token radius depending on PLL state
+  function getAnchorBand() {
+    try {
+      const LOST = PLL.state === 'LOST' || __tpLost;
+      const LOCKED = PLL.state === 'LOCKED' || false;
+      if (LOST) return 300;
+      if (LOCKED) return 200;
+      return 50;
+    } catch {
+      return 50;
+    }
+  }
   // Helper: compute in-vocab token ratio for spoken overlap gating
   function inVocabRatio(tokens, vocabSet) {
     try {
@@ -6813,7 +6825,8 @@ let _toast = function (msg, opts) {
             try {
               const anchors = extractHighIDFPhrases(spoken, 3);
               if (!anchors.length) return 0;
-              const hits = searchBand(anchors, v.start - 300, v.end + 300, spoken);
+              const band = getAnchorBand();
+              const hits = searchBand(anchors, v.start - band, v.end + band, spoken);
               return hits.length;
             } catch {
               return 0;
@@ -7449,7 +7462,8 @@ let _toast = function (msg, opts) {
       // Try anchor scan for distinctive phrases
       const anchors = extractHighIDFPhrases(batchTokens, 3);
       if (anchors.length > 0) {
-        const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
+  const band = getAnchorBand();
+  const anchorHits = searchBand(anchors, i_pred - band, i_pred + windowAhead, batchTokens);
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
         // Cap anchor jumps: prefer within +60 tokens unless confidence >0.9
         if (bestAnchor) {
@@ -7635,7 +7649,8 @@ let _toast = function (msg, opts) {
       // Trigger anchor scan for distinctive phrases
       const anchors = extractHighIDFPhrases(batchTokens, 3);
       if (anchors.length > 0) {
-        const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
+  const band = getAnchorBand();
+  const anchorHits = searchBand(anchors, i_pred - band, i_pred + windowAhead, batchTokens);
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
         if (bestAnchor) {
           // Find the para index containing the anchor word index
@@ -8294,7 +8309,7 @@ let _toast = function (msg, opts) {
     try {
       __anchorObs?.ensure?.();
     } catch {}
-    const paras = Array.from(scriptEl.querySelectorAll('p'));
+  const paras = Array.from(scriptEl.querySelectorAll('p'));
     try {
       __anchorObs?.observeAll?.(paras);
     } catch {}
@@ -8327,27 +8342,47 @@ let _toast = function (msg, opts) {
       );
     }
 
+    // Two-pass: 1) gather normalized tokens per paragraph and compute signature counts
+    const paraTokenList = [];
     for (const el of paras) {
-      const toks = normTokens(el.textContent || '');
+      try {
+        const toks = normTokens(el.textContent || '');
+        paraTokenList.push(toks);
+      } catch {
+        paraTokenList.push([]);
+      }
+    }
+    // Build signature counts (first 4 tokens per paragraph)
+    try {
+      __vSigCount = new Map();
+      for (const toks of paraTokenList) {
+        try {
+          const sig = (Array.isArray(toks) ? toks.slice(0, 4).join(' ') : '') || '';
+          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+        } catch {}
+      }
+    } catch {}
+
+    // 2) now build paraIndex and related structures using accurate __vSigCount
+    for (let idx = 0; idx < paras.length; idx++) {
+      const el = paras[idx];
+      const toks = paraTokenList[idx] || [];
       const wc = toks.length || 1;
       const key = normLineKey(el.textContent || '');
       const isNonSpoken = isNonSpokenLine(el.textContent || '');
-      const paraIdx = paraIndex.length; // Current paragraph index
+      const paraIdx = paraIndex.length;
       // Mark meta/branding lines: short or repeated headers
-      const isMeta = (function () {
-        try {
-          const low = key || '';
-          if (!low) return false;
-          if (low.startsWith('bs with joe')) return true;
-          const tokCount = (low.split(/\s+/) || []).length;
-          if (tokCount <= 5) return true;
-          const sig = normTokens((el.textContent || '')).slice(0, 4).join(' ');
-          const vSigCount = __vSigCount.get(sig) || 0;
-          return vSigCount > 1;
-        } catch {
-          return false;
-        }
-      })();
+      let isMeta = false;
+      try {
+        const low = key || '';
+        if (low && low.startsWith('bs with joe')) isMeta = true;
+        const tokCount = (low.split(/\s+/) || []).length;
+        if (tokCount <= 5) isMeta = true;
+        const sig = toks.slice(0, 4).join(' ');
+        const vSigCount = __vSigCount.get(sig) || 0;
+        if (vSigCount > 1) isMeta = true;
+      } catch {}
+
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken, isMeta });
       el.dataset.words = wc;
       el.dataset.idx = paraIdx;
