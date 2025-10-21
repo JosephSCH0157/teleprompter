@@ -8749,7 +8749,18 @@ let _toast = function (msg, opts) {
     // Notify presence of script (hasScript) for gating heavy subsystems
     try {
       const totalLines = (__paraTokens && __paraTokens.length) || 0;
-      try { window.tpSetHasScript && window.tpSetHasScript(totalLines > 0); } catch {}
+      try {
+        // Compute from editor text to avoid arming engines on empty/placeholder pages
+        const src = (typeof editor !== 'undefined' && editor ? String(editor.value || '') : '') .trim();
+        const tokenCount = src ? src.split(/\s+/).filter(Boolean).length : 0;
+        const nonMetaLines = src
+          .split(/\r?\n/)
+          .map((s) => (s || '').trim())
+          .filter((s) => s && !/^\[(?:note|s\d+|guest\d+)\]$/i.test(s) && !/^\[\/(?:note|s\d+|guest\d+)\]$/i.test(s)).length;
+        const hasScript = tokenCount >= 20 && nonMetaLines >= 3;
+        try { window.tpSetHasScript && window.tpSetHasScript(hasScript); } catch {}
+        try { console.log('[TP-TRACE]', hasScript ? 'rs:complete' : 'rs:empty'); } catch {}
+      } catch {}
       try { window.__tpHudInc && window.__tpHudInc('render', 'lines', totalLines); } catch {}
     } catch {}
   }
