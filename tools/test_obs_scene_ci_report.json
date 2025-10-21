@@ -51,79 +51,79 @@
   "console": [
     {
       "type": "log",
-      "text": "[TP-TRACE] script-enter"
+      "text": "[Main] [TP-TRACE] script-enter"
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 77839] entered main IIFE"
+      "text": "[Main] [TP-BOOT 36740] entered main IIFE"
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 77839] installed global error hooks"
+      "text": "[Main] [TP-BOOT 36740] installed global error hooks"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-boot-block"
+      "text": "[Main] [TP-TRACE] after-boot-block"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] window-init-proxy-installed"
+      "text": "[Main] [TP-TRACE] window-init-proxy-installed"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] minimal-boot"
+      "text": "[Main] [TP-TRACE] minimal-boot"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] post-minimalBoot"
+      "text": "[Main] [TP-TRACE] post-minimalBoot"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled"
+      "text": "[Main] [TP-TRACE] after-zero-time-init-attempt-scheduled"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling-early"
+      "text": "[Main] [TP-TRACE] pre-init-scheduling-early"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] init-scheduling-early-exited"
+      "text": "[Main] [TP-TRACE] init-scheduling-early-exited"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-zoom-guard"
+      "text": "[Main] [TP-TRACE] after-zoom-guard"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-wireNormalizeButton"
+      "text": "[Main] [TP-TRACE] after-wireNormalizeButton"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-buildSettingsContent-def"
+      "text": "[Main] [TP-TRACE] after-buildSettingsContent-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-syncSettingsValues-def"
+      "text": "[Main] [TP-TRACE] after-syncSettingsValues-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-setupSettingsTabs-def"
+      "text": "[Main] [TP-TRACE] after-setupSettingsTabs-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-fallbackNormalize-def"
+      "text": "[Main] [TP-TRACE] after-fallbackNormalize-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-normalizeToStandard-def"
+      "text": "[Main] [TP-TRACE] after-normalizeToStandard-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-validateStandardTags-def"
+      "text": "[Main] [TP-TRACE] after-validateStandardTags-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-ensureHelpUI-def"
+      "text": "[Main] [TP-TRACE] after-ensureHelpUI-def"
     },
     {
       "type": "log",
@@ -131,23 +131,23 @@
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-_initCore-def"
+      "text": "[Main] [TP-TRACE] after-_initCore-def"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling"
+      "text": "[Main] [TP-TRACE] pre-init-scheduling"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] init-scheduling-exited"
+      "text": "[Main] [TP-TRACE] init-scheduling-exited"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] late-init-fallback-scheduled"
+      "text": "[Main] [TP-TRACE] late-init-fallback-scheduled"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] early-init-invoking"
+      "text": "[Main] [TP-TRACE] early-init-invoking"
     },
     {
       "type": "log",
@@ -159,111 +159,23 @@
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] dom-content-loaded"
+      "text": "[Main] [TP-TRACE] dom-content-loaded"
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] early-init-fallback"
+      "text": "[Main] [TP-TRACE] early-init-fallback"
     },
     {
-      "type": "log",
-      "text": "[TP-TRACE] script-enter"
-    },
-    {
-      "type": "log",
-      "text": "[TP-BOOT 77935] entered main IIFE"
-    },
-    {
-      "type": "log",
-      "text": "[TP-BOOT 77935] installed global error hooks"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-boot-block"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] post-minimalBoot"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling-early"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] init-scheduling-early-exited"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-zoom-guard"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-wireNormalizeButton"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-buildSettingsContent-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-syncSettingsValues-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-setupSettingsTabs-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-fallbackNormalize-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-normalizeToStandard-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-validateStandardTags-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-ensureHelpUI-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-Pro] _initCore end"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-_initCore-def"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] init-scheduling-exited"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] late-init-fallback-scheduled"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] rs:complete"
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] rs:complete"
+      "type": "warning",
+      "text": "[TP-BOOT] duplicate load blocked"
     },
     {
       "type": "debug",
       "text": "[TP-Pro] recorder module keys: JSHandle@array "
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] rs:complete"
     },
     {
       "type": "log",
@@ -278,8 +190,12 @@
       "text": "[HUD] perf:reflow-risk JSHandle@object"
     },
     {
-      "type": "debug",
-      "text": "[HUD] perf:reflow-risk JSHandle@object"
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":1,\"w\":2},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}"
+    },
+    {
+      "type": "info",
+      "text": "WATCHDOG STATE: OK → STALL JSHandle@object"
     }
   ]
 }

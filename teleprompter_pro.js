@@ -6841,8 +6841,14 @@ let _toast = function (msg, opts) {
   const cov = tokenCoverage(lineTokens, spoken);
   const SCRIPT_VOCAB = window.__SCRIPT_VOCAB || new Set();
   const oovRatio = 1 - inVocabRatio(spoken, SCRIPT_VOCAB);
-  if (oovRatio > 0.5) return { idx: bestIdx, sim: bestSim, soft: false }; // too many OOVs
-  if (looksLikeCommand(spoken)) return { idx: bestIdx, sim: bestSim, soft: false };
+  if (oovRatio > 0.5) {
+    try { window.__tpHudInc && window.__tpHudInc('drops', 'oov', 1); } catch {}
+    return { idx: bestIdx, sim: bestSim, soft: false }; // too many OOVs
+  }
+  if (looksLikeCommand(spoken)) {
+    try { window.__tpHudInc && window.__tpHudInc('drops', 'command', 1); } catch {}
+    return { idx: bestIdx, sim: bestSim, soft: false };
+  }
 
       if (stagnantMs >= STALL_MS && cov >= COV_THRESH) {
         // Probe the next few virtual lines for a prefix match
@@ -6892,8 +6898,14 @@ let _toast = function (msg, opts) {
                 });
             } catch {}
             // reset stagnation to the new virtual line
+            try { window.__tpHudInc && window.__tpHudInc('softAdv', 'allowed', 1); } catch {}
             __tpStag = { vIdx: j, since: now };
             return { idx: v.start, sim, soft: true };
+          } else {
+            // LOST gating prevented soft-advance due to missing anchors/ngrams
+            try {
+              if (LOST) window.__tpHudInc && window.__tpHudInc('softAdv', 'blockedLost', 1);
+            } catch {}
           }
         }
       }
@@ -7521,6 +7533,7 @@ let _toast = function (msg, opts) {
             const anchorDistance = Math.abs(bestAnchor.idx - currentIndex); // Word distance, not paragraph distance
             const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
             if (bestAnchor.score > 0.75 && allowJump) {
+              try { window.__tpHudInc && window.__tpHudInc('rescue', 'count', 1); } catch {}
               bestIdx = paraIndex[paraIdx].start; // Use paragraph start word index, not paragraph array index
               bestSim = bestAnchor.score;
               // Update tracking for dynamic threshold
@@ -7546,6 +7559,7 @@ let _toast = function (msg, opts) {
               try {
                 window.__tpSoftAdvanceFreeze.until = performance.now() + 200; // ~2 batches at 10Hz
                 softAdvanceStreak = 0;
+                try { window.__tpHudInc && window.__tpHudInc('softAdv', 'frozen', 1); } catch {}
                 const el = lineEls && lineEls[Math.max(0, bestIdx)] ? lineEls[Math.max(0, bestIdx)] : null;
                 if (el) {
                   try {

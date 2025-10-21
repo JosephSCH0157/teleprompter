@@ -663,4 +663,21 @@
   try {
     window.__tpInstallHUD = installHUD;
   } catch {}
+    // Expose a safe global helper to increment HUD counters
+    try {
+      window.__tpHudInc = function (group, key, amt = 1) {
+        try {
+    // Safe update to metrics if HUD has been installed
+          if (window.__tpHudMetrics && window.__tpHudMetrics[group]) {
+            window.__tpHudMetrics[group][key] = (window.__tpHudMetrics[group][key] || 0) + amt;
+          }
+          // Also attempt to update any live HUD instance metrics if present
+          try {
+            if (window.__tpHudInstance && window.__tpHudInstance.metrics && window.__tpHudInstance.metrics[group]) {
+              window.__tpHudInstance.metrics[group][key] = (window.__tpHudInstance.metrics[group][key] || 0) + amt;
+            }
+          } catch {}
+        } catch {}
+      };
+    } catch {}
 })();
