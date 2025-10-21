@@ -55,6 +55,15 @@ let _toast = function (msg, opts) {
   } catch {}
       };
     }
+    if (!window.tpMarkInitRunning) {
+      window.tpMarkInitRunning = function() {
+        try {
+          if (window.__tp_init_running) return;
+          window.__tp_init_running = true;
+          try { if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
+        } catch {}
+      };
+    }
   })();
   // Gate heavy subsystems until a real script is present
   try {
@@ -770,31 +779,35 @@ let _toast = function (msg, opts) {
     __tpBootPush('pre-init-scheduling-early');
   } catch {}
   try {
-    const callInitOnce = () => {
+      const callInitOnce = () => {
       if (window.__tpInitCalled) return;
       if (typeof init === 'function') {
         window.__tpInitCalled = true;
         try {
-          __tpBootPush('early-init-invoking');
-        } catch {}
-        try {
-          init();
-        } catch {
-          console.error('init failed (early)', e);
-        }
+          try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
+          try {
+            __tpBootPush('early-init-invoking');
+          } catch {}
+          try {
+            init();
+          } catch {
+            console.error('init failed (early)', e);
+          }
       } else if (typeof window._initCore === 'function') {
         window.__tpInitCalled = true;
         try {
-          __tpBootPush('early-core-invoking');
-        } catch {}
-        (async () => {
-          try {
-            await window._initCore();
-            console.log('[TP-Pro] _initCore early path end (success)');
-          } catch {
-            console.error('[TP-Pro] _initCore failed (early path):', e);
-          }
-        })();
+            try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
+            try {
+              __tpBootPush('early-core-invoking');
+            } catch {}
+            (async () => {
+              try {
+                await window._initCore();
+                console.log('[TP-Pro] _initCore early path end (success)');
+              } catch {
+                console.error('[TP-Pro] _initCore failed (early path):', e);
+              }
+            })();
       } else {
         // Shouldn’t happen due to guard, but reset flag to allow later retry
         window.__tpInitCalled = false;
@@ -6532,29 +6545,7 @@ let _toast = function (msg, opts) {
     __tpBootPush('init-scheduling-exited');
   } catch {}
 
-  // Hard fallback: only schedule if nothing else started; guard runner to skip when init started elsewhere
-  try {
-    if (!window.__tp_init_running && !window.__tp_init_done && !_lateInitTimer) {
-      _lateInitTimer = setTimeout(() => {
-        _lateInitTimer = null;
-        try {
-          if (window.__tp_init_running || window.__tp_init_done) {
-            try { console.debug('[TP-TRACE] late-init-fallback-skip'); } catch {}
-            return;
-          }
-          if (!window.__tpInitSuccess) {
-            console.warn('[TP-Pro] Late init fallback firing');
-            if (typeof init === 'function') init();
-          }
-        } catch {
-          console.error('[TP-Pro] Late init fallback failed', e);
-        }
-  }, 1500);
-    }
-  } catch {}
-  try {
-    __tpBootPush('late-init-fallback-scheduled');
-  } catch {}
+  // Remove hard late-init fallback scheduling entirely — we cancel and avoid scheduling when real init runs.
 
   // Dump boot trace if user presses Ctrl+Alt+B (debug aid)
   window.addEventListener('keydown', (e) => {
