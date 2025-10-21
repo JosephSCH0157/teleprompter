@@ -1376,6 +1376,14 @@ let _toast = function (msg, opts) {
     function hideCard(c) {
       if (!c._visible) return; // already hidden
       c._visible = false;
+
+      // take it out of layout so the new card doesn't stack beneath it
+      try {
+        c.style.position = 'absolute';
+        c.style.inset = '0';
+        c.style.width = '100%';
+      } catch {}
+
       c.classList.remove(ANIM_IN);
       c.classList.add(ANIM_OUT);
       c.addEventListener(
@@ -1384,6 +1392,12 @@ let _toast = function (msg, opts) {
           if (e.animationName === 'cardFadeOut') {
             c.classList.remove(ANIM_OUT);
             c.style.display = 'none';
+            // restore flow for when card is shown again
+            try {
+              c.style.position = '';
+              c.style.inset = '';
+              c.style.width = '';
+            } catch {}
           }
         },
         { once: true }
@@ -1391,23 +1405,23 @@ let _toast = function (msg, opts) {
     }
 
     const apply = (name) => {
-      const sel = name || 'general';
+      const tab = name || 'general';
       // Preserve current scroll position so switching tabs doesn't jump the sheet
       const prevScroll = sb ? sb.scrollTop : 0;
-      try {
-        localStorage.setItem('tp_settings_tab', sel);
-      } catch {}
-      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === sel));
-      cards.forEach((c) => {
-        const show = c.dataset.tab === sel;
-        if (show) showCard(c);
-        else hideCard(c);
-      });
+      try { localStorage.setItem('tp_settings_tab', tab); } catch {}
+
+      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+
+      // Hide non-selected first
+      cards.forEach((c) => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
+
+      // Then show the selected card
+      const target = cards.find((c) => c.dataset.tab === tab);
+      if (target) showCard(target);
+
       // Restore scroll after layout/animation frame
       try {
-        if (sb) requestAnimationFrame(() => {
-          try { sb.scrollTop = prevScroll; } catch {}
-        });
+        if (sb) requestAnimationFrame(() => { try { sb.scrollTop = prevScroll; } catch {} });
       } catch {}
     };
     tabs.forEach((t) => {

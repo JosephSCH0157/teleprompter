@@ -212,6 +212,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (max-height:740px){ .settings-body{min-height:300px} }
 .settings-title{margin:0}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.settings-title{margin:0}
+/* Make the card container a positioning context and prevent scroll-anchor jumps */
+.settings-body{display:flex;flex-direction:column;gap:18px; min-height:340px; position:relative; overflow-anchor:none}
+@media (max-height:740px){ .settings-body{min-height:300px} }
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+
+/* Cards cross-fade smoothly; outgoing cards are taken out of flow while fading */
+.settings-card{border:1px solid var(--edge);padding:14px 16px;border-radius:14px;background:#0e141b;display:flex;flex-direction:column;gap:10px; will-change: opacity, transform}
+.settings-card.anim-out{ position:absolute; inset:0; width:100%; }
 .settings-card{border:1px solid var(--edge);padding:14px 16px;border-radius:14px;background:#0e141b;display:flex;flex-direction:column;gap:10px}
 .settings-card h4{margin:0 0 4px;font-size:15px}
 .settings-small{font-size:12px;color:var(--muted)}
