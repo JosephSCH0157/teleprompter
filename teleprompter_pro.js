@@ -266,8 +266,13 @@ let _toast = function (msg, opts) {
       };
       setInterval(() => {
         try {
+          // Only emit HUD counters when a real script exists and the watchdog is explicitly armed.
           if (!window.__tp_has_script || !window.__tp_wd_armed) return; // idle
-          console.log('[HUD:counts]', JSON.stringify(window.__hudCounters || {}));
+          // Quiet the HUD output unless the watchdog is armed (avoids noisy logs in CI/idle)
+          try {
+            if (!window.__tp_wd_armed) return;
+            console.log('[HUD:counts]', JSON.stringify(window.__hudCounters || {}));
+          } catch {}
         } catch {}
       }, 1000);
     }
@@ -1697,7 +1702,12 @@ let _toast = function (msg, opts) {
         readout.textContent = `Lead/Lag: ${err}px | Bias: ${bias}% | State: ${state}`;
       }
     };
-    setInterval(updatePLLReadout, 200); // Update 5x per second
+    setInterval(() => {
+      try {
+        if (!window.__tp_has_script || !window.__tp_wd_armed) return;
+        updatePLLReadout();
+      } catch {}
+    }, 200); // Update 5x per second
 
     hybridLockS?.addEventListener('change', () => {
       try {
@@ -2743,7 +2753,9 @@ let _toast = function (msg, opts) {
         // Tooltip stats (rounded)
         peakEl.title = `Approx RMS: ${(rms * 100).toFixed(0)}%\nApprox dBFS: ${dbfs === -Infinity ? '–∞' : dbfs.toFixed(1)} dB`;
       }
-      dbAnim = requestAnimationFrame(draw);
+  // Guard dB meter animation: skip when no script or watchdog unarmed
+  try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
+  dbAnim = requestAnimationFrame(draw);
     };
     draw();
   }
@@ -3839,9 +3851,9 @@ let _toast = function (msg, opts) {
       }
 
       setInterval(() => {
-        // If there is no script loaded, skip watchdog activity to save cycles and avoid noisy logs
+        // If there is no script loaded or watchdog is not armed, skip watchdog activity entirely
         try {
-          if (!window.__tp_has_script) return;
+          if (!window.__tp_has_script || !window.__tp_wd_armed) return;
         } catch {}
         // Increment tick counter for UI sampling
         incrementMetric('ticks');
@@ -8800,8 +8812,8 @@ let _toast = function (msg, opts) {
       let tId = 0;
       const loop = () => {
         try {
-          // Skip end-drift behavior when there is no script loaded
-          try { if (!window.__tp_has_script) { tId = setTimeout(loop, TICK_MS); return; } } catch {}
+          // Skip end-drift behavior when there is no script loaded or watchdog not armed
+          try { if (!window.__tp_has_script || !window.__tp_wd_armed) { tId = setTimeout(loop, TICK_MS); return; } } catch {}
           const now = performance.now();
           const sc = viewer;
           if (!sc) return;
@@ -9153,6 +9165,8 @@ let _toast = function (msg, opts) {
     __debugPosPending = true;
     __debugPosRaf && cancelAnimationFrame(__debugPosRaf);
     __debugPosRaf = requestAnimationFrame(() => {
+      // Guard: only run debug/update UI when script present and watchdog armed
+      try { if (!window.__tp_has_script || !window.__tp_wd_armed) { __debugPosPending = false; return; } } catch {}
       __debugPosPending = false;
       updateDebugPosChipImmediate();
     });
@@ -9164,6 +9178,8 @@ let _toast = function (msg, opts) {
     _wdLastT = 0;
   function deadmanWatchdog(idx) {
     try {
+      // Respect global guard: do nothing when no script or watchdog not armed
+      try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
       const sc = getScroller();
       if (!sc) return;
       // Don’t fight auto-scroll
@@ -9965,6 +9981,8 @@ let _toast = function (msg, opts) {
       const ctx = cvs.getContext('2d');
       function pump() {
         try {
+          // Skip pumping/canvas work when no script or watchdog is not armed to avoid rAF spam
+          try { if (!window.__tp_has_script || !window.__tp_wd_armed) { requestAnimationFrame(pump); return; } } catch {}
           if (!camVideo || !camVideo.videoWidth) {
             requestAnimationFrame(pump);
             return;
