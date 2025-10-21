@@ -435,14 +435,16 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       const speakersHidden = !!document.getElementById('speakersBody')?.classList.contains('hidden');
 
       const frag = document.createDocumentFragment();
-      const card = (id, title, tab, innerHtml) => {
-        const d = document.createElement('div');
-        d.className = 'settings-card';
-        d.dataset.tab = tab;
-        d.id = id;
-        d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
-        return d;
-      };
+        const card = (id, title, tab, innerHtml) => {
+          const d = document.createElement('div');
+          d.className = 'settings-card';
+          d.dataset.tab = tab;
+          d.id = id;
+          // start hidden to avoid initial flash of all cards
+          d.style.display = 'none';
+          d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
+          return d;
+        };
       frag.appendChild(card('cardMic','Microphone','media',`
         <div class="settings-inline-row">
           <button id="settingsReqMic" class="btn-chip">Request mic</button>
@@ -560,21 +562,29 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       function hideCard(c){
         if (!c._visible) return; // already hidden
         c._visible = false;
+        // take it out of layout so the new card doesn't stack beneath it
+        try { c.style.position = 'absolute'; c.style.inset = '0'; c.style.width = '100%'; } catch {}
         c.classList.remove(ANIM_IN);
         c.classList.add(ANIM_OUT);
         c.addEventListener('animationend', (e)=>{
-          if (e.animationName==='cardFadeOut') { c.classList.remove(ANIM_OUT); c.style.display='none'; }
+          if (e.animationName==='cardFadeOut') {
+            c.classList.remove(ANIM_OUT);
+            c.style.display='none';
+            // restore flow for when the card is shown again
+            try { c.style.position = ''; c.style.inset = ''; c.style.width = ''; } catch {}
+          }
         }, { once:true });
       }
 
       const apply = (name) => {
-        const sel = name || 'general';
-        try { localStorage.setItem('tp_settings_tab', sel); } catch {}
-        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === sel));
-        cards.forEach(c => {
-          const show = c.dataset.tab === sel;
-            if (show) showCard(c); else hideCard(c);
-        });
+        const tab = name || 'general';
+        try { localStorage.setItem('tp_settings_tab', tab); } catch {}
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        // hide non-selected first to avoid one-frame overlaps
+        cards.forEach(c => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
+        // then show the selected card
+        const target = cards.find(c => c.dataset.tab === tab);
+        if (target) showCard(target);
       };
       tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
       let last = 'general';
