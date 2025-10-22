@@ -2826,7 +2826,14 @@ let _toast = function (msg, opts) {
     try {
       if (audioStream) audioStream.getTracks().forEach((t) => t.stop());
     } catch {}
+    try {
+      // Close AudioContext to free system resources and allow a fresh one later
+      if (audioCtx && typeof audioCtx.close === 'function') {
+        try { audioCtx.close().catch?.(() => {}); } catch { try { audioCtx.close(); } catch {} }
+      }
+    } catch {}
     audioStream = null;
+    audioCtx = null;
     analyser = null;
     try {
       clearBars(dbMeterTop);
@@ -2938,12 +2945,12 @@ let _toast = function (msg, opts) {
       } catch {
         void e;
       }
-    } catch {
+    } catch (e) {
       warn('Mic denied or failed', e);
       try {
         permChip && (permChip.textContent = 'Mic: denied');
       } catch {
-        void e2;
+        void 0;
       }
     }
   }
