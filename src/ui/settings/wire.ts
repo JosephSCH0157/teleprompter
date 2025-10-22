@@ -7,4 +7,5 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null) {
   } catch {}
 }
 
-export {};
+export { };
+

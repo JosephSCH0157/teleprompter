@@ -6,4 +6,5 @@ declare global { interface Window { __tpObsBridge?: any; } }
 window.__tpObsBridge = window.__tpObsBridge || {};
 window.__tpObsBridge.setStatus = setObsStatus;
 
-export {};
+export { };
+

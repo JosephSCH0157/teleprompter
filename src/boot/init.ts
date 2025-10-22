@@ -16,4 +16,5 @@ export function whenReady(cb: () => void) {
 declare global { interface Window { _initCore?: Function | undefined; } }
 window._initCore = window._initCore || function (cb: () => void) { whenReady(cb); } as any;
 
-export {};
+export { };
+

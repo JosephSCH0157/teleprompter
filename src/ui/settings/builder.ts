@@ -4,4 +4,5 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
   try { return rootEl.innerHTML || ''; } catch { return ''; }
 }
 
-export {};
+export { };
+

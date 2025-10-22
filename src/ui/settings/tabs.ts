@@ -14,4 +14,5 @@ export function setupSettingsTabs(rootEl: HTMLElement | null) {
   } catch {}
 }
 
-export {};
+export { };
+

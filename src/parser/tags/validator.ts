@@ -3,4 +3,5 @@ export function validateTags(text: string) {
   return [] as Array<{ line: number; msg: string }>;
 }
 
-export {};
+export { };
+

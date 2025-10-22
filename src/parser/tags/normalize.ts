@@ -3,4 +3,5 @@ export function normalizeTags(text: string) {
   return String(text || '').replace(/\r\n/g, '\n').trim();
 }
 
-export {};
+export { };
+

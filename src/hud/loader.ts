@@ -15,4 +15,5 @@ export function loadHudIfDev() {
 // Auto-run if dev
 try { loadHudIfDev(); } catch {}
 
-export {};
+export { };
+
