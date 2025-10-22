@@ -1,5 +1,4 @@
 import * as asr from './asr';
-import * as pll from './pll';
 
 declare global {
   interface Window {
@@ -30,4 +29,5 @@ window.toggleSpeechSync = window.toggleSpeechSync || function (on?: boolean) {
   }
 };
 
-export {};
+export { };
+

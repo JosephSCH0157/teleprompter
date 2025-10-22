@@ -28,4 +28,5 @@ export function emitTranscript(text: string, isFinal = false) {
   } catch {}
 }
 
-export {};
+export { };
+
