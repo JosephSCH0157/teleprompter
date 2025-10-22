@@ -6996,6 +6996,45 @@ let _toast = function (msg, opts) {
     __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
   }
 
+  // Compute signed pixel error between a line element and the viewport marker.
+  // Positive => line is below the marker (we need to speed up), negative => above (slow down).
+  function computeErrPx(lineEl, viewerEl, markerPct) {
+    try {
+      const pct =
+        typeof markerPct === 'number'
+          ? markerPct
+          : typeof window.__TP_MARKER_PCT === 'number'
+          ? window.__TP_MARKER_PCT
+          : typeof MARKER_PCT === 'number'
+          ? MARKER_PCT
+          : 0.4;
+      const vRect = viewerEl.getBoundingClientRect();
+      const lRect = lineEl.getBoundingClientRect();
+      const markerY = vRect.top + (viewerEl.clientHeight || vRect.height) * pct;
+      return Math.round(lRect.top - markerY);
+    } catch {
+      return 0;
+    }
+  }
+
+  // Adapter to emit a HUD sample and forward speech alignment samples to the governor (if present).
+  function onSpeechAlignment(errPx, confidence) {
+    try {
+      const hud = window.tp_hud || window.__tpHud || null;
+      try {
+        hud && hud('sync:sample', { errPx: Math.round(errPx), conf: Number((confidence || 0).toFixed ? confidence.toFixed(2) : +confidence) });
+      } catch {}
+    } catch {}
+    try {
+      const g = window.__tpGov || null;
+      if (g && typeof g.onSpeechSample === 'function') {
+        try {
+          g.onSpeechSample({ errPx: errPx, conf: confidence || 0, now: performance.now() });
+        } catch {}
+      }
+    } catch {}
+  }
+
   // Heuristic gate: only run catch-up if the anchor (current line) sits low in the viewport
   let _lowStartTs = 0;
   function maybeCatchupByAnchor(anchorY, viewportH) {
@@ -8490,6 +8529,13 @@ let _toast = function (msg, opts) {
         dt: performance.now() - (window.__lastMatchTime || performance.now()),
       });
       window.__lastMatchTime = performance.now();
+      // Emit a speech-alignment sample for the adaptive governor: compute signed pixel error and forward
+      try {
+        if (matchedPara && matchedPara.el && viewer && typeof onSpeechAlignment === 'function') {
+          const errPx = computeErrPx(matchedPara.el, viewer);
+          try { onSpeechAlignment(errPx, bestSim); } catch {}
+        }
+      } catch {}
       try {
         if (mode === 'HYBRID') {
           window.HUD?.log?.('pll:update', {
@@ -9679,6 +9725,8 @@ let _toast = function (msg, opts) {
           console.debug && console.debug('[adaptiveSpeed] import failed', err);
           gov = null;
         }
+        // publish governor globally for speech-alignment samples to reach it
+        try { window.__tpGov = gov; } catch {}
       }
 
       // compute dy using governor when available
@@ -9724,6 +9772,7 @@ let _toast = function (msg, opts) {
       cancelAnimationFrame(autoTimer);
       autoTimer = null;
     }
+    try { window.__tpGov = null; } catch {}
     try { if (!speechOn) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
     autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
