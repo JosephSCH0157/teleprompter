@@ -1600,7 +1600,7 @@ let _toast = function (msg, opts) {
     const showSpk = document.getElementById('settingsShowSpeakers');
     showSpk?.addEventListener('click', () => {
       toggleSpeakersBtn?.click();
-      buildSettingsContent();
+  try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
     });
     document
       .getElementById('settingsNormalize')
@@ -5321,7 +5321,7 @@ let _toast = function (msg, opts) {
         try { settingsBtn.dataset.wired = '1'; } catch {}
       const openSettings = () => {
         try {
-          buildSettingsContent();
+          try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
         } catch {}
   // Auto-sync OBS fields from Settings -> main so adapters see values immediately
         try {
@@ -5362,7 +5362,7 @@ let _toast = function (msg, opts) {
       // Prebuild asynchronously after main init so first open isn't empty if user opens quickly
       setTimeout(() => {
         try {
-          buildSettingsContent();
+          try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
           try { wireObsSettings && wireObsSettings(); } catch {}
         } catch {}
       }, 0);
@@ -6842,7 +6842,7 @@ let _toast = function (msg, opts) {
             const overlay = document.getElementById('settingsOverlay');
             if (overlay) {
               try {
-                if (typeof buildSettingsContent === 'function') buildSettingsContent();
+                try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
               } catch {}
               overlay.classList.remove('hidden');
               try {
