@@ -1781,6 +1781,19 @@ let _toast = function (msg, opts) {
 
     async function wireObsToggle() {
       try {
+        // If a centralized store exists, let it drive OBS toggle wiring to avoid duplicate bindings
+        if (window.__tpStore) {
+          const s = window.__tpStore;
+          s.subscribe('obsEnabled', (v) => {
+            try {
+              // lazily mirror to local storage via the existing setObsEnabled helper
+              setObsEnabled(!!v);
+              const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+              if (pill) pill.textContent = v ? 'enabled' : 'disabled';
+            } catch {}
+          });
+          return;
+        }
         const settingsToggle = document.getElementById('settingsEnableObs');
         if (!settingsToggle) return;
 
@@ -1791,12 +1804,7 @@ let _toast = function (msg, opts) {
         const updateBadge = (txt) => {
           const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
           if (pill) {
-            // If obsStatus contains full text like 'OBS: ...', try to update only inner text
-            if (pill.id === 'obsStatus' && pill.tagName.toLowerCase() !== 'span') {
-              pill.textContent = txt;
-            } else {
-              pill.textContent = txt;
-            }
+            try { pill.textContent = txt; } catch {}
           }
         };
 
