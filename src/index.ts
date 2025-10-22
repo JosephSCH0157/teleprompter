@@ -5,5 +5,8 @@ import { bootstrap } from './boot/boot';
 // sets up the same early hooks when the module entry is used.
 bootstrap().catch(() => {});
 
+// Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
+import './vendor/mammoth';
+
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
