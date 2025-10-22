@@ -9091,6 +9091,79 @@ let _toast = function (msg, opts) {
     } catch {}
   }
 
+  // Ensure an end spacer element exists and scales so the last line can reach the marker.
+  // viewer: the scrolling container; scriptRoot: element that contains paragraphs (scriptEl)
+  function ensureEndSpacer(viewer, scriptRoot, markerPct = 0.4) {
+    try {
+      if (!viewer || !scriptRoot) return;
+      let spacer = document.getElementById('tp_end_spacer');
+      if (!spacer) {
+        spacer = document.createElement('div');
+        spacer.id = 'tp_end_spacer';
+        spacer.style.width = '100%';
+        spacer.style.display = 'block';
+        spacer.style.pointerEvents = 'none';
+        // append at end of script root so it contributes to scrollHeight
+        scriptRoot.appendChild(spacer);
+      }
+      // Compute required pad so the final text can be pushed up to the marker line
+      const pct = typeof markerPct === 'number' && isFinite(markerPct) ? markerPct : 0.4;
+      const markerPad = Math.ceil((viewer.clientHeight || window.innerHeight || 800) * (1 - pct) + 24);
+      spacer.style.height = markerPad + 'px';
+    } catch {}
+  }
+
+  // HUD helper that forwards to HUD.log when available
+  function hud(evt, data) {
+    try {
+      if (window.HUD && typeof window.HUD.log === 'function') window.HUD.log(evt, data);
+    } catch {}
+  }
+
+  // Track endgame enter/exit and emit HUD metrics. Uses the last paragraph element
+  // and compares its viewport top to the marker Y (also viewport coord) to decide.
+  let __tpEndgame = false;
+  function updateEndgameState() {
+    try {
+      if (!viewer || !scriptEl) return;
+      if (!paraIndex || !paraIndex.length) return;
+      const lastPara = paraIndex[paraIndex.length - 1];
+      if (!lastPara || !lastPara.el) return;
+      const vRect = viewer.getBoundingClientRect();
+      const lastLineRect = lastPara.el.getBoundingClientRect();
+      const markerTopLocal = (() => {
+        try {
+          return (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4) * (viewer.clientHeight || 0);
+        } catch {
+          return 0.4 * (viewer.clientHeight || 0);
+        }
+      })();
+      // markerY in viewport coordinates
+      const markerY = vRect.top + markerTopLocal;
+      // lastLineRect.top is already viewport Y
+      const distPx = Math.round(lastLineRect.top - markerY);
+      const atOrPast = lastLineRect.top <= markerY;
+      // Emit lightweight HUD metric and toggle enter/exit events
+      try { hud('end:metrics', { distPx, atOrPast }); } catch {}
+      if (!__tpEndgame && atOrPast) {
+        __tpEndgame = true;
+        try { hud('end:enter', { ts: Date.now(), distPx }); } catch {}
+      } else if (__tpEndgame && !atOrPast) {
+        __tpEndgame = false;
+        try { hud('end:exit', { ts: Date.now(), distPx }); } catch {}
+      }
+    } catch {}
+  }
+
+  // Refresh helper wired to resize and other layout changes
+  function refreshEndSpacer() {
+    try {
+      const pct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+      try { ensureEndSpacer(viewer, scriptEl, pct); } catch {}
+      try { updateEndgameState(); } catch {}
+    } catch {}
+  }
+
   // call this whenever you actually advance or scroll due to a match
   function markAdvance() {
     _lastAdvanceAt = performance.now();
