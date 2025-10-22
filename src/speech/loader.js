@@ -17,6 +17,17 @@
         computeLineSimilarity: matchMod.computeLineSimilarity,
       };
     } catch {}
+
+    try {
+      // high-level orchestrator (wires recognizer -> matcher -> consumer)
+      const orch = await import('./speech/orchestrator.ts');
+      (window).__tpSpeech = (window).__tpSpeech || {};
+      try { (window).__tpSpeech.startRecognizer = orch.startRecognizer; } catch {}
+      try { (window).__tpSpeech.stopRecognizer = orch.stopRecognizer; } catch {}
+      try { (window).__tpSpeech.matchBatch = orch.matchBatch; } catch {}
+    } catch {
+      // orchestrator import is best-effort
+    }
   } catch (e) {
     try { console.warn('[TP] speech loader failed', e); } catch {}
   }
