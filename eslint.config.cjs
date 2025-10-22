@@ -17,16 +17,16 @@ module.exports = [
   // TypeScript files: lightweight parsing (no type-aware rules to avoid project parsing issues)
   // Requires @typescript-eslint/parser and @typescript-eslint/eslint-plugin in devDependencies
   {
-    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
       parser: require('@typescript-eslint/parser'),
-      // Avoid parserOptions.project to skip type-aware parsing which expects tsconfig to include
-      // every file. This keeps linting lightweight during the TS migration.
-      parserOptions: {},
+      sourceType: 'module',
+      ecmaVersion: 2021,
     },
     plugins: { '@typescript-eslint': require('@typescript-eslint/eslint-plugin') },
     rules: {
-      // Use surface-level rules only (skip rules requiring type information)
+      'no-undef': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/consistent-type-imports': 'warn',
     },
   },
