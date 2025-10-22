@@ -109,7 +109,7 @@
         aud.forEach(d=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||'Microphone'; micSelB.appendChild(o); });
         if (cur && Array.from(micSelB.options).some(o=>o.value===cur)) micSelB.value = cur;
       }
-      const camSelA = typeof camDeviceSel !== 'undefined' ? camDeviceSel : null;
+      const camSelA = window.camDeviceSel ?? null;
       const camSelB = document.getElementById('settingsCamSel');
       [camSelA, camSelB].filter(Boolean).forEach(sel=>{
         try{ const cur = sel.value; sel.innerHTML=''; cams.forEach(d=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||'Camera'; sel.appendChild(o); }); if (cur && Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur; }catch{}

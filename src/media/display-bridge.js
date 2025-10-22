@@ -4,6 +4,10 @@
   let displayReady = false;
   let displayHelloTimer = null;
   let displayHelloDeadline = 0;
+  // ensure setStatus is defined to avoid ReferenceError; prefer window.setStatus if available
+  const setStatus = (typeof window !== 'undefined' && typeof window.setStatus === 'function')
+    ? window.setStatus.bind(window)
+    : function(){};
 
   function openDisplay() {
     try {
