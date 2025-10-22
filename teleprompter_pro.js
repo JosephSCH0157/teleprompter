@@ -9674,6 +9674,43 @@ let _toast = function (msg, opts) {
     autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
     autoToggle.classList.add('active');
 
+    // Snap the nearest readable line to the marker immediately to avoid
+    // initial overshoot/undershoot oscillation. Also ensure the end spacer
+    // exists in case layout/padding changed since render.
+    try {
+      try { ensureEndSpacer(viewer, scriptEl); } catch {}
+      // Determine a sensible start element: most-visible or currentIndex paragraph
+      const snapEl = (() => {
+        try {
+          const vis = __anchorObs?.mostVisibleEl?.() || null;
+          if (vis) return vis;
+          const p = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) ||
+            (paraIndex || [])[0];
+          return p?.el || null;
+        } catch {
+          return null;
+        }
+      })();
+      if (snapEl && viewer && typeof computeErrPx === 'function') {
+        // Compute delta and apply direct scroll to align the element to marker
+        const vRect = viewer.getBoundingClientRect();
+        const pct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+        const markerY = vRect.top + (viewer.clientHeight || vRect.height) * pct;
+        try {
+          const r = snapEl.getBoundingClientRect();
+          const delta = Math.round(r.top - markerY);
+          // apply immediate alignment
+          try {
+            const next = Math.max(0, Math.min(viewer.scrollTop + delta, viewer.scrollHeight));
+            if (typeof requestScroll === 'function') requestScroll(next);
+            else viewer.scrollTop = next;
+          } catch {
+            viewer.scrollTop += delta;
+          }
+          try { hud('sync:snap', { delta: Math.round(delta) }); } catch {}
+        } catch {}
+      }
+    } catch {}
     // clear any previous timer
     if (autoTimer) clearInterval(autoTimer);
 
