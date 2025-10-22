@@ -162,7 +162,7 @@ let _toast = function (msg, opts) {
   const tag = (m) => `[${TP_CTX}] [TP-BOOT ${Date.now() % 100000}] ${m}`;
     // Publish build version for About panel and diagnostics
     try {
-      window.APP_VERSION = '1.6.1';
+      window.APP_VERSION = '1.6.2';
     } catch {}
     window.__tpBootPush = (m) => {
       try {
