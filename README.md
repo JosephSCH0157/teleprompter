@@ -17,6 +17,9 @@ This is a browser-based teleprompter with display mirroring, speech sync, camera
   - The aggressiveness select tunes similarity thresholds and window sizes at runtime.
   - The chosen setting is persisted in `localStorage` under `tp_match_aggro_v1`.
 
+- Per-viewport base speed
+  - The auto-scroll base speed is now persisted per viewport size to reduce initial tuning on different displays. The primary storage key is of the form `tp_base_speed_px_s@vh=<n>` where `<n>` is the viewport height rounded to the nearest 10 (units: CSS pixels). The code still writes a legacy `tp_base_speed_px_s` key for backward compatibility, and on load the per-viewport key is preferred with a fallback to the legacy key.
+
 - Debug HUD
   - Toggle with `~` to view runtime match and scroll signals; useful for diagnosing alignment.
 
