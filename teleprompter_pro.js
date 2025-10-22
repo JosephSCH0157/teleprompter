@@ -5947,6 +5947,19 @@ let _toast = function (msg, opts) {
 
     // Mic and devices
     micBtn?.addEventListener('click', requestMic);
+    // Wire release mic button if present
+    try {
+      const releaseBtn = document.getElementById('releaseMicBtn');
+      if (releaseBtn && !releaseBtn.dataset?.wired) {
+        releaseBtn.dataset.wired = '1';
+        releaseBtn.addEventListener('click', () => {
+          try {
+            _releaseMic();
+            _toast && _toast('Mic released', { type: 'ok' });
+          } catch {}
+        });
+      }
+    } catch {}
     refreshDevicesBtn?.addEventListener('click', populateDevices);
 
     // Recognition on/off (placeholder toggle)
@@ -6017,6 +6030,15 @@ let _toast = function (msg, opts) {
         { capture: true }
       ); // capture so it runs before the normal handler
     }
+
+      // Expose programmatic release for tests / other modules
+      try {
+        window.releaseMic = function () {
+          try {
+            _releaseMic();
+          } catch {}
+        };
+      } catch {}
 
     // Camera
     startCamBtn?.addEventListener('click', startCamera);
