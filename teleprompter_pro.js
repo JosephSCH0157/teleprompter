@@ -689,6 +689,8 @@ let _toast = function (msg, opts) {
                   })(meter);
             } catch {}
           }
+            // Refresh the end spacer and endgame HUD now that layout/padding changed
+            try { refreshEndSpacer(); } catch {}
           window.__tpEarlyInitRan = true;
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
@@ -1038,6 +1040,15 @@ let _toast = function (msg, opts) {
     } catch {
       void e;
     }
+      // Keep bottom padding responsive to viewport changes and refresh end spacer
+      try {
+        window.addEventListener('resize', () => {
+          try {
+            applyBottomPad();
+            refreshEndSpacer();
+          } catch {}
+        }, { passive: true });
+      } catch {}
   }
   try {
     __tpBootPush('after-wireNormalizeButton');
@@ -6507,6 +6518,14 @@ let _toast = function (msg, opts) {
         { passive: true }
       );
     } catch {}
+    // Refresh end spacer on resize (do not replace existing applyBottomPad listener)
+    try {
+      window.addEventListener('resize', () => {
+        try {
+          refreshEndSpacer();
+        } catch {}
+      }, { passive: true });
+    } catch {}
     // Initial debug chip paint
     try {
       updateDebugPosChip();
@@ -8772,10 +8791,12 @@ let _toast = function (msg, opts) {
     }
     const paragraphs = outParts.filter(Boolean).join('');
 
-    scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
-    applyTypography();
-    // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
-    applyBottomPad();
+  scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
+  applyTypography();
+  // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
+  applyBottomPad();
+  // Refresh the end spacer and endgame HUD now that layout/padding changed
+  try { refreshEndSpacer(); } catch {}
     // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
     // Build paragraph index
@@ -9088,6 +9109,8 @@ let _toast = function (msg, opts) {
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
       // Reset endgame on viewport changes that affect marker position
       __scrollCtl?.resetEndgame?.();
+      // Also refresh the end spacer immediately whenever bottom padding is recomputed
+      try { refreshEndSpacer(); } catch {}
     } catch {}
   }
 
@@ -9525,6 +9548,7 @@ let _toast = function (msg, opts) {
       }
       const topStr = Math.round(viewer.scrollTop || 0).toLocaleString();
       debugPosChip.textContent = `A:${pct}% S:${topStr}`;
+      try { updateEndgameState(); } catch {}
     } catch {}
   }
   let __debugPosRaf = 0;
