@@ -3026,21 +3026,17 @@ let _toast = function (msg, opts) {
       const loadObsCreds = function () {
         try {
           const url = localStorage.getItem('tp_obs_url') || '';
-          const pass =
-            sessionStorage.getItem('tp_obs_password') ||
-            localStorage.getItem('tp_obs_password') ||
-            '';
+          // Do not load passwords from storage; keep them in-memory only
+          const pass = '';
           const remember = localStorage.getItem('tp_obs_remember') === '1';
           return { url, pass, remember };
         } catch {
           return { url: '', pass: '', remember: false };
         }
       };
-      const { url, pass, remember } = loadObsCreds();
-      const urlMain = document.getElementById('obsUrl');
-      const passMain = document.getElementById('obsPassword');
-      const urlSet = document.getElementById('settingsObsUrl');
-      const passSet = document.getElementById('settingsObsPass');
+  const { url, remember } = loadObsCreds();
+  const urlMain = document.getElementById('obsUrl');
+  const urlSet = document.getElementById('settingsObsUrl');
       const chkMain = document.getElementById('rememberObs');
       const chkSet = document.getElementById('settingsObsRemember');
 
@@ -3048,11 +3044,10 @@ let _toast = function (msg, opts) {
       const hydratedUrl = (url && url.trim()) || DEFAULT_OBS_URL;
       if (hydratedUrl && urlMain && !urlMain.value) urlMain.value = hydratedUrl;
       if (url && urlSet && !urlSet.value) urlSet.value = url;
-      if (pass && passMain && !passMain.value) passMain.value = pass;
-      if (pass && passSet && !passSet.value) passSet.value = pass;
+  // Passwords are intentionally not hydrated from storage
 
-      if (chkMain) chkMain.checked = !!remember;
-      if (chkSet) chkSet.checked = !!remember;
+  if (chkMain) chkMain.checked = !!remember;
+  if (chkSet) chkSet.checked = !!remember;
     } catch {
       void e;
     }
@@ -5487,8 +5482,8 @@ let _toast = function (msg, opts) {
               window.__obsPass = obsPassInput.value || '';
             } catch {}
             try {
-              // sessionStorage is session-scoped (tab lifetime) and used only for convenience
-              sessionStorage.setItem('tp_obs_password', obsPassInput.value || '');
+              // Keep password strictly in-memory only
+              __obsPass = obsPassInput.value || '';
             } catch {}
             // Keep the "Remember" checkbox visual only (disabled) — do not persist long-lived passwords
           }
@@ -5525,6 +5520,9 @@ let _toast = function (msg, opts) {
   const OBS_ENABLED_KEY = 'tp_obs_enabled';
   const OBS_DEFAULTS = { host: '127.0.0.1', port: '4455', secure: false, enabled: false };
 
+  // Strictly in-memory OBS password (do NOT persist to storage)
+  let __obsPass = '';
+
   function getObsConfig() {
     try {
       return {
@@ -5554,179 +5552,105 @@ let _toast = function (msg, opts) {
     } catch {}
   }
 
-  async function wireObsSettings() {
+  function validateHostPort(host, port) {
+    const hostOk = /^[A-Za-z0-9.-]+$/.test(host) || host === 'localhost';
+    const p = Number(port);
+    const portOk = Number.isFinite(p) && p >= 1 && p <= 65535;
+    return { hostOk, portOk };
+  }
+
+  function markValidity(el, ok, msg = '') {
+    if (!el) return;
+    el.classList.toggle('is-invalid', !ok);
+    if (!ok) el.title = msg;
+    else el.removeAttribute('title');
+  }
+
+  function wireObsSettings() {
     try {
       const urlEl = document.getElementById('settingsObsUrl');
       const portEl = document.getElementById('settingsObsPort');
-      const secureEl = document.getElementById('settingsObsSecure');
-      const enableEl = document.getElementById('settingsEnableObs');
-      if (!urlEl || !portEl || !secureEl || !enableEl) return;
+      const secEl = document.getElementById('settingsObsSecure');
+      const enEl = document.getElementById('settingsEnableObs');
+      const passEl = document.getElementById('settingsObsPass');
+      const clearEl = document.getElementById('settingsObsClear');
+      if (!urlEl || !portEl || !secEl || !enEl || !passEl) return;
 
-      const cfg = getObsConfig();
-      urlEl.value = cfg.host;
-      portEl.value = cfg.port;
-      secureEl.checked = !!cfg.secure;
-      enableEl.checked = !!cfg.enabled;
+      // Force correct type & dedupe
+      (function ensureObsPasswordField(){
+        try {
+          if (passEl.type !== 'password') {
+            try { passEl.type = 'password'; }
+            catch {
+              const repl = passEl.cloneNode(true);
+              repl.setAttribute('type', 'password');
+              passEl.replaceWith(repl);
+            }
+          }
+        } catch {}
+      })();
 
-      // Initialize session-only password from sessionStorage if present
-      try {
-        if (typeof window.__obsPass === 'undefined') {
-          window.__obsPass = sessionStorage.getItem('tp_obs_password') || '';
+      // Restore current (in-memory only)
+      try { passEl.value = __obsPass || ''; } catch {}
+
+      const apply = async () => {
+        const host = (urlEl.value || '127.0.0.1').trim();
+        const port = (portEl.value || '4455').trim();
+        const { hostOk, portOk } = validateHostPort(host, port);
+        markValidity(urlEl, hostOk, 'Host may contain letters, digits, dots, hyphens');
+        markValidity(portEl, portOk, 'Port must be 1–65535');
+
+        if (!hostOk || !portOk) {
+          updateObsStatus('invalid address');
+          return;
         }
-        const passEl = document.getElementById('settingsObsPass');
-        // Ensure the password field is actually a password control (self-heal)
-        (function ensureObsPasswordField(){
-          try {
-            const el = document.getElementById('settingsObsPass');
-            if (!el) return;
-            if (el.type !== 'password') {
-              try { el.type = 'password'; }
-              catch {
-                const repl = el.cloneNode(true);
-                repl.setAttribute('type', 'password');
-                el.replaceWith(repl);
-              }
-            }
-          } catch {}
-        })();
-        // Remove stray duplicate inputs that sometimes get left behind
-        (function dedupeObsInputs(){
-          try {
-            const form = document.getElementById('obsSettingsForm');
-            if (!form) return;
-            const xs = form.querySelectorAll('#settingsObsPass');
-            if (xs.length > 1) {
-              xs.forEach((n, i) => { if (i < xs.length - 1) n.remove(); });
-            }
-          } catch {}
-        })();
-        // Ensure the password field remains a password control even if mutated later
-        try {
-          const obsForm = document.getElementById('obsSettingsForm');
-          if (obsForm && typeof MutationObserver !== 'undefined') {
-            const mo = new MutationObserver((_mutations) => {
-              try {
-                const p = document.getElementById('settingsObsPass');
-                if (!p) return;
-                // If someone turned it into a checkbox or changed tag/type, restore it
-                if (p.tagName !== 'INPUT' || p.type !== 'password') {
-                  try {
-                    const repl = p.tagName === 'INPUT' ? p.cloneNode(true) : document.createElement('input');
-                    repl.id = 'settingsObsPass';
-                    repl.className = p.className || 'obs-pass';
-                    repl.type = 'password';
-                    repl.name = 'obsPassword';
-                    repl.autocomplete = 'current-password';
-                    repl.placeholder = p.placeholder || 'password';
-                    repl.setAttribute('aria-label', p.getAttribute('aria-label') || 'OBS password');
-                    // preserve value from in-memory var
-                    try { repl.value = window.__obsPass || ''; } catch {}
-                    p.replaceWith(repl);
-                    // reattach input listener to keep session value in sync
-                    repl.addEventListener('input', () => {
-                      try { window.__obsPass = repl.value || ''; sessionStorage.setItem('tp_obs_password', window.__obsPass); } catch {}
-                    });
-                  } catch {}
-                }
-              } catch {}
-            });
-            mo.observe(obsForm, { attributes: true, childList: true, subtree: true });
-          }
-        } catch {}
-        if (passEl && !passEl.value) passEl.value = window.__obsPass || '';
-        // keep session var updated as user types
-        passEl?.addEventListener('input', () => {
-          try {
-            window.__obsPass = passEl.value || '';
-            try {
-              sessionStorage.setItem('tp_obs_password', window.__obsPass);
-            } catch {}
-          } catch {}
-        });
-        // Clear button: wipes session password and input
-        try {
-          const clearBtn = document.getElementById('settingsObsClear');
-          if (clearBtn) {
-            clearBtn.addEventListener('click', () => {
-              try {
-                window.__obsPass = '';
-                try { sessionStorage.removeItem('tp_obs_password'); } catch {}
-                const p = document.getElementById('settingsObsPass');
-                if (p) p.value = '';
-              } catch {}
-            });
-          }
-        } catch {}
-      } catch {}
 
-      const apply = async (change = {}) => {
-        const next = {
-          host: urlEl.value || OBS_DEFAULTS.host,
-          port: portEl.value || OBS_DEFAULTS.port,
-          secure: secureEl.checked,
-          enabled: enableEl.checked,
-          ...change,
-        };
-        saveObsConfigFields(next);
+        // Persist non-sensitive config only
+        try { saveObsConfigFields({ host, port, secure: !!secEl.checked, enabled: !!enEl.checked }); } catch {}
 
         try {
-          if (!next.enabled) {
+          if (!enEl.checked) {
             updateObsStatus('disabled');
-            try {
-              // prefer the exported recorder surface if present
-              if (typeof recorder !== 'undefined' && recorder && typeof recorder.disconnect === 'function') await recorder.disconnect();
-              else {
-                const rm = await loadRecorder();
-                const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
-                if (r && typeof r.disconnect === 'function') await r.disconnect();
-              }
-            } catch {}
+            await recorder.disconnect?.();
             return;
           }
           updateObsStatus('connecting…');
-          try {
-            // Try to reconfigure inline bridge or adapter
-            const pw = window.__obsPass || document.getElementById('settingsObsPass')?.value || '';
-            if (typeof window !== 'undefined' && window.__obsBridge && typeof window.__obsBridge.configure === 'function') {
-              window.__obsBridge.configure({ url: `${next.secure ? 'wss' : 'ws'}://${next.host}:${next.port}`, password: pw });
-            }
-            // Recorder surface
-            if (typeof recorder !== 'undefined' && recorder && typeof recorder.reconfigure === 'function') {
-              await recorder.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure, password: pw });
-            } else {
-              const rm = await loadRecorder();
-              const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
-              try {
-                if (r && typeof r.reconfigure === 'function') await r.reconfigure({ host: next.host, port: Number(next.port) || 4455, secure: !!next.secure, password: pw });
-              } catch {}
-            }
-            // Connect via recorder surface preferred
-            if (typeof recorder !== 'undefined' && recorder && typeof recorder.connect === 'function') {
-              await recorder.connect();
-            } else {
-              const rm = await loadRecorder();
-              const r = rm && typeof rm.get === 'function' ? rm.get('obs') : null;
-              if (r && typeof r.connect === 'function') await r.connect();
-            }
-            updateObsStatus('connected');
-          } catch (err) {
-            console.warn('[OBS] config/apply error', err);
-            updateObsStatus('error');
-          }
+          await recorder.reconfigure?.({ host, port: Number(port), secure: !!secEl.checked, password: __obsPass || undefined });
+          await recorder.connect?.();
+          updateObsStatus('connected');
         } catch (err) {
-          console.warn('[OBS] apply outer error', err);
+          console.warn('[OBS] connect error', err);
           updateObsStatus('error');
         }
       };
 
-      enableEl.addEventListener('change', () => apply());
-      secureEl.addEventListener('change', () => apply());
-      urlEl.addEventListener('change', () => apply());
-      portEl.addEventListener('change', () => apply());
+      // Listeners
+      enEl.addEventListener('change', apply);
+      secEl.addEventListener('change', apply);
+      urlEl.addEventListener('change', apply);
+      portEl.addEventListener('change', apply);
 
-      // Reflect initial state; do not auto-connect unless enabled
-      updateObsStatus(enableEl.checked ? 'connecting…' : 'disabled');
-      if (enableEl.checked) apply().catch(() => {});
+      // Password is session-only
+      passEl.addEventListener('input', (e) => { __obsPass = e.target.value || ''; });
+      passEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); });
+
+      // Clear session password
+      clearEl?.addEventListener('click', () => {
+        __obsPass = '';
+        passEl.value = '';
+        updateObsStatus('password cleared');
+      });
+
+      // First open – reflect state; only connect if enabled
+      try {
+        const cfg = getObsConfig();
+        urlEl.value = cfg.host;
+        portEl.value = cfg.port;
+        secEl.checked = cfg.secure;
+        enEl.checked = cfg.enabled;
+        updateObsStatus(cfg.enabled ? 'connecting…' : 'disabled');
+        if (cfg.enabled) apply().catch(()=>{});
+      } catch {}
     } catch {}
   }
 
