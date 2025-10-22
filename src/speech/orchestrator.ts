@@ -1,5 +1,5 @@
-import { createRecognizer, Recognizer } from './recognizer';
 import * as matcher from './matcher';
+import { createRecognizer, Recognizer } from './recognizer';
 
 export interface MatchEvent {
   idx: number;
