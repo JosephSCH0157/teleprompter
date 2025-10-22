@@ -129,4 +129,5 @@ try {
   (window as any).__tpMic.clearBars = clearBars;
 } catch {}
 
-export { requestMic, releaseMic, populateDevices, startDbMeter, clearBars };
+export { clearBars, populateDevices, releaseMic, requestMic, startDbMeter };
+
