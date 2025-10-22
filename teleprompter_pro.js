@@ -5559,6 +5559,32 @@ let _toast = function (msg, opts) {
           window.__obsPass = sessionStorage.getItem('tp_obs_password') || '';
         }
         const passEl = document.getElementById('settingsObsPass');
+        // Ensure the password field is actually a password control (self-heal)
+        (function ensureObsPasswordField(){
+          try {
+            const el = document.getElementById('settingsObsPass');
+            if (!el) return;
+            if (el.type !== 'password') {
+              try { el.type = 'password'; }
+              catch {
+                const repl = el.cloneNode(true);
+                repl.setAttribute('type', 'password');
+                el.replaceWith(repl);
+              }
+            }
+          } catch {}
+        })();
+        // Remove stray duplicate inputs that sometimes get left behind
+        (function dedupeObsInputs(){
+          try {
+            const form = document.getElementById('obsSettingsForm');
+            if (!form) return;
+            const xs = form.querySelectorAll('#settingsObsPass');
+            if (xs.length > 1) {
+              xs.forEach((n, i) => { if (i < xs.length - 1) n.remove(); });
+            }
+          } catch {}
+        })();
         if (passEl && !passEl.value) passEl.value = window.__obsPass || '';
         // keep session var updated as user types
         passEl?.addEventListener('input', () => {
