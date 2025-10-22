@@ -260,7 +260,12 @@
         nbtn.__mini = true;
         nbtn.addEventListener('click', ()=>{
           try {
-            if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
+          // Emit a governor sample for this committed line
+          try {
+            const viewerEl = sc || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+            const epx = errPxFrom(activeEl, viewerEl);
+            try { if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, 1.0); } catch {}
+          } catch {}
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
           } catch(e){ console.warn('Mini normalize failed', e); }
         });
