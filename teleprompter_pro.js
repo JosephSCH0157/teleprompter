@@ -9773,10 +9773,17 @@ let _toast = function (msg, opts) {
         // convert px/sec to px for this frame using dt
         dy = vpx * dt;
       } else {
-        // legacy behavior: small initial boost for first 3s then base speed
-        let px = pxSpeed;
-        if (elapsed < 3.0) px = pxSpeed + 4;
-        dy = px * dt;
+        // legacy behavior: smooth soft-start ramp from 0 -> base over ~1200ms
+        try {
+          const SOFT_START_MS = 1200;
+          const alpha = Math.max(0, Math.min(1, elapsed / (SOFT_START_MS / 1000)));
+          // cubic ease-out: 1 - (1-alpha)^3
+          const eased = 1 - Math.pow(1 - alpha, 3);
+          const px = eased * pxSpeed;
+          dy = px * dt;
+        } catch {
+          dy = pxSpeed * dt;
+        }
       }
 
       // Apply PLL bias if hybrid lock is enabled
