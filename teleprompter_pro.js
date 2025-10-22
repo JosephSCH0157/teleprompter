@@ -1178,7 +1178,22 @@ let _toast = function (msg, opts) {
           <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
           <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
           <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
-          <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" aria-label="OBS password" />
+          <label class="tp-field">
+            <span>Password</span>
+            <input id="settingsObsPass"
+                   type="password"
+                   placeholder="OBS WebSocket password"
+                   autocomplete="current-password"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   inputmode="text"
+                   enterkeyhint="done"
+                   class="obs-pass"
+                   value="${getVal('obsPassword', '')}" />
+          </label>
+
+          <button id="settingsObsClear" class="btn btn-ghost" type="button" title="Clear session password">Clear</button>
+
           <label class="tp-check" style="margin-left:6px">
             <input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''} disabled aria-label="Remember password (disabled)" />
             <span>Remember password</span>
@@ -5628,6 +5643,20 @@ let _toast = function (msg, opts) {
             } catch {}
           } catch {}
         });
+        // Clear button: wipes session password and input
+        try {
+          const clearBtn = document.getElementById('settingsObsClear');
+          if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+              try {
+                window.__obsPass = '';
+                try { sessionStorage.removeItem('tp_obs_password'); } catch {}
+                const p = document.getElementById('settingsObsPass');
+                if (p) p.value = '';
+              } catch {}
+            });
+          }
+        } catch {}
       } catch {}
 
       const apply = async (change = {}) => {
