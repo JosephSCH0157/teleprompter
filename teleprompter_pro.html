@@ -113,19 +113,24 @@
         var moduleFiles = [ add('./debug-tools.js'), add('./utils/safe-dom.js'), add('./ui/toasts.js'), add('./ui/scripts-ui.js'), add('./ui/cam-draggable.js') ];
         moduleFiles.forEach(function(m){ var s=document.createElement('script'); s.type='module'; s.src=m; document.head.appendChild(s); });
 
-        // Load the single module entry for the app. This file is expected to be produced by the TS build at ./dist/index.js
-        var entry = document.createElement('script');
-        entry.type = 'module';
-        entry.textContent = "import './dist/index.js';"; // cache-busting handled by build metadata and loader if needed
-        document.head.appendChild(entry);
-      }catch(e){
-        // Fallback: legacy non-module bundle
-        var s = document.createElement('script');
-        s.defer = true;
-        s.src = './teleprompter_pro.js';
-        document.head.appendChild(s);
-      }
-    })();
+        // Load the single module entry for the app. Prefer the modern module bundle produced at ./dist/index.js
+        // The loader will attempt to import the module; if it fails (older browsers or missing file) we fall back to the legacy bundle.
+        (async function(){
+          try {
+            var entry = document.createElement('script');
+            entry.type = 'module';
+            var Venc = encodeURIComponent(V);
+            // Attempt dynamic import; if it throws, the catch below will install the legacy bundle
+            entry.textContent = "(async function(){ try{ await import('./dist/index.js?v=" + Venc + "'); } catch(e) { throw e; } })();";
+            document.head.appendChild(entry);
+          } catch(e){
+            // Fallback: legacy non-module bundle
+            var s = document.createElement('script');
+            s.defer = true;
+            s.src = './teleprompter_pro.js?v=' + encodeURIComponent(V);
+            document.head.appendChild(s);
+          }
+        })();
   </script>
 
   <!-- Build badge (dev only) -->
