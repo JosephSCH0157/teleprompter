@@ -14,4 +14,5 @@ window.__tpScrollWrite = window.__tpScrollWrite || function (top: number) {
   } catch {}
 };
 
-export {};
+export { };
+

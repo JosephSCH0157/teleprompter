@@ -12,4 +12,5 @@ window.__tpMatcher.matchBatch = function (spokenTokens: string[], scriptWords: s
   return matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState);
 };
 
-export {};
+export { };
+
