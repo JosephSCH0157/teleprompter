@@ -139,6 +139,18 @@ export default function createScrollController(adapters = {}, telemetry) {
     requestScroll:
       adapters.requestScroll ||
       ((top) => {
+        // Use scheduler to coalesce DOM writes
+        try {
+          const sched = window.__tpRequestWrite;
+          if (typeof sched === 'function') {
+            sched(() => {
+              try {
+                root.scrollTop = top;
+              } catch {}
+            });
+            return;
+          }
+        } catch {}
         root.scrollTop = top;
       }),
     getViewportHeight:
