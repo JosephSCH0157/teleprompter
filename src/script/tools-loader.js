@@ -1,4 +1,4 @@
-import { normalizeToStandardText, fallbackNormalizeText } from './normalize.js';
+import { fallbackNormalizeText, normalizeToStandardText } from './normalize.js';
 import { validateStandardTagsText } from './validate.js';
 
 try {
