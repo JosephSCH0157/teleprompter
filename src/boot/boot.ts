@@ -149,3 +149,18 @@ export function initBoot(): AppBootOptions {
     return { DEV: false, CALM: false, QUIET: false, ADDV: '' };
   }
 }
+
+// Public bootstrap entry used by the legacy monolith and new module loader.
+// It performs the minimal install steps (trace, error hooks, scheduler and
+// publishes a safe _initCore waiter). The function is async so callers can
+// await deterministic initialization during migration.
+export async function bootstrap(): Promise<void> {
+  try {
+    installBoot();
+    initBoot();
+    try { (window as any).__tpBootPush?.('bootstrap-done'); } catch {}
+  } catch (err) {
+    try { (window as any).__tpBootPush?.('bootstrap-failed'); } catch {}
+    throw err;
+  }
+}
