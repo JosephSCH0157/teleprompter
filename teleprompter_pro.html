@@ -131,6 +131,10 @@
             document.head.appendChild(s);
           }
         })();
+      } catch(e) {
+        // Silence errors initializing loader in older browsers
+      }
+    })();
   </script>
 
   <!-- Build badge (dev only) -->
