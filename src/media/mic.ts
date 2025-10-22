@@ -102,21 +102,36 @@ function releaseMic() {
 async function populateDevices() {
   try {
     if (!navigator.mediaDevices?.enumerateDevices) return;
+
     const devs = await navigator.mediaDevices.enumerateDevices();
-    const aud = devs.filter(d => d.kind === 'audioinput');
-    const cams = devs.filter(d => d.kind === 'videoinput');
-    const micSelB = document.getElementById('settingsMicSel') as HTMLSelectElement | null;
-    if (micSelB) {
-      const cur = micSelB.value; micSelB.innerHTML = '';
-      aud.forEach(d => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || 'Microphone'; micSelB.appendChild(o); });
-      if (cur && Array.from(micSelB.options).some(o => o.value === cur)) micSelB.value = cur;
-    }
-    const camSelA = (window as any).camDeviceSel !== undefined ? (window as any).camDeviceSel : null;
-    const camSelB = document.getElementById('settingsCamSel') as HTMLSelectElement | null;
-    [camSelA, camSelB].filter(Boolean).forEach((sel: any) => {
-      try { const cur = sel.value; sel.innerHTML = ''; cams.forEach((d: any) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || 'Camera'; sel.appendChild(o); }); if (cur && Array.from(sel.options).some((o: any) => o.value === cur)) sel.value = cur; } catch {}
-    });
-  } catch (e) { console.warn('populateDevices failed', e); }
+    const mics = devs.filter((d) => d.kind === 'audioinput');
+    const cams = devs.filter((d) => d.kind === 'videoinput');
+
+    const fill = (sel: HTMLSelectElement | null, list: MediaDeviceInfo[]) => {
+      if (!sel) return;
+      const prev = sel.value;
+      sel.innerHTML = '';
+      for (const d of list) {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || (d.kind === 'audioinput' ? 'Microphone' : 'Camera');
+        sel.appendChild(opt);
+      }
+      try { if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev; } catch {}
+    };
+
+    // prefer new settings IDs but also update legacy hidden select
+    fill(document.getElementById('settingsMicSel') as HTMLSelectElement | null, mics);
+    fill(document.getElementById('micDeviceSel')   as HTMLSelectElement | null, mics); // legacy (hidden)
+    fill(document.getElementById('settingsCamSel') as HTMLSelectElement | null, cams);
+    // legacy camera select is camDeviceSel on window (some code exposes it)
+    try {
+      const camLegacy = (window as any).camDeviceSel as HTMLSelectElement | undefined;
+      if (camLegacy) fill(camLegacy, cams);
+    } catch {}
+  } catch (e) {
+    console.warn('populateDevices failed', e);
+  }
 }
 
 // Expose typed API on window
@@ -127,6 +142,15 @@ try {
   (window as any).__tpMic.populateDevices = populateDevices;
   (window as any).__tpMic.startDbMeter = startDbMeter;
   (window as any).__tpMic.clearBars = clearBars;
+} catch {}
+
+// Attempt a safe populate once on boot (when DOM is ready)
+try {
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', () => { setTimeout(() => { try { populateDevices(); } catch {} }, 120); });
+  } else {
+    setTimeout(() => { try { populateDevices(); } catch {} }, 120);
+  }
 } catch {}
 
 export { clearBars, populateDevices, releaseMic, requestMic, startDbMeter };

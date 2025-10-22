@@ -99,24 +99,39 @@
 
   async function populateDevices() {
     try {
-      if (!navigator.mediaDevices?.enumerateDevices) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
       const devs = await navigator.mediaDevices.enumerateDevices();
-      const aud = devs.filter(d=>d.kind==='audioinput');
-      const cams = devs.filter(d=>d.kind==='videoinput');
-      const micSelB = document.getElementById('settingsMicSel');
-      if (micSelB) {
-        const cur = micSelB.value; micSelB.innerHTML='';
-        aud.forEach(d=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||'Microphone'; micSelB.appendChild(o); });
-        if (cur && Array.from(micSelB.options).some(o=>o.value===cur)) micSelB.value = cur;
-      }
-      const camSelA = window.camDeviceSel ?? null;
-      const camSelB = document.getElementById('settingsCamSel');
-      [camSelA, camSelB].filter(Boolean).forEach(sel=>{
-        try{ const cur = sel.value; sel.innerHTML=''; cams.forEach(d=>{ const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||'Camera'; sel.appendChild(o); }); if (cur && Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur; }catch{}
-      });
+      const mics = devs.filter(d => d.kind === 'audioinput');
+      const cams = devs.filter(d => d.kind === 'videoinput');
+
+      const fill = (sel, list) => {
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = '';
+        for (const d of list) {
+          const o = document.createElement('option');
+          o.value = d.deviceId;
+          o.textContent = d.label || (d.kind === 'audioinput' ? 'Microphone' : 'Camera');
+          sel.appendChild(o);
+        }
+        try { if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev; } catch {}
+      };
+
+      fill(document.getElementById('settingsMicSel'), mics);
+      fill(document.getElementById('micDeviceSel'), mics); // legacy hidden
+      fill(document.getElementById('settingsCamSel'), cams);
+      try { if (window.camDeviceSel) fill(window.camDeviceSel, cams); } catch {}
     } catch (e) { console.warn('populateDevices failed', e); }
   }
 
   // expose
   try { window.__tpMic = window.__tpMic || {}; window.__tpMic.requestMic = requestMic; window.__tpMic.releaseMic = releaseMic; window.__tpMic.populateDevices = populateDevices; window.__tpMic.startDbMeter = startDbMeter; } catch {}
+  // Attempt a safe populate once on boot
+  try {
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', () => { setTimeout(()=>{ try{ populateDevices(); }catch{} }, 120); });
+    } else {
+      setTimeout(()=>{ try{ populateDevices(); }catch{} }, 120);
+    }
+  } catch {}
 })();
