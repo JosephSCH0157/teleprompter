@@ -12,4 +12,5 @@ interface Window {
 declare const __TP_DEV: boolean | undefined;
 declare const __TP_CALM: boolean | undefined;
 
-export {};
+export { };
+
