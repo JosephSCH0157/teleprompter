@@ -9631,34 +9631,68 @@ let _toast = function (msg, opts) {
     // clear any previous timer
     if (autoTimer) clearInterval(autoTimer);
 
-    // Use requestAnimationFrame for smooth, accurate timing
+    // Use requestAnimationFrame for smooth, accurate timing.
+    // Lazy-load the adaptive governor so we don't add startup weight.
     let lastTime = performance.now();
     let startTime = performance.now();
-    autoTimer = () => {
+    let gov = null;
+    // HUD bridge for governor
+    const _govHud = (tag, data) => { try { (window.tp_hud || window.__tpHud)?.(tag, data); } catch {} };
+
+    // Wire user-driven change to inform governor when present
+    const onUserSpeedChange = (pxPerSec) => {
+      try {
+        if (gov && typeof gov.onManualAdjust === 'function') gov.onManualAdjust(pxPerSec);
+      } catch {}
+      localStorage.setItem('tp_base_speed_px_s', String(pxPerSec));
+    };
+    // Listen for live UI edits to autoSpeed and propagate
+    try {
+      autoSpeed.addEventListener('input', () => {
+        const v = parseFloat(autoSpeed.value) || 0;
+        onUserSpeedChange(v);
+      });
+    } catch {}
+
+    autoTimer = async () => {
       const now = performance.now();
       const dt = (now - lastTime) / 1000; // actual seconds elapsed
       lastTime = now;
       const elapsed = (now - startTime) / 1000; // total elapsed time
 
-      // live-update if user changes the number while running
+      // live-update base speed from UI
       const live = parseFloat(autoSpeed.value);
-      if (live && live > 0 && live !== pxSpeed) {
-        pxSpeed = live;
-        localStorage.setItem('autoPxSpeed', String(pxSpeed));
-        autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+      if (live && live > 0) {
+        try { if (gov && typeof gov.setBase === 'function') gov.setBase(live); } catch {}
       }
 
-      // Initial speed boost for first 3 seconds to get past potential matching issues
-      let effectiveSpeed = pxSpeed;
-      if (elapsed < 3.0) {
-        effectiveSpeed = pxSpeed + 4; // +4px/s boost for smoother initial advancement
-        autoToggle.textContent = `Auto-scroll: ${effectiveSpeed.toFixed(0)}px/s (boost)`;
+      // Ensure governor is loaded
+      if (!gov) {
+        try {
+          const mod = await import((window.__TP_ADDV || ((p) => p))('./controllers/adaptiveSpeed.js'));
+          const lastGood = Number(localStorage.getItem('tp_base_speed_px_s') || pxSpeed || 25);
+          const GovCtor = mod && (mod.SpeedGovernor || (mod.default && mod.default.SpeedGovernor));
+          if (GovCtor) gov = new GovCtor(lastGood, _govHud);
+          else gov = null;
+        } catch (err) {
+          // fallback to legacy stepping if import fails
+          console.debug && console.debug('[adaptiveSpeed] import failed', err);
+          gov = null;
+        }
+      }
+
+      // compute dy using governor when available
+      let dy = 0;
+      if (gov && typeof gov.tick === 'function') {
+        const vpx = gov.tick();
+        // convert px/sec to px for this frame using dt
+        dy = vpx * dt;
       } else {
-        autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+        // legacy behavior: small initial boost for first 3s then base speed
+        let px = pxSpeed;
+        if (elapsed < 3.0) px = pxSpeed + 4;
+        dy = px * dt;
       }
-
-      // convert px/s to px per frame
-      let dy = effectiveSpeed * dt;
 
       // Apply PLL bias if hybrid lock is enabled
       if (isHybrid()) {
@@ -9671,15 +9705,17 @@ let _toast = function (msg, opts) {
         viewer.scrollTop += dy;
       }
 
-      {
+      // Mirror to display
+      try {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? viewer.scrollTop / max : 0;
         sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
-      }
+      } catch {}
 
       // Continue the animation loop
       if (autoTimer) requestAnimationFrame(autoTimer);
     };
+
     requestAnimationFrame(autoTimer);
   }
 
