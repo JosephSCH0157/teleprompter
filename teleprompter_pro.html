@@ -114,17 +114,32 @@
         moduleFiles.forEach(function(m){ var s=document.createElement('script'); s.type='module'; s.src=m; document.head.appendChild(s); });
 
         // Load the single module entry for the app. Prefer the modern module bundle produced at ./dist/index.js
-        // The loader will attempt to import the module; if it fails (older browsers or missing file) we fall back to the legacy bundle.
-        (async function(){
+        // Non-blocking: try to import the module and call its bootstrap(), but fall back to the legacy bundle if unavailable.
+        (function(){
           try {
-            var entry = document.createElement('script');
-            entry.type = 'module';
-            var Venc = encodeURIComponent(V);
-            // Attempt dynamic import; if it throws, the catch below will install the legacy bundle
-            entry.textContent = "(async function(){ try{ await import('./dist/index.js?v=" + Venc + "'); } catch(e) { throw e; } })();";
-            document.head.appendChild(entry);
-          } catch(e){
-            // Fallback: legacy non-module bundle
+            var vToken = window.__TP_DEV_VERSION || V || 'dev';
+            var modBootstrapper = document.createElement('script');
+            modBootstrapper.type = 'module';
+            modBootstrapper.textContent = `
+              (async () => {
+                try {
+                  const mod = await import('./dist/index.js?v=${vToken}');
+                  if (mod && typeof mod.bootstrap === 'function') await mod.bootstrap();
+                  window.__tpInitSuccess = true;
+                } catch (e) {
+                  // dist bundle missing or failed — let the legacy loader take over
+                }
+              })();
+            `;
+            document.head.appendChild(modBootstrapper);
+
+            // Also insert a legacy fallback in case modules aren't supported or the import fails later.
+            var fallback = document.createElement('script');
+            fallback.defer = true;
+            fallback.src = './teleprompter_pro.js?v=' + encodeURIComponent(V);
+            document.head.appendChild(fallback);
+          } catch (e) {
+            // In very old browsers, just load the legacy bundle synchronously as before.
             var s = document.createElement('script');
             s.defer = true;
             s.src = './teleprompter_pro.js?v=' + encodeURIComponent(V);
