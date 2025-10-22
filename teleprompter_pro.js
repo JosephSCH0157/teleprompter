@@ -9737,6 +9737,21 @@ let _toast = function (msg, opts) {
       });
     } catch {}
 
+    // Momentary speed multiplier controlled by keys (Shift = +10%, Alt = -12%)
+    let __momentaryMult = 1;
+    const _onKey = (e) => {
+      try {
+        const next = e.shiftKey ? 1.1 : e.altKey ? 0.88 : 1;
+        if (next !== __momentaryMult) {
+          __momentaryMult = next;
+          try { (window.tp_hud || window.__tpHud)?.('speed:momentary', { n: __momentaryMult }); } catch {}
+        }
+      } catch {}
+    };
+    // Listen on window to catch both keydown and keyup changes
+    window.addEventListener('keydown', _onKey);
+    window.addEventListener('keyup', _onKey);
+
     autoTimer = async () => {
       const now = performance.now();
       const dt = (now - lastTime) / 1000; // actual seconds elapsed
@@ -9766,12 +9781,12 @@ let _toast = function (msg, opts) {
         try { window.__tpGov = gov; } catch {}
       }
 
-      // compute dy using governor when available
+      // compute dy using governor when available; apply momentary multiplier
       let dy = 0;
       if (gov && typeof gov.tick === 'function') {
         const vpx = gov.tick();
         // convert px/sec to px for this frame using dt
-        dy = vpx * dt;
+        dy = vpx * dt * __momentaryMult;
       } else {
         // legacy behavior: smooth soft-start ramp from 0 -> base over ~1200ms
         try {
@@ -9779,10 +9794,10 @@ let _toast = function (msg, opts) {
           const alpha = Math.max(0, Math.min(1, elapsed / (SOFT_START_MS / 1000)));
           // cubic ease-out: 1 - (1-alpha)^3
           const eased = 1 - Math.pow(1 - alpha, 3);
-          const px = eased * pxSpeed;
+          const px = eased * pxSpeed * __momentaryMult;
           dy = px * dt;
         } catch {
-          dy = pxSpeed * dt;
+          dy = pxSpeed * dt * __momentaryMult;
         }
       }
 
@@ -9808,6 +9823,11 @@ let _toast = function (msg, opts) {
       if (autoTimer) requestAnimationFrame(autoTimer);
     };
 
+    // register momentary handlers on window so stopAutoScroll can clean them up
+    try {
+      window.__tpMomentaryHandlers = { onKey: _onKey };
+    } catch {}
+
     requestAnimationFrame(autoTimer);
   }
 
@@ -9816,6 +9836,15 @@ let _toast = function (msg, opts) {
       cancelAnimationFrame(autoTimer);
       autoTimer = null;
     }
+    // remove momentary key handlers if installed
+    try {
+      const h = window.__tpMomentaryHandlers || null;
+      if (h && typeof h.onKey === 'function') {
+        try { window.removeEventListener('keydown', h.onKey); } catch {}
+        try { window.removeEventListener('keyup', h.onKey); } catch {}
+      }
+      try { window.__tpMomentaryHandlers = null; } catch {}
+    } catch {}
     try { window.__tpGov = null; } catch {}
     try { if (!speechOn) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
     autoToggle.classList.remove('active');
