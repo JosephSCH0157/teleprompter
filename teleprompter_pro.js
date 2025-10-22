@@ -7017,6 +7017,21 @@ let _toast = function (msg, opts) {
     }
   }
 
+  // Small convenience wrapper that mirrors the project's naming in some docs/examples.
+  // Returns +px when the spoken line is below the marker (need to speed up), -px when above.
+  function errPxFrom(spokenLineEl, viewerEl, markerPct = 0.4) {
+    try {
+      if (!spokenLineEl || !viewerEl) return 0;
+      const vRect = viewerEl.getBoundingClientRect();
+      const lRect = spokenLineEl.getBoundingClientRect();
+      const pct = typeof markerPct === 'number' ? markerPct : (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4);
+      const markerY = vRect.top + (viewerEl.clientHeight || vRect.height) * pct;
+      return Math.round(lRect.top - markerY);
+    } catch {
+      return 0;
+    }
+  }
+
   // Adapter to emit a HUD sample and forward speech alignment samples to the governor (if present).
   function onSpeechAlignment(errPx, confidence) {
     try {
@@ -8483,6 +8498,18 @@ let _toast = function (msg, opts) {
     // Update commit broker
     window.__tpCommit.idx = currentIndex;
     window.__tpCommit.ts = performance.now();
+
+    // Emit an explicit speech-sync sample to the governor/HUD at commit time.
+    try {
+      const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null;
+      const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+      if (matchedPara && matchedPara.el && viewerEl) {
+        try {
+          const epx = errPxFrom(matchedPara.el, viewerEl);
+          try { if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, typeof bestSim === 'number' ? bestSim : 0); } catch {}
+        } catch {}
+      }
+    } catch {}
 
     // Periodic rescue scheduling: trigger rescue if LOST for too long
     try {
