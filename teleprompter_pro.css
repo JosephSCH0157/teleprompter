@@ -327,3 +327,17 @@ body.ck::after{
     padding: 4px 8px; border-radius: 999px;
     background: rgba(255,255,255,.06); color: var(--muted);
 }
+
+/* Ghost button for low-importance actions */
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--edge);
+    color: var(--muted);
+}
+.btn-ghost:hover { color: var(--fg); }
+
+/* Invalid field hint */
+.is-invalid {
+    border-color: var(--danger, #d33);
+    box-shadow: 0 0 0 1px var(--danger, #d33) inset;
+}
