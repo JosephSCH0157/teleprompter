@@ -27,7 +27,8 @@ let _toast = function (msg, opts) {
   // Prevent double-loading in the same window/context
   try {
     // dev flag early so we can silence noisy warnings in production
-    const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
+            const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
+            const saveBaseSpeed = window.saveBaseSpeed; // Ensure saveBaseSpeed is defined
     // idle flag — don't start heavy subsystems until a script exists
     if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
     if (window.__TP_ALREADY_BOOTED__) {
@@ -9749,12 +9750,39 @@ let _toast = function (msg, opts) {
     // HUD bridge for governor
     const _govHud = (tag, data) => { try { (window.tp_hud || window.__tpHud)?.(tag, data); } catch {} };
 
+    // Per-viewport base speed helpers (nearest-10vh key) -------------------------------------------------
+    function _vpBaseKey() {
+      try {
+        const vh = Math.round((window.innerHeight || 0) / 10) * 10;
+        return `tp_base_speed_px_s@vh=${vh}`;
+      } catch {
+        return 'tp_base_speed_px_s';
+      }
+    }
+    function loadBaseSpeed() {
+      try {
+        const k = _vpBaseKey();
+        const v = localStorage.getItem(k) || localStorage.getItem('tp_base_speed_px_s');
+        return Number(v || 120);
+      } catch {
+        return 120;
+      }
+    }
+    function saveBaseSpeed(px) {
+      try {
+        const k = _vpBaseKey();
+        localStorage.setItem(k, String(px));
+        // keep legacy key for compatibility
+        localStorage.setItem('tp_base_speed_px_s', String(px));
+      } catch {}
+    }
+
     // Wire user-driven change to inform governor when present
     const onUserSpeedChange = (pxPerSec) => {
       try {
         if (gov && typeof gov.onManualAdjust === 'function') gov.onManualAdjust(pxPerSec);
       } catch {}
-      localStorage.setItem('tp_base_speed_px_s', String(pxPerSec));
+      saveBaseSpeed(pxPerSec);
     };
     // Listen for live UI edits to autoSpeed and propagate
     try {
@@ -9795,7 +9823,7 @@ let _toast = function (msg, opts) {
       if (!gov) {
         try {
           const mod = await import((window.__TP_ADDV || ((p) => p))('./controllers/adaptiveSpeed.js'));
-          const lastGood = Number(localStorage.getItem('tp_base_speed_px_s') || pxSpeed || 25);
+          const lastGood = Number((typeof loadBaseSpeed === 'function' ? loadBaseSpeed() : (localStorage.getItem('tp_base_speed_px_s') || pxSpeed || 25)) || 25);
           const GovCtor = mod && (mod.SpeedGovernor || (mod.default && mod.default.SpeedGovernor));
           if (GovCtor) gov = new GovCtor(lastGood, _govHud);
           else gov = null;
