@@ -82,8 +82,8 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
     const nowTs = now || (A.now ? A.now() : Date.now());
 
     if (absErr > macro) {
-      if (!bigErrStart) bigErrStart = nowTs;
-      if (nowTs - bigErrStart > 300) {
+      if (bigErrStart == null) bigErrStart = nowTs;
+      if (bigErrStart != null && nowTs - bigErrStart > 300) {
         bigErrStart = null;
         let snapTop = yActive - markerOffset;
         snapTop = Math.max(0, Math.min(snapTop, maxScrollTop));
