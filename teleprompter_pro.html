@@ -67,6 +67,9 @@
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
 
+  <!-- Boot loader (tries to run compiled TS boot initializer if available) -->
+  <script src="src/boot/boot-loader.js"></script>
+
   <!-- Inline critical CSS (small, ~2KB): topbar, chips, basic app grid and first-screen editor/viewer -->
   <style>
     :root{--bg:#0b0f19;--fg:#e6eef8;--muted:#9fb4c9;--chip-bg:rgba(255,255,255,0.03)}
