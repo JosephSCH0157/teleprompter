@@ -5585,6 +5585,39 @@ let _toast = function (msg, opts) {
             }
           } catch {}
         })();
+        // Ensure the password field remains a password control even if mutated later
+        try {
+          const obsForm = document.getElementById('obsSettingsForm');
+          if (obsForm && typeof MutationObserver !== 'undefined') {
+            const mo = new MutationObserver((_mutations) => {
+              try {
+                const p = document.getElementById('settingsObsPass');
+                if (!p) return;
+                // If someone turned it into a checkbox or changed tag/type, restore it
+                if (p.tagName !== 'INPUT' || p.type !== 'password') {
+                  try {
+                    const repl = p.tagName === 'INPUT' ? p.cloneNode(true) : document.createElement('input');
+                    repl.id = 'settingsObsPass';
+                    repl.className = p.className || 'obs-pass';
+                    repl.type = 'password';
+                    repl.name = 'obsPassword';
+                    repl.autocomplete = 'current-password';
+                    repl.placeholder = p.placeholder || 'password';
+                    repl.setAttribute('aria-label', p.getAttribute('aria-label') || 'OBS password');
+                    // preserve value from in-memory var
+                    try { repl.value = window.__obsPass || ''; } catch {}
+                    p.replaceWith(repl);
+                    // reattach input listener to keep session value in sync
+                    repl.addEventListener('input', () => {
+                      try { window.__obsPass = repl.value || ''; sessionStorage.setItem('tp_obs_password', window.__obsPass); } catch {}
+                    });
+                  } catch {}
+                }
+              } catch {}
+            });
+            mo.observe(obsForm, { attributes: true, childList: true, subtree: true });
+          }
+        } catch {}
         if (passEl && !passEl.value) passEl.value = window.__obsPass || '';
         // keep session var updated as user types
         passEl?.addEventListener('input', () => {
