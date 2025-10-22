@@ -3101,40 +3101,34 @@ let _toast = function (msg, opts) {
           const msgs = document.getElementById('obsDebugMsgs');
           if (!msgs) return;
           msgs.innerHTML = '';
-          const arr =
+          const arr = window.__obsHandshakeLog && Array.isArray(window.__obsHandshakeLog) ? window.__obsHandshakeLog : [];
+          if (!arr.length) {
+            const el = document.createElement('div');
+            el.textContent = 'No handshake log available — try enabling dev mode (add ?dev=1 or set window.__TP_DEV = true) and re-run the in-page test (window.__tpRunObsTest()) or click Settings → Test.';
+            msgs.appendChild(el);
+            return;
+          }
+          arr.forEach((it) => {
+            const el = document.createElement('div');
             try {
-              if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') {
-                try { return window.__tpMic.startDbMeter(stream); } catch {}
-              }
-              const AC = window.AudioContext || window.webkitAudioContext;
-              if (!AC) { warn('AudioContext unavailable'); return; }
-              const ctx = new AC(); audioCtx = ctx; try { if (typeof ctx.resume === 'function' && ctx.state === 'suspended') await ctx.resume(); } catch {}
-              const src = ctx.createMediaStreamSource(stream); analyser = ctx.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser);
-              const data = new Uint8Array(analyser.frequencyBinCount); const topBars = buildDbBars(dbMeterTop); const peakEl = dbMeterTop?.querySelector('.peak-marker'); let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let peakHold = { value: 0, lastUpdate: performance.now(), decay: 0.9 };
-              const draw = () => {
-                if (!analyser || !data) { dbAnim = null; return; }
-                analyser.getByteFrequencyData(data);
-                const rms = Math.sqrt(data.reduce((a, b) => a + b * b, 0) / data.length) / 255;
-                const dbfs = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
-                const dB = dbfs === -Infinity ? dBFloor : Math.max(dBFloor, Math.min(0, dbfs));
-                let level = (dB - dBFloor) / (0 - dBFloor);
-                if (!isFinite(level) || level < 0) level = 0; else if (level > 1) level = 1;
-                if (level > levelSmooth) levelSmooth = levelSmooth + (level - levelSmooth) * attack; else levelSmooth = levelSmooth + (level - levelSmooth) * release;
-                const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth * topBars.length)));
-                for (let i = 0; i < topBars.length; i++) topBars[i].classList.toggle('on', i < bars);
-                const now = performance.now(); if (bars > peakHold.value) { peakHold.value = bars; peakHold.lastUpdate = now; } else if (now - peakHold.lastUpdate > 350) { peakHold.value = Math.max(0, peakHold.value - peakHold.decay * ((now - peakHold.lastUpdate) / 16)); }
-                const peakIndex = Math.max(0, Math.min(topBars.length - 1, Math.floor(peakHold.value - 1)));
-                if (peakEl) {
-                  const bar = topBars[peakIndex]; if (bar) { const x = bar.offsetLeft; peakEl.style.transform = `translateX(${x}px)`; peakEl.style.opacity = peakHold.value > 0 ? '.9' : '0'; let color = '#2eff7d'; if (levelSmooth > 0.85) color = '#ff3131'; else if (levelSmooth > 0.65) color = '#ffb347'; peakEl.style.backgroundColor = color; peakEl.style.boxShadow = `0 0 4px ${color}aa`; }
-                  peakEl.title = `Approx RMS: ${(rms * 100).toFixed(0)}%\nApprox dBFS: ${dbfs === -Infinity ? '–∞' : dbfs.toFixed(1)} dB`;
-                }
-                try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
-                dbAnim = requestAnimationFrame(draw);
-              };
-              draw();
-            } catch (err) {
-              console.warn('startDbMeter failed', err);
+              el.textContent = JSON.stringify(it);
+            } catch {
+              el.textContent = String(it);
             }
+            msgs.appendChild(el);
+          });
+          msgs.scrollTop = msgs.scrollHeight;
+        } catch {
+          void 0;
+        }
+      });
+      // return the panel element so callers can inspect or reuse it
+      return p;
+    } catch {
+      void 0;
+    }
+  }
+
   async function __initMinimal() {
     try {
       // NOTE: previously we eagerly imported obsBridge here which forced the OBS adapter
@@ -10510,26 +10504,9 @@ let _toast = function (msg, opts) {
   }
   function applyCamSizing() {
     try {
-      if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay === 'function') {
-        try { return window.__tpDisplay.openDisplay(); } catch {}
-      }
-      // Fallback to inline openDisplay implementation
-      displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
-      if (!displayWin) { setStatus('Pop-up blocked. Allow pop-ups and try again.'); displayChip.textContent = 'Display: blocked'; return; }
-      displayReady = false; displayChip.textContent = 'Display: open'; try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
-      closeDisplayBtn.disabled = true;
-      if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
-      displayHelloDeadline = performance.now() + 3000;
-      displayHelloTimer = setInterval(()=>{ if (!displayWin || displayWin.closed || displayReady) { clearInterval(displayHelloTimer); displayHelloTimer=null; return; } if (performance.now()>displayHelloDeadline) { clearInterval(displayHelloTimer); displayHelloTimer=null; return;} try{ sendToDisplay({ type:'hello' }); } catch{} }, 300);
-    } catch (e) { setStatus('Unable to open display window: ' + (e && e.message)); }
-          ctx.drawImage(camVideo, 0, 0);
-          // Potential: send via postMessage with cvs.toDataURL('image/webp',0.6) throttled
-          // For now: only keep canvas for possible local preview tools
-        } catch {}
-        requestAnimationFrame(pump);
-      }
-      requestAnimationFrame(pump);
-      updateCamRtcChip('CamRTC: fallback');
+      const pct = Math.max(15, Math.min(60, Number(camSize.value) || 28));
+      camWrap.style.width = pct + '%';
+      try { sendToDisplay({ type: 'cam-sizing', pct }); } catch {}
     } catch {}
   }
 
