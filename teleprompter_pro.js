@@ -3898,6 +3898,49 @@ async function init(){
       throw e;
     }
   }
+
+  // Speed presets + Tap-Tempo (press 1-5 to set presets; press T to tap tempo)
+  (function installSpeedPresets(){
+    try {
+      const PRESETS = [90, 110, 125, 140, 160]; // px/s
+      let taps = [];
+      function setBase(px){
+        try {
+          // Primary hook: gov.onManualAdjust(px) if available
+          if (typeof gov !== 'undefined' && gov && typeof gov.onManualAdjust === 'function') {
+            try { gov.onManualAdjust(px); } catch {}
+          }
+          // Persist choice for future loads
+          try { localStorage.setItem('tp_base_speed_px_s', String(px)); } catch {}
+          // HUD ping if available
+          try { window.tp_hud && typeof window.tp_hud === 'function' && window.tp_hud('speed:set', { px }); } catch {}
+        } catch {}
+      }
+      window.addEventListener('keydown', (e) => {
+        try {
+          if (e.repeat) return;
+          const k = String(e.key || '');
+          if (k >= '1' && k <= '5'){
+            const px = PRESETS[Number(k) - 1];
+            setBase(px);
+            return;
+          }
+          if (k.toLowerCase() === 't'){
+            const now = performance.now();
+            taps.push(now);
+            if (taps.length > 6) taps.shift();
+            if (taps.length >= 3){
+              const intervals = taps.slice(1).map((t,i) => t - taps[i]);
+              const avg = intervals.reduce((a,b) => a + b, 0) / intervals.length;
+              // Map beat interval (ms) to px/s — tuned constant 520 works reasonably
+              const px = Math.max(20, Math.round(520 / (avg / 1000)));
+              setBase(px);
+            }
+          }
+        } catch {}
+      });
+    } catch {}
+  })();
   async function togglePiP(){ try{ if (document.pictureInPictureElement){ await document.exitPictureInPicture(); } else { await camVideo.requestPictureInPicture(); } } catch(e){ warn('PiP failed', e); } }
 
   /* ──────────────────────────────────────────────────────────────
