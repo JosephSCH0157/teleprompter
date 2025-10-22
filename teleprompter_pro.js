@@ -3149,7 +3149,11 @@ let _toast = function (msg, opts) {
           const v = getVals();
           if (!v.url && !v.pass) return;
           try {
-            sessionStorage.setItem('tp_obs_password', v.pass);
+            // Do NOT persist passwords to sessionStorage/localStorage.
+            // Keep passwords strictly in-memory only. Expose on window for other
+            // modules that may consult it during the page lifetime.
+            try { window.__obsPass = v.pass || ''; } catch {}
+            try { __obsPass = v.pass || ''; } catch {}
           } catch {}
           try {
             localStorage.setItem('tp_obs_url', v.url);
@@ -3157,15 +3161,6 @@ let _toast = function (msg, opts) {
           try {
             localStorage.setItem('tp_obs_remember', v.remember ? '1' : '0');
           } catch {}
-          if (!v.remember) {
-            try {
-              localStorage.removeItem('tp_obs_password');
-            } catch {}
-          } else {
-            try {
-              localStorage.setItem('tp_obs_password', v.pass);
-            } catch {}
-          }
         } catch {
           void e;
         }
@@ -5164,18 +5159,10 @@ let _toast = function (msg, opts) {
               if (typeof s.configs?.obs?.password === 'string' && s.configs.obs.password) {
                 obsPassInput.value = s.configs.obs.password;
               } else {
-                // Prefer sessionStorage (secure-by-default), then localStorage if Remember checked
+                // Do not hydrate from storage. Prefer the in-memory password if present.
                 try {
-                  const pSess = sessionStorage.getItem('tp_obs_password');
-                  if (pSess) {
-                    obsPassInput.value = pSess;
-                  } else {
-                    try {
-                      const rem = document.getElementById('settingsObsRemember');
-                      const pLocal = localStorage.getItem('tp_obs_password');
-                      if (rem && rem.checked && pLocal) obsPassInput.value = pLocal;
-                    } catch {}
-                  }
+                  const mem = (typeof window !== 'undefined' && window.__obsPass) || __obsPass || '';
+                  if (mem) obsPassInput.value = mem;
                 } catch {}
               }
             }
