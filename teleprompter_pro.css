@@ -118,6 +118,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     .topbar.hairline-strong::after {
         background: linear-gradient(rgba(255,255,255,0.08), rgba(255,255,255,0.02));
     }
+        /* Explicit small separator utility for use in markup where a compact hairline is needed */
+        .header-sep {
+            height: 1px;
+            background: linear-gradient(to right, rgba(0,0,0,.15), rgba(0,0,0,.08) 40%, rgba(255,255,255,.35) 40%, rgba(255,255,255,.15));
+            mix-blend-mode: multiply; /* keeps contrast across themes */
+        }
     /* top-bar label rhythm & consistency */
     .chip{font-size:0.9rem;font-weight:600;color:var(--muted);border-radius:.5rem;padding:6px 8px}
     #debugPosChip{font-family:monospace; width:160px; flex-shrink:0; text-align:center}
