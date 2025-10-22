@@ -7477,6 +7477,15 @@ let _toast = function (msg, opts) {
         document.body;
       const y = getYForElInScroller(activeEl, sc, 0.38);
       tpScrollTo(y, sc);
+      try {
+        // Emit a single high-confidence sample to the governor when we commit via geometry
+        if (typeof onSpeechAlignment === 'function') {
+          try {
+            const epx = errPxFrom(activeEl, sc, 0.38);
+            onSpeechAlignment(epx, 1.0);
+          } catch {}
+        }
+      } catch {}
     } catch {}
   }
 
