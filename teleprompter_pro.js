@@ -4,57 +4,8 @@
    - DOCX import via Mammoth (auto‑loads on demand)
    - dB meter + mic selector
    - Camera overlay (mirror/size/opacity/PiP)
-   - Auto‑scroll + timer
-   - NEW: Speakers section hide/show with persistence
-*/
-
-// Reinstate IIFE wrapper (was removed causing brace imbalance)
-(function(){
-  'use strict';
-  // Flags (URL or localStorage): ?calm=1&dev=1
-  try {
-    const Q = new URLSearchParams(location.search);
-    const DEV  = Q.has('dev')  || localStorage.getItem('tp_dev_mode') === '1';
-    const CALM = Q.has('calm') || localStorage.getItem('tp_calm')    === '1';
-    try { window.__TP_DEV = DEV; window.__TP_CALM = CALM; } catch {}
-    // Ensure DEV-only UI (like build label) is gated by a class on <html>
-    try {
-      document.documentElement.classList.toggle('tp-dev', !!DEV);
-    } catch {}
-    try { if (CALM) { window.__TP_DISABLE_NUDGES = true; } } catch {}
-    try { if (DEV) console.info('[TP-Pro] DEV mode enabled'); } catch {}
-    try { if (CALM) console.info('[TP-Pro] Calm Mode enabled'); } catch {}
-  } catch {}
-  // Boot instrumentation (added)
-  try {
-    window.__TP_BOOT_TRACE = [];
-    const _origLog = console.log.bind(console);
-    const tag = (m)=> `[TP-BOOT ${Date.now()%100000}] ${m}`;
-  // Publish build version for About panel and diagnostics
-  try { window.APP_VERSION = '1.5.8'; } catch {}
-  window.__tpBootPush = (m)=>{ try { const rec = { t: Date.now(), m }; window.__TP_BOOT_TRACE.push(rec); console.log('[TP-TRACE]', rec.m); } catch(e){ try { console.warn('[TP-TRACE-FAIL]', e); } catch {} } };
-    __tpBootPush('script-enter');
-    _origLog(tag('entered main IIFE'));
-    window.addEventListener('DOMContentLoaded', ()=>{ __tpBootPush('dom-content-loaded'); });
-    document.addEventListener('readystatechange', ()=>{ __tpBootPush('rs:' + document.readyState); });
-    // Global error hooks (diagnostic): capture earliest uncaught issues
-    window.addEventListener('error', ev => {
-      try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'onerror:'+ (ev?.error?.message||ev?.message) }); } catch {}
-      try { console.error('[TP-BOOT onerror]', ev?.error || ev?.message || ev); } catch {}
-    });
-    window.addEventListener('unhandledrejection', ev => {
-      try { (__TP_BOOT_TRACE||[]).push({t:Date.now(), m:'unhandled:'+ (ev?.reason?.message||ev?.reason) }); } catch {}
-      try { console.error('[TP-BOOT unhandled]', ev?.reason); } catch {}
-    });
-    _origLog(tag('installed global error hooks'));
-  } catch {}
-  try { __tpBootPush('after-boot-block'); } catch {}
-
-  // Calm Mode geometry helpers: unified target math and clamped scroll writes
-  // These are safe to define always; callers should only use them when CALM is enabled.
-  function getYForElInScroller(el, sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body), pct = 0.38) {
-    try {
-      if (!el || !sc) return 0;
+    // keep refresh button wired
+    refreshDevicesBtn?.addEventListener('click', populateDevices);
       const elR = el.getBoundingClientRect();
       const scR = (typeof sc.getBoundingClientRect === 'function') ? sc.getBoundingClientRect() : { top: 0 };
       const base = (typeof window.__TP_VIEWER_HEIGHT_BASE === 'number' && window.__TP_VIEWER_HEIGHT_BASE > 0) ? window.__TP_VIEWER_HEIGHT_BASE : (sc.clientHeight || 0);
@@ -4400,5 +4351,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
   });
 // end about popover
 }
-// <-- add this closing brace to end the IIFE
-})();
+// (removed stray IIFE closure inserted here)
