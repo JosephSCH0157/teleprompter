@@ -1,3 +1,6 @@
+// Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
+import './boot/compat-ids';
+
 import { bootstrap } from './boot/boot';
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
