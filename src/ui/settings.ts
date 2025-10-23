@@ -31,8 +31,8 @@ export function mountSettings(rootEl: HTMLElement | null) {
           const modernEl = rootEl.querySelector('#' + modern) as HTMLElement | null;
           if (modernEl && !document.getElementById(legacyId)) {
             // expose as a window reference for legacy codepaths instead of duplicating IDs
-            (window as any).__tpLegacy = (window as any).__tpLegacy || {};
-            (window as any).__tpLegacy[legacyId] = modernEl;
+            (window as any).__tpLegacyRefs = (window as any).__tpLegacyRefs || {};
+            (window as any).__tpLegacyRefs[legacyId] = modernEl;
           }
         } catch {}
       });
