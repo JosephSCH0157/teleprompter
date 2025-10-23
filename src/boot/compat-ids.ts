@@ -53,4 +53,5 @@ window.$bindOnce = function $bindOnce(el, type, handler, key) {
   (el as any)[k] = true;
 };
 
-export {};
+export { };
+
