@@ -49,9 +49,9 @@ export function runSelfChecks(): Array<{ name: string; pass: boolean; info?: str
     checks.push({ name: 'Display handshake', pass: false, info: 'error' });
   }
 
-  // 5) Top Normalize button wired
+  // 5) Top Normalize button wired (accept legacy normalizeBtn)
   try {
-    const btn = document.getElementById('normalizeTopBtn') as HTMLButtonElement | null;
+    const btn = (window.$id?.('normalizeTopBtn') || document.getElementById('normalizeTopBtn') || window.$id?.('normalizeBtn') || document.getElementById('normalizeBtn')) as HTMLButtonElement | null;
     const wired = Boolean(btn && (btn.onclick || btn.dataset.wired));
     checks.push({ name: 'Top Normalize button wired', pass: wired, info: wired ? 'wired' : 'not wired' });
   } catch {

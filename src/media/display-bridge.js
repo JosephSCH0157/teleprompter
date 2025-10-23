@@ -14,9 +14,10 @@
       displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
       if (!displayWin) { setStatus && setStatus('Pop-up blocked. Allow pop-ups and try again.'); document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: blocked'); return; }
       displayReady = false;
-      document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: open');
+      const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
+      if (chip) chip.textContent = 'Display: open';
       try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
-      const closeDisplayBtn = document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) closeDisplayBtn.disabled = true;
+      const closeDisplayBtn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) closeDisplayBtn.disabled = true;
       if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
       displayHelloDeadline = performance.now() + 3000;
       displayHelloTimer = setInterval(()=>{
@@ -29,7 +30,7 @@
 
   function closeDisplay() {
     try { if (displayWin && !displayWin.closed) displayWin.close(); } catch {}
-    displayWin = null; displayReady = false; const closeDisplayBtn = document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) closeDisplayBtn.disabled = true; document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: closed'); try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
+  displayWin = null; displayReady = false; const closeDisplayBtn2 = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn2) closeDisplayBtn2.disabled = true; const chip2 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip2) chip2.textContent = 'Display: closed'; try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
   }
 
   function sendToDisplay(payload) {
@@ -50,7 +51,7 @@
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
         displayReady = true; if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
-        document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: ready');
+  const chip3 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip3) chip3.textContent = 'Display: ready';
         // send initial render
         try { sendToDisplay({ type: 'render', html: document.getElementById('script')?.innerHTML, fontSize: document.getElementById('fontSize')?.value, lineHeight: document.getElementById('lineHeight')?.value }); } catch {}
       }
