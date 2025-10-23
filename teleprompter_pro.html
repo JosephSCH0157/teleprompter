@@ -411,7 +411,7 @@
         document.head.appendChild(s);
       });
       // Then load the remaining classic scripts
-  var jsFiles = [ add('./debug-seed.js'), add('./sim-history.js') ];
+  var jsFiles = [ add('./debug-seed.js'), add('./sim-history.js'), add('./recorders.js') ];
       jsFiles.forEach(function(src) {
         var script = document.createElement('script');
         script.src = src;
@@ -424,6 +424,7 @@
         './debug-seed.js?v=dev-20251007',
         './sim-history.js?v=dev-20251007',
         './ui/toasts.js?v=dev-20251007',
+        './recorders.js?v=dev-20251007',
         'teleprompter_pro.js?v=dev-20251007'
       ];
       jsFiles.forEach(function(src) {
