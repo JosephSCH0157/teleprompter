@@ -1530,10 +1530,15 @@ let _toast = function (msg, opts) {
   // when settings were first opened. We hoist it to top-level scope so the call inside
   // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
   function wireSettingsDynamic() {
+    // Prevent double-wiring across incremental builds / multiple opens
+    if (window.__tpMicWired) return;
+    window.__tpMicWired = true;
+
     // Mic — tolerant lookup for legacy vs new IDs
     const reqMicBtn = $id('settingsRequestMicBtn', 'settingsReqMic');
     const micSel = $id('settingsMicSel', 'micDeviceSel');
-    if (micSel) {
+    if (micSel && !micSel.dataset?.wired) {
+      micSel.dataset.wired = '1';
       micSel.addEventListener('change', () => {
         try {
           localStorage.setItem(DEVICE_KEY, micSel.value);
@@ -1542,7 +1547,8 @@ let _toast = function (msg, opts) {
         }
       });
     }
-    if (reqMicBtn) {
+    if (reqMicBtn && !reqMicBtn.dataset?.wired) {
+      reqMicBtn.dataset.wired = '1';
       reqMicBtn.addEventListener('click', async () => {
         try {
           const deviceId = micSel && micSel.value ? micSel.value : undefined;
