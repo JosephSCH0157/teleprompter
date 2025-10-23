@@ -1530,80 +1530,58 @@ let _toast = function (msg, opts) {
   // when settings were first opened. We hoist it to top-level scope so the call inside
   // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
   function wireSettingsDynamic() {
-    // Prevent double-wiring across incremental builds / multiple opens
-    if (window.__tpMicWired) return;
-    window.__tpMicWired = true;
+    // Mic & dB wiring: use tolerant lookups and de-duped binding
+    (function wireMicAndDbUI() {
+      if (window.__tpMicWired) return; window.__tpMicWired = true;
 
-    // Mic — tolerant lookup for legacy vs new IDs
-    const reqMicBtn = $id('settingsRequestMicBtn', 'settingsReqMic');
-    const micSel = $id('settingsMicSel', 'micDeviceSel');
-    if (micSel && !micSel.dataset?.wired) {
-      micSel.dataset.wired = '1';
-      micSel.addEventListener('change', () => {
+      const $id_local = window.$id || ((...ids) => document.getElementById(ids[0]));
+
+      const req = $id_local('settingsRequestMicBtn', 'settingsReqMic');
+      const rel = $id_local('settingsReleaseMicBtn', 'settingsReleaseMicBtn');
+      const start = $id_local('settingsStartDbBtn', 'startDbBtn');
+      const stop = $id_local('settingsStopDbBtn', 'stopDbBtn');
+
+      const getSel = () => $id_local('settingsMicSel', 'micDeviceSel');
+      const getBars = () => document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
+
+      async function doRequestMic() {
         try {
-          localStorage.setItem(DEVICE_KEY, micSel.value);
-        } catch {
-          void 0;
-        }
-      });
-    }
-    if (reqMicBtn && !reqMicBtn.dataset?.wired) {
-      reqMicBtn.dataset.wired = '1';
-      reqMicBtn.addEventListener('click', async () => {
-        try {
-          const deviceId = micSel && micSel.value ? micSel.value : undefined;
-          if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') {
-            await window.__tpMic.requestMic(deviceId);
-            _toast('Mic requested', { type: 'ok' });
-            return;
-          }
-          if (typeof requestMic === 'function') {
-            await requestMic(deviceId);
-            _toast('Mic requested', { type: 'ok' });
-            return;
-          }
-        } catch {
-          try { console.warn('requestMic() failed'); } catch {}
-        }
-        try {
-          // Fallback to clicking main button if requestMic isn't available
-          await (micBtn && micBtn.click && micBtn.click());
-          _toast('Mic requested', { type: 'ok' });
-        } catch {
-          _toast('Mic request failed', { type: 'error' });
-        }
-      });
-    }
-    // dB meter controls (settings overlay)
-    try {
-      const startDbS = $id('settingsStartDbBtn', 'startDbBtn');
-      const stopDbS = $id('settingsStopDbBtn', 'stopDbBtn');
-      if (startDbS && !startDbS.dataset?.wired) {
-        startDbS.dataset.wired = '1';
-        startDbS.addEventListener('click', () => {
-          try {
-            const meter = document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
-            if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') {
-              window.__tpMic.startDbMeter(meter);
-            } else if (typeof startDbMeter === 'function') {
-              startDbMeter(meter);
-            }
-          } catch {}
-        });
+          const sel = getSel();
+          const id = sel && sel.value ? sel.value : undefined;
+          if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') return window.__tpMic.requestMic(id);
+          if (typeof window.requestMic === 'function') return window.requestMic(id);
+        } catch {}
       }
-      if (stopDbS && !stopDbS.dataset?.wired) {
-        stopDbS.dataset.wired = '1';
-        stopDbS.addEventListener('click', () => {
-          try {
-            if (window.__tpMic && typeof window.__tpMic.clearBars === 'function') {
-              window.__tpMic.clearBars();
-            } else if (typeof _stopDbMeter === 'function') {
-              _stopDbMeter();
-            }
-          } catch {}
-        });
+      function doReleaseMic() {
+        try {
+          if (window.__tpMic && typeof window.__tpMic.releaseMic === 'function') return window.__tpMic.releaseMic();
+          if (typeof window.releaseMic === 'function') return window.releaseMic();
+        } catch {}
       }
-    } catch {}
+      function doStartDb() {
+        try {
+          const meter = getBars();
+          if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') return window.__tpMic.startDbMeter(meter);
+          if (typeof window.startDbMeter === 'function') return window.startDbMeter(meter);
+        } catch {}
+      }
+      function doStopDb() {
+        try {
+          if (window.__tpMic && typeof window.__tpMic.clearBars === 'function') return window.__tpMic.clearBars();
+          if (typeof window._stopDbMeter === 'function') return window._stopDbMeter();
+        } catch {}
+      }
+
+      const binder = window.$bindOnce || ((el, t, h) => el && el.addEventListener(t, h));
+
+      binder(req, 'click', () => { try { doRequestMic(); _toast && _toast('Mic requested', { type: 'ok' }); } catch {} }, 'micReq');
+      binder(rel, 'click', () => { try { doReleaseMic(); _toast && _toast('Mic released', { type: 'ok' }); } catch {} }, 'micRel');
+      binder(start, 'click', () => { try { doStartDb(); } catch {} }, 'dbStart');
+      binder(stop, 'click', () => { try { doStopDb(); } catch {} }, 'dbStop');
+
+      // keep both selects populated (new + legacy hidden)
+      try { if (window.__tpMic && typeof window.__tpMic.populateDevices === 'function') window.__tpMic.populateDevices(); } catch {}
+    })();
 
     // Camera
     const startCamS = document.getElementById('settingsStartCam');
