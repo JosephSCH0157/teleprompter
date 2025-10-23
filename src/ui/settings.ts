@@ -19,6 +19,43 @@ export function mountSettings(rootEl: HTMLElement | null) {
     try { wireSettingsDynamic(rootEl); } catch {}
     try { setupSettingsTabs(rootEl); } catch {}
 
+      // Ensure device selects are populated (keeps new and legacy selects in sync)
+      try {
+        // use the mic API if available, else try a local implementation
+        const micApi = (window as any).__tpMic;
+        if (micApi && typeof micApi.populateDevices === 'function') {
+          try { micApi.populateDevices(); } catch {}
+        } else {
+          // fallback: minimal populate that tolerates legacy/new IDs
+          (async function populateDevicesFallback() {
+            try {
+              if (!navigator.mediaDevices?.enumerateDevices) return;
+              const devs = await navigator.mediaDevices.enumerateDevices();
+              const mics = devs.filter(d => d.kind === 'audioinput');
+              const cams = devs.filter(d => d.kind === 'videoinput');
+              const fill = (id: string, list: MediaDeviceInfo[]) => {
+                try {
+                  const el = (window.$id?.(id) ?? document.getElementById(id)) as HTMLSelectElement | null;
+                  if (!el) return;
+                  const prev = el.value;
+                  el.innerHTML = '';
+                  for (const d of list) {
+                    const opt = document.createElement('option');
+                    opt.value = d.deviceId;
+                    opt.textContent = d.label || (d.kind === 'audioinput' ? 'Microphone' : 'Camera');
+                    el.appendChild(opt);
+                  }
+                  try { if (prev && Array.from(el.options).some(o => o.value === prev)) el.value = prev; } catch {}
+                } catch {}
+              };
+              fill('settingsMicSel', mics);
+              fill('micDeviceSel', mics);
+              fill('settingsCamSel', cams);
+            } catch {}
+          })();
+        }
+      } catch {}
+
     // Legacy-ID compatibility: alias legacy IDs used in monolith
     try {
       const legacyMap: Record<string,string> = {
