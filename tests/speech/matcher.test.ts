@@ -1,4 +1,4 @@
-import { matchBatch, computeTFIDFSimilarity, computeJaccardSimilarity, normTokens } from '../../src/speech/matcher';
+import { computeJaccardSimilarity, computeTFIDFSimilarity, matchBatch, normTokens } from '../../src/speech/matcher';
 
 describe('TS matcher parity', () => {
   test('computeTFIDFSimilarity: identical token lists => 1', () => {
