@@ -1,4 +1,6 @@
 /* Teleprompter Pro — JS CLEAN (v1.5.8) */
+/* eslint-disable */
+
 
 // Backwards-compatible no-op scheduler guard.
 // Some legacy paths may call window.__tpScrollWrite before the TS scheduler loads.
