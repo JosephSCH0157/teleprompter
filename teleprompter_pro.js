@@ -7332,8 +7332,14 @@ let _toast = function (msg, opts) {
       return finalScore;
     }
 
-    // TF-IDF cosine similarity for bi/tri-grams
+    // TF-IDF cosine similarity for bi/tri-grams — delegate to TS matcher when available
     function computeTFIDFSimilarity(tokens1, tokens2) {
+      try {
+        if (window && window.__tpMatcher && typeof window.__tpMatcher.computeTFIDFSimilarity === 'function')
+          return window.__tpMatcher.computeTFIDFSimilarity(tokens1, tokens2);
+      } catch {}
+
+      // Fallback: simple bi/tri-gram cosine similarity (keeps legacy behavior when TS not loaded)
       const ngrams1 = getNgrams(tokens1, 2).concat(getNgrams(tokens1, 3));
       const ngrams2 = getNgrams(tokens2, 2).concat(getNgrams(tokens2, 3));
 
@@ -7433,7 +7439,14 @@ let _toast = function (msg, opts) {
     }
 
     // Viterbi step: find best path through time given previous path and current scores
+    // Delegate to TS matcher when available for parity and maintainability
     function viterbiStep(prevPath, scores, alpha, beta, loopPenalty) {
+      try {
+        if (window && window.__tpMatcher && typeof window.__tpMatcher.viterbiStep === 'function')
+          return window.__tpMatcher.viterbiStep(prevPath, scores, alpha, beta, loopPenalty);
+      } catch {}
+
+      // Fallback simple heuristic implementation
       const candidates = Object.keys(scores)
         .map(Number)
         .sort((a, b) => a - b);
