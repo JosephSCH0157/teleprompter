@@ -7232,6 +7232,48 @@ let _toast = function (msg, opts) {
         }
         return; // delegated to TS matcher; skip legacy logic
       }
+      // If a differently-named TS matcher is present (loader may publish window.__tpMatcher), prefer it too
+      try {
+        if (window.__tpMatcher && typeof window.__tpMatcher.matchBatch === 'function') {
+          try {
+            if (!speechOn) return; // respect speech gating
+            const res2 = window.__tpMatcher.matchBatch(transcript, isFinal) || {};
+            const bestIdx2 = typeof res2.bestIdx === 'number' ? res2.bestIdx : null;
+            const bestSim2 = typeof res2.bestSim === 'number' ? res2.bestSim : 0;
+            if (bestIdx2 !== null && Array.isArray(paraIndex) && paraIndex.length) {
+              currentIndex = Math.max(currentIndex, Math.min(bestIdx2, scriptWords.length - 1));
+              window.currentIndex = currentIndex;
+              window.__tpCommit = window.__tpCommit || {};
+              window.__tpCommit.idx = currentIndex;
+              window.__tpCommit.ts = performance.now();
+              try {
+                const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null;
+                const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+                if (matchedPara && matchedPara.el && viewerEl) {
+                  try { const epx = errPxFrom(matchedPara.el, viewerEl); if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, bestSim2); } catch {}
+                }
+              } catch {}
+              try {
+                const targetPara = paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length - 1];
+                if (targetPara && targetPara.el && viewer) {
+                  const markerPct = (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
+                  const desiredTop = targetPara.el.offsetTop - Math.round((viewer.clientHeight || 0) * markerPct);
+                  try { if (typeof requestScroll === 'function') requestScroll(desiredTop); else viewer.scrollTop = desiredTop; } catch {}
+                }
+              } catch {}
+            }
+          } catch (e) {
+            try { console.warn && console.warn('[TP] delegated (alt) match failed', e); } catch {}
+          }
+          return; // handled by __tpMatcher
+        }
+      } catch {}
+
+      // If legacy matcher fallback is intentionally disabled, skip running the heavy legacy matcher.
+      // Set window.__TP_ENABLE_LEGACY_MATCHER = true to retain old behavior while migrating.
+      try {
+        if (!window.__TP_ENABLE_LEGACY_MATCHER) return;
+      } catch {}
   } catch {}
 
     // Hard gate: no matching when speech sync is off
