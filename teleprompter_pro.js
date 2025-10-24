@@ -2320,6 +2320,14 @@ let _toast = function (msg, opts) {
     'are',
   ]);
   function extractHighIDFPhrases(tokens, n = 3, topK = 10) {
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.__tpMatcher && typeof window.__tpMatcher.extractHighIDFPhrases === 'function')
+          return window.__tpMatcher.extractHighIDFPhrases(tokens, n, topK);
+        if (window.__tpSpeech && typeof window.__tpSpeech.extractHighIDFPhrases === 'function')
+          return window.__tpSpeech.extractHighIDFPhrases(tokens, n, topK);
+      }
+    } catch {}
     const out = [];
     if (!Array.isArray(tokens) || tokens.length < n) return out;
     for (let i = 0; i <= tokens.length - n; i++) {
@@ -2370,6 +2378,23 @@ let _toast = function (msg, opts) {
     } catch {
       return 50;
     }
+  }
+  // Delegateable n-gram helper: prefer TS matcher exports when available
+  function getNgrams(tokens, n) {
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.__tpMatcher && typeof window.__tpMatcher.getNgrams === 'function')
+          return window.__tpMatcher.getNgrams(tokens, n);
+        if (window.__tpSpeech && typeof window.__tpSpeech.getNgrams === 'function')
+          return window.__tpSpeech.getNgrams(tokens, n);
+      }
+    } catch {}
+    const ngrams = [];
+    if (!Array.isArray(tokens) || tokens.length < n) return ngrams;
+    for (let i = 0; i <= tokens.length - n; i++) {
+      ngrams.push(tokens.slice(i, i + n).join(' '));
+    }
+    return ngrams;
   }
   // Helper: compute in-vocab token ratio for spoken overlap gating
   function inVocabRatio(tokens, vocabSet) {
