@@ -7505,6 +7505,50 @@ let _toast = function (msg, opts) {
   // Advance currentIndex by trying to align recognized words to the upcoming script words
   // TP: advance-by-transcript
   function advanceByTranscript(transcript, isFinal) {
+    // Prefer the TS orchestrator/matcher when it's been loaded. Delegate early
+    // so the heavy legacy matching implementation below is only used as a
+    // fallback. This keeps boot-order races safe and avoids duplicating logic.
+    try {
+      if (window.__tpSpeech && typeof window.__tpSpeech.matchBatch === 'function') {
+        try {
+          if (!speechOn) return; // respect speech gating
+          // Run the TS matcher/orchestrator which returns a MatchResult-like object
+          const res = window.__tpSpeech.matchBatch(transcript, isFinal) || {};
+          const bestIdx = typeof res.bestIdx === 'number' ? res.bestIdx : null;
+          const bestSim = typeof res.bestSim === 'number' ? res.bestSim : 0;
+          if (bestIdx !== null && Array.isArray(paraIndex) && paraIndex.length) {
+            currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
+            window.currentIndex = currentIndex;
+            window.__tpCommit = window.__tpCommit || {};
+            window.__tpCommit.idx = currentIndex;
+            window.__tpCommit.ts = performance.now();
+
+            // Emit an alignment sample and update PLL similar to legacy flow
+            try {
+              const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null;
+              const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+              if (matchedPara && matchedPara.el && viewerEl) {
+                try { const epx = errPxFrom(matchedPara.el, viewerEl); if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, bestSim); } catch {}
+              }
+            } catch {}
+
+            // Simple scroll toward the matched paragraph to preserve legacy UX
+            try {
+              const targetPara = paraIndex.find((p) => currentIndex >= p.start && currentIndex <= p.end) || paraIndex[paraIndex.length - 1];
+              if (targetPara && targetPara.el && viewer) {
+                const markerPct = (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : (typeof MARKER_PCT === 'number' ? MARKER_PCT : 0.4));
+                const desiredTop = targetPara.el.offsetTop - Math.round((viewer.clientHeight || 0) * markerPct);
+                try { if (typeof requestScroll === 'function') requestScroll(desiredTop); else viewer.scrollTop = desiredTop; } catch {}
+              }
+            } catch {}
+          }
+        } catch (e) {
+          try { console.warn && console.warn('[TP] delegated match failed', e); } catch {}
+        }
+        return; // delegated to TS matcher; skip legacy logic
+      }
+  } catch {}
+
     // Hard gate: no matching when speech sync is off
     if (!speechOn) {
       try {
