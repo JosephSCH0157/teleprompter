@@ -1,5 +1,17 @@
 /* Teleprompter Pro — JS CLEAN (v1.5.8) */
 
+// Backwards-compatible no-op scheduler guard.
+// Some legacy paths may call window.__tpScrollWrite before the TS scheduler loads.
+// Provide a safe no-op that directly sets scrollTop to avoid hard crashes.
+try {
+  window.__tpScrollWrite = window.__tpScrollWrite || function (y) {
+    try {
+      const sc = document.scrollingElement || document.documentElement || document.body;
+      try { sc.scrollTop = (y | 0); } catch {}
+    } catch {}
+  };
+} catch {}
+
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 let _toast = function (msg, opts) {
   try {
