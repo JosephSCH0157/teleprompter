@@ -6,7 +6,7 @@
 declare global {
   interface Window {
     __tpScrollWrite?: (y: number) => void;
-    __TP_SCROLLER?: HTMLElement | null;
+    __TP_SCROLLER?: HTMLElement;
   }
 }
 
@@ -52,7 +52,8 @@ function flush() {
 export const scheduler = {
   /** Set/override the scroll container element (optional). */
   setScroller(el?: HTMLElement | null) {
-    window.__TP_SCROLLER = (el ?? null) as HTMLElement | null;
+    // align with existing global type (HTMLElement | undefined)
+    (window as any).__TP_SCROLLER = el ?? undefined;
   },
   /** Schedule a scrollTop write (coalesced to 1 rAF). */
   write(y: number) {
