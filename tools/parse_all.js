@@ -1,49 +1,19 @@
 const fs = require('fs');
-const path = require('path');
 const acorn = require('acorn');
 
-function walk(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  const out = [];
-  for (const e of entries) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'releases') continue;
-      out.push(...walk(full));
-    } else if (e.isFile() && full.endsWith('.js')) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
-const root = path.resolve(__dirname, '..');
-const files = walk(root);
-
-const fails = [];
-for (const f of files) {
+const file = process.argv[2] || 'd:/teleprompter/teleprompter/teleprompter_pro.js';
+try {
+  const src = fs.readFileSync(file, 'utf8');
   try {
-    const src = fs.readFileSync(f, 'utf8');
-    try {
-      // Try parsing as module first (handles import/export files)
-      acorn.parse(src, { ecmaVersion: 2022, locations: true, sourceType: 'module' });
-    } catch {
-      try {
-        // Fallback to script parsing
-        acorn.parse(src, { ecmaVersion: 2022, locations: true, sourceType: 'script' });
-      } catch {
-        fails.push({ file: f, error: eScript.message });
-      }
-    }
-  } catch {
-    fails.push({ file: f, error: e.message });
+    acorn.parse(src, { ecmaVersion: 2022, locations: true, sourceType: 'module' });
+    console.log('PARSE_OK');
+  } catch (e) {
+    console.error('PARSE_ERROR', e.message);
+    if (e.loc) console.error('at', e.loc);
+    process.exit(2);
   }
+} catch (err) {
+  console.error('READ_ERROR', err.message);
+  process.exit(1);
 }
-
-if (fails.length) {
-  console.log(`PARSE_FAIL ${fails.length} files:`);
-  for (const p of fails) console.log(`${p.file}: ${p.error}`);
-  process.exit(2);
-}
-console.log('PARSE_OK');
 

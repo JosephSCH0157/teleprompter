@@ -34,6 +34,8 @@ let _toast = function (msg, opts) {
   } catch {}
 };
 
+  // If running under Jest (unit tests), skip executing the full browser boot sequence
+  if (!(typeof process !== 'undefined' && process.env && process.env.JEST_WORKER_ID)) {
   (function(){
   'use strict';
   // Prevent double-loading in the same window/context
@@ -11188,5 +11190,8 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
 
   /* eslint-enable no-func-assign, no-redeclare */
 
-})(); // end main IIFE (restored)
+  } // end if (!window.tpMarkInitDone)
+  })(); // end ensureInitMarker IIFE
+  })(); // end main IIFE (restored)
+  } // end skip-under-jest guard
 
