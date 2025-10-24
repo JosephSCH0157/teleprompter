@@ -15,6 +15,9 @@ import './vendor/mammoth';
 // same coalesced writer. This is intentionally idempotent.
 import { installScheduler } from './scroll/scheduler';
 installScheduler();
+// Install PLL controller (idempotent). Exposes `window.PLL` for legacy callers.
+import { installPLL } from './scroll/pll';
+installPLL();
 
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
