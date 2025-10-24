@@ -115,19 +115,21 @@ async function main() {
                 });
               },
               test() {
-                return new Promise(async (res) => {
-                  try {
-                    // Ensure connected
-                    if (!ws || ws.readyState !== 1) {
-                      try { await this.connect(); } catch {}
-                    }
+                return new Promise((res) => {
+                  (async () => {
                     try {
-                      // Send a minimal IDENTIFY-like payload so the stub records it
-                      const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
-                      ws && ws.send && ws.send(id);
+                      // Ensure connected
+                      if (!ws || ws.readyState !== 1) {
+                        try { await this.connect(); } catch {}
+                      }
+                      try {
+                        // Send a minimal IDENTIFY-like payload so the stub records it
+                        const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
+                        ws && ws.send && ws.send(id);
+                      } catch {}
                     } catch {}
-                  } catch {}
-                  setTimeout(() => res(true), 100);
+                    setTimeout(() => res(true), 100);
+                  })();
                 });
               },
               getLastError() { return null; }
@@ -346,10 +348,7 @@ async function main() {
       const v = Number(y) || 0;
       const ok = await page.evaluate((val) => {
         try {
-          if (typeof tpScrollTo === 'function') {
-            tpScrollTo(val);
-            return true;
-          }
+          // reference the global explicitly via window to avoid undefined identifier errors
           if (typeof window.tpScrollTo === 'function') {
             window.tpScrollTo(val);
             return true;

@@ -11429,39 +11429,30 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     } catch {}
   })();
 
-  // Thin shims delegating mic/db operations to the new TypeScript mic module when available.
-  // These overwrite the older monolith implementations (idempotent — wrapped in try/catch).
-  try {
-    populateDevices = async function populateDevices() {
-      try {
-        return await window.__tpMic?.populateDevices?.();
-      } catch {}
-    };
+  /* MIGRATION SHIMS — delegate monolith mic/db calls to TS API
+     eslint-disable no-func-assign, no-redeclare */
 
-    requestMic = async function requestMic(id) {
-      try {
-        return await window.__tpMic?.requestMic?.(id);
-      } catch {}
-    };
+  populateDevices = async function populateDevices() {
+    return window.__tpMic?.populateDevices?.();
+  };
 
-    _releaseMic = function _releaseMic() {
-      try {
-        return window.__tpMic?.releaseMic?.();
-      } catch {}
-    };
+  requestMic = async function requestMic(deviceId) {
+    return window.__tpMic?.requestMic?.(deviceId);
+  };
 
-    startDbMeter = function startDbMeter(el) {
-      try {
-        return window.__tpMic?.startDbMeter?.(el);
-      } catch {}
-    };
+  _releaseMic = function _releaseMic() {
+    return window.__tpMic?.releaseMic?.();
+  };
 
-    _stopDbMeter = function _stopDbMeter() {
-      try {
-        return window.__tpMic?.clearBars?.();
-      } catch {}
-    };
-  } catch {}
+  startDbMeter = function startDbMeter(el) {
+    return window.__tpMic?.startDbMeter?.(el);
+  };
+
+  _stopDbMeter = function _stopDbMeter() {
+    return window.__tpMic?.clearBars?.();
+  };
+
+  /* eslint-enable no-func-assign, no-redeclare */
 
 })(); // end main IIFE (restored)
 
