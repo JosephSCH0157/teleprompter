@@ -73,3 +73,63 @@ export function installScheduler() {
   // Publish legacy hook for the monolith and any old call sites.
   window.__tpScrollWrite = (y: number) => scheduler.write(y);
 }
+
+// --- Lightweight coalescing requestWrite (DOM write queue) ---
+// Keep the same API as the old boot scheduler so callers importing
+// requestWrite from '../boot/scheduler' can be redirected here.
+export type WriteFn = () => void;
+
+let _pending = false;
+let _queue: WriteFn[] = [];
+
+export function requestWrite(fn: WriteFn) {
+  if (typeof fn !== 'function') return;
+  _queue.push(fn);
+  if (_pending) return;
+  _pending = true;
+  requestAnimationFrame(() => {
+    const q = _queue.slice(0);
+    _queue.length = 0;
+    _pending = false;
+    for (const f of q) {
+      try {
+        f();
+      } catch {}
+    }
+  });
+}
+
+export function hasPendingWrites() {
+  return _pending || _queue.length > 0;
+}
+
+export function createScheduler() {
+  let rafId: number | null = null;
+  let pending: (() => void) | null = null;
+
+  function schedule(task: () => void) {
+    pending = task;
+    if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        try {
+          const t = pending;
+          pending = null;
+          rafId = null;
+          if (t) t();
+        } catch (err) {
+          try { console.error('[scheduler] task failed', err); } catch {}
+        }
+      });
+    }
+  }
+
+  function cancel() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      pending = null;
+    }
+  }
+
+  return { schedule, cancel } as const;
+}

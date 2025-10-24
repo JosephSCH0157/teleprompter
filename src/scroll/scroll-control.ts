@@ -1,4 +1,4 @@
-import { requestWrite } from '../boot/scheduler';
+import { requestWrite } from '../scroll/scheduler';
 
 export type Adapters = Partial<{
   getViewerTop: () => number;
