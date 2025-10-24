@@ -11,5 +11,10 @@ bootstrap().catch(() => {});
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
 
+// Install the lightweight TS scroll scheduler so legacy and new code use the
+// same coalesced writer. This is intentionally idempotent.
+import { installScheduler } from './scroll/scheduler';
+installScheduler();
+
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
