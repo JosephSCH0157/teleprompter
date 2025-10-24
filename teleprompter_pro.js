@@ -34,9 +34,14 @@ let _toast = function (msg, opts) {
   } catch {}
 };
 
-  // If running under Jest (unit tests), skip executing the full browser boot sequence
-  if (!(typeof process !== 'undefined' && process.env && process.env.JEST_WORKER_ID)) {
-  (function(){
+  // If running under Jest (unit tests) or a test Node env, skip executing the full browser boot sequence
+  // Detect common Jest signals: JEST_WORKER_ID, NODE_ENV=test, or 'jest' on the process argv.
+  const __TP_SKIP_BOOT_FOR_TESTS =
+    typeof process !== 'undefined' &&
+    process.env &&
+    (process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test' || ((process.argv || []).join(' ') || '').includes('jest'));
+  if (!__TP_SKIP_BOOT_FOR_TESTS) {
+    (function () {
   'use strict';
   // Prevent double-loading in the same window/context
   try {
