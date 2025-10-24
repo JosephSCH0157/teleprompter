@@ -11428,5 +11428,40 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
       window.__setAutoSpeed = setAutoSpeed;
     } catch {}
   })();
+
+  // Thin shims delegating mic/db operations to the new TypeScript mic module when available.
+  // These overwrite the older monolith implementations (idempotent — wrapped in try/catch).
+  try {
+    populateDevices = async function populateDevices() {
+      try {
+        return await window.__tpMic?.populateDevices?.();
+      } catch {}
+    };
+
+    requestMic = async function requestMic(id) {
+      try {
+        return await window.__tpMic?.requestMic?.(id);
+      } catch {}
+    };
+
+    _releaseMic = function _releaseMic() {
+      try {
+        return window.__tpMic?.releaseMic?.();
+      } catch {}
+    };
+
+    startDbMeter = function startDbMeter(el) {
+      try {
+        return window.__tpMic?.startDbMeter?.(el);
+      } catch {}
+    };
+
+    _stopDbMeter = function _stopDbMeter() {
+      try {
+        return window.__tpMic?.clearBars?.();
+      } catch {}
+    };
+  } catch {}
+
 })(); // end main IIFE (restored)
 
