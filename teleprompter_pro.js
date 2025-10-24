@@ -7195,91 +7195,76 @@ let _toast = function (msg, opts) {
   let __tpStall = { reported: false };
 
   // --- PLL Bias Controller for Hybrid Auto-Scroll ---
-  const PLL = (() => {
-    let biasPct = 0,
-      errF = 0,
-      lastErrF = 0,
-      lastT = performance.now(),
-      lastGood = performance.now(),
-      lastAnchorTs = 0,
-      state = 'LOST'; // Initialize state
-    const S = { Kp: 0.022, Kd: 0.0025, maxBias: 0.12, confMin: 0.6, decayMs: 550, lostMs: 1800 };
+  // Lightweight PLL shim that delegates at call-time to `window.PLL` (if the TS module is loaded),
+  // otherwise provides a minimal, safe fallback. This keeps legacy callers (in this file)
+  // using the same symbol `PLL` while allowing the TS bundle to provide the real implementation.
+  const PLL = (function () {
+    // Internal minimal state for fallback behavior
+    let _biasPct = 0,
+      _errF = 0,
+      _state = 'LOST',
+      _lastAnchorTs = 0;
 
-    // Telemetry counters
-    const telemetry = {
-      timeLocked: 0,
-      timeCoast: 0,
-      timeLost: 0,
-      avgLeadLag: 0,
-      samples: 0,
-      nearClampCount: 0,
-      anchorCount: 0,
-      lastSample: performance.now(),
-    };
-
-    function scriptProgress() {
+    function now() {
       try {
-        const total = paraIndex.length;
-        if (!total) return 0;
-        return Math.min(1, currentIndex / total);
+        return (performance && performance.now && performance.now()) || Date.now();
       } catch {
-        return 0;
+        return Date.now();
       }
     }
 
-    function update({ yMatch, yTarget, conf, dt }) {
-      const now = performance.now();
-      const dts = (dt ?? now - lastT) / 1000;
-      lastT = now;
-      const err = yMatch - yTarget; // sign convention: positive = behind
-      errF = 0.8 * errF + 0.2 * err;
-
-      // End-game taper (soften in last 20%)
-      const p = scriptProgress();
-      const endTaper = p > 0.8 ? 0.6 : 1.0;
-
-      if (conf >= S.confMin) {
-        lastGood = now;
-        const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
-        let bias = S.Kp * errF + S.Kd * dErr;
-        const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
-        biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
-        state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
-      } else {
-        // Forward-only bias at low conf (no accidental slow-downs)
-        if (conf < S.confMin) {
-          biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
-        } else {
-          biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
+    function forward(name, args) {
+      try {
+        if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL[name] === 'function') {
+          return (window).PLL[name].apply((window).PLL, args);
         }
-        state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
-      }
-      lastErrF = errF;
+      } catch {}
+      return undefined;
+    }
 
-      // Update telemetry after state is determined
-      const dtSample = now - telemetry.lastSample;
-      if (state === 'LOCKED') telemetry.timeLocked += dtSample;
-      else if (state === 'COAST') telemetry.timeCoast += dtSample;
-      else if (state === 'LOST') telemetry.timeLost += dtSample;
-      telemetry.avgLeadLag =
-        (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
-      telemetry.samples++;
-      if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
-      telemetry.lastSample = now;
+    function update(opts) {
+      // Prefer real impl if available
+      const res = forward('update', [opts]);
+      if (typeof res !== 'undefined') return res;
+      // Minimal fallback: update smoothed error and keep bias non-negative
+      try {
+        const err = (opts && (opts.yMatch || 0) - (opts.yTarget || 0)) || 0;
+        _errF = 0.8 * _errF + 0.2 * err;
+        // simple decay when confidence low
+        const conf = opts && typeof opts.conf === 'number' ? opts.conf : 0;
+        if (conf < 0.6) _biasPct = Math.max(0, _biasPct * 0.95);
+      } catch {}
     }
 
     function allowAnchor() {
-      const now = performance.now();
-      if (now - lastAnchorTs < 1200) return false; // Anchor rate-limit
-      lastAnchorTs = now;
-      telemetry.anchorCount++;
+      try {
+        // delegate first
+        const d = forward('allowAnchor', []);
+        if (typeof d !== 'undefined') return d;
+      } catch {}
+      const t = now();
+      if (t - _lastAnchorTs < 1200) return false;
+      _lastAnchorTs = t;
       return true;
     }
 
-    // Pause breathing (feels natural)
     function onPause() {
-      PLL.tune({ decayMs: 400 });
-      setTimeout(() => PLL.tune({ decayMs: 550 }), 2000); // Reset after 2s
+      try {
+        const d = forward('onPause', []);
+        if (typeof d !== 'undefined') return d;
+      } catch {}
+      // fallback: no-op
+    }
+
+    function tune(p) {
+      try {
+        const d = forward('tune', [p]);
+        if (typeof d !== 'undefined') return d;
+      } catch {}
+      // fallback: accept maxBias param
+      try {
+        if (p && typeof p.maxBias === 'number') _biasPct = Math.max(-Math.abs(p.maxBias), Math.min(Math.abs(p.maxBias), _biasPct));
+      } catch {}
     }
 
     return {
@@ -7287,20 +7272,30 @@ let _toast = function (msg, opts) {
       allowAnchor,
       onPause,
       get biasPct() {
-        return biasPct;
+        try {
+          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.biasPct !== 'undefined') return (window).PLL.biasPct;
+        } catch {}
+        return _biasPct;
       },
       get state() {
-        return state;
+        try {
+          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.state !== 'undefined') return (window).PLL.state;
+        } catch {}
+        return _state;
       },
       get errF() {
-        return errF;
+        try {
+          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.errF !== 'undefined') return (window).PLL.errF;
+        } catch {}
+        return _errF;
       },
       get telemetry() {
-        return { ...telemetry };
+        try {
+          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.telemetry !== 'undefined') return (window).PLL.telemetry;
+        } catch {}
+        return {};
       },
-      tune(p) {
-        Object.assign(S, p);
-      },
+      tune,
     };
   })();
 
