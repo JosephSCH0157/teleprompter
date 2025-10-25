@@ -674,6 +674,50 @@ let _toast = function (msg, opts) {
     } catch {}
   })();
 
+  // Matcher migration guard:
+  // When the TS matcher is the single source of truth we want to avoid executing
+  // any heavy legacy builder logic (virtual-line merging, n-gram index builds,
+  // etc.) embedded in this monolith. Prefer the TypeScript implementations
+  // (exposed via `window.__tpMatcher` / `window.__tpSpeech`) and keep minimal,
+  // safe placeholders here so legacy inline loops become no-ops when the
+  // runtime flag `window.__TP_ENABLE_LEGACY_MATCHER` is NOT set.
+  //
+  // This is a defensive, low-risk change: it prevents expensive CPU work from
+  // running in-browser while keeping the page functional. If someone needs the
+  // old matcher for rollback/testing they can pass `?matcher=legacy` to enable
+  // the original behavior for one release.
+  (function () {
+    try {
+      if (typeof window === 'undefined') return;
+      if (window.__TP_ENABLE_LEGACY_MATCHER) return; // allow legacy behavior when explicitly requested
+
+      // Install safe placeholders for legacy in-memory matcher structures.
+      // Many legacy routines push into `__vParaIndex` or assume array methods.
+      // Provide a tiny array-like stub that silently ignores mutations so any
+      // remaining inline builder loops do no heavy work and do not throw.
+      try {
+        __vParaIndex = {
+          // push is a no-op; keep length property and lightweight find/forEach used by consumers
+          push: function () {},
+          find: function () { return null; },
+          forEach: function () {},
+          map: function () { return []; },
+          filter: function () { return []; },
+          slice: function () { return []; },
+          concat: function () { return []; },
+          length: 0,
+        };
+      } catch {}
+      try { __vLineFreq = new Map(); } catch {}
+      try { __vSigCount = new Map(); } catch {}
+      try { __ngramIndex = new Map(); } catch {}
+
+      // Also expose a tiny runtime hint so other scripts can detect that the
+      // monolith has been migrated to prefer TS matcher implementations.
+      try { window.__TP_MATCHER_LEGACY_DISABLED = true; } catch {}
+    } catch {}
+  })();
+
   function setStatus(msg) {
     try {
       const s =
