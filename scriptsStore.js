@@ -9,7 +9,7 @@ function _now() {
 function _read() {
   try {
     return JSON.parse(localStorage.getItem(KEY) || '[]');
-  } catch (e) {
+  } catch {
     console.debug('scriptsStore._read parse failed', e);
     return [];
   }
@@ -17,7 +17,7 @@ function _read() {
 function _write(list) {
   try {
     localStorage.setItem(KEY, JSON.stringify(list));
-  } catch (e) {
+  } catch {
     console.debug('scriptsStore._write failed', e);
   }
 }
@@ -69,6 +69,7 @@ const Scripts = {
 // CommonJS export for environments that don't use ES modules
 try {
   if (typeof window !== 'undefined') window.Scripts = Scripts;
-} catch (e) {
+} catch {
   void e;
 }
+

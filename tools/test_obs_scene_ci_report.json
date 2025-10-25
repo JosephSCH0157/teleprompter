@@ -1,0 +1,201 @@
+{
+  "ok": true,
+  "errors": [],
+  "cases": [
+    {
+      "name": "preferred-exists-different",
+      "ok": true,
+      "reason": null,
+      "res": {
+        "action": "set",
+        "preferredScene": "PreferredScene"
+      },
+      "calls": {
+        "setCurrentProgramScene": [
+          "PreferredScene"
+        ]
+      }
+    },
+    {
+      "name": "preferred-missing",
+      "ok": true,
+      "reason": null,
+      "res": {
+        "action": "skip",
+        "reason": "preferred-not-found",
+        "names": [
+          "Other",
+          "Another"
+        ],
+        "preferredScene": "PreferredScene",
+        "current": "Other"
+      },
+      "calls": {
+        "setCurrentProgramScene": []
+      }
+    },
+    {
+      "name": "preferred-already-active",
+      "ok": true,
+      "reason": null,
+      "res": {
+        "action": "skip",
+        "reason": "already-active",
+        "current": "PreferredScene"
+      },
+      "calls": {
+        "setCurrentProgramScene": []
+      }
+    }
+  ],
+  "console": [
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] script-enter"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-BOOT 36740] entered main IIFE"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-BOOT 36740] installed global error hooks"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-boot-block"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] window-init-proxy-installed"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] minimal-boot"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] post-minimalBoot"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-zero-time-init-attempt-scheduled"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] pre-init-scheduling-early"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] init-scheduling-early-exited"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-zoom-guard"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-wireNormalizeButton"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-buildSettingsContent-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-syncSettingsValues-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-setupSettingsTabs-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-fallbackNormalize-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-normalizeToStandard-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-validateStandardTags-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-ensureHelpUI-def"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore end"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-_initCore-def"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] pre-init-scheduling"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] init-scheduling-exited"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] late-init-fallback-scheduled"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] early-init-invoking"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] init() wrapper start"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore start"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] dom-content-loaded"
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] early-init-fallback"
+    },
+    {
+      "type": "warning",
+      "text": "[TP-BOOT] duplicate load blocked"
+    },
+    {
+      "type": "debug",
+      "text": "[TP-Pro] recorder module keys: JSHandle@array "
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] rs:complete"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore mid (core UI wired)"
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] init() wrapper end (success)"
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] perf:reflow-risk JSHandle@object"
+    },
+    {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":1,\"w\":2},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}"
+    },
+    {
+      "type": "info",
+      "text": "WATCHDOG STATE: OK → STALL JSHandle@object"
+    }
+  ]
+}

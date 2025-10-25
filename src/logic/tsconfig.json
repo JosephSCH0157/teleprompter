@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": false,
+    "strict": true,
+    "noImplicitAny": true,
+    "exactOptionalPropertyTypes": true,
+    "alwaysStrict": true,
+    "noEmit": false,
+    "outDir": "../build-logic"
+  },
+  "include": ["**/*"]
+}

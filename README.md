@@ -1,4 +1,4 @@
-# Teleprompter Pro (v1.6.1)
+# Teleprompter Pro (v1.6.2)
 
 This is a browser-based teleprompter with display mirroring, speech sync, camera overlay, and convenient editing helpers.
 
@@ -16,6 +16,9 @@ This is a browser-based teleprompter with display mirroring, speech sync, camera
 - Match aggressiveness
   - The aggressiveness select tunes similarity thresholds and window sizes at runtime.
   - The chosen setting is persisted in `localStorage` under `tp_match_aggro_v1`.
+
+- Per-viewport base speed
+  - The auto-scroll base speed is now persisted per viewport size to reduce initial tuning on different displays. The primary storage key is of the form `tp_base_speed_px_s@vh=<n>` where `<n>` is the viewport height rounded to the nearest 10 (units: CSS pixels). The code still writes a legacy `tp_base_speed_px_s` key for backward compatibility, and on load the per-viewport key is preferred with a fallback to the legacy key.
 
 - Debug HUD
   - Toggle with `~` to view runtime match and scroll signals; useful for diagnosing alignment.
@@ -58,3 +61,63 @@ npm run check
 ```
 
 If you prefer a faster developer loop, run `npm run lint` and `npm run types` separately while coding.
+
+## Testing → Smoke Test
+
+Minimal headless check that Anvil boots and the key UI renders.
+
+**Run locally**
+```bash
+node tools/static_server.js &
+node tools/smoke_test.js --calm --timeout=120000
+```
+
+What it checks
+
+- `#tp_toast_container` (toast host)
+- `#scriptSlots` (scripts UI area)
+- `window.__tp_init_done` (set by `tpMarkInitDone()` at the end of init)
+
+Captures console to flag duplicate boot attempts
+
+Duplicate boot handling
+
+By default, duplicate boot is a warning if `initDone=true` (guard blocks side effects).
+
+Set `SMOKE_STRICT_DUPBOOT=1` to fail CI on duplicate boot:
+
+```bash
+SMOKE_STRICT_DUPBOOT=1 node tools/smoke_test.js --calm
+```
+
+The smoke prints a one-line JSON summary:
+
+```
+[SMOKE-REPORT] {"ok":true,"runner":"puppeteer","dupBoot":true,...}
+```
+
+### TypeScript in a hybrid JS/TS repo
+
+The repo contains legacy JS plus new TS. We stage the migration:
+
+1. Build references first (they emit `.d.ts`):
+  ```bash
+  npm run build:logic
+  ```
+
+2. Type-check without emitting JS:
+
+```bash
+npm run typecheck
+```
+
+Why exclude `src/build-logic/**`?
+Those are prebuilt declaration artifacts; excluding them avoids TS6305 “expected outputs” churn while we incrementally convert.
+
+Why `checkJs: false` (temporary)?
+Legacy JS is noisy under TS. We'll re-enable it per-folder as we migrate (see “Migration plan” below).
+
+Flip `checkJs` back on later by:
+
+- adding `// @ts-check` to files you're ready to enforce, or
+- using folder `tsconfig.json` with `checkJs: true` scoped to the new TS/JS you want strict.

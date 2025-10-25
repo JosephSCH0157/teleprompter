@@ -96,7 +96,7 @@ export function showValidation(text) {
             try {
               (window.setStatus || (() => {}))('Validation copied ✓');
             } catch {}
-          } catch (e) {
+          } catch {
             try {
               (window.setStatus || (() => {}))('Copy failed: ' + (e?.message || e));
             } catch {}
@@ -335,7 +335,7 @@ export function ensureHelpUI() {
       if (typeof window.normalizeToStandard === 'function') {
         try {
           window.normalizeToStandard();
-        } catch (e) {
+        } catch {
           alert('Normalize error: ' + e.message);
         }
         return;
@@ -383,3 +383,4 @@ export function ensureHelpUI() {
     };
   }
 }
+

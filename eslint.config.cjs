@@ -5,7 +5,30 @@
 module.exports = [
   // Ignore patterns
   {
-    ignores: ['releases/**', '**/*.min.js', 'node_modules/**', '.vscode/**'],
+    ignores: [
+      'releases/**',
+      '**/*.min.js',
+      'node_modules/**',
+      '.vscode/**',
+      '**/*.d.ts',
+      'src/build-logic/**',
+    ],
+  },
+  // TypeScript files: lightweight parsing (no type-aware rules to avoid project parsing issues)
+  // Requires @typescript-eslint/parser and @typescript-eslint/eslint-plugin in devDependencies
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parser: require('@typescript-eslint/parser'),
+      sourceType: 'module',
+      ecmaVersion: 2021,
+    },
+    plugins: { '@typescript-eslint': require('@typescript-eslint/eslint-plugin') },
+    rules: {
+      'no-undef': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/consistent-type-imports': 'warn',
+    },
   },
   // Default: treat all .js files as ES modules so import/export parse by default.
   {

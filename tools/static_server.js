@@ -63,7 +63,7 @@ const server = http.createServer((req, res) => {
         res.end(data);
       });
     });
-  } catch (e) {
+  } catch {
     res.statusCode = 500;
     res.end(String(e));
   }
@@ -78,3 +78,4 @@ process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 module.exports = server;
+

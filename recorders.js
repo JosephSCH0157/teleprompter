@@ -35,8 +35,8 @@ const LS_KEY = 'tp_rec_settings_v1';
 let settings = {
   mode: 'multi',
   selected: ['obs', 'descript'],
-  configs: {
-    obs: { url: 'ws://192.168.1.198:4455', password: '' },
+    configs: {
+      obs: { url: 'ws://192.168.1.200:4455', password: '' },
     companion: { url: 'http://127.0.0.1:8000', buttonId: '1.1' },
     bridge: { startUrl: 'http://127.0.0.1:5723/record/start', stopUrl: '' },
     descript: { startHotkey: 'Ctrl+R', via: 'bridge' },
@@ -316,6 +316,8 @@ export async function stop() {
 let _ws = null,
   _connecting = false,
   _identified = false;
+// Config for inline bridge connection when used directly
+let obsCfg = { host: '127.0.0.1', port: 4455, secure: false };
 let _cfgBridge = {
   getUrl: () => 'ws://127.0.0.1:4455',
   getPass: () => '',
@@ -337,9 +339,31 @@ export function setEnabled(on) {
     else disconnect();
   } catch {}
 }
-export function reconfigure() {
+export async function reconfigure(cfg = {}) {
   try {
-    if (_identified) reconnectSoon();
+    if (cfg && typeof cfg === 'object') {
+      obsCfg = { ...obsCfg, ...cfg, port: Number(cfg.port) || obsCfg.port };
+      // Keep password available for the inline bridge connect logic
+      if (cfg.password != null) {
+        try {
+          obsCfg.password = String(cfg.password || '');
+        } catch {}
+      }
+      // Update the bridge getter so connect() picks up the latest password
+      try {
+        _cfgBridge.getPass = () => obsCfg.password || '';
+      } catch {}
+    }
+    // If already connected, reconnect soon to apply changes
+    try {
+      if (_ws) {
+        try {
+          // best-effort: close then reconnect
+          _ws.close(1000, 'reconfig');
+        } catch {}
+        reconnectSoon(200);
+      }
+    } catch {}
   } catch {}
 }
 export async function test() {
@@ -350,7 +374,7 @@ export async function test() {
     return false;
   }
 }
-export function disconnect() {
+export async function disconnect() {
   try {
     _identified = false;
     _connecting = false;
@@ -362,6 +386,7 @@ export function disconnect() {
       _cfgBridge.onStatus?.('disconnected', false);
     } catch {}
   } catch {}
+  return true;
 }
 
 let _reconnTimer = 0;
@@ -378,8 +403,10 @@ export function connect({ testOnly } = {}) {
   return new Promise((resolve, reject) => {
     try {
       if (!_cfgBridge.isEnabled() && !testOnly) return reject(new Error('disabled'));
-      const url = _cfgBridge.getUrl?.() || 'ws://127.0.0.1:4455';
-      const pass = _cfgBridge.getPass?.() || ''; // Original line for context
+  // Prefer an explicitly provided bridge URL, otherwise build from obsCfg
+  const cfgUrl = obsCfg && obsCfg.host ? `${obsCfg.secure ? 'wss' : 'ws'}://${obsCfg.host}:${obsCfg.port}` : null;
+  const url = _cfgBridge.getUrl?.() || cfgUrl || 'ws://127.0.0.1:4455';
+  const pass = _cfgBridge.getPass?.() || '';
       try {
         _ws && _ws.close(1000, 'reconnect');
       } catch {}
@@ -545,3 +572,119 @@ export function init({ getUrl, getPass, isEnabled, onStatus, onRecordState } = {
     return false;
   }
 }
+
+// --- Compatibility recorder surface used by the app ---
+// Provides a small surface with idempotent lifecycle and status events.
+export const recorder = (function () {
+  let _state = 'disabled'; // disabled | connecting… | connected | disconnected | error
+  let _initted = false;
+  let _enabled = false;
+
+  function emitStatus(txt, ok) {
+    _state = txt || _state;
+    // Call the inline bridge onStatus if configured
+    try {
+      _cfgBridge.onStatus?.(txt, !!ok);
+    } catch {}
+    // Dispatch a DOM CustomEvent so UI can listen
+    try {
+      const ev = new CustomEvent('tp-recorder-status', { detail: { state: txt, ok: !!ok } });
+      if (typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(ev);
+    } catch {}
+  }
+
+  async function initSurface() {
+    if (_initted) return true;
+    _initted = true;
+    try {
+      // ensure built-ins loaded so adapters are registered
+      await initBuiltIns();
+      emitStatus('recorder initialized', true);
+      return true;
+  } catch {
+      emitStatus('init error', false);
+      return false;
+    }
+  }
+
+  async function connectSurface() {
+    // idempotent: if already connected, return
+    if (isConnected()) {
+      emitStatus('connected', true);
+      return true;
+    }
+    emitStatus('connecting…', false);
+    try {
+      // prefer the inline bridge connect (if present) as a convenience
+      if (typeof connect === 'function') {
+        await connect();
+        if (isConnected()) {
+          emitStatus('connected', true);
+          return true;
+        }
+      }
+      // Try adapter-based connect: find an 'obs' adapter
+      const a = registry.get('obs');
+      if (a && typeof a.start === 'function') {
+        await a.start();
+        emitStatus('connected', true);
+        return true;
+      }
+      emitStatus('disconnected', false);
+      return false;
+  } catch {
+      emitStatus('error', false);
+      return false;
+    }
+  }
+
+  async function disconnectSurface() {
+    try {
+      if (typeof disconnect === 'function') {
+        try {
+          disconnect();
+        } catch {}
+      }
+      const a = registry.get('obs');
+      if (a && typeof a.stop === 'function') {
+        try {
+          await a.stop();
+        } catch {}
+      }
+      emitStatus('disconnected', false);
+      return true;
+  } catch {
+      emitStatus('error', false);
+      return false;
+    }
+  }
+
+  return {
+    get state() {
+      return _state;
+    },
+    async init() {
+      return initSurface();
+    },
+    async connect() {
+      _enabled = true;
+      return connectSurface();
+    },
+    async disconnect() {
+      _enabled = false;
+      return disconnectSurface();
+    },
+    setEnabled(on) {
+      try {
+        _enabled = !!on;
+        if (_enabled) {
+          // don't await to avoid UI blocking; connectSurface is idempotent
+          void connectSurface();
+        } else {
+          void disconnectSurface();
+        }
+      } catch {}
+    },
+  };
+})();
+

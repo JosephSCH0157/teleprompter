@@ -1,0 +1,21 @@
+# Teleprompter Pro v1.6.2 - Baseline
+
+Release date: 2025-10-22
+
+This release establishes a small stability baseline after recent stabilization and UX fixes.
+
+Highlights
+
+- Persist per-viewport base scroll speed (`tp_base_speed_px_s@vh=<n>`) so first auto-scrolls land closer to pace across different displays.
+- Improved microphone re-request robustness: AudioContext is closed on mic release to free resources and allow a fresh re-acquire.
+- UI sanitization: self-heal duplicate Settings panels at boot to avoid duplicated wiring.
+- Minor CSS and topbar hairline fixes.
+- README updated with storage key documentation.
+
+Files updated
+
+- `VERSION.txt`, `package.json`, `package-lock.json`, `README.md`, `teleprompter_pro.html`, `teleprompter_pro.js` (version bump and small fixes)
+
+Notes
+
+- This baseline is a conservative snapshot; further work is planned for extended telemetry and watchdog wiring.

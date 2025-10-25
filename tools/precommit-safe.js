@@ -20,7 +20,7 @@ function hasBin(bin) {
   const projRoot = procCwd ? path.resolve(procCwd, '..') : path.resolve('.', '..');
     const p = r.resolve(bin, { paths: [projRoot] });
     return !!p;
-  } catch (e) {
+  } catch {
     void e;
     return false;
   }
@@ -32,7 +32,7 @@ function stagedFiles() {
     const out = spawnSync('git', ['diff', '--cached', '--name-only'], { encoding: 'utf8' });
     if (!out || out.status !== 0) return [];
     return (out.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  } catch (e) {
+  } catch {
     void e;
     return [];
   }
@@ -60,7 +60,7 @@ async function main() {
           if (proc && typeof proc.exit === 'function') proc.exit(1);
           return 1;
         }
-      } catch (e) {
+      } catch {
         console.warn('[precommit-safe] lint-staged invocation error', e && e.message);
       }
     }
@@ -89,7 +89,7 @@ async function main() {
           return 1;
         }
         return 0;
-      } catch (e) {
+      } catch {
         void e;
       }
     }
@@ -97,7 +97,7 @@ async function main() {
     console.log('[precommit-safe] no lint-staged or eslint found; skipping lint checks');
     if (proc && typeof proc.exit === 'function') proc.exit(0);
     return 0;
-  } catch (e) {
+  } catch {
     console.error('[precommit-safe] unexpected error', e && e.stack ? e.stack : e);
     if (proc && typeof proc.exit === 'function') proc.exit(0);
     return 0;
@@ -105,3 +105,4 @@ async function main() {
 }
 
 main();
+

@@ -5,18 +5,34 @@ try {
   if (typeof _req === 'function') {
     try {
       Scripts = _req('../scriptsStore.js')?.Scripts || _req('../scriptsStore.js');
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
   }
-} catch (e) {
-  void e;
+} catch {
+  void 0;
 }
 try {
   if (!Scripts && typeof window !== 'undefined' && window.Scripts) Scripts = window.Scripts;
-} catch (e) {
-  void e;
+} catch {
+  void 0;
 }
+// If Scripts isn't available at load time, attempt to dynamically import the fixed module as a fallback
+(async function () {
+  try {
+    if (!Scripts && typeof window !== 'undefined') {
+      try {
+        const mod = await import('../scriptsStore_fixed.js');
+        if (mod && mod.Scripts) Scripts = mod.Scripts;
+      } catch {
+        // ignore dynamic import failures here; the module may be loaded later by the main app
+        void 0;
+      }
+    }
+  } catch {
+    void 0;
+  }
+})();
 let safeDOM = null;
 let importedToast = null;
 // minimal safeDOM fallback
@@ -31,33 +47,33 @@ try {
         _req('../utils/safe-dom.js')?.safeDOM ||
         (typeof window !== 'undefined' && window.safeDOM) ||
         _safeDOM_fallback;
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
     try {
       importedToast =
         _req('./toasts.js')?.toast || (typeof window !== 'undefined' && window.toast) || null;
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
       importedToast = (typeof window !== 'undefined' && window.toast) || null;
     }
   } else {
     try {
       safeDOM = (typeof window !== 'undefined' && window.safeDOM) || null;
       importedToast = (typeof window !== 'undefined' && window.toast) || null;
-    } catch (e) {
-    void e;
+    } catch {
+    void 0;
   }
 
   // Ensure we always have a minimal safeDOM implementation
   try {
     if (!safeDOM) safeDOM = _safeDOM_fallback;
-  } catch (e) {
-    void e;
+  } catch {
+  void 0;
+}
   }
-  }
-} catch (e) {
-  void e;
+} catch {
+  void 0;
 }
 
 let currentScriptId = null;
@@ -73,8 +89,8 @@ const editor = safeDOM.get('editor');
 const toastFn = (msg, opts) => {
   try {
     if (typeof importedToast === 'function') return importedToast(msg, opts);
-  } catch (e) {
-    console.debug('toastFn import failed', e);
+  } catch {
+    console.debug('toastFn import failed');
   }
 };
 
@@ -94,8 +110,8 @@ function refreshScriptsDropdown() {
     if (!scriptSlots) return;
     scriptSlots.innerHTML = list.map((s) => `<option value="${s.id}">${s.title}</option>`).join('');
     if (currentScriptId) scriptSlots.value = currentScriptId;
-  } catch (e) {
-    console.debug('refreshScriptsDropdown', e);
+  } catch {
+    console.debug('refreshScriptsDropdown');
   }
 }
 
@@ -103,15 +119,15 @@ function initScriptsUI() {
   try {
     Scripts && typeof Scripts.init === 'function' && Scripts.init();
     refreshScriptsDropdown();
-  } catch (e) {
-    console.debug('initScriptsUI', e);
+  } catch {
+    console.debug('initScriptsUI');
   }
 }
 
 try {
   if (typeof window !== 'undefined') window.initScriptsUI = initScriptsUI;
-} catch (e) {
-  void e;
+} catch {
+  void 0;
 }
 
 function onScriptSave() {
@@ -123,8 +139,12 @@ function onScriptSave() {
         : null;
     refreshScriptsDropdown();
     toastFn('Script saved', { type: 'ok' });
-  } catch (e) {
-    console.debug('onScriptSave', e);
+  } catch {
+    try {
+      console.error('onScriptSave error');
+    } catch {
+      void 0;
+    }
     toastFn('Save failed', { type: 'error' });
   }
 }
@@ -145,12 +165,12 @@ function onScriptLoad() {
     try {
       if (editor) editor.dispatchEvent(new Event('input', { bubbles: true }));
       else if (typeof window.renderScript === 'function') window.renderScript(s.content || '');
-    } catch (e) {
-      console.debug('scripts-ui: trigger render failed', e);
+    } catch {
+      console.debug('scripts-ui: trigger render failed');
     }
     toastFn('Script loaded', { type: 'ok' });
-  } catch (e) {
-    console.debug('onScriptLoad', e);
+  } catch {
+    console.debug('onScriptLoad');
     toastFn('Load failed', { type: 'error' });
   }
 }
@@ -162,8 +182,8 @@ function onScriptDelete() {
     scriptTitle && (scriptTitle.value = '');
     refreshScriptsDropdown();
     toastFn('Script deleted');
-  } catch (e) {
-    console.debug('onScriptDelete', e);
+  } catch {
+    console.debug('onScriptDelete');
     toastFn('Delete failed', { type: 'error' });
   }
 }
@@ -179,8 +199,8 @@ function onScriptRename() {
       scriptTitle && (scriptTitle.value = t);
       refreshScriptsDropdown();
     }
-  } catch (e) {
-    console.debug('onScriptRename', e);
+  } catch {
+    console.debug('onScriptRename');
   }
 }
 
@@ -191,8 +211,8 @@ try {
   scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
   scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
   scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
-} catch (e) {
-  console.debug('scripts-ui wiring', e);
+} catch {
+  console.debug('scripts-ui wiring');
 }
 
 // autosave
@@ -210,3 +230,4 @@ if (editor) {
 setTimeout(() => initScriptsUI(), 200);
 
 // Note: no legacy window shim; callers should import { initScriptsUI } from this module
+
