@@ -7442,18 +7442,7 @@ let _toast = function (msg, opts) {
         paraTokenList.push([]);
       }
     }
-    // Build signature counts (first 4 tokens per paragraph)
-    try {
-      __vSigCount = new Map();
-      for (const toks of paraTokenList) {
-        try {
-          const sig = (Array.isArray(toks) ? toks.slice(0, 4).join(' ') : '') || '';
-          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
-        } catch {}
-      }
-    } catch {}
-
-    // 2) now build paraIndex and related structures using accurate __vSigCount
+    // 2) now build paraIndex and related lightweight structures
     for (let idx = 0; idx < paras.length; idx++) {
       const el = paras[idx];
       const toks = paraTokenList[idx] || [];
@@ -7468,9 +7457,7 @@ let _toast = function (msg, opts) {
         if (low && low.startsWith('bs with joe')) isMeta = true;
         const tokCount = (low.split(/\s+/) || []).length;
         if (tokCount <= 5) isMeta = true;
-        const sig = toks.slice(0, 4).join(' ');
-        const vSigCount = __vSigCount.get(sig) || 0;
-        if (vSigCount > 1) isMeta = true;
+        // NOTE: duplicate-signature based meta detection removed; TS matcher handles duplicates
       } catch {}
 
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken, isMeta });
@@ -7483,23 +7470,7 @@ let _toast = function (msg, opts) {
         const uniq = new Set(toks);
         // always update document-frequency map (lightweight)
         uniq.forEach((t) => __dfMap.set(t, (__dfMap.get(t) || 0) + 1));
-
-        // Index n-grams only when the legacy matcher is explicitly enabled.
-        // This avoids building heavy indexes during progressive migration while
-        // keeping a safe empty Map available for any light-weight callers.
-        if (window.__TP_ENABLE_LEGACY_MATCHER) {
-          // Index n-grams (3-grams and 4-grams) for candidate seeding
-          const trigrams = getNgrams(toks, 3);
-          const tetragrams = getNgrams(toks, 4);
-          const allNgrams = [...trigrams, ...tetragrams];
-
-          for (const ngram of allNgrams) {
-            if (!__ngramIndex.has(ngram)) {
-              __ngramIndex.set(ngram, new Set());
-            }
-            __ngramIndex.get(ngram).add(paraIdx);
-          }
-        }
+        // n-gram indexing removed; TS matcher owns candidate seeding/indexing
       } catch {}
       try {
         if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1);
@@ -7543,133 +7514,14 @@ let _toast = function (msg, opts) {
     } catch {
       console.warn('line-index build failed', e);
     }
-    // Build virtual merged lines for matcher duplicate disambiguation
-    // Guard heavy merging behind the legacy matcher flag to avoid expensive
-    // string concatenation and tokenization during progressive migration.
+    // Virtual-line merging and n-gram indexing removed: TS matcher owns duplicate
+    // disambiguation, virtual-line construction and candidate indexing. Keep
+    // lightweight placeholders for any legacy consumers.
     try {
-      if (window.__TP_ENABLE_LEGACY_MATCHER) {
-        const MIN_LEN = 35,
-          MAX_LEN = 120; // characters
-        let bufText = '';
-        let bufStart = -1;
-        let bufEnd = -1;
-        let bufEls = [];
-        for (const p of paraIndex) {
-          const text = String(p.el?.textContent || '').trim();
-          const candidate = bufText ? bufText + ' ' + text : text;
-          if (candidate.trim().length < MAX_LEN) {
-            // absorb
-            if (!bufText) {
-              bufStart = p.start;
-              bufEnd = p.end;
-              bufEls = [p.el];
-              bufText = text;
-            } else {
-              bufText = candidate;
-              bufEnd = p.end;
-              bufEls.push(p.el);
-            }
-            if (bufText.length >= MIN_LEN) {
-              const key = normLineKey(bufText);
-              const sig = (function () {
-                try {
-                  return normTokens(bufText).slice(0, 4).join(' ');
-                } catch {
-                  return '';
-                }
-              })();
-              __vParaIndex.push({
-                text: bufText,
-                start: bufStart,
-                end: bufEnd,
-                key,
-                sig,
-                els: bufEls.slice(),
-                isNonSpoken: bufEls.some((el) => {
-                  const p = paraIndex.find((pi) => pi.el === el);
-                  return p?.isNonSpoken;
-                }),
-              });
-              if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
-              if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
-              bufText = '';
-              bufStart = -1;
-              bufEnd = -1;
-              bufEls = [];
-            }
-          } else {
-            // flush buffer if any
-            if (bufText) {
-              const key = normLineKey(bufText);
-              const sig = (function () {
-                try {
-                  return normTokens(bufText).slice(0, 4).join(' ');
-                } catch {
-                  return '';
-                }
-              })();
-              __vParaIndex.push({
-                text: bufText,
-                start: bufStart,
-                end: bufEnd,
-                key,
-                sig,
-                els: bufEls.slice(),
-              });
-              if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
-              if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
-              bufText = '';
-              bufStart = -1;
-              bufEnd = -1;
-              bufEls = [];
-            }
-            // push current as its own
-            const key = normLineKey(text);
-            const sig = (function () {
-              try {
-                return normTokens(text).slice(0, 4).join(' ');
-              } catch {
-                return '';
-              }
-            })();
-            __vParaIndex.push({
-              text,
-              start: p.start,
-              end: p.end,
-              key,
-              sig,
-              els: [p.el],
-              isNonSpoken: p.isNonSpoken,
-            });
-            if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
-            if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
-          }
-        }
-        if (bufText) {
-          const key = normLineKey(bufText);
-          const sig = (function () {
-            try {
-              return normTokens(bufText).slice(0, 4).join(' ');
-            } catch {
-              return '';
-            }
-          })();
-          __vParaIndex.push({
-            text: bufText,
-            start: bufStart,
-            end: bufEnd,
-            key,
-            sig,
-            els: bufEls.slice(),
-            isNonSpoken: bufEls.some((el) => {
-              const p = paraIndex.find((pi) => pi.el === el);
-              return p?.isNonSpoken;
-            }),
-          });
-          if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
-          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
-        }
-      }
+      __vParaIndex = null; // TS matcher can provide a richer vParaIndex if needed
+      __vLineFreq = new Map();
+      __vSigCount = new Map();
+      __ngramIndex = new Map();
     } catch {}
     // Initialize current element pointer
     try {
