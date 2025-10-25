@@ -1,1 +1,0 @@
-const fs=require('fs');const s=fs.readFileSync(process.argv[2]||'d:/teleprompter/teleprompter/teleprompter_pro.js','utf8');console.log('(function count):',(s.match(/\(function/g)||[]).length);console.log('})(); count):',(s.match(/\)\(\)\;/g)||[]).length);console.log('})(); literal count):',(s.match(/\)\)\;/g)||[]).length);

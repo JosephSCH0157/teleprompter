@@ -19,7 +19,6 @@ async function main() {
   const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke');
   const STUB_OBS = flag('--stubObs') || flag('--stubobs');
   const SHIM_RECORDER = flag('--shimRecorder') || flag('--shimrecorder');
-  const REQUIRE_OBS = flag('--requireObs') || flag('--requireobs') || process.env.SMOKE_REQUIRE_OBS === '1';
   const TIMEOUT_MS = Number(kv('timeout', process.env.SMOKE_TIMEOUT_MS || '30000')) || 30000; // default 30s
   const HEADLESS = flag('--headless') || process.env.HEADLESS === '1';
 
@@ -115,21 +114,19 @@ async function main() {
                 });
               },
               test() {
-                return new Promise((res) => {
-                  (async () => {
+                return new Promise(async (res) => {
+                  try {
+                    // Ensure connected
+                    if (!ws || ws.readyState !== 1) {
+                      try { await this.connect(); } catch {}
+                    }
                     try {
-                      // Ensure connected
-                      if (!ws || ws.readyState !== 1) {
-                        try { await this.connect(); } catch {}
-                      }
-                      try {
-                        // Send a minimal IDENTIFY-like payload so the stub records it
-                        const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
-                        ws && ws.send && ws.send(id);
-                      } catch {}
+                      // Send a minimal IDENTIFY-like payload so the stub records it
+                      const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
+                      ws && ws.send && ws.send(id);
                     } catch {}
-                    setTimeout(() => res(true), 100);
-                  })();
+                  } catch {}
+                  setTimeout(() => res(true), 100);
                 });
               },
               getLastError() { return null; }
@@ -224,7 +221,7 @@ async function main() {
     console.log('[e2e] running non-interactive smoke test...');
 
     // drive init -> connect -> test -> report inside the page to keep adapter context local
-  const smoke = await page.evaluate(async ({ stubObs, requireObs }) => {
+    const smoke = await page.evaluate(async ({ stubObs }) => {
       const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], wsOpened: 0, notes: [] };
       const T0 = Date.now();
 
@@ -242,10 +239,7 @@ async function main() {
         if (!obs) await new Promise(r => setTimeout(r, 100));
       }
       report.adapterReady = !!obs;
-      if (!obs) {
-        report.notes.push('OBS adapter not found.');
-        if (requireObs) return report;
-      }
+      if (!obs) { report.notes.push('OBS adapter not found.'); return report; }
 
       const SENT = (globalThis.__WS_SENT__ ||= []);
       const OPENED = (globalThis.__WS_OPENED__ ||= []);
@@ -294,15 +288,7 @@ async function main() {
       const wsCountsMatch = report.wsSentCount === (Array.isArray(report.wsOps) ? report.wsOps.length : 0);
 
       // Evaluate assertions into ok
-      let ok;
-      if (requireObs) {
-        // strict: require recorder + adapter + a test or outgoing WS frames
-        ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
-      } else {
-        // OBS optional: don't fail the smoke just because OBS/recorder aren't present.
-        // Start optimistic; guardrails below will flip to false for obvious protocol mismatches.
-        ok = true;
-      }
+      let ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
       if (stubObs && !hasIdentify) {
         ok = false;
         report.notes.push('assert: missing IDENTIFY opcode (1) under --stubObs');
@@ -325,7 +311,7 @@ async function main() {
         appVersion,
         asserts: { hasIdentify, wsCountsMatch }
       };
-  }, { stubObs: !!STUB_OBS, requireObs: !!REQUIRE_OBS });
+    }, { stubObs: !!STUB_OBS });
     // Attach CI metadata (sha/ref) and print a single-line JSON report for CI
     try {
       const _sha = (typeof process !== 'undefined' && process && process.env && process.env.GITHUB_SHA) ? process.env.GITHUB_SHA : null;
@@ -348,7 +334,10 @@ async function main() {
       const v = Number(y) || 0;
       const ok = await page.evaluate((val) => {
         try {
-          // reference the global explicitly via window to avoid undefined identifier errors
+          if (typeof tpScrollTo === 'function') {
+            tpScrollTo(val);
+            return true;
+          }
           if (typeof window.tpScrollTo === 'function') {
             window.tpScrollTo(val);
             return true;

@@ -4,7 +4,7 @@
 //   const sh = createScrollerHelpers(() => document.getElementById('viewer'));
 //   sh.scrollByPx(10);
 
-import { requestWrite } from './src/scroll/scheduler.js';
+import { requestWrite } from './src/boot/scheduler.js';
 
 export function createScrollerHelpers(getScroller) {
   let _pendingTop = null,

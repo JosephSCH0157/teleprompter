@@ -1,4 +1,4 @@
-import { requestWrite } from '../scroll/scheduler';
+import { requestWrite } from '../boot/scheduler';
 
 export type ScrollerGetter = () => HTMLElement | null | undefined;
 
