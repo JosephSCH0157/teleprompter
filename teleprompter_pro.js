@@ -42,11 +42,10 @@
           } catch (err) {
             _toast('Save failed', { type: 'error' });
           }
-        } catch (err) {
-          _toast('Save failed', { type: 'error' });
-        }
+      } catch (err) {
+        _toast('Save failed', { type: 'error' });
       }
-    (process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test' || ((process.argv || []).join(' ') || '').includes('jest'));
+    }
   try { window.__TP_SKIP_BOOT_FOR_TESTS = __TP_SKIP_BOOT_FOR_TESTS; } catch {}
   if (!__TP_SKIP_BOOT_FOR_TESTS) {
     (function () {
@@ -108,10 +107,8 @@
       try {
         if (typeof window.__tpClampGuard === 'function') {
           const ok = window.__tpClampGuard(target, max);
-          if (!ok) return; // skip micro re-clamp
-        }
-      } catch (e) { void e; }
-      sc.scrollTop = target;
+  // virtual-line construction and frequency counting delegated to TS matcher; removed legacy pushes
+  try { window.__tpScrollWrite && window.__tpScrollWrite(target); } catch { try { sc.scrollTop = target; } catch {} }
       if (window.__TP_DEV) {
         try {
           console.debug('[TP-Pro Calm] tpScrollTo', {
@@ -124,9 +121,7 @@
       }
     } catch (e) {
       void e;
-    }
-  }
-
+                  // virtual-line construction and frequency counting delegated to TS matcher; removed legacy pushes
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
     if (typeof window.__tpRealCore !== 'function') {
@@ -146,17 +141,15 @@
             void e;
           }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
-            return window._initCore();
-          }
-          await new Promise((r) => setTimeout(r, 10));
+                // virtual-line construction and frequency counting delegated to TS matcher; removed legacy pushes
         }
         throw new Error('Core waiter timeout');
       };
       try {
-        window.__tpRealCore.__tpWaiter = true;
-      } catch {}
+      window.__tpRealCore.__tpWaiter = true;
+      } catch (e) { void e; }
     }
-  } catch {}
+  } catch (e) { void e; }
   // Install an early stub for core init that queues until the real core is defined
   try {
     if (typeof window._initCore !== 'function') {
@@ -703,21 +696,15 @@
       // Provide a tiny array-like stub that silently ignores mutations so any
       // remaining inline builder loops do no heavy work and do not throw.
       try {
-        __vParaIndex = {
-          // push is a no-op; keep length property and lightweight find/forEach used by consumers
-          push: function () {},
-          find: function () { return null; },
-          forEach: function () {},
-          map: function () { return []; },
-          filter: function () { return []; },
-          slice: function () { return []; },
-          concat: function () { return []; },
-          length: 0,
-        };
+        // The legacy matcher builder/stub has been removed; the TypeScript
+        // matcher is the single source of truth. Keep lightweight placeholders
+        // to avoid throwing when legacy code checks these values, but do not
+        // attempt to rebuild virtual-line structures here.
+        try { __vParaIndex = null; } catch {}
+        try { __vLineFreq = new Map(); } catch {}
+        try { __vSigCount = new Map(); } catch {}
+        try { __ngramIndex = new Map(); } catch {}
       } catch {}
-      try { __vLineFreq = new Map(); } catch {}
-      try { __vSigCount = new Map(); } catch {}
-      try { __ngramIndex = new Map(); } catch {}
 
       // Also expose a tiny runtime hint so other scripts can detect that the
       // monolith has been migrated to prefer TS matcher implementations.
@@ -1915,9 +1902,18 @@
   // Duplicate-line disambiguation
   let __lineFreq = new Map(); // original paragraph line frequencies (by key)
   // Virtual lines (merge short runts so matcher scores over real phrases)
-  let __vParaIndex = []; // merged paragraph index
+  // TS matcher owns virtual-line construction; keep a lightweight placeholder
+  // so legacy consumers can safely call array methods without triggering
+  // expensive monolith-side indexing. The real TS matcher provides richer
+  // virtual-line data when installed.
+  let __vParaIndex = [];
+  // no-op push to avoid populating legacy array here (TS will own indexing)
+  try { __vParaIndex.push = function () {}; } catch {}
   let __vLineFreq = new Map(); // virtual line frequencies (by merged key)
+  // make .set a no-op so legacy frequency increments are ignored here
+  try { __vLineFreq.set = function () {}; } catch {}
   let __vSigCount = new Map(); // prefix signature counts (first 4 tokens) for virtual lines
+  try { __vSigCount.set = function () {}; } catch {}
   let __ngramIndex = new Map(); // ngram -> Set of paragraph indices
   // Hybrid lock state
   let HYBRID_ON = false; // in-mem truth
@@ -3138,10 +3134,15 @@
               debug({ tag: 'fallback-nudge', top: to, idx: bestIdx, phase: 'small' });
           } catch {}
           try {
-            viewer.scrollTo({ top: to, behavior: 'instant' });
-          } catch {
-            viewer.scrollTop = to;
-          }
+            // Prefer scheduler/request hook when available, fallback to direct scrollTop
+            try {
+              if (typeof requestScroll === 'function') requestScroll(to);
+              else if (window.__tpScrollWrite) window.__tpScrollWrite(to);
+              else viewer.scrollTo({ top: to, behavior: 'instant' });
+            } catch {
+              viewer.scrollTop = to;
+            }
+          } catch {}
           syncDisplay();
           S.smallPushes++;
           return true;
@@ -3165,10 +3166,14 @@
               debug({ tag: 'fallback-nudge', top: targetY, idx: bestIdx, phase: 'mini-seek' });
           } catch {}
           try {
-            viewer.scrollTo({ top: targetY, behavior: 'instant' });
-          } catch {
-            viewer.scrollTop = targetY;
-          }
+            try {
+              if (typeof requestScroll === 'function') requestScroll(targetY);
+              else if (window.__tpScrollWrite) window.__tpScrollWrite(targetY);
+              else viewer.scrollTo({ top: targetY, behavior: 'instant' });
+            } catch {
+              viewer.scrollTop = targetY;
+            }
+          } catch {}
           syncDisplay();
           S.smallPushes = 0; // reset after successful mini-seek
           return true;
@@ -3600,8 +3605,11 @@
             const scrollBy = (dy) => {
               try {
                 const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-                if (typeof requestScroll === 'function') requestScroll(next);
-                else viewer.scrollTop = next;
+                try {
+                  if (typeof requestScroll === 'function') requestScroll(next);
+                  else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
+                  else viewer.scrollTop = next;
+                } catch {}
                 const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
                 const ratio = max
                   ? (typeof window.__lastScrollTarget === 'number'
@@ -3684,8 +3692,11 @@
             const scrollBy = (dy) => {
               try {
                 const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-                if (typeof requestScroll === 'function') requestScroll(next);
-                else viewer.scrollTop = next;
+                try {
+                  if (typeof requestScroll === 'function') requestScroll(next);
+                  else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
+                  else viewer.scrollTop = next;
+                } catch {}
                 const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
                 const ratio = max
                   ? (typeof window.__lastScrollTarget === 'number'
@@ -3740,8 +3751,11 @@
           try {
             const step = 48; // px
             const next = Math.max(0, Math.min(viewer.scrollTop + step, viewer.scrollHeight));
-            if (typeof requestScroll === 'function') requestScroll(next);
-            else viewer.scrollTop = next;
+                try {
+                  if (typeof requestScroll === 'function') requestScroll(next);
+                  else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
+                  else viewer.scrollTop = next;
+                } catch {}
             const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
             const ratio = max
               ? (typeof window.__lastScrollTarget === 'number'
@@ -4374,10 +4388,14 @@
     }
     try {
       const scMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-control.js'));
-      __scrollCtl = new scMod.default({
+        __scrollCtl = new scMod.default({
         getViewerTop: () => viewer.scrollTop,
         requestScroll: (top) => {
-          viewer.scrollTop = top;
+          try {
+            if (typeof requestScroll === 'function') return requestScroll(top);
+            if (window.__tpScrollWrite) return window.__tpScrollWrite(top);
+            viewer.scrollTop = top;
+          } catch {}
         },
         getViewportHeight: () => viewer.clientHeight,
         getViewerElement: () => viewer,
@@ -6165,9 +6183,18 @@
           else if (ratio >= 0.6) step = Math.floor(step * 1.25);
         }
       } catch {}
-      viewer.scrollTop += Math.sign(dy) * Math.min(absdy, step);
+      try {
+        const nextTop = Math.max(0, Math.min(viewer.scrollHeight, viewer.scrollTop + Math.sign(dy) * Math.min(absdy, step)));
+        if (typeof requestScroll === 'function') requestScroll(nextTop);
+        else if (window.__tpScrollWrite) window.__tpScrollWrite(nextTop);
+        else viewer.scrollTop = nextTop;
+      } catch {}
     } else {
-      viewer.scrollTop = target;
+      try {
+        if (typeof requestScroll === 'function') requestScroll(target);
+        else if (window.__tpScrollWrite) window.__tpScrollWrite(target);
+        else viewer.scrollTop = target;
+      } catch {}
     }
     if (typeof markAdvance === 'function') markAdvance();
     else _lastAdvanceAt = performance.now();
@@ -6347,8 +6374,11 @@
     const scrollBy = (dy) => {
       try {
         const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-        if (typeof requestScroll === 'function') requestScroll(next);
-        else viewer.scrollTop = next;
+        try {
+          if (typeof requestScroll === 'function') requestScroll(next);
+          else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
+          else viewer.scrollTop = next;
+        } catch {}
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max
           ? (typeof window.__lastScrollTarget === 'number'
@@ -6544,11 +6574,10 @@
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
-  // --- PLL guard (delegates to TS implementation on window.PLL) ---
-  // The monolith no longer contains internal PLL/servo/bias logic. Keep a
-  // tiny, explicit delegating object `PLL` so legacy references in this file
-  // (which expect a `PLL` symbol) continue to work while the TypeScript
-  // implementation installs itself on `window.PLL` via `installPLL()`.
+  // --- PLL delegator ---
+  // Legacy PLL internals have been removed. Keep a tiny delegator object
+  // named `PLL` that forwards to the authoritative TypeScript implementation
+  // installed on `window.PLL`. This file should not contain servo/bias logic.
   const PLL = {
     update: (opts) => {
       try {
@@ -7267,7 +7296,12 @@
                     60,
                     Math.max(18, Math.floor((target - sc.scrollTop) * 0.25))
                   );
-                  sc.scrollTop = Math.min(max, sc.scrollTop + step);
+                  try {
+                    const next = Math.min(max, sc.scrollTop + step);
+                    if (typeof requestScroll === 'function') requestScroll(next);
+                    else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
+                    else sc.scrollTop = next;
+                  } catch {}
                   try {
                     debug && debug({ tag: 'scroll:end-drift', top: sc.scrollTop, target, ratio });
                   } catch {}
@@ -7689,8 +7723,13 @@
           // apply immediate alignment
           try {
             const next = Math.max(0, Math.min(viewer.scrollTop + delta, viewer.scrollHeight));
-            if (typeof requestScroll === 'function') requestScroll(next);
-            else viewer.scrollTop = next;
+            try {
+              if (typeof requestScroll === 'function') requestScroll(next);
+              else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
+              else viewer.scrollTop = next;
+            } catch {
+              try { viewer.scrollTop += delta; } catch {}
+            }
           } catch {
             viewer.scrollTop += delta;
           }
@@ -8712,7 +8751,11 @@
     // Reset logical position and scroll to the very top
     currentIndex = 0;
     window.currentIndex = currentIndex;
-    viewer.scrollTop = 0;
+    try {
+      if (typeof requestScroll === 'function') requestScroll(0);
+      else if (window.__tpScrollWrite) window.__tpScrollWrite(0);
+      else viewer.scrollTop = 0;
+    } catch {}
     // Reset dead-man timer state
     _wdLastIdx = -1;
     _wdLastTop = 0;
