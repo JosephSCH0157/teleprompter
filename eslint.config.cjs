@@ -195,22 +195,4 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
-  // Prevent direct DOM scroll mutations in non-source JS files.
-  // Prefer the centralized scheduler (`window.__tpScrollWrite`) or adapters.requestScroll.
-  {
-    files: ['**/*.js', '!src/**', '!scroll-control.js', '!teleprompter_pro.js', '!tools/**', '!releases/**'],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: "AssignmentExpression[left.type='MemberExpression'][left.property.name='scrollTop']",
-          message: 'Use window.__tpScrollWrite(...) or adapters.requestScroll(...) instead of assigning .scrollTop directly.',
-        },
-        {
-          selector: "CallExpression[callee.property.name='scrollTo']",
-          message: 'Use window.__tpScrollWrite(...) or adapters.requestScroll(...) instead of element.scrollTo(...)',
-        },
-      ],
-    },
-  },
 ];

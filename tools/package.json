@@ -7,8 +7,5 @@
   },
   "devDependencies": {
     "puppeteer": "^20.0.0"
-  },
-  "dependencies": {
-    "acorn": "^8.8.1"
   }
 }

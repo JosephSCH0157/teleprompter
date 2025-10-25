@@ -1,60 +1,33 @@
 /* Teleprompter Pro — JS CLEAN (v1.5.8) */
-/* eslint-disable */
 
-
- // Backwards-compatible no-op scheduler guard.
- // Some legacy paths may call window.__tpScrollWrite before the TS scheduler loads.
- // Provide a safe no-op that directly sets scrollTop to avoid hard crashes.
- try {
-   window.__tpScrollWrite = window.__tpScrollWrite || function (y) {
-     try {
-       const sc = document.scrollingElement || document.documentElement || document.body;
-       try { sc.scrollTop = (y | 0); } catch {}
-     } catch (e) {
-       console.warn('[TP-Pro] settings obs test failed', e);
-       // _toast may not be defined yet at this early point; guard its use.
-       try { typeof _toast === 'function' && _toast('OBS: failed'); } catch {}
-     }
-   };
- } catch (e) {
-   // Best-effort swallow to avoid breaking host page if globals are restricted.
- }
- // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
- let _toast = function (msg, opts) {
+// Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
+let _toast = function (msg, opts) {
   try {
     if (typeof moduleToast === 'function') return moduleToast(msg, opts);
-  } catch (e) {
+  } catch {
     try {
       console.debug('module toast access failed', e);
-      } catch (e) {
-        try {
-          console.error('[Scripts.save] error', e);
-        } catch (err) {
-          void err;
-        }
-        // expose last save error for diagnostics and attach a session fallback
-        try {
-          window.__lastScriptSaveError = { message: e && e.message, stack: e && e.stack };
-          const _fallback = { title: scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled', content: getEditorContent(), at: Date.now() };
-          try {
-            sessionStorage.setItem('tp_last_unsaved_script', JSON.stringify(_fallback));
-            _toast('Save failed — content saved to session storage', { type: 'error' });
-          } catch (err) {
-            _toast('Save failed', { type: 'error' });
-          }
-      } catch (err) {
-        _toast('Save failed', { type: 'error' });
-      }
+    } catch {
+      void e;
     }
-  try { window.__TP_SKIP_BOOT_FOR_TESTS = __TP_SKIP_BOOT_FOR_TESTS; } catch {}
-  if (!__TP_SKIP_BOOT_FOR_TESTS) {
-    (function () {
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof window._toast === 'function')
+      return window._toast(msg, opts);
+  } catch {
+    void 0;
+  }
+  try {
+    console.debug('[toast]', msg, opts || '');
+  } catch {}
+};
+
+  (function(){
   'use strict';
   // Prevent double-loading in the same window/context
   try {
     // dev flag early so we can silence noisy warnings in production
             const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
-            try { window.__TP_DEV = __dev; } catch {}
             const saveBaseSpeed = window.saveBaseSpeed; // Ensure saveBaseSpeed is defined
     // idle flag — don't start heavy subsystems until a script exists
     if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
@@ -68,31 +41,348 @@
   (function ensureInitMarker(){
     if (window.__tp_init_done == null) window.__tp_init_done = false;
     if (!window.tpMarkInitDone) {
-      window.tpMarkInitDone = function (reason = 'unspecified') {
+      window.tpMarkInitDone = function(reason = 'unspecified'){
         if (window.__tp_init_done) return;
         window.__tp_init_done = true;
         try {
           // Cancel any pending late-init fallback timer when init completes
-          try {
-            if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) {
-              clearTimeout(_lateInitTimer);
-              _lateInitTimer = null;
-            }
-          } catch {}
-          const ctx = window.opener ? 'Display' : window.name || 'Main';
+          try { if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
+          const ctx = window.opener ? 'Display' : (window.name || 'Main');
           const v = (window.App && (window.App.version || window.App.appVersion)) || null;
-          // Emit a minimal marker for CI/runners
+          // JSON pulse for runners
+          console.log('[TP-INIT]', JSON.stringify({ tp_init_done: true, ctx, appVersion: v, reason }));
+          // Optional: event for listeners
+          window.dispatchEvent(new CustomEvent('tp:init:done', { detail: { ctx, appVersion: v, reason } }));
+  } catch {}
+      };
+    }
+    if (!window.tpMarkInitRunning) {
+      window.tpMarkInitRunning = function() {
+        try {
+          if (window.__tp_init_running) return;
+          window.__tp_init_running = true;
+          try { if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
+        } catch {}
+      };
+    }
+  })();
+  // Gate heavy subsystems until a real script is present
+  try {
+    if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
+    if (!window.tpSetHasScript) {
+      window.tpSetHasScript = function (has) {
+        try {
+          // Only set the 'has script' flag once and only when true.
+          // This centralizes the decision and avoids flip-flopping during wiring.
+          if (!has) return; // ignore false/disarm calls
+          if (window.__tp_has_script) return; // already armed
+          window.__tp_has_script = true;
+          // Emit event for test harnesses / debug tools
           try {
-            if (typeof window.__TP_MARKER === 'function') {
-              window.__TP_MARKER({ ctx, version: v, reason });
-            } else if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-              try {
-                navigator.sendBeacon(window.__TP_MARKER_URL || '/__tp_init_marker', JSON.stringify({ ctx, version: v, reason }));
-              } catch {}
-            }
+            window.dispatchEvent(new CustomEvent('tp:script:presence', { detail: { has: window.__tp_has_script } }));
+          } catch {}
+          // Light control hooks: start optional subsystems
+          try {
+            window.__pll_running = true;
+            window.__hud_running = true;
+          } catch {}
+          // Dev-only trace to indicate the script presence was set
+          try { if (window.__TP_DEV) console.debug('[TP-TRACE] tpSetHasScript -> true'); } catch {}
+        } catch {}
+      };
+    }
+  } catch {}
+  // Derive a short context tag for logs (Main vs Display)
+  const TP_CTX = (function () {
+    try {
+      if (window.opener) return 'Display';
+      if (window.name) return window.name;
+    } catch {}
+    return 'Main';
+  })();
+  // Flags (URL or localStorage): ?calm=1&dev=1
+  try {
+    const Q = new URLSearchParams(location.search);
+    const DEV = Q.has('dev') || localStorage.getItem('tp_dev_mode') === '1';
+    const CALM = Q.has('calm') || localStorage.getItem('tp_calm') === '1';
+
+    // Default dev mode to quiet unless explicitly "loud"
+    const loudDev = Q.has('loud') || localStorage.getItem('tp_dev_loud') === '1';
+    window.__TP_QUIET = DEV && !loudDev; // dev by default is QUIET
+
+    // Dev-time cache buster for dynamic imports
+    try {
+      const V =
+        (typeof window !== 'undefined' && window.__TP_DEV && window.__TP_DEV_VERSION) ||
+        (DEV ? 'dev-' + Date.now().toString(36) : '');
+      window.__TP_DEV_VERSION = V;
+      window.__TP_ADDV = function addV(p) {
+        try {
+          if (!V) return p;
+          return p + (p.indexOf('?') >= 0 ? '&' : '?') + 'v=' + V;
+        } catch {
+          return p;
+        }
+      };
+    } catch {
+      void e;
+    }
+    // Dev-only cache bust handled via __TP_ADDV and HTML loader; no top-level await here
+    try {
+      window.__TP_DEV = DEV;
+      window.__TP_CALM = CALM;
+    } catch {}
+    // Ensure DEV-only UI (like build label) is gated by a class on <html>
+    try {
+      document.documentElement.classList.toggle('tp-dev', !!DEV);
+    } catch {}
+    try {
+      if (CALM) {
+        window.__TP_DISABLE_NUDGES = true;
+      }
+    } catch {}
+    try {
+      if (DEV) console.info('[TP-Pro] DEV mode enabled');
+    } catch {}
+    try {
+      if (CALM) console.info('[TP-Pro] Calm Mode enabled');
+    } catch {}
+  } catch {
+    void e;
+  }
+  // Boot instrumentation (added)
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      try { performance.mark('app-init-start'); } catch { }
+    }
+  } catch {}
+  try {
+    window.__TP_BOOT_TRACE = [];
+    const _origLog = console.log.bind(console);
+  const tag = (m) => `[${TP_CTX}] [TP-BOOT ${Date.now() % 100000}] ${m}`;
+    // Publish build version for About panel and diagnostics
+    try {
+      window.APP_VERSION = '1.6.2';
+    } catch {}
+    window.__tpBootPush = (m) => {
+      try {
+        const rec = { t: Date.now(), m };
+        window.__TP_BOOT_TRACE.push(rec);
+        try {
+          console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
+        } catch {
+          console.log('[TP-TRACE]', rec.m);
+        }
+      } catch {
+        try {
+          console.warn('[TP-TRACE-FAIL]', err);
+        } catch {}
+        // Long-running low-cost poll: keep checking every 5s so that
+        // bridge/recorder instances created later than the initial poll
+        // will still update the status chip. This is intentionally light.
+        try {
+          setInterval(() => {
+            try {
+              if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
+              updateStatus();
+            } catch {}
+          }, 5000);
+        } catch {}
+      }
+    };
+    // Ensure handshake log exists early so the Debug Dump can read it even before adapters run
+    try {
+      window.__obsHandshakeLog = window.__obsHandshakeLog || [];
+    } catch {}
+  __tpBootPush('script-enter');
+  _origLog(tag('entered main IIFE'));
+  // robust DOM id finder (first found wins)
+  function $id() {
+    for (var i = 0; i < arguments.length; i++) {
+      try {
+        var id = arguments[i];
+        var el = document.getElementById(id);
+        if (el) return el;
+      } catch {}
+    }
+    return null;
+  }
+  // Late-init timer handle: used to avoid scheduling fallback when init starts later
+  let _lateInitTimer = null;
+    window.addEventListener('DOMContentLoaded', () => {
+      __tpBootPush('dom-content-loaded');
+    });
+    document.addEventListener('readystatechange', () => {
+      __tpBootPush('rs:' + document.readyState);
+    });
+    // Global error hooks (diagnostic): capture earliest uncaught issues
+    window.addEventListener('error', (ev) => {
+      try {
+        (__TP_BOOT_TRACE || []).push({
+          t: Date.now(),
+          m: 'onerror:' + (ev?.error?.message || ev?.message),
+        });
+      } catch {
+        void e;
+      }
+      try {
+        console.error('[TP-BOOT onerror]', ev?.error || ev?.message || ev);
+      } catch {}
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      try {
+        (__TP_BOOT_TRACE || []).push({
+          t: Date.now(),
+          m: 'unhandled:' + (ev?.reason?.message || ev?.reason),
+        });
+      } catch {}
+      try {
+        console.error('[TP-BOOT unhandled]', ev?.reason);
+      } catch {}
+    });
+    _origLog(tag('installed global error hooks'));
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          try { performance.mark('boot-global-hooks-installed'); } catch {}
+        }
+      } catch {}
+  } catch {
+    void e;
+  }
+  // HUD counters for quick tuning telemetry
+  try {
+    if (!window.__hudCounters) {
+      window.__hudCounters = {
+        drops: { command: 0, oov: 0, meta: 0 },
+        softAdv: { allowed: 0, blockedLost: 0, frozen: 0 },
+        rescue: { count: 0 },
+      };
+      // Watchdog arm state: only report HUD and run watchdog when armed
+      window.__tp_wd_armed = false;
+      window.tpArmWatchdog = function (on) {
+        try {
+          const prev = !!window.__tp_wd_armed;
+          window.__tp_wd_armed = !!on;
+          if (prev === window.__tp_wd_armed) return;
+          // Reset counters/state when disarming
+          if (!window.__tp_wd_armed) {
+            try {
+              window.__tpMetrics = { ticks: 0, stalls: 0, rescues: 0, lastSample: 0, samples: [] };
+              window.__tpWatchdogState = 'OK';
+            } catch {}
+          }
+          try {
+            if (window.__TP_DEV) console.debug('[TP-TRACE] watchdog', window.__tp_wd_armed ? 'ARM' : 'DISARM');
           } catch {}
         } catch {}
       };
+      setInterval(() => {
+        try {
+          // Only emit HUD counters when a real script exists and the watchdog is explicitly armed.
+          if (!window.__tp_has_script || !window.__tp_wd_armed) return; // idle
+          // Quiet the HUD output unless the watchdog is armed (avoids noisy logs in CI/idle)
+          try {
+            if (!window.__tp_wd_armed) return;
+            console.log('[HUD:counts]', JSON.stringify(window.__hudCounters || {}));
+          } catch {}
+        } catch {}
+      }, 1000);
+    }
+  } catch {}
+
+  // Freeze soft-advance by batches (decremented per match cycle)
+  try {
+    if (typeof window.__freezeBatches === 'undefined') window.__freezeBatches = 0;
+  } catch {}
+    // Expose a small perf helper to measure sections during runtime
+    try {
+      window.__tpPerf = {
+        mark: (n) => { try { performance && performance.mark && performance.mark(n); } catch {} },
+        measure: (name, start, end) => { try { performance && performance.measure && performance.measure(name, start, end); } catch {} },
+        report: () => { try { const m = performance.getEntriesByType('measure'); console.table(m.map(x=>({name:x.name,duration:Math.round(x.duration)}))); } catch {} }
+      };
+    } catch {}
+    // Dev-only paint vitals: capture LCP and CLS when available to pair with perf marks
+    try {
+      if (window.__TP_DEV && typeof PerformanceObserver !== 'undefined') {
+        try {
+          const po = new PerformanceObserver((list) => {
+            try {
+              for (const e of list.getEntries()) {
+                try {
+                  if (e.entryType === 'largest-contentful-paint') {
+                    console.info('[TP-Pro] LCP', Math.round(e.startTime));
+                  } else if (e.entryType === 'layout-shift' && !e.hadRecentInput) {
+                    window.__tpCLS = (window.__tpCLS || 0) + (e.value || 0);
+                    try {
+                      console.info('[TP-Pro] CLS+', (e.value || 0).toFixed(4), 'total=', (window.__tpCLS || 0).toFixed(4));
+                    } catch {}
+                  }
+                } catch {}
+              }
+            } catch {}
+          });
+          try { po.observe({ type: 'largest-contentful-paint', buffered: true }); } catch {}
+          try { po.observe({ type: 'layout-shift', buffered: true }); } catch {}
+        } catch {}
+      }
+    } catch {}
+  try {
+    __tpBootPush('after-boot-block');
+  } catch {}
+
+  // Listen for endgame completion
+  window.addEventListener('end:reached', async (ev) => {
+    console.log('[ENDGAME] Script completed!', ev.detail);
+    // Stop recording if auto-record enabled
+    try {
+      if (window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
+        try {
+          if (typeof ensureStopped === 'function') await ensureStopped();
+          else
+            window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
+        } catch {
+          try {
+            window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
+          } catch {
+            void e;
+          }
+        }
+      }
+    } catch {
+      void e;
+    }
+  });
+
+  // Calm Mode geometry helpers: unified target math and clamped scroll writes
+  // These are safe to define always; callers should only use them when CALM is enabled.
+  function getYForElInScroller(
+    el,
+    sc = window.__TP_SCROLLER ||
+      document.getElementById('viewer') ||
+      document.scrollingElement ||
+      document.documentElement ||
+      document.body,
+    pct = typeof window !== 'undefined' && typeof window.__TP_MARKER_PCT === 'number'
+      ? window.__TP_MARKER_PCT
+      : 0.4
+  ) {
+    try {
+      if (!el || !sc) return 0;
+      const elR = el.getBoundingClientRect();
+      const scR =
+        typeof sc.getBoundingClientRect === 'function' ? sc.getBoundingClientRect() : { top: 0 };
+      const base =
+        typeof window.__TP_VIEWER_HEIGHT_BASE === 'number' && window.__TP_VIEWER_HEIGHT_BASE > 0
+          ? window.__TP_VIEWER_HEIGHT_BASE
+          : sc.clientHeight || 0;
+      const raw = (sc.scrollTop || 0) + (elR.top - scR.top) - Math.round(base * pct);
+      const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+      return Math.max(0, Math.min(raw | 0, max));
+    } catch {
+      return 0;
+    }
+  }
   function tpScrollTo(
     y,
     sc = window.__TP_SCROLLER ||
@@ -107,8 +397,10 @@
       try {
         if (typeof window.__tpClampGuard === 'function') {
           const ok = window.__tpClampGuard(target, max);
-  // virtual-line construction and frequency counting delegated to TS matcher; removed legacy pushes
-  try { window.__tpScrollWrite && window.__tpScrollWrite(target); } catch { try { sc.scrollTop = target; } catch {} }
+          if (!ok) return; // skip micro re-clamp
+        }
+      } catch {}
+      sc.scrollTop = target;
       if (window.__TP_DEV) {
         try {
           console.debug('[TP-Pro Calm] tpScrollTo', {
@@ -119,9 +411,11 @@
           });
         } catch {}
       }
-    } catch (e) {
+    } catch {
       void e;
-                  // virtual-line construction and frequency counting delegated to TS matcher; removed legacy pushes
+    }
+  }
+
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
   try {
     if (typeof window.__tpRealCore !== 'function') {
@@ -137,19 +431,21 @@
             ) {
               return _initCore();
             }
-          } catch (e) {
+          } catch {
             void e;
           }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
-                // virtual-line construction and frequency counting delegated to TS matcher; removed legacy pushes
+            return window._initCore();
+          }
+          await new Promise((r) => setTimeout(r, 10));
         }
         throw new Error('Core waiter timeout');
       };
       try {
-      window.__tpRealCore.__tpWaiter = true;
-      } catch (e) { void e; }
+        window.__tpRealCore.__tpWaiter = true;
+      } catch {}
     }
-  } catch (e) { void e; }
+  } catch {}
   // Install an early stub for core init that queues until the real core is defined
   try {
     if (typeof window._initCore !== 'function') {
@@ -174,10 +470,70 @@
         const core = await new Promise((res) => {
           let tries = 0;
           const id = setInterval(() => {
-            // Tiny scheduler removed — TS scheduler is authoritative.
-            // The TS scheduler should set `window.__tpScrollWrite` when it loads.
-            // Keep the early safe default at the top of this file so legacy callers
-            // won't crash if the TS scheduler hasn't initialized yet.
+            // Tiny global commit/scroll scheduler to centralize writes and make metrics easier
+            (function installTinyScheduler() {
+              try {
+                if (window.__tpTinySchedulerInstalled) return;
+                window.__tpTinySchedulerInstalled = true;
+                let _pendingTop = null,
+                  _rafId = 0;
+                const getScroller = () =>
+                  window.__TP_SCROLLER ||
+                  document.getElementById('viewer') ||
+                  document.scrollingElement ||
+                  document.documentElement ||
+                  document.body;
+                function clamp(y) {
+                  const sc = getScroller();
+                  if (!sc) return 0;
+                  const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+                  return Math.max(0, Math.min(Number(y) || 0, max));
+                }
+                function requestScrollTop(y) {
+                  const sc = getScroller();
+                  if (!sc) return;
+                  _pendingTop = clamp(y);
+                  try {
+                    window.__lastScrollTarget = _pendingTop;
+                  } catch {}
+                  if (_rafId) return;
+                  _rafId = requestAnimationFrame(() => {
+                    const t = _pendingTop;
+                    _pendingTop = null;
+                    _rafId = 0;
+                    try {
+                      sc.scrollTo({ top: t, behavior: 'auto' });
+                    } catch {
+                      sc.scrollTop = t;
+                    }
+                    try {
+                      window.__lastScrollTarget = null;
+                    } catch {}
+                  });
+                }
+                // publish minimal API
+                window.__tpScrollWrite = requestScrollTop;
+                // optional: wrap viewer.scrollTop writes
+                const sc = getScroller();
+                if (sc && !sc.__tpWriteWrapped) {
+                  sc.__tpWriteWrapped = true;
+                  try {
+                    const origSet = Object.getOwnPropertyDescriptor(
+                      Object.getPrototypeOf(sc),
+                      'scrollTop'
+                    )?.set;
+                    if (origSet) {
+                      Object.defineProperty(sc, 'scrollTop', {
+                        configurable: true,
+                        set(v) {
+                          requestScrollTop(v);
+                        },
+                      });
+                    }
+                  } catch {}
+                }
+              } catch {}
+            })();
             // Prefer explicitly published real core ONLY if it's not just the early waiter
             if (typeof window.__tpRealCore === 'function' && !window.__tpRealCore.__tpWaiter) {
               clearInterval(id);
@@ -269,7 +625,7 @@
           }
           try {
             __tpBootPush('window-init-proxy-waiting-core');
-          } catch (e) {
+          } catch {
             void e;
           }
           // Wait briefly for core to appear (either via assignment or resolve hook)
@@ -350,10 +706,10 @@
           window.__tpEarlyInitRan = true;
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
-          } catch (e) {
-          void e;
-        }
-        } catch (e) {
+          } catch {
+            void e;
+          }
+        } catch {
           void e;
         }
       });
@@ -395,7 +751,7 @@
           try {
             if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch (e) {
+          } catch {
               console.warn('Mini normalize failed', e);
             }
         });
@@ -403,7 +759,7 @@
       try {
         __tpBootPush('minimal-boot');
       } catch {}
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro] minimalBoot error', e);
     }
   }
@@ -424,7 +780,7 @@
         window.__tpInitCalled = true;
         init();
       }
-        } catch (e) {
+        } catch {
       console.error('[TP-Pro] early force init error', e);
     }
   }, 0);
@@ -493,7 +849,7 @@
         Promise.resolve().then(whenInitReady);
       }
     }
-    } catch (e) {
+    } catch {
     console.warn('early init scheduling error', e);
   }
   try {
@@ -615,11 +971,11 @@
             _toast = m.toast;
           } catch {}
         }
-      } catch (e) {
+      } catch {
         // module not available yet or import failed; keep fallback
         try {
           console.debug('toast module import failed', e);
-        } catch (e) { void e; }
+        } catch {}
       }
     })();
   })();
@@ -659,58 +1015,6 @@
   try {
     __tpBootPush('after-zoom-guard');
   } catch {}
-
-  // Dev escape hatch: allow running the legacy matcher for one version via
-  // URL param `?matcher=legacy`. This is temporary and intended for quick
-  // developer rollback/testing during the TS migration.
-  (function () {
-    try {
-      const params = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : null;
-      if (params && params.get && params.get('matcher') === 'legacy') {
-        try {
-          window.__TP_ENABLE_LEGACY_MATCHER = true;
-        } catch {}
-      }
-    } catch {}
-  })();
-
-  // Matcher migration guard:
-  // When the TS matcher is the single source of truth we want to avoid executing
-  // any heavy legacy builder logic (virtual-line merging, n-gram index builds,
-  // etc.) embedded in this monolith. Prefer the TypeScript implementations
-  // (exposed via `window.__tpMatcher` / `window.__tpSpeech`) and keep minimal,
-  // safe placeholders here so legacy inline loops become no-ops when the
-  // runtime flag `window.__TP_ENABLE_LEGACY_MATCHER` is NOT set.
-  //
-  // This is a defensive, low-risk change: it prevents expensive CPU work from
-  // running in-browser while keeping the page functional. If someone needs the
-  // old matcher for rollback/testing they can pass `?matcher=legacy` to enable
-  // the original behavior for one release.
-  (function () {
-    try {
-      if (typeof window === 'undefined') return;
-      if (window.__TP_ENABLE_LEGACY_MATCHER) return; // allow legacy behavior when explicitly requested
-
-      // Install safe placeholders for legacy in-memory matcher structures.
-      // Many legacy routines push into `__vParaIndex` or assume array methods.
-      // Provide a tiny array-like stub that silently ignores mutations so any
-      // remaining inline builder loops do no heavy work and do not throw.
-      try {
-        // The legacy matcher builder/stub has been removed; the TypeScript
-        // matcher is the single source of truth. Keep lightweight placeholders
-        // to avoid throwing when legacy code checks these values, but do not
-        // attempt to rebuild virtual-line structures here.
-        try { __vParaIndex = null; } catch {}
-        try { __vLineFreq = new Map(); } catch {}
-        try { __vSigCount = new Map(); } catch {}
-        try { __ngramIndex = new Map(); } catch {}
-      } catch {}
-
-      // Also expose a tiny runtime hint so other scripts can detect that the
-      // monolith has been migrated to prefer TS matcher implementations.
-      try { window.__TP_MATCHER_LEGACY_DISABLED = true; } catch {}
-    } catch {}
-  })();
 
   function setStatus(msg) {
     try {
@@ -769,23 +1073,197 @@
   // Dynamic wiring helper must exist before buildSettingsContent uses it
   // (Removed duplicate wireSettingsDynamic definition; primary is declared near top.)
 
-  // Simplified settings builder shim.
-  // The monolith's full DOM builder was removed in favor of the TS settings module.
-  // Keep a tiny delegator so legacy callers that invoke `buildSettingsContent()`
-  // will open the overlay via the TS mount when available.
   function buildSettingsContent() {
+    const body = document.getElementById('settingsBody');
+    if (!body) return;
+    // Idempotency guard: if cards already exist, treat as already-built and sync values.
     try {
-      const root = document.getElementById('settingsBody');
-      if (!root) return;
-      // Prefer the TS settings mount if present
-      try {
-        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') {
-          window.__tp.settings.mount(root);
-          return;
-        }
-      } catch {}
-      // No-op fallback: settings UI will be provided by the module when loaded.
+      if (body.querySelector('.settings-card')) {
+        _settingsBuilt = true;
+        try { syncSettingsValues(); } catch {}
+        try { setupSettingsTabs(); } catch {}
+        return;
+      }
     } catch {}
+    if (_settingsBuilt) {
+      if (!body.querySelector('.settings-card')) {
+        _settingsBuilt = false;
+      } else {
+        syncSettingsValues();
+        return;
+      }
+    }
+    const getVal = (id, fallback = '') => {
+      try {
+        const el = document.getElementById(id);
+        return el && 'value' in el && el.value !== undefined ? el.value : fallback;
+      } catch {
+        return fallback;
+      }
+    };
+    const isChecked = (id) => {
+      try {
+        const el = document.getElementById(id);
+        return !!el?.checked;
+      } catch {
+        return false;
+      }
+    };
+    const speakersHidden = !!document.getElementById('speakersBody')?.classList.contains('hidden');
+
+    const frag = document.createDocumentFragment();
+    const card = (id, title, tab, innerHtml) => {
+      const d = document.createElement('div');
+      d.className = 'settings-card';
+      d.dataset.tab = tab;
+      d.id = id;
+      d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
+      return d;
+    };
+    frag.appendChild(
+      card(
+        'cardMic',
+        'Microphone',
+        'media',
+        `
+        <div class="settings-inline-row">
+          <button id="settingsReqMic" class="btn-chip">Request mic</button>
+          <select id="settingsMicSel" class="select-md"></select>
+        </div>
+        <div class="settings-small">Select input and grant permission for speech sync & dB meter.</div>`
+      )
+    );
+    frag.appendChild(
+      card(
+        'cardCam',
+        'Camera',
+        'media',
+        `
+        <div class="settings-inline-row">
+          <button id="settingsStartCam" class="btn-chip">Start</button>
+          <button id="settingsStopCam" class="btn-chip">Stop</button>
+          <select id="settingsCamSel" class="select-md"></select>
+        </div>
+        <div class="settings-inline-row">
+          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${getVal('camSize', 28)}" style="width:70px"></label>
+          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${getVal('camOpacity', 100)}" style="width:80px"></label>
+          <label class="tp-check"><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror') ? 'checked' : ''} aria-label="Mirror camera" /><span>Mirror</span></label>
+        </div>
+        <div class="settings-small">Camera overlay floats over the script.</div>`
+      )
+    );
+    frag.appendChild(
+      card(
+        'cardSpeakers',
+        'Speakers',
+        'general',
+        `
+        <div class="settings-inline-row">
+          <button id="settingsShowSpeakers" class="btn-chip">${speakersHidden ? 'Show' : 'Hide'} List</button>
+          <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
+        </div>
+        <div class="settings-small">Manage speaker tags & quick normalization.</div>`
+      )
+    );
+    frag.appendChild(
+      card(
+        'cardRecording',
+        'Recording',
+        'recording',
+        `
+        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
+          <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
+          <div class="settings-row">
+            <label class="tp-check">
+              <input id="settingsEnableObs" type="checkbox" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false' }" aria-label="Enable OBS" />
+              <span>Enable OBS</span>
+            </label>
+
+            <span class="obs-pill">OBS: <strong id="obsStatusText">unknown</strong></span>
+
+            <label class="tp-field">
+              <span>URL</span>
+              <input id="settingsObsUrl" class="input-url" type="text" placeholder="127.0.0.1" inputmode="url" autocomplete="off" value="${getVal('obsUrl', '')}" />
+            </label>
+
+            <label class="tp-field">
+              <span>Port</span>
+              <input id="settingsObsPort" class="input-port" type="text" placeholder="4455" inputmode="numeric" pattern="[0-9]+" autocomplete="off" value="" />
+            </label>
+
+            <label class="tp-check" title="Use secure WebSocket (wss)">
+              <input id="settingsObsSecure" type="checkbox" ${isChecked('obsSecure') ? 'checked' : ''} />
+              <span>Secure (wss)</span>
+            </label>
+          </div>
+
+          <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
+          <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
+          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
+          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
+          <label class="tp-field">
+            <span>Password</span>
+            <input id="settingsObsPass"
+                   type="password"
+                   placeholder="OBS WebSocket password"
+                   autocomplete="current-password"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   inputmode="text"
+                   enterkeyhint="done"
+                   class="obs-pass"
+                   value="${getVal('obsPassword', '')}" />
+          </label>
+
+          <button id="settingsObsClear" class="btn btn-ghost" type="button" title="Clear session password">Clear</button>
+
+          <label class="tp-check" style="margin-left:6px">
+            <input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''} disabled aria-label="Remember password (disabled)" />
+            <span>Remember password</span>
+          </label>
+          <button id="settingsObsTest" type="button" class="btn-chip" aria-label="Test OBS connection">Test</button>
+          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px" aria-label="Sync and Test OBS">Sync & Test</button>
+          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px" aria-label="Poke OBS">Poke</button>
+        </form>
+        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" aria-atomic="true" style="margin-top:8px"></div>
+  <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
+  <div class="settings-small" style="margin-top:6px; font-size:0.9em; color:#444">Recommended OBS settings: set Recording Filename to <code>Anvil-{date}-{time}</code> (optionally include <code>{scene}</code> or <code>{profile}</code>), and set Container to <strong>mp4</strong> (or use <strong>mkv</strong> with auto-remux on stop for crash-safe recordings).</div>`
+      )
+    );
+    frag.appendChild(
+      card(
+        'cardPLL',
+        'Hybrid Lock (Auto + Speech)',
+        'advanced',
+        `
+        <div class="settings-inline-row">
+          <label class="tp-check"><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''} aria-label="Enable hybrid lock" /><span>Enable hybrid lock</span></label>
+        </div>
+        <div class="settings-inline-row">
+          <label>Responsiveness <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.022)}" style="width:80px"></label>
+          <label>Stability <input id="settingsKd" type="number" min="0" max="0.01" step="0.0001" value="${getVal('Kd', 0.0025)}" style="width:80px"></label>
+          <label>Max bias <input id="settingsMaxBiasPct" type="number" min="0" max="0.5" step="0.01" value="${getVal('maxBiasPct', 0.12)}" style="width:80px"></label>
+        </div>
+        <div class="settings-inline-row">
+          <label>Min conf <input id="settingsConfMin" type="number" min="0" max="1" step="0.01" value="${getVal('confMin', 0.6)}" style="width:80px"></label>
+          <label>Decay ms <input id="settingsDecayMs" type="number" min="100" max="5000" step="100" value="${getVal('decayMs', 550)}" style="width:80px"></label>
+        </div>
+        <div id="pllReadout" class="settings-small" style="font-family:monospace; margin-top:8px;">
+          Lead/Lag: --px | Bias: --% | State: --
+        </div>
+        <div class="settings-small">Keeps steady auto-scroll and gently trims speed to your voice. If recognition drops, it coasts.</div>`
+      )
+    );
+    try {
+      body.appendChild(frag);
+      wireSettingsDynamic();
+      syncSettingsValues();
+      setupSettingsTabs();
+      if (body.querySelector('.settings-card')) _settingsBuilt = true;
+    } catch {
+      console.warn('Settings build failed, will retry', e);
+      _settingsBuilt = false;
+    }
   }
   try {
     __tpBootPush('after-buildSettingsContent-def');
@@ -823,10 +1301,10 @@
             try {
               await switchCamera(camSelS.value);
               _toast('Camera switched', { type: 'ok' });
-            } catch (e) {
-                warn('Camera switch failed', e);
-                _toast('Camera switch failed');
-              }
+            } catch {
+              warn('Camera switch failed', e);
+              _toast('Camera switch failed');
+            }
           }
         });
       }
@@ -927,19 +1405,107 @@
     return '';
   };
 
-  // Simplified setup shim: delegate tab wiring to the TS settings module when available.
-  function setupSettingsTabs(rootEl) {
-    try {
-      const root = rootEl || document.getElementById('settingsBody');
-      if (!root) return;
+  function setupSettingsTabs() {
+    const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
+    // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
+    const sb = document.getElementById('settingsBody');
+    const cards = sb ? Array.from(sb.querySelectorAll('.settings-card')) : [];
+    // Hide tabs with no cards lazily
+    tabs.forEach((tab) => {
+      const tabName = tab.dataset.tab;
+      const hasCard = cards.some((c) => c.dataset.tab === tabName);
+      if (!hasCard) tab.style.display = 'none';
+    });
+
+    // Animation helpers
+    const ANIM_IN = 'anim-in';
+    const ANIM_OUT = 'anim-out';
+    function showCard(c) {
+      if (c._visible) return; // already visible
+      c._visible = true;
+      c.style.display = 'flex';
+      c.classList.remove(ANIM_OUT);
+      // force reflow for animation restart
+      void c.offsetWidth;
+      c.classList.add(ANIM_IN);
+      c.addEventListener(
+        'animationend',
+        (e) => {
+          if (e.animationName === 'cardFadeIn') c.classList.remove(ANIM_IN);
+        },
+        { once: true }
+      );
+    }
+    function hideCard(c) {
+      if (!c._visible) return; // already hidden
+      c._visible = false;
+
+      // take it out of layout so the new card doesn't stack beneath it
       try {
-        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.setup === 'function') {
-          window.__tp.settings.setup(root);
-          return;
-        }
+        c.style.position = 'absolute';
+        c.style.inset = '0';
+        c.style.width = '100%';
       } catch {}
-      // No-op fallback: TS module will handle tabs when present.
+
+      c.classList.remove(ANIM_IN);
+      c.classList.add(ANIM_OUT);
+      c.addEventListener(
+        'animationend',
+        (e) => {
+          if (e.animationName === 'cardFadeOut') {
+            c.classList.remove(ANIM_OUT);
+            c.style.display = 'none';
+            // restore flow for when card is shown again
+            try {
+              c.style.position = '';
+              c.style.inset = '';
+              c.style.width = '';
+            } catch {}
+          }
+        },
+        { once: true }
+      );
+    }
+
+    const apply = (name) => {
+      const tab = name || 'general';
+      // Preserve current scroll position so switching tabs doesn't jump the sheet
+      const prevScroll = sb ? sb.scrollTop : 0;
+      try { localStorage.setItem('tp_settings_tab', tab); } catch {}
+
+      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+
+      // Hide non-selected first
+      cards.forEach((c) => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
+
+      // Then show the selected card
+      const target = cards.find((c) => c.dataset.tab === tab);
+      if (target) showCard(target);
+
+      // Restore scroll after layout/animation frame
+      try {
+        if (sb) requestAnimationFrame(() => { try { sb.scrollTop = prevScroll; } catch {} });
+      } catch {}
+    };
+    tabs.forEach((t) => {
+      t.addEventListener('click', (ev) => {
+        try {
+          apply(t.dataset.tab);
+          // Blur the button to avoid focus-induced scrolling in some browsers
+          try { ev.currentTarget && ev.currentTarget.blur && ev.currentTarget.blur(); } catch {}
+        } catch {}
+      });
+    });
+    let last = 'general';
+    try {
+      last = localStorage.getItem('tp_settings_tab') || 'general';
     } catch {}
+    // Initialize visibility (no animation on first render)
+    cards.forEach((c) => {
+      c._visible = false;
+      c.style.display = 'none';
+    });
+    apply(last);
   }
   try {
     __tpBootPush('after-setupSettingsTabs-def');
@@ -1031,7 +1597,7 @@
           try {
             await switchCamera(camSelS.value);
             _toast('Camera switched', { type: 'ok' });
-          } catch (e) {
+          } catch {
             warn('Camera switch failed', e);
             _toast('Camera switch failed');
           }
@@ -1902,18 +2468,9 @@
   // Duplicate-line disambiguation
   let __lineFreq = new Map(); // original paragraph line frequencies (by key)
   // Virtual lines (merge short runts so matcher scores over real phrases)
-  // TS matcher owns virtual-line construction; keep a lightweight placeholder
-  // so legacy consumers can safely call array methods without triggering
-  // expensive monolith-side indexing. The real TS matcher provides richer
-  // virtual-line data when installed.
-  let __vParaIndex = [];
-  // no-op push to avoid populating legacy array here (TS will own indexing)
-  try { __vParaIndex.push = function () {}; } catch {}
+  let __vParaIndex = []; // merged paragraph index
   let __vLineFreq = new Map(); // virtual line frequencies (by merged key)
-  // make .set a no-op so legacy frequency increments are ignored here
-  try { __vLineFreq.set = function () {}; } catch {}
   let __vSigCount = new Map(); // prefix signature counts (first 4 tokens) for virtual lines
-  try { __vSigCount.set = function () {}; } catch {}
   let __ngramIndex = new Map(); // ngram -> Set of paragraph indices
   // Hybrid lock state
   let HYBRID_ON = false; // in-mem truth
@@ -2061,14 +2618,6 @@
     'are',
   ]);
   function extractHighIDFPhrases(tokens, n = 3, topK = 10) {
-    try {
-      if (typeof window !== 'undefined') {
-        if (window.__tpMatcher && typeof window.__tpMatcher.extractHighIDFPhrases === 'function')
-          return window.__tpMatcher.extractHighIDFPhrases(tokens, n, topK);
-        if (window.__tpSpeech && typeof window.__tpSpeech.extractHighIDFPhrases === 'function')
-          return window.__tpSpeech.extractHighIDFPhrases(tokens, n, topK);
-      }
-    } catch {}
     const out = [];
     if (!Array.isArray(tokens) || tokens.length < n) return out;
     for (let i = 0; i <= tokens.length - n; i++) {
@@ -2119,23 +2668,6 @@
     } catch {
       return 50;
     }
-  }
-  // Delegateable n-gram helper: prefer TS matcher exports when available
-  function getNgrams(tokens, n) {
-    try {
-      if (typeof window !== 'undefined') {
-        if (window.__tpMatcher && typeof window.__tpMatcher.getNgrams === 'function')
-          return window.__tpMatcher.getNgrams(tokens, n);
-        if (window.__tpSpeech && typeof window.__tpSpeech.getNgrams === 'function')
-          return window.__tpSpeech.getNgrams(tokens, n);
-      }
-    } catch {}
-    const ngrams = [];
-    if (!Array.isArray(tokens) || tokens.length < n) return ngrams;
-    for (let i = 0; i <= tokens.length - n; i++) {
-      ngrams.push(tokens.slice(i, i + n).join(' '));
-    }
-    return ngrams;
   }
   // Helper: compute in-vocab token ratio for spoken overlap gating
   function inVocabRatio(tokens, vocabSet) {
@@ -2270,61 +2802,171 @@
     speakersBody;
 
   // TP: meter-audio
-  // Minimal delegating shims: prefer TS `__tpMic` implementations (startDbMeter / clearBars).
-  // The heavy AudioContext + animation loop was moved into the TypeScript module.
+  // ───────────────────────────────────────────────────────────────
+  // dB meter utilities (single source of truth: top bar only)
+  // ───────────────────────────────────────────────────────────────
   function buildDbBars(target) {
-    try {
-      if (!target) return [];
-      // Prefer TS-side builder if exposed
-      if (window.__tpMic && typeof window.__tpMic.buildDbBars === 'function') {
-        return window.__tpMic.buildDbBars(target);
-      }
-      // Lightweight fallback: ensure '.bar' elements exist (small visual fallback)
-      let bars = Array.from(target.querySelectorAll('.bar'));
-      if (bars.length) return bars;
-      target.classList.add('db-bars');
-      const total = 12;
-      for (let i = 0; i < total; i++) {
-        const b = document.createElement('div');
-        b.className = 'bar';
-        target.appendChild(b);
-      }
-      const peak = document.createElement('div');
-      peak.className = 'peak-marker';
-      target.appendChild(peak);
-      return Array.from(target.querySelectorAll('.bar'));
-    } catch {
-      return [];
+    if (!target) return [];
+    target.classList.add('db-bars');
+    // If already has bars, reuse
+    let bars = Array.from(target.querySelectorAll('.bar'));
+    if (bars.length >= 16) return bars;
+    target.innerHTML = '';
+    const total = 20;
+    for (let i = 0; i < total; i++) {
+      const b = document.createElement('div');
+      b.className = 'bar';
+      const ratio = i / (total - 1); // 0 (left) -> 1 (right)
+      // Interpolate hue 120 (green) -> 0 (red)
+      const hue = 120 - 120 * ratio;
+      const sat = 70; // percent
+      const light = 30 + ratio * 25; // brighten a bit toward red end
+      b.style.setProperty('--bar-color', `hsl(${hue}deg ${sat}% ${light}%)`);
+      target.appendChild(b);
     }
+    // Peak marker
+    const peak = document.createElement('div');
+    peak.className = 'peak-marker';
+    peak.style.transform = 'translateX(0)';
+    target.appendChild(peak);
+    // Scale ticks (every 5 bars) – positioned absolutely
+    const ticks = document.createElement('div');
+    ticks.style.cssText =
+      'position:absolute;inset:0;pointer-events:none;font:8px/1 ui-monospace,monospace;color:#fff5;display:flex;';
+    for (let i = 0; i < 20; i++) {
+      if (i % 5 === 0) {
+        const t = document.createElement('div');
+        t.style.cssText = 'flex:1;position:relative;';
+        const line = document.createElement('div');
+        line.style.cssText =
+          'position:absolute;top:0;bottom:0;left:0;width:1px;background:#ffffff22';
+        const lbl = document.createElement('div');
+        lbl.textContent = (i === 0 ? '-∞' : `-${20 - i}dB`).replace('--', '-');
+        lbl.style.cssText =
+          'position:absolute;bottom:100%;left:0;transform:translate(-2px,-2px);white-space:nowrap;';
+        t.appendChild(line);
+        t.appendChild(lbl);
+        ticks.appendChild(t);
+      } else {
+        const spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        ticks.appendChild(spacer);
+      }
+    }
+    target.appendChild(ticks);
+    return Array.from(target.querySelectorAll('.bar'));
   }
 
   function clearBars(el) {
-    try {
-      if (window.__tpMic && typeof window.__tpMic.clearBars === 'function') return window.__tpMic.clearBars(el);
-      if (!el) return;
-      el.querySelectorAll('.bar.on').forEach((b) => b.classList.remove('on'));
-    } catch {}
+    if (!el) return;
+    el.querySelectorAll('.bar.on').forEach((b) => b.classList.remove('on'));
   }
 
   function _stopDbMeter() {
+    if (dbAnim) cancelAnimationFrame(dbAnim);
+    dbAnim = null;
     try {
-      // Prefer TS stop/clear if present
-      if (window.__tpMic && typeof window.__tpMic._stop === 'function') return window.__tpMic._stop();
-      if (dbAnim) cancelAnimationFrame(dbAnim);
-      dbAnim = null;
-      try { if (audioStream) audioStream.getTracks().forEach((t) => t.stop()); } catch {}
-      audioStream = null;
-      analyser = null;
-      audioCtx = null;
-      try { clearBars(dbMeterTop); } catch {}
+      if (audioStream) audioStream.getTracks().forEach((t) => t.stop());
+    } catch {}
+    try {
+      // Close AudioContext to free system resources and allow a fresh one later
+      if (audioCtx && typeof audioCtx.close === 'function') {
+        try { audioCtx.close().catch?.(() => {}); } catch { try { audioCtx.close(); } catch {} }
+      }
+    } catch {}
+    audioStream = null;
+    audioCtx = null;
+    analyser = null;
+    try {
+      clearBars(dbMeterTop);
     } catch {}
   }
 
   async function startDbMeter(stream) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) {
+      warn('AudioContext unavailable');
+      return;
+    }
+    const ctx = new AC();
+    audioCtx = ctx; // retain for suspend/resume when tab visibility changes
     try {
-      if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') return window.__tpMic.startDbMeter(stream);
-      // No-op fallback: TS module will mount a proper meter when available.
+      if (typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+        try {
+          await ctx.resume();
+        } catch {}
+      }
     } catch {}
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const topBars = buildDbBars(dbMeterTop);
+    const peakEl = dbMeterTop?.querySelector('.peak-marker');
+    peakHold.value = 0;
+    peakHold.lastUpdate = performance.now();
+    // Log scaling configuration
+    const dBFloor = -60; // anything quieter treated as silence
+    const attack = 0.55; // 0..1 (higher = faster rise)
+    const release = 0.15; // 0..1 (higher = faster fall)
+    let levelSmooth = 0; // smoothed 0..1 level after log mapping
+    const draw = () => {
+      // If analyser was torn down (e.g., mic released), stop the loop gracefully
+      if (!analyser || !data) {
+        dbAnim = null;
+        return;
+      }
+      analyser.getByteFrequencyData(data);
+      // Root-mean-square amplitude 0..1
+      const rms = Math.sqrt(data.reduce((a, b) => a + b * b, 0) / data.length) / 255;
+      // Convert to approximate dBFS
+      const dbfs = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+      // Clamp & normalize to 0..1 based on floor
+      const dB = dbfs === -Infinity ? dBFloor : Math.max(dBFloor, Math.min(0, dbfs));
+      let level = (dB - dBFloor) / (0 - dBFloor); // linear 0..1 after log compress
+      if (!isFinite(level) || level < 0) level = 0;
+      else if (level > 1) level = 1;
+      // Smooth (different attack/release)
+      if (level > levelSmooth) levelSmooth = levelSmooth + (level - levelSmooth) * attack;
+      else levelSmooth = levelSmooth + (level - levelSmooth) * release;
+      const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth * topBars.length)));
+      for (let i = 0; i < topBars.length; i++) topBars[i].classList.toggle('on', i < bars);
+      // Peak hold: keep highest bar for a short decay
+      const now = performance.now();
+      if (bars > peakHold.value) {
+        peakHold.value = bars;
+        peakHold.lastUpdate = now;
+      } else if (now - peakHold.lastUpdate > 350) {
+        // start decay after hold period
+        peakHold.value = Math.max(
+          0,
+          peakHold.value - peakHold.decay * ((now - peakHold.lastUpdate) / 16)
+        );
+      }
+      const peakIndex = Math.max(0, Math.min(topBars.length - 1, Math.floor(peakHold.value - 1)));
+      if (peakEl) {
+        const bar = topBars[peakIndex];
+        if (bar) {
+          const x = bar.offsetLeft;
+          peakEl.style.transform = `translateX(${x}px)`;
+          peakEl.style.opacity = peakHold.value > 0 ? '.9' : '0';
+          // Color shift based on level percentage
+          const pct = levelSmooth; // use smoothed 0..1 level for color classification
+          let color = '#2eff7d'; // green
+          if (pct > 0.85) color = '#ff3131';
+          else if (pct > 0.65) color = '#ffb347';
+          peakEl.style.backgroundColor = color;
+          peakEl.style.boxShadow = `0 0 4px ${color}aa`;
+        }
+        // Tooltip stats (rounded)
+        peakEl.title = `Approx RMS: ${(rms * 100).toFixed(0)}%\nApprox dBFS: ${dbfs === -Infinity ? '–∞' : dbfs.toFixed(1)} dB`;
+      }
+  // Guard dB meter animation: skip when no script or watchdog unarmed
+  try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
+  dbAnim = requestAnimationFrame(draw);
+    };
+    draw();
   }
 
   async function requestMic() {
@@ -3002,13 +3644,13 @@
           VIEWER_HEIGHT_BASE
         );
       }
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro Calm] scroller lock failed', e);
     }
     // Run minimal wiring first (meters, help overlay, normalize button)
     try {
       __initMinimal();
-    } catch (e) {
+    } catch {
       console.warn('Minimal init failed', e);
     }
     // ⬇️ grab these *first*
@@ -3134,15 +3776,10 @@
               debug({ tag: 'fallback-nudge', top: to, idx: bestIdx, phase: 'small' });
           } catch {}
           try {
-            // Prefer scheduler/request hook when available, fallback to direct scrollTop
-            try {
-              if (typeof requestScroll === 'function') requestScroll(to);
-              else if (window.__tpScrollWrite) window.__tpScrollWrite(to);
-              else viewer.scrollTo({ top: to, behavior: 'instant' });
-            } catch {
-              viewer.scrollTop = to;
-            }
-          } catch {}
+            viewer.scrollTo({ top: to, behavior: 'instant' });
+          } catch {
+            viewer.scrollTop = to;
+          }
           syncDisplay();
           S.smallPushes++;
           return true;
@@ -3166,14 +3803,10 @@
               debug({ tag: 'fallback-nudge', top: targetY, idx: bestIdx, phase: 'mini-seek' });
           } catch {}
           try {
-            try {
-              if (typeof requestScroll === 'function') requestScroll(targetY);
-              else if (window.__tpScrollWrite) window.__tpScrollWrite(targetY);
-              else viewer.scrollTo({ top: targetY, behavior: 'instant' });
-            } catch {
-              viewer.scrollTop = targetY;
-            }
-          } catch {}
+            viewer.scrollTo({ top: targetY, behavior: 'instant' });
+          } catch {
+            viewer.scrollTop = targetY;
+          }
           syncDisplay();
           S.smallPushes = 0; // reset after successful mini-seek
           return true;
@@ -3605,11 +4238,8 @@
             const scrollBy = (dy) => {
               try {
                 const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-                try {
-                  if (typeof requestScroll === 'function') requestScroll(next);
-                  else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
-                  else viewer.scrollTop = next;
-                } catch {}
+                if (typeof requestScroll === 'function') requestScroll(next);
+                else viewer.scrollTop = next;
                 const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
                 const ratio = max
                   ? (typeof window.__lastScrollTarget === 'number'
@@ -3692,11 +4322,8 @@
             const scrollBy = (dy) => {
               try {
                 const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-                try {
-                  if (typeof requestScroll === 'function') requestScroll(next);
-                  else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
-                  else viewer.scrollTop = next;
-                } catch {}
+                if (typeof requestScroll === 'function') requestScroll(next);
+                else viewer.scrollTop = next;
                 const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
                 const ratio = max
                   ? (typeof window.__lastScrollTarget === 'number'
@@ -3751,11 +4378,8 @@
           try {
             const step = 48; // px
             const next = Math.max(0, Math.min(viewer.scrollTop + step, viewer.scrollHeight));
-                try {
-                  if (typeof requestScroll === 'function') requestScroll(next);
-                  else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
-                  else viewer.scrollTop = next;
-                } catch {}
+            if (typeof requestScroll === 'function') requestScroll(next);
+            else viewer.scrollTop = next;
             const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
             const ratio = max
               ? (typeof window.__lastScrollTarget === 'number'
@@ -3840,7 +4464,7 @@
         if (!ScriptsModule || !ScriptsModule.Scripts) throw new Error('Scripts module not available');
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
-      } catch (e) {
+      } catch {
         console.error('initScriptsUI failed', e);
       }
     }
@@ -3856,7 +4480,7 @@
           .map((s) => `<option value="${s.id}">${s.title}</option>`)
           .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
-      } catch (e) {
+      } catch {
         void e;
       }
     }
@@ -3918,7 +4542,7 @@
         if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
         setEditorContent(s.content || '');
         _toast('Script loaded', { type: 'ok' });
-      } catch (e) {
+      } catch {
         console.debug('Scripts.load error', e);
         _toast('Load failed', { type: 'error' });
       }
@@ -3932,7 +4556,7 @@
         scriptTitle && (scriptTitle.value = '');
         refreshScriptsDropdown();
         _toast('Script deleted', {});
-      } catch (e) {
+      } catch {
         console.debug('Scripts.delete error', e);
         _toast('Delete failed', { type: 'error' });
       }
@@ -3950,7 +4574,7 @@
           scriptTitle && (scriptTitle.value = t);
           refreshScriptsDropdown();
         }
-      } catch (e) {
+      } catch {
         console.debug('Scripts.rename error', e);
       }
     }
@@ -4388,14 +5012,10 @@
     }
     try {
       const scMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-control.js'));
-        __scrollCtl = new scMod.default({
+      __scrollCtl = new scMod.default({
         getViewerTop: () => viewer.scrollTop,
         requestScroll: (top) => {
-          try {
-            if (typeof requestScroll === 'function') return requestScroll(top);
-            if (window.__tpScrollWrite) return window.__tpScrollWrite(top);
-            viewer.scrollTop = top;
-          } catch {}
+          viewer.scrollTop = top;
         },
         getViewportHeight: () => viewer.clientHeight,
         getViewerElement: () => viewer,
@@ -6183,18 +6803,9 @@
           else if (ratio >= 0.6) step = Math.floor(step * 1.25);
         }
       } catch {}
-      try {
-        const nextTop = Math.max(0, Math.min(viewer.scrollHeight, viewer.scrollTop + Math.sign(dy) * Math.min(absdy, step)));
-        if (typeof requestScroll === 'function') requestScroll(nextTop);
-        else if (window.__tpScrollWrite) window.__tpScrollWrite(nextTop);
-        else viewer.scrollTop = nextTop;
-      } catch {}
+      viewer.scrollTop += Math.sign(dy) * Math.min(absdy, step);
     } else {
-      try {
-        if (typeof requestScroll === 'function') requestScroll(target);
-        else if (window.__tpScrollWrite) window.__tpScrollWrite(target);
-        else viewer.scrollTop = target;
-      } catch {}
+      viewer.scrollTop = target;
     }
     if (typeof markAdvance === 'function') markAdvance();
     else _lastAdvanceAt = performance.now();
@@ -6374,11 +6985,8 @@
     const scrollBy = (dy) => {
       try {
         const next = Math.max(0, Math.min(viewer.scrollTop + dy, viewer.scrollHeight));
-        try {
-          if (typeof requestScroll === 'function') requestScroll(next);
-          else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
-          else viewer.scrollTop = next;
-        } catch {}
+        if (typeof requestScroll === 'function') requestScroll(next);
+        else viewer.scrollTop = next;
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max
           ? (typeof window.__lastScrollTarget === 'number'
@@ -6574,53 +7182,115 @@
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
-  // --- PLL delegator ---
-  // Legacy PLL internals have been removed. Keep a tiny delegator object
-  // named `PLL` that forwards to the authoritative TypeScript implementation
-  // installed on `window.PLL`. This file should not contain servo/bias logic.
-  const PLL = {
-    update: (opts) => {
+  // --- PLL Bias Controller for Hybrid Auto-Scroll ---
+  const PLL = (() => {
+    let biasPct = 0,
+      errF = 0,
+      lastErrF = 0,
+      lastT = performance.now(),
+      lastGood = performance.now(),
+      lastAnchorTs = 0,
+      state = 'LOST'; // Initialize state
+    const S = { Kp: 0.022, Kd: 0.0025, maxBias: 0.12, confMin: 0.6, decayMs: 550, lostMs: 1800 };
+
+    // Telemetry counters
+    const telemetry = {
+      timeLocked: 0,
+      timeCoast: 0,
+      timeLost: 0,
+      avgLeadLag: 0,
+      samples: 0,
+      nearClampCount: 0,
+      anchorCount: 0,
+      lastSample: performance.now(),
+    };
+
+    function scriptProgress() {
       try {
-        return typeof window !== 'undefined' && window.PLL && typeof window.PLL.update === 'function'
-          ? window.PLL.update(opts)
-          : undefined;
-      } catch { return undefined; }
-    },
-    tune: (p) => {
-      try {
-        return typeof window !== 'undefined' && window.PLL && typeof window.PLL.tune === 'function'
-          ? window.PLL.tune(p)
-          : undefined;
-      } catch { return undefined; }
-    },
-    allowAnchor: () => {
-      try {
-        const r = typeof window !== 'undefined' && window.PLL && typeof window.PLL.allowAnchor === 'function'
-          ? window.PLL.allowAnchor()
-          : undefined;
-        return typeof r === 'boolean' ? r : true; // default: allow anchors
-      } catch { return true; }
-    },
-    onPause: () => {
-      try {
-        return typeof window !== 'undefined' && window.PLL && typeof window.PLL.onPause === 'function'
-          ? window.PLL.onPause()
-          : undefined;
-      } catch { return undefined; }
-    },
-    get biasPct() {
-      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.biasPct !== 'undefined' ? window.PLL.biasPct : 0; } catch { return 0; }
-    },
-    get state() {
-      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.state !== 'undefined' ? window.PLL.state : 'UNKNOWN'; } catch { return 'UNKNOWN'; }
-    },
-    get errF() {
-      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.errF !== 'undefined' ? window.PLL.errF : 0; } catch { return 0; }
-    },
-    get telemetry() {
-      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.telemetry !== 'undefined' ? window.PLL.telemetry : {}; } catch { return {}; }
-    },
-  };
+        const total = paraIndex.length;
+        if (!total) return 0;
+        return Math.min(1, currentIndex / total);
+      } catch {
+        return 0;
+      }
+    }
+
+    function update({ yMatch, yTarget, conf, dt }) {
+      const now = performance.now();
+      const dts = (dt ?? now - lastT) / 1000;
+      lastT = now;
+      const err = yMatch - yTarget; // sign convention: positive = behind
+      errF = 0.8 * errF + 0.2 * err;
+
+      // End-game taper (soften in last 20%)
+      const p = scriptProgress();
+      const endTaper = p > 0.8 ? 0.6 : 1.0;
+
+      if (conf >= S.confMin) {
+        lastGood = now;
+        const dErr = (errF - lastErrF) / Math.max(dts, 0.016);
+        let bias = S.Kp * errF + S.Kd * dErr;
+        const clamp = (state === 'LOCK_SEEK' ? S.maxBias : S.maxBias * 0.8) * endTaper;
+        biasPct = Math.max(-clamp, Math.min(clamp, biasPct + bias));
+        state = Math.abs(errF) < 12 ? 'LOCKED' : 'LOCK_SEEK';
+      } else {
+        // Forward-only bias at low conf (no accidental slow-downs)
+        if (conf < S.confMin) {
+          biasPct = Math.max(0, biasPct * Math.exp(-dts / (S.decayMs / 1000)));
+        } else {
+          biasPct = biasPct * Math.exp(-dts / (S.decayMs / 1000));
+        }
+        state = now - lastGood > S.lostMs ? 'LOST' : 'COAST';
+      }
+      lastErrF = errF;
+
+      // Update telemetry after state is determined
+      const dtSample = now - telemetry.lastSample;
+      if (state === 'LOCKED') telemetry.timeLocked += dtSample;
+      else if (state === 'COAST') telemetry.timeCoast += dtSample;
+      else if (state === 'LOST') telemetry.timeLost += dtSample;
+      telemetry.avgLeadLag =
+        (telemetry.avgLeadLag * telemetry.samples + Math.abs(errF)) / (telemetry.samples + 1);
+      telemetry.samples++;
+      if (Math.abs(biasPct) > S.maxBias * 0.8) telemetry.nearClampCount++;
+      telemetry.lastSample = now;
+    }
+
+    function allowAnchor() {
+      const now = performance.now();
+      if (now - lastAnchorTs < 1200) return false; // Anchor rate-limit
+      lastAnchorTs = now;
+      telemetry.anchorCount++;
+      return true;
+    }
+
+    // Pause breathing (feels natural)
+    function onPause() {
+      PLL.tune({ decayMs: 400 });
+      setTimeout(() => PLL.tune({ decayMs: 550 }), 2000); // Reset after 2s
+    }
+
+    return {
+      update,
+      allowAnchor,
+      onPause,
+      get biasPct() {
+        return biasPct;
+      },
+      get state() {
+        return state;
+      },
+      get errF() {
+        return errF;
+      },
+      get telemetry() {
+        return { ...telemetry };
+      },
+      tune(p) {
+        Object.assign(S, p);
+      },
+    };
+  })();
 
   function tokenCoverage(lineTokens, tailTokens) {
     try {
@@ -6826,63 +7496,1289 @@
   }
 
   // Advance currentIndex by trying to align recognized words to the upcoming script words
-  // TP: advance-by-transcript — lightweight delegating implementation
+  // TP: advance-by-transcript
   function advanceByTranscript(transcript, isFinal) {
+    // Hard gate: no matching when speech sync is off
+    if (!speechOn) {
+      try {
+        if (typeof debug === 'function') debug({ tag: 'match:gate', reason: 'speech-off' });
+      } catch {}
+      return;
+    }
+    // Adopt current smoothness settings if provided
+    const SC = window.__TP_SCROLL || {
+      DEAD: DEAD_BAND_PX,
+      THROTTLE: CORRECTION_MIN_MS,
+      FWD: MAX_FWD_STEP_PX,
+      BACK: MAX_BACK_STEP_PX,
+    };
+    DEAD_BAND_PX = SC.DEAD;
+    CORRECTION_MIN_MS = SC.THROTTLE;
+    MAX_FWD_STEP_PX = SC.FWD;
+    MAX_BACK_STEP_PX = SC.BACK;
+    if (!scriptWords.length) return;
+    const now = performance.now();
+    if (now - _lastMatchAt < MATCH_INTERVAL_MS && !isFinal) return;
+    _lastMatchAt = now;
+
+    // Process each transcript individually (as per pseudocode)
+    const spokenAll = normTokens(transcript);
+    const spoken = spokenAll.slice(-SPOKEN_N);
+    if (!spoken.length) return;
+
+    // Skip batching - process each transcript immediately
+    const batchTokens = spoken;
+
+    // Never score empty batches - require minimum 3 tokens
+    const MIN_BATCH_TOKENS = 3;
+    if (batchTokens.length < MIN_BATCH_TOKENS) {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'transcript:skip',
+            reason: 'insufficient-tokens',
+            tokens: batchTokens.length,
+            minRequired: MIN_BATCH_TOKENS,
+            isFinal,
+          });
+      } catch {}
+      return; // Buffer until we have enough tokens
+    }
+
+    // Debounce partials: only score finals or partials with significant new content
+    if (!isFinal) {
+      // For now, skip all partials - only process finals
+      // TODO: Implement smart partial processing based on content changes
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'transcript:skip',
+            reason: 'partial-debounced',
+            tokens: batchTokens.length,
+            isFinal,
+          });
+      } catch {}
+      return;
+    }
+
     try {
-      // Prefer the TS orchestrator/matcher when it's been loaded. Delegate early.
-      if (window.__tpSpeech && typeof window.__tpSpeech.matchBatch === 'function') {
-        try {
-          if (!speechOn) return; // respect speech gating
-          const res = window.__tpSpeech.matchBatch(transcript, isFinal) || {};
-          const bestIdx = typeof res.bestIdx === 'number' ? res.bestIdx : null;
-          const bestSim = typeof res.bestSim === 'number' ? res.bestSim : 0;
-          if (bestIdx !== null && Array.isArray(paraIndex) && paraIndex.length) {
-            currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
-            window.currentIndex = currentIndex;
-            window.__tpCommit = window.__tpCommit || {};
-            window.__tpCommit.idx = currentIndex;
-            window.__tpCommit.ts = performance.now();
-            // Emit alignment sample if available
+      if (typeof debug === 'function')
+        debug({
+          tag: 'transcript:process',
+          tokens: batchTokens.length,
+          isFinal,
+        });
+    } catch {}
+
+    // Line-level similarity scoring function
+    function computeLineSimilarity(spokenTokens, scriptText) {
+      const scriptTokens = normTokens(scriptText);
+
+      // Component 1: 0.5 · cosine(TF-IDF bi/tri-grams)
+      const tfidfScore = computeTFIDFSimilarity(spokenTokens, scriptTokens);
+
+      // Component 2: 0.3 · character F1 (normalized Levenshtein)
+      const charF1 = computeCharacterF1(spokenTokens.join(' '), scriptTokens.join(' '));
+
+      // Component 3: 0.2 · Jaccard on stemmed tokens
+      const jaccardScore = computeJaccardSimilarity(spokenTokens, scriptTokens);
+
+      // Component 4: +δ for entity matches (numbers, names, toponyms)
+      const entityBonus = computeEntityBonus(spokenTokens, scriptTokens);
+
+      let finalScore = 0.5 * tfidfScore + 0.3 * charF1 + 0.2 * jaccardScore + entityBonus;
+
+      // Short-line penalty: -0.12 for lines <5 tokens
+      if (scriptTokens.length < 5) {
+        finalScore -= 0.12;
+      }
+
+      return finalScore;
+    }
+
+    // TF-IDF cosine similarity for bi/tri-grams
+    function computeTFIDFSimilarity(tokens1, tokens2) {
+      const ngrams1 = getNgrams(tokens1, 2).concat(getNgrams(tokens1, 3));
+      const ngrams2 = getNgrams(tokens2, 2).concat(getNgrams(tokens2, 3));
+
+      const allNgrams = new Set([...ngrams1, ...ngrams2]);
+      const vec1 = [];
+      const vec2 = [];
+
+      for (const ngram of allNgrams) {
+        vec1.push(ngrams1.filter((n) => n === ngram).length);
+        vec2.push(ngrams2.filter((n) => n === ngram).length);
+      }
+
+      return cosineSimilarity(vec1, vec2);
+    }
+
+    // Character-level F1 score using normalized Levenshtein
+    function computeCharacterF1(text1, text2) {
+      try { if (window && typeof window.computeCharacterF1 === 'function') return window.computeCharacterF1(text1, text2); } catch {};
+      const chars1 = text1.split('');
+      const chars2 = text2.split('');
+
+      // Simple character overlap for F1
+      const set1 = new Set(chars1);
+      const set2 = new Set(chars2);
+
+      const intersection = new Set([...set1].filter((x) => set2.has(x)));
+      const precision = set1.size ? intersection.size / set1.size : 0;
+      const recall = set2.size ? intersection.size / set2.size : 0;
+
+      return precision + recall > 0 ? (2 * (precision * recall)) / (precision + recall) : 0;
+    }
+
+    // Jaccard similarity on stemmed tokens
+    function computeJaccardSimilarity(tokens1, tokens2) {
+      try { if (window && typeof window.computeJaccardSimilarity === 'function') return window.computeJaccardSimilarity(tokens1, tokens2); } catch {};
+      const stem1 = new Set(tokens1.map(stemToken));
+      const stem2 = new Set(tokens2.map(stemToken));
+
+      const intersection = new Set([...stem1].filter((x) => stem2.has(x)));
+      const union = new Set([...stem1, ...stem2]);
+
+      return union.size ? intersection.size / union.size : 0;
+    }
+
+    // Entity bonus for numbers, names, toponyms
+    function computeEntityBonus(tokens1, tokens2) {
+      try { if (window && typeof window.computeEntityBonus === 'function') return window.computeEntityBonus(tokens1, tokens2); } catch {};
+      let bonus = 0;
+
+      // Number matches
+      const nums1 = tokens1.filter((t) => /^\d+(\.\d+)?$/.test(t));
+      const nums2 = tokens2.filter((t) => /^\d+(\.\d+)?$/.test(t));
+      if (nums1.length > 0 && nums2.length > 0) {
+        const numMatch = nums1.some((n1) => nums2.includes(n1)) ? 1 : 0;
+        bonus += 0.1 * numMatch;
+      }
+
+      // Name/toponym matches (capitalized words)
+      const names1 = tokens1.filter((t) => /^[A-Z][a-z]+$/.test(t));
+      const names2 = tokens2.filter((t) => /^[A-Z][a-z]+$/.test(t));
+      if (names1.length > 0 && names2.length > 0) {
+        const nameMatch = names1.some((n1) => names2.includes(n1)) ? 1 : 0;
+        bonus += 0.15 * nameMatch;
+      }
+
+      return bonus;
+    }
+
+    // Helper functions
+    function getNgrams(tokens, n) {
+      try {
+        if (window && typeof window.getNgrams === 'function') return window.getNgrams(tokens, n);
+      } catch { }
+      const ngrams = [];
+      for (let i = 0; i <= tokens.length - n; i++) {
+        ngrams.push(tokens.slice(i, i + n).join(' '));
+      }
+      return ngrams;
+    }
+
+    function cosineSimilarity(vec1, vec2) {
+      try { if (window && typeof window.cosineSimilarity === 'function') return window.cosineSimilarity(vec1, vec2); } catch {};
+      let dot = 0,
+        norm1 = 0,
+        norm2 = 0;
+      for (let i = 0; i < vec1.length; i++) {
+        dot += vec1[i] * vec2[i];
+        norm1 += vec1[i] * vec1[i];
+        norm2 += vec2[i] * vec2[i];
+      }
+      return norm1 && norm2 ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0;
+    }
+
+    function stemToken(token) {
+      // Simple stemming: remove common suffixes
+      return token.toLowerCase().replace(/ing$|ed$|er$|est$|ly$|s$/, '');
+    }
+
+    // Viterbi step: find best path through time given previous path and current scores
+    function viterbiStep(prevPath, scores, alpha, beta, loopPenalty) {
+      const candidates = Object.keys(scores)
+        .map(Number)
+        .sort((a, b) => a - b);
+      if (candidates.length === 0) return { idx: __viterbiIPred, path: prevPath };
+
+      let bestIdx = candidates[0];
+      let bestScore = -Infinity;
+
+      for (const j of candidates) {
+        let score = scores[j];
+
+        // Apply emission penalty (β)
+        score *= 1 - beta;
+
+        // Apply transition penalties from previous position
+        const prevIdx = prevPath.length > 0 ? prevPath[prevPath.length - 1] : __viterbiIPred;
+        const delta = Math.abs(j - prevIdx);
+
+        // α penalty for transitions between different states
+        if (delta > 0) {
+          score *= 1 - alpha * Math.min(delta / 20, 1);
+        }
+
+        // Loop penalty bonus for staying in same state
+        if (delta === 0) {
+          score *= 1 + loopPenalty;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = j;
+        }
+      }
+
+      const newPath = [...prevPath, bestIdx];
+      return { idx: bestIdx, path: newPath };
+    }
+
+    // Line-level matching: score against concatenated line windows [i..i+2]
+    let windowAhead = MATCH_WINDOW_AHEAD;
+    try {
+      const TAIL_N = 3; // examine last 3 tokens for duplication nearby
+      if (spoken.length >= TAIL_N) {
+        const tail = spoken.slice(-TAIL_N);
+        const bStart = Math.max(0, currentIndex - 80);
+        const bEnd = Math.min(scriptWords.length, currentIndex + Math.min(MATCH_WINDOW_AHEAD, 160));
+        let occ = 0;
+        let lastPos = -9999;
+        let tightSpan = 0;
+        for (let i = bStart; i <= bEnd - TAIL_N; i++) {
+          if (
+            scriptWords[i] === tail[0] &&
+            scriptWords[i + 1] === tail[1] &&
+            scriptWords[i + 2] === tail[2]
+          ) {
+            occ++;
+            if (lastPos > 0) tightSpan += Math.min(200, i - lastPos);
+            lastPos = i;
+            if (occ >= 4) break; // enough evidence
+          }
+        }
+        if (occ >= 3) {
+          const avgGap = occ > 1 ? tightSpan / (occ - 1) : 9999;
+          // Consider it “common nearby” if appears ≥3x and average gap is small
+          if (avgGap < 60) {
+            const prev = windowAhead;
+            // Improved tail-common tuning: be more conservative with narrowing
+            // Only narrow if we have good similarity and no jitter issues
+            const safeToNarrow =
+              (typeof bestSim === 'number' ? bestSim >= 0.6 : true) &&
+              !(window.jitter && window.jitter.elevated);
+            windowAhead = safeToNarrow ? Math.max(120, Math.min(windowAhead, 40)) : 250;
             try {
-              const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null;
-              const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
-              if (matchedPara && matchedPara.el && viewerEl) {
-                try { const epx = errPxFrom(matchedPara.el, viewerEl); if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, bestSim); } catch {}
-              }
+              if (typeof debug === 'function')
+                debug({
+                  tag: 'match:window-tune',
+                  reason: 'tail-common',
+                  tail: tail.join(' '),
+                  occ,
+                  avgGap,
+                  windowAheadPrev: prev,
+                  windowAhead,
+                  safeToNarrow,
+                  bestSim: typeof bestSim === 'number' ? Number(bestSim.toFixed(3)) : 'unknown',
+                });
             } catch {}
           }
-        } catch (e) {
-          try { console.warn && console.warn('[TP] delegated match failed', e); } catch {}
         }
-        return;
       }
+    } catch {}
 
-      // Alternate name: window.__tpMatcher
-      if (window.__tpMatcher && typeof window.__tpMatcher.matchBatch === 'function') {
-        try {
-          if (!speechOn) return;
-          const res = window.__tpMatcher.matchBatch(transcript, isFinal) || {};
-          const bestIdx = typeof res.bestIdx === 'number' ? res.bestIdx : null;
-          const bestSim = typeof res.bestSim === 'number' ? res.bestSim : 0;
-          if (bestIdx !== null && Array.isArray(paraIndex) && paraIndex.length) {
-            currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
-            window.currentIndex = currentIndex;
-            window.__tpCommit = window.__tpCommit || {};
-            window.__tpCommit.idx = currentIndex;
-            window.__tpCommit.ts = performance.now();
-            try { const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null; const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement; if (matchedPara && matchedPara.el && viewerEl) { try { const epx = errPxFrom(matchedPara.el, viewerEl); if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, bestSim); } catch {} } } catch {}
-          }
-        } catch (e) {
-          try { console.warn && console.warn('[TP] delegated (alt) match failed', e); } catch {}
+    // LOST watchdog: widen window if similarity stays low for multiple cycles
+    try {
+      if (typeof bestSim === 'number' && bestSim < 0.5) {
+        window.__lostWatchdogCount = (window.__lostWatchdogCount || 0) + 1;
+        if (window.__lostWatchdogCount >= 3) {
+          const prev = windowAhead;
+          windowAhead = Math.max(windowAhead, 900); // widen window significantly
+          try {
+            if (typeof debug === 'function')
+              debug({
+                tag: 'match:lost-watchdog',
+                reason: 'low-sim-watchdog',
+                watchdogCount: window.__lostWatchdogCount,
+                windowAheadPrev: prev,
+                windowAhead,
+                bestSim: Number(bestSim.toFixed(3)),
+              });
+          } catch {}
         }
-        return;
+      } else {
+        window.__lostWatchdogCount = 0; // reset on good similarity
       }
+    } catch {}
 
-      // No TS matcher available — do nothing. Legacy matcher removed in favor of TS implementation.
-      return;
-    } catch (e) {
-      try { console.warn('[TP] advanceByTranscript unexpected error', e); } catch {}
+    // Core loop: score candidates seeded by n-grams or window fallback
+    let i_pred = __viterbiIPred || currentIndex; // Use Viterbi prediction or fallback to current
+    const candidates = new Set(); // Use Set to avoid duplicates
+
+    try {
+      if (typeof debug === 'function')
+        debug({
+          tag: 'match:setup',
+          scriptWords: scriptWords.length,
+          paraIndex: paraIndex.length,
+          currentIndex,
+          i_pred,
+          batchTokens: batchTokens.slice(0, 5), // first 5 tokens
+        });
+    } catch {}
+
+    // N-gram candidate seeding: find positions containing n-grams from batchTokens
+    const batchNgrams = new Set([...getNgrams(batchTokens, 3), ...getNgrams(batchTokens, 4)]);
+
+    let ngramHits = 0;
+    for (const ngram of batchNgrams) {
+      const positions = __ngramIndex.get(ngram);
+      if (positions) {
+        for (const pos of positions) {
+          candidates.add(pos);
+          ngramHits++;
+        }
+      }
     }
+
+    // If no n-gram hits, fall back to window-based candidates
+    if (candidates.size === 0) {
+      const candidateStart = Math.max(0, Math.floor(currentIndex) - MATCH_WINDOW_BACK);
+      const candidateEnd = Math.min(scriptWords.length - 1, Math.floor(i_pred) + windowAhead);
+
+      for (let j = candidateStart; j <= candidateEnd; j++) {
+        candidates.add(j);
+      }
+
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:candidates-fallback',
+            reason: 'no-ngram-hits',
+            windowStart: candidateStart,
+            windowEnd: candidateEnd,
+            candidates: candidates.size,
+          });
+      } catch {}
+    } else {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:candidates-ngram',
+            ngramHits,
+            uniqueCandidates: candidates.size,
+            batchNgrams: batchNgrams.size,
+          });
+      } catch {}
+    }
+
+    // Instrumentation for verification
+    try {
+      if (typeof debug === 'function') {
+        const normBatch = batchTokens.join(' ');
+        const scriptSampleStart = Math.max(0, Math.floor(i_pred) - 5);
+        const scriptSampleEnd = Math.min(scriptWords.length, Math.floor(i_pred) + 5);
+        const scriptSampleTokens = scriptWords.slice(scriptSampleStart, scriptSampleEnd);
+        const normScriptSample = normTokens(scriptSampleTokens.join(' ')).join(' ');
+        const examplePositions = Array.from(candidates).slice(0, 3); // first 3 positions
+        const windowBounds =
+          candidates.size === 0 ? { start: candidateStart, end: candidateEnd } : null; // only if fallback
+        const minTokensGateTriggered = batchTokens.length < MIN_BATCH_TOKENS;
+        const backtrackEnabled = MATCH_WINDOW_BACK > 0;
+        const backtrackDistance = MATCH_WINDOW_BACK;
+
+        debug({
+          tag: 'instrumentation:batch',
+          normBatch,
+          normScriptSample,
+          nGramHits: ngramHits,
+          examplePositions,
+          windowBounds,
+          minTokensGateTriggered,
+          backtrackEnabled,
+          backtrackDistance,
+          ngramIndexSize: __ngramIndex.size,
+        });
+      }
+    } catch {}
+
+    const candidateArray = Array.from(candidates).sort((a, b) => a - b);
+    const scores = {};
+
+    // Score each candidate
+    for (const j of candidateArray) {
+      const para = __vParaIndex ? __vParaIndex[j] : paraIndex[j];
+      if (!para) continue;
+
+      const vis = para.key; // canonicalized script text
+      const score = computeLineSimilarity(batchTokens, vis);
+
+      // Apply header penalty (skip_prior)
+      // Devalue/ignore meta/branding lines
+      try {
+        if (para.isMeta) {
+          // apply heavy penalty so these lines don't win soft-advance
+          scores[j] = score * 0.5 - 0.2;
+        } else if (para.isNonSpoken) {
+          scores[j] = score - 0.6; // header_prior = -0.6
+        } else {
+          scores[j] = score;
+        }
+      } catch {
+        scores[j] = score;
+      }
+    }
+
+    // Debug: log top scores
+    const topScores = Object.entries(scores)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([idx, score]) => ({ idx: Number(idx), score: Number(score.toFixed(3)) }));
+    try {
+      if (typeof debug === 'function')
+        debug({
+          tag: 'match:scores',
+          candidates: candidateArray.length,
+          topScores,
+          batchTokens: batchTokens.length,
+        });
+    } catch {}
+
+    // Reset prediction seed when window is empty
+    const markerTop = () =>
+      Math.round(
+        viewer.clientHeight *
+          (typeof window.__TP_MARKER_PCT === 'number'
+            ? window.__TP_MARKER_PCT
+            : typeof MARKER_PCT === 'number'
+              ? MARKER_PCT
+              : 0.4)
+      );
+    function estimateIdxFromViewport() {
+      const y = viewer.scrollTop + markerTop();
+      const idx = lineIndex.nearestIdxAtY(y); // use virtual lines map
+      return Math.max(0, idx | 0);
+    }
+    if (!topScores || topScores.length === 0) {
+      i_pred = estimateIdxFromViewport(); // nearest virtual line under yTarget
+    }
+
+    // Update fallback streak: require real evidence when n-gram misses
+    const hadHits = ngramHits > 0 || (topScores && topScores.length > 0);
+    fallbackStreak = hadHits ? 0 : fallbackStreak + 1;
+
+    // Viterbi step to find best temporal path (with rescue-adjusted parameters)
+    const effectiveBeta = window.__tpRescueMode?.active ? VITERBI_BETA * 0.5 : VITERBI_BETA;
+    const viterbiResult = viterbiStep(
+      __viterbiPath,
+      scores,
+      VITERBI_ALPHA,
+      effectiveBeta,
+      VITERBI_LOOP_PENALTY
+    );
+    const i_viterbi = viterbiResult.idx;
+
+    // Track Viterbi consistency for soft advance
+    if (i_viterbi === lastViterbiIdx) {
+      viterbiConsistencyCount++;
+    } else {
+      viterbiConsistencyCount = 1;
+      lastViterbiIdx = i_viterbi;
+    }
+
+    // Update Viterbi state
+    __viterbiPath = viterbiResult.path;
+    __viterbiIPred = i_viterbi;
+
+    // Use Viterbi result as best match
+    let bestIdx = i_viterbi;
+    let bestSim = scores[i_viterbi] || 0;
+
+    // Stall detection and rescue mode
+    const stallDetected = (function () {
+      const now = performance.now();
+      const timeSinceLastAdvance = now - (_lastAdvanceAt || 0);
+      if (!Array.isArray(window.simHistory)) {
+        return false; // No history available, assume no stall
+      }
+      const simMean =
+        window.simHistory.length > 0
+          ? window.simHistory.reduce((a, b) => a + b, 0) / window.simHistory.length
+          : 1.0;
+
+      return timeSinceLastAdvance > 1400 && simMean < 0.65;
+    })();
+
+    // Rescue mode state
+    if (!window.__tpRescueMode) window.__tpRescueMode = { active: false, enteredAt: 0 };
+    // Soft-advance freeze after anchor rescue
+    if (typeof window.__tpSoftAdvanceFreeze === 'undefined') window.__tpSoftAdvanceFreeze = { until: 0 };
+
+    if (stallDetected) {
+      // Enter rescue mode: widen window, relax β, try anchor scan
+      window.__tpRescueMode.active = true;
+      window.__tpRescueMode.enteredAt = performance.now();
+      windowAhead = Math.max(windowAhead, 900); // widen window
+      // β penalty is relaxed in the Viterbi step call above
+
+      // Try anchor scan for distinctive phrases
+      const anchors = extractHighIDFPhrases(batchTokens, 3);
+      if (anchors.length > 0) {
+  const band = getAnchorBand();
+  const anchorHits = searchBand(anchors, i_pred - band, i_pred + windowAhead, batchTokens);
+        const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
+        // Cap anchor jumps: prefer within +60 tokens unless confidence >0.9
+        if (bestAnchor) {
+          // Find the para index containing the anchor word index
+          let paraIdx = -1;
+          for (let p = 0; p < paraIndex.length; p++) {
+            if (bestAnchor.idx >= paraIndex[p].start && bestAnchor.idx <= paraIndex[p].end) {
+              paraIdx = p;
+              break;
+            }
+          }
+          if (paraIdx >= 0) {
+            const anchorDistance = Math.abs(bestAnchor.idx - currentIndex); // Word distance, not paragraph distance
+            const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
+            if (bestAnchor.score > 0.75 && allowJump) {
+              try { window.__tpHudInc && window.__tpHudInc('rescue', 'count', 1); } catch {}
+              bestIdx = paraIndex[paraIdx].start; // Use paragraph start word index, not paragraph array index
+              bestSim = bestAnchor.score;
+              // Update tracking for dynamic threshold
+              lastAnchorConfidence = bestAnchor.score;
+              lastAnchorAt = performance.now();
+              // Update Viterbi path to include the anchor position
+              __viterbiPath = [...__viterbiPath, paraIdx];
+              __viterbiIPred = paraIdx;
+              // Update currentIndex to the anchor word position
+              currentIndex = Math.max(currentIndex, bestAnchor.idx);
+              try {
+                if (typeof debug === 'function')
+                  debug({
+                    tag: 'rescue:anchor',
+                    idx: bestIdx,
+                    wordIdx: bestAnchor.idx,
+                    score: bestSim,
+                    distance: anchorDistance,
+                    allowed: allowJump,
+                  });
+              } catch {}
+              // Freeze soft-advance for next ~2 batches and issue a catch-up to marker
+              try {
+                window.__freezeBatches = 2; // freeze next 2 match cycles
+                softAdvanceStreak = 0;
+                try { window.__tpHudInc && window.__tpHudInc('softAdv', 'frozen', 1); } catch {}
+                const el = lineEls && lineEls[Math.max(0, bestIdx)] ? lineEls[Math.max(0, bestIdx)] : null;
+                if (el) {
+                  try {
+                    const y = getYForElInScroller(el);
+                    tpScrollTo(y);
+                  } catch {}
+                }
+              } catch {}
+            }
+          }
+        }
+      }
+
+      try {
+        if (typeof debug === 'function') debug({ tag: 'rescue:enter', windowAhead, simMean });
+      } catch {}
+    } else if (window.__tpRescueMode.active) {
+      // Check if we can exit rescue mode (progress detected)
+      const timeInRescue = performance.now() - window.__tpRescueMode.enteredAt;
+      const recentProgress = Math.abs(bestIdx - i_pred) > 2; // moved more than 2 lines
+
+      if (timeInRescue > 3000 || (recentProgress && bestSim > 0.7)) {
+        // Decay to normal mode
+        window.__tpRescueMode.active = false;
+        try {
+          if (typeof debug === 'function')
+            debug({ tag: 'rescue:exit', reason: recentProgress ? 'progress' : 'timeout' });
+        } catch {}
+      }
+    }
+
+    // Update similarity history AFTER rescue mode has potentially improved bestSim
+    if (!Array.isArray(window.simHistory)) {
+      window.simHistory = [];
+    }
+    window.simHistory.push(bestSim);
+    if (window.simHistory.length > 10) window.simHistory.shift();
+    window.__tpSimHistory = window.simHistory;
+
+    // Smooth scroll: maintain EMA of Viterbi index to decouple from jittery matches
+    const SMOOTH_GAMMA = 0.2; // EMA smoothing factor
+    if (!window.__tpSmoothState) {
+      window.__tpSmoothState = {
+        i_smooth: bestIdx,
+        last_marker_idx: Math.floor(bestIdx),
+        marker_moved_at: performance.now(),
+      };
+    }
+
+    const smooth = window.__tpSmoothState;
+    // Update smoothed index with EMA
+    smooth.i_smooth = SMOOTH_GAMMA * bestIdx + (1 - SMOOTH_GAMMA) * smooth.i_smooth;
+
+    // Only move marker when smoothed index advances by ≥0.4 lines
+    const markerAdvanceThreshold = 0.4;
+    const currentMarkerIdx = Math.floor(smooth.i_smooth);
+    const markerDelta = currentMarkerIdx - smooth.last_marker_idx;
+
+    let useSmoothedForScroll = false;
+    if (Math.abs(markerDelta) >= markerAdvanceThreshold) {
+      smooth.last_marker_idx = currentMarkerIdx;
+      smooth.marker_moved_at = performance.now();
+      useSmoothedForScroll = true;
+    }
+
+    // Use smoothed index for scroll target, but raw index for matching logic
+    const scrollTargetIdx = useSmoothedForScroll ? smooth.i_smooth : currentIndex;
+
+    try {
+      if (typeof debug === 'function')
+        debug({
+          tag: 'smooth-scroll',
+          bestIdx,
+          i_smooth: Number(smooth.i_smooth.toFixed(2)),
+          scrollTargetIdx: Number(scrollTargetIdx.toFixed(2)),
+          markerDelta: Number(markerDelta.toFixed(2)),
+          useSmoothedForScroll,
+          scrollMarkerDistance: Math.floor(scrollMarkerDistance),
+          outOfBounds,
+          velocityMultiplier: Number(velocityMultiplier.toFixed(2)),
+        });
+    } catch {}
+
+    // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
+
+    // Breadcrumb: report similarity outcome for this match step (and stash score for gate)
+    const idxBefore = currentIndex; // for jitter metric
+    try {
+      window.__lastSimScore = Number(bestSim.toFixed(3));
+      if (typeof debug === 'function')
+        debug({
+          tag: 'match:sim',
+          idx: currentIndex,
+          bestIdx,
+          sim: window.__lastSimScore,
+          windowAhead: MATCH_WINDOW_AHEAD,
+          viterbi: true,
+          pathLength: __viterbiPath.length,
+        });
+    } catch {}
+
+    // Jitter meter: rolling std-dev of (bestIdx - idx)
+    try {
+      const J = (window.__tpJitter ||= {
+        buf: [],
+        max: 30,
+        mean: 0,
+        std: 0,
+        spikeUntil: 0,
+        lastLogAt: 0,
+      });
+      const d = bestIdx - idxBefore;
+      J.buf.push(d);
+      if (J.buf.length > J.max) J.buf.shift();
+      if (J.buf.length >= 5) {
+        const m = J.buf.reduce((a, b) => a + b, 0) / J.buf.length;
+        const v = J.buf.reduce((a, b) => a + Math.pow(b - m, 2), 0) / J.buf.length;
+        J.mean = +m.toFixed(2);
+        J.std = +Math.sqrt(v).toFixed(2);
+        const nowJ = performance.now();
+        const elevated = nowJ < (J.spikeUntil || 0);
+        // Emit at most ~3 times/sec
+        if (!J.lastLogAt || nowJ - J.lastLogAt > 330) {
+          J.lastLogAt = nowJ;
+          try {
+            if (typeof debug === 'function')
+              debug({ tag: 'match:jitter', mean: J.mean, std: J.std, n: J.buf.length, elevated });
+          } catch {}
+        }
+        // Spike detector: if std-dev spikes past 7, raise thresholds for ~8s
+        if (J.std >= 7 && !elevated) {
+          J.spikeUntil = nowJ + 8000;
+          try {
+            if (typeof debug === 'function')
+              debug({ tag: 'match:jitter:spike', std: J.std, until: J.spikeUntil });
+          } catch {}
+        }
+      }
+    } catch {}
+
+    // Early rescue when treadmill detected
+    if (fallbackStreak >= 3 && J.std > 90) {
+      // Trigger anchor scan for distinctive phrases
+      const anchors = extractHighIDFPhrases(batchTokens, 3);
+      if (anchors.length > 0) {
+  const band = getAnchorBand();
+  const anchorHits = searchBand(anchors, i_pred - band, i_pred + windowAhead, batchTokens);
+        const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
+        if (bestAnchor) {
+          // Find the para index containing the anchor word index
+          let anchorParaIdx = -1;
+          for (let p = 0; p < paraIndex.length; p++) {
+            const para = paraIndex[p];
+            if (bestAnchor.idx >= para.start && bestAnchor.idx <= para.end) {
+              anchorParaIdx = p;
+              break;
+            }
+          }
+          if (anchorParaIdx >= 0) {
+            // Allow anchor if not too recent and within rate limit
+            const now = performance.now();
+            if (now - lastAnchorAt > 2000 && allowAnchor()) {
+              bestIdx = anchorParaIdx;
+              bestSim = bestAnchor.score;
+              lastAnchorAt = now;
+              lastAnchorConfidence = bestAnchor.score;
+              try {
+                if (typeof debug === 'function')
+                  debug({
+                    tag: 'rescue:anchor',
+                    idx: bestAnchor.idx,
+                    wordIdx: bestAnchor.wordIdx,
+                    score: bestAnchor.score,
+                    distance: bestAnchor.distance,
+                    allowed: true,
+                  });
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+
+    // Apply elevated thresholds during jitter spikes
+    const J = window.__tpJitter || {};
+    const jitterElevated = typeof J.spikeUntil === 'number' && performance.now() < J.spikeUntil;
+    let EFF_SIM_THRESHOLD = SIM_THRESHOLD + (jitterElevated ? 0.08 : 0);
+    let EFF_STRICT_FWD_SIM = STRICT_FORWARD_SIM + (jitterElevated ? 0.06 : 0);
+    // Dynamic threshold: lower for 1-2 steps after high-confidence anchor
+    const nowThresh = performance.now();
+    const timeSinceLastAnchor = nowThresh - lastAnchorAt;
+    const dynamicLower = lastAnchorConfidence > 0.8 && timeSinceLastAnchor < 3000 ? 0.05 : 0; // lower by 0.05 for 3s after high-confidence anchor
+    EFF_SIM_THRESHOLD -= dynamicLower;
+    // End-game easing: give bestSim a tiny boost near the end
+    const __adj = endGameAdjust(bestIdx, bestSim);
+    if (__adj !== bestSim) {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:sim:end-ease',
+            bestIdx,
+            sim: Number(bestSim.toFixed(3)),
+            adj: Number(__adj.toFixed(3)),
+          });
+      } catch {}
+      bestSim = __adj;
+    }
+    // Soft advance: if below threshold but Viterbi consistent for last 3+ frames, advance by 1-2 tokens
+    if (bestSim < EFF_SIM_THRESHOLD && viterbiConsistencyCount >= 2) {
+      const delta = Math.min(2, Math.max(1, Math.floor(viterbiConsistencyCount / 2))); // 1-2 tokens
+      bestIdx += delta;
+      bestIdx = Math.min(bestIdx, scriptWords.length - 1);
+      bestSim = EFF_SIM_THRESHOLD + 0.01; // force proceed by setting just above threshold
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'soft-advance',
+            originalIdx: i_viterbi,
+            newIdx: bestIdx,
+            delta,
+            consistency: viterbiConsistencyCount,
+            sim: Number(bestSim.toFixed(3)),
+          });
+      } catch {}
+    }
+    if (bestSim < EFF_SIM_THRESHOLD) {
+      try {
+        if (typeof debug === 'function')
+          debug({
+            tag: 'match:below-threshold',
+            bestSim: Number(bestSim.toFixed(3)),
+            threshold: Number(EFF_SIM_THRESHOLD.toFixed(3)),
+            bestIdx,
+          });
+      } catch {}
+      return;
+    }
+
+    // Lost-mode tracker: DISABLED - replaced by new rescue mode
+    // The old lost mode was causing stalls, especially near end of script
+    try {
+      // Keep counters for debugging but don't trigger lost mode
+      if (bestSim < 0.6) __tpLowSimCount++;
+      else __tpLowSimCount = 0;
+      // Removed: if ((J.std || 0) > 12 || __tpLowSimCount >= 8) { ... }
+    } catch {}
+
+    // If we’re lost, try to recover: DISABLED - replaced by new rescue mode
+    // The old lost mode recovery was causing stalls near end of script
+    /*
+    if (__tpLost) {
+      try {
+        const BAND_BEFORE = 35,
+          BAND_AFTER = 120;
+        const anchors = extractHighIDFPhrases(spoken, 3);
+        const hits = searchBand(
+          anchors,
+          currentIndex - BAND_BEFORE,
+          currentIndex + BAND_AFTER,
+          spoken
+        );
+        const best = hits.sort((a, b) => b.score - a.score)[0] || null;
+        if (best && best.score > 0.78) {
+          currentIndex = Math.max(currentIndex, Math.min(best.idx, scriptWords.length - 1));
+          window.currentIndex = currentIndex;
+          __tpLost = false;
+          __tpLowSimCount = 0;
+          try {
+            if (typeof debug === 'function')
+              debug({ tag: 'match:lost:recover', idx: currentIndex, score: best.score });
+          } catch {}
+        } else {
+          // Defer normal motion until we recover
+          return;
+        }
+      } catch {
+        return;
+      }
+    }
+    */
+
+    // Coverage-based soft advance probe to prevent stalls
+    // Stall instrumentation: if we haven't advanced for >1s, emit a one-line summary
+    try {
+      const nowS = performance.now();
+      const idleMs = nowS - (_lastAdvanceAt || 0);
+      if (idleMs > 1000) {
+        const v =
+          (__vParaIndex || []).find((v) => currentIndex >= v.start && currentIndex <= v.end) ||
+          null;
+        const lineTokens = v ? scriptWords.slice(v.start, v.end + 1) : [];
+        const cov = tokenCoverage(lineTokens, spoken);
+        // probe next virtual line similarity (cheap local look-ahead)
+        let nextSim = 0;
+        try {
+          const vList = __vParaIndex || [];
+          const vIdx = vList.findIndex((x) => currentIndex >= x.start && currentIndex <= x.end);
+          if (vIdx >= 0 && vIdx + 1 < vList.length) {
+            const nxt = vList[vIdx + 1];
+            const win = scriptWords.slice(
+              nxt.start,
+              Math.min(nxt.start + spoken.length, nxt.end + 1)
+            );
+            nextSim = _sim(spoken, win);
+          }
+        } catch {}
+        const nearEnd = scriptWords.length - currentIndex < 30;
+        let bottom = false;
+        try {
+          bottom = atBottom(
+            document.getElementById('viewer') ||
+              document.scrollingElement ||
+              document.documentElement ||
+              document.body
+          );
+        } catch {}
+        if (!__tpStall?.reported) {
+          try {
+            if (typeof debug === 'function')
+              debug({
+                tag: 'STALL',
+                idx: currentIndex,
+                cov: +cov.toFixed(2),
+                nextSim: +nextSim.toFixed(2),
+                time: +(idleMs / 1000).toFixed(1),
+                nearEnd,
+                atBottom: bottom,
+              });
+          } catch {}
+          try {
+            __tpStall.reported = true;
+          } catch {}
+        }
+      } else {
+        try {
+          __tpStall.reported = false;
+        } catch {}
+      }
+    } catch {}
+
+    try {
+      const nowPerf = performance.now();
+      const allowSoftAdv = nowPerf > autoBumpUntil && nowPerf > (window.__tpSoftAdvanceFreeze?.until || 0);
+      const soft = allowSoftAdv ? maybeSoftAdvance(bestIdx, bestSim, spoken) : null;
+      if (soft && soft.soft) {
+        bestIdx = soft.idx;
+        bestSim = soft.sim;
+        softAdvanceStreak++;
+      } else {
+        softAdvanceStreak = 0;
+      }
+    } catch {}
+
+    // Soften big forward jumps unless similarity is very strong
+    const delta = bestIdx - currentIndex;
+    debug({
+      tag: 'match:candidate',
+      // normalize spoken tail consistently with line keys and matcher
+      spokenTail: (function () {
+        try {
+          return normTokens(spoken.join(' ')).join(' ');
+        } catch {
+          return spoken.join(' ');
+        }
+      })(),
+      bestIdx,
+      bestScore: Number(bestSim.toFixed(3)),
+      // Duplicate penalty visibility in HUD
+      ...(function () {
+        try {
+          // Original paragraph key context (for reference)
+          const para = paraIndex.find((p) => bestIdx >= p.start && bestIdx <= p.end) || null;
+          const key = para?.key || '';
+          const count = key ? __lineFreq.get(key) || 0 : 0;
+          const dup = count > 1;
+          // Virtual merged-line context (used for penalty)
+          const v =
+            (__vParaIndex || []).find((v) => bestIdx >= v.start && bestIdx <= v.end) || null;
+          const vKey = v?.key || '';
+          const vCount = vKey ? __vLineFreq.get(vKey) || 0 : 0;
+          const vDup = vCount > 1;
+          const vSig = v?.sig || '';
+          const vSigCount = vSig ? __vSigCount.get(vSig) || 0 : 0;
+          const dupPenalty = vDup ? 0.08 : 0;
+          const sigPenalty = vSigCount > 1 ? 0.06 : 0;
+          return {
+            dup,
+            dupCount: count,
+            lineKey: key?.slice(0, 80),
+            vDup,
+            vDupCount: vCount,
+            vLineKey: vKey?.slice(0, 80),
+            vSig: vSig?.slice(0, 80),
+            vSigCount,
+            dupPenalty,
+            sigPenalty,
+          };
+        } catch {
+          return {};
+        }
+      })(),
+      delta,
+    });
+
+    // NEW: if bestIdx hasn't moved for ~700ms but sim stays high, apply a tiny scroll nudge
+    const SAME_IDX_MS = 700;
+    const NUDGE_PX = 36;
+    if (bestIdx === window.__lastBestIdx && bestSim > 0.8) {
+      if (!window.__sameIdxSince) window.__sameIdxSince = performance.now();
+      if (performance.now() - window.__sameIdxSince > SAME_IDX_MS) {
+        onUserAutoNudge(); // Gate soft-advance during tiny scroll nudge
+        try {
+          window.__tpStallRelaxUntil = performance.now() + 300; // relax clamp guard briefly
+          const next = Math.max(0, Math.min(viewer.scrollTop + NUDGE_PX, viewer.scrollHeight));
+          if (typeof requestScroll === 'function') requestScroll(next);
+          else viewer.scrollTop = next;
+        } catch {}
+        window.__sameIdxSince = performance.now(); // reset timer after nudge
+      }
+    } else {
+      window.__lastBestIdx = bestIdx;
+      window.__sameIdxSince = performance.now();
+    }
+
+    if (delta > MAX_JUMP_AHEAD_WORDS && bestSim < EFF_STRICT_FWD_SIM) {
+      currentIndex += MAX_JUMP_AHEAD_WORDS;
+    } else {
+      // Soft advance gating: only advance if similarity meets minimum threshold
+      const minAdvanceSim = 0.42; // minimum similarity for advance
+      if (bestSim >= minAdvanceSim) {
+        currentIndex = Math.max(currentIndex, Math.min(bestIdx, scriptWords.length - 1));
+      } else {
+        try {
+          if (typeof debug === 'function')
+            debug({
+              tag: 'match:advance-gated',
+              reason: 'below-min-advance-sim',
+              bestSim: Number(bestSim.toFixed(3)),
+              minAdvanceSim,
+              bestIdx,
+              currentIndex,
+            });
+        } catch {}
+        // Don't advance - wait for better match
+        return;
+      }
+    }
+    window.currentIndex = currentIndex;
+    // Update commit broker
+    window.__tpCommit.idx = currentIndex;
+    window.__tpCommit.ts = performance.now();
+
+    // Emit an explicit speech-sync sample to the governor/HUD at commit time.
+    try {
+      const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null;
+      const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+      if (matchedPara && matchedPara.el && viewerEl) {
+        try {
+          const epx = errPxFrom(matchedPara.el, viewerEl);
+          try { if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, typeof bestSim === 'number' ? bestSim : 0); } catch {}
+        } catch {}
+      }
+    } catch {}
+
+    // Periodic rescue scheduling: trigger rescue if LOST for too long
+    try {
+      const now = performance.now();
+      const timeSinceLastRescue = now - (window.__lastRescueAttempt || 0);
+      const rescueIntervalMs = 5000; // try rescue every 5 seconds when LOST
+
+      if (window.__lostWatchdogCount >= 3 && timeSinceLastRescue > rescueIntervalMs) {
+        // Trigger a global scan rescue
+        window.__lastRescueAttempt = now;
+        try {
+          if (typeof debug === 'function')
+            debug({
+              tag: 'match:periodic-rescue',
+              reason: 'lost-watchdog-triggered',
+              watchdogCount: window.__lostWatchdogCount,
+              timeSinceLastRescue: Math.round(timeSinceLastRescue),
+            });
+        } catch {}
+
+        // Force a rescue by temporarily widening window and triggering search
+        const originalWindowAhead = MATCH_WINDOW_AHEAD;
+        MATCH_WINDOW_AHEAD = 1200; // very wide for rescue
+        setTimeout(() => {
+          MATCH_WINDOW_AHEAD = originalWindowAhead; // restore after rescue attempt
+        }, 100);
+      }
+    } catch {}
+
+    // PLL: Update bias controller with match position
+    try {
+      const yTarget = markerTop();
+      const matchedPara = paraIndex.find((p) => bestIdx >= p.start && bestIdx <= p.end);
+      let yMatch = yTarget;
+      if (matchedPara && viewer) {
+        const rect = matchedPara.el?.getBoundingClientRect?.();
+        const vRect = viewer.getBoundingClientRect();
+        if (rect) yMatch = rect.top - vRect.top;
+      }
+      PLL.update({
+        yMatch,
+        yTarget,
+        conf: bestSim,
+        dt: performance.now() - (window.__lastMatchTime || performance.now()),
+      });
+      window.__lastMatchTime = performance.now();
+      // Emit a speech-alignment sample for the adaptive governor: compute signed pixel error and forward
+      try {
+        if (matchedPara && matchedPara.el && viewer && typeof onSpeechAlignment === 'function') {
+          const errPx = computeErrPx(matchedPara.el, viewer);
+          try { onSpeechAlignment(errPx, bestSim); } catch {}
+        }
+      } catch {}
+      try {
+        if (mode === 'HYBRID') {
+          window.HUD?.log?.('pll:update', {
+            state: PLL.state,
+            biasPct: PLL.biasPct.toFixed(3),
+            yMatch: yMatch.toFixed(1),
+            yTarget: yTarget.toFixed(1),
+            error: (yMatch - yTarget).toFixed(1),
+            conf: bestSim.toFixed(3),
+          });
+        }
+      } catch {}
+    } catch {}
+
+    // Scroll toward the paragraph that contains scrollTargetIdx (smoothed), gently clamped
+    if (!paraIndex.length) return;
+    const targetPara =
+      paraIndex.find((p) => scrollTargetIdx >= p.start && scrollTargetIdx <= p.end) ||
+      paraIndex[paraIndex.length - 1];
+    // Maintain a persistent pointer to the current line element
+    try {
+      if (currentEl && currentEl !== targetPara.el) {
+        currentEl.classList.remove('active');
+        currentEl.classList.remove('current');
+      }
+    } catch {}
+    currentEl = targetPara.el;
+    try {
+      currentEl.classList.add('active');
+      currentEl.classList.add('current');
+    } catch {}
+
+    const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
+
+    // Marker distance clamping: |y(active) - y(marker)| ≤ L_max (1.2 viewport lines)
+    const L_MAX = 1.2 * (viewer.clientHeight || 800); // 1.2 viewport lines
+    const activeY = targetPara.el.offsetTop;
+    const markerY = viewer.scrollTop + markerTop();
+    const scrollMarkerDistance = Math.abs(activeY - markerY);
+    const outOfBounds = scrollMarkerDistance > L_MAX;
+
+    // Apply catch-up velocity boost (1.5-2.0x) when out of bounds
+    let velocityMultiplier = 1.0;
+    if (outOfBounds) {
+      velocityMultiplier = Math.min(2.0, 1.5 + (scrollMarkerDistance - L_MAX) / L_MAX); // 1.5-2.0x based on how far out
+    }
+
+    // Base cap to keep motion tame; relax near the end to avoid slowdown perception
+    const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const progress = maxScroll ? viewer.scrollTop / maxScroll : 0;
+    let capPx = Math.floor((viewer.clientHeight || 0) * 0.6 * velocityMultiplier); // Apply velocity boost to cap
+    if (progress >= 0.75) capPx = Math.floor((viewer.clientHeight || 0) * 0.9 * velocityMultiplier);
+
+    if (isFinal && window.__TP_CALM) {
+      // If similarity isn't very high, cap the jump size to keep motion tame (but relax near end)
+      try {
+        if (Number.isFinite(bestScore) && bestScore < 0.9) {
+          const dTop = desiredTop - viewer.scrollTop;
+          const inTail = progress >= 0.85; // last ~15%: no cap
+          if (!inTail && Math.abs(dTop) > capPx) {
+            const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
+            try {
+              requestScroll(limitedTop);
+              if (typeof debug === 'function')
+                debug({ tag: 'scroll', top: limitedTop, mode: 'calm-cap' });
+            } catch {}
+            // sync display based on intended target (avoid read-after-write)
+            try {
+              const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+              const ratio = max ? limitedTop / max : 0;
+              sendToDisplay({ type: 'scroll', top: limitedTop, ratio });
+            } catch {}
+            if (typeof markAdvance === 'function') markAdvance();
+            else _lastAdvanceAt = performance.now();
+            return; // defer full commit until next cycle
+          }
+        }
+      } catch {}
+      // Calm Mode: snap using geometry-based targeting at commit time
+      try {
+        onSpeechCommit(currentEl);
+      } catch {}
+      // --- HARD ANTI-DRIFT: force align committed line to marker ---
+      try {
+        if (__scrollCtl && typeof __scrollCtl.forceAlignToMarker === 'function') {
+          // markerTop is the Y position of the marker line relative to the viewer
+          // currentIndex is the committed line index
+          // viewer.getBoundingClientRect().top is the top of the viewer in viewport
+          // markerTop is already relative to viewer, so add viewer's top to get viewport Y
+          const markerY = viewer.getBoundingClientRect().top + markerTop();
+          __scrollCtl.forceAlignToMarker(currentIndex, markerY);
+        }
+      } catch {
+        if (window.__TP_DEV) console.warn('forceAlignToMarker failed', e);
+      }
+      if (typeof debug === 'function')
+        debug({ tag: 'scroll', top: desiredTop, mode: 'calm-commit' });
+      {
+        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+        const ratio = max ? desiredTop / max : 0;
+        sendToDisplay({ type: 'scroll', top: desiredTop, ratio });
+      }
+      try {
+        const vRect = viewer.getBoundingClientRect();
+        const anchorEl =
+          __anchorObs?.mostVisibleEl?.() ||
+          document.querySelector('#script p.active') ||
+          targetPara?.el ||
+          null;
+        if (anchorEl) {
+          const pRect = anchorEl.getBoundingClientRect();
+          const anchorY = pRect.top - vRect.top;
+          maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+        }
+      } catch {}
+      if (typeof markAdvance === 'function') markAdvance();
+      else _lastAdvanceAt = performance.now();
+    } else {
+      const err = desiredTop - viewer.scrollTop;
+      const tNow = performance.now();
+      if (Math.abs(err) < DEAD_BAND_PX || tNow - _lastCorrectionAt < CORRECTION_MIN_MS) return;
+
+      // Anti-jitter: for interim results, avoid backward corrections entirely
+      const dir = err > 0 ? 1 : err < 0 ? -1 : 0;
+      if (!isFinal && dir < 0) return;
+      // Hysteresis: don’t change direction on interim unless the error is clearly large
+      if (
+        !isFinal &&
+        _lastMoveDir !== 0 &&
+        dir !== 0 &&
+        dir !== _lastMoveDir &&
+        Math.abs(err) < DEAD_BAND_PX * 2
+      )
+        return;
+
+      // Scale steps based on whether this came from a final (more confident) match
+      const fwdStep = isFinal ? MAX_FWD_STEP_PX : Math.round(MAX_FWD_STEP_PX * 0.6);
+      const backStep = isFinal ? MAX_BACK_STEP_PX : Math.round(MAX_BACK_STEP_PX * 0.6);
+      // Prefer element-anchored scrolling; apply jump cap unless similarity is very high
+      try {
+        const dTop = desiredTop - viewer.scrollTop;
+        const inTail = progress >= 0.85; // last ~15%: no cap
+        if (!inTail && Number.isFinite(bestScore) && bestScore < 0.9 && Math.abs(dTop) > capPx) {
+          const limitedTop = viewer.scrollTop + Math.sign(dTop) * capPx;
+          requestScroll(limitedTop);
+        } else {
+          scrollToEl(currentEl, markerTop());
+        }
+      } catch {
+        let next;
+        if (err > 0) next = Math.min(viewer.scrollTop + fwdStep, desiredTop);
+        else next = Math.max(viewer.scrollTop - backStep, desiredTop);
+        try {
+          requestScroll(next);
+        } catch {
+          viewer.scrollTop = next;
+        }
+      }
+      if (typeof debug === 'function') debug({ tag: 'scroll', top: viewer.scrollTop });
+      {
+        // compute output from intended target if we just scheduled a write
+        const tTop = (() => {
+          try {
+            const last =
+              typeof window.__lastScrollTarget === 'number' ? window.__lastScrollTarget : null;
+            return last ?? viewer.scrollTop;
+          } catch {
+            return viewer.scrollTop;
+          }
+        })();
+        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+        const ratio = max ? tTop / max : 0;
+        sendToDisplay({ type: 'scroll', top: tTop, ratio });
+      }
+      // Evaluate whether to run the gentle catch-up loop based on anchor position
+      try {
+        const vRect = viewer.getBoundingClientRect();
+        // Prefer the most visible element if available; else current paragraph
+        const anchorEl = __anchorObs?.mostVisibleEl?.() || null || targetPara.el;
+        const pRect = anchorEl.getBoundingClientRect();
+        const anchorY = pRect.top - vRect.top; // anchor relative to viewer
+        maybeCatchupByAnchor(anchorY, viewer.clientHeight);
+      } catch {}
+      // mark progress for stall-recovery
+      if (typeof markAdvance === 'function') markAdvance();
+      else _lastAdvanceAt = performance.now();
+      _lastCorrectionAt = tNow;
+      if (dir !== 0) _lastMoveDir = dir;
+    }
+    // Dead-man timer: ensure scroll keeps up with HUD index
+    try {
+      deadmanWatchdog(currentIndex);
+    } catch {}
   }
 
   function escapeHtml(s) {
@@ -7048,7 +8944,18 @@
         paraTokenList.push([]);
       }
     }
-    // 2) now build paraIndex and related lightweight structures
+    // Build signature counts (first 4 tokens per paragraph)
+    try {
+      __vSigCount = new Map();
+      for (const toks of paraTokenList) {
+        try {
+          const sig = (Array.isArray(toks) ? toks.slice(0, 4).join(' ') : '') || '';
+          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+        } catch {}
+      }
+    } catch {}
+
+    // 2) now build paraIndex and related structures using accurate __vSigCount
     for (let idx = 0; idx < paras.length; idx++) {
       const el = paras[idx];
       const toks = paraTokenList[idx] || [];
@@ -7063,7 +8970,9 @@
         if (low && low.startsWith('bs with joe')) isMeta = true;
         const tokCount = (low.split(/\s+/) || []).length;
         if (tokCount <= 5) isMeta = true;
-        // NOTE: duplicate-signature based meta detection removed; TS matcher handles duplicates
+        const sig = toks.slice(0, 4).join(' ');
+        const vSigCount = __vSigCount.get(sig) || 0;
+        if (vSigCount > 1) isMeta = true;
       } catch {}
 
       paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken, isMeta });
@@ -7074,9 +8983,19 @@
       __paraTokens.push(toks);
       try {
         const uniq = new Set(toks);
-        // always update document-frequency map (lightweight)
         uniq.forEach((t) => __dfMap.set(t, (__dfMap.get(t) || 0) + 1));
-        // n-gram indexing removed; TS matcher owns candidate seeding/indexing
+
+        // Index n-grams (3-grams and 4-grams) for candidate seeding
+        const trigrams = getNgrams(toks, 3);
+        const tetragrams = getNgrams(toks, 4);
+        const allNgrams = [...trigrams, ...tetragrams];
+
+        for (const ngram of allNgrams) {
+          if (!__ngramIndex.has(ngram)) {
+            __ngramIndex.set(ngram, new Set());
+          }
+          __ngramIndex.get(ngram).add(paraIdx);
+        }
       } catch {}
       try {
         if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1);
@@ -7120,14 +9039,129 @@
     } catch {
       console.warn('line-index build failed', e);
     }
-    // Virtual-line merging and n-gram indexing removed: TS matcher owns duplicate
-    // disambiguation, virtual-line construction and candidate indexing. Keep
-    // lightweight placeholders for any legacy consumers.
+    // Build virtual merged lines for matcher duplicate disambiguation
     try {
-      __vParaIndex = null; // TS matcher can provide a richer vParaIndex if needed
-      __vLineFreq = new Map();
-      __vSigCount = new Map();
-      __ngramIndex = new Map();
+      const MIN_LEN = 35,
+        MAX_LEN = 120; // characters
+      let bufText = '';
+      let bufStart = -1;
+      let bufEnd = -1;
+      let bufEls = [];
+      for (const p of paraIndex) {
+        const text = String(p.el?.textContent || '').trim();
+        const candidate = bufText ? bufText + ' ' + text : text;
+        if (candidate.trim().length < MAX_LEN) {
+          // absorb
+          if (!bufText) {
+            bufStart = p.start;
+            bufEnd = p.end;
+            bufEls = [p.el];
+            bufText = text;
+          } else {
+            bufText = candidate;
+            bufEnd = p.end;
+            bufEls.push(p.el);
+          }
+          if (bufText.length >= MIN_LEN) {
+            const key = normLineKey(bufText);
+            const sig = (function () {
+              try {
+                return normTokens(bufText).slice(0, 4).join(' ');
+              } catch {
+                return '';
+              }
+            })();
+            __vParaIndex.push({
+              text: bufText,
+              start: bufStart,
+              end: bufEnd,
+              key,
+              sig,
+              els: bufEls.slice(),
+              isNonSpoken: bufEls.some((el) => {
+                const p = paraIndex.find((pi) => pi.el === el);
+                return p?.isNonSpoken;
+              }),
+            });
+            if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+            if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+            bufText = '';
+            bufStart = -1;
+            bufEnd = -1;
+            bufEls = [];
+          }
+        } else {
+          // flush buffer if any
+          if (bufText) {
+            const key = normLineKey(bufText);
+            const sig = (function () {
+              try {
+                return normTokens(bufText).slice(0, 4).join(' ');
+              } catch {
+                return '';
+              }
+            })();
+            __vParaIndex.push({
+              text: bufText,
+              start: bufStart,
+              end: bufEnd,
+              key,
+              sig,
+              els: bufEls.slice(),
+            });
+            if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+            if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+            bufText = '';
+            bufStart = -1;
+            bufEnd = -1;
+            bufEls = [];
+          }
+          // push current as its own
+          const key = normLineKey(text);
+          const sig = (function () {
+            try {
+              return normTokens(text).slice(0, 4).join(' ');
+            } catch {
+              return '';
+            }
+          })();
+          __vParaIndex.push({
+            text,
+            start: p.start,
+            end: p.end,
+            key,
+            sig,
+            els: [p.el],
+            isNonSpoken: p.isNonSpoken,
+          });
+          if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+        }
+      }
+      if (bufText) {
+        const key = normLineKey(bufText);
+        const sig = (function () {
+          try {
+            return normTokens(bufText).slice(0, 4).join(' ');
+          } catch {
+            return '';
+          }
+        })();
+        __vParaIndex.push({
+          text: bufText,
+          start: bufStart,
+          end: bufEnd,
+          key,
+          sig,
+          els: bufEls.slice(),
+          isNonSpoken: bufEls.some((el) => {
+            const p = paraIndex.find((pi) => pi.el === el);
+            return p?.isNonSpoken;
+          }),
+        });
+        if (key) __vLineFreq.set(key, (__vLineFreq.get(key) || 0) + 1);
+        if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+      }
     } catch {}
     // Initialize current element pointer
     try {
@@ -7296,12 +9330,7 @@
                     60,
                     Math.max(18, Math.floor((target - sc.scrollTop) * 0.25))
                   );
-                  try {
-                    const next = Math.min(max, sc.scrollTop + step);
-                    if (typeof requestScroll === 'function') requestScroll(next);
-                    else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
-                    else sc.scrollTop = next;
-                  } catch {}
+                  sc.scrollTop = Math.min(max, sc.scrollTop + step);
                   try {
                     debug && debug({ tag: 'scroll:end-drift', top: sc.scrollTop, target, ratio });
                   } catch {}
@@ -7723,13 +9752,8 @@
           // apply immediate alignment
           try {
             const next = Math.max(0, Math.min(viewer.scrollTop + delta, viewer.scrollHeight));
-            try {
-              if (typeof requestScroll === 'function') requestScroll(next);
-              else if (window.__tpScrollWrite) window.__tpScrollWrite(next);
-              else viewer.scrollTop = next;
-            } catch {
-              try { viewer.scrollTop += delta; } catch {}
-            }
+            if (typeof requestScroll === 'function') requestScroll(next);
+            else viewer.scrollTop = next;
           } catch {
             viewer.scrollTop += delta;
           }
@@ -8751,11 +10775,7 @@
     // Reset logical position and scroll to the very top
     currentIndex = 0;
     window.currentIndex = currentIndex;
-    try {
-      if (typeof requestScroll === 'function') requestScroll(0);
-      else if (window.__tpScrollWrite) window.__tpScrollWrite(0);
-      else viewer.scrollTop = 0;
-    } catch {}
+    viewer.scrollTop = 0;
     // Reset dead-man timer state
     _wdLastIdx = -1;
     _wdLastTop = 0;
@@ -9408,36 +11428,5 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
       window.__setAutoSpeed = setAutoSpeed;
     } catch {}
   })();
-
-  /* MIGRATION SHIMS — delegate monolith mic/db calls to TS API
-     eslint-disable no-func-assign, no-redeclare */
-
-  populateDevices = async function populateDevices() {
-    return window.__tpMic?.populateDevices?.();
-  };
-
-  requestMic = async function requestMic(deviceId) {
-    return window.__tpMic?.requestMic?.(deviceId);
-  };
-
-  _releaseMic = function _releaseMic() {
-    return window.__tpMic?.releaseMic?.();
-  };
-
-  startDbMeter = function startDbMeter(el) {
-    return window.__tpMic?.startDbMeter?.(el);
-  };
-
-  _stopDbMeter = function _stopDbMeter() {
-    return window.__tpMic?.clearBars?.();
-  };
-
-    /* eslint-enable no-func-assign, no-redeclare */
-  
-    } // end if (!window.tpMarkInitDone)
-    })(); // end ensureInitMarker IIFE
-    })(); // end main IIFE (restored)
-    } // end skip-under-jest guard
-  
-  /* EOF */
+})(); // end main IIFE (restored)
 
