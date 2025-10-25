@@ -1,0 +1,38 @@
+name: Smoke + Tests
+
+on:
+  pull_request:
+  push:
+    branches: [ chore/ts-migration/remove-legacy-matcher-pll ]
+
+jobs:
+  smoke-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./
+
+      - name: Run Jest tests
+        run: |
+          CI=true npm test --silent --prefix d:/teleprompter/teleprompter || (echo "Jest failed" && exit 1)
+
+      - name: Start static server (http-server via npx)
+        run: |
+          npx http-server . -a 127.0.0.1 -p 5180 -c-1 &
+          sleep 2
+
+      - name: Run headless smoke check
+        run: |
+          node scripts/smoke/checkRoot.cjs
+
+      - name: Success marker
+        run: echo "Smoke + Tests OK"
