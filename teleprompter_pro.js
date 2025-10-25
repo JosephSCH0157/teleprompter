@@ -86,201 +86,17 @@
           }
         } catch {}
       })();
-            // Prefer explicitly published real core ONLY if it's not just the early waiter
-            if (typeof window.__tpRealCore === 'function' && !window.__tpRealCore.__tpWaiter) { clearInterval(id); return res(window.__tpRealCore); }
-            // Or if window._initCore has been swapped to a different function, use that
-            if (typeof window._initCore === 'function' && window._initCore !== self) { clearInterval(id); return res(window._initCore); }
-            // Or if the hoisted real function has appeared, use it directly
-            try { if (typeof _initCore === 'function' && _initCore !== self) { clearInterval(id); return res(_initCore); } } catch {}
-            if (++tries > 2000) { clearInterval(id); return res(null); } // ~20s
-          }, 10);
-        });
-        if (typeof core === 'function') return core();
-        throw new Error('Core not ready after stub wait');
-      };
-    }
-  } catch {}
-  // Watchdog: if the real core is not defined soon, dump boot trace for diagnosis
-  try {
-    setTimeout(()=>{
-      try {
-        const trace = (window.__TP_BOOT_TRACE||[]);
-        const hasCoreDef = trace.some(r => r && r.m === 'after-_initCore-def');
-        if (!hasCoreDef) {
-          console.warn('[TP-Pro] Core definition not reached yet; dumping boot trace tail…');
-          const tail = trace.slice(-50).map(x=>x && x.m);
-          console.log('[TP-Pro] Boot tail:', tail);
-        }
-      } catch {}
-    }, 3000);
-  } catch {}
-    // Establish a stable core runner that waits until core is ready
-    try {
-      if (!window._initCoreRunner) {
-        let __resolveCoreRunner;
-        const __coreRunnerReady = new Promise(r => { __resolveCoreRunner = r; });
-        window._initCoreRunner = async function(){
-          try { await __coreRunnerReady; } catch {}
-          if (typeof window._initCore === 'function') return window._initCore();
-          if (typeof _initCore === 'function') return _initCore();
-          throw new Error('Core not ready');
-        };
-        window.__tpSetCoreRunnerReady = () => { try { __resolveCoreRunner && __resolveCoreRunner(); } catch {} };
-      }
-    } catch {}
-  // Provide a safe early init proxy on window that forwards to core when available
-  try {
-    // Promise that resolves when core initializer becomes available
-    if (!window.__tpCoreReady) {
-      window.__tpCoreReady = new Promise((resolve) => { window.__tpResolveCoreReady = resolve; });
-    }
-    if (typeof window.init !== 'function') {
-      window.init = async function(){
-        try {
-          // If core is already available, run immediately
-          if (typeof _initCore === 'function' || typeof window._initCore === 'function') {
-            return (window._initCore || _initCore)();
-          }
-          try { __tpBootPush('window-init-proxy-waiting-core'); } catch {}
-          // Wait briefly for core to appear (either via assignment or resolve hook)
-          const core = await Promise.race([
-            new Promise((res)=>{
-              let tries = 0; const id = setInterval(()=>{
-                if (typeof _initCore === 'function' || typeof window._initCore === 'function') { clearInterval(id); res(window._initCore || _initCore); }
-                else if (++tries > 300) { clearInterval(id); res(null); }
-              }, 10);
-            }),
-            (window.__tpCoreReady?.then(()=> (window._initCore || _initCore)).catch(()=>null))
-          ]);
-          if (typeof core === 'function') { return core(); }
-          console.warn('[TP-Pro] window.init proxy: core not ready after wait');
-            // Use the stable runner which waits until core is ready
-            try { __tpBootPush('window-init-proxy-waiting-core'); } catch {}
-            return await window._initCoreRunner();
-        } catch(e){ console.error('[TP-Pro] window.init proxy error', e); }
-      };
-      __tpBootPush('window-init-proxy-installed');
-    }
-  } catch {}
-  // Early minimal init safety net: builds placeholder + dB meter if deep init stalls.
-  (function earlyInitFallback(){
-    try {
-      if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
-      // Defer a tick so DOM is definitely present
-      requestAnimationFrame(()=>{
-        try {
-          if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
-          const scriptEl = document.getElementById('script');
-          const editorEl = document.getElementById('editor');
-          if (scriptEl && !scriptEl.innerHTML) {
-            scriptEl.innerHTML = '<p><em>Paste text in the editor to begin… (early)</em></p>';
-          }
-          // Build minimal dB meter bars if missing
-          const meter = document.getElementById('dbMeterTop');
-          if (meter && !meter.querySelector('.bar')) {
-            try { (typeof buildDbBars === 'function') ? buildDbBars(meter) : (function(m){ for(let i=0;i<10;i++){ const b=document.createElement('div'); b.className='bar'; m.appendChild(b);} })(meter); } catch {}
-          }
-          window.__tpEarlyInitRan = true;
-          try { __tpBootPush && __tpBootPush('early-init-fallback'); } catch {}
-        } catch (e) { console.warn('[TP-Pro] earlyInitFallback error', e); }
-      });
-    } catch {}
-  })();
-
-  // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
-  function minimalBoot(){
-    try {
-      if (window.__tpInitSuccess || window.__tpMinimalBootRan) return;
-      window.__tpMinimalBootRan = true;
-      const scriptEl = document.getElementById('script');
-      const editorEl = document.getElementById('editor');
-      if (scriptEl && (!scriptEl.textContent || !scriptEl.textContent.trim())) {
-        scriptEl.innerHTML = '<p><em>Paste text in the editor to begin…</em></p>';
-      }
-      // Build meter bars (lightweight fallback if buildDbBars not yet defined)
-      const meter = document.getElementById('dbMeterTop');
-      if (meter && !meter.querySelector('.bar')) {
-        if (typeof buildDbBars === 'function') { try { buildDbBars(meter); } catch {} }
-        else {
-          for (let i=0;i<12;i++){ const b=document.createElement('div'); b.className='bar'; meter.appendChild(b); }
-        }
-      }
-      // Wire top normalize button minimally (may be overwritten by full init later)
-      const nbtn = document.getElementById('normalizeTopBtn');
-      if (nbtn && !nbtn.__mini){
-        nbtn.__mini = true;
-        nbtn.addEventListener('click', ()=>{
-          try {
-          // Emit a governor sample for this committed line
-          try {
-            const viewerEl = sc || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
-            const epx = errPxFrom(activeEl, viewerEl);
-            try { if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, 1.0); } catch {}
-          } catch {}
-            else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch(e){ console.warn('Mini normalize failed', e); }
-        });
-      }
-      try { __tpBootPush('minimal-boot'); } catch {}
-    } catch (e){ console.warn('[TP-Pro] minimalBoot error', e); }
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', minimalBoot);
-  else minimalBoot();
-  try { __tpBootPush('post-minimalBoot'); } catch {}
-  // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
-  setTimeout(()=>{
-    try {
-      if (!window.__tpInitSuccess && !window.__tpInitCalled && typeof init === 'function') {
-        if (window.__TP_DEV) { try { console.info('[TP-Pro] Early zero-time force init attempt'); } catch {} }
-        window.__tpInitCalled = true;
-        init();
-      }
-    } catch(e){ console.error('[TP-Pro] early force init error', e); }
-  }, 0);
-  try { __tpBootPush('after-zero-time-init-attempt-scheduled'); } catch {}
-  // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
-
-  // Early redundant init scheduling (safety net): wait for init to be defined, then call once
-  try { __tpBootPush('pre-init-scheduling-early'); } catch {}
-  try {
-    const callInitOnce = () => {
-      if (window.__tpInitCalled) return;
-      if (typeof init === 'function') {
-        window.__tpInitCalled = true;
-        try { __tpBootPush('early-init-invoking'); } catch {}
-        try { init(); } catch(e){ console.error('init failed (early)', e); }
-      } else if (typeof window._initCore === 'function') {
-        window.__tpInitCalled = true;
-        try { __tpBootPush('early-core-invoking'); } catch {}
-        (async ()=>{
-          try {
-            await window._initCore();
-            console.log('[TP-Pro] _initCore early path end (success)');
-          } catch(e){
-            console.error('[TP-Pro] _initCore failed (early path):', e);
-          }
-        })();
-      } else {
-        // Shouldn’t happen due to guard, but reset flag to allow later retry
-        window.__tpInitCalled = false;
-      }
-    };
-    const whenInitReady = () => {
-      if (typeof init === 'function') { callInitOnce(); return; }
-      try { __tpBootPush('early-waiting-for-init'); } catch {}
-      let tries = 0;
-      const id = setInterval(() => {
-        if (typeof init === 'function' || typeof window._initCore === 'function') { clearInterval(id); callInitOnce(); }
-        else if (++tries > 300) { clearInterval(id); console.warn('[TP-Pro] init not defined after wait'); }
-      }, 10);
-    };
-    if (!window.__tpInitScheduled) {
-      window.__tpInitScheduled = true;
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', whenInitReady, { once: true });
-      } else {
-        Promise.resolve().then(whenInitReady);
-      }
+            function buildSettingsContent() {
+              // Monolith settings builder removed in favor of the TS settings stack.
+              try {
+                const body = document.getElementById('settingsBody');
+                if (!body) return;
+                try { if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch {}
+              } catch {}
+            }
+            try {
+              __tpBootPush('after-buildSettingsContent-def');
+            } catch {}
     }
   } catch(e){ console.warn('early init scheduling error', e); }
   try { __tpBootPush('init-scheduling-early-exited'); } catch {}
@@ -429,68 +245,9 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
   try { __tpBootPush('after-syncSettingsValues-def'); } catch {}
 
     function setupSettingsTabs(){
-      const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
-    // Guard against duplicate wiring: some builds accidentally contain
-    // duplicated wiring blocks. Make this idempotent so calling the
-    // function multiple times won't attach listeners twice.
-    if (window.__tpTabsWired) return;
-    window.__tpTabsWired = true;
-      // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
-      const sb = document.getElementById('settingsBody');
-      const cards = sb ? Array.from(sb.querySelectorAll('.settings-card')) : [];
-      // Hide tabs with no cards lazily
-      tabs.forEach(tab => {
-        const tabName = tab.dataset.tab;
-        const hasCard = cards.some(c => c.dataset.tab === tabName);
-        if (!hasCard) tab.style.display = 'none';
-      });
-
-      // Animation helpers
-      const ANIM_IN = 'anim-in';
-      const ANIM_OUT = 'anim-out';
-      function showCard(c){
-        if (c._visible) return; // already visible
-        c._visible = true;
-        c.style.display = 'flex';
-        c.classList.remove(ANIM_OUT);
-        // force reflow for animation restart
-        void c.offsetWidth;
-        c.classList.add(ANIM_IN);
-        c.addEventListener('animationend', (e)=>{ if(e.animationName==='cardFadeIn') c.classList.remove(ANIM_IN); }, { once:true });
-      }
-      function hideCard(c){
-        if (!c._visible) return; // already hidden
-        c._visible = false;
-        // take it out of layout so the new card doesn't stack beneath it
-        try { c.style.position = 'absolute'; c.style.inset = '0'; c.style.width = '100%'; } catch {}
-        c.classList.remove(ANIM_IN);
-        c.classList.add(ANIM_OUT);
-        c.addEventListener('animationend', (e)=>{
-          if (e.animationName==='cardFadeOut') {
-            c.classList.remove(ANIM_OUT);
-            c.style.display='none';
-            // restore flow for when the card is shown again
-            try { c.style.position = ''; c.style.inset = ''; c.style.width = ''; } catch {}
-          }
-        }, { once:true });
-      }
-
-      const apply = (name) => {
-        const tab = name || 'general';
-        try { localStorage.setItem('tp_settings_tab', tab); } catch {}
-        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-        // hide non-selected first to avoid one-frame overlaps
-        cards.forEach(c => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
-        // then show the selected card
-        const target = cards.find(c => c.dataset.tab === tab);
-        if (target) showCard(target);
-      };
-      tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
-      let last = 'general';
-      try { last = localStorage.getItem('tp_settings_tab') || 'general'; } catch {}
-      // Initialize visibility (no animation on first render)
-      cards.forEach(c => { c._visible = false; c.style.display='none'; });
-      apply(last);
+      // Tabs/cards UI now managed by the TS settings stack. Keep a
+      // minimal idempotent guard so other monolith callers remain safe.
+      try { window.__tpTabsWired = true; } catch {}
     }
   try { __tpBootPush('after-setupSettingsTabs-def'); } catch {}
     // (Removed stray recorder settings snippet accidentally injected here)
@@ -533,7 +290,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
       // Speakers
       const showSpk = document.getElementById('settingsShowSpeakers');
-      showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); buildSettingsContent(); });
+  showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); try { const body = document.getElementById('settingsBody'); if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch {} });
       document.getElementById('settingsNormalize')?.addEventListener('click', ()=> normalizeTopBtn?.click());
       // Recording / OBS
       const obsEnable = document.getElementById('settingsEnableObs');
@@ -1660,12 +1417,13 @@ shortcutsClose   = document.getElementById('shortcutsClose');
     // Settings overlay wiring
     if (settingsBtn && settingsOverlay && settingsClose && settingsBody){
       const openSettings = () => {
-        try { buildSettingsContent(); } catch(e){}
+        try { const body = document.getElementById('settingsBody'); if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch(e){}
         settingsOverlay.classList.remove('hidden');
         settingsBtn.setAttribute('aria-expanded','true');
+        try { setTimeout(()=>settingsClose?.focus(), 0); } catch {}
       };
-      // Prebuild asynchronously after main init so first open isn't empty if user opens quickly
-      setTimeout(()=>{ try { buildSettingsContent(); } catch{} }, 0);
+  // Let TS settings optionally mount early so first open isn't empty if user opens quickly
+  setTimeout(()=>{ try { const body = document.getElementById('settingsBody'); if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch{} }, 0);
       const closeSettings = () => { settingsOverlay.classList.add('hidden'); settingsBtn.setAttribute('aria-expanded','false'); };
       settingsBtn.addEventListener('click', openSettings);
       settingsClose.addEventListener('click', closeSettings);
