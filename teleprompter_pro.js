@@ -6911,108 +6911,55 @@ let _toast = function (msg, opts) {
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
-  // --- PLL Bias Controller for Hybrid Auto-Scroll ---
-  // Lightweight PLL shim that delegates at call-time to `window.PLL` (if the TS module is loaded),
-  // otherwise provides a minimal, safe fallback. This keeps legacy callers (in this file)
-  // using the same symbol `PLL` while allowing the TS bundle to provide the real implementation.
+  // --- PLL Bias Controller shim (delegates entirely to TS implementation) ---
+  // The monolith no longer contains internal PLL/servo/bias logic. Instead we
+  // expose a tiny delegating object `PLL` used by legacy call sites. The real
+  // implementation lives in `src/scroll/pll.ts` and installs itself on
+  // `window.PLL` via `installPLL()`. If the TS impl isn't present yet, the
+  // shim returns safe defaults and no-op functions.
   const PLL = (function () {
-    // Internal minimal state for fallback behavior
-    let _biasPct = 0,
-      _errF = 0,
-      _state = 'LOST',
-      _lastAnchorTs = 0;
-
-    function now() {
+    const forward = (name, args = []) => {
       try {
-        return (performance && performance.now && performance.now()) || Date.now();
-      } catch {
-        return Date.now();
-      }
-    }
-
-    function forward(name, args) {
-      try {
-        if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL[name] === 'function') {
-          return (window).PLL[name].apply((window).PLL, args);
-        }
+        if (typeof window !== 'undefined' && window.PLL && typeof window.PLL[name] === 'function')
+          return window.PLL[name].apply(window.PLL, args);
       } catch {}
       return undefined;
-    }
-
-    function update(opts) {
-      // Prefer real impl if available
-      const res = forward('update', [opts]);
-      if (typeof res !== 'undefined') return res;
-      // Minimal fallback: update smoothed error and keep bias non-negative
-      try {
-        const err = (opts && (opts.yMatch || 0) - (opts.yTarget || 0)) || 0;
-        _errF = 0.8 * _errF + 0.2 * err;
-        // simple decay when confidence low
-        const conf = opts && typeof opts.conf === 'number' ? opts.conf : 0;
-        if (conf < 0.6) _biasPct = Math.max(0, _biasPct * 0.95);
-      } catch {}
-    }
-
-    function allowAnchor() {
-      try {
-        // delegate first
-        const d = forward('allowAnchor', []);
-        if (typeof d !== 'undefined') return d;
-      } catch {}
-      const t = now();
-      if (t - _lastAnchorTs < 1200) return false;
-      _lastAnchorTs = t;
-      return true;
-    }
-
-    function onPause() {
-      try {
-        const d = forward('onPause', []);
-        if (typeof d !== 'undefined') return d;
-      } catch {}
-      // fallback: no-op
-    }
-
-    function tune(p) {
-      try {
-        const d = forward('tune', [p]);
-        if (typeof d !== 'undefined') return d;
-      } catch {}
-      // fallback: accept maxBias param
-      try {
-        if (p && typeof p.maxBias === 'number') _biasPct = Math.max(-Math.abs(p.maxBias), Math.min(Math.abs(p.maxBias), _biasPct));
-      } catch {}
-    }
+    };
 
     return {
-      update,
-      allowAnchor,
-      onPause,
+      // Forwarding operations — no-op if TS PLL not installed
+      update: (opts) => forward('update', [opts]),
+      tune: (p) => forward('tune', [p]),
+      allowAnchor: () => {
+        const r = forward('allowAnchor', []);
+        return typeof r === 'boolean' ? r : true; // default: allow anchors
+      },
+      onPause: () => forward('onPause', []),
+      // Telemetry & readouts — mirror the TS impl when present, otherwise safe defaults
       get biasPct() {
         try {
-          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.biasPct !== 'undefined') return (window).PLL.biasPct;
+          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.biasPct !== 'undefined') return window.PLL.biasPct;
         } catch {}
-        return _biasPct;
+        return 0;
       },
       get state() {
         try {
-          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.state !== 'undefined') return (window).PLL.state;
+          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.state !== 'undefined') return window.PLL.state;
         } catch {}
-        return _state;
+        return 'UNKNOWN';
       },
       get errF() {
         try {
-          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.errF !== 'undefined') return (window).PLL.errF;
+          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.errF !== 'undefined') return window.PLL.errF;
         } catch {}
-        return _errF;
+        return 0;
       },
       get telemetry() {
         try {
-          if (typeof window !== 'undefined' && (window).PLL && typeof (window).PLL.telemetry !== 'undefined') return (window).PLL.telemetry;
+          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.telemetry !== 'undefined') return window.PLL.telemetry;
         } catch {}
         return {};
       },
-      tune,
     };
   })();
 
