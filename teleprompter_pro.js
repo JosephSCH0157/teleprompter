@@ -2209,171 +2209,61 @@ let _toast = function (msg, opts) {
     speakersBody;
 
   // TP: meter-audio
-  // ───────────────────────────────────────────────────────────────
-  // dB meter utilities (single source of truth: top bar only)
-  // ───────────────────────────────────────────────────────────────
+  // Minimal delegating shims: prefer TS `__tpMic` implementations (startDbMeter / clearBars).
+  // The heavy AudioContext + animation loop was moved into the TypeScript module.
   function buildDbBars(target) {
-    if (!target) return [];
-    target.classList.add('db-bars');
-    // If already has bars, reuse
-    let bars = Array.from(target.querySelectorAll('.bar'));
-    if (bars.length >= 16) return bars;
-    target.innerHTML = '';
-    const total = 20;
-    for (let i = 0; i < total; i++) {
-      const b = document.createElement('div');
-      b.className = 'bar';
-      const ratio = i / (total - 1); // 0 (left) -> 1 (right)
-      // Interpolate hue 120 (green) -> 0 (red)
-      const hue = 120 - 120 * ratio;
-      const sat = 70; // percent
-      const light = 30 + ratio * 25; // brighten a bit toward red end
-      b.style.setProperty('--bar-color', `hsl(${hue}deg ${sat}% ${light}%)`);
-      target.appendChild(b);
-    }
-    // Peak marker
-    const peak = document.createElement('div');
-    peak.className = 'peak-marker';
-    peak.style.transform = 'translateX(0)';
-    target.appendChild(peak);
-    // Scale ticks (every 5 bars) – positioned absolutely
-    const ticks = document.createElement('div');
-    ticks.style.cssText =
-      'position:absolute;inset:0;pointer-events:none;font:8px/1 ui-monospace,monospace;color:#fff5;display:flex;';
-    for (let i = 0; i < 20; i++) {
-      if (i % 5 === 0) {
-        const t = document.createElement('div');
-        t.style.cssText = 'flex:1;position:relative;';
-        const line = document.createElement('div');
-        line.style.cssText =
-          'position:absolute;top:0;bottom:0;left:0;width:1px;background:#ffffff22';
-        const lbl = document.createElement('div');
-        lbl.textContent = (i === 0 ? '-∞' : `-${20 - i}dB`).replace('--', '-');
-        lbl.style.cssText =
-          'position:absolute;bottom:100%;left:0;transform:translate(-2px,-2px);white-space:nowrap;';
-        t.appendChild(line);
-        t.appendChild(lbl);
-        ticks.appendChild(t);
-      } else {
-        const spacer = document.createElement('div');
-        spacer.style.flex = '1';
-        ticks.appendChild(spacer);
+    try {
+      if (!target) return [];
+      // Prefer TS-side builder if exposed
+      if (window.__tpMic && typeof window.__tpMic.buildDbBars === 'function') {
+        return window.__tpMic.buildDbBars(target);
       }
+      // Lightweight fallback: ensure '.bar' elements exist (small visual fallback)
+      let bars = Array.from(target.querySelectorAll('.bar'));
+      if (bars.length) return bars;
+      target.classList.add('db-bars');
+      const total = 12;
+      for (let i = 0; i < total; i++) {
+        const b = document.createElement('div');
+        b.className = 'bar';
+        target.appendChild(b);
+      }
+      const peak = document.createElement('div');
+      peak.className = 'peak-marker';
+      target.appendChild(peak);
+      return Array.from(target.querySelectorAll('.bar'));
+    } catch {
+      return [];
     }
-    target.appendChild(ticks);
-    return Array.from(target.querySelectorAll('.bar'));
   }
 
   function clearBars(el) {
-    if (!el) return;
-    el.querySelectorAll('.bar.on').forEach((b) => b.classList.remove('on'));
+    try {
+      if (window.__tpMic && typeof window.__tpMic.clearBars === 'function') return window.__tpMic.clearBars(el);
+      if (!el) return;
+      el.querySelectorAll('.bar.on').forEach((b) => b.classList.remove('on'));
+    } catch {}
   }
 
   function _stopDbMeter() {
-    if (dbAnim) cancelAnimationFrame(dbAnim);
-    dbAnim = null;
     try {
-      if (audioStream) audioStream.getTracks().forEach((t) => t.stop());
-    } catch {}
-    try {
-      // Close AudioContext to free system resources and allow a fresh one later
-      if (audioCtx && typeof audioCtx.close === 'function') {
-        try { audioCtx.close().catch?.(() => {}); } catch { try { audioCtx.close(); } catch {} }
-      }
-    } catch {}
-    audioStream = null;
-    audioCtx = null;
-    analyser = null;
-    try {
-      clearBars(dbMeterTop);
+      // Prefer TS stop/clear if present
+      if (window.__tpMic && typeof window.__tpMic._stop === 'function') return window.__tpMic._stop();
+      if (dbAnim) cancelAnimationFrame(dbAnim);
+      dbAnim = null;
+      try { if (audioStream) audioStream.getTracks().forEach((t) => t.stop()); } catch {}
+      audioStream = null;
+      analyser = null;
+      audioCtx = null;
+      try { clearBars(dbMeterTop); } catch {}
     } catch {}
   }
 
   async function startDbMeter(stream) {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) {
-      warn('AudioContext unavailable');
-      return;
-    }
-    const ctx = new AC();
-    audioCtx = ctx; // retain for suspend/resume when tab visibility changes
     try {
-      if (typeof ctx.resume === 'function' && ctx.state === 'suspended') {
-        try {
-          await ctx.resume();
-        } catch {}
-      }
+      if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') return window.__tpMic.startDbMeter(stream);
+      // No-op fallback: TS module will mount a proper meter when available.
     } catch {}
-    const src = ctx.createMediaStreamSource(stream);
-    analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    src.connect(analyser);
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    const topBars = buildDbBars(dbMeterTop);
-    const peakEl = dbMeterTop?.querySelector('.peak-marker');
-    peakHold.value = 0;
-    peakHold.lastUpdate = performance.now();
-    // Log scaling configuration
-    const dBFloor = -60; // anything quieter treated as silence
-    const attack = 0.55; // 0..1 (higher = faster rise)
-    const release = 0.15; // 0..1 (higher = faster fall)
-    let levelSmooth = 0; // smoothed 0..1 level after log mapping
-    const draw = () => {
-      // If analyser was torn down (e.g., mic released), stop the loop gracefully
-      if (!analyser || !data) {
-        dbAnim = null;
-        return;
-      }
-      analyser.getByteFrequencyData(data);
-      // Root-mean-square amplitude 0..1
-      const rms = Math.sqrt(data.reduce((a, b) => a + b * b, 0) / data.length) / 255;
-      // Convert to approximate dBFS
-      const dbfs = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
-      // Clamp & normalize to 0..1 based on floor
-      const dB = dbfs === -Infinity ? dBFloor : Math.max(dBFloor, Math.min(0, dbfs));
-      let level = (dB - dBFloor) / (0 - dBFloor); // linear 0..1 after log compress
-      if (!isFinite(level) || level < 0) level = 0;
-      else if (level > 1) level = 1;
-      // Smooth (different attack/release)
-      if (level > levelSmooth) levelSmooth = levelSmooth + (level - levelSmooth) * attack;
-      else levelSmooth = levelSmooth + (level - levelSmooth) * release;
-      const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth * topBars.length)));
-      for (let i = 0; i < topBars.length; i++) topBars[i].classList.toggle('on', i < bars);
-      // Peak hold: keep highest bar for a short decay
-      const now = performance.now();
-      if (bars > peakHold.value) {
-        peakHold.value = bars;
-        peakHold.lastUpdate = now;
-      } else if (now - peakHold.lastUpdate > 350) {
-        // start decay after hold period
-        peakHold.value = Math.max(
-          0,
-          peakHold.value - peakHold.decay * ((now - peakHold.lastUpdate) / 16)
-        );
-      }
-      const peakIndex = Math.max(0, Math.min(topBars.length - 1, Math.floor(peakHold.value - 1)));
-      if (peakEl) {
-        const bar = topBars[peakIndex];
-        if (bar) {
-          const x = bar.offsetLeft;
-          peakEl.style.transform = `translateX(${x}px)`;
-          peakEl.style.opacity = peakHold.value > 0 ? '.9' : '0';
-          // Color shift based on level percentage
-          const pct = levelSmooth; // use smoothed 0..1 level for color classification
-          let color = '#2eff7d'; // green
-          if (pct > 0.85) color = '#ff3131';
-          else if (pct > 0.65) color = '#ffb347';
-          peakEl.style.backgroundColor = color;
-          peakEl.style.boxShadow = `0 0 4px ${color}aa`;
-        }
-        // Tooltip stats (rounded)
-        peakEl.title = `Approx RMS: ${(rms * 100).toFixed(0)}%\nApprox dBFS: ${dbfs === -Infinity ? '–∞' : dbfs.toFixed(1)} dB`;
-      }
-  // Guard dB meter animation: skip when no script or watchdog unarmed
-  try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
-  dbAnim = requestAnimationFrame(draw);
-    };
-    draw();
   }
 
   async function requestMic() {
