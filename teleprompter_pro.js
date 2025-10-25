@@ -2,20 +2,25 @@
 /* eslint-disable */
 
 
-// Backwards-compatible no-op scheduler guard.
-// Some legacy paths may call window.__tpScrollWrite before the TS scheduler loads.
-// Provide a safe no-op that directly sets scrollTop to avoid hard crashes.
-try {
-  window.__tpScrollWrite = window.__tpScrollWrite || function (y) {
-    try {
-      const sc = document.scrollingElement || document.documentElement || document.body;
-      try { sc.scrollTop = (y | 0); } catch {}
-        } catch (e) {
-          console.warn('[TP-Pro] settings obs test failed', e);
-          _toast('OBS: failed');
-        }
-// Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
-let _toast = function (msg, opts) {
+ // Backwards-compatible no-op scheduler guard.
+ // Some legacy paths may call window.__tpScrollWrite before the TS scheduler loads.
+ // Provide a safe no-op that directly sets scrollTop to avoid hard crashes.
+ try {
+   window.__tpScrollWrite = window.__tpScrollWrite || function (y) {
+     try {
+       const sc = document.scrollingElement || document.documentElement || document.body;
+       try { sc.scrollTop = (y | 0); } catch {}
+     } catch (e) {
+       console.warn('[TP-Pro] settings obs test failed', e);
+       // _toast may not be defined yet at this early point; guard its use.
+       try { typeof _toast === 'function' && _toast('OBS: failed'); } catch {}
+     }
+   };
+ } catch (e) {
+   // Best-effort swallow to avoid breaking host page if globals are restricted.
+ }
+ // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
+ let _toast = function (msg, opts) {
   try {
     if (typeof moduleToast === 'function') return moduleToast(msg, opts);
   } catch (e) {
@@ -9387,10 +9392,12 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     return window.__tpMic?.clearBars?.();
   };
 
-  /* eslint-enable no-func-assign, no-redeclare */
-
-  } // end if (!window.tpMarkInitDone)
-  })(); // end ensureInitMarker IIFE
-  })(); // end main IIFE (restored)
-  } // end skip-under-jest guard
+    /* eslint-enable no-func-assign, no-redeclare */
+  
+    } // end if (!window.tpMarkInitDone)
+    })(); // end ensureInitMarker IIFE
+    })(); // end main IIFE (restored)
+    } // end skip-under-jest guard
+  
+  /* EOF */
 
