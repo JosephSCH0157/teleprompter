@@ -42,6 +42,7 @@ let _toast = function (msg, opts) {
         }
       }
     (process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test' || ((process.argv || []).join(' ') || '').includes('jest'));
+  try { window.__TP_SKIP_BOOT_FOR_TESTS = __TP_SKIP_BOOT_FOR_TESTS; } catch {}
   if (!__TP_SKIP_BOOT_FOR_TESTS) {
     (function () {
   'use strict';
