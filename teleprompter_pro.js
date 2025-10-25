@@ -660,6 +660,20 @@ let _toast = function (msg, opts) {
     __tpBootPush('after-zoom-guard');
   } catch {}
 
+  // Dev escape hatch: allow running the legacy matcher for one version via
+  // URL param `?matcher=legacy`. This is temporary and intended for quick
+  // developer rollback/testing during the TS migration.
+  (function () {
+    try {
+      const params = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : null;
+      if (params && params.get && params.get('matcher') === 'legacy') {
+        try {
+          window.__TP_ENABLE_LEGACY_MATCHER = true;
+        } catch {}
+      }
+    } catch {}
+  })();
+
   function setStatus(msg) {
     try {
       const s =
