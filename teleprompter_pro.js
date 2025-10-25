@@ -10,37 +10,37 @@ try {
     try {
       const sc = document.scrollingElement || document.documentElement || document.body;
       try { sc.scrollTop = (y | 0); } catch {}
-    } catch {}
-  };
-} catch {}
-
+        } catch (e) {
+          console.warn('[TP-Pro] settings obs test failed', e);
+          _toast('OBS: failed');
+        }
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 let _toast = function (msg, opts) {
   try {
     if (typeof moduleToast === 'function') return moduleToast(msg, opts);
-  } catch {
+  } catch (e) {
     try {
       console.debug('module toast access failed', e);
-    } catch {
-      void e;
-    }
-  }
-  try {
-    if (typeof window !== 'undefined' && typeof window._toast === 'function')
-      return window._toast(msg, opts);
-  } catch {
-    void 0;
-  }
-  try {
-    console.debug('[toast]', msg, opts || '');
-  } catch {}
-};
-
-  // If running under Jest (unit tests) or a test Node env, skip executing the full browser boot sequence
-  // Detect common Jest signals: JEST_WORKER_ID, NODE_ENV=test, or 'jest' on the process argv.
-  const __TP_SKIP_BOOT_FOR_TESTS =
-    typeof process !== 'undefined' &&
-    process.env &&
+      } catch (e) {
+        try {
+          console.error('[Scripts.save] error', e);
+        } catch (err) {
+          void err;
+        }
+        // expose last save error for diagnostics and attach a session fallback
+        try {
+          window.__lastScriptSaveError = { message: e && e.message, stack: e && e.stack };
+          const _fallback = { title: scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled', content: getEditorContent(), at: Date.now() };
+          try {
+            sessionStorage.setItem('tp_last_unsaved_script', JSON.stringify(_fallback));
+            _toast('Save failed — content saved to session storage', { type: 'error' });
+          } catch (err) {
+            _toast('Save failed', { type: 'error' });
+          }
+        } catch (err) {
+          _toast('Save failed', { type: 'error' });
+        }
+      }
     (process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test' || ((process.argv || []).join(' ') || '').includes('jest'));
   if (!__TP_SKIP_BOOT_FOR_TESTS) {
     (function () {
@@ -104,7 +104,7 @@ let _toast = function (msg, opts) {
           const ok = window.__tpClampGuard(target, max);
           if (!ok) return; // skip micro re-clamp
         }
-      } catch {}
+      } catch (e) { void e; }
       sc.scrollTop = target;
       if (window.__TP_DEV) {
         try {
@@ -116,7 +116,7 @@ let _toast = function (msg, opts) {
           });
         } catch {}
       }
-    } catch {
+    } catch (e) {
       void e;
     }
   }
@@ -136,7 +136,7 @@ let _toast = function (msg, opts) {
             ) {
               return _initCore();
             }
-          } catch {
+          } catch (e) {
             void e;
           }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
@@ -270,7 +270,7 @@ let _toast = function (msg, opts) {
           }
           try {
             __tpBootPush('window-init-proxy-waiting-core');
-          } catch {
+          } catch (e) {
             void e;
           }
           // Wait briefly for core to appear (either via assignment or resolve hook)
@@ -351,10 +351,10 @@ let _toast = function (msg, opts) {
           window.__tpEarlyInitRan = true;
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
-          } catch {
-            void e;
-          }
-        } catch {
+          } catch (e) {
+          void e;
+        }
+        } catch (e) {
           void e;
         }
       });
@@ -396,7 +396,7 @@ let _toast = function (msg, opts) {
           try {
             if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch {
+          } catch (e) {
               console.warn('Mini normalize failed', e);
             }
         });
@@ -404,7 +404,7 @@ let _toast = function (msg, opts) {
       try {
         __tpBootPush('minimal-boot');
       } catch {}
-    } catch {
+    } catch (e) {
       console.warn('[TP-Pro] minimalBoot error', e);
     }
   }
@@ -425,7 +425,7 @@ let _toast = function (msg, opts) {
         window.__tpInitCalled = true;
         init();
       }
-        } catch {
+        } catch (e) {
       console.error('[TP-Pro] early force init error', e);
     }
   }, 0);
@@ -494,7 +494,7 @@ let _toast = function (msg, opts) {
         Promise.resolve().then(whenInitReady);
       }
     }
-    } catch {
+    } catch (e) {
     console.warn('early init scheduling error', e);
   }
   try {
@@ -616,11 +616,11 @@ let _toast = function (msg, opts) {
             _toast = m.toast;
           } catch {}
         }
-      } catch {
+      } catch (e) {
         // module not available yet or import failed; keep fallback
         try {
           console.debug('toast module import failed', e);
-        } catch {}
+        } catch (e) { void e; }
       }
     })();
   })();
@@ -830,10 +830,10 @@ let _toast = function (msg, opts) {
             try {
               await switchCamera(camSelS.value);
               _toast('Camera switched', { type: 'ok' });
-            } catch {
-              warn('Camera switch failed', e);
-              _toast('Camera switch failed');
-            }
+            } catch (e) {
+                warn('Camera switch failed', e);
+                _toast('Camera switch failed');
+              }
           }
         });
       }
@@ -1038,7 +1038,7 @@ let _toast = function (msg, opts) {
           try {
             await switchCamera(camSelS.value);
             _toast('Camera switched', { type: 'ok' });
-          } catch {
+          } catch (e) {
             warn('Camera switch failed', e);
             _toast('Camera switch failed');
           }
@@ -3000,13 +3000,13 @@ let _toast = function (msg, opts) {
           VIEWER_HEIGHT_BASE
         );
       }
-    } catch {
+    } catch (e) {
       console.warn('[TP-Pro Calm] scroller lock failed', e);
     }
     // Run minimal wiring first (meters, help overlay, normalize button)
     try {
       __initMinimal();
-    } catch {
+    } catch (e) {
       console.warn('Minimal init failed', e);
     }
     // ⬇️ grab these *first*
@@ -3820,7 +3820,7 @@ let _toast = function (msg, opts) {
         if (!ScriptsModule || !ScriptsModule.Scripts) throw new Error('Scripts module not available');
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
-      } catch {
+      } catch (e) {
         console.error('initScriptsUI failed', e);
       }
     }
@@ -3836,7 +3836,7 @@ let _toast = function (msg, opts) {
           .map((s) => `<option value="${s.id}">${s.title}</option>`)
           .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
-      } catch {
+      } catch (e) {
         void e;
       }
     }
@@ -3898,7 +3898,7 @@ let _toast = function (msg, opts) {
         if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
         setEditorContent(s.content || '');
         _toast('Script loaded', { type: 'ok' });
-      } catch {
+      } catch (e) {
         console.debug('Scripts.load error', e);
         _toast('Load failed', { type: 'error' });
       }
@@ -3912,7 +3912,7 @@ let _toast = function (msg, opts) {
         scriptTitle && (scriptTitle.value = '');
         refreshScriptsDropdown();
         _toast('Script deleted', {});
-      } catch {
+      } catch (e) {
         console.debug('Scripts.delete error', e);
         _toast('Delete failed', { type: 'error' });
       }
@@ -3930,7 +3930,7 @@ let _toast = function (msg, opts) {
           scriptTitle && (scriptTitle.value = t);
           refreshScriptsDropdown();
         }
-      } catch {
+      } catch (e) {
         console.debug('Scripts.rename error', e);
       }
     }
