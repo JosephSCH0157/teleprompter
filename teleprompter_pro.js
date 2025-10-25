@@ -6544,57 +6544,54 @@
   // Stall instrumentation state
   let __tpStall = { reported: false };
 
-  // --- PLL Bias Controller shim (delegates entirely to TS implementation) ---
-  // The monolith no longer contains internal PLL/servo/bias logic. Instead we
-  // expose a tiny delegating object `PLL` used by legacy call sites. The real
-  // implementation lives in `src/scroll/pll.ts` and installs itself on
-  // `window.PLL` via `installPLL()`. If the TS impl isn't present yet, the
-  // shim returns safe defaults and no-op functions.
-  const PLL = (function () {
-    const forward = (name, args = []) => {
+  // --- PLL guard (delegates to TS implementation on window.PLL) ---
+  // The monolith no longer contains internal PLL/servo/bias logic. Keep a
+  // tiny, explicit delegating object `PLL` so legacy references in this file
+  // (which expect a `PLL` symbol) continue to work while the TypeScript
+  // implementation installs itself on `window.PLL` via `installPLL()`.
+  const PLL = {
+    update: (opts) => {
       try {
-        if (typeof window !== 'undefined' && window.PLL && typeof window.PLL[name] === 'function')
-          return window.PLL[name].apply(window.PLL, args);
-      } catch {}
-      return undefined;
-    };
-
-    return {
-      // Forwarding operations — no-op if TS PLL not installed
-      update: (opts) => forward('update', [opts]),
-      tune: (p) => forward('tune', [p]),
-      allowAnchor: () => {
-        const r = forward('allowAnchor', []);
+        return typeof window !== 'undefined' && window.PLL && typeof window.PLL.update === 'function'
+          ? window.PLL.update(opts)
+          : undefined;
+      } catch { return undefined; }
+    },
+    tune: (p) => {
+      try {
+        return typeof window !== 'undefined' && window.PLL && typeof window.PLL.tune === 'function'
+          ? window.PLL.tune(p)
+          : undefined;
+      } catch { return undefined; }
+    },
+    allowAnchor: () => {
+      try {
+        const r = typeof window !== 'undefined' && window.PLL && typeof window.PLL.allowAnchor === 'function'
+          ? window.PLL.allowAnchor()
+          : undefined;
         return typeof r === 'boolean' ? r : true; // default: allow anchors
-      },
-      onPause: () => forward('onPause', []),
-      // Telemetry & readouts — mirror the TS impl when present, otherwise safe defaults
-      get biasPct() {
-        try {
-          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.biasPct !== 'undefined') return window.PLL.biasPct;
-        } catch {}
-        return 0;
-      },
-      get state() {
-        try {
-          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.state !== 'undefined') return window.PLL.state;
-        } catch {}
-        return 'UNKNOWN';
-      },
-      get errF() {
-        try {
-          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.errF !== 'undefined') return window.PLL.errF;
-        } catch {}
-        return 0;
-      },
-      get telemetry() {
-        try {
-          if (typeof window !== 'undefined' && window.PLL && typeof window.PLL.telemetry !== 'undefined') return window.PLL.telemetry;
-        } catch {}
-        return {};
-      },
-    };
-  })();
+      } catch { return true; }
+    },
+    onPause: () => {
+      try {
+        return typeof window !== 'undefined' && window.PLL && typeof window.PLL.onPause === 'function'
+          ? window.PLL.onPause()
+          : undefined;
+      } catch { return undefined; }
+    },
+    get biasPct() {
+      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.biasPct !== 'undefined' ? window.PLL.biasPct : 0; } catch { return 0; }
+    },
+    get state() {
+      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.state !== 'undefined' ? window.PLL.state : 'UNKNOWN'; } catch { return 'UNKNOWN'; }
+    },
+    get errF() {
+      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.errF !== 'undefined' ? window.PLL.errF : 0; } catch { return 0; }
+    },
+    get telemetry() {
+      try { return typeof window !== 'undefined' && window.PLL && typeof window.PLL.telemetry !== 'undefined' ? window.PLL.telemetry : {}; } catch { return {}; }
+    },
+  };
 
   function tokenCoverage(lineTokens, tailTokens) {
     try {
