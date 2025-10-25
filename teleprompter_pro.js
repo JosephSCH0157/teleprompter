@@ -717,197 +717,23 @@ let _toast = function (msg, opts) {
   // Dynamic wiring helper must exist before buildSettingsContent uses it
   // (Removed duplicate wireSettingsDynamic definition; primary is declared near top.)
 
+  // Simplified settings builder shim.
+  // The monolith's full DOM builder was removed in favor of the TS settings module.
+  // Keep a tiny delegator so legacy callers that invoke `buildSettingsContent()`
+  // will open the overlay via the TS mount when available.
   function buildSettingsContent() {
-    const body = document.getElementById('settingsBody');
-    if (!body) return;
-    // Idempotency guard: if cards already exist, treat as already-built and sync values.
     try {
-      if (body.querySelector('.settings-card')) {
-        _settingsBuilt = true;
-        try { syncSettingsValues(); } catch {}
-        try { setupSettingsTabs(); } catch {}
-        return;
-      }
+      const root = document.getElementById('settingsBody');
+      if (!root) return;
+      // Prefer the TS settings mount if present
+      try {
+        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') {
+          window.__tp.settings.mount(root);
+          return;
+        }
+      } catch {}
+      // No-op fallback: settings UI will be provided by the module when loaded.
     } catch {}
-    if (_settingsBuilt) {
-      if (!body.querySelector('.settings-card')) {
-        _settingsBuilt = false;
-      } else {
-        syncSettingsValues();
-        return;
-      }
-    }
-    const getVal = (id, fallback = '') => {
-      try {
-        const el = document.getElementById(id);
-        return el && 'value' in el && el.value !== undefined ? el.value : fallback;
-      } catch {
-        return fallback;
-      }
-    };
-    const isChecked = (id) => {
-      try {
-        const el = document.getElementById(id);
-        return !!el?.checked;
-      } catch {
-        return false;
-      }
-    };
-    const speakersHidden = !!document.getElementById('speakersBody')?.classList.contains('hidden');
-
-    const frag = document.createDocumentFragment();
-    const card = (id, title, tab, innerHtml) => {
-      const d = document.createElement('div');
-      d.className = 'settings-card';
-      d.dataset.tab = tab;
-      d.id = id;
-      d.innerHTML = `<h4>${title}</h4><div class="settings-card-body">${innerHtml}</div>`;
-      return d;
-    };
-    frag.appendChild(
-      card(
-        'cardMic',
-        'Microphone',
-        'media',
-        `
-        <div class="settings-inline-row">
-          <button id="settingsReqMic" class="btn-chip">Request mic</button>
-          <select id="settingsMicSel" class="select-md"></select>
-        </div>
-        <div class="settings-small">Select input and grant permission for speech sync & dB meter.</div>`
-      )
-    );
-    frag.appendChild(
-      card(
-        'cardCam',
-        'Camera',
-        'media',
-        `
-        <div class="settings-inline-row">
-          <button id="settingsStartCam" class="btn-chip">Start</button>
-          <button id="settingsStopCam" class="btn-chip">Stop</button>
-          <select id="settingsCamSel" class="select-md"></select>
-        </div>
-        <div class="settings-inline-row">
-          <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${getVal('camSize', 28)}" style="width:70px"></label>
-          <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${getVal('camOpacity', 100)}" style="width:80px"></label>
-          <label class="tp-check"><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror') ? 'checked' : ''} aria-label="Mirror camera" /><span>Mirror</span></label>
-        </div>
-        <div class="settings-small">Camera overlay floats over the script.</div>`
-      )
-    );
-    frag.appendChild(
-      card(
-        'cardSpeakers',
-        'Speakers',
-        'general',
-        `
-        <div class="settings-inline-row">
-          <button id="settingsShowSpeakers" class="btn-chip">${speakersHidden ? 'Show' : 'Hide'} List</button>
-          <button id="settingsNormalize" class="btn-chip">Normalize Script</button>
-        </div>
-        <div class="settings-small">Manage speaker tags & quick normalization.</div>`
-      )
-    );
-    frag.appendChild(
-      card(
-        'cardRecording',
-        'Recording',
-        'recording',
-        `
-        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
-          <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
-          <div class="settings-row">
-            <label class="tp-check">
-              <input id="settingsEnableObs" type="checkbox" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false' }" aria-label="Enable OBS" />
-              <span>Enable OBS</span>
-            </label>
-
-            <span class="obs-pill">OBS: <strong id="obsStatusText">unknown</strong></span>
-
-            <label class="tp-field">
-              <span>URL</span>
-              <input id="settingsObsUrl" class="input-url" type="text" placeholder="127.0.0.1" inputmode="url" autocomplete="off" value="${getVal('obsUrl', '')}" />
-            </label>
-
-            <label class="tp-field">
-              <span>Port</span>
-              <input id="settingsObsPort" class="input-port" type="text" placeholder="4455" inputmode="numeric" pattern="[0-9]+" autocomplete="off" value="" />
-            </label>
-
-            <label class="tp-check" title="Use secure WebSocket (wss)">
-              <input id="settingsObsSecure" type="checkbox" ${isChecked('obsSecure') ? 'checked' : ''} />
-              <span>Secure (wss)</span>
-            </label>
-          </div>
-
-          <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
-          <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
-          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
-          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
-          <label class="tp-field">
-            <span>Password</span>
-            <input id="settingsObsPass"
-                   type="password"
-                   placeholder="OBS WebSocket password"
-                   autocomplete="current-password"
-                   autocapitalize="off"
-                   spellcheck="false"
-                   inputmode="text"
-                   enterkeyhint="done"
-                   class="obs-pass"
-                   value="${getVal('obsPassword', '')}" />
-          </label>
-
-          <button id="settingsObsClear" class="btn btn-ghost" type="button" title="Clear session password">Clear</button>
-
-          <label class="tp-check" style="margin-left:6px">
-            <input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''} disabled aria-label="Remember password (disabled)" />
-            <span>Remember password</span>
-          </label>
-          <button id="settingsObsTest" type="button" class="btn-chip" aria-label="Test OBS connection">Test</button>
-          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px" aria-label="Sync and Test OBS">Sync & Test</button>
-          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px" aria-label="Poke OBS">Poke</button>
-        </form>
-        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" aria-atomic="true" style="margin-top:8px"></div>
-  <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
-  <div class="settings-small" style="margin-top:6px; font-size:0.9em; color:#444">Recommended OBS settings: set Recording Filename to <code>Anvil-{date}-{time}</code> (optionally include <code>{scene}</code> or <code>{profile}</code>), and set Container to <strong>mp4</strong> (or use <strong>mkv</strong> with auto-remux on stop for crash-safe recordings).</div>`
-      )
-    );
-    frag.appendChild(
-      card(
-        'cardPLL',
-        'Hybrid Lock (Auto + Speech)',
-        'advanced',
-        `
-        <div class="settings-inline-row">
-          <label class="tp-check"><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''} aria-label="Enable hybrid lock" /><span>Enable hybrid lock</span></label>
-        </div>
-        <div class="settings-inline-row">
-          <label>Responsiveness <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.022)}" style="width:80px"></label>
-          <label>Stability <input id="settingsKd" type="number" min="0" max="0.01" step="0.0001" value="${getVal('Kd', 0.0025)}" style="width:80px"></label>
-          <label>Max bias <input id="settingsMaxBiasPct" type="number" min="0" max="0.5" step="0.01" value="${getVal('maxBiasPct', 0.12)}" style="width:80px"></label>
-        </div>
-        <div class="settings-inline-row">
-          <label>Min conf <input id="settingsConfMin" type="number" min="0" max="1" step="0.01" value="${getVal('confMin', 0.6)}" style="width:80px"></label>
-          <label>Decay ms <input id="settingsDecayMs" type="number" min="100" max="5000" step="100" value="${getVal('decayMs', 550)}" style="width:80px"></label>
-        </div>
-        <div id="pllReadout" class="settings-small" style="font-family:monospace; margin-top:8px;">
-          Lead/Lag: --px | Bias: --% | State: --
-        </div>
-        <div class="settings-small">Keeps steady auto-scroll and gently trims speed to your voice. If recognition drops, it coasts.</div>`
-      )
-    );
-    try {
-      body.appendChild(frag);
-      wireSettingsDynamic();
-      syncSettingsValues();
-      setupSettingsTabs();
-      if (body.querySelector('.settings-card')) _settingsBuilt = true;
-    } catch {
-      console.warn('Settings build failed, will retry', e);
-      _settingsBuilt = false;
-    }
   }
   try {
     __tpBootPush('after-buildSettingsContent-def');
@@ -1049,107 +875,19 @@ let _toast = function (msg, opts) {
     return '';
   };
 
-  function setupSettingsTabs() {
-    const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
-    // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
-    const sb = document.getElementById('settingsBody');
-    const cards = sb ? Array.from(sb.querySelectorAll('.settings-card')) : [];
-    // Hide tabs with no cards lazily
-    tabs.forEach((tab) => {
-      const tabName = tab.dataset.tab;
-      const hasCard = cards.some((c) => c.dataset.tab === tabName);
-      if (!hasCard) tab.style.display = 'none';
-    });
-
-    // Animation helpers
-    const ANIM_IN = 'anim-in';
-    const ANIM_OUT = 'anim-out';
-    function showCard(c) {
-      if (c._visible) return; // already visible
-      c._visible = true;
-      c.style.display = 'flex';
-      c.classList.remove(ANIM_OUT);
-      // force reflow for animation restart
-      void c.offsetWidth;
-      c.classList.add(ANIM_IN);
-      c.addEventListener(
-        'animationend',
-        (e) => {
-          if (e.animationName === 'cardFadeIn') c.classList.remove(ANIM_IN);
-        },
-        { once: true }
-      );
-    }
-    function hideCard(c) {
-      if (!c._visible) return; // already hidden
-      c._visible = false;
-
-      // take it out of layout so the new card doesn't stack beneath it
-      try {
-        c.style.position = 'absolute';
-        c.style.inset = '0';
-        c.style.width = '100%';
-      } catch {}
-
-      c.classList.remove(ANIM_IN);
-      c.classList.add(ANIM_OUT);
-      c.addEventListener(
-        'animationend',
-        (e) => {
-          if (e.animationName === 'cardFadeOut') {
-            c.classList.remove(ANIM_OUT);
-            c.style.display = 'none';
-            // restore flow for when card is shown again
-            try {
-              c.style.position = '';
-              c.style.inset = '';
-              c.style.width = '';
-            } catch {}
-          }
-        },
-        { once: true }
-      );
-    }
-
-    const apply = (name) => {
-      const tab = name || 'general';
-      // Preserve current scroll position so switching tabs doesn't jump the sheet
-      const prevScroll = sb ? sb.scrollTop : 0;
-      try { localStorage.setItem('tp_settings_tab', tab); } catch {}
-
-      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
-
-      // Hide non-selected first
-      cards.forEach((c) => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
-
-      // Then show the selected card
-      const target = cards.find((c) => c.dataset.tab === tab);
-      if (target) showCard(target);
-
-      // Restore scroll after layout/animation frame
-      try {
-        if (sb) requestAnimationFrame(() => { try { sb.scrollTop = prevScroll; } catch {} });
-      } catch {}
-    };
-    tabs.forEach((t) => {
-      t.addEventListener('click', (ev) => {
-        try {
-          apply(t.dataset.tab);
-          // Blur the button to avoid focus-induced scrolling in some browsers
-          try { ev.currentTarget && ev.currentTarget.blur && ev.currentTarget.blur(); } catch {}
-        } catch {}
-      });
-    });
-    let last = 'general';
+  // Simplified setup shim: delegate tab wiring to the TS settings module when available.
+  function setupSettingsTabs(rootEl) {
     try {
-      last = localStorage.getItem('tp_settings_tab') || 'general';
+      const root = rootEl || document.getElementById('settingsBody');
+      if (!root) return;
+      try {
+        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.setup === 'function') {
+          window.__tp.settings.setup(root);
+          return;
+        }
+      } catch {}
+      // No-op fallback: TS module will handle tabs when present.
     } catch {}
-    // Initialize visibility (no animation on first render)
-    cards.forEach((c) => {
-      c._visible = false;
-      c.style.display = 'none';
-    });
-    apply(last);
   }
   try {
     __tpBootPush('after-setupSettingsTabs-def');
