@@ -49,6 +49,7 @@ let _toast = function (msg, opts) {
   try {
     // dev flag early so we can silence noisy warnings in production
             const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
+            try { window.__TP_DEV = __dev; } catch {}
             const saveBaseSpeed = window.saveBaseSpeed; // Ensure saveBaseSpeed is defined
     // idle flag — don't start heavy subsystems until a script exists
     if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
