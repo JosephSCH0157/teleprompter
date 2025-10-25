@@ -103,7 +103,8 @@ export const PLL = (() => {
 
   function allowAnchor() {
     const tNow = now();
-    if (tNow - lastAnchorTs < 1200) return false;
+    // If lastAnchorTs is zero (module just initialized) allow the first anchor.
+    if (lastAnchorTs !== 0 && tNow - lastAnchorTs < 1200) return false;
     lastAnchorTs = tNow;
     telemetry.anchorCount++;
     return true;
