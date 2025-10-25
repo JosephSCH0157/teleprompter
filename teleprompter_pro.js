@@ -149,16 +149,198 @@
                 if (typeof _initCore === 'function' || typeof window._initCore === 'function') { clearInterval(id); res(window._initCore || _initCore); }
                 else if (++tries > 300) { clearInterval(id); res(null); }
               }, 10);
-            })
+            }),
+            (window.__tpCoreReady?.then(()=> (window._initCore || _initCore)).catch(()=>null))
           ]);
-
-          if (typeof core === 'function') return core();
-          throw new Error('Core not ready');
-        } catch {}
+          if (typeof core === 'function') { return core(); }
+          console.warn('[TP-Pro] window.init proxy: core not ready after wait');
+            // Use the stable runner which waits until core is ready
+            try { __tpBootPush('window-init-proxy-waiting-core'); } catch {}
+            return await window._initCoreRunner();
+        } catch(e){ console.error('[TP-Pro] window.init proxy error', e); }
       };
+      __tpBootPush('window-init-proxy-installed');
     }
+  } catch {}
+  // Early minimal init safety net: builds placeholder + dB meter if deep init stalls.
+  (function earlyInitFallback(){
+    try {
+      if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
+      // Defer a tick so DOM is definitely present
+      requestAnimationFrame(()=>{
+        try {
+          if (window.__tpInitSuccess || window.__tpEarlyInitRan) return;
+          const scriptEl = document.getElementById('script');
+          const editorEl = document.getElementById('editor');
+          if (scriptEl && !scriptEl.innerHTML) {
+            scriptEl.innerHTML = '<p><em>Paste text in the editor to begin… (early)</em></p>';
+          }
+          // Build minimal dB meter bars if missing
+          const meter = document.getElementById('dbMeterTop');
+          if (meter && !meter.querySelector('.bar')) {
+            try { (typeof buildDbBars === 'function') ? buildDbBars(meter) : (function(m){ for(let i=0;i<10;i++){ const b=document.createElement('div'); b.className='bar'; m.appendChild(b);} })(meter); } catch {}
+          }
+          window.__tpEarlyInitRan = true;
+          try { __tpBootPush && __tpBootPush('early-init-fallback'); } catch {}
+        } catch (e) { console.warn('[TP-Pro] earlyInitFallback error', e); }
+      });
+    } catch {}
+  })();
 
-// Small helper: setStatus writes to a top-level #status element if present
+  // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
+  function minimalBoot(){
+    try {
+      if (window.__tpInitSuccess || window.__tpMinimalBootRan) return;
+      window.__tpMinimalBootRan = true;
+      const scriptEl = document.getElementById('script');
+      const editorEl = document.getElementById('editor');
+      if (scriptEl && (!scriptEl.textContent || !scriptEl.textContent.trim())) {
+        scriptEl.innerHTML = '<p><em>Paste text in the editor to begin…</em></p>';
+      }
+      // Build meter bars (lightweight fallback if buildDbBars not yet defined)
+      const meter = document.getElementById('dbMeterTop');
+      if (meter && !meter.querySelector('.bar')) {
+        if (typeof buildDbBars === 'function') { try { buildDbBars(meter); } catch {} }
+        else {
+          for (let i=0;i<12;i++){ const b=document.createElement('div'); b.className='bar'; meter.appendChild(b); }
+        }
+      }
+      // Wire top normalize button minimally (may be overwritten by full init later)
+      const nbtn = document.getElementById('normalizeTopBtn');
+      if (nbtn && !nbtn.__mini){
+        nbtn.__mini = true;
+        nbtn.addEventListener('click', ()=>{
+          try {
+          // Emit a governor sample for this committed line
+          try {
+            const viewerEl = sc || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+            const epx = errPxFrom(activeEl, viewerEl);
+            try { if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, 1.0); } catch {}
+          } catch {}
+            else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
+          } catch(e){ console.warn('Mini normalize failed', e); }
+        });
+      }
+      try { __tpBootPush('minimal-boot'); } catch {}
+    } catch (e){ console.warn('[TP-Pro] minimalBoot error', e); }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', minimalBoot);
+  else minimalBoot();
+  try { __tpBootPush('post-minimalBoot'); } catch {}
+  // Ultra-early safety init attempt (will run before normal scheduler if nothing else fires)
+  setTimeout(()=>{
+    try {
+      if (!window.__tpInitSuccess && !window.__tpInitCalled && typeof init === 'function') {
+        if (window.__TP_DEV) { try { console.info('[TP-Pro] Early zero-time force init attempt'); } catch {} }
+        window.__tpInitCalled = true;
+        init();
+      }
+    } catch(e){ console.error('[TP-Pro] early force init error', e); }
+  }, 0);
+  try { __tpBootPush('after-zero-time-init-attempt-scheduled'); } catch {}
+  // cSpell:ignore playsinline webkit-playsinline recog chrono preroll topbar labelledby uppercased Tunables tunables Menlo Consolas docx openxmlformats officedocument wordprocessingml arrayBuffer FileReader unpkg mammoth
+
+  // Early redundant init scheduling (safety net): wait for init to be defined, then call once
+  try { __tpBootPush('pre-init-scheduling-early'); } catch {}
+  try {
+    const callInitOnce = () => {
+      if (window.__tpInitCalled) return;
+      if (typeof init === 'function') {
+        window.__tpInitCalled = true;
+        try { __tpBootPush('early-init-invoking'); } catch {}
+        try { init(); } catch(e){ console.error('init failed (early)', e); }
+      } else if (typeof window._initCore === 'function') {
+        window.__tpInitCalled = true;
+        try { __tpBootPush('early-core-invoking'); } catch {}
+        (async ()=>{
+          try {
+            await window._initCore();
+            console.log('[TP-Pro] _initCore early path end (success)');
+          } catch(e){
+            console.error('[TP-Pro] _initCore failed (early path):', e);
+          }
+        })();
+      } else {
+        // Shouldn’t happen due to guard, but reset flag to allow later retry
+        window.__tpInitCalled = false;
+      }
+    };
+    const whenInitReady = () => {
+      if (typeof init === 'function') { callInitOnce(); return; }
+      try { __tpBootPush('early-waiting-for-init'); } catch {}
+      let tries = 0;
+      const id = setInterval(() => {
+        if (typeof init === 'function' || typeof window._initCore === 'function') { clearInterval(id); callInitOnce(); }
+        else if (++tries > 300) { clearInterval(id); console.warn('[TP-Pro] init not defined after wait'); }
+      }, 10);
+    };
+    if (!window.__tpInitScheduled) {
+      window.__tpInitScheduled = true;
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', whenInitReady, { once: true });
+      } else {
+        Promise.resolve().then(whenInitReady);
+      }
+    }
+  } catch(e){ console.warn('early init scheduling error', e); }
+  try { __tpBootPush('init-scheduling-early-exited'); } catch {}
+
+  /* ──────────────────────────────────────────────────────────────
+   * Boot diagnostics
+   * ────────────────────────────────────────────────────────────── */
+  const log  = (...a) => console.log('[TP-Pro]', ...a);
+  const warn = (...a) => console.warn('[TP-Pro]', ...a);
+  const err  = (...a) => console.error('[TP-Pro]', ...a);
+
+  // Missing constants / safe fallbacks (restored)
+  const DEVICE_KEY = 'tp_mic_device_v1';
+  // Define globals used later to avoid early ReferenceErrors halting script
+  let dbAnim = null;          // requestAnimationFrame id for dB meter
+  let audioStream = null;     // MediaStream for mic
+  let analyser = null;        // AnalyserNode
+  let audioCtx = null;        // AudioContext
+  // Display & camera/session globals (avoid ReferenceErrors during early handlers)
+  let displayReady = false;           // display window handshake state
+  let displayHelloTimer = null;       // hello ping interval id
+  let displayHelloDeadline = 0;       // cutoff for hello pings
+  let camStream = null;               // active camera MediaStream
+  let wantCamRTC = false;             // user intent to mirror cam to display
+  let camPC = null;                   // RTCPeerConnection for camera
+  let recog = null;                   // SpeechRecognition instance
+  let camAwaitingAnswer = false;      // negotiation flag to gate remote answers
+  // Peak hold state for dB meter
+  const peakHold = { value: 0, lastUpdate: 0, decay: 0.9 };
+  // Default for recAutoRestart until init wires it; exposed via defineProperty later
+  let recAutoRestart = false;
+  // Auto-start mic if previously chosen device is present
+  let pendingAutoStart = false;
+  function _toast(msg, opts){
+    // Lightweight fallback if the richer toast system was not injected
+    try { console.debug('[toast]', msg, opts||''); } catch {}
+  }
+
+  window.addEventListener('error', e => setStatus('Boot error: ' + (e?.message || e)));
+  window.addEventListener('unhandledrejection', e => setStatus('Promise rejection: ' + (e?.reason?.message || e?.reason || e)));
+
+  // CSS rule '.hidden { display: none !important; }' removed. Add this to your CSS file instead.
+
+  // TP: zoom-guard (main)
+  // Prevent browser-level zoom (Ctrl/Meta + wheel or +/-/0) so each window keeps its own in-app typography zoom.
+  try {
+    window.addEventListener('wheel', (e)=>{
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); }
+    }, { passive: false });
+    window.addEventListener('keydown', (e)=>{
+      if (e.ctrlKey || e.metaKey) {
+        const k = (e.key||'');
+        if (k === '+' || k === '=' || k === '-' || k === '_' || k === '0') e.preventDefault();
+      }
+    }, { capture: true });
+  } catch {}
+  try { __tpBootPush('after-zoom-guard'); } catch {}
+
+
+
 function setStatus(msg){
   try {
     const s = document.getElementById('status') || (() => {
@@ -168,7 +350,9 @@ function setStatus(msg){
       return p;
     })();
     s.textContent = String(msg);
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    // ignore
+  }
 }
 
 // Shared Normalize wiring helper
@@ -193,46 +377,120 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // Dynamic wiring helper must exist before buildSettingsContent uses it
     // (Removed duplicate wireSettingsDynamic definition; primary is declared near top.)
 
-    // Simplified settings builder: delegate to new TS stack when available.
-    // The legacy DOM builder/tabs are removed to avoid duplication with the
-    // TypeScript-based settings UI. This function now mounts the TS settings
-    // into the overlay body if the new stack is present.
     function buildSettingsContent(){
-      try{
+      // Monolith settings builder removed in favor of the TS settings stack.
+      // Delegate to the new settings mount API when available so the
+      // overlay body is populated by `src/ui/settings` instead of this file.
+      try {
         const body = document.getElementById('settingsBody');
         if (!body) return;
-        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function'){
-          try { window.__tp.settings.mount(body); } catch {}
-        }
-      }catch{}
+        try { if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch {}
+      } catch {}
     }
   try { __tpBootPush('after-buildSettingsContent-def'); } catch {}
 
-    // syncSettingsValues is now handled by the TS settings stack. Keep a small
-    // shim so legacy callers don't error and so launch-time hydration can be
-    // delegated to the new settings module if present.
     function syncSettingsValues(){
-      try{
-        const body = document.getElementById('settingsBody');
-        if (!body) return;
-        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.sync === 'function'){
-          try { window.__tp.settings.sync(body); } catch {}
+      // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
+      const micSel = document.getElementById('settingsMicSel');
+      if (micSel && !micSel.options.length) {
+        // If not yet populated, attempt populateDevices (async, fire and forget)
+        try { populateDevices(); } catch {}
+      }
+      const camSelS = document.getElementById('settingsCamSel');
+      if (camSelS && camDeviceSel){
+        if (camSelS){
+          camSelS.addEventListener('change', async ()=>{
+            try { if (typeof camDeviceSel !== 'undefined' && camDeviceSel) camDeviceSel.value = camSelS.value; } catch {}
+            if (camVideo?.srcObject && camSelS.value) {
+              try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
+            }
+          });
         }
-      }catch{}
+      }
+      const showSpk = document.getElementById('settingsShowSpeakers');
+      if (showSpk) showSpk.textContent = speakersBody?.classList.contains('hidden') ? 'Show List' : 'Hide List';
+      // Mirror OBS fields from main panel to Settings overlay (query directly; avoid non-global vars)
+      try {
+        const obsEnable = document.getElementById('settingsEnableObs');
+        const mainEnable = document.getElementById('enableObs');
+        if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
+      } catch {}
+      try {
+        const obsUrlS = document.getElementById('settingsObsUrl');
+        const mainUrl = document.getElementById('obsUrl');
+        if (obsUrlS && mainUrl && typeof mainUrl.value === 'string') obsUrlS.value = mainUrl.value;
+      } catch {}
+      try {
+        const obsPassS = document.getElementById('settingsObsPass');
+        const mainPass = document.getElementById('obsPassword');
+        if (obsPassS && mainPass && typeof mainPass.value === 'string') obsPassS.value = mainPass.value;
+      } catch {}
     }
   try { __tpBootPush('after-syncSettingsValues-def'); } catch {}
 
-    // Legacy tab/card flow is now managed by the TS settings stack. Provide a
-    // small shim so legacy callers that expect setupSettingsTabs() to exist
-    // won't fail; the real tab wiring lives in the TS code.
     function setupSettingsTabs(){
-      try{
-        const body = document.getElementById('settingsBody');
-        if (!body) return;
-        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function'){
-          try { window.__tp.settings.mount(body); } catch {}
-        }
-      }catch{}
+      const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
+    // Guard against duplicate wiring: some builds accidentally contain
+    // duplicated wiring blocks. Make this idempotent so calling the
+    // function multiple times won't attach listeners twice.
+    if (window.__tpTabsWired) return;
+    window.__tpTabsWired = true;
+      // Query cards from the DOM directly; do not rely on a non-global settingsBody variable
+      const sb = document.getElementById('settingsBody');
+      const cards = sb ? Array.from(sb.querySelectorAll('.settings-card')) : [];
+      // Hide tabs with no cards lazily
+      tabs.forEach(tab => {
+        const tabName = tab.dataset.tab;
+        const hasCard = cards.some(c => c.dataset.tab === tabName);
+        if (!hasCard) tab.style.display = 'none';
+      });
+
+      // Animation helpers
+      const ANIM_IN = 'anim-in';
+      const ANIM_OUT = 'anim-out';
+      function showCard(c){
+        if (c._visible) return; // already visible
+        c._visible = true;
+        c.style.display = 'flex';
+        c.classList.remove(ANIM_OUT);
+        // force reflow for animation restart
+        void c.offsetWidth;
+        c.classList.add(ANIM_IN);
+        c.addEventListener('animationend', (e)=>{ if(e.animationName==='cardFadeIn') c.classList.remove(ANIM_IN); }, { once:true });
+      }
+      function hideCard(c){
+        if (!c._visible) return; // already hidden
+        c._visible = false;
+        // take it out of layout so the new card doesn't stack beneath it
+        try { c.style.position = 'absolute'; c.style.inset = '0'; c.style.width = '100%'; } catch {}
+        c.classList.remove(ANIM_IN);
+        c.classList.add(ANIM_OUT);
+        c.addEventListener('animationend', (e)=>{
+          if (e.animationName==='cardFadeOut') {
+            c.classList.remove(ANIM_OUT);
+            c.style.display='none';
+            // restore flow for when the card is shown again
+            try { c.style.position = ''; c.style.inset = ''; c.style.width = ''; } catch {}
+          }
+        }, { once:true });
+      }
+
+      const apply = (name) => {
+        const tab = name || 'general';
+        try { localStorage.setItem('tp_settings_tab', tab); } catch {}
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        // hide non-selected first to avoid one-frame overlaps
+        cards.forEach(c => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
+        // then show the selected card
+        const target = cards.find(c => c.dataset.tab === tab);
+        if (target) showCard(target);
+      };
+      tabs.forEach(t => t.addEventListener('click', ()=> apply(t.dataset.tab)));
+      let last = 'general';
+      try { last = localStorage.getItem('tp_settings_tab') || 'general'; } catch {}
+      // Initialize visibility (no animation on first render)
+      cards.forEach(c => { c._visible = false; c.style.display='none'; });
+      apply(last);
     }
   try { __tpBootPush('after-setupSettingsTabs-def'); } catch {}
     // (Removed stray recorder settings snippet accidentally injected here)
@@ -243,16 +501,147 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // to buildSettingsContent() (which resides at top scope) and causing a ReferenceError
     // when settings were first opened. We hoist it to top-level scope so the call inside
     // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
-    // Dynamic wiring for Settings is now provided by the TS stack; keep a no-op
-    // shim so legacy callers will succeed without duplicating listeners.
     function wireSettingsDynamic(){
-      try{
-        const body = document.getElementById('settingsBody');
-        if (!body) return;
-        if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function'){
-          try { window.__tp.settings.mount(body); } catch {}
+      // Mic
+      const reqMicBtn = document.getElementById('settingsReqMic');
+      const micSel    = document.getElementById('settingsMicSel');
+      if (micSel){
+        micSel.addEventListener('change', ()=>{
+          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
+        });
+      }
+      reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
+      // Camera
+      const startCamS = document.getElementById('settingsStartCam');
+      const stopCamS  = document.getElementById('settingsStopCam');
+      const camSelS   = document.getElementById('settingsCamSel');
+      const camSizeS  = document.getElementById('settingsCamSize');
+      const camOpacityS = document.getElementById('settingsCamOpacity');
+      const camMirrorS  = document.getElementById('settingsCamMirror');
+      if (camSelS && camDeviceSel){
+        camSelS.addEventListener('change', async ()=>{
+          camDeviceSel.value = camSelS.value;
+          if (camVideo?.srcObject && camSelS.value) {
+            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
+          }
+        });
+      }
+      startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
+      stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
+      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
+      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
+      // Speakers
+      const showSpk = document.getElementById('settingsShowSpeakers');
+      showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); buildSettingsContent(); });
+      document.getElementById('settingsNormalize')?.addEventListener('click', ()=> normalizeTopBtn?.click());
+      // Recording / OBS
+      const obsEnable = document.getElementById('settingsEnableObs');
+      const obsUrlS = document.getElementById('settingsObsUrl');
+      const obsPassS = document.getElementById('settingsObsPass');
+      const obsTestS = document.getElementById('settingsObsTest');
+      // Make the "Remember password" control inert and ensure password input is ephemeral
+      try {
+        const remEl = document.getElementById('settingsObsRemember');
+        if (remEl) {
+          try { remEl.disabled = true; } catch {}
+          try { remEl.setAttribute('aria-disabled', 'true'); } catch {}
+          try { remEl.tabIndex = -1; } catch {}
+          try { const lab = remEl.closest && remEl.closest('label'); if (lab) lab.classList.add('dim'); } catch {}
+          try { remEl.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); }); } catch {}
         }
-      }catch{}
+        const passEl = document.getElementById('settingsObsPass');
+        if (passEl) {
+          try { passEl.setAttribute('autocomplete', 'current-password'); } catch {}
+          try { passEl.setAttribute('spellcheck', 'false'); } catch {}
+          try { passEl.setAttribute('inputmode', 'text'); } catch {}
+          try { passEl.setAttribute('enterkeyhint', 'done'); } catch {}
+        }
+      } catch(e) { /* defensive */ }
+      obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
+      obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      // Settings Test: persist when "Remember" is checked, mirror inputs, and run adapter test
+      obsTestS?.addEventListener('click', async ()=>{
+        try {
+          const rem = document.getElementById('settingsObsRemember');
+          const urlEl = document.getElementById('settingsObsUrl');
+          // Password persistence is intentionally disabled until a secure store is available.
+          if (rem?.checked) {
+            try { if (urlEl?.value) localStorage.setItem('obsUrl', urlEl.value); } catch {}
+            try { localStorage.setItem('obsRemember','1'); } catch {}
+          } else {
+            try { localStorage.setItem('obsRemember','0'); } catch {}
+          }
+        } catch(e) { /* ignore */ }
+
+        // Mirror into main inputs so recorder wiring sees the latest values
+        try {
+          const mainUrl = document.getElementById('obsUrl');
+          const mainPass = document.getElementById('obsPassword');
+          const setUrl = document.getElementById('settingsObsUrl');
+          const setPass = document.getElementById('settingsObsPass');
+          if (mainUrl && setUrl) { mainUrl.value = setUrl.value; mainUrl.dispatchEvent(new Event('change',{bubbles:true})); }
+          if (mainPass && setPass) { mainPass.value = setPass.value; mainPass.dispatchEvent(new Event('change',{bubbles:true})); }
+        } catch(e) { /* ignore */ }
+
+        // Ensure adapter is configured with latest URL/password and status callbacks
+        try {
+          const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
+          const setUrl = document.getElementById('settingsObsUrl');
+          const setPass = document.getElementById('settingsObsPass');
+          const enableChk = document.getElementById('enableObs');
+          const obsStatusEl = document.getElementById('obsStatus');
+          if (adapter && typeof adapter.configure === 'function') {
+            try {
+              adapter.configure({
+                url: (setUrl && setUrl.value) || (document.getElementById('obsUrl')?.value) || undefined,
+                password: (setPass && setPass.value) || (document.getElementById('obsPassword')?.value) || undefined,
+                isEnabled: () => !!(enableChk && enableChk.checked),
+                onStatus: (s, ok) => {
+                  try {
+                    if (obsStatusEl) {
+                      if (ok) obsStatusEl.textContent = 'OBS: connected';
+                      else obsStatusEl.textContent = 'OBS: ' + (String(s || '').length ? String(s) : 'failed');
+                      obsStatusEl.title = String(s || '');
+                    }
+                  } catch(e) { /* ignore */ }
+                }
+              });
+            } catch(e) { /* ignore */ }
+          }
+        } catch(e) { /* ignore */ }
+
+        // Trigger existing UI test button behavior
+        try { obsTestBtn?.click(); } catch {}
+
+        // Also configure and call recorder adapter test directly (uses adapter's test implementation)
+        try {
+          const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
+          if (adapter) {
+            // adapter.configure already called above; run test()
+            if (typeof adapter.test === 'function') await adapter.test();
+          }
+        } catch(e) { console.warn('OBS adapter test failed', e); }
+
+        setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600);
+      });
+
+      // Helper: read OBS URL from settings/main/localStorage with sane fallback
+      window.readObsUrl = function () {
+        try {
+          return document.getElementById('settingsObsUrl')?.value?.trim() || document.getElementById('obsUrl')?.value?.trim() || localStorage.getItem('obsUrl') || 'ws://127.0.0.1:4455';
+        } catch(e) { return 'ws://127.0.0.1:4455'; }
+      };
+
+      // Helper: read OBS password from settings/main/localStorage depending on "Remember" flag
+      window.readObsPassword = function () {
+        try {
+          // Prefer in-DOM inputs; we intentionally do NOT read the persisted localStorage password
+          const s = document.getElementById('settingsObsPass')?.value ?? document.getElementById('obsPassword')?.value ?? '';
+          return s || '';
+        } catch(e) { return ''; }
+      };
     }
 
   // TP: normalize-fallback
@@ -3902,4 +4291,5 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 // end about popover
-// end about popover (clean end)
+}
+// (removed stray IIFE closure inserted here)
