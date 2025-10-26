@@ -1,10 +1,14 @@
-/* Teleprompter Pro — JS CLEAN (v1.5.8)
+/* Teleprompter Pro — JS CLEAN (v1.5.8) - Updated
    - Display handshake + retry pump
    - SmartTag supports: Name:, Name —, Name >, and block headers >> NAME:
    - DOCX import via Mammoth (auto‑loads on demand)
    - dB meter + mic selector
    - Camera overlay (mirror/size/opacity/PiP)
     // keep refresh button wired
+  // Temporary global to avoid ReferenceError from unbound `e` in legacy bare catches.
+  // Many older `catch {}` blocks reference `e` without binding; declaring `var e`
+  // at top-level prevents runtime ReferenceError while preserving local catch(e) bindings.
+  var e;
     refreshDevicesBtn?.addEventListener('click', populateDevices);
       const elR = el.getBoundingClientRect();
       const scR = (typeof sc.getBoundingClientRect === 'function') ? sc.getBoundingClientRect() : { top: 0 };
@@ -13,6 +17,7 @@
       const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
       return Math.max(0, Math.min(raw | 0, max));
     } catch { return 0; }
+    } catch (e) { return 0; }
   }
   function tpScrollTo(y, sc = (window.__TP_SCROLLER || document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body)) {
     try {
@@ -23,6 +28,10 @@
         try { console.debug('[TP-Pro Calm] tpScrollTo', { y, target, max, scroller: sc.id || sc.tagName }); } catch {}
       }
     } catch {}
+        if (window.__TP_DEV) {
+          try { console.debug('[TP-Pro Calm] tpScrollTo', { y, target, max, scroller: sc.id || sc.tagName }); } catch (e) {}
+        }
+      } catch (e) {}
   }
 
   // Early real-core waiter: provides a stable entry that will call the real core once it appears
@@ -36,6 +45,7 @@
               return _initCore();
             }
           } catch {}
+            } catch (e) {}
           if (typeof window._initCore === 'function' && window._initCore !== self) {
             return window._initCore();
           }
@@ -46,6 +56,7 @@
       try { window.__tpRealCore.__tpWaiter = true; } catch {}
     }
   } catch {}
+    } catch (e) {}
   // Install an early stub for core init that queues until the real core is defined
   try {
     if (typeof window._initCore !== 'function') {
@@ -59,6 +70,7 @@
             return _initCore();
           }
         } catch {}
+          } catch (e) {}
         const core = await new Promise((res)=>{
           let tries = 0; const id = setInterval(()=>{
   
@@ -83,6 +95,7 @@
                 Object.defineProperty(sc, 'scrollTop', { configurable:true, set(v){ requestScrollTop(v); } });
               }
             } catch {}
+              } catch (e) {}
           }
         } catch {}
       })();
@@ -204,6 +217,7 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
       } catch {}
     }
   try { __tpBootPush('after-buildSettingsContent-def'); } catch {}
+  try { __tpBootPush('after-buildSettingsContent-def'); } catch (e) {}
 
     function syncSettingsValues(){
       // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
