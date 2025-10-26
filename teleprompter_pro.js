@@ -258,407 +258,45 @@ try { __tpBootPush('after-wireNormalizeButton'); } catch {}
     // to buildSettingsContent() (which resides at top scope) and causing a ReferenceError
     // when settings were first opened. We hoist it to top-level scope so the call inside
     // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
-    function wireSettingsDynamic(){
-      // Mic
-      const reqMicBtn = document.getElementById('settingsReqMic');
-      const micSel    = document.getElementById('settingsMicSel');
-      if (micSel){
-        micSel.addEventListener('change', ()=>{
-          try { localStorage.setItem(DEVICE_KEY, micSel.value); } catch {};
-        });
-      }
-      reqMicBtn?.addEventListener('click', async ()=> { await micBtn?.click(); _toast('Mic requested',{type:'ok'}); });
-      // Camera
-      const startCamS = document.getElementById('settingsStartCam');
-      const stopCamS  = document.getElementById('settingsStopCam');
-      const camSelS   = document.getElementById('settingsCamSel');
-      const camSizeS  = document.getElementById('settingsCamSize');
-      const camOpacityS = document.getElementById('settingsCamOpacity');
-      const camMirrorS  = document.getElementById('settingsCamMirror');
-      if (camSelS && camDeviceSel){
-        camSelS.addEventListener('change', async ()=>{
-          camDeviceSel.value = camSelS.value;
-          if (camVideo?.srcObject && camSelS.value) {
-            try { await switchCamera(camSelS.value); _toast('Camera switched',{type:'ok'}); } catch(e){ warn('Camera switch failed', e); _toast('Camera switch failed'); }
-          }
-        });
-      }
-      startCamS?.addEventListener('click', ()=> { startCamBtn?.click(); _toast('Camera starting…'); });
-      stopCamS?.addEventListener('click', ()=> { stopCamBtn?.click(); _toast('Camera stopped',{type:'ok'}); });
-      camSizeS?.addEventListener('change', ()=>{ if (camSize) { camSize.value = camSizeS.value; camSize.dispatchEvent(new Event('input',{bubbles:true})); }});
-      camOpacityS?.addEventListener('change', ()=>{ if (camOpacity){ camOpacity.value = camOpacityS.value; camOpacity.dispatchEvent(new Event('input',{bubbles:true})); }});
-      camMirrorS?.addEventListener('change', ()=>{ if (camMirror){ camMirror.checked = camMirrorS.checked; camMirror.dispatchEvent(new Event('change',{bubbles:true})); }});
-      // Speakers
-      const showSpk = document.getElementById('settingsShowSpeakers');
-  showSpk?.addEventListener('click', ()=>{ toggleSpeakersBtn?.click(); try { const body = document.getElementById('settingsBody'); if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch {} });
-      document.getElementById('settingsNormalize')?.addEventListener('click', ()=> normalizeTopBtn?.click());
-      // Recording / OBS
-      const obsEnable = document.getElementById('settingsEnableObs');
-      const obsUrlS = document.getElementById('settingsObsUrl');
-      const obsPassS = document.getElementById('settingsObsPass');
-      const obsTestS = document.getElementById('settingsObsTest');
-      // Make the "Remember password" control inert and ensure password input is ephemeral
+    function wireSettingsDynamic() {
+      // Deprecated: legacy settings wiring removed — TS owns Settings UI
       try {
-        const remEl = document.getElementById('settingsObsRemember');
-        if (remEl) {
-          try { remEl.disabled = true; } catch {}
-          try { remEl.setAttribute('aria-disabled', 'true'); } catch {}
-          try { remEl.tabIndex = -1; } catch {}
-          try { const lab = remEl.closest && remEl.closest('label'); if (lab) lab.classList.add('dim'); } catch {}
-          try { remEl.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); }); } catch {}
+        // ensure globals exist
+        window.__tp = window.__tp || {};
+        window.__tp.settings = window.__tp.settings || {};
+
+        const mount = window.__tp.settings && window.__tp.settings.mount;
+        const root = document.getElementById('settingsBody') || undefined;
+
+        if (typeof mount === 'function') {
+          // Delegate mount to TS (idempotent; TS side can re-render)
+          mount(root);
+        } else if (window.__TP_DEV) {
+          console.warn('[settings] TS mount not yet available; skipping legacy wiring');
         }
-        const passEl = document.getElementById('settingsObsPass');
-        if (passEl) {
-          try { passEl.setAttribute('autocomplete', 'current-password'); } catch {}
-          try { passEl.setAttribute('spellcheck', 'false'); } catch {}
-          try { passEl.setAttribute('inputmode', 'text'); } catch {}
-          try { passEl.setAttribute('enterkeyhint', 'done'); } catch {}
-        }
-      } catch(e) { /* defensive */ }
-      obsEnable?.addEventListener('change', ()=>{ if (enableObsChk){ enableObsChk.checked = obsEnable.checked; enableObsChk.dispatchEvent(new Event('change',{bubbles:true})); } });
-      obsUrlS?.addEventListener('change', ()=>{ if (obsUrlInput){ obsUrlInput.value = obsUrlS.value; obsUrlInput.dispatchEvent(new Event('change',{bubbles:true})); }});
-      obsPassS?.addEventListener('change', ()=>{ if (obsPassInput){ obsPassInput.value = obsPassS.value; obsPassInput.dispatchEvent(new Event('change',{bubbles:true})); }});
+      } catch (e) {
+        if (window.__TP_DEV) console.warn('[settings] delegator error', e);
+      }
+    }
       // Settings Test: persist when "Remember" is checked, mirror inputs, and run adapter test
-      obsTestS?.addEventListener('click', async ()=>{
+      obsTestS?.addEventListener('click', async () => {
         try {
-          const rem = document.getElementById('settingsObsRemember');
-          const urlEl = document.getElementById('settingsObsUrl');
-          // Password persistence is intentionally disabled until a secure store is available.
-          if (rem?.checked) {
-            try { if (urlEl?.value) localStorage.setItem('obsUrl', urlEl.value); } catch {}
-            try { localStorage.setItem('obsRemember','1'); } catch {}
-          } else {
-            try { localStorage.setItem('obsRemember','0'); } catch {}
+          // Delegate to main test button if present; otherwise no-op
+          const mainTest = document.getElementById('obsTestBtn');
+          if (mainTest) {
+            mainTest.click();
+            return;
           }
-        } catch(e) { /* ignore */ }
-
-        // Mirror into main inputs so recorder wiring sees the latest values
-        try {
-          const mainUrl = document.getElementById('obsUrl');
-          const mainPass = document.getElementById('obsPassword');
-          const setUrl = document.getElementById('settingsObsUrl');
-          const setPass = document.getElementById('settingsObsPass');
-          if (mainUrl && setUrl) { mainUrl.value = setUrl.value; mainUrl.dispatchEvent(new Event('change',{bubbles:true})); }
-          if (mainPass && setPass) { mainPass.value = setPass.value; mainPass.dispatchEvent(new Event('change',{bubbles:true})); }
-        } catch(e) { /* ignore */ }
-
-        // Ensure adapter is configured with latest URL/password and status callbacks
-        try {
-          const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
-          const setUrl = document.getElementById('settingsObsUrl');
-          const setPass = document.getElementById('settingsObsPass');
-          const enableChk = document.getElementById('enableObs');
-          const obsStatusEl = document.getElementById('obsStatus');
-          if (adapter && typeof adapter.configure === 'function') {
-            try {
-              adapter.configure({
-                url: (setUrl && setUrl.value) || (document.getElementById('obsUrl')?.value) || undefined,
-                password: (setPass && setPass.value) || (document.getElementById('obsPassword')?.value) || undefined,
-                isEnabled: () => !!(enableChk && enableChk.checked),
-                onStatus: (s, ok) => {
-                  try {
-                    if (obsStatusEl) {
-                      if (ok) obsStatusEl.textContent = 'OBS: connected';
-                      else obsStatusEl.textContent = 'OBS: ' + (String(s || '').length ? String(s) : 'failed');
-                      obsStatusEl.title = String(s || '');
-                    }
-                  } catch(e) { /* ignore */ }
-                }
-              });
-            } catch(e) { /* ignore */ }
-          }
-        } catch(e) { /* ignore */ }
-
-        // Trigger existing UI test button behavior
-        try { obsTestBtn?.click(); } catch {}
-
-        // Also configure and call recorder adapter test directly (uses adapter's test implementation)
-        try {
-          const adapter = window.__recorder?.get ? window.__recorder.get('obs') : null;
-          if (adapter) {
-            // adapter.configure already called above; run test()
-            if (typeof adapter.test === 'function') await adapter.test();
-          }
-        } catch(e) { console.warn('OBS adapter test failed', e); }
-
-        setTimeout(()=>{ _toast(obsStatus?.textContent||'OBS test', { type: (obsStatus?.textContent||'').includes('ok')?'ok':'error' }); }, 600);
-      });
-
-      // Helper: read OBS URL from settings/main/localStorage with sane fallback
-      window.readObsUrl = function () {
-        try {
-          return document.getElementById('settingsObsUrl')?.value?.trim() || document.getElementById('obsUrl')?.value?.trim() || localStorage.getItem('obsUrl') || 'ws://127.0.0.1:4455';
-        } catch(e) { return 'ws://127.0.0.1:4455'; }
-      };
-
-      // Helper: read OBS password from settings/main/localStorage depending on "Remember" flag
-      window.readObsPassword = function () {
-        try {
-          // Prefer in-DOM inputs; we intentionally do NOT read the persisted localStorage password
-          const s = document.getElementById('settingsObsPass')?.value ?? document.getElementById('obsPassword')?.value ?? '';
-          return s || '';
-        } catch(e) { return ''; }
-      };
-    }
-
-  // TP: normalize-fallback
-  // Shared, safe fallback normalizer used when normalizeToStandard() is not provided
-  function fallbackNormalize(){
-    try {
-      const ta = document.getElementById('editor');
-      if (!ta) return;
-      let txt = String(ta.value || '');
-      // Normalize newlines & spaces; convert smart quotes; trim trailing spaces per-line
-      txt = txt.replace(/\r\n?/g, '\n')
-               .replace(/ +\n/g, '\n')
-               .replace(/[’]/g, "'");
-      // Ensure closing tags aren't accidentally uppercased/spaced
-      txt = txt.replace(/\[\/\s*s1\s*\]/gi, '[/s1]')
-               .replace(/\[\/\s*s2\s*\]/gi, '[/s2]')
-               .replace(/\[\/\s*note\s*\]/gi, '[/note]');
-      ta.value = txt;
-      // Re-render via input event to keep everything in sync
-      const ev = new Event('input'); ta.dispatchEvent(ev);
-      alert('Basic normalization applied.');
-    } catch (e) {
-      alert('Normalize fallback failed: ' + e.message);
-    }
-  }
-  try { __tpBootPush('after-fallbackNormalize-def'); } catch {}
-
-  // TP: normalize-strict
-  // Strict normalizer (single source of truth)
-  window.normalizeToStandard = function normalizeToStandard() {
-    const ta = document.getElementById('editor');
-    if (!ta) return;
-    let txt = String(ta.value || '');
-
-    // Canonicalize whitespace/quotes/case
-    txt = txt.replace(/\r\n?/g, '\n')
-             .replace(/[ \t]+\n/g, '\n')
-             .replace(/[’]/g, "'")
-             .replace(/\[\s*(s1|s2|note)\s*\]/gi, (_,x)=>`[${x.toLowerCase()}]`)
-             .replace(/\[\s*\/\s*(s1|s2|note)\s*\]/gi, (_,x)=>`[/${x.toLowerCase()}]`);
-
-    // Move inline notes out of speaker paragraphs
-    txt = txt.replace(
-      /\[(s1|s2)\]([\s\S]*?)\[note\]([\s\S]*?)\[\/note\]([\s\S]*?)\[\/\1\]/gi,
-      (_,r,pre,note,post)=>`[note]${note.trim()}[/note]\n[${r}]${(pre+' '+post).trim()}[/${r}]`
-    );
-
-    // Ensure speaker/close tags are on their own lines
-    txt = txt.replace(/\[(s1|s2)\]\s*(?=\S)/gi, (_,r)=>`[${r}]\n`)
-             .replace(/([^\n])\s*\[\/s(1|2)\](?=\s*$)/gmi, (_,ch,sp)=>`${ch}\n[/s${sp}]`);
-
-    // Notes must be standalone blocks
-    txt = txt.replace(/\n?(\[note\][\s\S]*?\[\/note\])\n?/gi, '\n$1\n');
-
-    // Collapse excess blank lines
-    txt = txt.replace(/\n{3,}/g, '\n\n').trim() + '\n';
-
-    // Wrap untagged blocks with current (default s1); ensure missing closers
-    const blocks = txt.split(/\n{2,}/);
-    let current = 's1';
-    const out = [];
-    for (let b of blocks) {
-      const first = b.match(/^\s*\[(s1|s2|note)\]/i)?.[1]?.toLowerCase();
-      if (first === 'note') { out.push(b); continue; }
-      if (first === 's1' || first === 's2') {
-        current = first;
-        if (!/\[\/s[12]\]/i.test(b)) b = b + `\n[/${current}]`;
-        out.push(b);
-      } else {
-        // untagged → wrap under current speaker
-        out.push(`[${current}]\n${b}\n[/${current}]`);
-      }
-    }
-    ta.value = out.join('\n\n') + '\n';
-    ta.dispatchEvent(new Event('input', { bubbles:true }));
-    if (typeof saveDraft === 'function') saveDraft();
-    if (typeof setStatus === 'function') setStatus('Normalized to standard.');
-  };
-  try { __tpBootPush('after-normalizeToStandard-def'); } catch {}
-
-  // Validator (quick “am I standard?” check)
-  function showCopyDialog(text, title='Validation Results'){
-    if (window.__help?.showCopyDialog) return window.__help.showCopyDialog(text, title);
-    // fallback: simple alert
-    alert(String(title)+"\n\n"+String(text||''));
-
-  // Global helper: show validation output in the Help overlay's panel with copy support
-  window.showValidation = function showValidation(text){
-    if (window.__help?.showValidation) return window.__help.showValidation(text);
-    return showCopyDialog(text, 'Validation');
-  };
-
-  window.validateStandardTags = function validateStandardTags(silent=false) {
-    if (window.__help?.validateStandardTags) return window.__help.validateStandardTags(silent);
-    const ta = document.getElementById('editor');
-    const src = String(ta?.value || '');
-    const lines = src.split(/\r?\n/);
-    // Configurable tag set
-    if (!window.validatorConfig) window.validatorConfig = { allowedTags: new Set(['s1','s2','note']) };
-    const allowed = window.validatorConfig.allowedTags;
-    const speakerTags = new Set(['s1','s2']);
-    const stack = []; // {tag,line}
-    let s1Blocks=0, s2Blocks=0, noteBlocks=0; let unknownCount=0;
-    const issues=[]; const issueObjs=[];
-    function addIssue(line,msg,type='issue',detail){ issues.push(`line ${line}: ${msg}`); issueObjs.push({ line, message: msg, type, detail }); }
-    const tagRe = /\[(\/)?([a-z0-9]+)(?:=[^\]]+)?\]/gi;
-    for (let i=0;i<lines.length;i++){
-      const rawLine=lines[i]; const lineNum=i+1; let m; tagRe.lastIndex=0;
-      while((m=tagRe.exec(rawLine))){
-        const closing=!!m[1]; const nameRaw=m[2]; const name=nameRaw.toLowerCase();
-        if(!allowed.has(name)){ unknownCount++; addIssue(lineNum,`unsupported tag [${closing?'\/':''}${nameRaw}]`,'unsupported',{tag:name}); continue; }
-        if(!closing){
-          if(name==='note'){
-            if(stack.length){ addIssue(lineNum,`[note] must not appear inside [${stack[stack.length-1].tag}] (opened line ${stack[stack.length-1].line})`,'nested-note',{parent:stack[stack.length-1].tag}); }
-            stack.push({tag:name,line:lineNum});
-          } else if(speakerTags.has(name)) {
-            if(stack.length && speakerTags.has(stack[stack.length-1].tag)) addIssue(lineNum,`[${name}] opened before closing previous [${stack[stack.length-1].tag}] (opened line ${stack[stack.length-1].line})`,'nested-speaker',{prev:stack[stack.length-1].tag,prevLine:stack[stack.length-1].line});
-            stack.push({tag:name,line:lineNum});
-          } else { stack.push({tag:name,line:lineNum}); }
-        } else {
-          if(!stack.length){ addIssue(lineNum,`stray closing tag [\/${name}]`,'stray-close',{tag:name}); continue; }
-          const top=stack[stack.length-1];
-          if(top.tag===name){ stack.pop(); if(name==='s1') s1Blocks++; else if(name==='s2') s2Blocks++; else if(name==='note') noteBlocks++; }
-          else {
-            addIssue(lineNum,`mismatched closing [\/${name}] – expected [\/${top.tag}] for opening on line ${top.line}`,'mismatch',{expected:top.tag,openLine:top.line,found:name});
-            let poppedAny=false; while(stack.length && stack[stack.length-1].tag!==name){ stack.pop(); poppedAny=true; }
-            if(stack.length && stack[stack.length-1].tag===name){ const opener=stack.pop(); if(name==='s1') s1Blocks++; else if(name==='s2') s2Blocks++; else if(name==='note') noteBlocks++; if(poppedAny) addIssue(lineNum,`auto-recovered by closing [\/${name}] (opened line ${opener.line}) after mismatches`,'auto-recover',{tag:name,openLine:opener.line}); }
-            else addIssue(lineNum,`no matching open tag for [\/${name}]`,'no-match',{tag:name});
-          }
-        }
-      }
-    }
-    for(const open of stack) addIssue(open.line,`unclosed [${open.tag}] opened here`,'unclosed',{tag:open.tag});
-    const summaryParts=[`s1 blocks: ${s1Blocks}`,`s2 blocks: ${s2Blocks}`,`notes: ${noteBlocks}`]; if(unknownCount) summaryParts.push(`unsupported tags: ${unknownCount}`);
-    // Quick fixes
-    const fixes=[]; for(const iss of issueObjs){
-      if(iss.type==='unclosed' && /(s1|s2)/i.test(iss.message)){ const tag=iss.message.match(/\[(s1|s2)\]/i)?.[1]; if(tag) fixes.push({type:'append-close',tag,label:`Append closing [\/${tag}] at end`,apply:(text)=> text + (text.endsWith('\n')?'':'\n') + `[\/${tag}]\n`}); }
-      else if(iss.type==='stray-close'){ fixes.push({type:'remove-line',line:iss.line,label:`Remove stray closing tag on line ${iss.line}`,apply:(text)=> text.split(/\r?\n/).filter((_,i)=>i!==iss.line-1).join('\n')}); }
-      else if(iss.type==='mismatch'){ const found=iss.message.match(/mismatched closing \[\/(\w+)\]/i)?.[1]; const expected=iss.message.match(/expected \[\/(\w+)\]/i)?.[1]; if(found&&expected&&found!==expected) fixes.push({type:'replace-tag',line:iss.line,from:found,to:expected,label:`Replace [\/${found}] with [\/${expected}] on line ${iss.line}`,apply:(text)=>{ const arr=text.split(/\r?\n/); const ln=arr[iss.line-1]; if(ln) arr[iss.line-1]=ln.replace(new RegExp(`\[\/${found}\]`,'i'),`[\/${expected}]`); return arr.join('\n'); }}); }
-    }
-  let msg = !issues.length ? `No issues found. (${summaryParts.join(', ')})` : `Validation issues (${issues.length}):\n- ${issues.join('\n- ')}\n\nSummary: ${summaryParts.join(', ')}`;
-    window.__lastValidation={ issues: issueObjs, summary: summaryParts, fixes };
-    // Inline highlighting
-    try {
-      const existing = document.getElementById('validatorLineOverlay');
-      if (existing) existing.remove();
-      if (issueObjs.length && ta){
-        const overlay = document.createElement('div');
-        overlay.id='validatorLineOverlay';
-        overlay.style.cssText='position:absolute;inset:0;pointer-events:none;font:inherit;';
-        // Positioning container wrapper if not already relative
-        const wrap = ta.parentElement;
-        if (wrap && getComputedStyle(wrap).position==='static') wrap.style.position='relative';
-        // Map: line -> severity color
-        const colors = { 'unclosed':'#d33', 'mismatch':'#d33', 'nested-speaker':'#d33', 'nested-note':'#d33', 'stray-close':'#d55', 'unsupported':'#b46', 'auto-recover':'#c80', 'no-match':'#d33', 'issue':'#c30' };
-        const badLines = new Set(issueObjs.map(i=>i.line));
-        // Build spans aligned via line height approximation
-        const style = getComputedStyle(ta); const lh = parseFloat(style.lineHeight)||16; const padTop = ta.scrollTop; // will adjust on scroll
-        function rebuild(){
+          // fallback: attempt to lazy-load recorder test if adapter APIs are available
           try {
-            overlay.innerHTML='';
-            const scrollTop = ta.scrollTop; const firstVisible = Math.floor(scrollTop / lh)-1; const linesVisible = Math.ceil(ta.clientHeight / lh)+2;
-            for (let i=0;i<linesVisible;i++){
-              const lineIdx = firstVisible + i; if (lineIdx <0) continue; const lineNumber=lineIdx+1; if(!badLines.has(lineNumber)) continue;
-              const issue = issueObjs.find(o=>o.line===lineNumber);
-              const bar = document.createElement('div');
-              bar.title = issue.message;
-              bar.style.cssText = `position:absolute;left:0;right:0;top:${lineIdx*lh}px;height:${lh}px;background:linear-gradient(90deg,${colors[issue.type]||'#c30'}22,transparent 80%);pointer-events:none;`;
-              overlay.appendChild(bar);
+            const recModule = await (window.__recorder && window.__recorder.get ? window.__recorder.get('obs') : null);
+            if (recModule && typeof recModule.test === 'function') {
+              const ok = await recModule.test();
+              _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
             }
           } catch {}
-        }
-        rebuild();
-        ta.addEventListener('scroll', rebuild, { passive:true });
-        wrap.appendChild(overlay);
-      }
-    } catch {}
-
-    // Return the textual report for callers (e.g., Help overlay validate button)
-    return msg;
-  // Expose a live getter/setter for Help → Advanced to toggle at runtime
-  } // <-- end validateStandardTags
-
-  // Expose a live getter/setter for Help → Advanced to toggle at runtime (top-level)
-  try {
-    Object.defineProperty(window, 'recAutoRestart', {
-      configurable: true,
-      get(){ return recAutoRestart; },
-      set(v){ recAutoRestart = !!v; try{ localStorage.setItem('tp_rec_autorestart_v1', recAutoRestart ? '1' : '0'); } catch {} }
+        } catch {}
     });
-  } catch {}
-  try { __tpBootPush('after-validateStandardTags-def'); } catch {}
-  let recBackoffMs   = 300;       // grows on repeated failures
-  const MATCH_WINDOW = 6;         // how far ahead we’ll look for the next word
-  // Safe placeholders for optional modules to prevent ReferenceError when dynamic import fails
-  let __scrollHelpers = null; // set after scroll-helpers.js loads
-  let __anchorObs = null;     // set after io-anchor.js loads
-  let __scrollCtl = null;     // set after scroll-control.js loads
-  // Mic selector single source of truth (settings overlay)
-  const getMicSel = () => document.getElementById('settingsMicSel');
-  let autoTimer = null, chrono = null, chronoStart = 0;
-  let scriptWords = [], paraIndex = [], currentIndex = 0;
-  // Paragraph token stats for rarity gating (computed on render)
-  let __paraTokens = [];           // Array<Array<string>> per paragraph
-  let __dfMap = new Map();         // token -> in how many paragraphs it appears
-  let __dfN = 0;                   // number of paragraphs
-  function __idf(t){ try { return Math.log(1 + (__dfN || 1) / ((__dfMap.get(t) || 0) || 1)); } catch { return 0; } }
-  // Duplicate-line disambiguation
-  let __lineFreq = new Map();      // original paragraph line frequencies (by key)
-  // Virtual lines (merge short runts so matcher scores over real phrases)
-  let __vParaIndex = [];           // merged paragraph index
-  let __vLineFreq = new Map();     // virtual line frequencies (by merged key)
-  let __vSigCount = new Map();     // prefix signature counts (first 4 tokens) for virtual lines
-  function normLineKey(text){
-    // Build line keys from fully normalized tokens to ensure duplicate detection
-    // matches what the matcher “hears” (contractions, unicode punctuation, numerals → words, etc.)
-    try {
-      const toks = normTokens(text || '');
-      return toks.join(' ');
-    } catch { return ''; }
-  }
-  // Lost-mode state
-  let __tpLost = false; let __tpLowSimCount = 0;
-  const __STOP = new Set(['the','and','a','an','to','of','in','on','for','with','as','at','by','is','are','was','were','be','been','being','or','but','if','then','that','this','these','those','you','your','yours','we','our','ours','they','their','them','it','its','he','she','his','her','hers','do','did','does','done','have','has','had']);
-  // Junk-anchor set: tokens that should not drive medium/long jumps on their own
-  const __JUNK = new Set(['so','and','but','the','a','an','to','of','in','on','for','with','or','is','are']);
-  function extractHighIDFPhrases(tokens, n=3, topK=6){
-    const out = [];
-    if (!Array.isArray(tokens) || tokens.length < n) return out;
-    for (let i = 0; i <= tokens.length - n; i++){
-      const gram = tokens.slice(i, i+n);
-      if (gram.some(t => __STOP.has(t))) continue; // never on a stop-word
-      const rarity = gram.reduce((s,t)=> s + __idf(t), 0);
-      out.push({ gram, rarity });
-    }
-    out.sort((a,b)=> b.rarity - a.rarity);
-    return out.slice(0, topK);
-  }
-  function searchBand(anchors, startIdx, endIdx, spoken){
-    const hits = [];
-    if (!anchors?.length) return hits;
-    const n = anchors[0]?.gram?.length || 3;
-    const s = Math.max(0, startIdx|0), e = Math.min(scriptWords.length, endIdx|0);
-    for (let i = s; i <= e - n; i++){
-      const win = scriptWords.slice(i, i+n);
-      for (const a of anchors){
-        let match = true;
-        for (let k=0;k<n;k++){ if (win[k] !== a.gram[k]) { match = false; break; } }
-        if (match){
-          // Compute an overall score using the full spoken window similarity
-          const windowTokens = normTokens(scriptWords.slice(i, i + spoken.length).join(' '));
-          const sim = _sim(spoken, windowTokens);
-          const score = sim; // rarity was used to gate anchors; keep sim as score
-          hits.push({ idx: i, score });
-          break;
-        }
-      }
-    }
-    return hits;
-  }
   // Hard-bound current line tracking
   let currentEl = null;               // currently active <p> element
   let lineEls = [];                   // array of <p> elements in script order
@@ -4049,5 +3687,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     if (e.ctrlKey && e.altKey && (e.key?.toLowerCase?.() === 'k')){ e.preventDefault(); showAbout(); }
   });
 // end about popover
-}
 // (removed stray IIFE closure inserted here)
