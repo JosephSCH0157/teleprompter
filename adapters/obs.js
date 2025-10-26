@@ -30,12 +30,12 @@ export function createOBSAdapter() {
             window.__obsLog.splice(0, window.__obsLog.length - window.__obsLogMax);
           }
         } catch {
-          void ex;
+          void 0;
         }
       };
     }
   } catch {
-    void ex;
+    void 0;
   }
 
   var _enc = function (s) {
@@ -78,9 +78,9 @@ export function createOBSAdapter() {
       try {
         try {
           if (ws) ws.close(1000, 'reconnect');
-        } catch {
-          void ex;
-        }
+                } catch {
+                void 0;
+              }
         identified = false;
         _lastErr = null;
         var url = cfg.url || 'ws://127.0.0.1:4455';
@@ -89,9 +89,9 @@ export function createOBSAdapter() {
         ws.onopen = function () {
           try {
             if (window && window.__TP_DEV) console.debug('[OBS-HS] socket open', url);
-          } catch {
-            void ex;
-          }
+            } catch {
+                void 0;
+              }
           try {
             window.__obsHandshakeLog = window.__obsHandshakeLog || [];
             window.__obsHandshakeLog.push({ t: Date.now(), event: 'open', url: url });
@@ -105,12 +105,12 @@ export function createOBSAdapter() {
                 // dev log
                 window.logObs && window.logObs('open', { url: url });
               } catch {
-                void ex;
-              }
+                  void 0;
+                }
             } catch {}
-          } catch {
-            void ex;
-          }
+            } catch {
+                void 0;
+              }
         };
 
         ws.onmessage = async function (ev) {
@@ -118,9 +118,9 @@ export function createOBSAdapter() {
             var msg = JSON.parse(ev.data);
             try {
               if (window && window.__TP_DEV) console.debug('[OBS-HS] recv op=' + msg.op, msg.d);
-            } catch {
-              void ex;
-            }
+                    } catch {
+                    void 0;
+                    }
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
               window.__obsHandshakeLog.push({ t: Date.now(), op: msg.op, data: msg.d });
