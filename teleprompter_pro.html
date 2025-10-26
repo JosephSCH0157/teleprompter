@@ -278,15 +278,24 @@
 </div>
 <script src="./debug-tools.js" defer></script>
 <script src="./debug-seed.js" defer></script>
-<script src="teleprompter_pro.js" defer></script>
-<script src="./scriptsStore.js" defer></script>
-<script src="./ui/toasts.js" defer></script>
-<script src="./ui/scripts-ui.js" defer></script>
-
-<!-- Build label -->
-<div id="anvil-build-label">
-  ANVIL build 2025-10-03 21:15 • baseline: fix/scroll-geometry • HUD wired
-</div>
-
-</body>
-</html>
+      moduleFiles.forEach(function(m){
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = m;
+        document.head.appendChild(s);
+      });
+      // Load recorders as a module (it contains ESM exports)
+      try {
+        var rec = document.createElement('script');
+        rec.type = 'module';
+        rec.src = add('./recorders.js');
+        document.head.appendChild(rec);
+      } catch (e) {}
+      // Then load the remaining classic scripts (legacy fallbacks)
+  var jsFiles = [ add('./debug-seed.js'), add('./sim-history.js') ];
+      jsFiles.forEach(function(src) {
+        var script = document.createElement('script');
+        script.src = src;
+        script.defer = true;
+        document.head.appendChild(script);
+      });
