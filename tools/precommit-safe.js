@@ -21,7 +21,7 @@ function hasBin(bin) {
     const p = r.resolve(bin, { paths: [projRoot] });
     return !!p;
   } catch {
-    void e;
+    void 0;
     return false;
   }
 }
@@ -33,7 +33,7 @@ function stagedFiles() {
     if (!out || out.status !== 0) return [];
     return (out.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   } catch {
-    void e;
+    void 0;
     return [];
   }
 }
@@ -60,7 +60,7 @@ async function main() {
           if (proc && typeof proc.exit === 'function') proc.exit(1);
           return 1;
         }
-      } catch {
+      } catch (e) {
         console.warn('[precommit-safe] lint-staged invocation error', e && e.message);
       }
     }
@@ -90,14 +90,14 @@ async function main() {
         }
         return 0;
       } catch {
-        void e;
+        void 0;
       }
     }
 
     console.log('[precommit-safe] no lint-staged or eslint found; skipping lint checks');
     if (proc && typeof proc.exit === 'function') proc.exit(0);
     return 0;
-  } catch {
+  } catch (e) {
     console.error('[precommit-safe] unexpected error', e && e.stack ? e.stack : e);
     if (proc && typeof proc.exit === 'function') proc.exit(0);
     return 0;

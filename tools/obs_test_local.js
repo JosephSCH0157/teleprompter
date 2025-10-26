@@ -16,7 +16,7 @@ if (!OBSWebSocket) {
     const _req2 = typeof globalThis !== 'undefined' ? globalThis['require'] : undefined;
     if (typeof _req2 === 'function') OBSWebSocket = _req2('obs-websocket-js');
   } catch (e) {
-    void e;
+    void 0;
   }
 }
 
@@ -49,7 +49,7 @@ if (
       try {
         await obs.disconnect();
       } catch (e) {
-        void e;
+        void 0;
       }
       globalThis['process'].exit(0);
     } catch (e) {
@@ -67,7 +67,7 @@ if (
   try {
     console.debug('[obs_test_local] not running under Node; skipping');
   } catch (e) {
-    void e;
+    void 0;
   }
 }
 

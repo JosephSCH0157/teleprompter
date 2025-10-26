@@ -374,12 +374,12 @@ async function main() {
       try {
         await browser.close();
       } catch (e) {
-        void e;
+        void 0;
       }
       try {
         server.close();
       } catch (e) {
-        void e;
+        void 0;
       }
       rl.close();
       process.exit(0);
