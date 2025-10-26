@@ -1698,7 +1698,7 @@ let _toast = function (msg, opts) {
         try {
           rec?.reconfigure?.();
         } catch {
-          void e;
+          void 0;
         }
       } catch {
         void 0;
