@@ -27,7 +27,7 @@
     return Array.from(target.querySelectorAll('.bar'));
   }
 
-  function clearBars(el) {
+  function _clearBars(el) {
     if (!el) return;
     el.querySelectorAll('.bar.on').forEach((b) => b.classList.remove('on'));
   }
@@ -52,8 +52,8 @@
       analyser.fftSize = 2048;
       src.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
-      const topBars = buildDbBars(document.getElementById('dbMeterTop'));
-      let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let peakHold = { value:0, lastUpdate: performance.now(), decay:0.9 };
+  const topBars = buildDbBars(document.getElementById('dbMeterTop'));
+  let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let _peakHold = { value:0, lastUpdate: performance.now(), decay:0.9 };
       function draw(){
         if (!analyser || !data) { dbAnim = null; return; }
         analyser.getByteFrequencyData(data);

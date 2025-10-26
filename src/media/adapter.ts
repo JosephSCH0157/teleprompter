@@ -10,7 +10,7 @@ window.toggleSpeechSync = window.toggleSpeechSync || function (on?: boolean) {
   try {
     if (typeof on === 'boolean') {
       if (on) {
-        asr.startASRorVAD((t, f) => {}, true);
+        asr.startASRorVAD((_t, _f) => {}, true);
         return String(asr.currentMode());
       } else {
         asr.stopASRorVAD();
@@ -19,12 +19,12 @@ window.toggleSpeechSync = window.toggleSpeechSync || function (on?: boolean) {
     }
     // toggle
     if (asr.currentMode() === 'off') {
-      asr.startASRorVAD((t, f) => {}, true);
+      asr.startASRorVAD((_t, _f) => {}, true);
     } else {
       asr.stopASRorVAD();
     }
     return String(asr.currentMode());
-  } catch (e) {
+  } catch {
     return 'error';
   }
 };
