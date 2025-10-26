@@ -10420,7 +10420,7 @@ let _toast = function (msg, opts) {
       if (viewer && typeof scrollToCurrentIndex === 'function') {
         scrollToCurrentIndex();
       }
-    } catch {
+    } catch (e) {
       console.warn('Viewport anchor snap failed:', e);
     }
   }
@@ -10446,11 +10446,11 @@ let _toast = function (msg, opts) {
           if (el) el.textContent = v;
           // 3) HUD header will pick up APP_VERSION automatically
           if (window.HUD) HUD.log('boot:version', { v });
-        } catch {
+        } catch (e) {
           if (window.HUD) HUD.log('boot:version-error', String(e));
         }
       })();
-    } catch {
+    } catch (e) {
       console.error('[TP-Pro] init() failed:', e);
       try {
         (window.__TP_BOOT_TRACE || []).push({
@@ -10471,7 +10471,7 @@ let _toast = function (msg, opts) {
           } catch {}
           window.__tpInitSuccess = true;
         }
-      } catch {
+      } catch (err2) {
         console.error('[TP-Pro] fallback init failed', err2);
       }
       throw e;
@@ -10510,7 +10510,7 @@ let _toast = function (msg, opts) {
       } catch {}
       try {
         await camVideo.play();
-      } catch {
+      } catch (err) {
         // Autoplay might be blocked (iOS). Provide a simple tap-to-start fallback.
         warn('Camera autoplay blocked, waiting for user gesture', err);
         setStatus('Tap the video to start the camera');
@@ -10536,7 +10536,7 @@ let _toast = function (msg, opts) {
         if (displayWin && !displayWin.closed && displayReady) await ensureCamPeer();
       } catch {}
       populateDevices();
-    } catch {
+    } catch (e) {
       warn('startCamera failed', e);
     }
   }
