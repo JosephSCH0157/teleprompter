@@ -125,7 +125,7 @@ let _toast = function (msg, opts) {
         }
       };
     } catch {
-      void e;
+      void 0;
     }
     // Dev-only cache bust handled via __TP_ADDV and HTML loader; no top-level await here
     try {
@@ -148,7 +148,7 @@ let _toast = function (msg, opts) {
       if (CALM) console.info('[TP-Pro] Calm Mode enabled');
     } catch {}
   } catch {
-    void e;
+    void 0;
   }
   // Boot instrumentation (added)
   try {
@@ -223,8 +223,8 @@ let _toast = function (msg, opts) {
           m: 'onerror:' + (ev?.error?.message || ev?.message),
         });
       } catch {
-        void e;
-      }
+          void 0;
+        }
       try {
         console.error('[TP-BOOT onerror]', ev?.error || ev?.message || ev);
       } catch {}
@@ -247,7 +247,7 @@ let _toast = function (msg, opts) {
         }
       } catch {}
   } catch {
-    void e;
+    void 0;
   }
   // HUD counters for quick tuning telemetry
   try {
@@ -345,12 +345,12 @@ let _toast = function (msg, opts) {
           try {
             window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
           } catch {
-            void e;
+            void 0;
           }
         }
       }
     } catch {
-      void e;
+      void 0;
     }
   });
 
@@ -412,7 +412,7 @@ let _toast = function (msg, opts) {
         } catch {}
       }
     } catch {
-      void e;
+      void 0;
     }
   }
 
@@ -432,7 +432,7 @@ let _toast = function (msg, opts) {
               return _initCore();
             }
           } catch {
-            void e;
+            void 0;
           }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
             return window._initCore();
@@ -626,7 +626,7 @@ let _toast = function (msg, opts) {
           try {
             __tpBootPush('window-init-proxy-waiting-core');
           } catch {
-            void e;
+            void 0;
           }
           // Wait briefly for core to appear (either via assignment or resolve hook)
           const core = await Promise.race([
@@ -707,15 +707,15 @@ let _toast = function (msg, opts) {
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
           } catch {
-            void e;
+            void 0;
           }
         } catch {
-          void e;
+          void 0;
         }
       });
-    } catch {
-      void e;
-    }
+          } catch {
+            void 0;
+          }
   })();
 
   // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
@@ -953,7 +953,7 @@ let _toast = function (msg, opts) {
         _toast = window._toast;
       }
     } catch {
-      void e;
+      void 0;
     }
 
     // Try to dynamically import the module-based toast and prefer it when available.
@@ -1050,7 +1050,7 @@ let _toast = function (msg, opts) {
         }
       });
     } catch {
-      void e;
+      void 0;
     }
       // Keep bottom padding responsive to viewport changes and refresh end spacer
       try {
@@ -1274,12 +1274,12 @@ let _toast = function (msg, opts) {
     try {
       hydrateObsFieldsFromStore();
     } catch {
-      void e;
+      void 0;
     }
     try {
       wireObsPersistence();
     } catch {
-      void e;
+      void 0;
     }
     // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
     const micSel = document.getElementById('settingsMicSel');
@@ -1318,7 +1318,7 @@ let _toast = function (msg, opts) {
       const mainEnable = document.getElementById('enableObs');
       if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
     } catch {
-      void e;
+      void 0;
     }
     try {
       const autoRec = document.getElementById('autoRecordToggle');
@@ -1326,7 +1326,7 @@ let _toast = function (msg, opts) {
         try {
           autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
         } catch {
-          void e;
+          void 0;
         }
         autoRec.addEventListener('change', () => {
           try {
@@ -1365,7 +1365,7 @@ let _toast = function (msg, opts) {
           // Do not auto-set from storage while diagnosing auth issues; keep unchecked.
           rem.checked = false;
         } catch {
-          void e;
+          void 0;
         }
         // Keep "Remember password" inert for now; notify user when toggled.
         rem.addEventListener('change', () => {
@@ -1379,7 +1379,7 @@ let _toast = function (msg, opts) {
   try {
     __tpBootPush('after-syncSettingsValues-def');
   } catch {
-    void e;
+    void 0;
   }
 
   // Getter for auto-record preference
@@ -1519,7 +1519,7 @@ let _toast = function (msg, opts) {
         try {
           runSelfChecks();
         } catch {
-          void e;
+          void 0;
         }
       }, 120);
     }
@@ -1687,7 +1687,7 @@ let _toast = function (msg, opts) {
           mainPass.dispatchEvent(new Event('change', { bubbles: true }));
         }
       } catch {
-        void e;
+        void 0;
       }
 
       // Do NOT persist OBS password to storage during diagnostics - use live DOM only.
@@ -1701,7 +1701,7 @@ let _toast = function (msg, opts) {
           void e;
         }
       } catch {
-        void e;
+        void 0;
       }
     });
     // Proxy test button and surface result via toast
@@ -1771,9 +1771,9 @@ let _toast = function (msg, opts) {
           try {
             rec?.reconfigure?.();
           } catch {}
-        } catch {
-          void e;
-        }
+          } catch {
+            void 0;
+          }
         // Run the in-page test if provided
         try {
           if (typeof window.__tpRunObsTest === 'function') {
@@ -2431,7 +2431,7 @@ let _toast = function (msg, opts) {
       try {
         adapter.__wrapped = true;
       } catch {
-        void e;
+        void 0;
       }
       appendObsLogLine('adapter wrapped');
       return adapter;
@@ -3568,7 +3568,7 @@ let _toast = function (msg, opts) {
             setStatus && setStatus('Normalized.');
           }
         } catch (err) {
-          void err;
+          void 0;
         }
       });
 
@@ -4497,7 +4497,7 @@ let _toast = function (msg, opts) {
         try {
           console.error('[Scripts.save] error', e);
         } catch {
-          void err;
+          void 0;
         }
         // expose last save error for diagnostics and attach a session fallback
         try {
@@ -5209,13 +5209,13 @@ let _toast = function (msg, opts) {
             try {
               if (typeof rec.setEnabled === 'function') rec.setEnabled(!!e.target.checked);
             } catch {
-              void err;
+              void 0;
             }
             try {
               if (e.target.checked) await (rec.connect ? rec.connect() : Promise.resolve());
               else await (rec.disconnect ? rec.disconnect() : Promise.resolve());
             } catch {
-              void err;
+              void 0;
             }
           } catch {}
         });
@@ -5273,7 +5273,7 @@ let _toast = function (msg, opts) {
                   if (s) s.textContent = 'OBS: disabled';
                 }
               } catch {
-                void ex;
+                void 0;
               }
             } catch {
               void e;
@@ -5402,12 +5402,12 @@ let _toast = function (msg, opts) {
                 .map((x) => ({ t: new Date(x.t).toLocaleTimeString(), ev: x.ev, data: x.data }));
               pane.textContent = tail.map((l) => JSON.stringify(l)).join('\n');
             } catch {
-              void ex;
+              void 0;
             }
           }, 500);
         }
       } catch {
-        void ex;
+  void 0;
       }
       const closeSettings = () => {
         settingsOverlay.classList.add('hidden');
@@ -5660,7 +5660,7 @@ let _toast = function (msg, opts) {
                               else if (b !== null) suffix = ` (retry ${b}ms)`;
                             }
                           } catch {
-                            void ex;
+                            void 0;
                           }
                           st.textContent =
                             'OBS: ' + (ok ? 'connected' : String(s || 'failed')) + suffix;
@@ -5681,15 +5681,15 @@ let _toast = function (msg, opts) {
                 }
               }
             } catch {
-              void ex;
+              void 0;
             }
           });
         } catch {
-          void ex;
+          void 0;
         }
       });
     } catch {
-      void ex;
+  void 0;
     }
 
     // Test button (lazy-load bridge/recorder as needed)
