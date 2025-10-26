@@ -6,6 +6,7 @@ module.exports = [
   // Ignore patterns
   {
     ignores: [
+      'teleprompter_pro.js',
       'releases/**',
       '**/*.min.js',
       'node_modules/**',
@@ -170,7 +171,7 @@ module.exports = [
   {
     files: ['teleprompter_pro.js'],
     languageOptions: {
-      ecmaVersion: 2021,
+      ecmaVersion: 'latest',
       sourceType: 'script',
       globals: {
         window: 'readonly',

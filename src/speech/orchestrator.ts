@@ -90,7 +90,7 @@ export function stopRecognizer() {
     w.__tpSpeech.startRecognizer = startRecognizer;
     w.__tpSpeech.stopRecognizer = stopRecognizer;
     w.__tpSpeech.matchBatch = matchBatch;
-  } catch (e) {
+  } catch (_e) {
     // noop
   }
 })();

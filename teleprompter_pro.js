@@ -3577,8 +3577,11 @@ let _toast = function (msg, opts) {
           const src = typeof editor !== 'undefined' && editor ? editor.value : '';
           if (typeof validateScriptStrict === 'function') {
             const issues = validateScriptStrict(src);
-            if (!issues.length) alert('✅ Script passes the standard.');
-            else alert('⚠️ Issues:\\n- ' + issues.join('\\n- '));
+            if (!issues.length) {
+              alert('✅ Script passes the standard.');
+            } else {
+              alert('⚠️ Issues:\n- ' + issues.join('\n- '));
+            }
           } else {
             alert('Validation is not available in this build.');
           }
@@ -3586,8 +3589,8 @@ let _toast = function (msg, opts) {
           console.error(err);
         }
       });
-    } catch (err) {
-      console.error('Help injection failed', err);
+    } catch (_err) {
+      console.error('Help injection failed', _err);
     }
   }
 
