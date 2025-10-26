@@ -6,7 +6,7 @@ declare global {
     __TP_DEV?: boolean;
     __TP_CALM?: boolean;
     __TP_BOOT_TRACE?: Array<{ t: number; m: string }>;
-    __tpBootPush?: (m: string) => void;
+  __tpBootPush?: (_m: string) => void;
     __tpRealCore?: Function & { __tpWaiter?: boolean };
     _initCore?: Function;
   }
@@ -39,7 +39,7 @@ export function installBoot() {
   // Boot trace + push helper
   try {
     (window as any).__TP_BOOT_TRACE = [];
-    (window as any).__tpBootPush = (m: string) => {
+  (window as any).__tpBootPush = (m: string) => {
       try {
         const rec = { t: Date.now(), m };
         (window as any).__TP_BOOT_TRACE!.push(rec);

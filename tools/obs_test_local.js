@@ -8,15 +8,14 @@ let OBSWebSocket = null;
 try {
   const _req = typeof globalThis !== 'undefined' ? globalThis['require'] : undefined;
   if (typeof _req === 'function') OBSWebSocket = _req('obs-websocket-js');
-} catch (_e) {
+} catch {
   // swallow optional require error
-  void 0;
 }
 if (!OBSWebSocket) {
   try {
     const _req2 = typeof globalThis !== 'undefined' ? globalThis['require'] : undefined;
     if (typeof _req2 === 'function') OBSWebSocket = _req2('obs-websocket-js');
-  } catch (_e) {
+  } catch {
     void 0;
   }
 }
@@ -49,7 +48,7 @@ if (
       console.log('[local-test] GetRecordStatus response:', status);
       try {
         await obs.disconnect();
-      } catch (_e) {
+      } catch {
         // ignore disconnect errors
         void 0;
       }
@@ -58,7 +57,7 @@ if (
       console.error('[local-test] connection failed:', e && e.message ? e.message : e);
       try {
         await obs.disconnect();
-      } catch (_e) {
+      } catch {
         void 0;
       }
       globalThis['process'].exit(3);
@@ -68,7 +67,7 @@ if (
   // Not running in Node — make the file a no-op to satisfy browser/static checks
   try {
     console.debug('[obs_test_local] not running under Node; skipping');
-  } catch (_e) {
+  } catch {
     void 0;
   }
 }

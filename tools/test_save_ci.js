@@ -14,7 +14,7 @@ const fs = require('fs');
       try {
         const loc = msg.location ? msg.location() : {};
         out.console.push({ type: msg.type(), text: msg.text(), location: loc });
-      } catch (e) {
+      } catch {
         out.console.push({ type: 'console', text: msg.text() });
       }
     });
