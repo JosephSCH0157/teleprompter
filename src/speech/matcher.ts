@@ -93,7 +93,7 @@ export function matchBatch(
   vParaIndex: string[] | null,
   cfg: MatchConfig,
   currentIndex: number,
-  viterbiState?: { path: number[]; pred?: number }
+  _viterbiState?: { path: number[]; pred?: number }
 ): MatchResult {
   const batch = spokenTokens.slice(-Math.max(3, spokenTokens.length));
   const candidates = new Set<number>();

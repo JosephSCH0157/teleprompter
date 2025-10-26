@@ -52,7 +52,7 @@ function startDbMeter(stream: MediaStream) {
     src.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
     const topBars = buildDbBars(document.getElementById('dbMeterTop'));
-    let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let peakHold = { value: 0, lastUpdate: performance.now(), decay: 0.9 };
+  let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let _peakHold = { value: 0, lastUpdate: performance.now(), decay: 0.9 };
     function draw() {
       if (!analyser || !data) { dbAnim = null; return; }
       analyser.getByteFrequencyData(data);
