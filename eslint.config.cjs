@@ -196,4 +196,18 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
+  // Global unused-vars policy: allow underscore-prefixed args and locals in all JS/TS files
+  {
+    files: ['**/*.{ts,js}'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      }],
+      'no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      }],
+    },
+  },
 ];
