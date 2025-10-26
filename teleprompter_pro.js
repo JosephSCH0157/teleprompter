@@ -4,11 +4,11 @@
 let _toast = function (msg, opts) {
   try {
     if (typeof moduleToast === 'function') return moduleToast(msg, opts);
-  } catch {
+  } catch (e) {
     try {
       console.debug('module toast access failed', e);
-    } catch {
-      void e;
+    } catch (innerErr) {
+      void innerErr;
     }
   }
   try {
@@ -1041,10 +1041,10 @@ let _toast = function (msg, opts) {
         try {
           if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
           else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-        } catch {
+        } catch (e) {
           try {
             alert('Normalize error: ' + (e?.message || e));
-          } catch {
+          } catch (innerErr) {
             console.debug('alert failed', innerErr);
           }
         }
@@ -3468,29 +3468,18 @@ let _toast = function (msg, opts) {
       validateBtn.onclick = () => {
         let msg;
         try {
-          msg = window.validateStandardTags
-            ? window.validateStandardTags(true)
-            : 'Validator missing.';
-        } catch {
-          msg = 'Validation error: ' + (_e?.message || _e);
-        }
+            msg = window.validateStandardTags
+              ? window.validateStandardTags(true)
+              : 'Validator missing.';
+          } catch (_e) {
+            msg = 'Validation error: ' + (_e?.message || _e);
+          }
         try {
           window.showValidation(msg);
         } catch {
           showCopyDialog(msg, 'Validator');
         }
       };
-    }
-  }
-  try {
-    __tpBootPush('after-ensureHelpUI-def');
-  } catch {
-    void e;
-  }
-
-  function _injectHelpPanel() {
-    try {
-      const btn = document.getElementById('shortcutsBtn');
       const modal = document.getElementById('shortcutsOverlay');
       const title = document.getElementById('shortcutsTitle');
       const _close = document.getElementById('shortcutsClose');
@@ -3578,7 +3567,7 @@ let _toast = function (msg, opts) {
             if (typeof renderScript === 'function') renderScript(out);
             setStatus && setStatus('Normalized.');
           }
-        } catch {
+        } catch (err) {
           void err;
         }
       });
@@ -3593,11 +3582,11 @@ let _toast = function (msg, opts) {
           } else {
             alert('Validation is not available in this build.');
           }
-        } catch {
+        } catch (err) {
           console.error(err);
         }
       });
-    } catch {
+    } catch (err) {
       console.error('Help injection failed', err);
     }
   }
@@ -3644,13 +3633,13 @@ let _toast = function (msg, opts) {
           VIEWER_HEIGHT_BASE
         );
       }
-    } catch {
+    } catch (e) {
       console.warn('[TP-Pro Calm] scroller lock failed', e);
     }
     // Run minimal wiring first (meters, help overlay, normalize button)
     try {
       __initMinimal();
-    } catch {
+    } catch (e) {
       console.warn('Minimal init failed', e);
     }
     // ⬇️ grab these *first*
@@ -5761,7 +5750,7 @@ let _toast = function (msg, opts) {
         if (typeof window.normalizeToStandard === 'function') {
           try {
             window.normalizeToStandard();
-          } catch {
+          } catch (e) {
             alert('Normalize error: ' + e.message);
           }
           return;
