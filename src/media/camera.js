@@ -2,7 +2,7 @@
   // Camera overlay helpers. Exposes window.__tpCamera
   let camStream = null;
   let camPC = null;
-  let wantCamRTC = false;
+  let _wantCamRTC = false;
 
   function applyCamSizing() {
     try {
@@ -55,7 +55,7 @@
 
   function stopCamera() {
     try {
-      wantCamRTC = false;
+  _wantCamRTC = false;
       const camVideo = document.getElementById('camVideo');
       const camWrap = document.getElementById('camWrap');
       if (camStream) camStream.getTracks().forEach(t=>t.stop());

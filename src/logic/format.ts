@@ -17,7 +17,7 @@ export function formatInlineMarkup(
   }
 ): string {
   const safeColor = deps?.safeColor || ((c: string) => (c || '').trim());
-  const roleStyle = deps?.roleStyle || ((k: string) => '');
+  const roleStyle = deps?.roleStyle || ((_k: string) => '');
   const escapeHtml =
     deps?.escapeHtml ||
     ((s: string) =>

@@ -144,7 +144,7 @@ export function initBoot(): AppBootOptions {
 
     // Return the options for further wiring/tests
     return { DEV, CALM, QUIET, ADDV };
-  } catch (err) {
+  } catch {
     // Non-fatal: return defaults
     return { DEV: false, CALM: false, QUIET: false, ADDV: '' };
   }
