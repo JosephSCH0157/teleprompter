@@ -9,7 +9,7 @@ const fs = require('fs');
     const page = await browser.newPage();
     page.setDefaultTimeout(20000);
     page.on('console', msg => {
-      try { out.console = out.console || []; out.console.push({ type: msg.type(), text: msg.text() }); } catch(e) {}
+      try { out.console = out.console || []; out.console.push({ type: msg.type(), text: msg.text() }); } catch {}
     });
 
     await page.goto('http://127.0.0.1:8080/teleprompter_pro.html', { waitUntil: 'networkidle2', timeout: 30000 });

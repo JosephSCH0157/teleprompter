@@ -1,7 +1,7 @@
 // Minimal, single-writer scroll scheduler (rAF-coalesced)
 declare global {
   interface Window {
-    __tpScrollWrite?: (y: number) => void;
+    __tpScrollWrite?: (_y: number) => void;
     __lastScrollTarget?: number | null;
     __TP_SCROLLER?: HTMLElement;
     __tpTinySchedulerInstalled?: boolean;

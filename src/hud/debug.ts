@@ -1,6 +1,6 @@
 // Opt-in HUD/debug utilities ported from debug-seed.js
 // This module is only initialized when DEV is enabled (window.__TP_DEV || ?dev=1)
-type LogFn = (tag: string, payload?: any) => void;
+type LogFn = (_tag: string, _payload?: any) => void;
 
 function defaultLog(tag: string, payload?: any) {
   try {

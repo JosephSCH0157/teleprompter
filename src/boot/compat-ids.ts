@@ -3,8 +3,8 @@
 
 declare global {
   interface Window {
-    $id?: <T extends HTMLElement = HTMLElement>(...ids: string[]) => T | null;
-    $bindOnce?: (el: EventTarget | null, type: string, handler: EventListener, key: string) => void;
+    $id?: <T extends HTMLElement = HTMLElement>(..._ids: string[]) => T | null;
+    $bindOnce?: (_el: EventTarget | null, _type: string, _handler: EventListener, _key: string) => void;
     __TP_ID_ALIASES?: Record<string, string[]>;
   }
 }

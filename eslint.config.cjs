@@ -27,7 +27,9 @@ module.exports = [
     plugins: { '@typescript-eslint': require('@typescript-eslint/eslint-plugin') },
     rules: {
       'no-undef': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      // Disable the base rule so the TS plugin handles unused vars (avoid duplicate reports)
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/consistent-type-imports': 'warn',
     },
   },
@@ -72,6 +74,7 @@ module.exports = [
     },
     rules: {
       'no-undef': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
 
@@ -200,10 +203,7 @@ module.exports = [
   {
     files: ['**/*.{ts,js}'],
     rules: {
-      '@typescript-eslint/no-unused-vars': ['warn', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-      }],
+      // Keep plain JS linting: allow underscore-prefixed unused vars/args
       'no-unused-vars': ['warn', {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',

@@ -5,7 +5,7 @@ export type AdaptSample = {
 };
 
 export interface GovernorHUD {
-  (tag: string, data?: Record<string, unknown>): void;
+  (_tag: string, _data?: Record<string, unknown>): void;
 }
 
 export class SpeedGovernor {

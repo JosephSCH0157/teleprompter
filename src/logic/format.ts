@@ -1,8 +1,8 @@
 // src/logic/format.ts
 // Pure formatting logic extracted from the monolith's formatInlineMarkup
 
-export type RoleStyleFn = (key: string) => string;
-export type SafeColorFn = (c: string) => string;
+export type RoleStyleFn = (_key: string) => string;
+export type SafeColorFn = (_c: string) => string;
 
 /**
  * Format inline markup into safe HTML. Dependencies (safeColor, roleStyle, escapeHtml)
