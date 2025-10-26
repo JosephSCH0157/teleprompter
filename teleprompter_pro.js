@@ -27,9 +27,9 @@
       if (window.__TP_DEV) {
         try { console.debug('[TP-Pro Calm] tpScrollTo', { y, target, max, scroller: sc.id || sc.tagName }); } catch {}
       }
-    } catch {}
-        if (window.__TP_DEV) {
-          try { console.debug('[TP-Pro Calm] tpScrollTo', { y, target, max, scroller: sc.id || sc.tagName }); } catch (e) {}
+    } catch (e) {
+      void 0;
+    }
         }
       } catch (e) {}
   }
@@ -44,9 +44,9 @@
             if (typeof _initCore === 'function' && _initCore !== self && _initCore !== window._initCore) {
               return _initCore();
             }
-          } catch {}
-            } catch (e) {}
-          if (typeof window._initCore === 'function' && window._initCore !== self) {
+          } catch (e) {
+            void 0;
+          }
             return window._initCore();
           }
           await new Promise(r => setTimeout(r, 10));
@@ -55,9 +55,9 @@
       };
       try { window.__tpRealCore.__tpWaiter = true; } catch {}
     }
-  } catch {}
-    } catch (e) {}
-  // Install an early stub for core init that queues until the real core is defined
+    } catch (_e) {
+      void 0;
+    }
   try {
     if (typeof window._initCore !== 'function') {
       window._initCore = async function __initCoreStub(){
@@ -69,9 +69,9 @@
             try { __tpBootPush('initCore-stub-direct-call'); } catch {}
             return _initCore();
           }
-        } catch {}
-          } catch (e) {}
-        const core = await new Promise((res)=>{
+        } catch (_e) {
+          void 0;
+        }
           let tries = 0; const id = setInterval(()=>{
   
       // Tiny global commit/scroll scheduler to centralize writes and make metrics easier
@@ -94,24 +94,24 @@
               if (origSet){
                 Object.defineProperty(sc, 'scrollTop', { configurable:true, set(v){ requestScrollTop(v); } });
               }
-            } catch {}
-              } catch (e) {}
-          }
-        } catch {}
-      })();
-            function buildSettingsContent() {
+            } catch (_e) {
+              void 0;
+            }
+        } catch (_e) {
+          void 0;
+        }
               // Monolith settings builder removed in favor of the TS settings stack.
               try {
                 const body = document.getElementById('settingsBody');
                 if (!body) return;
                 try { if (window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function') window.__tp.settings.mount(body); } catch {}
-              } catch {}
+              } catch (_e) {
+              void 0;
             }
-            try {
               __tpBootPush('after-buildSettingsContent-def');
-            } catch {}
-    }
-  } catch(e){ console.warn('early init scheduling error', e); }
+            } catch (_e) {
+              void 0;
+            }
   try { __tpBootPush('init-scheduling-early-exited'); } catch {}
 
   /* ──────────────────────────────────────────────────────────────
@@ -165,9 +165,9 @@
         if (k === '+' || k === '=' || k === '-' || k === '_' || k === '0') e.preventDefault();
       }
     }, { capture: true });
-  } catch {}
-  try { __tpBootPush('after-zoom-guard'); } catch {}
-
+    } catch (_e) {
+      void 0;
+    }
 
 
 function setStatus(msg){
