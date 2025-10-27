@@ -9,7 +9,7 @@ export interface MatchEvent {
 }
 
 let _rec: Recognizer | null = null;
-let _cb: ((e: MatchEvent) => void) | null = null;
+let _cb: ((_evt: MatchEvent) => void) | null = null;
 
 function _getRuntimeScriptState() {
   // runtime stores these globals (legacy). Use safe access and sensible defaults.
@@ -50,7 +50,7 @@ export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult 
   }
 }
 
-export function startRecognizer(cb: (e: MatchEvent) => void, opts?: { lang?: string }) {
+export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: string }) {
   if (_rec) {
     // already running; replace callback
     _cb = cb;
@@ -91,7 +91,7 @@ export function stopRecognizer() {
     w.__tpSpeech.startRecognizer = startRecognizer;
     w.__tpSpeech.stopRecognizer = stopRecognizer;
     w.__tpSpeech.matchBatch = matchBatch;
-  } catch (_e) {
+  } catch {
     // noop
   }
 })();

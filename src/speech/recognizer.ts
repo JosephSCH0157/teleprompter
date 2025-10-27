@@ -6,7 +6,7 @@ export type RecognizerOptions = {
   maxAlternatives?: number;
 };
 
-type ResultCallback = (transcript: string, isFinal: boolean) => void;
+type ResultCallback = (_transcript: string, _isFinal: boolean) => void;
 
 export class Recognizer {
   private recog: any | null = null;

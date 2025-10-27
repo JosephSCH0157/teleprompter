@@ -2,7 +2,7 @@ import { createScrollerHelpers } from './scroll-helpers';
 
 declare global {
   interface Window {
-    __tpScrollWrite?: (top: number) => void;
+    __tpScrollWrite?: (_top: number) => void;
   }
 }
 
