@@ -4,6 +4,8 @@
   const q = new URLSearchParams(location.search);
   const isCI = q.has('ci') || (() => { try { return localStorage.getItem('tp_ci') === '1'; } catch { return false; } })();
   const isDev = (q.has('dev') || (() => { try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })() || (window.__TP_DEV === true)) && !isCI;
+  // Expose a CI boot guard so in-page code can short-circuit probing during CI/smoke runs
+  try { window.__TP_SKIP_BOOT_FOR_TESTS = !!isCI; } catch {};
 
   const tryImport = async (path) => {
     try { await import(path); return true; }
