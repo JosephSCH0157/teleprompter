@@ -9,10 +9,14 @@
      node tools/smoke_test.js --url=http://127.0.0.1:8080/teleprompter_pro.html
 */
 
-const DEFAULT_URL = 'http://localhost:8080/teleprompter_pro.html';
+// Build default URL from CI_HOST/CI_PORT if provided, else fall back to 127.0.0.1:5180
+const CI_HOST = process.env.CI_HOST || '127.0.0.1';
+const CI_PORT = process.env.CI_PORT || process.env.PORT || '5180';
+const DEFAULT_URL = `http://${CI_HOST}:${CI_PORT}/teleprompter_pro.html`;
 const ARG_URL = (process.argv.find(a => a.startsWith('--url=')) || '').split('=')[1];
 const ARG_TIMEOUT = Number((process.argv.find(a => a.startsWith('--timeout=')) || '').split('=')[1]) || 60000;
 const ARG_CALM = process.argv.includes('--calm');
+const ARG_CI = process.argv.includes('--ci');
 
 function withParam(url, key, val = '1') {
   const u = new URL(url);
@@ -20,8 +24,11 @@ function withParam(url, key, val = '1') {
   return u.toString();
 }
 
-const RAW_URL = ARG_URL || process.env.TP_URL || DEFAULT_URL;
-const URL_TO_OPEN = ARG_CALM ? withParam(RAW_URL, 'calm', '1') : RAW_URL;
+let RAW_URL = ARG_URL || process.env.TP_URL || DEFAULT_URL;
+// Append flags as query params where requested
+if (ARG_CALM) RAW_URL = withParam(RAW_URL, 'calm', '1');
+if (process.env.SMOKE_CI === '1' || ARG_CI) RAW_URL = withParam(RAW_URL, 'ci', '1');
+const URL_TO_OPEN = RAW_URL;
 
 (async function run() {
   try {
