@@ -108,6 +108,12 @@ npm run check
 
 If you prefer a faster developer loop, run `npm run lint` and `npm run types` separately while coding.
 
+### CI profile & smoke flags
+
+- CI server: `http://127.0.0.1:5180` (set via `CI_HOST`, `CI_PORT`)
+- Smoke URL: `/teleprompter_pro.html?ci=1` (app sets `window.__TP_SKIP_BOOT_FOR_TESTS=true`)
+- Headless runner: Playwright (preferred) with `npx playwright install --with-deps`; Puppeteer is a fallback if present.
+
 ## Testing → Smoke Test
 
 Minimal headless check that Anvil boots and the key UI renders.
