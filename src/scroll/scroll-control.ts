@@ -2,15 +2,15 @@ import { requestWrite } from '../boot/scheduler';
 
 export type Adapters = Partial<{
   getViewerTop: () => number;
-  requestScroll: (top: number) => void;
+  requestScroll: (_top: number) => void;
   getViewportHeight: () => number;
   getViewerElement: () => HTMLElement | null;
-  emit: (event: string, data?: any) => void;
+  emit: (_event: string, _data?: any) => void;
   now: () => number;
-  raf: (cb: FrameRequestCallback) => number;
+  raf: (_cb: FrameRequestCallback) => number;
 }>;
 
-export type TelemetryFn = (tag: string, data?: any) => void;
+export type TelemetryFn = (_tag: string, _data?: any) => void;
 
 export default function createScrollController(adapters: Adapters = {}, telemetry?: TelemetryFn) {
   let bigErrStart: number | null = null;

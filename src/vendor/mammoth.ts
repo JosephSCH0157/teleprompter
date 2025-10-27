@@ -15,11 +15,11 @@ export async function ensureMammoth(): Promise<any | null> {
         s.onload = () => resolve((window as any).mammoth || null);
         s.onerror = () => resolve(null);
         document.head.appendChild(s);
-      } catch (_e) {
+      } catch {
         resolve(null);
       }
     });
-  } catch (_err) {
+  } catch {
     return null;
   }
 }

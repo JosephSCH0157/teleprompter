@@ -7,7 +7,7 @@ export type RecorderAdapter = {
   start: () => Promise<void> | void;
   stop: () => Promise<void> | void;
   test?: () => Promise<void> | void;
-  configure?: (cfg: any) => void;
+  configure?: (_cfg: any) => void;
 };
 
 export type RecorderSettings = {
@@ -224,6 +224,8 @@ export async function initBuiltIns() {
   if (_builtInsInit) return;
   _builtInsInit = true;
   try {
+    // If running under CI/profiled tests, skip probing/connecting external adapters
+    try { if (typeof window !== 'undefined' && (window as any).__TP_SKIP_BOOT_FOR_TESTS) return; } catch {}
     const adapters: RecorderAdapter[] = [];
     try {
       const m = await import((window as any).__TP_ADDV || ((p: string) => p)('./adapters/bridge.js'));

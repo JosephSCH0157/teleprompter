@@ -2,7 +2,7 @@ import * as asr from './asr';
 
 declare global {
   interface Window {
-    toggleSpeechSync?: (on?: boolean) => string;
+    toggleSpeechSync?: (_on?: boolean) => string;
   }
 }
 

@@ -58,7 +58,7 @@ const fs = require('fs');
             const bridge = window.__obsBridge;
             let current = null; let scenes = null;
             try { if (bridge && bridge.getCurrentProgramScene) current = await bridge.getCurrentProgramScene(); } catch(e) { return { action:'error', err:String(e) }; }
-            try { if (bridge && bridge.getSceneList) scenes = await bridge.getSceneList(); } catch(e) { scenes = null; }
+            try { if (bridge && bridge.getSceneList) scenes = await bridge.getSceneList(); } catch { scenes = null; }
             const names = Array.isArray(scenes) ? scenes.map(s => s && (s.sceneName || s.name || s)).filter(Boolean) : null;
             const exists = Array.isArray(names) ? names.indexOf(preferredScene) >= 0 : false;
             if (!exists) return { action: 'skip', reason: 'preferred-not-found', names, preferredScene, current };
