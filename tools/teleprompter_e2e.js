@@ -28,6 +28,10 @@ async function main() {
 
   // Start the static server in-process
   console.log('[e2e] starting static server...');
+  // If running the smoke harness, prefer a deterministic non-dev port and ensure
+  // the static server listens on that port so the loader can see ?ci=1 without dev mode.
+  const effectivePort = RUN_SMOKE ? 5180 : port;
+  try { process.env.PORT = String(effectivePort); } catch (_e) {}
   const server = require('./static_server.js');
 
   // Wait briefly for server to be ready (it's synchronous listen)
@@ -46,7 +50,7 @@ async function main() {
     }
   });
 
-  const url = `http://127.0.0.1:${port}/teleprompter_pro.html`;
+  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
     try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (_e) { /* ignore */ }
