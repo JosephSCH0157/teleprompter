@@ -29,6 +29,52 @@ This is a browser-based teleprompter with display mirroring, speech sync, camera
   - Features PID-like feedback control, state machine (LOCK_SEEK/LOCKED/COAST/LOST), and guardrails to prevent stalls or jumps.
   - Live readout shows Lead/Lag, Bias percentage, and current state.
 
+## Contributing / Quickstart
+
+### Dev & CI quickstart
+
+**Install**
+
+```bash
+npm ci
+```
+
+Local checks
+
+```bash
+npm run lint      # zero warnings enforced
+npm test          # unit tests
+```
+
+Run smoke locally
+
+```bash
+# serves the repo at http://127.0.0.1:5180 and runs headless smoke
+npm run smoke:strict
+```
+
+Flags
+
+?dev=1 or localStorage.setItem('tp_dev_mode','1') → DEV extras (HUD, logs)
+
+?ci=1 or localStorage.setItem('tp_ci','1') → CI mode (sets window.\_\_TP_SKIP_BOOT_FOR_TESTS=true)
+
+Matcher escape hatch (temporary):
+localStorage.setItem('tp_matcher','legacy') (remove next release)
+
+Scroll writes
+All main viewer scrolling goes through window.\_\_tpScrollWrite(y). Direct .scrollTop/.scrollTo is lint-blocked outside the scheduler.
+
+# Optional tiny follow-ups (fast wins)
+
+- Add the **nomodule** fallback in HTML to stop executing the monolith in modern browsers:
+  ```html
+  <script type="module" src="/src/boot/loader.js"></script>
+  <script nomodule src="/teleprompter_pro.js"></script>
+  ```
+
+In the workflow, make sure npm run smoke:strict is included after starting the static server (you’ve got this locally; mirror it in CI if not already).
+
 ## Dev quickstart
 
 Open `teleprompter_pro.html` in a modern browser (Chromium-based recommended). Grant mic permissions if you want speech sync or the dB meter.
@@ -67,6 +113,7 @@ If you prefer a faster developer loop, run `npm run lint` and `npm run types` se
 Minimal headless check that Anvil boots and the key UI renders.
 
 **Run locally**
+
 ```bash
 node tools/static_server.js &
 node tools/smoke_test.js --calm --timeout=120000
@@ -101,9 +148,10 @@ The smoke prints a one-line JSON summary:
 The repo contains legacy JS plus new TS. We stage the migration:
 
 1. Build references first (they emit `.d.ts`):
-  ```bash
-  npm run build:logic
-  ```
+
+```bash
+npm run build:logic
+```
 
 2. Type-check without emitting JS:
 
