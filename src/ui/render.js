@@ -14,7 +14,8 @@ export function renderScript(text = '') {
   try {
     const host = document.getElementById('script');
     if (!host) return;
-    const t = String(text || '');
+    let t = String(text || '');
+    try { if (typeof window.stripNoteBlocks === 'function') t = window.stripNoteBlocks(t); } catch {}
     const lines = t.replace(/\r\n?/g, '\n').split('\n');
     // Preserve current scroll position if the viewer is the scroller
     const viewer = document.getElementById('viewer');

@@ -8868,7 +8868,10 @@ let _toast = function (msg, opts) {
       if (window.__tp_rs_inflight) return;
       window.__tp_rs_inflight = true;
     } catch {}
-    const t = String(text || '');
+    let t = String(text || '');
+    try {
+      if (typeof window.stripNoteBlocks === 'function') t = window.stripNoteBlocks(t);
+    } catch {}
 
     // Tokenize for speech sync (strip tags so only spoken words are matched)
     scriptWords = normTokens(stripTagsForTokens(text));
@@ -8876,11 +8879,11 @@ let _toast = function (msg, opts) {
     // Build paragraphs; preserve single \n as <br>
     // First, split on double newlines into blocks, then further split any block
     // that contains note divs so note blocks always stand alone.
-    const blocks = t.split(/\n{2,}/);
+  const blocks = t.split(/\n{2,}/);
     const outParts = [];
     for (const b of blocks) {
       // Convert inline markup first so notes become <div class="note"> blocks
-      const html = formatInlineMarkup(b).replace(/\n/g, '<br>');
+  const html = (typeof window.applyInlineTags === 'function' ? window.applyInlineTags(b) : formatInlineMarkup(b)).replace(/\n/g, '<br>');
       // If there are one or more note divs inside, split them out to standalone entries
       if (/<div class=\"note\"[\s\S]*?<\/div>/i.test(html)) {
         const pieces = html.split(/(?=<div class=\"note")|(?<=<\/div>)/i).filter(Boolean);
