@@ -11,6 +11,8 @@ function $(id) {
 // --- UI Hydration Contract ---------------------------------------------------
 const UI_WIRED = new Set();
 const $id = (id) => { try { return document.getElementById(id); } catch { return null; } };
+let IS_HYDRATING = false;
+let HYDRATE_SCHEDULED = false;
 
 // Wire once per key
 function once(key, fn) {
@@ -280,6 +282,8 @@ function loadRoles() {
 
 function updateLegend() {
   try {
+    // Mark that legend is being rendered so the MutationObserver can ignore these mutations
+    document.documentElement.dataset.legendRendering = '1';
     const legend = document.getElementById('legend');
     if (!legend) return;
     const ROLES = loadRoles();
@@ -319,7 +323,9 @@ function updateLegend() {
         });
       }
     } catch {}
-  } catch {}
+  } finally {
+    try { delete document.documentElement.dataset.legendRendering; } catch {}
+  }
 }
 
 function ensureEmptyBanner() {
@@ -343,10 +349,16 @@ function ensureEmptyBanner() {
 
 // === Master hydrator: run now and whenever DOM changes ===
 function hydrateUI() {
-  wireOverlays();
-  wirePresentMode();
-  updateLegend();
-  ensureEmptyBanner();
+  if (IS_HYDRATING) return;
+  IS_HYDRATING = true;
+  try {
+    wireOverlays();
+    wirePresentMode();
+    updateLegend();
+    ensureEmptyBanner();
+  } finally {
+    IS_HYDRATING = false;
+  }
 }
 
 export function bindStaticDom() {
@@ -411,8 +423,12 @@ export function bindStaticDom() {
     // keep it healthy: observe DOM changes and rehydrate idempotently
     const mo = new MutationObserver(() => {
       try {
-        if ($id('shortcutsBtn') || $id('settingsBtn') || $id('legend') || $id('script')) {
-          hydrateUI();
+        // Ignore mutations caused by legend rendering to avoid feedback loops
+        if (document.documentElement.dataset.legendRendering === '1') return;
+        if (IS_HYDRATING) return;
+        if (!HYDRATE_SCHEDULED) {
+          HYDRATE_SCHEDULED = true;
+          requestAnimationFrame(() => { try { hydrateUI(); } finally { HYDRATE_SCHEDULED = false; } });
         }
       } catch {}
     });
