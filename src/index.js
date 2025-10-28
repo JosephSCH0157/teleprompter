@@ -7,6 +7,7 @@ import * as Mic from './adapters/mic.js';
 import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
 import * as Auto from './features/autoscroll.js';
+import { installScrollRouter } from './features/scroll-router.js';
 import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
@@ -14,7 +15,6 @@ import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
 import { initToasts } from './features/toasts.js';
-import * as ScrollModes from './scroll/router.js';
 import * as UI from './ui/dom.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
@@ -58,7 +58,9 @@ async function boot() {
     // Dev-only parity guard: verifies key UI elements and wiring exist
     try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
-    UI.bindStaticDom();
+  UI.bindStaticDom();
+  // Ensure autoscroll engine is initialized before wiring router/UI
+  try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
 
   // Party-mode eggs (UI + bus triggers)
   try { Eggs.install({ bus }); } catch {}
@@ -126,13 +128,14 @@ async function boot() {
       // Install speech start/stop delegator
       try { installSpeech(); } catch (e) { console.warn('[src/index] installSpeech failed', e); }
 
-    // Wire Auto-scroll controls and install Scroll Modes router
+    // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
     try {
-      ScrollModes.installScrollModes();
+      // Install the new features/scroll-router (uses Auto internally)
+      try { installScrollRouter(); } catch (e) { console.warn('[src/index] installScrollRouter failed', e); }
       // Resilient event delegation (works in headless + when nodes re-render)
       document.addEventListener('click', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoToggle')) return (ScrollModes.isRunning()?ScrollModes.stop():ScrollModes.start()); } catch {}
+        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
         try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
@@ -141,9 +144,9 @@ async function boot() {
       // Headless fallback (some runners only dispatch mousedown)
       document.addEventListener('mousedown', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoToggle')) return (ScrollModes.isRunning()?ScrollModes.stop():ScrollModes.start()); } catch {}
+        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
       }, { capture: true });
-    } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
+    } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }
 
     console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
