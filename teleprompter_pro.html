@@ -314,14 +314,21 @@
 <main class="viewer" id="viewer">
 <div class="marker"></div>
 <div class="script" id="script">
-  <div class="line" data-line-idx="0">First line…</div>
-  <div class="line" data-line-idx="1">Second line…</div>
-  <!-- ... -->
+  
 </div>
 <div class="camWrap" id="camWrap">
 <video autoplay="" id="camVideo" muted=""></video>
 </div>
 </main>
+</div>
+<!-- Empty-script hint -->
+<div id="emptyHint" class="empty-hint" aria-live="polite">
+  <div class="hint-box">
+    <div class="hint-title">Paste your script here</div>
+    <div class="hint-sub">Press <strong>Ctrl+V</strong> (Cmd+V on Mac) or drop a .txt/.docx</div>
+    <div class="hint-tags">Use tags like <code>[s1]…[/s1]</code>, <code>[s2]…[/s2]</code>, <code>[note]…[/note]</code></div>
+  </div>
+  
 </div>
 <!-- Pre-roll overlay (main window) -->
 <div id="countOverlay" class="inl-7">

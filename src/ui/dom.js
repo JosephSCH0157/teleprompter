@@ -214,6 +214,35 @@ function installDbMeter() {
   } catch {}
 }
 
+function installEmptyScriptHint() {
+  try {
+    const hint = document.getElementById('emptyHint');
+    if (!hint) return;
+
+    const editor = document.getElementById('editor');
+    const viewer = document.getElementById('viewer');
+
+    const hasContent = () => {
+      try {
+        const eVal = (editor && 'value' in editor) ? (editor.value || '') : '';
+        const vTxt = (viewer && viewer.textContent) || '';
+        return (String(eVal) + String(vTxt)).trim().length > 0;
+      } catch { return false; }
+    };
+
+    const refresh = () => {
+      try { hint.classList.toggle('show', !hasContent()); } catch {}
+    };
+
+    editor && editor.addEventListener && editor.addEventListener('input', refresh);
+    document.addEventListener('paste', () => setTimeout(refresh, 0));
+    document.addEventListener('drop', () => setTimeout(refresh, 0));
+    window.addEventListener('tp:script-loaded', refresh);
+
+    refresh();
+  } catch {}
+}
+
 export function bindStaticDom() {
   console.log('[src/ui/dom] bindStaticDom');
   try {
@@ -229,6 +258,7 @@ export function bindStaticDom() {
     wirePresentMode();
     installSpeakerIndex();
     installDbMeter();
+    installEmptyScriptHint();
   } catch {}
 }
 

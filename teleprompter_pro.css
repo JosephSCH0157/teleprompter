@@ -416,3 +416,29 @@ html.tp-present .present-exit { display: inline-flex; }
     transform: scaleX(0);
     background: linear-gradient(90deg, #4caf50 0%, #ffc107 60%, #e53935 100%);
 }
+
+/* Empty script hint */
+.empty-hint {
+    position: absolute;
+    inset: 64px 16px 16px 16px; /* leave space for topbar */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none; /* clicks go through */
+    z-index: 10;
+}
+.empty-hint.show { display: flex; }
+
+.empty-hint .hint-box {
+    pointer-events: auto;
+    max-width: min(820px, 90vw);
+    padding: 24px 28px;
+    border: 1px dashed rgba(255,255,255,.25);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+    backdrop-filter: blur(2px);
+    text-align: center;
+}
+.hint-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.hint-sub   { opacity: .85; margin-bottom: 8px; }
+.hint-tags  { opacity: .7; font-size: 13px; }
