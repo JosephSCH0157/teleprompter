@@ -214,32 +214,97 @@ function installDbMeter() {
   } catch {}
 }
 
-function installEmptyScriptHint() {
+function wireOverlays() {
   try {
-    const hint = document.getElementById('emptyHint');
-    if (!hint) return;
-
-    const editor = document.getElementById('editor');
-    const viewer = document.getElementById('viewer');
-
-    const hasContent = () => {
+    const open = (name) => {
       try {
-        const eVal = (editor && 'value' in editor) ? (editor.value || '') : '';
-        const vTxt = (viewer && viewer.textContent) || '';
-        return (String(eVal) + String(vTxt)).trim().length > 0;
-      } catch { return false; }
+        const btn = document.getElementById(name + 'Btn');
+        const dlg = document.getElementById(name + 'Overlay');
+        if (!dlg) return;
+        dlg.classList.remove('hidden');
+        btn && btn.setAttribute('aria-expanded', 'true');
+      } catch {}
+    };
+    const close = (name) => {
+      try {
+        const btn = document.getElementById(name + 'Btn');
+        const dlg = document.getElementById(name + 'Overlay');
+        if (!dlg) return;
+        dlg.classList.add('hidden');
+        btn && btn.setAttribute('aria-expanded', 'false');
+      } catch {}
     };
 
-    const refresh = () => {
-      try { hint.classList.toggle('show', !hasContent()); } catch {}
-    };
+    document.addEventListener('click', (e) => {
+      try {
+        const t = e.target;
+        if (t && t.closest && t.closest('#shortcutsBtn')) return open('shortcuts');
+        if (t && t.closest && t.closest('#settingsBtn')) return open('settings');
+        if (t && t.closest && t.closest('#shortcutsClose')) return close('shortcuts');
+        if (t && t.closest && t.closest('#settingsClose')) return close('settings');
+        const sc = document.getElementById('shortcutsOverlay');
+        if (sc && t === sc) close('shortcuts');
+        const se = document.getElementById('settingsOverlay');
+        if (se && t === se) close('settings');
+      } catch {}
+    }, { capture: true });
 
-    editor && editor.addEventListener && editor.addEventListener('input', refresh);
-    document.addEventListener('paste', () => setTimeout(refresh, 0));
-    document.addEventListener('drop', () => setTimeout(refresh, 0));
-    window.addEventListener('tp:script-loaded', refresh);
+    window.addEventListener('keydown', (e) => {
+      try {
+        if (e.key !== 'Escape') return;
+        document.getElementById('shortcutsOverlay')?.classList.add('hidden');
+        document.getElementById('settingsOverlay')?.classList.add('hidden');
+        document.getElementById('shortcutsBtn')?.setAttribute('aria-expanded','false');
+        document.getElementById('settingsBtn')?.setAttribute('aria-expanded','false');
+      } catch {}
+    });
+  } catch {}
+}
 
-    refresh();
+const ROLE_KEYS = ['s1','s2','g1','g2'];
+const ROLES_KEY = 'tp_roles_v2';
+const ROLE_DEFAULTS = {
+  s1: { name: 'Speaker 1', color: '#60a5fa' },
+  s2: { name: 'Speaker 2', color: '#facc15' },
+  g1: { name: 'Guest 1',   color: '#34d399' },
+  g2: { name: 'Guest 2',   color: '#f472b6' },
+};
+
+function loadRoles() {
+  try { return Object.assign({}, ROLE_DEFAULTS, JSON.parse(localStorage.getItem(ROLES_KEY) || '{}')); }
+  catch { return { ...ROLE_DEFAULTS }; }
+}
+
+function updateLegend() {
+  try {
+    const legend = document.getElementById('legend');
+    if (!legend) return;
+    const ROLES = loadRoles();
+    legend.innerHTML = '';
+    for (const key of ROLE_KEYS) {
+      const item = ROLES[key];
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = item.color;
+      const name = document.createElement('span');
+      name.textContent = item.name;
+      tag.appendChild(dot);
+      tag.appendChild(name);
+      legend.appendChild(tag);
+    }
+  } catch {}
+}
+
+function ensureViewerPlaceholder() {
+  try {
+    const scriptEl = document.getElementById('script');
+    if (!scriptEl) return;
+    if (!scriptEl.querySelector('.line')) {
+      scriptEl.innerHTML = '<div class="line" data-line-idx="0">First line…</div>' +
+                           '<div class="line" data-line-idx="1">Second line…</div>';
+    }
   } catch {}
 }
 
@@ -258,7 +323,9 @@ export function bindStaticDom() {
     wirePresentMode();
     installSpeakerIndex();
     installDbMeter();
-    installEmptyScriptHint();
+    wireOverlays();
+    updateLegend();
+    ensureViewerPlaceholder();
   } catch {}
 }
 
