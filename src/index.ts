@@ -18,6 +18,8 @@ import './vendor/mammoth';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
+import { applyTypographyTo } from './features/typography';
+import { onTypography } from './settings/typographyStore';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
@@ -67,6 +69,24 @@ try {
 					try { return (window as any).__tpDisplayWindow || null; } catch { return null; }
 				},
 				// onApplyRemote is used on display side only; main does not need it here
+			});
+		} catch {}
+
+		// Apply typography to main window and, if present, to display window
+		try {
+			applyTypographyTo(window, 'main');
+			const w = (window as any).__tpDisplayWindow as Window | null;
+			if (w) applyTypographyTo(w, 'display');
+		} catch {}
+
+		// Broadcast typography changes to external display (BC + postMessage)
+		try {
+			let bc: BroadcastChannel | null = null;
+			try { bc = new BroadcastChannel('tp_display'); } catch {}
+			onTypography((d, t) => {
+				const snap = { kind: 'tp:typography', source: 'main', display: d, t } as const;
+				try { bc?.postMessage(snap as any); } catch {}
+				try { const w = (window as any).__tpDisplayWindow as Window | null; w?.postMessage?.(snap as any, '*'); } catch {}
 			});
 		} catch {}
 	});

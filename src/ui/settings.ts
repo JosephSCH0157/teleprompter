@@ -1,6 +1,7 @@
 import { buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { setupSettingsTabs } from './settings/tabs';
 import { wireSettingsDynamic } from './settings/wire';
+import { bindTypographyPanel } from './settings/typographyPanel';
 
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null) {
@@ -18,8 +19,11 @@ export function mountSettings(rootEl: HTMLElement | null) {
     } catch {}
     try { wireSettingsDynamic(rootEl); } catch {}
     try { setupSettingsTabs(rootEl); } catch {}
+    // Bind new typography panels (main + display)
+    try { bindTypographyPanel('main'); } catch {}
+    try { bindTypographyPanel('display'); } catch {}
 
-    // Typography wiring: Settings is source-of-truth; mirror to legacy main inputs and trigger updates
+    // Legacy compatibility: mirror minimal font size/line height controls if present
     try {
       const fsS = document.getElementById('settingsFontSize') as HTMLInputElement | null;
       const lhS = document.getElementById('settingsLineHeight') as HTMLInputElement | null;
@@ -42,8 +46,8 @@ export function mountSettings(rootEl: HTMLElement | null) {
           } catch {}
         } catch {}
       };
-      if (fsS) fsS.addEventListener('input', applyFromSettings);
-      if (lhS) lhS.addEventListener('input', applyFromSettings);
+  if (fsS) fsS.addEventListener('input', applyFromSettings);
+  if (lhS) lhS.addEventListener('input', applyFromSettings);
       // Initial sync
       try {
         const storedFS = (() => { try { return localStorage.getItem('tp_font_size_v1'); } catch { return null; } })();
