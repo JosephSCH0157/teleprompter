@@ -14,6 +14,7 @@ import * as UI from './ui/dom.js';
 async function boot() {
   try {
     console.log('[src/index] boot()');
+    try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
     await Core.init();
     UI.bindStaticDom();
 
@@ -29,8 +30,10 @@ async function boot() {
     try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
 
     console.log('[src/index] boot completed');
+    try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);
+    try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch {}
   }
 }
 
