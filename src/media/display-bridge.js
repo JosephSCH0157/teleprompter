@@ -17,7 +17,7 @@
       const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
       if (chip) chip.textContent = 'Display: open';
       try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
-      const closeDisplayBtn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) closeDisplayBtn.disabled = true;
+  const closeDisplayBtn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) closeDisplayBtn.disabled = false;
       if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
       displayHelloDeadline = performance.now() + 3000;
       displayHelloTimer = setInterval(()=>{
@@ -50,8 +50,9 @@
     try {
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
-        displayReady = true; if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
+    displayReady = true; if (displayHelloTimer) { clearInterval(displayHelloTimer); displayHelloTimer = null; }
   const chip3 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip3) chip3.textContent = 'Display: ready';
+    try { const btn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (btn) btn.disabled = false; } catch {}
         // send initial render
         try { sendToDisplay({ type: 'render', html: document.getElementById('script')?.innerHTML, fontSize: document.getElementById('fontSize')?.value, lineHeight: document.getElementById('lineHeight')?.value }); } catch {}
       }
