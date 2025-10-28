@@ -18,8 +18,8 @@ import { initTelemetry } from './features/telemetry.js';
 import '../ui/format.js';
 import '../ui/inline-shim.js';
 // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
-import './media/display-bridge.js';
 import { initToasts } from './features/toasts.js';
+import './media/display-bridge.js';
 import * as UI from './ui/dom.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
