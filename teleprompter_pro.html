@@ -63,6 +63,24 @@
   <!-- Preload critical modules and scripts to shorten main-thread work and reduce LCP delay -->
   <!-- Avoid preloading the legacy monolith; modern browsers should use the module loader below -->
   <!-- Avoid modulepreload for heavy optional modules so they are fetched only when needed -->
+  <!-- Conditional, relative modulepreload for app entry (preloads src in dev, dist in prod) -->
+  <script>
+    (function () {
+      try {
+        var qs = new URLSearchParams(location.search);
+        var isDev = qs.has('dev') || /\bdev\b/.test(location.hash);
+        try { isDev = isDev || localStorage.getItem('tp_dev_mode') === '1'; } catch {}
+        var v = (new URL(location.href)).searchParams.get('v') || Date.now();
+        // Preload matches boot-loader import targets: /src/index.js in dev, /dist/index.js in prod
+        var href = isDev ? './src/index.js?v=' + encodeURIComponent(v)
+                         : './dist/index.js?v=' + encodeURIComponent(v);
+        var l = document.createElement('link');
+        l.rel = 'modulepreload';
+        l.href = href;
+        document.head.appendChild(l);
+      } catch {}
+    })();
+  </script>
 
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
