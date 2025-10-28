@@ -17,6 +17,7 @@ import './vendor/mammoth';
 // Optional: wire Auto-scroll + install scroll router in TS path as well
 import * as Auto from './features/autoscroll.js';
 import { installScrollRouter } from './features/scroll-router';
+import { installDisplaySync } from './features/display-sync';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
@@ -46,6 +47,27 @@ try {
 				dec:    (Auto as any).dec,
 				setEnabled: (Auto as any).setEnabled,
 			}});
+		} catch {}
+
+		// Install coalesced Display Sync (hash + optional HTML text) for external display
+		try {
+			installDisplaySync({
+				getText: () => {
+					try { return (document.getElementById('script')?.innerHTML) || ''; } catch { return ''; }
+				},
+				getAnchorRatio: () => {
+					try {
+						const v = document.getElementById('viewer') as HTMLElement | null;
+						if (!v) return 0;
+						const max = Math.max(0, v.scrollHeight - v.clientHeight);
+						return max > 0 ? (v.scrollTop / max) : 0;
+					} catch { return 0; }
+				},
+				getDisplayWindow: () => {
+					try { return (window as any).__tpDisplayWindow || null; } catch { return null; }
+				},
+				// onApplyRemote is used on display side only; main does not need it here
+			});
 		} catch {}
 	});
 } catch {}

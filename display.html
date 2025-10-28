@@ -180,8 +180,44 @@
               }
             }
 
+            // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
+            try {
+              const chan = new BroadcastChannel('tp_display');
+              chan.addEventListener('message', (e) => {
+                try {
+                  const msg = e?.data || {};
+                  if (msg && msg.kind === 'tp:script' && msg.source === 'main') {
+                    try { window.__lastDisplayHash = msg.textHash || ''; } catch {}
+                    if (typeof msg.text === 'string') {
+                      scriptEl.innerHTML = msg.text;
+                      applyScaled();
+                      applyBottomPad();
+                    }
+                    if (typeof msg.anchorRatio === 'number' && isFinite(msg.anchorRatio)) {
+                      const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                      wrap.scrollTop = Math.round(Math.max(0, Math.min(1, msg.anchorRatio)) * max);
+                    }
+                  }
+                } catch {}
+              });
+            } catch {}
+
             window.addEventListener('message', ev => {
               const d = ev.data||{};
+              // New display-sync snapshot via postMessage fallback
+              if (d && d.kind === 'tp:script' && d.source === 'main') {
+                try { window.__lastDisplayHash = d.textHash || ''; } catch {}
+                if (typeof d.text === 'string') {
+                  scriptEl.innerHTML = d.text;
+                  applyScaled();
+                  applyBottomPad();
+                }
+                if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
+                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                  wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
+                }
+                return; // handled
+              }
               // WebRTC camera offer/candidate handling
               if (!window.__camPC && (d.type === 'cam-offer')) {
                 try {

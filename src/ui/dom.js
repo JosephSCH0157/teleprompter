@@ -77,7 +77,12 @@ function wireDisplayMirror() {
     };
     if (viewer) {
       viewer.addEventListener('scroll', () => {
-        if (!scrollPending) { scrollPending = true; requestAnimationFrame(sendScroll); }
+        if (!scrollPending) {
+          scrollPending = true;
+          requestAnimationFrame(() => {
+            try { sendScroll(); } finally { try { window.dispatchEvent(new Event('tp:anchorChanged')); } catch {} }
+          });
+        }
       }, { passive: true });
     }
 
