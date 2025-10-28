@@ -5,7 +5,7 @@
 // Dependencies: existing Auto controller (autoscroll.js) and dB events (tp:db) from mic.js
 import * as Auto from './autoscroll.js';
 
-const LS_KEY = 'tp_scroll_mode_v1';
+const LS_KEY = 'scrollMode';
 const DEFAULTS = {
   mode: 'hybrid',
   timed:   { speed: 22, rampMs: 300 },
@@ -21,12 +21,12 @@ let viewer = null;
 
 // ---------- utilities ----------
 function persist() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ mode: state.mode })); } catch {}
+  try { localStorage.setItem(LS_KEY, state.mode); } catch {}
 }
 function restore() {
   try {
-    const s = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
-    if (s.mode) state.mode = s.mode;
+    const m = localStorage.getItem(LS_KEY);
+    if (m) state.mode = m;
   } catch {}
 }
 
@@ -113,9 +113,7 @@ function applyMode(m) {
     Auto.setEnabled(false); speaking=false; // step/wpm/asr/reh start paused
   }
 
-  // Update mode chip/select if present
-  const chip = document.getElementById('modeChip');
-  if (chip) chip.textContent = `Mode: ${m[0].toUpperCase()+m.slice(1)}`;
+  // Update select if present
   const sel = document.getElementById('scrollMode');
   if (sel && sel.value !== m) sel.value = m;
 }
@@ -136,6 +134,12 @@ export function installScrollRouter() {
     const t = e.target;
     if (t?.id === 'scrollMode') setMode(t.value);
   }, {capture:true});
+
+  // Ensure the select announces changes for screen readers
+  try {
+    const modeSel = document.getElementById('scrollMode');
+    modeSel && modeSel.setAttribute('aria-live', 'polite');
+  } catch {}
 
   // Keyboard helpers for Step mode
   document.addEventListener('keydown', (e)=>{
