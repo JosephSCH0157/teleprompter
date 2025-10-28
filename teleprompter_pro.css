@@ -155,7 +155,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* app contains sidebar + main viewer; topbar is outside .app in the DOM, so keep rows out of this grid */
     .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;flex:1 1 auto;min-height:0}
-    .sidebar{width:var(--sidebar-w)}
+    .sidebar{width:var(--sidebar-w); position: sticky; top: var(--topbar-h); align-self: start; height: calc(100vh - var(--topbar-h) - var(--statusbar-h)); overflow:auto}
     .statusbar{height:var(--statusbar-h);box-sizing:border-box}
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
     .panel h2{margin:0 0 12px;font-size:18px}

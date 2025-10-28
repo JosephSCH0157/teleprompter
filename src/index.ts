@@ -19,7 +19,7 @@ import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
 import { applyTypographyTo } from './features/typography';
-import { onTypography } from './settings/typographyStore';
+import { onTypography, setTypography, getTypography } from './settings/typographyStore';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
@@ -88,6 +88,22 @@ try {
 				try { bc?.postMessage(snap as any); } catch {}
 				try { const w = (window as any).__tpDisplayWindow as Window | null; w?.postMessage?.(snap as any, '*'); } catch {}
 			});
+		} catch {}
+
+		// Ctrl/Cmd + Mouse Wheel to adjust font size (main by default, Ctrl+Alt for display)
+		try {
+			const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+			window.addEventListener('wheel', (e: WheelEvent) => {
+				try {
+					if (!(e.ctrlKey || e.metaKey)) return; // only when user intends zoom-like behavior
+					e.preventDefault();
+					const targetDisplay = e.altKey ? 'display' : 'main';
+					const cur = getTypography(targetDisplay as any).fontSizePx;
+					const step = 2;
+					const next = clamp(cur + (e.deltaY < 0 ? step : -step), 18, 120);
+					setTypography(targetDisplay as any, { fontSizePx: next });
+				} catch {}
+			}, { passive: false });
 		} catch {}
 	});
 } catch {}
