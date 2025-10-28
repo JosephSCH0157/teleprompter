@@ -1,6 +1,6 @@
 // boot-loader.js — singleton guard + clean dev/prod import
 (function (g) {
-  if (g.__TP_LOADER_RAN__) return; // singleton guard so it never boots twice
+  if (g.__TP_LOADER_RAN__) { try { (g.__TP_BOOT_TRACE = g.__TP_BOOT_TRACE || []).push({ ts: performance.now(), tag: 'boot-loader', msg: 'dup-loader' }); } catch {} throw 'dup-loader'; }
   g.__TP_LOADER_RAN__ = true;
 
   const push = (e) => (g.__TP_BOOT_TRACE = g.__TP_BOOT_TRACE || []).push({ ts: performance.now(), ...e });

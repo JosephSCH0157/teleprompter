@@ -389,3 +389,7 @@ html.tp-present #viewer {
     font: 600 12px/1 system-ui, sans-serif;
 }
 html.tp-present .present-exit { display: inline-flex; }
+
+/* Top-bar: clearer separator and dB meter visibility */
+.topbar { border-bottom: 1px solid var(--hairline, #2a2a2a); }
+#dbMeter { display: inline-flex; align-items: center; gap: 6px; }
