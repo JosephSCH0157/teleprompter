@@ -125,6 +125,18 @@
     },
     {
       "checkboxIndex": 1
+    },
+    {
+      "checkboxIndex": 2
+    },
+    {
+      "checkboxIndex": 3
+    },
+    {
+      "checkboxIndex": 4
+    },
+    {
+      "checkboxIndex": 5
     }
   ],
   "errors": [],
@@ -249,9 +261,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "f9b95d4a12f6b3bb11ccc883d7c63f1feae5a938",
+      "gitSha": "25712974e0fb112e11d5ef1073cbf590a22b0a98",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-28T18:53:28.816Z"
+      "buildTime": "2025-10-28T18:55:54.794Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
