@@ -139,19 +139,17 @@
 <span class="chip" id="speakerIndexChip">Speakers: —</span>
 <!-- dB Meter (top bar mini) -->
 <div id="dbMeterTop" title="Input level"></div>
-<!-- Mode chip + selector -->
+<!-- Mode chip + compact selector -->
 <span id="modeChip" class="chip">Mode: Hybrid</span>
-<span class="chip">
-  <label for="scrollMode" style="margin-right:6px">Mode</label>
-  <select id="scrollMode">
-    <option value="timed">Timed</option>
-    <option value="wpm">WPM</option>
-    <option value="hybrid" selected>Hybrid</option>
-    <option value="asr">ASR</option>
-    <option value="step">Step</option>
-    <option value="reh">Rehearsal</option>
-  </select>
-  </span>
+<label for="scrollMode" class="sr-only">Scroll Mode</label>
+<select id="scrollMode" aria-label="Scroll Mode">
+  <option value="timed">Timed</option>
+  <option value="wpm">WPM</option>
+  <option value="hybrid" selected>Hybrid</option>
+  <option value="asr">ASR</option>
+  <option value="step">Step</option>
+  <option value="rehearsal">Rehearsal</option>
+</select>
 <!-- Present Mode (top bar) -->
 <button class="inl-1 chip" id="presentBtn">Present Mode</button>
 <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>

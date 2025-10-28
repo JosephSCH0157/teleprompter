@@ -14,15 +14,38 @@ import './vendor/mammoth';
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
 
-// Optional: wire Auto-scroll in TS path as well (dev uses JS path; prod bundle may use TS entry)
-import { initAutoScroll } from './features/autoscroll.js';
+// Optional: wire Auto-scroll + install scroll router in TS path as well
+import * as Auto from './features/autoscroll.js';
+import { installScrollRouter } from './features/scroll-router';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
-		const viewer = document.getElementById('viewer') as HTMLElement | null;
-		const autoToggle = document.getElementById('autoToggle') as HTMLElement | null;
-		const autoSpeed = document.getElementById('autoSpeed') as HTMLInputElement | null;
-		const auto = initAutoScroll(() => viewer);
-		auto.bindUI(autoToggle, autoSpeed);
+		// Ensure autoscroll engine is initialized
+		try { (Auto as any).initAutoScroll?.(); } catch {}
+
+		// Wire Auto buttons via resilient delegation (nodes may be re-rendered)
+		try {
+			const onClick = (e: Event) => {
+				const t = e && (e.target as any);
+				try { if (t?.closest?.('#autoToggle')) return (Auto as any).toggle?.(); } catch {}
+				try { if (t?.closest?.('#autoInc'))    return (Auto as any).inc?.(); } catch {}
+				try { if (t?.closest?.('#autoDec'))    return (Auto as any).dec?.(); } catch {}
+			};
+			document.addEventListener('click', onClick, { capture: true });
+			document.addEventListener('mousedown', (e) => {
+				const t = e && (e.target as any);
+				try { if (t?.closest?.('#autoToggle')) return (Auto as any).toggle?.(); } catch {}
+			}, { capture: true });
+		} catch {}
+
+		// Install the new Scroll Router (Step/Hybrid; WPM/ASR/Rehearsal stubs)
+		try {
+			installScrollRouter({ auto: {
+				toggle: (Auto as any).toggle,
+				inc:    (Auto as any).inc,
+				dec:    (Auto as any).dec,
+				setEnabled: (Auto as any).setEnabled,
+			}});
+		} catch {}
 	});
 } catch {}
