@@ -299,6 +299,14 @@ body.ck::after{
 .chip-live{ background: rgba(229,57,53,.18); border-color: rgba(229,57,53,.5); }
 /* Error state */
 .chip.obs-error{ background:#3e0b0b; color:#ffd6d6; border-color:#E03E3E }
+/* OBS test icon within chip */
+.obs-test-icon{
+    display:inline-block; margin-left:6px; font-style:normal; font-weight:700; opacity:0; transform: translateY(-2px) scale(0.9);
+    transition: opacity .18s ease, transform .18s ease; user-select:none;
+}
+.obs-test-icon.show{ opacity:1; transform: translateY(0) scale(1); }
+.obs-test-icon.ok{ color:#b7f4c9; }
+.obs-test-icon.error{ color:#ffd6d6; }
 
 /* Inline OBS test message */
 .obs-test-msg{font-size:13px;padding:6px 8px;border-radius:8px}

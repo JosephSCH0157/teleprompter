@@ -271,12 +271,13 @@
             const reconnect = false; // temporary test connection should not linger
             const port = 4455;
             const secure = false;
-            const setMsg = (ok, txt) => {
+            const setMsg = (ok, txt, extra) => {
               try {
                 if (!obsTestMsg) return;
                 obsTestMsg.textContent = String(txt||'');
                 obsTestMsg.classList.remove('obs-test-ok','obs-test-error');
                 obsTestMsg.classList.add(ok ? 'obs-test-ok' : 'obs-test-error');
+                try { window.dispatchEvent(new CustomEvent('tp:obs-test', { detail: { ok: !!ok, ...(extra||{}) } })); } catch {}
               } catch {}
             };
             if (!host) { setMsg(false, 'Enter IP/Host and try again'); return; }
@@ -288,7 +289,7 @@
             if (existing && typeof existing.isIdentified === 'function' && existing.isIdentified()) {
               try {
                 const res = await existing.request('GetVersion', {});
-                if (res && res.ok) setMsg(true, 'Connected • ' + (res.data && (res.data.obsVersion || 'OK')));
+                if (res && res.ok) setMsg(true, 'Connected • ' + (res.data && (res.data.obsVersion || 'OK')), { version: res.data && res.data.obsVersion });
                 else setMsg(false, 'Connected but request failed');
               } catch { setMsg(false, 'Connected but request failed'); }
               return;
@@ -308,7 +309,7 @@
                 } catch { reject(new Error('listener-failed')); }
               });
               const res = await conn.request('GetVersion', {});
-              if (res && res.ok) setMsg(true, 'Connected • ' + (res.data && (res.data.obsVersion || 'OK')));
+              if (res && res.ok) setMsg(true, 'Connected • ' + (res.data && (res.data.obsVersion || 'OK')), { version: res.data && res.data.obsVersion });
               else setMsg(false, 'Connected but request failed');
             } catch {
               setMsg(false, 'Failed to connect');
