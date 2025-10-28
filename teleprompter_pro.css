@@ -373,3 +373,19 @@ html.tp-present #viewer {
     font-size: clamp(24px, 4.0vw, 72px);
     line-height: 1.35;
 }
+
+/* Present-mode emergency exit button */
+.present-exit {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 10000;
+    display: none;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(20,20,20,.8);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.25);
+    font: 600 12px/1 system-ui, sans-serif;
+}
+html.tp-present .present-exit { display: inline-flex; }

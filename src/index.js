@@ -32,10 +32,18 @@ async function boot() {
 
     // Wire Auto-scroll controls (independent of speech/mic)
     try {
-      const viewer = document.getElementById('viewer');
+      // pick a real scrollable element in priority: #viewer -> #script -> page
+      const getScroller = () => {
+        const v = document.getElementById('viewer');
+        if (v && v.scrollHeight > v.clientHeight + 1) return v;
+        const scr = document.getElementById('script');
+        if (scr && scr.scrollHeight > scr.clientHeight + 1) return scr;
+        return document.scrollingElement || document.documentElement;
+      };
+
       const autoToggle = document.getElementById('autoToggle');
       const autoSpeed = /** @type {HTMLInputElement|null} */ (document.getElementById('autoSpeed'));
-      const auto = initAutoScroll(() => viewer);
+      const auto = initAutoScroll(getScroller);
       auto.bindUI(autoToggle, autoSpeed);
     } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
 

@@ -133,23 +133,34 @@ function wireUpload() {
 
 function wirePresentMode() {
   const btn = $('presentBtn');
-  try {
-    // Apply persisted state
-    const KEY = 'tp_present';
-    let initial = false;
-    try { initial = (localStorage.getItem(KEY) === '1'); } catch {}
-    document.documentElement.classList.toggle('tp-present', !!initial);
-    if (btn) btn.textContent = initial ? 'Exit Present' : 'Present Mode';
-    // Toggle + persist
-    on(btn, 'click', () => {
-      try {
-        const next = !document.documentElement.classList.contains('tp-present');
-        document.documentElement.classList.toggle('tp-present', next);
-        btn.textContent = next ? 'Exit Present' : 'Present Mode';
-        try { localStorage.setItem(KEY, next ? '1' : '0'); } catch {}
-      } catch {}
-    });
-  } catch {}
+  const exitBtn = $('presentExitBtn');
+  const root = document.documentElement;
+  const KEY = 'tp_present';
+
+  const apply = (on) => {
+    try {
+      root.classList.toggle('tp-present', !!on);
+      if (btn) btn.textContent = on ? 'Exit Present' : 'Present Mode';
+      try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}
+    } catch {}
+  };
+
+  // restore on load
+  try { apply(localStorage.getItem(KEY) === '1'); } catch {}
+
+  // main toggle
+  on(btn, 'click', () => apply(!root.classList.contains('tp-present')));
+
+  // guaranteed escape routes
+  on(exitBtn, 'click', () => apply(false));
+  on(document, 'keydown', (e) => {
+    try {
+      if (e.key === 'Escape' && root.classList.contains('tp-present')) apply(false);
+      if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        apply(!root.classList.contains('tp-present'));
+      }
+    } catch {}
+  });
 }
 
 function installSpeakerIndex() {
