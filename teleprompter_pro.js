@@ -3404,7 +3404,7 @@ let _toast = function (msg, opts) {
     const validateBtn = overlay.querySelector('#validateBtn');
     if (validateBtn) {
       try {
-      const _showValidation = (text) => {
+        const _showValidation = (text) => {
         const sheet = overlay.querySelector('.sheet') || overlay;
         let panel = sheet.querySelector('#validatePanel');
         if (!panel) {
@@ -3590,9 +3590,9 @@ let _toast = function (msg, opts) {
           console.error(err);
         }
       });
+      } catch (_err) {
+        console.error('Help injection failed', _err);
       }
-    } catch (_err) {
-      console.error('Help injection failed', _err);
     }
   }
 
