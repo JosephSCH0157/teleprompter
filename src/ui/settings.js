@@ -16,6 +16,50 @@
     } catch {}
   }
 
+  function buildSettingsContent(rootEl){
+    try {
+      if (!rootEl) return;
+      if (rootEl.dataset.mounted === '1') return; // idempotent
+      const html = [
+        '<div data-tab-content="general">',
+        '  <h4>General</h4>',
+        '  <div class="row">Application settings will appear here.</div>',
+        '</div>',
+        '',
+        '<div data-tab-content="media" style="display:none">',
+        '  <h4>Microphone</h4>',
+        '  <div class="row">',
+        '    <label>Input device',
+        '      <select id="settingsMicSel" class="select-md"></select>',
+        '    </label>',
+        '  </div>',
+        '  <div class="row">',
+        '    <button id="settingsRequestMicBtn" class="chip">Request mic</button>',
+        '    <button id="settingsReleaseMicBtn" class="chip">Release mic</button>',
+        '  </div>',
+        '  <h4>Camera</h4>',
+        '  <div class="row">',
+        '    <label>Device',
+        '      <select id="settingsCamSel" class="select-md"></select>',
+        '    </label>',
+        '  </div>',
+        '</div>',
+        '',
+        '<div data-tab-content="recording" style="display:none">',
+        '  <h4>Recording</h4>',
+        '  <div class="row">Recording settings live here.</div>',
+        '</div>',
+        '',
+        '<div data-tab-content="advanced" style="display:none">',
+        '  <h4>Advanced</h4>',
+        '  <div class="row">Advanced settings.</div>',
+        '</div>'
+      ].join('\n');
+      rootEl.innerHTML = html;
+      rootEl.dataset.mounted = '1';
+    } catch {}
+  }
+
   function init() {
     try {
       // Bind settings tab persistence
@@ -101,5 +145,22 @@
   // Run init when DOM is ready
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else setTimeout(init, 0);
+
+  // Expose a mount function for overlay open handler
+  try {
+    window.__tp = window.__tp || {};
+    window.__tp.settings = window.__tp.settings || {};
+    if (typeof window.__tp.settings.mount !== 'function') {
+      window.__tp.settings.mount = function(root){
+        try {
+          const el = root || document.getElementById('settingsBody');
+          buildSettingsContent(el);
+          // After building, ensure tabs show active one
+          const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
+          showTab(active && active.getAttribute('data-tab') || 'general');
+        } catch {}
+      };
+    }
+  } catch {}
 
 })();
