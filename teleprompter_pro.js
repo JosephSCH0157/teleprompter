@@ -3758,6 +3758,21 @@ let _toast = function (msg, opts) {
       }
     } catch {}
 
+    // Auto-recompute scroll step after typography changes
+    try {
+      window.addEventListener('tp:lineMetricsDirty', () => {
+        try {
+          const root = document.documentElement;
+          const cs = getComputedStyle(root);
+          const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+          const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+          const pxPerLine = fs * lh;
+          const stepPx = Math.round(pxPerLine * 7);
+          try { window.__tpAuto && window.__tpAuto.setStepPx && window.__tpAuto.setStepPx(stepPx); } catch {}
+        } catch {}
+      });
+    } catch {}
+
     // ===== Progressive Fallback Nudge =====
     (function () {
       const F = {
