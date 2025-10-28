@@ -45,7 +45,8 @@
       const se = q('#settingsOverlay'),  sb2 = q('#settingsBtn');
       try { sb?.click(); } catch {}
       if (so && so.classList.contains('hidden')) fails.push('Help overlay does not open');
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // Close explicitly via Close button to avoid depending on keydown target
+      try { q('#shortcutsClose')?.click(); } catch {}
       try { sb2?.click(); } catch {}
       if (se && se.classList.contains('hidden')) fails.push('Settings overlay does not open');
       q('#settingsClose')?.click();

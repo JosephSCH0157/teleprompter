@@ -269,11 +269,27 @@ function updateLegend() {
         dot.className = 'dot';
         dot.style.background = item.color;
         const name = document.createElement('span');
-        name.textContent = item.name;
+        // Prefer live input value if provided; else show canonical tag (S1/S2/G1/G2) to avoid implying set names
+        try {
+          const input = document.getElementById('name-' + key);
+          const val = (input && 'value' in input) ? String(input.value || '').trim() : '';
+          name.textContent = val || key.toUpperCase();
+        } catch { name.textContent = key.toUpperCase(); }
         tag.appendChild(dot);
         tag.appendChild(name);
         legend.appendChild(tag);
       }
+      // Re-render when user types names
+      try {
+        const handler = (e) => {
+          try {
+            const id = (e && e.target && e.target.id) ? String(e.target.id) : '';
+            if (/^name-(s1|s2|g1|g2)$/.test(id)) updateLegend();
+          } catch {}
+        };
+        document.removeEventListener('input', handler);
+        document.addEventListener('input', handler);
+      } catch {}
     } catch {}
   });
 }
@@ -320,6 +336,27 @@ export function bindStaticDom() {
     installSpeakerIndex();
     installDbMeter();
   initSelfChecksChip();
+    // Speakers section toggle (show/hide panel body)
+    try {
+      const btn = document.getElementById('toggleSpeakers');
+      const body = document.getElementById('speakersBody');
+      if (btn && body && !btn.dataset.wired) {
+        btn.dataset.wired = '1';
+        const KEY = 'tp_speakers_visible';
+        const apply = (vis) => {
+          try {
+            body.style.display = vis ? '' : 'none';
+            btn.textContent = vis ? 'Hide' : 'Show';
+            btn.setAttribute('aria-expanded', vis ? 'true' : 'false');
+            try { localStorage.setItem(KEY, vis ? '1' : '0'); } catch {}
+          } catch {}
+        };
+        // initial
+        let vis = true; try { vis = (localStorage.getItem(KEY) !== '0'); } catch {}
+        apply(vis);
+        btn.addEventListener('click', () => apply(!(body.style.display === '' || body.style.display === 'block' || body.style.display === null)));
+      }
+    } catch {}
 
     // Wire normalize button(s) for parity (top bar / settings / help)
     try {
