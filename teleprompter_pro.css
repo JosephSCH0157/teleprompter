@@ -352,6 +352,16 @@ body.ck::after{
 /* Quick overlay visibility toggle */
 #settingsOverlay.hidden, #shortcutsOverlay.hidden { display: none !important; }
 
+/* Make viewer a constrained scroll area in normal mode */
+#viewer {
+    /* Use dynamic viewport block to avoid mobile URL bar tricks; fallback below */
+    block-size: calc(100dvb - var(--topbar-h) - var(--statusbar-h));
+    /* Fallback if dvb isn't supported: */
+    height: calc(100vh - var(--topbar-h) - var(--statusbar-h));
+}
+
+/* Present Mode already overrides #viewer to full-viewport; keep that rule last */
+
 /* Present Mode */
 html.tp-present .sidebar,
 html.tp-present .panel,
