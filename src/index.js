@@ -83,6 +83,8 @@ async function boot() {
 
   // Minimal script renderer for module boot path
   try { await import('./ui/render.js'); } catch (e) { console.warn('[src/index] render init failed', e); }
+  // Speech loader (attaches window.__tpSpeech shims)
+  try { await import('./speech/loader.js'); } catch (e) { console.warn('[src/index] speech loader init failed', e); }
 
     // Legacy matcher constants for parity (dev only)
     try {
@@ -115,6 +117,63 @@ async function boot() {
     try { initToasts(); } catch (e) { console.warn('[src/index] initToasts failed', e); }
     try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
     try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
+
+    // Wire Start speech sync button if SpeechRecognition is available
+    try {
+      const btn = document.getElementById('recBtn');
+      const chip = document.getElementById('recChip');
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (btn && SR) {
+        btn.disabled = false;
+        let running = false;
+        const onMatch = (evt) => {
+          try {
+            const { idx } = evt || {};
+            // Smoothly center matched line in the viewer
+            const viewer = document.getElementById('viewer');
+            const host = document.getElementById('script');
+            if (!viewer || !host) return;
+            const lines = host.querySelectorAll('.line');
+            const target = lines && lines[idx|0];
+            if (!target) return;
+            const containerTop = viewer.getBoundingClientRect().top;
+            const targetTop = target.getBoundingClientRect().top;
+            const delta = targetTop - containerTop;
+            // We want the line to sit around 40% of the viewer height
+            const desired = Math.max(0, viewer.scrollTop + delta - Math.floor(viewer.clientHeight * 0.4));
+            // Only scroll if the change is meaningful to avoid micro-jitter
+            if (Math.abs(desired - viewer.scrollTop) > 12) {
+              viewer.scrollTo({ top: desired, behavior: 'smooth' });
+            }
+          } catch {}
+        };
+        btn.addEventListener('click', async () => {
+          try {
+            if (!running) {
+              running = true;
+              if (chip) chip.textContent = 'Speech: starting…';
+              try {
+                const api = window.__tpSpeech;
+                if (api && typeof api.startRecognizer === 'function') {
+                  api.startRecognizer(onMatch, { lang: 'en-US' });
+                }
+                if (chip) chip.textContent = 'Speech: running';
+                btn.textContent = 'Stop speech sync';
+              } catch {
+                if (chip) chip.textContent = 'Speech: error';
+                running = false;
+              }
+            } else {
+              const api = window.__tpSpeech;
+              try { api && typeof api.stopRecognizer === 'function' && api.stopRecognizer(); } catch {}
+              running = false;
+              if (chip) chip.textContent = 'Speech: idle';
+              btn.textContent = 'Start speech sync';
+            }
+          } catch {}
+        });
+      }
+    } catch (e) { console.warn('[src/index] speech button wiring failed', e); }
 
     // Wire Auto-scroll controls (independent of speech/mic)
     try {
