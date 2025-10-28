@@ -16,8 +16,8 @@ import './vendor/mammoth';
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
 import * as Auto from './features/autoscroll.js';
-import { installScrollRouter } from './features/scroll-router';
 import { installDisplaySync } from './features/display-sync';
+import { installScrollRouter } from './features/scroll-router';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
