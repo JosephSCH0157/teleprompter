@@ -105,5 +105,23 @@ try {
 				} catch {}
 			}, { passive: false });
 		} catch {}
+
+		// Shift + Wheel over the viewer to adjust font size (no Ctrl/Cmd required)
+		try {
+			const clamp2 = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+			const viewer = document.getElementById('viewer');
+			if (viewer) {
+				viewer.addEventListener('wheel', (e: WheelEvent) => {
+					try {
+						if (!e.shiftKey || e.ctrlKey || e.metaKey) return; // only Shift, not Ctrl/Cmd
+						e.preventDefault();
+						const cur = getTypography('main').fontSizePx;
+						const step = 2;
+						const next = clamp2(cur + (e.deltaY < 0 ? step : -step), 18, 120);
+						setTypography('main', { fontSizePx: next });
+					} catch {}
+				}, { passive: false });
+			}
+		} catch {}
 	});
 } catch {}
