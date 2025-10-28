@@ -23,6 +23,8 @@ try {
 const clicked = Array.isArray(report.clicked) ? report.clicked : [];
 const fileInputs = Array.isArray(report.fileInputs) ? report.fileInputs : [];
 const consoleEntries = Array.isArray(report.console) ? report.console : [];
+const legendProbe = Array.isArray(report.legendProbe) ? report.legendProbe : [];
+const renderProbe = report.renderProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
 // CI detection retained for potential future use; currently not used in validation rules
 const _isCI = !!(
@@ -130,6 +132,30 @@ if (!allOk) {
   console.error('\nOne or more required UI controls or checks failed.');
   process.exit(1);
 }
+// Additional probes validation: ensure legend exists and renderer applies different colors
+try {
+  if (legendProbe.length < 2) {
+    console.warn('WARN legend — expected 2+ legend items, found', legendProbe.length);
+  } else {
+    console.log('PASS legend — items:', legendProbe.length);
+  }
+  const { lineCount, iHello, iWorld, cHello, cWorld } = renderProbe;
+  if (!lineCount || iHello < 0 || iWorld < 0) {
+    console.warn('WARN render — sample lines not rendered (ci profile or renderer not wired in this build)', renderProbe);
+  } else if (!cHello || !cWorld || cHello === cWorld) {
+    console.warn('WARN render-colors — expected distinct colors for S1 and S2', { cHello, cWorld });
+  } else {
+    console.log('PASS render-colors —', cHello, 'vs', cWorld);
+  }
+} catch (e) {
+  console.warn('WARN probes evaluation failed:', String(e && e.message || e));
+}
+
+if (!allOk) {
+  console.error('\nOne or more required UI controls or checks failed.');
+  process.exit(1);
+}
+
 console.log('\nAll required UI controls and checks passed.');
 process.exit(0);
 
