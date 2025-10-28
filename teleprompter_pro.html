@@ -68,49 +68,7 @@
     window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
     window.__TP_BOOT_INFO  = window.__TP_BOOT_INFO  || {};
   </script>
-  <!-- Dev-only: safe no-op stubs so UI clicks never throw before adapters load -->
-  <script>
-    (function(){
-      try {
-        var qs = new URLSearchParams(location.search);
-        var isDev = qs.has('dev') || /\bdev\b/.test(location.hash);
-        try { isDev = isDev || localStorage.getItem('tp_dev_mode') === '1'; } catch {}
-        if (!isDev) return;
-        // Display bridge (both shapes)
-        try {
-          window.__tpDisplay = window.__tpDisplay || {
-            openDisplay: function(){}, closeDisplay: function(){}, sendToDisplay: function(){}, handleMessage: function(){}
-          };
-          // Legacy flat wrappers guarded in dom.js, but define them too for convenience
-          if (!window.openDisplay) window.openDisplay = function(){};
-          if (!window.closeDisplay) window.closeDisplay = function(){};
-          if (!window.sendToDisplay) window.sendToDisplay = function(){};
-        } catch {}
-
-        // Mic
-        try {
-          window.__tpMic = window.__tpMic || { requestMic: async function(){}, releaseMic: function(){} };
-        } catch {}
-
-        // Camera: include both alias sets so any caller shape is safe
-        try {
-          window.__tpCamera = window.__tpCamera || {};
-          window.__tpCamera.start = window.__tpCamera.start || (async function(){});
-          window.__tpCamera.stop = window.__tpCamera.stop || (function(){});
-          window.__tpCamera.setDevice = window.__tpCamera.setDevice || (function(){});
-          window.__tpCamera.setSize = window.__tpCamera.setSize || (function(){});
-          window.__tpCamera.setOpacity = window.__tpCamera.setOpacity || (function(){});
-          window.__tpCamera.setMirror = window.__tpCamera.setMirror || (function(){});
-          window.__tpCamera.startCamera = window.__tpCamera.startCamera || (async function(){});
-          window.__tpCamera.stopCamera = window.__tpCamera.stopCamera || (function(){});
-          window.__tpCamera.switchCamera = window.__tpCamera.switchCamera || (function(){});
-          window.__tpCamera.applyCamSizing = window.__tpCamera.applyCamSizing || (function(){});
-          window.__tpCamera.applyCamOpacity = window.__tpCamera.applyCamOpacity || (function(){});
-          window.__tpCamera.applyCamMirror = window.__tpCamera.applyCamMirror || (function(){});
-        } catch {}
-      } catch {}
-    })();
-  </script>
+  
 
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>

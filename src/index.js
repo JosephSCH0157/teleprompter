@@ -12,6 +12,38 @@ import { initTelemetry } from './features/telemetry.js';
 import { initToasts } from './features/toasts.js';
 import * as UI from './ui/dom.js';
 
+// Dev-only helpers and safety stubs: keep out of prod bundle
+try {
+  if (window?.__TP_BOOT_INFO?.isDev) {
+    // Load debug helper dynamically in dev
+    import('../debug-tools.js').catch(() => {});
+    // Install safe no-op shims so early UI clicks never throw before adapters/media load
+    // Display bridge (both shapes)
+    window.__tpDisplay = window.__tpDisplay || {
+      openDisplay: function(){}, closeDisplay: function(){}, sendToDisplay: function(){}, handleMessage: function(){}
+    };
+    if (!window.openDisplay) window.openDisplay = function(){};
+    if (!window.closeDisplay) window.closeDisplay = function(){};
+    if (!window.sendToDisplay) window.sendToDisplay = function(){};
+    // Mic
+    window.__tpMic = window.__tpMic || { requestMic: async function(){}, releaseMic: function(){} };
+    // Camera: include both alias sets so any caller shape is safe
+    window.__tpCamera = window.__tpCamera || {};
+    window.__tpCamera.start = window.__tpCamera.start || (async function(){});
+    window.__tpCamera.stop = window.__tpCamera.stop || (function(){});
+    window.__tpCamera.setDevice = window.__tpCamera.setDevice || (function(){});
+    window.__tpCamera.setSize = window.__tpCamera.setSize || (function(){});
+    window.__tpCamera.setOpacity = window.__tpCamera.setOpacity || (function(){});
+    window.__tpCamera.setMirror = window.__tpCamera.setMirror || (function(){});
+    window.__tpCamera.startCamera = window.__tpCamera.startCamera || (async function(){});
+    window.__tpCamera.stopCamera = window.__tpCamera.stopCamera || (function(){});
+    window.__tpCamera.switchCamera = window.__tpCamera.switchCamera || (function(){});
+    window.__tpCamera.applyCamSizing = window.__tpCamera.applyCamSizing || (function(){});
+    window.__tpCamera.applyCamOpacity = window.__tpCamera.applyCamOpacity || (function(){});
+    window.__tpCamera.applyCamMirror = window.__tpCamera.applyCamMirror || (function(){});
+  }
+} catch {}
+
 async function boot() {
   try {
     console.log('[src/index] boot()');

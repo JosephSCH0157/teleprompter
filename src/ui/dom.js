@@ -195,6 +195,10 @@ function installSpeakerIndex() {
 export function bindStaticDom() {
   console.log('[src/ui/dom] bindStaticDom');
   try {
+    // one-time UI wiring guard to prevent duplicate listeners and chips
+    if (document.documentElement.dataset.uiWired === '1') return;
+    document.documentElement.dataset.uiWired = '1';
+
     wireOverlayBasics();
     wireDisplayBridge();
     wireMic();
