@@ -48,6 +48,8 @@ async function boot() {
   try {
     console.log('[src/index] boot()');
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
+    // Dev-only parity guard: verifies key UI elements and wiring exist
+    try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
     UI.bindStaticDom();
 
