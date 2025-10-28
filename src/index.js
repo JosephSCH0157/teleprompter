@@ -21,6 +21,8 @@ import '../ui/inline-shim.js';
 import { initToasts } from './features/toasts.js';
 import './media/display-bridge.js';
 import * as UI from './ui/dom.js';
+// Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
+import '../ui/typography-bridge.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
@@ -152,6 +154,8 @@ async function boot() {
         try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
       }, { capture: true });
     } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }
+
+    // Typography bridge is installed via './ui/typography-bridge.js'
 
     console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
