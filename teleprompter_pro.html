@@ -27,7 +27,7 @@
   <script type="module">
     window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
     window.__TP_BOOT_INFO = { path: 'dev', isDev: true, imported: false };
-    import './src/index.js'
+    import('./src/index.js')
       .then(() => { window.__TP_BOOT_INFO.imported = true; window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev ok'}); })
       .catch(e  => { window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev fail', err:String(e)}); });
   </script>
