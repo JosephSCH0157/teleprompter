@@ -233,7 +233,7 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 129,
+        "lineNumber": 119,
         "columnNumber": 12
       }
     }
@@ -249,9 +249,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "7b14de770ab070843b21f9ad401ea24da808fd3f",
+      "gitSha": "d4bdd94778908a6172cb78770c7f9a0e375e360e",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-28T16:40:20.238Z"
+      "buildTime": "2025-10-28T16:56:13.435Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -315,9 +315,9 @@
     "ok": true
   },
   "autoScrollUi": {
-    "was": "Auto-scroll: Off",
-    "now": "Auto-scroll: Off",
-    "ok": false
+    "was": "Auto-scroll: On",
+    "now": "Auto-scroll: On",
+    "ok": true
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }

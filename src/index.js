@@ -4,7 +4,7 @@
 
 import * as Adapters from './adapters/index.js';
 import * as Core from './core/state.js';
-import { initAutoScroll } from './features/autoscroll.js';
+import * as Auto from './features/autoscroll.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
@@ -102,29 +102,19 @@ async function boot() {
 
     // Wire Auto-scroll controls (independent of speech/mic)
     try {
-      // pick a real scrollable element in priority: #viewer -> #script -> page
-      const getScroller = () => {
-        const v = document.getElementById('viewer');
-        if (v && v.scrollHeight > v.clientHeight + 1) return v;
-        const scr = document.getElementById('script');
-        if (scr && scr.scrollHeight > scr.clientHeight + 1) return scr;
-        return document.scrollingElement || document.documentElement;
-      };
-
-      const autoToggle = document.getElementById('autoToggle');
-      const autoSpeed = /** @type {HTMLInputElement|null} */ (document.getElementById('autoSpeed'));
-      const auto = initAutoScroll(getScroller);
-      auto.bindUI(autoToggle, autoSpeed);
-      // Delegate click in case the button node is replaced during dynamic UI updates
-      try {
-        document.addEventListener('click', (ev) => {
-          try {
-            const t = ev && ev.target;
-            const btn = t && typeof t.closest === 'function' ? t.closest('#autoToggle') : null;
-            if (btn) { ev.preventDefault && ev.preventDefault(); auto.toggle(); }
-          } catch {}
-        }, true);
-      } catch {}
+      Auto.initAutoScroll();
+      // Resilient event delegation (works in headless + when nodes re-render)
+      document.addEventListener('click', (e) => {
+        const t = e && e.target;
+        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
+        try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
+        try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
+      }, { capture: true });
+      // Headless fallback (some runners only dispatch mousedown)
+      document.addEventListener('mousedown', (e) => {
+        const t = e && e.target;
+        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
+      }, { capture: true });
     } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
 
     console.log('[src/index] boot completed');

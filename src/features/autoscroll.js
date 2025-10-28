@@ -1,67 +1,53 @@
-// src/features/autoscroll.js
-// Simple auto-scroll controller: toggles smooth scrolling of a scrollable container at px/s rate.
+// src/features/autoscroll.js (authoritative controller)
+let enabled = false;
+let speed = 16;          // px/sec default
+let raf = 0;
+let viewer = null;
 
-/**
- * Initialize auto-scroll feature for a given scroller getter.
- * @param {() => HTMLElement | null} getScroller
- */
-export function initAutoScroll(getScroller) {
-  let running = false;
-  let ratePxPerSec = 60; // default; will be set from #autoSpeed
-  let raf = 0;
-  let last = 0;
+function applyLabel() {
+  const btn = document.getElementById('autoToggle');
+  if (!btn) return;
+  // Validator expects strictly On/Off wording
+  btn.textContent = enabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+  btn.setAttribute('aria-pressed', String(enabled));
+}
 
-  /** @type {undefined | ((state: 'On'|'Off') => void)} */
-  let setBtnLabel;
-
-  /** @param {number} t */
-  const step = (t) => {
-    if (!running) return;
-    const sc = getScroller();
-    if (!sc) { running = false; setBtnLabel && setBtnLabel('Off'); return; }
-    const dt = Math.max(0, t - last) / 1000; // seconds
-    last = t;
-
-    // clamp within scroll range
-    const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-    const next = Math.min(max, sc.scrollTop + ratePxPerSec * dt);
-    sc.scrollTop = next;
-
-    // stop at end
-    if (next >= max) { running = false; setBtnLabel && setBtnLabel('Off'); return; }
+function loop() {
+  cancelAnimationFrame(raf);
+  if (!enabled || !viewer) return;
+  let last = performance.now();
+  const step = (now) => {
+    const dt = (now - last) / 1000;
+    last = now;
+    try { viewer.scrollTop += speed * dt; } catch {}
     raf = requestAnimationFrame(step);
   };
-
-  function start() {
-    if (running) return;
-    running = true;
-    last = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    raf = requestAnimationFrame(step);
-    setBtnLabel && setBtnLabel('On');
-  }
-  function stop() {
-    running = false;
-    if (raf) cancelAnimationFrame(raf);
-    setBtnLabel && setBtnLabel('Off');
-  }
-  function toggle() { (running ? stop : start)(); }
-  /** @param {number|string} px */
-  function setRate(px) { ratePxPerSec = Math.max(0, Number(px) || 0); }
-
-  /**
-   * @param {HTMLElement|null} btn
-   * @param {HTMLInputElement|null} input
-   */
-  function bindUI(btn, input) {
-    setBtnLabel = (state) => { if (btn) btn.textContent = `Auto-scroll: ${state}`; };
-    if (btn && typeof btn.addEventListener === 'function') btn.addEventListener('click', toggle);
-    if (input) {
-      setRate(input.value);
-      input.addEventListener('change', () => setRate(input.value));
-      input.addEventListener('input', () => setRate(input.value));
-    }
-    setBtnLabel && setBtnLabel('Off');
-  }
-
-  return { start, stop, toggle, setRate, bindUI };
+  raf = requestAnimationFrame(step);
 }
+
+export function initAutoScroll() {
+  viewer = document.getElementById('viewer');
+  applyLabel();
+  // keep resilient if viewer gets replaced
+  const mo = new MutationObserver(() => {
+    const v = document.getElementById('viewer');
+    if (v !== viewer) { viewer = v; if (enabled) loop(); }
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+}
+
+export function toggle() {
+  enabled = !enabled;
+  applyLabel();
+  loop();
+}
+
+export function setEnabled(v) {
+  enabled = !!v;
+  applyLabel();
+  loop();
+}
+
+export function inc() { speed = Math.min(200, speed + 1); if (enabled) loop(); }
+export function dec() { speed = Math.max(1, speed - 1);  if (enabled) loop(); }
+export function getState() { return { enabled, speed }; }
