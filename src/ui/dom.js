@@ -8,69 +8,21 @@ function $(id) {
   try { return document.getElementById(id); } catch { return null; }
 }
 
-function toggleOverlay(overlay, show) {
+// --- UI Hydration Contract ---------------------------------------------------
+const UI_WIRED = new Set();
+const $id = (id) => { try { return document.getElementById(id); } catch { return null; } };
+
+// Wire once per key
+function once(key, fn) {
   try {
-    if (!overlay) return;
-    const want = !!show;
-    overlay.classList.toggle('hidden', !want);
+    if (UI_WIRED.has(key)) return;
+    try { fn && fn(); } finally { UI_WIRED.add(key); }
   } catch {}
 }
 
-function wireOverlayBasics() {
-  // Shortcuts overlay
-  const shortcutsBtn = $('shortcutsBtn');
-  const shortcutsOverlay = $('shortcutsOverlay');
-  const shortcutsClose = $('shortcutsClose');
-  on(shortcutsBtn, 'click', () => {
-    try { shortcutsBtn.setAttribute('aria-expanded', 'true'); } catch {}
-    toggleOverlay(shortcutsOverlay, true);
-  });
-  on(shortcutsClose, 'click', () => {
-    toggleOverlay(shortcutsOverlay, false);
-    try { shortcutsBtn.setAttribute('aria-expanded', 'false'); shortcutsBtn.focus && shortcutsBtn.focus(); } catch {}
-  });
-  on(shortcutsOverlay, 'click', (e) => {
-    try {
-      if (e.target === shortcutsOverlay) {
-        toggleOverlay(shortcutsOverlay, false);
-        shortcutsBtn && shortcutsBtn.setAttribute('aria-expanded', 'false');
-      }
-    } catch {}
-  });
+// (legacy toggleOverlay helper removed with legacy overlay wiring)
 
-  // Settings overlay
-  const settingsBtn = $('settingsBtn');
-  const settingsOverlay = $('settingsOverlay');
-  const settingsClose = $('settingsClose');
-  on(settingsBtn, 'click', () => {
-    try { settingsBtn.setAttribute('aria-expanded', 'true'); } catch {}
-    toggleOverlay(settingsOverlay, true);
-  });
-  on(settingsClose, 'click', () => {
-    toggleOverlay(settingsOverlay, false);
-    try { settingsBtn.setAttribute('aria-expanded', 'false'); settingsBtn.focus && settingsBtn.focus(); } catch {}
-  });
-  on(settingsOverlay, 'click', (e) => {
-    try {
-      if (e.target === settingsOverlay) {
-        toggleOverlay(settingsOverlay, false);
-        settingsBtn && settingsBtn.setAttribute('aria-expanded', 'false');
-      }
-    } catch {}
-  });
-
-  // Escape closes any open overlay
-  on(document, 'keydown', (e) => {
-    try {
-      if (e.key === 'Escape') {
-        toggleOverlay(shortcutsOverlay, false);
-        shortcutsBtn && shortcutsBtn.setAttribute('aria-expanded', 'false');
-        toggleOverlay(settingsOverlay, false);
-        settingsBtn && settingsBtn.setAttribute('aria-expanded', 'false');
-      }
-    } catch {}
-  });
-}
+// (legacy non-delegated overlay wiring removed; replaced by idempotent delegated wiring)
 
 function wireDisplayBridge() {
   // Bridge wrappers for legacy global API expected by some helpers/self-checks
@@ -132,34 +84,36 @@ function wireUpload() {
 }
 
 function wirePresentMode() {
-  const btn = $('presentBtn');
-  const exitBtn = $('presentExitBtn');
-  const root = document.documentElement;
-  const KEY = 'tp_present';
+  once('present', () => {
+    const btn = $id('presentBtn');
+    const exitBtn = $id('presentExitBtn');
+    const root = document.documentElement;
+    const KEY = 'tp_present';
 
-  const apply = (on) => {
-    try {
-      root.classList.toggle('tp-present', !!on);
-      if (btn) btn.textContent = on ? 'Exit Present' : 'Present Mode';
-      try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}
-    } catch {}
-  };
+    const apply = (on) => {
+      try {
+        root.classList.toggle('tp-present', !!on);
+        if (btn) btn.textContent = on ? 'Exit Present' : 'Present Mode';
+        try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}
+      } catch {}
+    };
 
-  // restore on load
-  try { apply(localStorage.getItem(KEY) === '1'); } catch {}
+    // restore on load
+    try { apply(localStorage.getItem(KEY) === '1'); } catch {}
 
-  // main toggle
-  on(btn, 'click', () => apply(!root.classList.contains('tp-present')));
+    // main toggle
+    on(btn, 'click', () => apply(!root.classList.contains('tp-present')));
 
-  // guaranteed escape routes
-  on(exitBtn, 'click', () => apply(false));
-  on(document, 'keydown', (e) => {
-    try {
-      if (e.key === 'Escape' && root.classList.contains('tp-present')) apply(false);
-      if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        apply(!root.classList.contains('tp-present'));
-      }
-    } catch {}
+    // guaranteed escape routes
+    on(exitBtn, 'click', () => apply(false));
+    on(document, 'keydown', (e) => {
+      try {
+        if (e.key === 'Escape' && root.classList.contains('tp-present')) apply(false);
+        if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          apply(!root.classList.contains('tp-present'));
+        }
+      } catch {}
+    });
   });
 }
 
@@ -215,50 +169,52 @@ function installDbMeter() {
 }
 
 function wireOverlays() {
-  try {
-    const open = (name) => {
-      try {
-        const btn = document.getElementById(name + 'Btn');
-        const dlg = document.getElementById(name + 'Overlay');
-        if (!dlg) return;
-        dlg.classList.remove('hidden');
-        btn && btn.setAttribute('aria-expanded', 'true');
-      } catch {}
-    };
-    const close = (name) => {
-      try {
-        const btn = document.getElementById(name + 'Btn');
-        const dlg = document.getElementById(name + 'Overlay');
-        if (!dlg) return;
-        dlg.classList.add('hidden');
-        btn && btn.setAttribute('aria-expanded', 'false');
-      } catch {}
-    };
+  once('overlays', () => {
+    try {
+      const open = (name) => {
+        try {
+          const btn = $id(name + 'Btn');
+          const dlg = $id(name + 'Overlay');
+          if (!dlg) return;
+          dlg.classList.remove('hidden');
+          btn && btn.setAttribute('aria-expanded', 'true');
+        } catch {}
+      };
+      const close = (name) => {
+        try {
+          const btn = $id(name + 'Btn');
+          const dlg = $id(name + 'Overlay');
+          if (!dlg) return;
+          dlg.classList.add('hidden');
+          btn && btn.setAttribute('aria-expanded', 'false');
+        } catch {}
+      };
 
-    document.addEventListener('click', (e) => {
-      try {
-        const t = e.target;
-        if (t && t.closest && t.closest('#shortcutsBtn')) return open('shortcuts');
-        if (t && t.closest && t.closest('#settingsBtn')) return open('settings');
-        if (t && t.closest && t.closest('#shortcutsClose')) return close('shortcuts');
-        if (t && t.closest && t.closest('#settingsClose')) return close('settings');
-        const sc = document.getElementById('shortcutsOverlay');
-        if (sc && t === sc) close('shortcuts');
-        const se = document.getElementById('settingsOverlay');
-        if (se && t === se) close('settings');
-      } catch {}
-    }, { capture: true });
+      document.addEventListener('click', (e) => {
+        try {
+          const t = e.target;
+          if (t && t.closest && t.closest('#shortcutsBtn')) return open('shortcuts');
+          if (t && t.closest && t.closest('#settingsBtn')) return open('settings');
+          if (t && t.closest && t.closest('#shortcutsClose')) return close('shortcuts');
+          if (t && t.closest && t.closest('#settingsClose')) return close('settings');
+          const sc = $id('shortcutsOverlay');
+          if (sc && t === sc) close('shortcuts');
+          const se = $id('settingsOverlay');
+          if (se && t === se) close('settings');
+        } catch {}
+      }, { capture: true });
 
-    window.addEventListener('keydown', (e) => {
-      try {
-        if (e.key !== 'Escape') return;
-        document.getElementById('shortcutsOverlay')?.classList.add('hidden');
-        document.getElementById('settingsOverlay')?.classList.add('hidden');
-        document.getElementById('shortcutsBtn')?.setAttribute('aria-expanded','false');
-        document.getElementById('settingsBtn')?.setAttribute('aria-expanded','false');
-      } catch {}
-    });
-  } catch {}
+      window.addEventListener('keydown', (e) => {
+        try {
+          if (e.key !== 'Escape') return;
+          $id('shortcutsOverlay')?.classList.add('hidden');
+          $id('settingsOverlay')?.classList.add('hidden');
+          $id('shortcutsBtn')?.setAttribute('aria-expanded','false');
+          $id('settingsBtn')?.setAttribute('aria-expanded','false');
+        } catch {}
+      });
+    } catch {}
+  });
 }
 
 const ROLE_KEYS = ['s1','s2','g1','g2'];
@@ -276,36 +232,48 @@ function loadRoles() {
 }
 
 function updateLegend() {
-  try {
-    const legend = document.getElementById('legend');
-    if (!legend) return;
-    const ROLES = loadRoles();
-    legend.innerHTML = '';
-    for (const key of ROLE_KEYS) {
-      const item = ROLES[key];
-      const tag = document.createElement('span');
-      tag.className = 'tag';
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.style.background = item.color;
-      const name = document.createElement('span');
-      name.textContent = item.name;
-      tag.appendChild(dot);
-      tag.appendChild(name);
-      legend.appendChild(tag);
-    }
-  } catch {}
+  once('legend', () => {
+    try {
+      const legend = document.getElementById('legend');
+      if (!legend) return;
+      const ROLES = loadRoles();
+      legend.innerHTML = '';
+      for (const key of ROLE_KEYS) {
+        const item = ROLES[key];
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = item.color;
+        const name = document.createElement('span');
+        name.textContent = item.name;
+        tag.appendChild(dot);
+        tag.appendChild(name);
+        legend.appendChild(tag);
+      }
+    } catch {}
+  });
 }
 
 function ensureViewerPlaceholder() {
-  try {
-    const scriptEl = document.getElementById('script');
-    if (!scriptEl) return;
-    if (!scriptEl.querySelector('.line')) {
-      scriptEl.innerHTML = '<div class="line" data-line-idx="0">First line…</div>' +
-                           '<div class="line" data-line-idx="1">Second line…</div>';
-    }
-  } catch {}
+  once('viewer-placeholder', () => {
+    try {
+      const scriptEl = document.getElementById('script');
+      if (!scriptEl) return;
+      if (!scriptEl.querySelector('.line')) {
+        scriptEl.innerHTML = '<div class="line" data-line-idx="0">First line…</div>' +
+                             '<div class="line" data-line-idx="1">Second line…</div>';
+      }
+    } catch {}
+  });
+}
+
+// === Master hydrator: run now and whenever DOM changes ===
+function hydrateUI() {
+  wireOverlays();
+  wirePresentMode();
+  updateLegend();
+  ensureViewerPlaceholder();
 }
 
 export function bindStaticDom() {
@@ -315,17 +283,26 @@ export function bindStaticDom() {
     if (document.documentElement.dataset.uiWired === '1') return;
     document.documentElement.dataset.uiWired = '1';
 
-    wireOverlayBasics();
+    // core feature wiring
     wireDisplayBridge();
     wireMic();
     wireCamera();
     wireUpload();
-    wirePresentMode();
     installSpeakerIndex();
     installDbMeter();
-    wireOverlays();
-    updateLegend();
-    ensureViewerPlaceholder();
+
+    // initial hydration pass
+    hydrateUI();
+
+    // keep it healthy: observe DOM changes and rehydrate idempotently
+    const mo = new MutationObserver(() => {
+      try {
+        if ($id('shortcutsBtn') || $id('settingsBtn') || $id('legend') || $id('script')) {
+          hydrateUI();
+        }
+      } catch {}
+    });
+    try { mo.observe(document.documentElement, { childList: true, subtree: true }); } catch {}
   } catch {}
 }
 
