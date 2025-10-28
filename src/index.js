@@ -75,6 +75,9 @@ async function boot() {
     // Upload handler: expose window._uploadFromFile for Upload button; supports .docx via mammoth
     try { await import('../ui/upload.js'); } catch (e) { console.warn('[src/index] upload handler init failed', e); }
 
+  // Minimal script renderer for module boot path
+  try { await import('./ui/render.js'); } catch (e) { console.warn('[src/index] render init failed', e); }
+
     // Legacy matcher constants for parity (dev only)
     try {
       if (window?.__TP_BOOT_INFO?.isDev) {
