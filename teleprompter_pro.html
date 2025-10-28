@@ -20,9 +20,8 @@
   <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
   <!-- If you serve fonts or CDN assets, add preconnects for those origins, too -->
 
-  <!-- Critical CSS: preload + swap to avoid render-blocking -->
-  <link rel="preload" href="teleprompter_pro.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="teleprompter_pro.css"></noscript>
+  <!-- Load CSS in a simple, reliable way -->
+  <link rel="stylesheet" href="teleprompter_pro.css">
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
@@ -57,22 +56,17 @@
 
   <!-- Third-party: mammoth will be loaded lazily by ui/upload.js when needed -->
 
-  <!-- Debug HUD helper BEFORE main app so ~ works -->
-  <script defer src="debug-tools.js"></script>
+  <!-- (helpers loaded from modules in dev via src/index.js) -->
 
   <!-- Preload critical modules and scripts to shorten main-thread work and reduce LCP delay -->
   <!-- Avoid preloading the legacy monolith; modern browsers should use the module loader below -->
   <!-- Avoid modulepreload for heavy optional modules so they are fetched only when needed -->
   <!-- Boot globals (version & trace) before loader; keep paths relative to avoid host coupling -->
   <script>
-    (function(){
-      try {
-        var u = new URL(location.href);
-        window.__TP_ADDV = u.searchParams.get('v') || Date.now();
-        window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
-        window.__TP_BOOT_INFO = window.__TP_BOOT_INFO || {};
-      } catch {}
-    })();
+    // Small globals used by the loader
+    window.__TP_ADDV = (new URL(location.href)).searchParams.get('v') || Date.now();
+    window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
+    window.__TP_BOOT_INFO  = window.__TP_BOOT_INFO  || {};
   </script>
   <!-- Dev-only: safe no-op stubs so UI clicks never throw before adapters load -->
   <script>
@@ -121,11 +115,11 @@
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
 
-  <!-- Boot loader (module): modern path — load the module loader; no hardcoded preloads -->
+  <!-- Single module boot loader (dev: src/index.js; prod: dist/index.js) -->
   <script type="module" src="./src/boot/boot-loader.js"></script>
 
-  <!-- Explicit legacy fallback for non-module browsers -->
-  <script nomodule src="/teleprompter_pro.js"></script>
+  <!-- Optional legacy fallback for non-module browsers (prod only) -->
+  <script nomodule src="./teleprompter_pro.js"></script>
 
   <!-- App store & centralized Settings wiring -->
   <script src="src/state/app-store.js"></script>
@@ -162,67 +156,7 @@
     html.tp-present .app{grid-template-columns:1fr !important}
   </style>
 
-  <!-- Main app: load compiled module entry (built from /src/index.ts) -->
-  <script>
-    (function(){
-      try{
-        var DEV = window.__TP_DEV || document.documentElement.classList.contains('tp-dev');
-        var V = window.__TP_DEV_VERSION || (new URLSearchParams(location.search).get('v') || (DEV ? Date.now().toString(36) : 'dev-20251007'));
-        var add = function(p){ return p + (p.indexOf('?')>=0 ? '&' : '?') + 'v=' + V };
-        // Keep preloaded small helpers as modules (unchanged)
-        var moduleFiles = [ add('./debug-tools.js'), add('./utils/safe-dom.js'), add('./ui/toasts.js'), add('./ui/scripts-ui.js'), add('./ui/cam-draggable.js') ];
-        moduleFiles.forEach(function(m){ var s=document.createElement('script'); s.type='module'; s.src=m; document.head.appendChild(s); });
-
-        // Load the single module entry for the app. Prefer the modern module bundle produced at ./dist/index.js
-        // Non-blocking: try to import the module and call its bootstrap(), but fall back to the legacy bundle if unavailable.
-        (function(){
-          try {
-            var vToken = window.__TP_DEV_VERSION || V || 'dev';
-            var IS_TEST = false;
-            try {
-              var _qs = new URLSearchParams(location.search);
-              IS_TEST = _qs.has('ci') || (function(){ try { return localStorage.getItem('tp_ci')==='1'; } catch(e){ return false; }})();
-            } catch(e) {}
-            var modBootstrapper = document.createElement('script');
-            modBootstrapper.type = 'module';
-            modBootstrapper.textContent = `
-              (async () => {
-                try {
-                  const mod = await import('./dist/index.js?v=${vToken}');
-                  if (mod && typeof mod.bootstrap === 'function') await mod.bootstrap();
-                  window.__tpInitSuccess = true;
-                } catch (e) {
-                  // dist bundle missing or failed — let the legacy loader take over
-                }
-              })();
-            `;
-            document.head.appendChild(modBootstrapper);
-
-            // Also insert a legacy fallback in case modules aren't supported or the import fails later.
-            var fallback = document.createElement('script');
-            fallback.defer = true;
-            // In CI we want the legacy bundle to load even in modern browsers; in DEV keep nomodule so modern browsers skip it
-            try { if (!IS_TEST) fallback.setAttribute('nomodule', ''); } catch (e) {}
-            fallback.src = '/teleprompter_pro.js?v=' + encodeURIComponent(V);
-            document.head.appendChild(fallback);
-          } catch (e) {
-            // In very old browsers, just load the legacy bundle synchronously as before.
-            var s = document.createElement('script');
-            s.defer = true;
-            // In CI, avoid nomodule so it executes; otherwise keep nomodule
-            try {
-              var __IS_TEST__ = (function(){ try { var _q=new URLSearchParams(location.search); return _q.has('ci') || (localStorage.getItem('tp_ci')==='1'); } catch(_e){ return false; } })();
-              if (!__IS_TEST__) s.setAttribute('nomodule', '');
-            } catch (e) {}
-            s.src = '/teleprompter_pro.js?v=' + encodeURIComponent(V);
-            document.head.appendChild(s);
-          }
-        })();
-      } catch(e) {
-        // Silence errors initializing loader in older browsers
-      }
-    })();
-  </script>
+  <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
 
   <!-- Build badge (dev only) -->
   <style>
@@ -469,47 +403,7 @@
     <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
   </div>
 </div>
-<script>
-  (function(){
-    try{
-      var DEV = window.__TP_DEV || document.documentElement.classList.contains('tp-dev');
-      var V = window.__TP_DEV_VERSION || (new URLSearchParams(location.search).get('v') || (DEV ? Date.now().toString(36) : 'dev-20251007'));
-      var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
-      // Load a few small helper modules as ES modules first (backwards compatible)
-  var moduleFiles = [ add('./debug-tools.js'), add('./utils/safe-dom.js'), add('./ui/toasts.js'), add('./ui/scripts-ui.js'), add('./ui/cam-draggable.js') ];
-      moduleFiles.forEach(function(m){
-        var s = document.createElement('script');
-        s.type = 'module';
-        s.src = m;
-        document.head.appendChild(s);
-      });
-      // Then load the remaining classic scripts
-  // recorders.js is loaded as an ES module above; do not include it in classic fallbacks
-  var jsFiles = [ add('./debug-seed.js'), add('./sim-history.js') ];
-      jsFiles.forEach(function(src) {
-        var script = document.createElement('script');
-        script.src = src;
-        script.defer = true;
-        document.head.appendChild(script);
-      });
-    }catch(e){
-      var jsFiles = [
-        './debug-tools.js?v=dev-20251007',
-        './debug-seed.js?v=dev-20251007',
-        './sim-history.js?v=dev-20251007',
-        './ui/toasts.js?v=dev-20251007',
-  // './recorders.js?v=dev-20251007', // intentionally omitted; recorders is loaded as module
-        'teleprompter_pro.js?v=dev-20251007'
-      ];
-      jsFiles.forEach(function(src) {
-        var script = document.createElement('script');
-        script.src = src;
-        script.defer = true;
-        document.head.appendChild(script);
-      });
-    }
-  })();
-</script>
+<!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
 
 <!-- Build label -->
 <div id="anvil-build-label">
