@@ -1,5 +1,5 @@
-import { getTypography, onTypography } from '../settings/typographyStore';
 import type { DisplayId } from '../settings/schema';
+import { getTypography, onTypography } from '../settings/typographyStore';
 
 export function applyTypographyTo(win: Window, id: DisplayId) {
   const doc = win.document;

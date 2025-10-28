@@ -1,5 +1,5 @@
-import { setTypography, getTypography } from '../../settings/typographyStore';
 import type { DisplayId } from '../../settings/schema';
+import { getTypography, setTypography } from '../../settings/typographyStore';
 
 function idFor(base: string, display: DisplayId) { return `${base}-${display}`; }
 
