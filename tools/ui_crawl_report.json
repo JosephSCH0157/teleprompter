@@ -134,7 +134,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 50,
+        "lineNumber": 53,
         "columnNumber": 12
       }
     },
@@ -233,7 +233,7 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 119,
+        "lineNumber": 127,
         "columnNumber": 12
       }
     }
@@ -249,9 +249,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "d4bdd94778908a6172cb78770c7f9a0e375e360e",
+      "gitSha": "4a4a931b5f3b3fc30d99194b11e59bc69edf3453",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-28T16:56:13.435Z"
+      "buildTime": "2025-10-28T18:36:34.900Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

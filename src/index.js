@@ -3,8 +3,11 @@
 // delegates the heavy lifting to the legacy loader until a full migration is done.
 
 import * as Adapters from './adapters/index.js';
+import * as Mic from './adapters/mic.js';
+import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
 import * as Auto from './features/autoscroll.js';
+import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
@@ -54,6 +57,9 @@ async function boot() {
     try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
     UI.bindStaticDom();
+
+  // Party-mode eggs (UI + bus triggers)
+  try { Eggs.install({ bus }); } catch {}
 
     // Easter eggs (party mode on dB meter, Konami theme, etc.)
     try {
@@ -109,6 +115,8 @@ async function boot() {
         try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
         try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
+        try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
+        try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
       }, { capture: true });
       // Headless fallback (some runners only dispatch mousedown)
       document.addEventListener('mousedown', (e) => {
