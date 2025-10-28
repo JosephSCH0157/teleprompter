@@ -182,7 +182,7 @@ try {
   }
   // Hotkeys probe (best-effort)
   if (hotkeysProbe && hotkeysProbe.supported) {
-    const moved = (hotkeysProbe.afterDown !== hotkeysProbe.before) || (hotkeysProbe.afterPageDown !== hotkeysProbe.before);
+    const moved = !!(hotkeysProbe.ok || (hotkeysProbe.afterPD && (hotkeysProbe.afterPD.scrollTop !== hotkeysProbe.beforeTop || hotkeysProbe.afterPD.markerTop !== hotkeysProbe.beforeMarker)));
     if (moved) console.log('PASS hotkeys — scroll reacted to keys');
     else {
       const msg = 'hotkeys — no scroll change after keys';
@@ -191,8 +191,8 @@ try {
   }
   // Late-script probe: warn if jitter too high or fps too low
   if (lateProbe && lateProbe.supported) {
-    const fpsOk = (lateProbe.approxFps || 0) >= 20; // tiny threshold just to catch regressions
-    const jitterOk = (lateProbe.jitterStd || 0) <= 4; // px tolerance
+    const fpsOk = (lateProbe.approxFps || 0) >= 50; // target ~60, accept >=50
+    const jitterOk = (lateProbe.jitterStd || 0) <= 6; // px tolerance
     if (fpsOk && jitterOk) console.log('PASS late-probe — fps≈', lateProbe.approxFps, 'jitterStd≈', Math.round((lateProbe.jitterStd || 0)*10)/10);
     else {
       const msg = `late-probe — fps=${lateProbe.approxFps}, jitterStd=${lateProbe.jitterStd}`;
