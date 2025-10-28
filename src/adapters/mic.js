@@ -22,7 +22,10 @@ function updateChip(state) {
 
 export async function requestMic() {
   try {
-    stream = await (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? navigator.mediaDevices.getUserMedia({ audio: true, video: false }) : Promise.reject(new Error('no-media-devices')));
+    const S = (typeof window !== 'undefined' && window.__tpStore) ? window.__tpStore : null;
+    const preferId = (S && typeof S.get === 'function') ? (S.get('micDevice') || '') : '';
+    const constraints = { audio: preferId ? { deviceId: { exact: preferId } } : true, video: false };
+    stream = await (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? navigator.mediaDevices.getUserMedia(constraints) : Promise.reject(new Error('no-media-devices')));
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
@@ -30,6 +33,9 @@ export async function requestMic() {
     data = new Float32Array(analyser.fftSize);
     src.connect(analyser);
     updateChip('ready');
+
+    // Trigger device re-enumeration so labels become visible post-permission
+    try { window.dispatchEvent(new CustomEvent('tp:devices-refresh')); } catch {}
 
     const tick = () => {
       try {
