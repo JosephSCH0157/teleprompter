@@ -115,6 +115,16 @@ async function boot() {
       const autoSpeed = /** @type {HTMLInputElement|null} */ (document.getElementById('autoSpeed'));
       const auto = initAutoScroll(getScroller);
       auto.bindUI(autoToggle, autoSpeed);
+      // Delegate click in case the button node is replaced during dynamic UI updates
+      try {
+        document.addEventListener('click', (ev) => {
+          try {
+            const t = ev && ev.target;
+            const btn = t && typeof t.closest === 'function' ? t.closest('#autoToggle') : null;
+            if (btn) { ev.preventDefault && ev.preventDefault(); auto.toggle(); }
+          } catch {}
+        }, true);
+      } catch {}
     } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
 
     console.log('[src/index] boot completed');
