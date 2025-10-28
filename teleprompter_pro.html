@@ -122,6 +122,11 @@
         (function(){
           try {
             var vToken = window.__TP_DEV_VERSION || V || 'dev';
+            var IS_TEST = false;
+            try {
+              var _qs = new URLSearchParams(location.search);
+              IS_TEST = _qs.has('ci') || (function(){ try { return localStorage.getItem('tp_ci')==='1'; } catch(e){ return false; }})();
+            } catch(e) {}
             var modBootstrapper = document.createElement('script');
             modBootstrapper.type = 'module';
             modBootstrapper.textContent = `
@@ -140,14 +145,16 @@
             // Also insert a legacy nomodule fallback in case modules aren't supported or the import fails later.
             var fallback = document.createElement('script');
             fallback.defer = true;
-            try { fallback.setAttribute('nomodule', ''); } catch (e) {}
+            // In dev/CI we want the legacy bundle to load even in modern browsers (no dist build in dev)
+            try { if (!(window.__TP_DEV || IS_TEST)) fallback.setAttribute('nomodule', ''); } catch (e) {}
             fallback.src = '/teleprompter_pro.js?v=' + encodeURIComponent(V);
             document.head.appendChild(fallback);
           } catch (e) {
             // In very old browsers, just load the legacy bundle synchronously as before.
             var s = document.createElement('script');
             s.defer = true;
-            try { s.setAttribute('nomodule', ''); } catch (e) {}
+            // In dev/CI, avoid nomodule so it always executes
+            try { if (!(window.__TP_DEV || (function(){ try { var _q=new URLSearchParams(location.search); return _q.has('ci'); } catch(_e){ return false; } })())) s.setAttribute('nomodule', ''); } catch (e) {}
             s.src = '/teleprompter_pro.js?v=' + encodeURIComponent(V);
             document.head.appendChild(s);
           }
