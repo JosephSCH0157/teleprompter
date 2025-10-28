@@ -417,6 +417,17 @@ export function bindStaticDom() {
       tryWire('settingsNormalize');
     } catch {}
 
+    // Wire editor input to re-render script
+    try {
+      const ed = document.getElementById('editor');
+      if (ed && !ed.dataset.renderWired) {
+        ed.dataset.renderWired = '1';
+        ed.addEventListener('input', () => {
+          try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch {}
+        });
+      }
+    } catch {}
+
     // initial hydration pass
     hydrateUI();
 
