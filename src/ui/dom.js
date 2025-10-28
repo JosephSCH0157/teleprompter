@@ -281,8 +281,15 @@ function installObsChip() {
       }
       const render = ({ status = 'disconnected', recording = false, scene } = {}) => {
         try {
-          chip.textContent = `OBS: ${status}${recording ? ' • REC' : ''}${scene ? ` • ${scene}` : ''}`;
-          chip.classList.toggle('chip-live', !!recording);
+          const s = String(status||'disconnected');
+          chip.textContent = `OBS: ${s}${recording ? ' • REC' : ''}${scene ? ` • ${scene}` : ''}`;
+          // reset state classes and apply new one(s)
+          const base = ['chip'];
+          if (s === 'identified' || s === 'open') base.push('obs-connected');
+          else if (s === 'connecting') base.push('obs-reconnecting');
+          else if (s === 'error') base.push('obs-error');
+          if (recording) base.push('chip-live');
+          chip.className = base.join(' ');
         } catch {}
       };
       render();
