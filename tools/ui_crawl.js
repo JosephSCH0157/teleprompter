@@ -48,6 +48,7 @@ const fs = require('fs');
   // Build crawl URL and append ?ci=1 to enable CI profile in the app
   const baseUrl = `http://${HOST}:${PORT}/teleprompter_pro.html`;
   const url = baseUrl.includes('?') ? `${baseUrl}&ci=1` : `${baseUrl}?ci=1`;
+  try { out.url = url; out.ci = true; } catch {}
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     // wait a little for UI to settle
     await page.waitForTimeout(1000);
