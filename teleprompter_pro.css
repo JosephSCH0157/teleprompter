@@ -347,3 +347,19 @@ body.ck::after{
     border-color: var(--danger, #d33);
     box-shadow: 0 0 0 1px var(--danger, #d33) inset;
 }
+
+/* --- Appended: Overlay visibility + Present Mode layout --- */
+/* Quick overlay visibility toggle */
+#settingsOverlay.hidden, #shortcutsOverlay.hidden { display: none !important; }
+
+/* Present Mode */
+html.tp-present .sidebar,
+html.tp-present .panel,
+html.tp-present .topbar { display: none !important; }
+
+html.tp-present #viewer {
+    width: 100vw; height: 100vh;
+    padding: 4vh 6vw;
+    font-size: clamp(24px, 4.0vw, 72px);
+    line-height: 1.35;
+}
