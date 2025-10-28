@@ -23,6 +23,32 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
+  <!-- Hard switch: monolith vs module path (place before any other scripts) -->
+  <script>
+  (function (g) {
+    try {
+      var q = new URL(location.href).searchParams;
+      var forceMono = (q.get('mono') === '1') || (function(){ try { return localStorage.getItem('tp_force_monolith') === '1'; } catch(_) { return false; } })();
+      g.__TP_FORCE_MONO = !!forceMono;
+
+      function loadMonolith() {
+        var s = document.createElement('script');
+        s.src = './teleprompter_pro.js';
+        document.head.appendChild(s);
+      }
+
+      function loadModules() {
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = './src/boot/boot-loader.js';
+        document.head.appendChild(s);
+      }
+
+      forceMono ? loadMonolith() : loadModules();
+    } catch {}
+  })(window);
+  </script>
+
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
@@ -58,26 +84,13 @@
 
   <!-- (helpers loaded from modules in dev via src/index.js) -->
 
-  <!-- Preload critical modules and scripts to shorten main-thread work and reduce LCP delay -->
-  <!-- Avoid preloading the legacy monolith; modern browsers should use the module loader below -->
-  <!-- Avoid modulepreload for heavy optional modules so they are fetched only when needed -->
-  <!-- Boot globals (version & trace) before loader; keep paths relative to avoid host coupling -->
-  <script>
-    // Small globals used by the loader
-    window.__TP_ADDV = (new URL(location.href)).searchParams.get('v') || Date.now();
-    window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
-    window.__TP_BOOT_INFO  = window.__TP_BOOT_INFO  || {};
-  </script>
+  
   
 
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
 
-  <!-- Single module boot loader (dev: src/index.js; prod: dist/index.js) -->
-  <script type="module" src="./src/boot/boot-loader.js"></script>
-
-  <!-- Optional legacy fallback for non-module browsers (prod only) -->
-  <script nomodule src="./teleprompter_pro.js"></script>
+  <!-- Loader is selected above (monolith or modules). No additional booters here. -->
 
   <!-- App store & centralized Settings wiring -->
   <script src="src/state/app-store.js"></script>
