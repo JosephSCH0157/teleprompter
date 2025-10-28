@@ -1,24 +1,61 @@
 #!/usr/bin/env node
 const puppeteer = require('puppeteer');
 const fs = require('fs');
+const path = require('path');
+const cp = require('child_process');
 (async function main(){
-  const out = { clicked: [], errors: [], console: [], notes: [] };
+  const out = { clicked: [], errors: [], console: [], notes: [], meta: {} };
   try{
     const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
     const page = await browser.newPage();
+    // Freeze viewport and DPR for deterministic layout
+    try { await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 }); } catch {}
     page.setDefaultTimeout(20000);
     page.setDefaultNavigationTimeout(30000);
+    // Freeze world: time/random + disable animations
+    const FIXED_NOW = 1700000000000;
+    await page.evaluateOnNewDocument((fixedNow) => {
+      try {
+        const _Date = Date;
+        class FixedDate extends _Date {
+          constructor(...args) { super(args.length ? args[0] : fixedNow); }
+        }
+        FixedDate.now = () => fixedNow;
+        FixedDate.UTC = _Date.UTC.bind(_Date);
+        FixedDate.parse = _Date.parse.bind(_Date);
+        // @ts-ignore
+        window.Date = FixedDate;
+      } catch {}
+      try {
+        let seed = 123456789;
+        Math.random = () => { seed = (1103515245 * seed + 12345) & 0x7fffffff; return (seed >>> 0) / 0x80000000; };
+      } catch {}
+      try {
+        const style = document.createElement('style');
+        style.id = 'ci-freeze-style';
+        style.textContent = '*{animation:none!important;transition:none!important}';
+        (document.head || document.documentElement).appendChild(style);
+      } catch {}
+    }, FIXED_NOW);
     page.on('console', msg => {
       try {
         const loc = msg.location ? msg.location() : {};
-        out.console.push({ type: msg.type(), text: msg.text(), location: loc });
+        out.console.push({ type: msg.type(), text: maskText(msg.text()), location: loc });
       } catch {
-        out.console.push({ type: 'console', text: msg.text() });
+        out.console.push({ type: 'console', text: maskText(msg.text()) });
       }
     });
-  page.on('pageerror', err => { out.errors.push({ type: 'pageerror', message: String(err), stack: err && err.stack ? err.stack : null }); });
+    page.on('pageerror', err => { out.errors.push({ type: 'pageerror', message: String(err), stack: err && err.stack ? err.stack : null }); });
+    let CURRENT_HOST = '127.0.0.1';
     page.on('response', res => {
-      if (res.status() >= 400) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
+      try {
+        if (res.status() < 400) return;
+        const u = new URL(res.url());
+        const isMap = u.pathname.endsWith('.map');
+        if (isMap) return;
+        const isFirstParty = (u.hostname === CURRENT_HOST);
+        if (isFirstParty) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
+      } catch {}
     });
   // Choose host/port (CI-aware). Default to 127.0.0.1:5180 to match CI/static_server defaults.
   const HOST = process.env.CI_HOST || '127.0.0.1';
@@ -54,16 +91,20 @@ const fs = require('fs');
       const u = base.includes('?') ? `${base}&ci=1` : `${base}?ci=1`;
       try { out.url = u; out.ci = true; } catch {}
       await page.goto(u, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      out.meta.target = { host, port, url: u };
+      return u;
     };
     let ok = false;
     try {
-      await attempt(HOST, PORT);
+      const u = await attempt(HOST, PORT);
+      out.notes.push(`Navigated to ${u}`);
       ok = true;
     } catch {}
     if (!ok) {
       try {
         PORT = '8080';
-        await attempt(HOST, PORT);
+        const u = await attempt(HOST, PORT);
+        out.notes.push(`Navigated (fallback) to ${u}`);
         ok = true;
       } catch {}
     }
@@ -71,9 +112,12 @@ const fs = require('fs');
       // last resort: networkidle2 on default
       await page.goto(`http://${HOST}:5180/teleprompter_pro.html?ci=1`, { waitUntil: 'networkidle2', timeout: 20000 });
       try { out.url = `http://${HOST}:5180/teleprompter_pro.html?ci=1`; out.ci = true; } catch {}
+      out.meta.target = { host: HOST, port: '5180', url: out.url };
+      out.notes.push(`Navigated (last-resort) to ${out.url}`);
     }
   }
   await navigateWithFallback(page);
+    try { const u0 = new URL(out.url); CURRENT_HOST = u0.hostname; } catch {}
     // wait a little for UI to settle
     await page.waitForTimeout(500);
     // Wait for app readiness (either custom event or marker)
@@ -100,7 +144,7 @@ const fs = require('fs');
           if (el.id && blacklist.includes(el.id)) return false;
           return true;
         })
-        .map((el) => ({ tag: el.tagName, id: el.id || null, text: el.textContent && el.textContent.trim().slice(0,80) || null }))
+    .map((el) => ({ tag: el.tagName, id: el.id || null, text: el.textContent && el.textContent.trim().slice(0,80) || null }))
         .slice(0,300);
     }, blacklist);
     out.notes.push(`Found ${candidates.length} candidate controls`);
@@ -114,7 +158,7 @@ const fs = require('fs');
         const handle = await page.$('#' + c.id);
         if (!handle) continue;
         await handle.click({ delay: 60 }).catch(() => {});
-        out.clicked.push({ id: c.id, text: c.text });
+        out.clicked.push({ id: c.id, text: maskText(c.text) });
         await page.waitForTimeout(300);
       } catch (err) {
         out.errors.push({ type: 'click', id: c.id, err: String(err) });
@@ -176,7 +220,7 @@ const fs = require('fs');
       out.fileInputs = [];
     }
     
-    // Legend and render probes
+    // Legend and render + additional probes
     try {
       // Ensure core elements exist before probing
       try { await page.waitForSelector('#script', { timeout: 5000 }); } catch {}
@@ -217,13 +261,73 @@ const fs = require('fs');
             return { lineCount: lines.length, iHello, iWorld, cHello, cWorld };
           } catch { return { lineCount: 0 } }
         })();
-        return { legendProbe, renderProbe };
+        const hudProbe = (function(){
+          try {
+            const isDevClass = document.documentElement.classList.contains('tp-dev');
+            const hud = document.getElementById('hud-root');
+            const hasHudChildren = !!(hud && hud.children && hud.children.length > 0);
+            return { isDevClass, hasHudChildren };
+          } catch { return { isDevClass: false, hasHudChildren: false } }
+        })();
+        const hotkeysProbe = await (async function(){
+          try {
+            const viewer = document.getElementById('viewer');
+            if (!viewer) return { supported: false };
+            const before = viewer.scrollTop;
+            viewer.focus && viewer.focus();
+            const key = (k) => new Promise(res => { document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); setTimeout(res, 60); });
+            await key('ArrowDown'); const afterDown = viewer.scrollTop;
+            await key('ArrowUp'); const afterUp = viewer.scrollTop;
+            await key('PageDown'); const afterPageDown = viewer.scrollTop;
+            const ok = (afterDown !== before) || (afterPageDown !== before);
+            return { supported: true, before, afterDown, afterUp, afterPageDown, ok };
+          } catch { return { supported: false } }
+        })();
+        const lateProbe = await (async function(){
+          try {
+            const viewer = document.getElementById('viewer');
+            const marker = document.querySelector('#viewer .marker');
+            if (!viewer) return { supported: false };
+            viewer.scrollTop = Math.max(0, viewer.scrollHeight - viewer.clientHeight) * 0.88;
+            const samples = [];
+            const jitter = [];
+            const start = performance.now();
+            while (performance.now() - start < 400) {
+              await new Promise(r => requestAnimationFrame(r));
+              samples.push(viewer.scrollTop);
+              if (marker) jitter.push((marker.getBoundingClientRect().top|0));
+            }
+            const moves = samples.slice(1).filter((v,i) => v !== samples[i]).length;
+            const approxFps = Math.min(60, Math.round(moves / 0.4));
+            const jstdev = (arr) => { if (!arr.length) return 0; const m = arr.reduce((a,b)=>a+b,0)/arr.length; const v = arr.reduce((a,b)=>a + (b-m)*(b-m),0)/arr.length; return Math.sqrt(v); };
+            const jitterStd = jstdev(jitter);
+            return { supported: true, approxFps, jitterStd };
+          } catch { return { supported: false } }
+        })();
+        return { legendProbe, renderProbe, hudProbe, hotkeysProbe, lateProbe };
       });
       out.legendProbe = probes.legendProbe;
       out.renderProbe = probes.renderProbe;
+      out.hudProbe = probes.hudProbe;
+      out.hotkeysProbe = probes.hotkeysProbe;
+      out.lateProbe = probes.lateProbe;
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
     }
+    // Embed build metadata
+    try {
+      out.meta.build = {
+        gitSha: safeExec('git rev-parse HEAD'),
+        branch: safeExec('git rev-parse --abbrev-ref HEAD'),
+        buildTime: new Date().toISOString(),
+      };
+    } catch {}
+    // Screenshot artifact
+    try {
+      const shotPath = path.join(__dirname, 'ui_crawl_screenshot.png');
+      await page.screenshot({ path: shotPath, fullPage: true });
+      out.screenshot = path.relative(process.cwd(), shotPath);
+    } catch {}
     await browser.close();
   }catch(_e){ out.errors.push({ type:'fatal', message: String(_e) }); }
   const p = 'tools/ui_crawl_report.json';
@@ -232,3 +336,18 @@ const fs = require('fs');
   if (out.errors.length) process.exit(2);
   process.exit(0);
 })();
+
+// Mask volatile text segments to reduce diff noise
+function maskText(t) {
+  try {
+    if (!t || typeof t !== 'string') return t;
+    let s = t;
+    s = s.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<DATE>');
+    s = s.replace(/\b[a-f0-9]{7,40}\b/gi, '<HASH>');
+    s = s.replace(/dev-\d{8}/gi, '<BUILD>');
+    return s;
+  } catch { return t }
+}
+function safeExec(cmd) {
+  try { return cp.execSync(cmd, { stdio: ['ignore','pipe','ignore'] }).toString().trim(); } catch { return null }
+}
