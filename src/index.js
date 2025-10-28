@@ -7,6 +7,7 @@ import * as Mic from './adapters/mic.js';
 import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
 import * as Auto from './features/autoscroll.js';
+import * as ScrollModes from './scroll/router.js';
 import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
@@ -105,6 +106,8 @@ async function boot() {
 
     // Expose OBS/Recorder adapter instances to the global so non-module settings code can connect
     try {
+      // Expose app bus for QA hooks and integrations
+      window.__tpBus = bus;
       if (!window.__tpOBS && Adapters.obsAdapter?.create) {
         window.__tpOBS = Adapters.obsAdapter.create();
       }
@@ -117,19 +120,19 @@ async function boot() {
     try { initPersistence(); } catch (e) { console.warn('[src/index] initPersistence failed', e); }
     try { initTelemetry(); } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
     try { initToasts(); } catch (e) { console.warn('[src/index] initToasts failed', e); }
-    try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
+  try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
     try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
 
       // Install speech start/stop delegator
       try { installSpeech(); } catch (e) { console.warn('[src/index] installSpeech failed', e); }
 
-    // Wire Auto-scroll controls (independent of speech/mic)
+    // Wire Auto-scroll controls and install Scroll Modes router
     try {
-      Auto.initAutoScroll();
+      ScrollModes.installScrollModes();
       // Resilient event delegation (works in headless + when nodes re-render)
       document.addEventListener('click', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
+        try { if (t?.closest?.('#autoToggle')) return (ScrollModes.isRunning()?ScrollModes.stop():ScrollModes.start()); } catch {}
         try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
@@ -138,7 +141,7 @@ async function boot() {
       // Headless fallback (some runners only dispatch mousedown)
       document.addEventListener('mousedown', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
+        try { if (t?.closest?.('#autoToggle')) return (ScrollModes.isRunning()?ScrollModes.stop():ScrollModes.start()); } catch {}
       }, { capture: true });
     } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
 

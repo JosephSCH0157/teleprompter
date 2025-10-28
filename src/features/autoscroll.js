@@ -51,3 +51,16 @@ export function setEnabled(v) {
 export function inc() { speed = Math.min(200, speed + 1); if (enabled) loop(); }
 export function dec() { speed = Math.max(1, speed - 1);  if (enabled) loop(); }
 export function getState() { return { enabled, speed }; }
+
+export function setSpeed(pxPerSec) {
+  const v = Number(pxPerSec);
+  if (Number.isFinite(v)) speed = Math.max(1, Math.min(200, v));
+}
+
+export function nudge(pixels) {
+  try {
+    if (!viewer) viewer = document.getElementById('viewer');
+    if (!viewer) return;
+    viewer.scrollTop += Number(pixels) || 0;
+  } catch {}
+}
