@@ -181,13 +181,35 @@ function installSpeakerIndex() {
       try {
         const s1 = countTag('s1');
         const s2 = countTag('s2');
-        const g = countTag('g1') + countTag('g2');
+        // tolerate variants: guest1, g1, guest
+        const g = countTag('g1') + countTag('g2') + countTag('guest1') + countTag('guest');
         host.textContent = `Speakers: S1 ${s1} • S2 ${s2}${g ? ` • G ${g}` : ''}`;
       } catch {}
     };
     render();
     on(document, 'input', (e) => {
       try { const id = (e && e.target && e.target.id) ? String(e.target.id) : ''; if (/editor|script|source/i.test(id)) render(); } catch {}
+    });
+  } catch {}
+}
+
+function installDbMeter() {
+  try {
+    const text = document.getElementById('dbText');
+    const bar = document.querySelector('#dbMeter .bar i');
+    if (!text || !bar) return;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const render = (db = NaN, peak = NaN) => {
+      try {
+        text.textContent = Number.isFinite(db) ? `${Math.round(db)} dB` : '— dB';
+        const val = Number.isFinite(peak) ? peak : (Number.isFinite(db) ? db : -60);
+        const pct = (clamp(val, -60, 0) + 60) / 60; // map -60..0 dBFS → 0..1
+        bar.style.transform = `scaleX(${pct})`;
+      } catch {}
+    };
+    render(); // idle
+    window.addEventListener('tp:db', (e) => {
+      try { const d = (e && e.detail) || {}; render(d.db, d.peak); } catch {}
     });
   } catch {}
 }
@@ -206,6 +228,7 @@ export function bindStaticDom() {
     wireUpload();
     wirePresentMode();
     installSpeakerIndex();
+    installDbMeter();
   } catch {}
 }
 

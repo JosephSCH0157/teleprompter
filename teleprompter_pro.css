@@ -393,3 +393,26 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Top-bar: clearer separator and dB meter visibility */
 .topbar { border-bottom: 1px solid var(--hairline, #2a2a2a); }
 #dbMeter { display: inline-flex; align-items: center; gap: 6px; }
+
+/* dB meter layout (detailed) */
+#dbMeter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 120px;
+}
+#dbMeter .bar {
+    position: relative;
+    width: 80px;
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255,255,255,.1);
+}
+#dbMeter .bar i {
+    position: absolute;
+    inset: 0;
+    transform-origin: left center;
+    transform: scaleX(0);
+    background: linear-gradient(90deg, #4caf50 0%, #ffc107 60%, #e53935 100%);
+}
