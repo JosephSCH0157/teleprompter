@@ -14,6 +14,8 @@ import { installScrollRouter } from './features/scroll-router.js';
 import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
+// Ensure inline formatter is present (provides window.formatInlineMarkup)
+import '../ui/format.js';
 import { initToasts } from './features/toasts.js';
 import * as UI from './ui/dom.js';
 
