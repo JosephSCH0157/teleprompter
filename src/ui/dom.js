@@ -148,24 +148,47 @@ function installSpeakerIndex() {
 }
 
 function installDbMeter() {
-  try {
-    const text = document.getElementById('dbText');
-    const bar = document.querySelector('#dbMeter .bar i');
-    if (!text || !bar) return;
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    const render = (db = NaN, peak = NaN) => {
-      try {
-        text.textContent = Number.isFinite(db) ? `${Math.round(db)} dB` : '— dB';
-        const val = Number.isFinite(peak) ? peak : (Number.isFinite(db) ? db : -60);
-        const pct = (clamp(val, -60, 0) + 60) / 60; // map -60..0 dBFS → 0..1
-        bar.style.transform = `scaleX(${pct})`;
-      } catch {}
-    };
-    render(); // idle
-    window.addEventListener('tp:db', (e) => {
-      try { const d = (e && e.detail) || {}; render(d.db, d.peak); } catch {}
-    });
-  } catch {}
+  once('db-meter', () => {
+    try {
+      // Detailed bar + text (bottom/inline)
+      const text = document.getElementById('dbText');
+      const bar = document.querySelector('#dbMeter .bar i');
+
+      // Top-bar compact meter (build if needed)
+      const hostTop = document.getElementById('dbMeterTop');
+      let topFill = null;
+      if (hostTop && !hostTop.dataset.wired) {
+        hostTop.dataset.wired = '1';
+        const barMini = document.createElement('div');
+        barMini.style.cssText = 'height:6px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.1);width:90px';
+        const fill = document.createElement('i');
+        fill.style.cssText = 'display:block;height:100%;transform-origin:left center;transform:scaleX(0);background:linear-gradient(90deg,#4caf50,#ffc107 60%,#e53935)';
+        barMini.appendChild(fill);
+        hostTop.title = 'Input level';
+        hostTop.appendChild(barMini);
+        topFill = fill;
+      } else if (hostTop) {
+        topFill = hostTop.querySelector('i');
+      }
+
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const render = (db = NaN, peak = NaN) => {
+        try {
+          // Update detailed meter
+          if (text) text.textContent = Number.isFinite(db) ? `${Math.round(db)} dB` : '— dB';
+          const val = Number.isFinite(peak) ? peak : (Number.isFinite(db) ? db : -60);
+          const pct = (clamp(val, -60, 0) + 60) / 60; // map -60..0 → 0..1
+          if (bar) bar.style.transform = `scaleX(${pct})`;
+          if (topFill) topFill.style.transform = `scaleX(${pct})`;
+        } catch {}
+      };
+      render(); // idle
+
+      window.addEventListener('tp:db', (e) => {
+        try { const d = (e && e.detail) || {}; render(d.db, d.peak); } catch {}
+      });
+    } catch {}
+  });
 }
 
 function wireOverlays() {
