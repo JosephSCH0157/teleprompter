@@ -13,3 +13,16 @@ import './vendor/mammoth';
 
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
+
+// Optional: wire Auto-scroll in TS path as well (dev uses JS path; prod bundle may use TS entry)
+import { initAutoScroll } from './features/autoscroll.js';
+
+try {
+	document.addEventListener('DOMContentLoaded', () => {
+		const viewer = document.getElementById('viewer') as HTMLElement | null;
+		const autoToggle = document.getElementById('autoToggle') as HTMLElement | null;
+		const autoSpeed = document.getElementById('autoSpeed') as HTMLInputElement | null;
+		const auto = initAutoScroll(() => viewer);
+		auto.bindUI(autoToggle, autoSpeed);
+	});
+} catch {}

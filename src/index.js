@@ -4,6 +4,7 @@
 
 import * as Adapters from './adapters/index.js';
 import * as Core from './core/state.js';
+import { initAutoScroll } from './features/autoscroll.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
@@ -28,6 +29,15 @@ async function boot() {
     try { initToasts(); } catch (e) { console.warn('[src/index] initToasts failed', e); }
     try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
     try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
+
+    // Wire Auto-scroll controls (independent of speech/mic)
+    try {
+      const viewer = document.getElementById('viewer');
+      const autoToggle = document.getElementById('autoToggle');
+      const autoSpeed = /** @type {HTMLInputElement|null} */ (document.getElementById('autoSpeed'));
+      const auto = initAutoScroll(() => viewer);
+      auto.bindUI(autoToggle, autoSpeed);
+    } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
 
     console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
