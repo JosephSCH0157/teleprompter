@@ -91,6 +91,14 @@ function wireDisplayMirror() {
     const lh = $('lineHeight');
     const sendTypography = () => {
       try {
+        // Only broadcast when linking is ON
+        let linkOn = false;
+        try {
+          const raw = localStorage.getItem('tp_ui_prefs_v1');
+          const st = raw ? JSON.parse(raw) : {};
+          linkOn = !!st.linkTypography;
+        } catch {}
+        if (!linkOn) return;
         const fontSize = fs && 'value' in fs ? Number(fs.value) : undefined;
         const lineHeight = lh && 'value' in lh ? Number(lh.value) : undefined;
         window.sendToDisplay && window.sendToDisplay({ type: 'typography', fontSize, lineHeight });
@@ -99,8 +107,8 @@ function wireDisplayMirror() {
     on(fs, 'input', sendTypography);
     on(lh, 'input', sendTypography);
 
-    // Initial push once inputs are present (small delay to allow boot)
-    setTimeout(sendTypography, 0);
+  // Initial push only if linking is enabled
+  setTimeout(sendTypography, 0);
 
     // Content render mirroring: listen for our renderer's event and also observe #script for any DOM changes
     let renderPending = false;

@@ -6,6 +6,23 @@
 (function(){
   try {
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const DISPLAY_ID = (function(){ try { return window.opener ? 'display' : 'main'; } catch { return 'main'; } })();
+
+    // Minimal local store: tp_typography_v1 = { main: {...}, display: {...} }
+    const KEY = 'tp_typography_v1';
+    function readStore(){
+      try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+    }
+    function writeStore(st){ try { localStorage.setItem(KEY, JSON.stringify(st||{})); } catch {}
+    }
+    function setTypographyLocal(patch){
+      try {
+        const st = readStore();
+        const cur = st[DISPLAY_ID] || {};
+        st[DISPLAY_ID] = { ...cur, ...patch };
+        writeStore(st);
+      } catch {}
+    }
 
     function applyTypographyVars(fontPx, lineH) {
       try {
@@ -17,10 +34,9 @@
         const lh = Number.isFinite(lineH) ? clamp(lineH, 1.1, 2.0) : curLH;
         root.style.setProperty('--tp-font-size', String(fs) + 'px');
         root.style.setProperty('--tp-line-height', String(lh));
-        try { localStorage.setItem('tp_font_size_v1', String(fs)); } catch {}
-        try { localStorage.setItem('tp_line_height_v1', String(lh)); } catch {}
+        // Persist per-window (no cross-broadcast by default)
+        setTypographyLocal({ fontSizePx: fs, lineHeight: lh });
         try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
-        try { window.sendToDisplay && window.sendToDisplay({ type: 'typography', fontSize: fs, lineHeight: lh }); } catch {}
       } catch {}
     }
 
@@ -39,10 +55,10 @@
 
     // Initial hydration from storage or fallback to hidden inputs
     try {
-      const fsStored = (function(){ try { return Number(localStorage.getItem('tp_font_size_v1')); } catch { return NaN; } })();
-      const lhStored = (function(){ try { return Number(localStorage.getItem('tp_line_height_v1')); } catch { return NaN; } })();
-      let fsInit = Number.isFinite(fsStored) ? fsStored : NaN;
-      let lhInit = Number.isFinite(lhStored) ? lhStored : NaN;
+      const store = readStore();
+      const own = (store && store[DISPLAY_ID]) || {};
+      let fsInit = Number(own.fontSizePx);
+      let lhInit = Number(own.lineHeight);
       if (!Number.isFinite(fsInit) || !Number.isFinite(lhInit)) {
         const fsEl = document.getElementById('fontSize');
         const lhEl = document.getElementById('lineHeight');

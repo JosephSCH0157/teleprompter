@@ -104,6 +104,42 @@ const URL_TO_OPEN = RAW_URL;
         warnLogs.push('[typo-smoke] ' + (e?.message || String(e)));
       }
 
+      // Guard: unlink by default; then link → mirror
+      try {
+        const hasSettingsBtn = await page.$('#settingsBtn');
+        if (hasSettingsBtn) {
+          await page.click('#settingsBtn');
+          await page.waitForSelector('#settingsOverlay:not(.hidden)', { timeout: 2000 }).catch(()=>{});
+          // Ensure Link is off by default
+          const linkChecked = await page.$eval('#typoLink', el => el && el.checked);
+          if (linkChecked) warnLogs.push('[smoke] Link Typography is ON by default (expected OFF)');
+          // Change main only
+          await page.$eval('#settingsFontSize', (el) => { el.value = '60'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+          // Open display and check it did not mirror by default
+          await page.click('#openDisplayBtn');
+          await page.waitForTimeout(400);
+          const dispSize1 = await page.evaluate(() => {
+            try {
+              const w = window.__tpDisplayWindow; if (!w) return 'n/a';
+              return w.getComputedStyle(w.document.documentElement).getPropertyValue('--tp-font-size').trim();
+            } catch { return 'n/a'; }
+          });
+          if (dispSize1 === '60px') warnLogs.push('[smoke] Display mirrored size while Link was OFF');
+          // Enable Link and change again → should mirror
+          await page.click('#typoLink');
+          await page.$eval('#settingsFontSize', (el) => { el.value = '64'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+          await page.waitForTimeout(250);
+          const dispSize2 = await page.evaluate(() => {
+            try {
+              const w = window.__tpDisplayWindow; if (!w) return 'n/a';
+              return w.getComputedStyle(w.document.documentElement).getPropertyValue('--tp-font-size').trim();
+            } catch { return 'n/a'; }
+          });
+          if (dispSize2 !== '64px') warnLogs.push('[smoke] Display did not mirror when Link was ON');
+          await page.click('#settingsClose').catch(()=>{});
+        }
+      } catch {}
+
       // Grab a couple runtime flags if present
       const { initDone, appVersion, ctx } = await page.evaluate(() => ({
         initDone: !!(window.__tp_init_done || (window.App && (window.App.inited || window.App.initDone))),

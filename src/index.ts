@@ -20,6 +20,7 @@ import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
 import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
+import { getUiPrefs } from './settings/uiPrefs';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
@@ -79,12 +80,16 @@ try {
 			if (w) applyTypographyTo(w, 'display');
 		} catch {}
 
-		// Broadcast typography changes to external display (BC + postMessage)
+		// Broadcast typography changes to external display (only when linked)
 		try {
 			let bc: BroadcastChannel | null = null;
 			try { bc = new BroadcastChannel('tp_display'); } catch {}
 			onTypography((d, t) => {
-				const snap = { kind: 'tp:typography', source: 'main', display: d, t } as const;
+				// Only broadcast if explicitly linked
+				try { if (!getUiPrefs().linkTypography) return; } catch {}
+				// Push to the other screen (target opposite of the source display)
+				const target = (d === 'main' ? 'display' : 'main');
+				const snap = { kind: 'tp:typography', source: 'main', display: target, t } as const;
 				try { bc?.postMessage(snap as any); } catch {}
 				try { const w = (window as any).__tpDisplayWindow as Window | null; w?.postMessage?.(snap as any, '*'); } catch {}
 			});

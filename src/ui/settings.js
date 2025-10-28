@@ -27,7 +27,14 @@
         '    <label>Font size <input id="settingsFontSize" type="number" min="16" max="96" step="2" class="select-md"/></label>',
         '    <label>Line height <input id="settingsLineHeight" type="number" min="1.1" max="2" step="0.05" class="select-md"/></label>',
         '  </div>',
-        '  <div class="settings-small">Applies to both the main script and the external display.</div>',
+        '  <div class="settings-small">Typography applies locally by default. Use Link to mirror changes.</div>',
+        '  <label class="row" style="align-items:center;gap:8px;">',
+        '    <input id="typoLink" type="checkbox"/> Link typography across displays (size & spacing)',
+        '  </label>',
+        '  <div class="row">',
+        '    <button id="typoCopyMainToDisplay" class="chip">Copy Main → Display</button>',
+        '    <button id="typoCopyDisplayToMain" class="chip">Copy Display → Main</button>',
+        '  </div>',
         '</div>',
         '',
         '<div data-tab-content="media" style="display:none">',
@@ -269,6 +276,85 @@
           if (lhS) lhS.value = (lhMain && lhMain.value) || storedLH || '1.35';
           applyFromSettings();
         } catch {}
+      } catch {}
+
+      // Link typography pref + Copy buttons
+      try {
+        const PREF_KEY = 'tp_ui_prefs_v1';
+        const readPrefs = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') || {}; } catch { return {}; } };
+        const writePrefs = (p) => { try { localStorage.setItem(PREF_KEY, JSON.stringify(p||{})); } catch {} };
+        const box = q('typoLink');
+        if (box) {
+          const st = readPrefs();
+          box.checked = !!st.linkTypography;
+          box.addEventListener('change', () => {
+            const cur = readPrefs();
+            cur.linkTypography = !!box.checked;
+            writePrefs(cur);
+          });
+        }
+        const btnA = q('typoCopyMainToDisplay');
+        const btnB = q('typoCopyDisplayToMain');
+        // Helper: get computed typography snapshot of a window
+        const grab = (win) => {
+          try {
+            const cs = win.getComputedStyle(win.document.documentElement);
+            return {
+              fontSizePx: parseFloat(cs.getPropertyValue('--tp-font-size')) || 56,
+              lineHeight: parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4,
+              fontFamily: cs.getPropertyValue('--tp-font-family')?.trim() || undefined,
+              weight: parseFloat(cs.getPropertyValue('--tp-weight')) || undefined,
+              letterSpacingEm: parseFloat(cs.getPropertyValue('--tp-letter-spacing')) || undefined,
+              wordSpacingEm: parseFloat(cs.getPropertyValue('--tp-word-spacing')) || undefined,
+              color: cs.getPropertyValue('--tp-fg')?.trim() || undefined,
+              background: cs.getPropertyValue('--tp-bg')?.trim() || undefined,
+              maxLineWidthCh: parseFloat(cs.getPropertyValue('--tp-maxch')) || undefined,
+              dimOthers: parseFloat(cs.getPropertyValue('--tp-dim')) || undefined,
+            };
+          } catch { return {}; }
+        };
+        // Apply snapshot to this window and persist locally for 'main'
+        const applyLocal = (snap) => {
+          try {
+            const s = document.documentElement.style;
+            if (snap.fontFamily) s.setProperty('--tp-font-family', snap.fontFamily);
+            if (snap.fontSizePx != null) s.setProperty('--tp-font-size', String(snap.fontSizePx) + 'px');
+            if (snap.lineHeight != null) s.setProperty('--tp-line-height', String(snap.lineHeight));
+            if (snap.weight != null) s.setProperty('--tp-weight', String(snap.weight));
+            if (snap.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(snap.letterSpacingEm) + 'em');
+            if (snap.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(snap.wordSpacingEm) + 'em');
+            if (snap.color) s.setProperty('--tp-fg', snap.color);
+            if (snap.background) s.setProperty('--tp-bg', snap.background);
+            if (snap.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(snap.maxLineWidthCh));
+            if (snap.dimOthers != null) s.setProperty('--tp-dim', String(snap.dimOthers));
+            // persist under tp_typography_v1 for 'main'
+            try {
+              const KEY = 'tp_typography_v1';
+              const raw = localStorage.getItem(KEY);
+              const st = raw ? JSON.parse(raw) : {};
+              st.main = { ...(st.main||{}), ...snap };
+              localStorage.setItem(KEY, JSON.stringify(st));
+              window.dispatchEvent(new Event('tp:lineMetricsDirty'));
+            } catch {}
+          } catch {}
+        };
+        if (btnA) btnA.addEventListener('click', () => {
+          try {
+            const snap = grab(window);
+            // Addressed snapshot to display only
+            const payload = { kind:'tp:typography', source:'main', display:'display', t: snap };
+            try { const bc = new BroadcastChannel('tp_display'); bc.postMessage(payload); } catch {}
+            try { const w = window.__tpDisplayWindow; w && w.postMessage && w.postMessage(payload, '*'); } catch {}
+          } catch {}
+        });
+        if (btnB) btnB.addEventListener('click', () => {
+          try {
+            const w = window.__tpDisplayWindow;
+            if (!w) return;
+            const snap = grab(w);
+            applyLocal(snap);
+          } catch {}
+        });
       } catch {}
 
       // Mirror OBS URL/password live between settings overlay and main panel via input events
