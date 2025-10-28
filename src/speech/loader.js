@@ -3,8 +3,8 @@
 (async function () {
   try {
     // NOTE: tooling may compile .ts -> .js; dynamic import of .ts will work in dev setups
-    const recMod = await import('./speech/recognizer.ts');
-    const matchMod = await import('./speech/matcher.ts');
+    const recMod = await import('./recognizer.ts');
+    const matchMod = await import('./matcher.ts');
 
     try {
       (window).__tpRecognizer = (opts) => recMod.createRecognizer(opts);
@@ -20,7 +20,7 @@
 
     try {
       // high-level orchestrator (wires recognizer -> matcher -> consumer)
-      const orch = await import('./speech/orchestrator.ts');
+      const orch = await import('./orchestrator.ts');
       (window).__tpSpeech = (window).__tpSpeech || {};
       try { (window).__tpSpeech.startRecognizer = orch.startRecognizer; } catch {}
       try { (window).__tpSpeech.stopRecognizer = orch.stopRecognizer; } catch {}
