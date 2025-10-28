@@ -23,30 +23,13 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- Hard switch: monolith vs module path (place before any other scripts) -->
-  <script>
-  (function (g) {
-    try {
-      var q = new URL(location.href).searchParams;
-      var forceMono = (q.get('mono') === '1') || (function(){ try { return localStorage.getItem('tp_force_monolith') === '1'; } catch(_) { return false; } })();
-      g.__TP_FORCE_MONO = !!forceMono;
-
-      function loadMonolith() {
-        var s = document.createElement('script');
-        s.src = './teleprompter_pro.js';
-        document.head.appendChild(s);
-      }
-
-      function loadModules() {
-        var s = document.createElement('script');
-        s.type = 'module';
-        s.src = './src/boot/boot-loader.js';
-        document.head.appendChild(s);
-      }
-
-      forceMono ? loadMonolith() : loadModules();
-    } catch {}
-  })(window);
+  <!-- Single dev module loader: import source entry directly -->
+  <script type="module">
+    window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
+    window.__TP_BOOT_INFO = { path: 'dev', isDev: true, imported: false };
+    import './src/index.js'
+      .then(() => { window.__TP_BOOT_INFO.imported = true; window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev ok'}); })
+      .catch(e  => { window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev fail', err:String(e)}); });
   </script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
@@ -90,7 +73,7 @@
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
 
-  <!-- Loader is selected above (monolith or modules). No additional booters here. -->
+  <!-- Single loader above; no additional booters here. -->
 
   <!-- App store & centralized Settings wiring -->
   <script src="src/state/app-store.js"></script>
