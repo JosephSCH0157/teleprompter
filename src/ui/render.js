@@ -1,5 +1,15 @@
 // Minimal script renderer: converts editor text into .line elements inside #script
 
+function getRoleColor(role) {
+  try {
+    const inp = document.getElementById('color-' + role);
+    const v = (inp && 'value' in inp) ? String(inp.value || '').trim() : '';
+    if (v) return v;
+  } catch {}
+  const DEF = { s1: '#2ea8ff', s2: '#ffd24a', g1: '#25d08a', g2: '#b36cff' };
+  return DEF[role] || '#9fb4c9';
+}
+
 export function renderScript(text = '') {
   try {
     const host = document.getElementById('script');
@@ -13,7 +23,14 @@ export function renderScript(text = '') {
 
     // Render
     host.innerHTML = '';
-    for (const ln of lines) {
+    let curRole = null; // s1|s2|g1|g2 or null
+    for (const raw of lines) {
+      const ln = String(raw || '');
+      const tag = ln.trim().toLowerCase();
+      const mOpen = tag.match(/^\[(s1|s2|g1|g2)\]$/);
+      const mClose = tag.match(/^\[\/(s1|s2|g1|g2)\]$/);
+      if (mOpen) { curRole = mOpen[1]; continue; }
+      if (mClose) { if (curRole === mClose[1]) curRole = null; continue; }
       if (ln.trim() === '') { // blank spacer line
         const div = document.createElement('div');
         div.className = 'line';
@@ -24,6 +41,9 @@ export function renderScript(text = '') {
       const div = document.createElement('div');
       div.className = 'line';
       div.textContent = ln;
+      if (curRole) {
+        try { div.style.color = getRoleColor(curRole); } catch {}
+      }
       host.appendChild(div);
     }
 
