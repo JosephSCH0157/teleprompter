@@ -3,14 +3,22 @@
   // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
   const DEVICE_KEY = 'tp_mic_device_v1';
   const OBS_ENABLED_KEY = 'tp_obs_enabled';
+  const OBS_SCENE_KEY = 'tp_obs_scene';
+  const OBS_RECONNECT_KEY = 'tp_obs_reconnect';
   const AUTO_RECORD_KEY = 'tp_auto_record';
+  const PREROLL_SEC_KEY = 'tp_preroll_seconds';
+  const DEV_HUD_KEY = 'tp_dev_hud';
   const SETTINGS_TAB_KEY = 'tp_settings_tab';
 
   const persistMap = {
     settingsTab: SETTINGS_TAB_KEY,
     micDevice: DEVICE_KEY,
     obsEnabled: OBS_ENABLED_KEY,
+    obsScene: OBS_SCENE_KEY,
+    obsReconnect: OBS_RECONNECT_KEY,
     autoRecord: AUTO_RECORD_KEY,
+    prerollSeconds: PREROLL_SEC_KEY,
+    devHud: DEV_HUD_KEY,
   };
 
   const state = {
@@ -18,14 +26,17 @@
     settingsTab: (function(){ try { return localStorage.getItem(SETTINGS_TAB_KEY) || 'general'; } catch { return 'general'; } })(),
     micDevice: (function(){ try { return localStorage.getItem(DEVICE_KEY) || ''; } catch { return ''; } })(),
     obsEnabled: (function(){ try { return localStorage.getItem(OBS_ENABLED_KEY) === '1'; } catch { return false; } })(),
+  obsScene: (function(){ try { return localStorage.getItem(OBS_SCENE_KEY) || ''; } catch { return ''; } })(),
+  obsReconnect: (function(){ try { return localStorage.getItem(OBS_RECONNECT_KEY) === '1'; } catch { return false; } })(),
     autoRecord: (function(){ try { return localStorage.getItem(AUTO_RECORD_KEY) === '1'; } catch { return false; } })(),
+  prerollSeconds: (function(){ try { const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY)||'3',10); return isFinite(n) ? Math.max(0, Math.min(10, n)) : 3; } catch { return 3; } })(),
+  devHud: (function(){ try { return localStorage.getItem(DEV_HUD_KEY) === '1'; } catch { return false; } })(),
 
     // transient session state (not persisted)
-    obsUrl: '',
-    obsPort: '',
-    obsSecure: false,
-    obsScene: '',
-    obsPassword: '',
+  obsUrl: '',
+  obsPort: '',
+  obsSecure: false,
+  obsPassword: '',
   };
 
   const subs = Object.create(null);
