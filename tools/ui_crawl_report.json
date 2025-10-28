@@ -249,9 +249,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "9daeebdc5c6cecd2269a1e597cc1cdeaa4971dd7",
+      "gitSha": "35be54bac6063180978f45e690a91f27abc2a8f8",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-28T16:13:10.391Z"
+      "buildTime": "2025-10-28T16:28:48.523Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -302,14 +302,22 @@
   },
   "hotkeysProbe": {
     "supported": true,
-    "beforeTop": 0,
-    "beforeMarker": 352,
-    "afterPD": {
-      "scrollTop": 0,
-      "markerTop": 328,
-      "idx": null
+    "before": {
+      "idx": null,
+      "top": 352,
+      "st": 0
+    },
+    "after": {
+      "idx": null,
+      "top": 288,
+      "st": 0
     },
     "ok": true
+  },
+  "autoScrollUi": {
+    "was": "Auto-scroll: Off",
+    "now": "Auto-scroll: Off",
+    "ok": false
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }
