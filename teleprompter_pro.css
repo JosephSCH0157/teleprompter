@@ -295,6 +295,8 @@ body.ck::after{
 .chip.obs-connected{background:#06371a;color:#dfffe8;border-color:#3CE07A}
 .chip.obs-reconnecting{background:#31250f;color:#fff6e8;border-color:#E0A43C}
 .chip.idle{background:#0e141b;color:var(--muted);border-color:var(--edge)}
+/* Recording emphasis for generic chips (used by #obsChip) */
+.chip-live{ background: rgba(229,57,53,.18); border-color: rgba(229,57,53,.5); }
 
 /* Inline OBS test message */
 .obs-test-msg{font-size:13px;padding:6px 8px;border-radius:8px}

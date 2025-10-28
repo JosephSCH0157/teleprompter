@@ -266,6 +266,31 @@ function installDbMeter() {
   });
 }
 
+// Tiny OBS status chip: creates #obsChip once and updates on tp:obs events
+function installObsChip() {
+  once('obs-chip', () => {
+    try {
+      const topbar = document.querySelector('.topbar') || document.body;
+      let chip = document.getElementById('obsChip');
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.id = 'obsChip';
+        chip.className = 'chip';
+        chip.textContent = 'OBS: disconnected';
+        topbar && topbar.appendChild(chip);
+      }
+      const render = ({ status = 'disconnected', recording = false, scene } = {}) => {
+        try {
+          chip.textContent = `OBS: ${status}${recording ? ' • REC' : ''}${scene ? ` • ${scene}` : ''}`;
+          chip.classList.toggle('chip-live', !!recording);
+        } catch {}
+      };
+      render();
+      window.addEventListener('tp:obs', (e) => { try { render((e && e.detail) || {}); } catch {} });
+    } catch {}
+  });
+}
+
 function wireOverlays() {
   once('overlays', () => {
     try {
@@ -450,6 +475,7 @@ export function bindStaticDom() {
     wireUpload();
     installSpeakerIndex();
     installDbMeter();
+    installObsChip();
   initSelfChecksChip();
     // Speakers section toggle (show/hide panel body)
     try {
