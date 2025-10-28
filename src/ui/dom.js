@@ -62,6 +62,7 @@ function wireDisplayMirror() {
     document.documentElement.dataset.displayMirrorWired = '1';
 
     const viewer = $('viewer');
+    const scriptEl = $('script');
     // Throttled scroll mirroring (send ratio for resolution independence)
     let scrollPending = false;
     const sendScroll = () => {
@@ -96,15 +97,29 @@ function wireDisplayMirror() {
     // Initial push once inputs are present (small delay to allow boot)
     setTimeout(sendTypography, 0);
 
-    // Content render mirroring: listen for our renderer's event
-    document.addEventListener('tp:script-rendered', () => {
+    // Content render mirroring: listen for our renderer's event and also observe #script for any DOM changes
+    let renderPending = false;
+    const sendRender = () => {
       try {
         const html = document.getElementById('script')?.innerHTML || '';
         const fontSize = fs && 'value' in fs ? Number(fs.value) : undefined;
         const lineHeight = lh && 'value' in lh ? Number(lh.value) : undefined;
         window.sendToDisplay && window.sendToDisplay({ type: 'render', html, fontSize, lineHeight });
-      } catch {}
+      } finally {
+        renderPending = false;
+      }
+    };
+    document.addEventListener('tp:script-rendered', () => {
+      if (!renderPending) { renderPending = true; requestAnimationFrame(sendRender); }
     });
+    try {
+      if (scriptEl) {
+        const mo = new MutationObserver(() => {
+          if (!renderPending) { renderPending = true; requestAnimationFrame(sendRender); }
+        });
+        mo.observe(scriptEl, { childList: true, subtree: true });
+      }
+    } catch {}
   } catch {}
 }
 
