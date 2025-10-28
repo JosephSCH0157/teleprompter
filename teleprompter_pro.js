@@ -3735,6 +3735,29 @@ let _toast = function (msg, opts) {
       }, { passive: false });
     } catch {}
 
+    // Shift + Wheel over viewer to adjust font size without Ctrl/Cmd
+    try {
+      const clamp2 = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const viewer = document.getElementById('viewer');
+      if (viewer) {
+        viewer.addEventListener('wheel', (e) => {
+          try {
+            if (!e.shiftKey || e.ctrlKey || e.metaKey) return; // require Shift only
+            const tag = (e.target && e.target.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+            e.preventDefault();
+            const root = document.documentElement;
+            const cs = getComputedStyle(root);
+            const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+            const step = 2;
+            const next = clamp2(curPx + (e.deltaY < 0 ? step : -step), 18, 120);
+            root.style.setProperty('--tp-font-size', next + 'px');
+            try { localStorage.setItem('tp_font_size_v1', String(next)); } catch {}
+          } catch {}
+        }, { passive: false });
+      }
+    } catch {}
+
     // ===== Progressive Fallback Nudge =====
     (function () {
       const F = {
