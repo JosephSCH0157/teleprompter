@@ -11,9 +11,15 @@
     // existence
     must('.topbar');
     must('#viewer');
-    ['#presentBtn','#settingsBtn','#shortcutsBtn','#speakerIndexChip','#dbMeter',
+    ['#presentBtn','#settingsBtn','#shortcutsBtn','#speakerIndexChip',
      '#settingsOverlay','#settingsClose','#shortcutsOverlay','#shortcutsClose']
      .forEach(id => must(id));
+
+    // Accept either legacy bottom meter (#dbMeter) or current top-bar meter (#dbMeterTop)
+    (function () {
+      const hasMeter = q('#dbMeterTop') || q('#dbMeter');
+      if (!hasMeter) fails.push('#dbMeter missing');
+    })();
 
     // topbar hairline present?
     try {
@@ -21,11 +27,15 @@
       if (!st || st.borderBottomWidth === '0px') fails.push('topbar hairline missing');
     } catch {}
 
-    // paste hint exists (either #emptyHint or editor placeholder contains "Paste")
+    // paste hint exists (either #emptyHint, current .empty-msg banner, or editor placeholder contains "Paste")
     (function () {
       const ed = document.getElementById('editor');
       const hint = document.getElementById('emptyHint');
-      const ok = !!hint || (ed && 'placeholder' in ed && /\bpaste\b/i.test(ed.placeholder||''));
+      const banner = document.querySelector('.empty-msg');
+      const ok = !!hint
+        || !!banner
+        || (ed && 'placeholder' in ed && /\bpaste\b/i.test(ed.placeholder||''))
+        || (banner && /\bpaste\b/i.test(String(banner.textContent||'')));
       if (!ok) fails.push('paste-script hint missing');
     })();
 
