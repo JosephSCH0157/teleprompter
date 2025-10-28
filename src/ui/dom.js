@@ -150,11 +150,7 @@ function installSpeakerIndex() {
 function installDbMeter() {
   once('db-meter', () => {
     try {
-      // Detailed bar + text (bottom/inline)
-      const text = document.getElementById('dbText');
-      const bar = document.querySelector('#dbMeter .bar i');
-
-      // Top-bar compact meter (build if needed)
+      // Top-bar compact meter (single source of truth)
       const hostTop = document.getElementById('dbMeterTop');
       let topFill = null;
       if (hostTop && !hostTop.dataset.wired) {
@@ -174,11 +170,8 @@ function installDbMeter() {
       const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
       const render = (db = NaN, peak = NaN) => {
         try {
-          // Update detailed meter
-          if (text) text.textContent = Number.isFinite(db) ? `${Math.round(db)} dB` : '— dB';
           const val = Number.isFinite(peak) ? peak : (Number.isFinite(db) ? db : -60);
           const pct = (clamp(val, -60, 0) + 60) / 60; // map -60..0 → 0..1
-          if (bar) bar.style.transform = `scaleX(${pct})`;
           if (topFill) topFill.style.transform = `scaleX(${pct})`;
         } catch {}
       };

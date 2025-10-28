@@ -28,7 +28,8 @@ export function installEasterEggs() {
   });
 
   // dB meter party mode (5 clicks within 1.2s)
-  const meter = document.getElementById('dbMeter');
+  // Use top-bar meter as the single source of truth; fall back to legacy if present
+  const meter = document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
   if (meter) {
     let clicks = 0,
       t0 = 0;
