@@ -47,16 +47,62 @@
         '',
         '<div data-tab-content="recording" style="display:none">',
         '  <h4>Recording</h4>',
-        '  <div class="row">Recording settings live here.</div>',
+        '  <div class="row">',
+        '    <label><input type="checkbox" id="settingsAutoRecord"/> Auto-record on start</label>',
+        '  </div>',
+        '  <div class="row">',
+        '    <label>Pre-roll (sec) <input id="settingsPreroll" type="number" min="0" max="10" step="1" class="select-md"/></label>',
+        '  </div>',
+        '  <h4>OBS</h4>',
+        '  <div class="row">',
+        '    <label><input type="checkbox" id="settingsEnableObs"/> Enable OBS</label>',
+        '  </div>',
+        '  <div class="row">',
+        '    <label>Scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name"/></label>',
+        '    <label><input type="checkbox" id="settingsObsReconnect"/> Auto-reconnect</label>',
+        '  </div>',
         '</div>',
         '',
         '<div data-tab-content="advanced" style="display:none">',
         '  <h4>Advanced</h4>',
-        '  <div class="row">Advanced settings.</div>',
+        '  <div class="row">',
+        '    <label><input type="checkbox" id="settingsDevHud"/> Enable HUD (dev only)</label>',
+        '  </div>',
+        '  <div class="row">',
+        '    <button id="settingsResetState" class="chip">Reset app state</button>',
+        '  </div>',
         '</div>'
       ].join('\n');
       rootEl.innerHTML = html;
       rootEl.dataset.mounted = '1';
+    } catch {}
+  }
+
+  function populateDevices() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+      navigator.mediaDevices.enumerateDevices().then((devs) => {
+        const mics = devs.filter(d => d.kind === 'audioinput');
+        const cams = devs.filter(d => d.kind === 'videoinput');
+        const fill = (id, list) => {
+          try {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const prev = el.value;
+            el.innerHTML = '';
+            list.forEach((d) => {
+              const opt = document.createElement('option');
+              opt.value = d.deviceId;
+              opt.textContent = d.label || (d.kind === 'audioinput' ? 'Microphone' : 'Camera');
+              el.appendChild(opt);
+            });
+            if (prev && Array.from(el.options).some(o => o.value === prev)) el.value = prev;
+          } catch {}
+        };
+        fill('settingsMicSel', mics);
+        fill('micDeviceSel', mics); // keep main panel in sync if present
+        fill('settingsCamSel', cams);
+      }).catch(() => {});
     } catch {}
   }
 
@@ -78,6 +124,30 @@
       // Ensure a default tab is visible on first open
       const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
       showTab(active && active.getAttribute('data-tab') || 'general');
+
+      // Wire settings overlay mic buttons (fallback to window.__tpMic when available)
+      try {
+        const reqBtn = q('settingsRequestMicBtn');
+        const relBtn = q('settingsReleaseMicBtn');
+        if (reqBtn) reqBtn.addEventListener('click', async () => { try { await (window.__tpMic?.requestMic?.() || Promise.resolve()); } catch {} });
+        if (relBtn) relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} });
+      } catch {}
+
+      // Wire mic device selector (persist to store when available; mirror main panel select)
+      try {
+        const sel = q('settingsMicSel');
+        if (sel) sel.addEventListener('change', () => {
+          try { if (hasStore) S.set('micDevice', sel.value); } catch {}
+          try { const main = q('micDeviceSel') || q('micDevice'); if (main && main.value !== sel.value) main.value = sel.value; } catch {}
+        });
+        if (hasStore && typeof S.subscribe === 'function') {
+          S.subscribe('micDevice', (v) => { try { if (sel && sel.value !== v) sel.value = v || ''; } catch {} });
+        }
+      } catch {}
+
+      // Populate devices initially and when device list changes
+      populateDevices();
+      try { navigator.mediaDevices && navigator.mediaDevices.addEventListener && navigator.mediaDevices.addEventListener('devicechange', populateDevices); } catch {}
 
       // Mic device selector
       const settingsMicSel = q('settingsMicSel');
@@ -155,6 +225,8 @@
         try {
           const el = root || document.getElementById('settingsBody');
           buildSettingsContent(el);
+          // ensure latest devices are shown
+          populateDevices();
           // After building, ensure tabs show active one
           const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
           showTab(active && active.getAttribute('data-tab') || 'general');
