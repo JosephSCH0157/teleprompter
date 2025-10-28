@@ -133,12 +133,23 @@ function wireUpload() {
 
 function wirePresentMode() {
   const btn = $('presentBtn');
-  on(btn, 'click', () => {
-    try {
-      const on = document.documentElement.classList.toggle('tp-present');
-      btn.textContent = on ? 'Exit Present' : 'Present Mode';
-    } catch {}
-  });
+  try {
+    // Apply persisted state
+    const KEY = 'tp_present';
+    let initial = false;
+    try { initial = (localStorage.getItem(KEY) === '1'); } catch {}
+    document.documentElement.classList.toggle('tp-present', !!initial);
+    if (btn) btn.textContent = initial ? 'Exit Present' : 'Present Mode';
+    // Toggle + persist
+    on(btn, 'click', () => {
+      try {
+        const next = !document.documentElement.classList.contains('tp-present');
+        document.documentElement.classList.toggle('tp-present', next);
+        btn.textContent = next ? 'Exit Present' : 'Present Mode';
+        try { localStorage.setItem(KEY, next ? '1' : '0'); } catch {}
+      } catch {}
+    });
+  } catch {}
 }
 
 export function bindStaticDom() {

@@ -81,4 +81,28 @@
   }
 
   try { window.__tpCamera = window.__tpCamera || {}; window.__tpCamera.startCamera = startCamera; window.__tpCamera.stopCamera = stopCamera; window.__tpCamera.switchCamera = switchCamera; window.__tpCamera.applyCamSizing = applyCamSizing; window.__tpCamera.applyCamOpacity = applyCamOpacity; window.__tpCamera.applyCamMirror = applyCamMirror; } catch {}
+  // Aliases for simplified API expected by some callers
+  try {
+    window.__tpCamera = window.__tpCamera || {};
+    // start/stop aliases
+    if (!window.__tpCamera.start) window.__tpCamera.start = startCamera;
+    if (!window.__tpCamera.stop) window.__tpCamera.stop = stopCamera;
+    // setDevice alias -> switchCamera
+    if (!window.__tpCamera.setDevice) window.__tpCamera.setDevice = (id) => { try { switchCamera(id); } catch {} };
+    // setSize alias -> set input value and apply
+    if (!window.__tpCamera.setSize) window.__tpCamera.setSize = (pct) => {
+      try { const el = document.getElementById('camSize'); if (el) el.value = String(Math.max(15, Math.min(60, Number(pct)||28))); } catch {}
+      try { applyCamSizing(); } catch {}
+    };
+    // setOpacity alias -> set input value and apply
+    if (!window.__tpCamera.setOpacity) window.__tpCamera.setOpacity = (op) => {
+      try { const el = document.getElementById('camOpacity'); if (el) el.value = String(Math.max(20, Math.min(100, Number(op)||100))); } catch {}
+      try { applyCamOpacity(); } catch {}
+    };
+    // setMirror alias -> set checkbox and apply
+    if (!window.__tpCamera.setMirror) window.__tpCamera.setMirror = (on) => {
+      try { const el = document.getElementById('camMirror'); if (el) el.checked = !!on; } catch {}
+      try { applyCamMirror(); } catch {}
+    };
+  } catch {}
 })();
