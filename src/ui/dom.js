@@ -255,43 +255,47 @@ function loadRoles() {
 }
 
 function updateLegend() {
-  once('legend', () => {
-    try {
-      const legend = document.getElementById('legend');
-      if (!legend) return;
-      const ROLES = loadRoles();
-      legend.innerHTML = '';
-      for (const key of ROLE_KEYS) {
-        const item = ROLES[key];
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        const dot = document.createElement('span');
-        dot.className = 'dot';
-        dot.style.background = item.color;
-        const name = document.createElement('span');
-        // Prefer live input value if provided; else show canonical tag (S1/S2/G1/G2) to avoid implying set names
-        try {
-          const input = document.getElementById('name-' + key);
-          const val = (input && 'value' in input) ? String(input.value || '').trim() : '';
-          name.textContent = val || key.toUpperCase();
-        } catch { name.textContent = key.toUpperCase(); }
-        tag.appendChild(dot);
-        tag.appendChild(name);
-        legend.appendChild(tag);
-      }
-      // Re-render when user types names
+  try {
+    const legend = document.getElementById('legend');
+    if (!legend) return;
+    const ROLES = loadRoles();
+    legend.innerHTML = '';
+    for (const key of ROLE_KEYS) {
+      const item = ROLES[key];
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      // Prefer live color input value if provided; else stored default
       try {
-        const handler = (e) => {
+        const colorInput = document.getElementById('color-' + key);
+        const c = (colorInput && 'value' in colorInput) ? String(colorInput.value || '').trim() : '';
+        dot.style.background = c || item.color;
+      } catch { dot.style.background = item.color; }
+      const name = document.createElement('span');
+      // Prefer live input value if provided; else show canonical tag (S1/S2/G1/G2)
+      try {
+        const input = document.getElementById('name-' + key);
+        const val = (input && 'value' in input) ? String(input.value || '').trim() : '';
+        name.textContent = val || key.toUpperCase();
+      } catch { name.textContent = key.toUpperCase(); }
+      tag.appendChild(dot);
+      tag.appendChild(name);
+      legend.appendChild(tag);
+    }
+    // One-time input wiring to re-render on user changes
+    try {
+      if (!document.documentElement.dataset.legendWired) {
+        document.documentElement.dataset.legendWired = '1';
+        document.addEventListener('input', (e) => {
           try {
             const id = (e && e.target && e.target.id) ? String(e.target.id) : '';
-            if (/^name-(s1|s2|g1|g2)$/.test(id)) updateLegend();
+            if (/^(name|color)-(s1|s2|g1|g2)$/.test(id)) updateLegend();
           } catch {}
-        };
-        document.removeEventListener('input', handler);
-        document.addEventListener('input', handler);
-      } catch {}
+        });
+      }
     } catch {}
-  });
+  } catch {}
 }
 
 function ensureEmptyBanner() {
