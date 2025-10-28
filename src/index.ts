@@ -19,7 +19,7 @@ import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
 import { applyTypographyTo } from './features/typography';
-import { onTypography, setTypography, getTypography } from './settings/typographyStore';
+import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
