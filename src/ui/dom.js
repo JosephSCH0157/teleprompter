@@ -33,9 +33,10 @@ function wireDisplayBridge() {
   // Bridge wrappers for legacy global API expected by some helpers/self-checks
   try {
     const disp = (window.__tpDisplay || {});
-    if (disp && !window.openDisplay) window.openDisplay = () => { try { return disp.openDisplay && disp.openDisplay(); } catch {} };
-    if (disp && !window.closeDisplay) window.closeDisplay = () => { try { return disp.closeDisplay && disp.closeDisplay(); } catch {} };
-    if (disp && !window.sendToDisplay) window.sendToDisplay = (p) => { try { return disp.sendToDisplay && disp.sendToDisplay(p); } catch {} };
+    // Always delegate to the bridge to avoid stale no-op stubs
+    if (disp) window.openDisplay = () => { try { return disp.openDisplay && disp.openDisplay(); } catch {} };
+    if (disp) window.closeDisplay = () => { try { return disp.closeDisplay && disp.closeDisplay(); } catch {} };
+    if (disp) window.sendToDisplay = (p) => { try { return disp.sendToDisplay && disp.sendToDisplay(p); } catch {} };
   } catch {}
 
   // Wire message handler once
