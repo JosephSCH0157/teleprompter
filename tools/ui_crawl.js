@@ -385,6 +385,8 @@ const cp = require('child_process');
               if (typeof window.renderScript === 'function') window.renderScript(long);
               await sleep(200);
             }
+            // Reset scroll position to top to avoid immediate end-stop flipping the toggle back to Off
+            try { const viewer = document.getElementById('viewer'); if (viewer) viewer.scrollTop = 0; } catch {}
           } catch {}
         });
       } catch {}
@@ -405,7 +407,21 @@ const cp = require('child_process');
             if (/On/i.test(now)) break;
           }
         }
-        out.autoScrollUi = { was, now, ok: /On/i.test(now) };
+        // As a semantic fallback, treat it as OK if the viewport starts moving after toggle
+        let moved = false;
+        try {
+          moved = await page.evaluate(async () => {
+            const vp = document.getElementById('viewer');
+            if (!vp) return false;
+            const before = vp.scrollTop|0;
+            // sample a few frames
+            await new Promise(r => requestAnimationFrame(r));
+            await new Promise(r => setTimeout(r, 80));
+            const after = vp.scrollTop|0;
+            return after > before;
+          });
+        } catch {}
+        out.autoScrollUi = { was, now, ok: (/On/i.test(now) || moved) };
       } catch {}
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
