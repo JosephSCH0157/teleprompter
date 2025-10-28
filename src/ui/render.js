@@ -24,6 +24,11 @@ export function renderScript(text = '') {
     // Render
     host.innerHTML = '';
     let curRole = null; // s1|s2|g1|g2 or null
+    const fmt = (s) => {
+      try { if (typeof window.formatInlineMarkup === 'function') return window.formatInlineMarkup(s); } catch {}
+      // fallback escape only
+      try { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); } catch { return String(s||''); }
+    };
     for (const raw of lines) {
       const ln = String(raw || '');
       const tag = ln.trim().toLowerCase();
@@ -40,7 +45,8 @@ export function renderScript(text = '') {
       }
       const div = document.createElement('div');
       div.className = 'line';
-      div.textContent = ln;
+      // inline formatting (safe: formatter escapes first)
+      div.innerHTML = fmt(ln);
       if (curRole) {
         try { div.style.color = getRoleColor(curRole); } catch {}
       }
