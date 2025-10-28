@@ -17,6 +17,8 @@ import { initTelemetry } from './features/telemetry.js';
 // Ensure inline formatter is present (provides window.formatInlineMarkup)
 import '../ui/format.js';
 import '../ui/inline-shim.js';
+// Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
+import './media/display-bridge.js';
 import { initToasts } from './features/toasts.js';
 import * as UI from './ui/dom.js';
 
