@@ -6,7 +6,11 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
   const html = `
     <div data-tab-content="general">
       <h4>General</h4>
-      <div class="row">Application settings will appear here.</div>
+      <div class="row">
+        <label>Font size <input id="settingsFontSize" type="number" min="16" max="96" step="2" class="select-md" /></label>
+        <label>Line height <input id="settingsLineHeight" type="number" min="1.1" max="2" step="0.05" class="select-md" /></label>
+      </div>
+      <div class="settings-small">Applies to both the main script and the external display.</div>
     </div>
 
     <div data-tab-content="media" style="display:none">

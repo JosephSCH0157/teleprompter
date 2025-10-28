@@ -19,6 +19,41 @@ export function mountSettings(rootEl: HTMLElement | null) {
     try { wireSettingsDynamic(rootEl); } catch {}
     try { setupSettingsTabs(rootEl); } catch {}
 
+    // Typography wiring: Settings is source-of-truth; mirror to legacy main inputs and trigger updates
+    try {
+      const fsS = document.getElementById('settingsFontSize') as HTMLInputElement | null;
+      const lhS = document.getElementById('settingsLineHeight') as HTMLInputElement | null;
+      const fsMain = (window as any).$id?.('fontSize') ?? document.getElementById('fontSize');
+      const lhMain = (window as any).$id?.('lineHeight') ?? document.getElementById('lineHeight');
+      const applyFromSettings = () => {
+        try {
+          if (fsS && fsMain) {
+            if ((fsMain as HTMLInputElement).value !== fsS.value) (fsMain as HTMLInputElement).value = fsS.value;
+            try { (fsMain as HTMLInputElement).dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+          }
+          if (lhS && lhMain) {
+            if ((lhMain as HTMLInputElement).value !== lhS.value) (lhMain as HTMLInputElement).value = lhS.value;
+            try { (lhMain as HTMLInputElement).dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+          }
+          try { (window as any).applyTypography && (window as any).applyTypography(); } catch {}
+          try {
+            if (fsS?.value) localStorage.setItem('tp_font_size_v1', String(fsS.value));
+            if (lhS?.value) localStorage.setItem('tp_line_height_v1', String(lhS.value));
+          } catch {}
+        } catch {}
+      };
+      if (fsS) fsS.addEventListener('input', applyFromSettings);
+      if (lhS) lhS.addEventListener('input', applyFromSettings);
+      // Initial sync
+      try {
+        const storedFS = (() => { try { return localStorage.getItem('tp_font_size_v1'); } catch { return null; } })();
+        const storedLH = (() => { try { return localStorage.getItem('tp_line_height_v1'); } catch { return null; } })();
+        if (fsS) fsS.value = ((fsMain as HTMLInputElement | null)?.value) || storedFS || '48';
+        if (lhS) lhS.value = ((lhMain as HTMLInputElement | null)?.value) || storedLH || '1.35';
+        applyFromSettings();
+      } catch {}
+    } catch {}
+
       // Ensure device selects are populated (keeps new and legacy selects in sync)
       try {
         // use the mic API if available, else try a local implementation
