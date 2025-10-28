@@ -467,3 +467,10 @@ html.tp-present .present-exit { display: inline-flex; }
     text-align: center;
     pointer-events: none;
 }
+
+/* Compact Mode selector in topbar */
+.topbar select#scrollMode {
+    background: transparent; color: inherit; border: 1px solid rgba(255,255,255,.2);
+    border-radius: 6px; padding: 2px 8px; font: inherit;
+}
+.topbar label[for="scrollMode"] { margin-right: 6px; }
