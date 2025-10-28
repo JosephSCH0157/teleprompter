@@ -1,5 +1,8 @@
 // Minimal DOM helpers for the UI layer
 
+// Broadcast channel for cross-window display sync (names/colors)
+let __bc = null; try { __bc = new BroadcastChannel('prompter'); } catch {}
+
 function on(el, ev, fn, opts) {
   try { if (el && typeof el.addEventListener === 'function') el.addEventListener(ev, fn, opts); } catch {}
 }
@@ -49,6 +52,59 @@ function wireDisplayBridge() {
   const closeBtn = $('closeDisplayBtn');
   on(openBtn, 'click', () => { try { window.openDisplay && window.openDisplay(); } catch {} });
   on(closeBtn, 'click', () => { try { window.closeDisplay && window.closeDisplay(); } catch {} });
+}
+
+// Mirror main window state to display: scroll position, typography, and content
+function wireDisplayMirror() {
+  try {
+    if (document.documentElement.dataset.displayMirrorWired === '1') return;
+    document.documentElement.dataset.displayMirrorWired = '1';
+
+    const viewer = $('viewer');
+    // Throttled scroll mirroring (send ratio for resolution independence)
+    let scrollPending = false;
+    const sendScroll = () => {
+      try {
+        if (!viewer || !window.sendToDisplay) return;
+        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+        const ratio = max > 0 ? (viewer.scrollTop / max) : 0;
+        window.sendToDisplay({ type: 'scroll', ratio });
+      } finally {
+        scrollPending = false;
+      }
+    };
+    if (viewer) {
+      viewer.addEventListener('scroll', () => {
+        if (!scrollPending) { scrollPending = true; requestAnimationFrame(sendScroll); }
+      }, { passive: true });
+    }
+
+    // Typography mirroring (font size / line height)
+    const fs = $('fontSize');
+    const lh = $('lineHeight');
+    const sendTypography = () => {
+      try {
+        const fontSize = fs && 'value' in fs ? Number(fs.value) : undefined;
+        const lineHeight = lh && 'value' in lh ? Number(lh.value) : undefined;
+        window.sendToDisplay && window.sendToDisplay({ type: 'typography', fontSize, lineHeight });
+      } catch {}
+    };
+    on(fs, 'input', sendTypography);
+    on(lh, 'input', sendTypography);
+
+    // Initial push once inputs are present (small delay to allow boot)
+    setTimeout(sendTypography, 0);
+
+    // Content render mirroring: listen for our renderer's event
+    document.addEventListener('tp:script-rendered', () => {
+      try {
+        const html = document.getElementById('script')?.innerHTML || '';
+        const fontSize = fs && 'value' in fs ? Number(fs.value) : undefined;
+        const lineHeight = lh && 'value' in lh ? Number(lh.value) : undefined;
+        window.sendToDisplay && window.sendToDisplay({ type: 'render', html, fontSize, lineHeight });
+      } catch {}
+    });
+  } catch {}
 }
 
 function wireMic() {
@@ -323,6 +379,24 @@ function updateLegend() {
         });
       }
     } catch {}
+
+    // Broadcast speaker names/colors to display (s1/s2 only for the legend there)
+    try {
+      const getColor = (role, fallback) => {
+        try { const inp = document.getElementById('color-' + role); const v = (inp && 'value' in inp) ? String(inp.value||'').trim() : ''; return v || fallback; } catch { return fallback; }
+      };
+      const getName = (role, fallback) => {
+        try { const inp = document.getElementById('name-' + role); const v = (inp && 'value' in inp) ? String(inp.value||'').trim() : ''; return v || fallback; } catch { return fallback; }
+      };
+      const s1Color = getColor('s1', ROLES.s1.color);
+      const s2Color = getColor('s2', ROLES.s2.color);
+      const s1Name  = getName('s1', 'S1');
+      const s2Name  = getName('s2', 'S2');
+      if (__bc) {
+        try { __bc.postMessage({ type: 'SPEAKER_COLORS', s1: s1Color, s2: s2Color }); } catch {}
+        try { __bc.postMessage({ type: 'SPEAKER_NAMES', s1Name, s2Name }); } catch {}
+      }
+    } catch {}
   } finally {
     try { delete document.documentElement.dataset.legendRendering; } catch {}
   }
@@ -370,6 +444,7 @@ export function bindStaticDom() {
 
     // core feature wiring
     wireDisplayBridge();
+  wireDisplayMirror();
     wireMic();
     wireCamera();
     wireUpload();
