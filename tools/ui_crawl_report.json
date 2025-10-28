@@ -239,8 +239,21 @@
     }
   ],
   "notes": [
+    "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
     "Found 30 candidate controls"
   ],
+  "meta": {
+    "target": {
+      "host": "127.0.0.1",
+      "port": "5180",
+      "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+    },
+    "build": {
+      "gitSha": "bf46f728ccb26bd7653ae6d673af9292628d6b27",
+      "branch": "chore/ts-migration/remove-legacy-matcher-pll",
+      "buildTime": "2025-10-28T16:03:28.551Z"
+    }
+  },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
   "ci": true,
   "fileInputs": [
@@ -276,5 +289,23 @@
     "iWorld": 1,
     "cHello": "rgb(96, 165, 250)",
     "cWorld": "rgb(250, 204, 21)"
-  }
+  },
+  "hudProbe": {
+    "isDevClass": false,
+    "hasHudChildren": false
+  },
+  "hotkeysProbe": {
+    "supported": true,
+    "before": 0,
+    "afterDown": 0,
+    "afterUp": 0,
+    "afterPageDown": 0,
+    "ok": false
+  },
+  "lateProbe": {
+    "supported": true,
+    "approxFps": 0,
+    "jitterStd": 0
+  },
+  "screenshot": "tools\\ui_crawl_screenshot.png"
 }
