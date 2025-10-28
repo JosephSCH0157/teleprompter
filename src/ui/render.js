@@ -54,8 +54,10 @@ export function renderScript(text = '') {
       host.appendChild(div);
     }
 
-    // Nudge hydrator to update empty banner state
-    try { document.dispatchEvent(new CustomEvent('tp:script-rendered')); } catch {}
+  // Nudge hydrator to update empty banner state
+  try { document.dispatchEvent(new CustomEvent('tp:script-rendered')); } catch {}
+  // Notify display-sync pipeline of content change
+  try { window.dispatchEvent(new Event('tp:scriptChanged')); } catch {}
 
     // Restore scrollTop to avoid jumps on re-render
     if (scroller && typeof prevTop === 'number') scroller.scrollTop = prevTop;

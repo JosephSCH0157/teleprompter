@@ -12,6 +12,7 @@
   function openDisplay() {
     try {
       displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
+      try { window.__tpDisplayWindow = displayWin || null; } catch {}
       if (!displayWin) { setStatus && setStatus('Pop-up blocked. Allow pop-ups and try again.'); document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: blocked'); return; }
       displayReady = false;
       const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
@@ -30,7 +31,8 @@
 
   function closeDisplay() {
     try { if (displayWin && !displayWin.closed) displayWin.close(); } catch {}
-  displayWin = null; displayReady = false; const closeDisplayBtn2 = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn2) closeDisplayBtn2.disabled = true; const chip2 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip2) chip2.textContent = 'Display: closed'; try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
+  displayWin = null; displayReady = false; try { window.__tpDisplayWindow = null; } catch {}
+  const closeDisplayBtn2 = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn2) closeDisplayBtn2.disabled = true; const chip2 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip2) chip2.textContent = 'Display: closed'; try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
   }
 
   function sendToDisplay(payload) {
