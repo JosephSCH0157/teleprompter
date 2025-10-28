@@ -14,12 +14,12 @@
 
   (async () => {
     if (isDev) {
-      // DEV: import sources directly, no double-prefixing, no dist attempt
-      await tryImport('/src/boot/boot.js');
+      // DEV: avoid importing TS sources (.ts) via .js path to prevent 404 noise; rely on legacy fallback
+      // The legacy bundle (teleprompter_pro.js) will initialize the app in dev.
       return;
     }
-    // PROD: try dist, fall back to source if dist isn’t present
+    // PROD: try dist; if missing, fall back to legacy bundle handled by the page
     if (await tryImport('/dist/index.js')) return;
-    await tryImport('/src/boot/boot.js');
+    // No further import attempts here; allow page-level fallback to load the legacy bundle.
   })();
 })();
