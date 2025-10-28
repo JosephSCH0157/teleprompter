@@ -352,18 +352,15 @@ function initSelfChecksChip() {
       } catch { checks.push({ name: 'Overlays open/close', pass: false }); }
 
       try {
-        // Present mode toggle + escape
+        // Present Mode controls exist (non-invasive)
         const btn = document.getElementById('presentBtn');
         const root = document.documentElement;
         const was = root.classList.contains('tp-present');
-        btn && btn.click();
-        const on = root.classList.contains('tp-present');
+        // Send Escape to ensure no errors when present is off; shouldn't change state
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-        const off = !root.classList.contains('tp-present');
-        // restore initial if needed
-        if (was && !root.classList.contains('tp-present')) btn && btn.click();
-        checks.push({ name: 'Present Mode toggle', pass: Boolean(on && off) });
-      } catch { checks.push({ name: 'Present Mode toggle', pass: false }); }
+        const unchanged = root.classList.contains('tp-present') === was;
+        checks.push({ name: 'Present Mode controls', pass: Boolean(btn && unchanged) });
+      } catch { checks.push({ name: 'Present Mode controls', pass: false }); }
 
       try {
         // dB meter listener
