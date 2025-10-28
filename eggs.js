@@ -1,6 +1,14 @@
 // Easter eggs and related lightweight UX add-ons
 // This module is safe to import in the browser. It references globals defensively.
 
+// Minimal safe toast shim (avoid hard dependency on module exports)
+function safeToast(msg) {
+  try {
+    const fn = (typeof window !== 'undefined' && window.toast) ? window.toast : (m => console.debug('[toast]', m));
+    fn(String(msg || ''));
+  } catch {}
+}
+
 export function installEasterEggs() {
   // restore theme from localStorage
   try {
@@ -28,7 +36,8 @@ export function installEasterEggs() {
   });
 
   // dB meter party mode (5 clicks within 1.2s)
-  const meter = document.getElementById('dbMeter');
+  // Use top-bar meter as the single source of truth; fall back to legacy if present
+  const meter = document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
   if (meter) {
     let clicks = 0,
       t0 = 0;
@@ -92,7 +101,6 @@ export function roarOverlay() {
   });
 }
 
-import { toast } from './ui/toasts.js';
 
 export function installCKEgg() {
   const enable = (silent = false) => {
@@ -103,7 +111,7 @@ export function installCKEgg() {
     } catch {}
     if (!silent)
       try {
-        toast('CK on');
+        safeToast('CK on');
       } catch {}
   };
   const disable = (silent = false) => {
@@ -114,7 +122,7 @@ export function installCKEgg() {
     } catch {}
     if (!silent)
       try {
-        toast('CK off');
+        safeToast('CK off');
       } catch {}
   };
   // restore

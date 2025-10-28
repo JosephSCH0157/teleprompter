@@ -1,169 +1,4 @@
-/* Teleprompter Pro — JS CLEAN (v1.5.8)
-   - Display handshake + retry pump
-   - SmartTag supports: Name:, Name —, Name >, and block headers >> NAME:
-   - DOCX import via Mammoth (auto‑loads on demand)
-   - dB meter + mic selector
-   - Camera overlay (mirror/size/opacity/PiP)
-   - Auto‑scroll + timer
-   - NEW: Speakers section hide/show with persistence
-*/
-
-// Reinstate IIFE wrapper (was removed causing brace imbalance)
-// runtime-safe import fallback: try require() first, then window globals, then leave undefined
-var moduleToast = null;
-try {
-  if (typeof require === 'function') {
-    try {
-      moduleToast = require('./ui/toasts.js').toast;
-    } catch (e) {
-      void e;
-      moduleToast = null;
-    }
-  }
-} catch (e) {
-  void e;
-}
-try {
-  if (!moduleToast && typeof window !== 'undefined' && window.toast) moduleToast = window.toast;
-} catch (e) {
-  void e;
-}
-// 1) LAN default for OBS
-var DEFAULT_OBS_URL = 'ws://192.168.1.198:4455';
-// Ensure recorder adapters are loaded and exposed globally so OBS adapter exists
-try {
-  if (typeof require === 'function') {
-    try {
-      var RecorderModule = require('./recorders.js');
-      if (typeof window !== 'undefined') window.__recorder = RecorderModule;
-    } catch (e) {
-      void e; /* fallthrough */
-    }
-  }
-} catch (e) {
-  void e;
-}
-try {
-  if (typeof window !== 'undefined' && !window.__recorder) {
-    // last-resort: maybe the module already attached itself globally
-    if (window.__recorder);
-  }
-} catch (e) {
-  void e;
-}
-try {
-  // Emit a lightweight startup log so developers can see adapter availability in the browser console
-  try {
-    const list =
-      window.__recorder && typeof window.__recorder.all === 'function'
-        ? window.__recorder.all().map((a) => a.id || a.label || '(unknown)')
-        : [];
-    console.info('[TP-Pro] __recorder assigned — adapters:', list);
-  } catch (e) {
-    void e;
-    console.info('[TP-Pro] __recorder assigned (no list available)');
-  }
-} catch (e) {
-  void e;
-}
-
-// Developer helper: run the OBS adapter test from the page console and print structured logs.
-try {
-  window.__tpRunObsTest = async function __tpRunObsTest() {
-    try {
-      console.info('[TP-Pro] __tpRunObsTest: starting');
-      let r = window.__recorder;
-      if (!r) {
-        console.warn(
-          '[TP-Pro] __tpRunObsTest: no window.__recorder found — polling for registration (2s max)'
-        );
-        // Poll briefly in case the recorder module registers slightly later
-        for (let i = 0; i < 20 && !r; i++) {
-          await new Promise((res) => setTimeout(res, 100));
-          r = window.__recorder;
-        }
-      }
-      if (!r) {
-        console.error('[TP-Pro] __tpRunObsTest: no window.__recorder found after waiting');
-        return;
-      }
-      if (typeof r.initBuiltIns === 'function') {
-        try {
-          console.info('[TP-Pro] __tpRunObsTest: awaiting initBuiltIns()');
-          await r.initBuiltIns();
-        } catch (e) {
-          console.warn('[TP-Pro] initBuiltIns() threw', e);
-        }
-      }
-      const obs = typeof r.get === 'function' ? r.get('obs') : null;
-      if (!obs) {
-        console.error(
-          '[TP-Pro] __tpRunObsTest: obs adapter missing; adapters:',
-          typeof r.all === 'function' ? r.all().map((a) => a.id || a.label) : '(unknown)'
-        );
-        return;
-      }
-      console.info('[TP-Pro] __tpRunObsTest: found obs adapter', obs);
-      // If the smoke runner injected an OBS config, apply it to the adapter before testing
-      try {
-        if (typeof window !== 'undefined' && window.__OBS_CFG__ && obs && typeof obs.configure === 'function') {
-          try {
-            const c = window.__OBS_CFG__ || {};
-            // Build a ws:// URL if host/port provided, else pass through any url
-            let url = c.url || c.u || '';
-            try {
-              if (!url && c.host) {
-                const host = String(c.host || '').replace(/\/+$/, '');
-                const port = c.port ? String(c.port) : '';
-                url = host.match(/^wss?:\//i) ? host + (port ? ':' + port : '') : 'ws://' + host + (port ? ':' + port : '');
-              }
-            } catch (e) {
-              void e;
-            }
-            const passwd = c.password || c.pass || c.pwd || '';
-            const cfgPatch = {};
-            if (url) cfgPatch.url = url;
-            if (passwd) cfgPatch.password = passwd;
-            if (Object.keys(cfgPatch).length) {
-              try {
-                obs.configure(cfgPatch);
-                console.info('[TP-Pro] __tpRunObsTest: applied __OBS_CFG__ to obs adapter', cfgPatch);
-              } catch (e) {
-                console.warn('[TP-Pro] __tpRunObsTest: failed to apply __OBS_CFG__', e);
-              }
-            }
-          } catch (e) {
-            void e;
-          }
-        }
-      } catch (e) {
-        void e;
-      }
-      try {
-        if (typeof obs.test === 'function') {
-          console.info('[TP-Pro] __tpRunObsTest: calling obs.test()');
-          await obs.test();
-          console.info('[TP-Pro] __tpRunObsTest: obs.test() succeeded');
-        } else if (typeof obs.isAvailable === 'function') {
-          console.info('[TP-Pro] __tpRunObsTest: calling obs.isAvailable()');
-          const ok = await obs.isAvailable();
-          console.info('[TP-Pro] __tpRunObsTest: isAvailable ->', ok);
-        } else {
-          console.warn('[TP-Pro] __tpRunObsTest: obs adapter has no test/isAvailable methods');
-        }
-      } catch (e) {
-        console.error(
-          '[TP-Pro] __tpRunObsTest: obs test failed',
-          e,
-          'adapterLastErr=',
-          typeof obs.getLastError === 'function' ? obs.getLastError() : null
-        );
-      }
-    } catch (outer) {
-      console.error('[TP-Pro] __tpRunObsTest: unexpected error', outer);
-    }
-  };
-} catch {}
+/* Teleprompter Pro — JS CLEAN (v1.5.8) */
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
 let _toast = function (msg, opts) {
@@ -172,23 +7,99 @@ let _toast = function (msg, opts) {
   } catch (e) {
     try {
       console.debug('module toast access failed', e);
-    } catch (e) {
-      void e;
+    } catch (innerErr) {
+      void innerErr;
     }
   }
   try {
     if (typeof window !== 'undefined' && typeof window._toast === 'function')
       return window._toast(msg, opts);
-  } catch (e) {
-    void e;
+  } catch {
+    void 0;
   }
   try {
     console.debug('[toast]', msg, opts || '');
   } catch {}
 };
 
-(function () {
+  (function(){
   'use strict';
+  // Prevent double-loading in the same window/context
+  try {
+    // dev flag early so we can silence noisy warnings in production
+            const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
+            const saveBaseSpeed = window.saveBaseSpeed; // Ensure saveBaseSpeed is defined
+    // idle flag — don't start heavy subsystems until a script exists
+    if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
+    if (window.__TP_ALREADY_BOOTED__) {
+      if (__dev) console.warn('[TP-BOOT] duplicate load blocked');
+      return;
+    }
+    window.__TP_ALREADY_BOOTED__ = true;
+  } catch {}
+  // --- Init-done marker (for smoke/CI) ---
+  (function ensureInitMarker(){
+    if (window.__tp_init_done == null) window.__tp_init_done = false;
+    if (!window.tpMarkInitDone) {
+      window.tpMarkInitDone = function(reason = 'unspecified'){
+        if (window.__tp_init_done) return;
+        window.__tp_init_done = true;
+        try {
+          // Cancel any pending late-init fallback timer when init completes
+          try { if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
+          const ctx = window.opener ? 'Display' : (window.name || 'Main');
+          const v = (window.App && (window.App.version || window.App.appVersion)) || null;
+          // JSON pulse for runners
+          console.log('[TP-INIT]', JSON.stringify({ tp_init_done: true, ctx, appVersion: v, reason }));
+          // Optional: event for listeners
+          window.dispatchEvent(new CustomEvent('tp:init:done', { detail: { ctx, appVersion: v, reason } }));
+  } catch {}
+      };
+    }
+    if (!window.tpMarkInitRunning) {
+      window.tpMarkInitRunning = function() {
+        try {
+          if (window.__tp_init_running) return;
+          window.__tp_init_running = true;
+          try { if (typeof _lateInitTimer !== 'undefined' && _lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
+        } catch {}
+      };
+    }
+  })();
+  // Gate heavy subsystems until a real script is present
+  try {
+    if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
+    if (!window.tpSetHasScript) {
+      window.tpSetHasScript = function (has) {
+        try {
+          // Only set the 'has script' flag once and only when true.
+          // This centralizes the decision and avoids flip-flopping during wiring.
+          if (!has) return; // ignore false/disarm calls
+          if (window.__tp_has_script) return; // already armed
+          window.__tp_has_script = true;
+          // Emit event for test harnesses / debug tools
+          try {
+            window.dispatchEvent(new CustomEvent('tp:script:presence', { detail: { has: window.__tp_has_script } }));
+          } catch {}
+          // Light control hooks: start optional subsystems
+          try {
+            window.__pll_running = true;
+            window.__hud_running = true;
+          } catch {}
+          // Dev-only trace to indicate the script presence was set
+          try { if (window.__TP_DEV) console.debug('[TP-TRACE] tpSetHasScript -> true'); } catch {}
+        } catch {}
+      };
+    }
+  } catch {}
+  // Derive a short context tag for logs (Main vs Display)
+  const TP_CTX = (function () {
+    try {
+      if (window.opener) return 'Display';
+      if (window.name) return window.name;
+    } catch {}
+    return 'Main';
+  })();
   // Flags (URL or localStorage): ?calm=1&dev=1
   try {
     const Q = new URLSearchParams(location.search);
@@ -213,8 +124,8 @@ let _toast = function (msg, opts) {
           return p;
         }
       };
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
     // Dev-only cache bust handled via __TP_ADDV and HTML loader; no top-level await here
     try {
@@ -236,26 +147,46 @@ let _toast = function (msg, opts) {
     try {
       if (CALM) console.info('[TP-Pro] Calm Mode enabled');
     } catch {}
-  } catch (e) {
-    void e;
+  } catch {
+    void 0;
   }
   // Boot instrumentation (added)
   try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      try { performance.mark('app-init-start'); } catch { }
+    }
+  } catch {}
+  try {
     window.__TP_BOOT_TRACE = [];
     const _origLog = console.log.bind(console);
-    const tag = (m) => `[TP-BOOT ${Date.now() % 100000}] ${m}`;
+  const tag = (m) => `[${TP_CTX}] [TP-BOOT ${Date.now() % 100000}] ${m}`;
     // Publish build version for About panel and diagnostics
     try {
-      window.APP_VERSION = '1.6.1';
+      window.APP_VERSION = '1.6.2';
     } catch {}
     window.__tpBootPush = (m) => {
       try {
         const rec = { t: Date.now(), m };
         window.__TP_BOOT_TRACE.push(rec);
-        console.log('[TP-TRACE]', rec.m);
-      } catch (err) {
+        try {
+          console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
+        } catch {
+          console.log('[TP-TRACE]', rec.m);
+        }
+      } catch {
         try {
           console.warn('[TP-TRACE-FAIL]', err);
+        } catch {}
+        // Long-running low-cost poll: keep checking every 5s so that
+        // bridge/recorder instances created later than the initial poll
+        // will still update the status chip. This is intentionally light.
+        try {
+          setInterval(() => {
+            try {
+              if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
+              updateStatus();
+            } catch {}
+          }, 5000);
         } catch {}
       }
     };
@@ -263,8 +194,21 @@ let _toast = function (msg, opts) {
     try {
       window.__obsHandshakeLog = window.__obsHandshakeLog || [];
     } catch {}
-    __tpBootPush('script-enter');
-    _origLog(tag('entered main IIFE'));
+  __tpBootPush('script-enter');
+  _origLog(tag('entered main IIFE'));
+  // robust DOM id finder (first found wins)
+  function $id() {
+    for (var i = 0; i < arguments.length; i++) {
+      try {
+        var id = arguments[i];
+        var el = document.getElementById(id);
+        if (el) return el;
+      } catch {}
+    }
+    return null;
+  }
+  // Late-init timer handle: used to avoid scheduling fallback when init starts later
+  let _lateInitTimer = null;
     window.addEventListener('DOMContentLoaded', () => {
       __tpBootPush('dom-content-loaded');
     });
@@ -278,9 +222,9 @@ let _toast = function (msg, opts) {
           t: Date.now(),
           m: 'onerror:' + (ev?.error?.message || ev?.message),
         });
-      } catch (e) {
-        void e;
-      }
+      } catch {
+          void 0;
+        }
       try {
         console.error('[TP-BOOT onerror]', ev?.error || ev?.message || ev);
       } catch {}
@@ -297,9 +241,92 @@ let _toast = function (msg, opts) {
       } catch {}
     });
     _origLog(tag('installed global error hooks'));
-  } catch (e) {
-    void e;
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          try { performance.mark('boot-global-hooks-installed'); } catch {}
+        }
+      } catch {}
+  } catch {
+    void 0;
   }
+  // HUD counters for quick tuning telemetry
+  try {
+    if (!window.__hudCounters) {
+      window.__hudCounters = {
+        drops: { command: 0, oov: 0, meta: 0 },
+        softAdv: { allowed: 0, blockedLost: 0, frozen: 0 },
+        rescue: { count: 0 },
+      };
+      // Watchdog arm state: only report HUD and run watchdog when armed
+      window.__tp_wd_armed = false;
+      window.tpArmWatchdog = function (on) {
+        try {
+          const prev = !!window.__tp_wd_armed;
+          window.__tp_wd_armed = !!on;
+          if (prev === window.__tp_wd_armed) return;
+          // Reset counters/state when disarming
+          if (!window.__tp_wd_armed) {
+            try {
+              window.__tpMetrics = { ticks: 0, stalls: 0, rescues: 0, lastSample: 0, samples: [] };
+              window.__tpWatchdogState = 'OK';
+            } catch {}
+          }
+          try {
+            if (window.__TP_DEV) console.debug('[TP-TRACE] watchdog', window.__tp_wd_armed ? 'ARM' : 'DISARM');
+          } catch {}
+        } catch {}
+      };
+      setInterval(() => {
+        try {
+          // Only emit HUD counters when a real script exists and the watchdog is explicitly armed.
+          if (!window.__tp_has_script || !window.__tp_wd_armed) return; // idle
+          // Quiet the HUD output unless the watchdog is armed (avoids noisy logs in CI/idle)
+          try {
+            if (!window.__tp_wd_armed) return;
+            console.log('[HUD:counts]', JSON.stringify(window.__hudCounters || {}));
+          } catch {}
+        } catch {}
+      }, 1000);
+    }
+  } catch {}
+
+  // Freeze soft-advance by batches (decremented per match cycle)
+  try {
+    if (typeof window.__freezeBatches === 'undefined') window.__freezeBatches = 0;
+  } catch {}
+    // Expose a small perf helper to measure sections during runtime
+    try {
+      window.__tpPerf = {
+        mark: (n) => { try { performance && performance.mark && performance.mark(n); } catch {} },
+        measure: (name, start, end) => { try { performance && performance.measure && performance.measure(name, start, end); } catch {} },
+        report: () => { try { const m = performance.getEntriesByType('measure'); console.table(m.map(x=>({name:x.name,duration:Math.round(x.duration)}))); } catch {} }
+      };
+    } catch {}
+    // Dev-only paint vitals: capture LCP and CLS when available to pair with perf marks
+    try {
+      if (window.__TP_DEV && typeof PerformanceObserver !== 'undefined') {
+        try {
+          const po = new PerformanceObserver((list) => {
+            try {
+              for (const e of list.getEntries()) {
+                try {
+                  if (e.entryType === 'largest-contentful-paint') {
+                    console.info('[TP-Pro] LCP', Math.round(e.startTime));
+                  } else if (e.entryType === 'layout-shift' && !e.hadRecentInput) {
+                    window.__tpCLS = (window.__tpCLS || 0) + (e.value || 0);
+                    try {
+                      console.info('[TP-Pro] CLS+', (e.value || 0).toFixed(4), 'total=', (window.__tpCLS || 0).toFixed(4));
+                    } catch {}
+                  }
+                } catch {}
+              }
+            } catch {}
+          });
+          try { po.observe({ type: 'largest-contentful-paint', buffered: true }); } catch {}
+          try { po.observe({ type: 'layout-shift', buffered: true }); } catch {}
+        } catch {}
+      }
+    } catch {}
   try {
     __tpBootPush('after-boot-block');
   } catch {}
@@ -317,13 +344,13 @@ let _toast = function (msg, opts) {
         } catch {
           try {
             window.obsCommand({ op: 6, d: { requestType: 'StopRecord', requestId: 'anvil-stop' } });
-          } catch (e) {
-            void e;
+          } catch {
+            void 0;
           }
         }
       }
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
   });
 
@@ -384,8 +411,8 @@ let _toast = function (msg, opts) {
           });
         } catch {}
       }
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
   }
 
@@ -404,8 +431,8 @@ let _toast = function (msg, opts) {
             ) {
               return _initCore();
             }
-          } catch (e) {
-            void e;
+          } catch {
+            void 0;
           }
           if (typeof window._initCore === 'function' && window._initCore !== self) {
             return window._initCore();
@@ -582,14 +609,24 @@ let _toast = function (msg, opts) {
     if (typeof window.init !== 'function') {
       window.init = async function () {
         try {
+          // Prevent concurrent or duplicate init runs
+          if (window.__tp_init_running || window.__tp_init_done) return;
+          window.__tp_init_running = true;
+          try { if (typeof lateInitTimer !== 'undefined' && lateInitTimer) { clearTimeout(lateInitTimer); lateInitTimer = null; } } catch {}
           // If core is already available, run immediately
           if (typeof _initCore === 'function' || typeof window._initCore === 'function') {
-            return (window._initCore || _initCore)();
+            try {
+              const res = await (window._initCore || _initCore)();
+              window.__tp_init_done = true;
+              return res;
+            } finally {
+              window.__tp_init_running = false;
+            }
           }
           try {
             __tpBootPush('window-init-proxy-waiting-core');
-          } catch (e) {
-            void e;
+          } catch {
+            void 0;
           }
           // Wait briefly for core to appear (either via assignment or resolve hook)
           const core = await Promise.race([
@@ -608,16 +645,29 @@ let _toast = function (msg, opts) {
             window.__tpCoreReady?.then(() => window._initCore || _initCore).catch(() => null),
           ]);
           if (typeof core === 'function') {
-            return core();
+            try {
+              const res = await core();
+              window.__tp_init_done = true;
+              return res;
+            } finally {
+              window.__tp_init_running = false;
+            }
           }
           console.warn('[TP-Pro] window.init proxy: core not ready after wait');
           // Use the stable runner which waits until core is ready
           try {
             __tpBootPush('window-init-proxy-waiting-core');
           } catch {}
-          return await window._initCoreRunner();
-        } catch (e) {
-          void e;
+          try {
+            const res = await window._initCoreRunner();
+            window.__tp_init_done = true;
+            return res;
+          } finally {
+            window.__tp_init_running = false;
+          }
+        } catch {
+          window.__tp_init_running = false;
+          throw e;
         }
       };
       __tpBootPush('window-init-proxy-installed');
@@ -651,19 +701,21 @@ let _toast = function (msg, opts) {
                   })(meter);
             } catch {}
           }
+            // Refresh the end spacer and endgame HUD now that layout/padding changed
+            try { refreshEndSpacer(); } catch {}
           window.__tpEarlyInitRan = true;
           try {
             __tpBootPush && __tpBootPush('early-init-fallback');
-          } catch (e) {
-            void e;
+          } catch {
+            void 0;
           }
-        } catch (e) {
-          void e;
+        } catch {
+          void 0;
         }
       });
-    } catch (e) {
-      void e;
-    }
+          } catch {
+            void 0;
+          }
   })();
 
   // Absolute minimal boot (independent of full init) to restore placeholder + meter if script aborts early.
@@ -699,7 +751,7 @@ let _toast = function (msg, opts) {
           try {
             if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
             else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
-          } catch (e) {
+          } catch {
               console.warn('Mini normalize failed', e);
             }
         });
@@ -707,7 +759,7 @@ let _toast = function (msg, opts) {
       try {
         __tpBootPush('minimal-boot');
       } catch {}
-    } catch (e) {
+    } catch {
       console.warn('[TP-Pro] minimalBoot error', e);
     }
   }
@@ -728,7 +780,7 @@ let _toast = function (msg, opts) {
         window.__tpInitCalled = true;
         init();
       }
-        } catch (e) {
+        } catch {
       console.error('[TP-Pro] early force init error', e);
     }
   }, 0);
@@ -747,26 +799,24 @@ let _toast = function (msg, opts) {
       if (typeof init === 'function') {
         window.__tpInitCalled = true;
         try {
-          __tpBootPush('early-init-invoking');
+          try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
+          try { __tpBootPush('early-init-invoking'); } catch {}
+          try { init(); } catch (e) { console.error('init failed (early)', e); }
         } catch {}
-        try {
-          init();
-        } catch {
-          console.error('init failed (early)', e);
-        }
       } else if (typeof window._initCore === 'function') {
         window.__tpInitCalled = true;
         try {
-          __tpBootPush('early-core-invoking');
+          try { window.tpMarkInitRunning && window.tpMarkInitRunning(); } catch {}
+          try { __tpBootPush('early-core-invoking'); } catch {}
+          (async () => {
+            try {
+              await window._initCore();
+              console.log('[TP-Pro] _initCore early path end (success)');
+            } catch (e) {
+              console.error('[TP-Pro] _initCore failed (early path):', e);
+            }
+          })();
         } catch {}
-        (async () => {
-          try {
-            await window._initCore();
-            console.log('[TP-Pro] _initCore early path end (success)');
-          } catch (e) {
-            console.error('[TP-Pro] _initCore failed (early path):', e);
-          }
-        })();
       } else {
         // Shouldn’t happen due to guard, but reset flag to allow later retry
         window.__tpInitCalled = false;
@@ -799,11 +849,17 @@ let _toast = function (msg, opts) {
         Promise.resolve().then(whenInitReady);
       }
     }
-    } catch (e) {
+    } catch {
     console.warn('early init scheduling error', e);
   }
   try {
     __tpBootPush('init-scheduling-early-exited');
+  } catch {}
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      try { performance.mark('app-init-end'); } catch {}
+      try { performance.measure('app-init', 'app-init-start', 'app-init-end'); } catch {}
+    }
   } catch {}
 
   /* ──────────────────────────────────────────────────────────────
@@ -811,7 +867,8 @@ let _toast = function (msg, opts) {
    * ────────────────────────────────────────────────────────────── */
   const log = (...a) => console.log('[TP-Pro]', ...a);
   const warn = (...a) => console.warn('[TP-Pro]', ...a);
-  const err = (...a) => console.error('[TP-Pro]', ...a);
+  const _err = (...a) => console.error('[TP-Pro]', ...a);
+  try { window.err = _err; } catch {}
 
   // Missing constants / safe fallbacks (restored)
   const DEVICE_KEY = 'tp_mic_device_v1';
@@ -895,8 +952,8 @@ let _toast = function (msg, opts) {
       } else {
         _toast = window._toast;
       }
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
 
     // Try to dynamically import the module-based toast and prefer it when available.
@@ -914,7 +971,7 @@ let _toast = function (msg, opts) {
             _toast = m.toast;
           } catch {}
         }
-      } catch (e) {
+      } catch {
         // module not available yet or import failed; keep fallback
         try {
           console.debug('toast module import failed', e);
@@ -992,9 +1049,18 @@ let _toast = function (msg, opts) {
           }
         }
       });
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
+      // Keep bottom padding responsive to viewport changes and refresh end spacer
+      try {
+        window.addEventListener('resize', () => {
+          try {
+            applyBottomPad();
+            refreshEndSpacer();
+          } catch {}
+        }, { passive: true });
+      } catch {}
   }
   try {
     __tpBootPush('after-wireNormalizeButton');
@@ -1010,6 +1076,15 @@ let _toast = function (msg, opts) {
   function buildSettingsContent() {
     const body = document.getElementById('settingsBody');
     if (!body) return;
+    // Idempotency guard: if cards already exist, treat as already-built and sync values.
+    try {
+      if (body.querySelector('.settings-card')) {
+        _settingsBuilt = true;
+        try { syncSettingsValues(); } catch {}
+        try { setupSettingsTabs(); } catch {}
+        return;
+      }
+    } catch {}
     if (_settingsBuilt) {
       if (!body.querySelector('.settings-card')) {
         _settingsBuilt = false;
@@ -1072,7 +1147,7 @@ let _toast = function (msg, opts) {
         <div class="settings-inline-row">
           <label>Size <input id="settingsCamSize" type="number" min="15" max="60" value="${getVal('camSize', 28)}" style="width:70px"></label>
           <label>Opacity <input id="settingsCamOpacity" type="number" min="20" max="100" value="${getVal('camOpacity', 100)}" style="width:80px"></label>
-          <label><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror') ? 'checked' : ''}/> Mirror</label>
+          <label class="tp-check"><input id="settingsCamMirror" type="checkbox" ${isChecked('camMirror') ? 'checked' : ''} aria-label="Mirror camera" /><span>Mirror</span></label>
         </div>
         <div class="settings-small">Camera overlay floats over the script.</div>`
       )
@@ -1096,20 +1171,61 @@ let _toast = function (msg, opts) {
         'Recording',
         'recording',
         `
-        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off">
-          <label><input type="checkbox" id="settingsEnableObs" ${isChecked('enableObs') ? 'checked' : ''}/> Enable OBS</label>
+        <form id="obsSettingsForm" class="settings-inline-row" autocomplete="off" role="region" aria-labelledby="cardRecordingLabel">
+          <h4 id="cardRecordingLabel" class="visually-hidden">Recording settings</h4>
+          <div class="settings-row">
+            <label class="tp-check">
+              <input id="settingsEnableObs" type="checkbox" ${isChecked('enableObs') ? 'checked' : ''} aria-checked="${isChecked('enableObs') ? 'true' : 'false' }" aria-label="Enable OBS" />
+              <span>Enable OBS</span>
+            </label>
+
+            <span class="obs-pill">OBS: <strong id="obsStatusText">unknown</strong></span>
+
+            <label class="tp-field">
+              <span>URL</span>
+              <input id="settingsObsUrl" class="input-url" type="text" placeholder="127.0.0.1" inputmode="url" autocomplete="off" value="${getVal('obsUrl', '')}" />
+            </label>
+
+            <label class="tp-field">
+              <span>Port</span>
+              <input id="settingsObsPort" class="input-port" type="text" placeholder="4455" inputmode="numeric" pattern="[0-9]+" autocomplete="off" value="" />
+            </label>
+
+            <label class="tp-check" title="Use secure WebSocket (wss)">
+              <input id="settingsObsSecure" type="checkbox" ${isChecked('obsSecure') ? 'checked' : ''} />
+              <span>Secure (wss)</span>
+            </label>
+          </div>
+
           <label style="margin-left:12px"><input type="checkbox" id="autoRecordToggle"/> Auto-record with Pre-Roll</label>
-          <span id="obsConnStatus" class="chip" style="margin-left:8px">OBS: unknown</span>
-          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px"></label>
-          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''}/> Auto-reconnect</label>
-          <input id="settingsObsUrl" class="obs-url" type="text" name="obsUrl" autocomplete="url" value="${getVal('obsUrl', 'ws://192.168.1.198:4455')}" placeholder="ws://host:port" />
-          <input id="settingsObsPass" class="obs-pass" type="password" name="obsPassword" autocomplete="current-password" value="${getVal('obsPassword', '')}" placeholder="password" />
-          <label style="margin-left:6px"><input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''}/> Remember password</label>
-          <button id="settingsObsTest" type="button" class="btn-chip">Test</button>
-          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px">Sync & Test</button>
-          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px">Poke</button>
+          <span id="obsConnStatus" class="chip" style="margin-left:8px" role="status" aria-live="polite" aria-atomic="true">OBS: unknown</span>
+          <label style="margin-left:12px">Default scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name" value="${getVal('obsScene', '')}" style="width:160px" aria-label="Default OBS scene" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" enterkeyhint="done"></label>
+          <label style="margin-left:6px"><input type="checkbox" id="settingsObsReconnect" ${isChecked('obsReconnect') ? 'checked' : ''} aria-checked="${isChecked('obsReconnect') ? 'true' : 'false'}/> Auto-reconnect</label>
+          <label class="tp-field">
+            <span>Password</span>
+            <input id="settingsObsPass"
+                   type="password"
+                   placeholder="OBS WebSocket password"
+                   autocomplete="current-password"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   inputmode="text"
+                   enterkeyhint="done"
+                   class="obs-pass"
+                   value="${getVal('obsPassword', '')}" />
+          </label>
+
+          <button id="settingsObsClear" class="btn btn-ghost" type="button" title="Clear session password">Clear</button>
+
+          <label class="tp-check" style="margin-left:6px">
+            <input type="checkbox" id="settingsObsRemember" ${isChecked('obsRemember') ? 'checked' : ''} disabled aria-label="Remember password (disabled)" />
+            <span>Remember password</span>
+          </label>
+          <button id="settingsObsTest" type="button" class="btn-chip" aria-label="Test OBS connection">Test</button>
+          <button id="settingsObsSyncTest" type="button" class="btn-chip" style="margin-left:6px" aria-label="Sync and Test OBS">Sync & Test</button>
+          <button id="settingsObsPoke" type="button" class="btn-chip" style="margin-left:6px" aria-label="Poke OBS">Poke</button>
         </form>
-        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" style="margin-top:8px"></div>
+        <div id="settingsObsTestMsg" class="settings-small obs-test-msg" aria-live="polite" aria-atomic="true" style="margin-top:8px"></div>
   <div class="settings-small">Controls global recorder settings (mirrors panel options).</div>
   <div class="settings-small" style="margin-top:6px; font-size:0.9em; color:#444">Recommended OBS settings: set Recording Filename to <code>Anvil-{date}-{time}</code> (optionally include <code>{scene}</code> or <code>{profile}</code>), and set Container to <strong>mp4</strong> (or use <strong>mkv</strong> with auto-remux on stop for crash-safe recordings).</div>`
       )
@@ -1121,7 +1237,7 @@ let _toast = function (msg, opts) {
         'advanced',
         `
         <div class="settings-inline-row">
-          <label><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''}/> Enable hybrid lock</label>
+          <label class="tp-check"><input type="checkbox" id="settingsHybridLock" ${isChecked('hybridLock') ? 'checked' : ''} aria-label="Enable hybrid lock" /><span>Enable hybrid lock</span></label>
         </div>
         <div class="settings-inline-row">
           <label>Responsiveness <input id="settingsKp" type="number" min="0" max="0.1" step="0.001" value="${getVal('Kp', 0.022)}" style="width:80px"></label>
@@ -1144,7 +1260,7 @@ let _toast = function (msg, opts) {
       syncSettingsValues();
       setupSettingsTabs();
       if (body.querySelector('.settings-card')) _settingsBuilt = true;
-    } catch (e) {
+    } catch {
       console.warn('Settings build failed, will retry', e);
       _settingsBuilt = false;
     }
@@ -1157,13 +1273,13 @@ let _toast = function (msg, opts) {
     // Ensure OBS fields are hydrated from storage and persistence is wired before we mirror values
     try {
       hydrateObsFieldsFromStore();
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
     try {
       wireObsPersistence();
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
     // Mic devices now source-of-truth is settingsMicSel itself; nothing to sync.
     const micSel = document.getElementById('settingsMicSel');
@@ -1201,16 +1317,16 @@ let _toast = function (msg, opts) {
       const obsEnable = document.getElementById('settingsEnableObs');
       const mainEnable = document.getElementById('enableObs');
       if (obsEnable && mainEnable) obsEnable.checked = !!mainEnable.checked;
-    } catch (e) {
-      void e;
+    } catch {
+      void 0;
     }
     try {
       const autoRec = document.getElementById('autoRecordToggle');
       if (autoRec) {
         try {
           autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
-        } catch (e) {
-          void e;
+        } catch {
+          void 0;
         }
         autoRec.addEventListener('change', () => {
           try {
@@ -1246,15 +1362,15 @@ let _toast = function (msg, opts) {
       const rem = document.getElementById('settingsObsRemember');
       if (rem) {
         try {
-          rem.checked = localStorage.getItem('tp_obs_remember') === '1';
-        } catch (e) {
-          void e;
+          // Do not auto-set from storage while diagnosing auth issues; keep unchecked.
+          rem.checked = false;
+        } catch {
+          void 0;
         }
-        // ensure changes to the checkbox re-run save logic
+        // Keep "Remember password" inert for now; notify user when toggled.
         rem.addEventListener('change', () => {
           try {
-            // re-run save logic which will persist or remove stored password based on the checkbox
-            saveObsConfig();
+            _toast && _toast('Remember password disabled for diagnostics', { type: 'info' });
           } catch {}
         });
       }
@@ -1262,8 +1378,8 @@ let _toast = function (msg, opts) {
   }
   try {
     __tpBootPush('after-syncSettingsValues-def');
-  } catch (e) {
-    void e;
+  } catch {
+    void 0;
   }
 
   // Getter for auto-record preference
@@ -1277,17 +1393,14 @@ let _toast = function (msg, opts) {
 
   // Getter for stored OBS password (if any). Use sparingly; storing passwords in localStorage is insecure.
   window.getObsPassword = function () {
-    // Prefer sessionStorage (session-only, more private), then localStorage if remember checked
+    // For diagnostics, only consult the live DOM inputs; do not use persisted storage.
     try {
-      try {
-        const s = sessionStorage.getItem('tp_obs_password');
-        if (s) return s;
-      } catch {}
-      try {
-        const rem = document.getElementById('settingsObsRemember');
-        const p = localStorage.getItem('tp_obs_password');
-        if (p && rem && rem.checked) return p;
-      } catch {}
+      const set = document.getElementById('settingsObsPass');
+      if (set && set.value) return set.value;
+    } catch {}
+    try {
+      const main = document.getElementById('obsPassword');
+      if (main && main.value) return main.value;
     } catch {}
     return '';
   };
@@ -1326,6 +1439,14 @@ let _toast = function (msg, opts) {
     function hideCard(c) {
       if (!c._visible) return; // already hidden
       c._visible = false;
+
+      // take it out of layout so the new card doesn't stack beneath it
+      try {
+        c.style.position = 'absolute';
+        c.style.inset = '0';
+        c.style.width = '100%';
+      } catch {}
+
       c.classList.remove(ANIM_IN);
       c.classList.add(ANIM_OUT);
       c.addEventListener(
@@ -1334,6 +1455,12 @@ let _toast = function (msg, opts) {
           if (e.animationName === 'cardFadeOut') {
             c.classList.remove(ANIM_OUT);
             c.style.display = 'none';
+            // restore flow for when card is shown again
+            try {
+              c.style.position = '';
+              c.style.inset = '';
+              c.style.width = '';
+            } catch {}
           }
         },
         { once: true }
@@ -1341,18 +1468,34 @@ let _toast = function (msg, opts) {
     }
 
     const apply = (name) => {
-      const sel = name || 'general';
+      const tab = name || 'general';
+      // Preserve current scroll position so switching tabs doesn't jump the sheet
+      const prevScroll = sb ? sb.scrollTop : 0;
+      try { localStorage.setItem('tp_settings_tab', tab); } catch {}
+
+      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+
+      // Hide non-selected first
+      cards.forEach((c) => { if (c._visible && c.dataset.tab !== tab) hideCard(c); });
+
+      // Then show the selected card
+      const target = cards.find((c) => c.dataset.tab === tab);
+      if (target) showCard(target);
+
+      // Restore scroll after layout/animation frame
       try {
-        localStorage.setItem('tp_settings_tab', sel);
+        if (sb) requestAnimationFrame(() => { try { sb.scrollTop = prevScroll; } catch {} });
       } catch {}
-      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === sel));
-      cards.forEach((c) => {
-        const show = c.dataset.tab === sel;
-        if (show) showCard(c);
-        else hideCard(c);
-      });
     };
-    tabs.forEach((t) => t.addEventListener('click', () => apply(t.dataset.tab)));
+    tabs.forEach((t) => {
+      t.addEventListener('click', (ev) => {
+        try {
+          apply(t.dataset.tab);
+          // Blur the button to avoid focus-induced scrolling in some browsers
+          try { ev.currentTarget && ev.currentTarget.blur && ev.currentTarget.blur(); } catch {}
+        } catch {}
+      });
+    });
     let last = 'general';
     try {
       last = localStorage.getItem('tp_settings_tab') || 'general';
@@ -1375,8 +1518,8 @@ let _toast = function (msg, opts) {
       setTimeout(() => {
         try {
           runSelfChecks();
-        } catch (e) {
-          void e;
+        } catch {
+          void 0;
         }
       }, 120);
     }
@@ -1387,22 +1530,59 @@ let _toast = function (msg, opts) {
   // when settings were first opened. We hoist it to top-level scope so the call inside
   // buildSettingsContent() succeeds. (See removal of inner duplicate later in init()).
   function wireSettingsDynamic() {
-    // Mic
-    const reqMicBtn = document.getElementById('settingsReqMic');
-    const micSel = document.getElementById('settingsMicSel');
-    if (micSel) {
-      micSel.addEventListener('change', () => {
+    // Mic & dB wiring: use tolerant lookups and de-duped binding
+    (function wireMicAndDbUI() {
+      if (window.__tpMicWired) return; window.__tpMicWired = true;
+
+      const $id_local = window.$id || ((...ids) => document.getElementById(ids[0]));
+
+      const req = $id_local('settingsRequestMicBtn', 'settingsReqMic');
+      const rel = $id_local('settingsReleaseMicBtn', 'settingsReleaseMicBtn');
+      const start = $id_local('settingsStartDbBtn', 'startDbBtn');
+      const stop = $id_local('settingsStopDbBtn', 'stopDbBtn');
+
+      const getSel = () => $id_local('settingsMicSel', 'micDeviceSel');
+      const getBars = () => document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
+
+      async function doRequestMic() {
         try {
-          localStorage.setItem(DEVICE_KEY, micSel.value);
-        } catch (e) {
-          void e;
-        }
-      });
-    }
-    reqMicBtn?.addEventListener('click', async () => {
-      await micBtn?.click();
-      _toast('Mic requested', { type: 'ok' });
-    });
+          const sel = getSel();
+          const id = sel && sel.value ? sel.value : undefined;
+          if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') return window.__tpMic.requestMic(id);
+          if (typeof window.requestMic === 'function') return window.requestMic(id);
+        } catch {}
+      }
+      function doReleaseMic() {
+        try {
+          if (window.__tpMic && typeof window.__tpMic.releaseMic === 'function') return window.__tpMic.releaseMic();
+          if (typeof window.releaseMic === 'function') return window.releaseMic();
+        } catch {}
+      }
+      function doStartDb() {
+        try {
+          const meter = getBars();
+          if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') return window.__tpMic.startDbMeter(meter);
+          if (typeof window.startDbMeter === 'function') return window.startDbMeter(meter);
+        } catch {}
+      }
+      function doStopDb() {
+        try {
+          if (window.__tpMic && typeof window.__tpMic.clearBars === 'function') return window.__tpMic.clearBars();
+          if (typeof window._stopDbMeter === 'function') return window._stopDbMeter();
+        } catch {}
+      }
+
+      const binder = window.$bindOnce || ((el, t, h) => el && el.addEventListener(t, h));
+
+      binder(req, 'click', () => { try { doRequestMic(); _toast && _toast('Mic requested', { type: 'ok' }); } catch {} }, 'micReq');
+      binder(rel, 'click', () => { try { doReleaseMic(); _toast && _toast('Mic released', { type: 'ok' }); } catch {} }, 'micRel');
+      binder(start, 'click', () => { try { doStartDb(); } catch {} }, 'dbStart');
+      binder(stop, 'click', () => { try { doStopDb(); } catch {} }, 'dbStop');
+
+      // keep both selects populated (new + legacy hidden)
+      try { if (window.__tpMic && typeof window.__tpMic.populateDevices === 'function') window.__tpMic.populateDevices(); } catch {}
+    })();
+
     // Camera
     const startCamS = document.getElementById('settingsStartCam');
     const stopCamS = document.getElementById('settingsStopCam');
@@ -1454,7 +1634,7 @@ let _toast = function (msg, opts) {
     const showSpk = document.getElementById('settingsShowSpeakers');
     showSpk?.addEventListener('click', () => {
       toggleSpeakersBtn?.click();
-      buildSettingsContent();
+  try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
     });
     document
       .getElementById('settingsNormalize')
@@ -1478,38 +1658,15 @@ let _toast = function (msg, opts) {
         return;
       }
 
-      // Fallback: apply directly via recorder when main toggle isn't in the DOM
+      // If main toggle not present, update recorder settings directly
       try {
-        if (!window.__recorder?.getSettings || !window.__recorder?.setSettings) return;
-        const s = __recorder.getSettings();
-        let selected = (s && Array.isArray(s.selected) ? s.selected.slice() : []).filter((id) => id !== 'obs');
-        if (obsEnable.checked) selected.push('obs');
-
-        const cfgs = { ...(s.configs || {}) };
-        if (!cfgs.obs) {
-          cfgs.obs = {
-            url: obsUrlS?.value || DEFAULT_OBS_URL,
-            password: obsPassS?.value || '',
-          };
-        } else {
-          // keep any current cfg, but honor current settings fields if present
-          if (obsUrlS?.value) cfgs.obs.url = obsUrlS.value;
-          if (typeof obsPassS?.value === 'string') cfgs.obs.password = obsPassS.value;
+        if (__recorder?.getSettings && __recorder?.setSettings) {
+          const s = __recorder.getSettings();
+          let sel = (s.selected || []).filter((id) => id !== 'obs');
+          if (obsEnable.checked) sel.push('obs');
+          __recorder.setSettings({ selected: sel });
         }
-
-        __recorder.setSettings({ selected, configs: cfgs });
-
-        // Optional quick availability check for UX feedback
-        if (obsEnable.checked && __recorder.get('obs')?.isAvailable) {
-          try {
-            const ok = await __recorder.get('obs').isAvailable();
-            _toast(ok ? 'OBS: ready' : 'OBS: offline', { type: ok ? 'ok' : 'error' });
-          } catch {
-            _toast('OBS: offline');
-          }
-        } else {
-          _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
-        }
+        _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
       } catch {}
     });
     // Mirror URL
@@ -1529,34 +1686,22 @@ let _toast = function (msg, opts) {
           mainPass.dispatchEvent(new Event('input', { bubbles: true }));
           mainPass.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      } catch (e) {
-        void e;
+      } catch {
+        void 0;
       }
 
-      try {
-        sessionStorage.setItem('tp_obs_password', obsPassS.value || '');
-      } catch (e) {
-        void e;
-      }
-
-      try {
-        const rem = document.getElementById('settingsObsRemember');
-        if (rem && rem.checked) localStorage.setItem('tp_obs_password', obsPassS.value || '');
-        else localStorage.removeItem('tp_obs_password');
-      } catch (e) {
-        void e;
-      }
+      // Do NOT persist OBS password to storage during diagnostics - use live DOM only.
 
       try {
         const recModule = await loadRecorder();
         const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
         try {
           rec?.reconfigure?.();
-        } catch (e) {
-          void e;
+        } catch {
+          void 0;
         }
-      } catch (e) {
-        void e;
+      } catch {
+        void 0;
       }
     });
     // Proxy test button and surface result via toast
@@ -1572,25 +1717,38 @@ let _toast = function (msg, opts) {
         return;
       }
 
-      // Fallback: direct test via recorder
+      // Fallback: lazy-load bridge or recorder adapter and run test
       try {
-        if (!__recorder?.get || !__recorder.get('obs')) {
+        saveObsConfig();
+      } catch {}
+      try {
+        const bridge = await ensureObsBridge();
+        if (bridge && typeof bridge.getRecordStatus === 'function') {
+          try {
+            await bridge.getRecordStatus();
+            _toast('OBS: ok', { type: 'ok' });
+            return;
+          } catch {
+            // continue to recorder fallback
+          }
+        }
+      } catch {}
+      try {
+        const recModule = await loadRecorder();
+        const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+        if (!rec || typeof rec.test !== 'function') {
           _toast('OBS: adapter missing');
           return;
         }
-        // ensure cfgs reflect the Settings fields before testing
-        try {
-          const s = __recorder.getSettings?.() || { selected: [], configs: {} };
-          const cfgs = { ...(s.configs || {}), obs: { ...(s.configs?.obs || {}) } };
-          if (obsUrlS?.value) cfgs.obs.url = obsUrlS.value;
-          if (typeof obsPassS?.value === 'string') cfgs.obs.password = obsPassS.value;
-          __recorder.setSettings({ configs: cfgs });
-        } catch {}
-
         _toast('OBS: testing…');
-        const ok = await __recorder.get('obs').isAvailable?.();
-        _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
-      } catch {
+        try {
+          const ok = await rec.test();
+          _toast(ok ? 'OBS: ok' : 'OBS: failed', { type: ok ? 'ok' : 'error' });
+        } catch {
+          _toast('OBS: failed', { type: 'error' });
+        }
+      } catch (e) {
+        console.warn('[TP-Pro] settings obs test failed', e);
         _toast('OBS: failed');
       }
     });
@@ -1613,9 +1771,9 @@ let _toast = function (msg, opts) {
           try {
             rec?.reconfigure?.();
           } catch {}
-        } catch (e) {
-          void e;
-        }
+          } catch {
+            void 0;
+          }
         // Run the in-page test if provided
         try {
           if (typeof window.__tpRunObsTest === 'function') {
@@ -1624,7 +1782,7 @@ let _toast = function (msg, opts) {
             // fallback: click existing test button if present
             document.getElementById('obsTestBtn')?.click();
           }
-        } catch (e) {
+        } catch {
           console.warn('[TP-Pro] Sync & Test failed', e);
         }
       } catch {}
@@ -1639,6 +1797,83 @@ let _toast = function (msg, opts) {
       const m = document.getElementById('obsPassword');
       if (m) m.value = obsPassS.value;
     });
+
+    // Persist and wire the top-level Enable OBS toggle
+    const OBS_ENABLED_KEY = 'tp_obs_enabled'; // '1' | '0'
+    function getObsEnabled() {
+      try {
+        return localStorage.getItem(OBS_ENABLED_KEY) === '1';
+      } catch {
+        return false;
+      }
+    }
+    function setObsEnabled(v) {
+      try {
+        localStorage.setItem(OBS_ENABLED_KEY, v ? '1' : '0');
+      } catch {}
+    }
+
+    async function wireObsToggle() {
+      try {
+        // If a centralized store exists, let it drive OBS toggle wiring to avoid duplicate bindings
+        if (window.__tpStore) {
+          const s = window.__tpStore;
+          s.subscribe('obsEnabled', (v) => {
+            try {
+              // lazily mirror to local storage via the existing setObsEnabled helper
+              setObsEnabled(!!v);
+              const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+              if (pill) pill.textContent = v ? 'enabled' : 'disabled';
+            } catch {}
+          });
+          return;
+        }
+        const settingsToggle = document.getElementById('settingsEnableObs');
+        if (!settingsToggle) return;
+
+        // initial state
+        settingsToggle.checked = getObsEnabled();
+
+        // keep a badge/pill in sync if present
+        const updateBadge = (txt) => {
+          const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+          if (pill) {
+            try { pill.textContent = txt; } catch {}
+          }
+        };
+
+        settingsToggle.addEventListener('change', async (e) => {
+          const on = !!e.currentTarget.checked;
+          setObsEnabled(on);
+          try {
+            // prefer recorder adapter
+            const recModule = await loadRecorder();
+            const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+            if (on) {
+              // init may be safe/no-op if already initialized
+              try {
+                await (rec?.init?.() ?? Promise.resolve());
+              } catch {}
+              try {
+                await (rec?.connect?.() ?? Promise.resolve());
+              } catch {}
+              updateBadge('connecting…');
+            } else {
+              try {
+                await (rec?.disconnect?.() ?? Promise.resolve());
+              } catch {}
+              updateBadge('disabled');
+            }
+          } catch (err) {
+            console.warn('[OBS] toggle error', err);
+            updateBadge('error');
+          }
+        });
+      } catch {}
+    }
+
+    // Call wiring after settings are present
+    try { wireObsToggle(); } catch {}
     // PLL Controller
     const hybridLockS = document.getElementById('settingsHybridLock');
     const maxBiasPctS = document.getElementById('settingsMaxBiasPct');
@@ -1669,7 +1904,12 @@ let _toast = function (msg, opts) {
         readout.textContent = `Lead/Lag: ${err}px | Bias: ${bias}% | State: ${state}`;
       }
     };
-    setInterval(updatePLLReadout, 200); // Update 5x per second
+    setInterval(() => {
+      try {
+        if (!window.__tp_has_script || !window.__tp_wd_armed) return;
+        updatePLLReadout();
+      } catch {}
+    }, 200); // Update 5x per second
 
     hybridLockS?.addEventListener('change', () => {
       try {
@@ -1707,13 +1947,13 @@ let _toast = function (msg, opts) {
       const ev = new Event('input');
       ta.dispatchEvent(ev);
       alert('Basic normalization applied.');
-    } catch (e) {
+    } catch {
       alert('Normalize fallback failed: ' + (e && e.message));
     }
   }
   try {
     __tpBootPush('after-fallbackNormalize-def');
-  } catch (e) {
+  } catch {
     void e;
   }
 
@@ -2002,7 +2242,7 @@ let _toast = function (msg, opts) {
         ta.addEventListener('scroll', rebuild, { passive: true });
         wrap.appendChild(overlay);
       }
-    } catch (e) {
+    } catch {
       void e;
     }
 
@@ -2022,7 +2262,7 @@ let _toast = function (msg, opts) {
         recAutoRestart = !!v;
         try {
           localStorage.setItem('tp_rec_autorestart_v1', recAutoRestart ? '1' : '0');
-        } catch (e) {
+        } catch {
           void e;
         }
       },
@@ -2037,6 +2277,8 @@ let _toast = function (msg, opts) {
   let __scrollHelpers = null; // set after scroll-helpers.js loads
   let __anchorObs = null; // set after io-anchor.js loads
   let __scrollCtl = null; // set after scroll-control.js loads
+  // Small helper: add version/cache-buster if provided by the host (kept local)
+  const addV = (p) => (window.__TP_ADDV ? window.__TP_ADDV(p) : p);
   // Recorder lazy loader
   let __rec = null;
   async function loadRecorder() {
@@ -2044,11 +2286,13 @@ let _toast = function (msg, opts) {
     try {
       const addV = window.__TP_ADDV || ((p) => p);
       const m = await import(addV('./recorders.js'));
-      console.debug(
-        '[TP-Pro] recorder module keys:',
-        Object.keys(m),
-        m.default && Object.keys(m.default)
-      );
+      try {
+        const modKeys = m && typeof m === 'object' ? Object.keys(m) : [];
+        const defaultKeys = m && m.default && typeof m.default === 'object' ? Object.keys(m.default) : [];
+        console.debug('[TP-Pro] recorder module keys:', modKeys.length, modKeys, defaultKeys.length, defaultKeys);
+      } catch {
+        try { console.debug('[TP-Pro] recorder module keys: <uninspectable module>'); } catch {}
+      }
       __rec = m;
       if (!__rec || typeof __rec.init !== 'function') {
         console.warn('[TP-Pro] recorders.js loaded but no init() export found');
@@ -2059,6 +2303,25 @@ let _toast = function (msg, opts) {
       return null;
     }
   }
+
+  // Lazy-load the OBS bridge module on-demand. Returns window.__obsBridge when available.
+  let __obsBridgeLoaded = null;
+  async function ensureObsBridge() {
+    try {
+      if (typeof window !== 'undefined' && window.__obsBridge) return window.__obsBridge;
+      if (__obsBridgeLoaded) return __obsBridgeLoaded;
+      const path = addV('./adapters/obsBridge.js');
+      await import(path);
+      __obsBridgeLoaded = typeof window !== 'undefined' ? window.__obsBridge || null : null;
+      return __obsBridgeLoaded;
+    } catch (err) {
+      try { console.warn('[TP-Pro] ensureObsBridge failed', err); } catch {}
+      return null;
+    }
+  }
+
+  // Note: camera recorder is lazy-loaded via loadRecorder(); DOCX/mammoth is handled by
+  // ui/upload.js and exposed via window.ensureMammoth/_ensureMammoth later in this file.
   // ==================================================
   // OBS adapter helper: ensure adapter availability + wrapper
   // ==================================================
@@ -2078,14 +2341,14 @@ let _toast = function (msg, opts) {
               return __obsAdapterWrapper;
             }
           }
-        } catch (e) {
+        } catch {
           void e;
         }
         // brief pause
         await new Promise((res) => setTimeout(res, pollInterval));
       }
       return null;
-    } catch (e) {
+    } catch {
       void e;
       return null;
     }
@@ -2102,7 +2365,7 @@ let _toast = function (msg, opts) {
           'position:fixed;right:8px;bottom:8px;max-width:320px;max-height:200px;overflow:auto;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:6px;border-radius:6px;z-index:99999';
         try {
           document.body.appendChild(el);
-        } catch (e) {
+        } catch {
           void e;
         }
       }
@@ -2111,7 +2374,7 @@ let _toast = function (msg, opts) {
       el.appendChild(line);
       // Trim to last 40 lines
       while (el.childNodes.length > 40) el.removeChild(el.firstChild);
-    } catch (e) {
+    } catch {
       void e;
     }
   }
@@ -2138,41 +2401,41 @@ let _toast = function (msg, opts) {
                 appendObsLogLine(
                   `adapter.${m}(${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(',')})`
                 );
-              } catch (e) {
+              } catch {
                 void e;
               }
               try {
                 const res = await orig(...args);
                 try {
                   appendObsLogLine(`adapter.${m} -> ok`);
-                } catch (e) {
+                } catch {
                   void e;
                 }
                 return res;
-              } catch (err) {
+              } catch {
                 try {
                   appendObsLogLine(
                     `adapter.${m} -> error ${err && err.message ? err.message : String(err)}`
                   );
-                } catch (e) {
+                } catch {
                   void e;
                 }
                 throw err;
               }
             };
           }
-        } catch (e) {
+        } catch {
           void e;
         }
       }
       try {
         adapter.__wrapped = true;
-      } catch (e) {
-        void e;
+      } catch {
+        void 0;
       }
       appendObsLogLine('adapter wrapped');
       return adapter;
-    } catch (e) {
+    } catch {
       void e;
       return adapter;
     }
@@ -2354,7 +2617,7 @@ let _toast = function (msg, opts) {
     'is',
     'are',
   ]);
-  function extractHighIDFPhrases(tokens, n = 3, topK = 6) {
+  function extractHighIDFPhrases(tokens, n = 3, topK = 10) {
     const out = [];
     if (!Array.isArray(tokens) || tokens.length < n) return out;
     for (let i = 0; i <= tokens.length - n; i++) {
@@ -2393,6 +2656,41 @@ let _toast = function (msg, opts) {
       }
     }
     return hits;
+  }
+  // Anchor search band helper: return surrounding token radius depending on PLL state
+  function getAnchorBand() {
+    try {
+      const LOST = PLL.state === 'LOST' || __tpLost;
+      const LOCKED = PLL.state === 'LOCKED' || false;
+      if (LOST) return 300;
+      if (LOCKED) return 200;
+      return 50;
+    } catch {
+      return 50;
+    }
+  }
+  // Helper: compute in-vocab token ratio for spoken overlap gating
+  function inVocabRatio(tokens, vocabSet) {
+    try {
+      if (!Array.isArray(tokens) || tokens.length === 0) return 0;
+      let n = 0;
+      for (const t of tokens) if (vocabSet.has(t)) n++;
+      return n / tokens.length;
+    } catch {
+      return 0;
+    }
+  }
+
+  const COMMAND_TOKENS = new Set(['scroll', 'ok', 'okay', 'test', 'testing', 'uh', 'um', 'you', 'need', 'to']);
+  function looksLikeCommand(tokens) {
+    try {
+      if (!Array.isArray(tokens) || tokens.length === 0) return false;
+      let c = 0;
+      for (const t of tokens) if (COMMAND_TOKENS.has(t)) c++;
+      return c / Math.max(1, tokens.length) > 0.4;
+    } catch {
+      return false;
+    }
   }
   // Hard-bound current line tracking
   let currentEl = null; // currently active <p> element
@@ -2570,7 +2868,14 @@ let _toast = function (msg, opts) {
     try {
       if (audioStream) audioStream.getTracks().forEach((t) => t.stop());
     } catch {}
+    try {
+      // Close AudioContext to free system resources and allow a fresh one later
+      if (audioCtx && typeof audioCtx.close === 'function') {
+        try { audioCtx.close().catch?.(() => {}); } catch { try { audioCtx.close(); } catch {} }
+      }
+    } catch {}
     audioStream = null;
+    audioCtx = null;
     analyser = null;
     try {
       clearBars(dbMeterTop);
@@ -2585,6 +2890,13 @@ let _toast = function (msg, opts) {
     }
     const ctx = new AC();
     audioCtx = ctx; // retain for suspend/resume when tab visibility changes
+    try {
+      if (typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+        try {
+          await ctx.resume();
+        } catch {}
+      }
+    } catch {}
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
@@ -2650,57 +2962,45 @@ let _toast = function (msg, opts) {
         // Tooltip stats (rounded)
         peakEl.title = `Approx RMS: ${(rms * 100).toFixed(0)}%\nApprox dBFS: ${dbfs === -Infinity ? '–∞' : dbfs.toFixed(1)} dB`;
       }
-      dbAnim = requestAnimationFrame(draw);
+  // Guard dB meter animation: skip when no script or watchdog unarmed
+  try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
+  dbAnim = requestAnimationFrame(draw);
     };
     draw();
   }
 
   async function requestMic() {
     try {
+      if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') {
+        const s = await window.__tpMic.requestMic();
+        audioStream = s || audioStream;
+        return s;
+      }
+      // Fallback to inline behavior if module missing
       const chosenId = getMicSel()?.value || undefined;
       const constraints = { audio: { deviceId: chosenId ? { exact: chosenId } : undefined } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       audioStream = stream;
-      try {
-        permChip && (permChip.textContent = 'Mic: allowed');
-      } catch (e) {
-        void e;
-      }
+      try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
       startDbMeter(stream);
-      // Persist chosen device
-      try {
-        if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId);
-      } catch (e) {
-        void e;
-      }
+      try { if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId); } catch {}
+      return stream;
     } catch (e) {
       warn('Mic denied or failed', e);
-      try {
-        permChip && (permChip.textContent = 'Mic: denied');
-      } catch (e2) {
-        void e2;
-      }
+      try { permChip && (permChip.textContent = 'Mic: denied'); } catch {}
     }
   }
 
   function _releaseMic() {
     try {
-      if (audioStream) {
-        audioStream.getTracks().forEach((t) => {
-          try {
-            t.stop();
-          } catch {}
-        });
+      if (window.__tpMic && typeof window.__tpMic.releaseMic === 'function') {
+        try { window.__tpMic.releaseMic(); } catch {}
+      } else {
+        if (audioStream) audioStream.getTracks().forEach(t=>{ try{t.stop()}catch{} });
+        audioStream = null;
+        try { permChip && (permChip.textContent = 'Mic: released'); } catch {}
+        try { _stopDbMeter(); } catch {}
       }
-    } catch (e) {
-      void e;
-    }
-    audioStream = null;
-    try {
-      permChip && (permChip.textContent = 'Mic: released');
-    } catch {}
-    try {
-      _stopDbMeter();
     } catch {}
   }
 
@@ -2724,7 +3024,7 @@ let _toast = function (msg, opts) {
             micSelB.appendChild(o);
           });
           if (cur && Array.from(micSelB.options).some((o) => o.value === cur)) micSelB.value = cur;
-        } catch (e) {
+        } catch {
           void e;
         }
       }
@@ -2759,7 +3059,7 @@ let _toast = function (msg, opts) {
           sel.value = prefer;
           sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      } catch (e) {
+      } catch {
         void e;
       }
     } catch {
@@ -2773,21 +3073,17 @@ let _toast = function (msg, opts) {
       const loadObsCreds = function () {
         try {
           const url = localStorage.getItem('tp_obs_url') || '';
-          const pass =
-            sessionStorage.getItem('tp_obs_password') ||
-            localStorage.getItem('tp_obs_password') ||
-            '';
+          // Do not load passwords from storage; keep them in-memory only
+          const pass = '';
           const remember = localStorage.getItem('tp_obs_remember') === '1';
           return { url, pass, remember };
         } catch {
           return { url: '', pass: '', remember: false };
         }
       };
-      const { url, pass, remember } = loadObsCreds();
-      const urlMain = document.getElementById('obsUrl');
-      const passMain = document.getElementById('obsPassword');
-      const urlSet = document.getElementById('settingsObsUrl');
-      const passSet = document.getElementById('settingsObsPass');
+  const { url, remember } = loadObsCreds();
+  const urlMain = document.getElementById('obsUrl');
+  const urlSet = document.getElementById('settingsObsUrl');
       const chkMain = document.getElementById('rememberObs');
       const chkSet = document.getElementById('settingsObsRemember');
 
@@ -2795,12 +3091,11 @@ let _toast = function (msg, opts) {
       const hydratedUrl = (url && url.trim()) || DEFAULT_OBS_URL;
       if (hydratedUrl && urlMain && !urlMain.value) urlMain.value = hydratedUrl;
       if (url && urlSet && !urlSet.value) urlSet.value = url;
-      if (pass && passMain && !passMain.value) passMain.value = pass;
-      if (pass && passSet && !passSet.value) passSet.value = pass;
+  // Passwords are intentionally not hydrated from storage
 
-      if (chkMain) chkMain.checked = !!remember;
-      if (chkSet) chkSet.checked = !!remember;
-    } catch (e) {
+  if (chkMain) chkMain.checked = !!remember;
+  if (chkSet) chkSet.checked = !!remember;
+    } catch {
       void e;
     }
   }
@@ -2840,14 +3135,10 @@ let _toast = function (msg, opts) {
           const msgs = document.getElementById('obsDebugMsgs');
           if (!msgs) return;
           msgs.innerHTML = '';
-          const arr =
-            window.__obsHandshakeLog && Array.isArray(window.__obsHandshakeLog)
-              ? window.__obsHandshakeLog
-              : [];
+          const arr = window.__obsHandshakeLog && Array.isArray(window.__obsHandshakeLog) ? window.__obsHandshakeLog : [];
           if (!arr.length) {
             const el = document.createElement('div');
-            el.textContent =
-              'No handshake log available — try enabling dev mode (add ?dev=1 or set window.__TP_DEV = true) and re-run the in-page test (window.__tpRunObsTest()) or click Settings → Test.';
+            el.textContent = 'No handshake log available — try enabling dev mode (add ?dev=1 or set window.__TP_DEV = true) and re-run the in-page test (window.__tpRunObsTest()) or click Settings → Test.';
             msgs.appendChild(el);
             return;
           }
@@ -2861,77 +3152,24 @@ let _toast = function (msg, opts) {
             msgs.appendChild(el);
           });
           msgs.scrollTop = msgs.scrollHeight;
-        } catch (e) {
-          void e;
+        } catch {
+          void 0;
         }
       });
+      // return the panel element so callers can inspect or reuse it
       return p;
     } catch {
-      return null;
+      void 0;
     }
   }
 
-  function obsDebugLog(msg) {
-    try {
-      if (!window.__TP_DEV) return;
-      const p = ensureObsDebugPanel();
-      if (!p) return;
-      const msgs = document.getElementById('obsDebugMsgs');
-      if (!msgs) return;
-      const el = document.createElement('div');
-      el.textContent = `${new Date().toLocaleTimeString()}: ${msg}`;
-      msgs.appendChild(el);
-      // keep scroll at bottom
-      msgs.scrollTop = msgs.scrollHeight;
-    } catch {}
-  }
-
-  function wireObsPersistence() {
-    try {
-      const urlMain = document.getElementById('obsUrl');
-      const passMain = document.getElementById('obsPassword');
-      const chkMain = document.getElementById('rememberObs');
-      const getVals = () => ({
-        url: urlMain?.value?.trim() || '',
-        pass: passMain?.value || '',
-        remember: !!chkMain?.checked,
-      });
-      const commit = () => {
-        try {
-          const v = getVals();
-          if (!v.url && !v.pass) return;
-          try {
-            sessionStorage.setItem('tp_obs_password', v.pass);
-          } catch {}
-          try {
-            localStorage.setItem('tp_obs_url', v.url);
-          } catch {}
-          try {
-            localStorage.setItem('tp_obs_remember', v.remember ? '1' : '0');
-          } catch {}
-          if (!v.remember) {
-            try {
-              localStorage.removeItem('tp_obs_password');
-            } catch {}
-          } else {
-            try {
-              localStorage.setItem('tp_obs_password', v.pass);
-            } catch {}
-          }
-        } catch (e) {
-          void e;
-        }
-      };
-      urlMain?.addEventListener('change', commit);
-      passMain?.addEventListener('change', commit);
-      chkMain?.addEventListener('change', commit);
-    } catch {}
-  }
-
-  // TP: init-minimal
-  // Minimal init to wire the meter pieces and help overlay (internal helper)
   async function __initMinimal() {
     try {
+      // NOTE: previously we eagerly imported obsBridge here which forced the OBS adapter
+      // to initialize during page load. To reduce startup work and make the app
+      // deterministic for CI, we now lazy-load the OBS bridge on-demand via
+      // ensureObsBridge() when the user interacts with OBS controls.
+
       loadRecorder().then((rec) => {
         try {
           if (rec && typeof rec.init === 'function') {
@@ -3230,29 +3468,18 @@ let _toast = function (msg, opts) {
       validateBtn.onclick = () => {
         let msg;
         try {
-          msg = window.validateStandardTags
-            ? window.validateStandardTags(true)
-            : 'Validator missing.';
-        } catch (_e) {
-          msg = 'Validation error: ' + (_e?.message || _e);
-        }
+            msg = window.validateStandardTags
+              ? window.validateStandardTags(true)
+              : 'Validator missing.';
+          } catch (_e) {
+            msg = 'Validation error: ' + (_e?.message || _e);
+          }
         try {
           window.showValidation(msg);
         } catch {
           showCopyDialog(msg, 'Validator');
         }
       };
-    }
-  }
-  try {
-    __tpBootPush('after-ensureHelpUI-def');
-  } catch (e) {
-    void e;
-  }
-
-  function _injectHelpPanel() {
-    try {
-      const btn = document.getElementById('shortcutsBtn');
       const modal = document.getElementById('shortcutsOverlay');
       const title = document.getElementById('shortcutsTitle');
       const _close = document.getElementById('shortcutsClose');
@@ -3341,7 +3568,7 @@ let _toast = function (msg, opts) {
             setStatus && setStatus('Normalized.');
           }
         } catch (err) {
-          void err;
+          void 0;
         }
       });
 
@@ -3350,8 +3577,11 @@ let _toast = function (msg, opts) {
           const src = typeof editor !== 'undefined' && editor ? editor.value : '';
           if (typeof validateScriptStrict === 'function') {
             const issues = validateScriptStrict(src);
-            if (!issues.length) alert('✅ Script passes the standard.');
-            else alert('⚠️ Issues:\\n- ' + issues.join('\\n- '));
+            if (!issues.length) {
+              alert('✅ Script passes the standard.');
+            } else {
+              alert('⚠️ Issues:\n- ' + issues.join('\n- '));
+            }
           } else {
             alert('Validation is not available in this build.');
           }
@@ -3359,8 +3589,8 @@ let _toast = function (msg, opts) {
           console.error(err);
         }
       });
-    } catch (err) {
-      console.error('Help injection failed', err);
+    } catch (_err) {
+      console.error('Help injection failed', _err);
     }
   }
 
@@ -3741,6 +3971,10 @@ let _toast = function (msg, opts) {
       }
 
       setInterval(() => {
+        // If there is no script loaded or watchdog is not armed, skip watchdog activity entirely
+        try {
+          if (!window.__tp_has_script || !window.__tp_wd_armed) return;
+        } catch {}
         // Increment tick counter for UI sampling
         incrementMetric('ticks');
 
@@ -4196,11 +4430,34 @@ let _toast = function (msg, opts) {
 
     async function initScriptsUI() {
       try {
-        if (!ScriptsModule) ScriptsModule = await import('./scriptsStore.js');
+  if (!ScriptsModule) {
+          try {
+            ScriptsModule = await import('./scriptsStore_fixed.js');
+          } catch {
+            try {
+              console.error('[ScriptsModule] import ./scriptsStore_fixed.js failed', impErr);
+            } catch {}
+            // Try to recover by using a global window.Scripts if present
+            if (typeof window !== 'undefined' && window.Scripts) {
+              ScriptsModule = { Scripts: window.Scripts };
+            } else {
+              // final fallback: try the legacy path
+              try {
+                ScriptsModule = await import('./scriptsStore.js');
+              } catch {
+                try {
+                  console.error('[ScriptsModule] fallback import ./scriptsStore.js failed', legacyErr);
+                } catch {}
+                ScriptsModule = null;
+              }
+            }
+          }
+        }
+        if (!ScriptsModule || !ScriptsModule.Scripts) throw new Error('Scripts module not available');
         ScriptsModule.Scripts.init();
         refreshScriptsDropdown();
-      } catch (e) {
-        void e;
+      } catch {
+        console.error('initScriptsUI failed', e);
       }
     }
 
@@ -4215,25 +4472,49 @@ let _toast = function (msg, opts) {
           .map((s) => `<option value="${s.id}">${s.title}</option>`)
           .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
-      } catch (e) {
+      } catch {
         void e;
       }
     }
 
     async function onScriptSave() {
       try {
-        if (!ScriptsModule) ScriptsModule = await import('./scriptsStore.js');
+  if (!ScriptsModule) {
+          try {
+            ScriptsModule = await import('./scriptsStore_fixed.js');
+          } catch {
+            try {
+              console.error('[ScriptsModule] import failed in onScriptSave', impErr);
+            } catch {}
+            if (typeof window !== 'undefined' && window.Scripts) ScriptsModule = { Scripts: window.Scripts };
+          }
+        }
         const title = scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled';
-        currentScriptId = ScriptsModule.Scripts.save({
-          id: currentScriptId,
-          title,
-          content: getEditorContent(),
-        });
+        if (!ScriptsModule || !ScriptsModule.Scripts || typeof ScriptsModule.Scripts.save !== 'function') {
+          throw new Error('Scripts.save not available');
+        }
+        currentScriptId = ScriptsModule.Scripts.save({ id: currentScriptId, title, content: getEditorContent() });
         refreshScriptsDropdown();
         _toast('Script saved', { type: 'ok' });
-      } catch (e) {
-        void e;
-        _toast('Save failed', { type: 'error' });
+      } catch {
+        try {
+          console.error('[Scripts.save] error', e);
+        } catch {
+          void 0;
+        }
+        // expose last save error for diagnostics and attach a session fallback
+        try {
+          window.__lastScriptSaveError = { message: e && e.message, stack: e && e.stack };
+          const _fallback = { title: scriptTitle && scriptTitle.value ? scriptTitle.value : 'Untitled', content: getEditorContent(), at: Date.now() };
+          try {
+            sessionStorage.setItem('tp_last_unsaved_script', JSON.stringify(_fallback));
+            _toast('Save failed — content saved to session storage', { type: 'error' });
+          } catch {
+            _toast('Save failed', { type: 'error' });
+          }
+        } catch {
+          _toast('Save failed', { type: 'error' });
+        }
       }
     }
 
@@ -4253,7 +4534,7 @@ let _toast = function (msg, opts) {
         if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
         setEditorContent(s.content || '');
         _toast('Script loaded', { type: 'ok' });
-      } catch (e) {
+      } catch {
         console.debug('Scripts.load error', e);
         _toast('Load failed', { type: 'error' });
       }
@@ -4267,7 +4548,7 @@ let _toast = function (msg, opts) {
         scriptTitle && (scriptTitle.value = '');
         refreshScriptsDropdown();
         _toast('Script deleted', {});
-      } catch (e) {
+      } catch {
         console.debug('Scripts.delete error', e);
         _toast('Delete failed', { type: 'error' });
       }
@@ -4285,7 +4566,7 @@ let _toast = function (msg, opts) {
           scriptTitle && (scriptTitle.value = t);
           refreshScriptsDropdown();
         }
-      } catch (e) {
+      } catch {
         console.debug('Scripts.rename error', e);
       }
     }
@@ -4321,23 +4602,67 @@ let _toast = function (msg, opts) {
     displayChip = document.getElementById('displayChip');
     recChip = document.getElementById('recChip');
     scrollChip = document.getElementById('scrollChip');
-    // Rec chip UI helper
+    // Rec chip UI helper — accessible API
+    // Usage:
+    // window.setRecChip('recording') // backward-compatible
+    // window.setRecChip({ text: 'Speech: listening…', tone: 'ok', assertive: false, busy: true })
     window.setRecChip = function (state) {
       try {
         const el = document.getElementById('recChip');
         if (!el) return;
-        // normalize incoming states
-        const s = String(state || '').toLowerCase();
-        el.classList.remove('rec-recording', 'idle');
-        if (s === 'recording' || s === 'record') {
-          el.textContent = 'Recording...';
-          el.classList.add('rec-recording');
-        } else {
-          el.textContent = 'Idle';
-          el.classList.add('idle');
+
+        // Helper to actually set the text and attributes
+        const apply = ({ text = '', tone = 'neutral', assertive = false, busy = false } = {}) => {
+          try {
+            // set aria-live depending on severity
+            el.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+            el.setAttribute('aria-atomic', 'true');
+            if (busy) el.setAttribute('aria-busy', 'true');
+            else el.removeAttribute('aria-busy');
+
+            // optional styling hook
+            try {
+              el.dataset.tone = tone;
+            } catch {}
+
+            // update classes for visual state mapping
+            el.classList.remove('rec-recording', 'idle');
+            const txt = String(text || '');
+            if (/record/i.test(txt)) el.classList.add('rec-recording');
+            else el.classList.add('idle');
+
+            // update content last so screen readers pick up changes
+            el.textContent = txt || 'Idle';
+          } catch {
+            // noop
+          }
+        };
+
+        // Backwards-compatible simple string handling
+        if (typeof state === 'string' || typeof state === 'number') {
+          const s = String(state || '').toLowerCase();
+          if (s === 'recording' || s === 'record') {
+            apply({ text: 'Recording...', tone: 'ok', assertive: false, busy: true });
+          } else if (/listening|listening\u2026|preparing/i.test(s)) {
+            apply({ text: 'Speech: listening…', tone: 'ok', assertive: false, busy: true });
+          } else if (/unavailable|unsupported|error/i.test(s)) {
+            apply({ text: 'Speech: unavailable', tone: 'error', assertive: true, busy: false });
+          } else {
+            apply({ text: 'Idle', tone: 'neutral', assertive: false, busy: false });
+          }
+          return;
         }
-      } catch (e) {
-        void e;
+
+        // If an object is passed, accept keys: text, tone, assertive, busy
+        if (state && typeof state === 'object') {
+          apply(state);
+          return;
+        }
+
+        // fallback
+        apply({ text: 'Idle', tone: 'neutral', assertive: false, busy: false });
+      } catch {
+        void 0;
       }
     };
     // OBS runtime flags (safe defaults)
@@ -4363,7 +4688,7 @@ let _toast = function (msg, opts) {
             } catch {}
           }
         }
-      } catch (e) {
+      } catch {
         void e;
       }
       return false;
@@ -4380,7 +4705,9 @@ let _toast = function (msg, opts) {
             // Prefer the new obsBridge if available
             if (typeof window !== 'undefined' && window.__obsBridge) {
               try {
-                const ok = window.__obsBridge.isConnected();
+                // support sync or async isConnected() implementations
+                let ok = window.__obsBridge.isConnected();
+                if (ok && typeof ok.then === 'function') ok = await ok;
                 text = ok ? 'OBS: ready' : 'OBS: offline';
                 cls = ok ? 'ok' : 'error';
               } catch {
@@ -4409,10 +4736,40 @@ let _toast = function (msg, opts) {
                 statusEl.classList.add('obs-reconnecting');
               else statusEl.classList.add('idle');
             }
+            try {
+              const tEl = document.getElementById('obsStatusText');
+              if (tEl) tEl.textContent = (String(text || '') || 'unknown').replace(/^OBS:\s*/i, '');
+            } catch {}
           } catch {}
         };
         // Initial probe
         setTimeout(updateStatus, 120);
+        // Poll for status updates for a short period so that late-loading recorder/bridge
+        // will replace the initial 'unknown' state. Poll every 2s up to ~30s.
+        try {
+          let tries = 0;
+          const maxTries = 15;
+          const pollId = setInterval(async () => {
+            try {
+              await updateStatus();
+              tries++;
+              // stop polling once status is no longer 'unknown' or max tries reached
+              try {
+                if (statusEl) {
+                  const t = (statusEl.textContent || '').toLowerCase();
+                  if (t.indexOf('unknown') < 0 || tries >= maxTries) clearInterval(pollId);
+                } else if (tries >= maxTries) {
+                  clearInterval(pollId);
+                }
+              } catch {
+                if (tries >= maxTries) clearInterval(pollId);
+              }
+            } catch {
+              tries++;
+              if (tries >= maxTries) clearInterval(pollId);
+            }
+          }, 2000);
+        } catch {}
         // If obsBridge exists, subscribe to its events for immediate updates
         try {
           if (typeof window !== 'undefined' && window.__obsBridge) {
@@ -4477,6 +4834,10 @@ let _toast = function (msg, opts) {
     _downloadFileBtn = document.getElementById('downloadFile');
     _uploadFileBtn = document.getElementById('uploadFileBtn');
     _uploadFileInput = document.getElementById('uploadFile');
+    // ensure we have a reference to the top dB meter container
+    try {
+      dbMeterTop = document.getElementById('dbMeterTop');
+    } catch {}
     // Wire upload button to hidden file input and handle file change
     try {
       if (_uploadFileBtn && _uploadFileInput && !_uploadFileBtn.__wired) {
@@ -4492,7 +4853,7 @@ let _toast = function (msg, opts) {
             if (!f) return;
             try {
               await _uploadFromFile(f);
-            } catch (err) {
+            } catch {
               try { console.warn('uploadFromFile failed', err); } catch {}
             }
           } finally {
@@ -4624,7 +4985,7 @@ let _toast = function (msg, opts) {
           updateDebugPosChip();
         } catch {}
       };
-    } catch (e) {
+    } catch {
       console.warn('scroll-helpers load failed', e);
     }
 
@@ -4638,7 +4999,7 @@ let _toast = function (msg, opts) {
           } catch {}
         }
       );
-    } catch (e) {
+    } catch {
       console.warn('io-anchor load failed', e);
     }
     try {
@@ -4651,13 +5012,13 @@ let _toast = function (msg, opts) {
         getViewportHeight: () => viewer.clientHeight,
         getViewerElement: () => viewer,
       });
-    } catch (e) {
+    } catch {
       console.warn('scroll-control load failed', e);
     }
     try {
       const liMod = await import((window.__TP_ADDV || ((p) => p))('./line-index.js'));
       window.buildLineIndex = liMod.buildLineIndex;
-    } catch (e) {
+    } catch {
       console.warn('line-index load failed', e);
     }
     // Dev-only: fixture loader (?fixture=name or ?fixtureUrl=encodedURL)
@@ -4673,7 +5034,7 @@ let _toast = function (msg, opts) {
         renderScript(txt);
         console.info('[TP-Pro] Loaded fixture:', url);
       }
-    } catch (e) {
+    } catch {
       void e;
     }
     // …keep the rest of your init() as-is…
@@ -4687,7 +5048,7 @@ let _toast = function (msg, opts) {
       openDisplayBtn.__listenerAttached = true;
       closeDisplayBtn.__listenerAttached = true;
       presentBtn.__listenerAttached = true;
-    } catch (e) {
+    } catch {
       void e;
     }
     window.__tpInitSuccess = true;
@@ -4709,9 +5070,19 @@ let _toast = function (msg, opts) {
               onStatus: (txt, ok) => {
                 try {
                   const via = document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL;
-                  const chip =
-                    document.getElementById('obsStatus') || document.getElementById('recChip');
+                  const chip = document.getElementById('obsStatus') || document.getElementById('recChip');
                   if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                  // also mirror status into the settings-level connection chip (obsConnStatus)
+                  try {
+                    const connChip = document.getElementById('obsConnStatus');
+                    if (connChip) {
+                      connChip.textContent = txt ? `OBS: ${txt}` : 'OBS: unknown';
+                      connChip.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
+                      if (ok) connChip.classList.add('obs-connected');
+                      else if (/offline|error|disconnect/i.test(String(txt || ''))) connChip.classList.add('obs-reconnecting');
+                      else connChip.classList.add('idle');
+                    }
+                  } catch {}
                   obsDebugLog(`status: ${txt || '(empty)'} (via ${via})`);
                 } catch {}
                 try {
@@ -4727,11 +5098,11 @@ let _toast = function (msg, opts) {
               },
             });
           }
-        } catch (e) {
+        } catch {
           console.warn('[TP-Pro] recorder.init() threw', e);
         }
       });
-    } catch (e) {
+    } catch {
       void e;
     }
 
@@ -4770,18 +5141,10 @@ let _toast = function (msg, opts) {
               if (typeof s.configs?.obs?.password === 'string' && s.configs.obs.password) {
                 obsPassInput.value = s.configs.obs.password;
               } else {
-                // Prefer sessionStorage (secure-by-default), then localStorage if Remember checked
+                // Do not hydrate from storage. Prefer the in-memory password if present.
                 try {
-                  const pSess = sessionStorage.getItem('tp_obs_password');
-                  if (pSess) {
-                    obsPassInput.value = pSess;
-                  } else {
-                    try {
-                      const rem = document.getElementById('settingsObsRemember');
-                      const pLocal = localStorage.getItem('tp_obs_password');
-                      if (rem && rem.checked && pLocal) obsPassInput.value = pLocal;
-                    } catch {}
-                  }
+                  const mem = (typeof window !== 'undefined' && window.__obsPass) || __obsPass || '';
+                  if (mem) obsPassInput.value = mem;
                 } catch {}
               }
             }
@@ -4820,7 +5183,7 @@ let _toast = function (msg, opts) {
           const cfgs = { ...(s.configs || {}) };
           if (!cfgs.obs)
             cfgs.obs = {
-              url: obsUrlInput?.value || 'ws://192.168.1.198:4455',
+              url: obsUrlInput?.value || 'ws://192.168.1.200:4455',
               password: obsPassInput?.value || '',
             };
           __recorder.setSettings({ selected: sel, configs: cfgs });
@@ -4848,14 +5211,14 @@ let _toast = function (msg, opts) {
             if (!rec) return;
             try {
               if (typeof rec.setEnabled === 'function') rec.setEnabled(!!e.target.checked);
-            } catch (err) {
-              void err;
+            } catch {
+              void 0;
             }
             try {
               if (e.target.checked) await (rec.connect ? rec.connect() : Promise.resolve());
               else await (rec.disconnect ? rec.disconnect() : Promise.resolve());
-            } catch (err) {
-              void err;
+            } catch {
+              void 0;
             }
           } catch {}
         });
@@ -4881,12 +5244,12 @@ let _toast = function (msg, opts) {
             const ok = await (rec?.test ? rec.test() : Promise.resolve(false));
             const el = document.getElementById('obsStatus');
             if (el) el.textContent = ok ? 'OBS test: ok' : 'OBS test: failed';
-          } catch (e) {
+          } catch {
             void e;
             try {
               const el = document.getElementById('obsStatus');
               if (el) el.textContent = 'OBS test: error';
-            } catch (e) {
+            } catch {
               void e;
             }
           }
@@ -4912,10 +5275,10 @@ let _toast = function (msg, opts) {
                   const s = document.getElementById('obsStatus');
                   if (s) s.textContent = 'OBS: disabled';
                 }
-              } catch (ex) {
-                void ex;
+              } catch {
+                void 0;
               }
-            } catch (e) {
+            } catch {
               void e;
             }
           });
@@ -4940,7 +5303,7 @@ let _toast = function (msg, opts) {
               // clear armed flag when we see recording
               if (active) window.__obsRecArmed = false;
             }
-          } catch (err) {
+          } catch {
             try {
               if (window.__TP_DEV) console.warn('[OBS WS] message parse failed', err);
             } catch {}
@@ -4973,17 +5336,20 @@ let _toast = function (msg, opts) {
           } catch {}
         } catch {}
       }
-    } catch (e) {
+    } catch {
       void e;
     }
 
     // Settings overlay wiring
-    if (settingsBtn && settingsOverlay && settingsClose && settingsBody) {
+      if (settingsBtn && settingsOverlay && settingsClose && settingsBody) {
+        // Avoid wiring multiple times if script executed twice for any reason
+        if (settingsBtn.dataset && settingsBtn.dataset.wired) return;
+        try { settingsBtn.dataset.wired = '1'; } catch {}
       const openSettings = () => {
         try {
-          buildSettingsContent();
+          try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
         } catch {}
-        // Auto-sync OBS fields from Settings -> main so adapters see values immediately
+  // Auto-sync OBS fields from Settings -> main so adapters see values immediately
         try {
           const setUrl = document.getElementById('settingsObsUrl');
           const setPass = document.getElementById('settingsObsPass');
@@ -5010,6 +5376,8 @@ let _toast = function (msg, opts) {
               localStorage.setItem('tp_obs_remember', setRem.checked ? '1' : '0');
             }
           } catch {}
+          // Wire the OBS-specific settings controls when the sheet opens
+          try { wireObsSettings && wireObsSettings(); } catch {}
           try {
             if (window.__TP_DEV) console.debug('[TP-Pro] synced Settings -> main (obs url/pass)');
           } catch {}
@@ -5020,7 +5388,8 @@ let _toast = function (msg, opts) {
       // Prebuild asynchronously after main init so first open isn't empty if user opens quickly
       setTimeout(() => {
         try {
-          buildSettingsContent();
+          try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
+          try { wireObsSettings && wireObsSettings(); } catch {}
         } catch {}
       }, 0);
       // Dev-only: render a compact OBS handshake log into #obsDevPane when present
@@ -5035,13 +5404,13 @@ let _toast = function (msg, opts) {
                 .slice(-20)
                 .map((x) => ({ t: new Date(x.t).toLocaleTimeString(), ev: x.ev, data: x.data }));
               pane.textContent = tail.map((l) => JSON.stringify(l)).join('\n');
-            } catch (ex) {
-              void ex;
+            } catch {
+              void 0;
             }
           }, 500);
         }
-      } catch (ex) {
-        void ex;
+      } catch {
+  void 0;
       }
       const closeSettings = () => {
         settingsOverlay.classList.add('hidden');
@@ -5068,33 +5437,24 @@ let _toast = function (msg, opts) {
         const s = __recorder.getSettings();
         const cfgs = { ...(s.configs || {}) };
         const prev = cfgs.obs || {};
-        cfgs.obs = {
-          ...prev,
-          url: obsUrlInput?.value || prev.url || 'ws://192.168.1.198:4455',
-          password: obsPassInput?.value || prev.password || '',
-        };
+        // Prefer main panel inputs when present; otherwise fall back to Settings inputs
+        const urlEl = obsUrlInput || document.getElementById('settingsObsUrl');
+        const passEl = obsPassInput || document.getElementById('settingsObsPass');
+  const url = urlEl?.value || prev.url || 'ws://192.168.1.200:4455';
+        const password = passEl?.value ?? prev.password ?? '';
+        cfgs.obs = { ...prev, url, password };
         __recorder.setSettings({ configs: cfgs });
-        // Persist password to sessionStorage by default; optionally to localStorage when 'remember' is checked
+        // Persist password in-memory and to sessionStorage only (do NOT write to localStorage)
         try {
           if (typeof obsPassInput?.value === 'string') {
             try {
-              sessionStorage.setItem('tp_obs_password', obsPassInput.value);
+              window.__obsPass = obsPassInput.value || '';
             } catch {}
             try {
-              const rem = document.getElementById('settingsObsRemember');
-              // persist the user's remember preference so the checkbox is stable across reloads
-              try {
-                localStorage.setItem('tp_obs_remember', rem && rem.checked ? '1' : '0');
-              } catch {}
-              if (rem && rem.checked) {
-                localStorage.setItem('tp_obs_password', obsPassInput.value);
-              } else {
-                // If not remembering, remove any long-lived stored password
-                try {
-                  localStorage.removeItem('tp_obs_password');
-                } catch {}
-              }
+              // Keep password strictly in-memory only
+              __obsPass = obsPassInput.value || '';
             } catch {}
+            // Keep the "Remember" checkbox visual only (disabled) — do not persist long-lived passwords
           }
         } catch {}
         // Save scene and reconnect preference
@@ -5119,8 +5479,149 @@ let _toast = function (msg, opts) {
         if (obsStatus && enableObsChk?.checked) obsStatus.textContent = 'OBS: updated';
       } catch {}
     };
-    obsUrlInput?.addEventListener('change', saveObsConfig);
-    obsPassInput?.addEventListener('change', saveObsConfig);
+  obsUrlInput?.addEventListener('change', saveObsConfig);
+  obsPassInput?.addEventListener('change', saveObsConfig);
+
+  // --- New OBS config helpers (host/port/secure/enabled) ---
+  const OBS_HOST_KEY = 'tp_obs_host';
+  const OBS_PORT_KEY = 'tp_obs_port';
+  const OBS_SECURE_KEY = 'tp_obs_secure';
+  const OBS_ENABLED_KEY = 'tp_obs_enabled';
+  const OBS_DEFAULTS = { host: '127.0.0.1', port: '4455', secure: false, enabled: false };
+
+  // Strictly in-memory OBS password (do NOT persist to storage)
+  let __obsPass = '';
+
+  function getObsConfig() {
+    try {
+      return {
+        host: localStorage.getItem(OBS_HOST_KEY) || OBS_DEFAULTS.host,
+        port: localStorage.getItem(OBS_PORT_KEY) || OBS_DEFAULTS.port,
+        secure: localStorage.getItem(OBS_SECURE_KEY) === '1',
+        enabled: localStorage.getItem(OBS_ENABLED_KEY) === '1',
+      };
+    } catch {
+      return { ...OBS_DEFAULTS };
+    }
+  }
+
+  function saveObsConfigFields({ host, port, secure, enabled } = {}) {
+    try {
+      if (host != null) localStorage.setItem(OBS_HOST_KEY, String(host).trim());
+      if (port != null) localStorage.setItem(OBS_PORT_KEY, String(port).trim());
+      if (secure != null) localStorage.setItem(OBS_SECURE_KEY, secure ? '1' : '0');
+      if (enabled != null) localStorage.setItem(OBS_ENABLED_KEY, enabled ? '1' : '0');
+    } catch {}
+  }
+
+  function updateObsStatus(text) {
+    try {
+      const pill = document.getElementById('obsStatusText');
+      if (pill) pill.textContent = String(text || 'unknown');
+    } catch {}
+  }
+
+  function validateHostPort(host, port) {
+    const hostOk = /^[A-Za-z0-9.-]+$/.test(host) || host === 'localhost';
+    const p = Number(port);
+    const portOk = Number.isFinite(p) && p >= 1 && p <= 65535;
+    return { hostOk, portOk };
+  }
+
+  function markValidity(el, ok, msg = '') {
+    if (!el) return;
+    el.classList.toggle('is-invalid', !ok);
+    if (!ok) el.title = msg;
+    else el.removeAttribute('title');
+  }
+
+  function wireObsSettings() {
+    try {
+      const urlEl = document.getElementById('settingsObsUrl');
+      const portEl = document.getElementById('settingsObsPort');
+      const secEl = document.getElementById('settingsObsSecure');
+      const enEl = document.getElementById('settingsEnableObs');
+      const passEl = document.getElementById('settingsObsPass');
+      const clearEl = document.getElementById('settingsObsClear');
+      if (!urlEl || !portEl || !secEl || !enEl || !passEl) return;
+
+      // Force correct type & dedupe
+      (function ensureObsPasswordField(){
+        try {
+          if (passEl.type !== 'password') {
+            try { passEl.type = 'password'; }
+            catch {
+              const repl = passEl.cloneNode(true);
+              repl.setAttribute('type', 'password');
+              passEl.replaceWith(repl);
+            }
+          }
+        } catch {}
+      })();
+
+      // Restore current (in-memory only)
+      try { passEl.value = __obsPass || ''; } catch {}
+
+      const apply = async () => {
+        const host = (urlEl.value || '127.0.0.1').trim();
+        const port = (portEl.value || '4455').trim();
+        const { hostOk, portOk } = validateHostPort(host, port);
+        markValidity(urlEl, hostOk, 'Host may contain letters, digits, dots, hyphens');
+        markValidity(portEl, portOk, 'Port must be 1–65535');
+
+        if (!hostOk || !portOk) {
+          updateObsStatus('invalid address');
+          return;
+        }
+
+        // Persist non-sensitive config only
+        try { saveObsConfigFields({ host, port, secure: !!secEl.checked, enabled: !!enEl.checked }); } catch {}
+
+        try {
+          if (!enEl.checked) {
+            updateObsStatus('disabled');
+            await recorder.disconnect?.();
+            return;
+          }
+          updateObsStatus('connecting…');
+          await recorder.reconfigure?.({ host, port: Number(port), secure: !!secEl.checked, password: __obsPass || undefined });
+          await recorder.connect?.();
+          updateObsStatus('connected');
+        } catch (err) {
+          console.warn('[OBS] connect error', err);
+          updateObsStatus('error');
+        }
+      };
+
+      // Listeners
+      enEl.addEventListener('change', apply);
+      secEl.addEventListener('change', apply);
+      urlEl.addEventListener('change', apply);
+      portEl.addEventListener('change', apply);
+
+      // Password is session-only
+      passEl.addEventListener('input', (e) => { __obsPass = e.target.value || ''; });
+      passEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); });
+
+      // Clear session password
+      clearEl?.addEventListener('click', () => {
+        __obsPass = '';
+        passEl.value = '';
+        updateObsStatus('password cleared');
+      });
+
+      // First open – reflect state; only connect if enabled
+      try {
+        const cfg = getObsConfig();
+        urlEl.value = cfg.host;
+        portEl.value = cfg.port;
+        secEl.checked = cfg.secure;
+        enEl.checked = cfg.enabled;
+        updateObsStatus(cfg.enabled ? 'connecting…' : 'disabled');
+        if (cfg.enabled) apply().catch(()=>{});
+      } catch {}
+    } catch {}
+  }
 
     // When OBS fields change, reconfigure adapter immediately so it has latest values
     try {
@@ -5161,50 +5662,57 @@ let _toast = function (msg, opts) {
                               else if (a !== null) suffix = ` (attempt ${a})`;
                               else if (b !== null) suffix = ` (retry ${b}ms)`;
                             }
-                          } catch (ex) {
-                            void ex;
+                          } catch {
+                            void 0;
                           }
                           st.textContent =
                             'OBS: ' + (ok ? 'connected' : String(s || 'failed')) + suffix;
                           // Keep full string in title for hover
                           try {
                             st.title = String(s || '') + (suffix ? ' ' + suffix : '');
-                          } catch (e) {
+                          } catch {
                             void e;
                           }
                         }
-                      } catch (e) {
+                      } catch {
                         void e;
                       }
                     },
                   });
-                } catch (e) {
+                } catch {
                   void e;
                 }
               }
-            } catch (ex) {
-              void ex;
+            } catch {
+              void 0;
             }
           });
-        } catch (ex) {
-          void ex;
+        } catch {
+          void 0;
         }
       });
-    } catch (ex) {
-      void ex;
+    } catch {
+  void 0;
     }
 
-    // Test button
+    // Test button (lazy-load bridge/recorder as needed)
     obsTestBtn?.addEventListener('click', async () => {
       if (obsStatus) obsStatus.textContent = 'OBS: testing…';
       try {
         saveObsConfig();
-        if (typeof window !== 'undefined' && window.__obsBridge) {
-          await window.__obsBridge.getRecordStatus();
+        // Try bridge first (lazy-import)
+        const bridge = await ensureObsBridge();
+        if (bridge && typeof bridge.getRecordStatus === 'function') {
+          await bridge.getRecordStatus();
           if (obsStatus) obsStatus.textContent = 'OBS: ok';
-        } else if (__recorder?.get && __recorder.get('obs')?.test) {
-          await __recorder.get('obs').test();
-          if (obsStatus) obsStatus.textContent = 'OBS: ok';
+          return;
+        }
+        // Fallback: ensure recorder module and call adapter test
+        const recModule = await loadRecorder();
+        const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
+        if (rec && typeof rec.test === 'function') {
+          const ok = await rec.test();
+          if (obsStatus) obsStatus.textContent = ok ? 'OBS: ok' : 'OBS: failed';
         } else {
           if (obsStatus) obsStatus.textContent = 'OBS: missing';
         }
@@ -5212,31 +5720,15 @@ let _toast = function (msg, opts) {
         if (obsStatus) {
           obsStatus.textContent = 'OBS: failed';
           try {
-            const errMsg =
-              (typeof window !== 'undefined' && window.__obsBridge && e?.message) ||
-              __recorder.get('obs')?.getLastError?.() ||
-              e?.message ||
-              String(e);
+            const errMsg = (e && e.message) || String(e || '');
             obsStatus.title = errMsg;
-            // show a visible toast with the error and a console hint
             try {
               _toast('OBS test failed: ' + (errMsg || 'unknown error'), { type: 'error' });
             } catch {}
             try {
-              console.warn('[OBS TEST] failed', {
-                err: e,
-                derived: errMsg,
-                url: obsUrlInput?.value,
-              });
+              console.warn('[OBS TEST] failed', { err: e, derived: errMsg, url: obsUrlInput?.value });
             } catch {}
-          } catch (inner) {
-            void inner;
-            try {
-              obsStatus.title = String(e);
-            } catch (e) {
-              void e;
-            }
-          }
+          } catch {}
         }
       }
     });
@@ -5261,7 +5753,7 @@ let _toast = function (msg, opts) {
         if (typeof window.normalizeToStandard === 'function') {
           try {
             window.normalizeToStandard();
-          } catch {
+          } catch (e) {
             alert('Normalize error: ' + e.message);
           }
           return;
@@ -5326,7 +5818,7 @@ let _toast = function (msg, opts) {
             msgEl.classList.add('obs-test-error');
           }
         }
-      } catch (e) {
+      } catch {
         let errMsg = '';
         try {
           errMsg =
@@ -5437,7 +5929,55 @@ let _toast = function (msg, opts) {
 
     // Mic and devices
     micBtn?.addEventListener('click', requestMic);
+    // Wire release mic button if present (tolerant lookup + prefer new API)
+    try {
+      const releaseBtn = $id('settingsReleaseMicBtn', 'releaseMicBtn');
+      if (releaseBtn && !releaseBtn.dataset?.wired) {
+        releaseBtn.dataset.wired = '1';
+        releaseBtn.addEventListener('click', () => {
+          try {
+            if (window.__tpMic && typeof window.__tpMic.releaseMic === 'function') {
+              window.__tpMic.releaseMic();
+            } else if (typeof _releaseMic === 'function') {
+              _releaseMic();
+            }
+            _toast && _toast('Mic released', { type: 'ok' });
+          } catch {}
+        });
+      }
+    } catch {}
     refreshDevicesBtn?.addEventListener('click', populateDevices);
+
+    // Topbar dB meter controls (tolerant lookup)
+    try {
+      const topStart = $id('startDbBtn', 'settingsStartDbBtn');
+      const topStop = $id('stopDbBtn', 'settingsStopDbBtn');
+      if (topStart && !topStart.dataset?.wired) {
+        topStart.dataset.wired = '1';
+        topStart.addEventListener('click', () => {
+          try {
+            const meter = document.getElementById('dbMeterTop') || document.getElementById('dbMeter');
+            if (window.__tpMic && typeof window.__tpMic.startDbMeter === 'function') {
+              window.__tpMic.startDbMeter(meter);
+            } else if (typeof startDbMeter === 'function') {
+              startDbMeter(meter);
+            }
+          } catch {}
+        });
+      }
+      if (topStop && !topStop.dataset?.wired) {
+        topStop.dataset.wired = '1';
+        topStop.addEventListener('click', () => {
+          try {
+            if (window.__tpMic && typeof window.__tpMic.clearBars === 'function') {
+              window.__tpMic.clearBars();
+            } else if (typeof _stopDbMeter === 'function') {
+              _stopDbMeter();
+            }
+          } catch {}
+        });
+      }
+    } catch {}
 
     // Recognition on/off (placeholder toggle)
     recBtn?.addEventListener('click', () => {
@@ -5507,6 +6047,15 @@ let _toast = function (msg, opts) {
         { capture: true }
       ); // capture so it runs before the normal handler
     }
+
+      // Expose programmatic release for tests / other modules
+      try {
+        window.releaseMic = function () {
+          try {
+            _releaseMic();
+          } catch {}
+        };
+      } catch {}
 
     // Camera
     startCamBtn?.addEventListener('click', startCamera);
@@ -5609,12 +6158,28 @@ let _toast = function (msg, opts) {
       })();
     try {
       const savedAggro = localStorage.getItem(AGGRO_KEY);
-      if (savedAggro && matchAggroSel) matchAggroSel.value = savedAggro;
+      // If Calm mode is requested (e.g. ?calm=1) force conservative behavior for tests.
+      if (typeof CALM !== 'undefined' && CALM && matchAggroSel) {
+        matchAggroSel.value = '1';
+      } else if (savedAggro && matchAggroSel) {
+        matchAggroSel.value = savedAggro;
+      } else if (matchAggroSel) {
+        // No saved preference: default to Conservative for deterministic runs
+        matchAggroSel.value = '1';
+      }
     } catch {}
     const SMOOTH_KEY = 'tp_motion_smooth_v1';
     try {
       const savedSmooth = localStorage.getItem(SMOOTH_KEY);
-      if (savedSmooth && motionSmoothSel) motionSmoothSel.value = savedSmooth;
+      // Calm mode prefers the calm/stable motion profile
+      if (typeof CALM !== 'undefined' && CALM && motionSmoothSel) {
+        motionSmoothSel.value = 'stable';
+      } else if (savedSmooth && motionSmoothSel) {
+        motionSmoothSel.value = savedSmooth;
+      } else if (motionSmoothSel) {
+        // Default to Stable for deterministic runs
+        motionSmoothSel.value = 'stable';
+      }
     } catch {}
 
     // TP: initial-render
@@ -5959,6 +6524,14 @@ let _toast = function (msg, opts) {
         { passive: true }
       );
     } catch {}
+    // Refresh end spacer on resize (do not replace existing applyBottomPad listener)
+    try {
+      window.addEventListener('resize', () => {
+        try {
+          refreshEndSpacer();
+        } catch {}
+      }, { passive: true });
+    } catch {}
     // Initial debug chip paint
     try {
       updateDebugPosChip();
@@ -6267,17 +6840,22 @@ let _toast = function (msg, opts) {
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
           try {
+            // mark running early and cancel any late-init timer
+            try { window.__tp_init_running = true; if (_lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
             init();
-          } catch (e) {
+          } catch {
             console.error('init failed', e);
+            try { window.__tp_init_running = false; } catch {}
           }
         });
       } else {
         Promise.resolve().then(() => {
           try {
+            try { window.__tp_init_running = true; if (_lateInitTimer) { clearTimeout(_lateInitTimer); _lateInitTimer = null; } } catch {}
             init();
-          } catch (e) {
+          } catch {
             console.error('init failed', e);
+            try { window.__tp_init_running = false; } catch {}
           }
         });
       }
@@ -6287,20 +6865,7 @@ let _toast = function (msg, opts) {
     __tpBootPush('init-scheduling-exited');
   } catch {}
 
-  // Hard fallback: if init hasn't marked success soon, force-call it (guards against missed events or earlier silent exceptions)
-  setTimeout(() => {
-    try {
-      if (!window.__tpInitSuccess) {
-        console.warn('[TP-Pro] Late init fallback firing');
-        if (typeof init === 'function') init();
-      }
-    } catch (e) {
-      console.error('[TP-Pro] Late init fallback failed', e);
-    }
-  }, 1500);
-  try {
-    __tpBootPush('late-init-fallback-scheduled');
-  } catch {}
+  // Remove hard late-init fallback scheduling entirely — we cancel and avoid scheduling when real init runs.
 
   // Dump boot trace if user presses Ctrl+Alt+B (debug aid)
   window.addEventListener('keydown', (e) => {
@@ -6338,7 +6903,7 @@ let _toast = function (msg, opts) {
             const overlay = document.getElementById('settingsOverlay');
             if (overlay) {
               try {
-                if (typeof buildSettingsContent === 'function') buildSettingsContent();
+                try { window.__tp && window.__tp.settings && typeof window.__tp.settings.mount === 'function' ? window.__tp.settings.mount(document.getElementById('settingsBody')) : null; } catch {}
               } catch {}
               overlay.classList.remove('hidden');
               try {
@@ -6348,7 +6913,7 @@ let _toast = function (msg, opts) {
           } else if (id === 'micBtn') {
             requestMic();
           }
-        } catch (err) {
+        } catch {
           console.warn('Delegated handler error', err);
         }
       };
@@ -6435,6 +7000,60 @@ let _toast = function (msg, opts) {
     } catch {}
     if (scrollChip) scrollChip.textContent = 'Scroll: active';
     __scrollCtl.startAutoCatchup(getAnchorY, getTargetY, scrollBy);
+  }
+
+  // Compute signed pixel error between a line element and the viewport marker.
+  // Positive => line is below the marker (we need to speed up), negative => above (slow down).
+  function computeErrPx(lineEl, viewerEl, markerPct) {
+    try {
+      const pct =
+        typeof markerPct === 'number'
+          ? markerPct
+          : typeof window.__TP_MARKER_PCT === 'number'
+          ? window.__TP_MARKER_PCT
+          : typeof MARKER_PCT === 'number'
+          ? MARKER_PCT
+          : 0.4;
+      const vRect = viewerEl.getBoundingClientRect();
+      const lRect = lineEl.getBoundingClientRect();
+      const markerY = vRect.top + (viewerEl.clientHeight || vRect.height) * pct;
+      return Math.round(lRect.top - markerY);
+    } catch {
+      return 0;
+    }
+  }
+
+  // Small convenience wrapper that mirrors the project's naming in some docs/examples.
+  // Returns +px when the spoken line is below the marker (need to speed up), -px when above.
+  function errPxFrom(spokenLineEl, viewerEl, markerPct = 0.4) {
+    try {
+      if (!spokenLineEl || !viewerEl) return 0;
+      const vRect = viewerEl.getBoundingClientRect();
+      const lRect = spokenLineEl.getBoundingClientRect();
+      const pct = typeof markerPct === 'number' ? markerPct : (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4);
+      const markerY = vRect.top + (viewerEl.clientHeight || vRect.height) * pct;
+      return Math.round(lRect.top - markerY);
+    } catch {
+      return 0;
+    }
+  }
+
+  // Adapter to emit a HUD sample and forward speech alignment samples to the governor (if present).
+  function onSpeechAlignment(errPx, confidence) {
+    try {
+      const hud = window.tp_hud || window.__tpHud || null;
+      try {
+        hud && hud('sync:sample', { errPx: Math.round(errPx), conf: Number((confidence || 0).toFixed ? confidence.toFixed(2) : +confidence) });
+      } catch {}
+    } catch {}
+    try {
+      const g = window.__tpGov || null;
+      if (g && typeof g.onSpeechSample === 'function') {
+        try {
+          g.onSpeechSample({ errPx: errPx, conf: confidence || 0, now: performance.now() });
+        } catch {}
+      }
+    } catch {}
   }
 
   // Heuristic gate: only run catch-up if the anchor (current line) sits low in the viewport
@@ -6686,6 +7305,14 @@ let _toast = function (msg, opts) {
 
   function maybeSoftAdvance(bestIdx, bestSim, spoken) {
     try {
+      // Respect batch-based freeze if set by rescue logic
+      try {
+        if ((window.__freezeBatches || 0) > 0) {
+          window.__freezeBatches = Math.max(0, (window.__freezeBatches || 0) - 1);
+          try { window.__tpHudInc && window.__tpHudInc('softAdv', 'frozen', 1); } catch {}
+          return { idx: bestIdx, sim: bestSim, soft: false };
+        }
+      } catch {}
       // Find current virtual line context
       const vList = __vParaIndex && __vParaIndex.length ? __vParaIndex : null;
       if (!vList) return { idx: bestIdx, sim: bestSim, soft: false };
@@ -6701,7 +7328,17 @@ let _toast = function (msg, opts) {
 
       // Compute coverage of current virtual line by spoken tail
       const lineTokens = scriptWords.slice(vList[vIdx].start, vList[vIdx].end + 1);
-      const cov = tokenCoverage(lineTokens, spoken);
+  const cov = tokenCoverage(lineTokens, spoken);
+  const SCRIPT_VOCAB = window.__SCRIPT_VOCAB || new Set();
+  const oovRatio = 1 - inVocabRatio(spoken, SCRIPT_VOCAB);
+  if (oovRatio > 0.5) {
+    try { window.__tpHudInc && window.__tpHudInc('drops', 'oov', 1); } catch {}
+    return { idx: bestIdx, sim: bestSim, soft: false }; // too many OOVs
+  }
+  if (looksLikeCommand(spoken)) {
+    try { window.__tpHudInc && window.__tpHudInc('drops', 'command', 1); } catch {}
+    return { idx: bestIdx, sim: bestSim, soft: false };
+  }
 
       if (stagnantMs >= STALL_MS && cov >= COV_THRESH) {
         // Probe the next few virtual lines for a prefix match
@@ -6710,10 +7347,37 @@ let _toast = function (msg, opts) {
           const v = vList[j];
           const win = scriptWords.slice(v.start, Math.min(v.start + spoken.length, v.end + 1));
           const sim = _sim(spoken, win);
+          // LOST-mode stricter gating (jitter-aware)
+          const LOST = PLL.state === 'LOST' || __tpLost;
+          const jitterStd = (window.__tpJitter && window.__tpJitter.std) || 0;
+          let LOST_MIN = 0.62;
+          if (LOST && jitterStd > 25) LOST_MIN += 0.04; // raise when noisy
+          const minSim = LOST ? LOST_MIN : SOFT_ADV_MIN_SIM;
+          const streakCap = LOST ? 1 : SOFT_ADV_MAX_STREAK;
+          // require at least an n-gram hit or an anchor nearby when LOST
+          const ngramHitsNear = (() => {
+            try {
+              const g = getNgrams(spoken, 3);
+              for (const gk of g) if (__ngramIndex.has(gk)) return 1;
+            } catch {}
+            return 0;
+          })();
+          const anchorsNear = (() => {
+            try {
+              const anchors = extractHighIDFPhrases(spoken, 3);
+              if (!anchors.length) return 0;
+              const band = getAnchorBand();
+              const hits = searchBand(anchors, v.start - band, v.end + band, spoken);
+              return hits.length;
+            } catch {
+              return 0;
+            }
+          })();
           if (
-            sim >= SOFT_ADV_MIN_SIM &&
+            sim >= minSim &&
             fallbackStreak < 3 &&
-            softAdvanceStreak < SOFT_ADV_MAX_STREAK
+            softAdvanceStreak < streakCap &&
+            (LOST ? (ngramHitsNear > 0 || anchorsNear > 0) : true)
           ) {
             try {
               if (typeof debug === 'function')
@@ -6727,8 +7391,14 @@ let _toast = function (msg, opts) {
                 });
             } catch {}
             // reset stagnation to the new virtual line
+            try { window.__tpHudInc && window.__tpHudInc('softAdv', 'allowed', 1); } catch {}
             __tpStag = { vIdx: j, since: now };
             return { idx: v.start, sim, soft: true };
+          } else {
+            // LOST gating prevented soft-advance due to missing anchors/ngrams
+            try {
+              if (LOST) window.__tpHudInc && window.__tpHudInc('softAdv', 'blockedLost', 1);
+            } catch {}
           }
         }
       }
@@ -6805,6 +7475,15 @@ let _toast = function (msg, opts) {
         document.body;
       const y = getYForElInScroller(activeEl, sc, 0.38);
       tpScrollTo(y, sc);
+      try {
+        // Emit a single high-confidence sample to the governor when we commit via geometry
+        if (typeof onSpeechAlignment === 'function') {
+          try {
+            const epx = errPxFrom(activeEl, sc, 0.38);
+            onSpeechAlignment(epx, 1.0);
+          } catch {}
+        }
+      } catch {}
     } catch {}
   }
 
@@ -6928,6 +7607,7 @@ let _toast = function (msg, opts) {
 
     // Character-level F1 score using normalized Levenshtein
     function computeCharacterF1(text1, text2) {
+      try { if (window && typeof window.computeCharacterF1 === 'function') return window.computeCharacterF1(text1, text2); } catch {};
       const chars1 = text1.split('');
       const chars2 = text2.split('');
 
@@ -6936,25 +7616,27 @@ let _toast = function (msg, opts) {
       const set2 = new Set(chars2);
 
       const intersection = new Set([...set1].filter((x) => set2.has(x)));
-      const precision = intersection.size / set1.size;
-      const recall = intersection.size / set2.size;
+      const precision = set1.size ? intersection.size / set1.size : 0;
+      const recall = set2.size ? intersection.size / set2.size : 0;
 
       return precision + recall > 0 ? (2 * (precision * recall)) / (precision + recall) : 0;
     }
 
     // Jaccard similarity on stemmed tokens
     function computeJaccardSimilarity(tokens1, tokens2) {
+      try { if (window && typeof window.computeJaccardSimilarity === 'function') return window.computeJaccardSimilarity(tokens1, tokens2); } catch {};
       const stem1 = new Set(tokens1.map(stemToken));
       const stem2 = new Set(tokens2.map(stemToken));
 
       const intersection = new Set([...stem1].filter((x) => stem2.has(x)));
       const union = new Set([...stem1, ...stem2]);
 
-      return intersection.size / union.size;
+      return union.size ? intersection.size / union.size : 0;
     }
 
     // Entity bonus for numbers, names, toponyms
     function computeEntityBonus(tokens1, tokens2) {
+      try { if (window && typeof window.computeEntityBonus === 'function') return window.computeEntityBonus(tokens1, tokens2); } catch {};
       let bonus = 0;
 
       // Number matches
@@ -6978,6 +7660,9 @@ let _toast = function (msg, opts) {
 
     // Helper functions
     function getNgrams(tokens, n) {
+      try {
+        if (window && typeof window.getNgrams === 'function') return window.getNgrams(tokens, n);
+      } catch { }
       const ngrams = [];
       for (let i = 0; i <= tokens.length - n; i++) {
         ngrams.push(tokens.slice(i, i + n).join(' '));
@@ -6986,6 +7671,7 @@ let _toast = function (msg, opts) {
     }
 
     function cosineSimilarity(vec1, vec2) {
+      try { if (window && typeof window.cosineSimilarity === 'function') return window.cosineSimilarity(vec1, vec2); } catch {};
       let dot = 0,
         norm1 = 0,
         norm2 = 0;
@@ -7222,9 +7908,17 @@ let _toast = function (msg, opts) {
       const score = computeLineSimilarity(batchTokens, vis);
 
       // Apply header penalty (skip_prior)
-      if (para.isNonSpoken) {
-        scores[j] = score - 0.6; // header_prior = -0.6
-      } else {
+      // Devalue/ignore meta/branding lines
+      try {
+        if (para.isMeta) {
+          // apply heavy penalty so these lines don't win soft-advance
+          scores[j] = score * 0.5 - 0.2;
+        } else if (para.isNonSpoken) {
+          scores[j] = score - 0.6; // header_prior = -0.6
+        } else {
+          scores[j] = score;
+        }
+      } catch {
         scores[j] = score;
       }
     }
@@ -7311,6 +8005,8 @@ let _toast = function (msg, opts) {
 
     // Rescue mode state
     if (!window.__tpRescueMode) window.__tpRescueMode = { active: false, enteredAt: 0 };
+    // Soft-advance freeze after anchor rescue
+    if (typeof window.__tpSoftAdvanceFreeze === 'undefined') window.__tpSoftAdvanceFreeze = { until: 0 };
 
     if (stallDetected) {
       // Enter rescue mode: widen window, relax β, try anchor scan
@@ -7322,7 +8018,8 @@ let _toast = function (msg, opts) {
       // Try anchor scan for distinctive phrases
       const anchors = extractHighIDFPhrases(batchTokens, 3);
       if (anchors.length > 0) {
-        const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
+  const band = getAnchorBand();
+  const anchorHits = searchBand(anchors, i_pred - band, i_pred + windowAhead, batchTokens);
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
         // Cap anchor jumps: prefer within +60 tokens unless confidence >0.9
         if (bestAnchor) {
@@ -7338,6 +8035,7 @@ let _toast = function (msg, opts) {
             const anchorDistance = Math.abs(bestAnchor.idx - currentIndex); // Word distance, not paragraph distance
             const allowJump = bestAnchor.score > 0.9 || anchorDistance <= 60;
             if (bestAnchor.score > 0.75 && allowJump) {
+              try { window.__tpHudInc && window.__tpHudInc('rescue', 'count', 1); } catch {}
               bestIdx = paraIndex[paraIdx].start; // Use paragraph start word index, not paragraph array index
               bestSim = bestAnchor.score;
               // Update tracking for dynamic threshold
@@ -7358,6 +8056,19 @@ let _toast = function (msg, opts) {
                     distance: anchorDistance,
                     allowed: allowJump,
                   });
+              } catch {}
+              // Freeze soft-advance for next ~2 batches and issue a catch-up to marker
+              try {
+                window.__freezeBatches = 2; // freeze next 2 match cycles
+                softAdvanceStreak = 0;
+                try { window.__tpHudInc && window.__tpHudInc('softAdv', 'frozen', 1); } catch {}
+                const el = lineEls && lineEls[Math.max(0, bestIdx)] ? lineEls[Math.max(0, bestIdx)] : null;
+                if (el) {
+                  try {
+                    const y = getYForElInScroller(el);
+                    tpScrollTo(y);
+                  } catch {}
+                }
               } catch {}
             }
           }
@@ -7496,7 +8207,8 @@ let _toast = function (msg, opts) {
       // Trigger anchor scan for distinctive phrases
       const anchors = extractHighIDFPhrases(batchTokens, 3);
       if (anchors.length > 0) {
-        const anchorHits = searchBand(anchors, i_pred - 50, i_pred + windowAhead, batchTokens);
+  const band = getAnchorBand();
+  const anchorHits = searchBand(anchors, i_pred - band, i_pred + windowAhead, batchTokens);
         const bestAnchor = anchorHits.sort((a, b) => b.score - a.score)[0];
         if (bestAnchor) {
           // Find the para index containing the anchor word index
@@ -7691,7 +8403,8 @@ let _toast = function (msg, opts) {
     } catch {}
 
     try {
-      const allowSoftAdv = performance.now() > autoBumpUntil;
+      const nowPerf = performance.now();
+      const allowSoftAdv = nowPerf > autoBumpUntil && nowPerf > (window.__tpSoftAdvanceFreeze?.until || 0);
       const soft = allowSoftAdv ? maybeSoftAdvance(bestIdx, bestSim, spoken) : null;
       if (soft && soft.soft) {
         bestIdx = soft.idx;
@@ -7801,6 +8514,18 @@ let _toast = function (msg, opts) {
     window.__tpCommit.idx = currentIndex;
     window.__tpCommit.ts = performance.now();
 
+    // Emit an explicit speech-sync sample to the governor/HUD at commit time.
+    try {
+      const matchedPara = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) || null;
+      const viewerEl = viewer || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+      if (matchedPara && matchedPara.el && viewerEl) {
+        try {
+          const epx = errPxFrom(matchedPara.el, viewerEl);
+          try { if (typeof onSpeechAlignment === 'function') onSpeechAlignment(epx, typeof bestSim === 'number' ? bestSim : 0); } catch {}
+        } catch {}
+      }
+    } catch {}
+
     // Periodic rescue scheduling: trigger rescue if LOST for too long
     try {
       const now = performance.now();
@@ -7846,6 +8571,13 @@ let _toast = function (msg, opts) {
         dt: performance.now() - (window.__lastMatchTime || performance.now()),
       });
       window.__lastMatchTime = performance.now();
+      // Emit a speech-alignment sample for the adaptive governor: compute signed pixel error and forward
+      try {
+        if (matchedPara && matchedPara.el && viewer && typeof onSpeechAlignment === 'function') {
+          const errPx = computeErrPx(matchedPara.el, viewer);
+          try { onSpeechAlignment(errPx, bestSim); } catch {}
+        }
+      } catch {}
       try {
         if (mode === 'HYBRID') {
           window.HUD?.log?.('pll:update', {
@@ -7938,7 +8670,7 @@ let _toast = function (msg, opts) {
           const markerY = viewer.getBoundingClientRect().top + markerTop();
           __scrollCtl.forceAlignToMarker(currentIndex, markerY);
         }
-      } catch (e) {
+      } catch {
         if (window.__TP_DEV) console.warn('forceAlignToMarker failed', e);
       }
       if (typeof debug === 'function')
@@ -8045,16 +8777,20 @@ let _toast = function (msg, opts) {
     return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
   }
 
+  // Delegating stub: prefer window.formatInlineMarkup (ui/format.js or TS build)
   function formatInlineMarkup(text) {
+    try {
+      if (typeof window.formatInlineMarkup === 'function' && window.formatInlineMarkup !== formatInlineMarkup) {
+        return window.formatInlineMarkup(text);
+      }
+    } catch {}
+    // Fallback legacy inline implementation (kept minimal to match previous behavior)
     let s = escapeHtml(text);
-    // basic
     s = s
       .replace(/\[b\]([\s\S]+?)\[\/b\]/gi, '<strong>$1<\/strong>')
       .replace(/\[i\]([\s\S]+?)\[\/i\]/gi, '<em>$1<\/em>')
       .replace(/\[u\]([\s\S]+?)\[\/u\]/gi, '<span class="u">$1<\/span>')
-      // Notes render as block-level for clarity
       .replace(/\[note\]([\s\S]+?)\[\/note\]/gi, '<div class="note">$1<\/div>');
-    // color/bg
     s = s.replace(/\[color=([^\]]+)\]([\s\S]+?)\[\/color\]/gi, (_, col, inner) => {
       const c = safeColor(col);
       return c ? `<span style="color:${c}">${inner}</span>` : inner;
@@ -8065,25 +8801,13 @@ let _toast = function (msg, opts) {
         ? `<span style="background:${c};padding:0 .15em;border-radius:.2em">${inner}</span>`
         : inner;
     });
-    // roles (standardized: only s1/s2 are colorized; g1/g2 and guest wrappers are stripped)
-    // Colorize s1 and s2
-    s = s.replace(
-      /\[s1\]([\s\S]+?)\[\/s1\]/gi,
-      (_, inner) => `<span style="${roleStyle('s1')}">${inner}<\/span>`
-    );
-    s = s.replace(
-      /\[s2\]([\s\S]+?)\[\/s2\]/gi,
-      (_, inner) => `<span style="${roleStyle('s2')}">${inner}<\/span>`
-    );
-    // Strip g1/g2 wrappers, keep content
+    s = s.replace(/\[s1\]([\s\S]+?)\[\/s1\]/gi, (_, inner) => `<span style="${roleStyle('s1')}">${inner}<\/span>`);
+    s = s.replace(/\[s2\]([\s\S]+?)\[\/s2\]/gi, (_, inner) => `<span style="${roleStyle('s2')}">${inner}<\/span>`);
     s = s.replace(/\[(g1|g2)\]([\s\S]+?)\[\/\1\]/gi, '$2');
-    // Map [speaker=1|2] to s1/s2 styling; strip [guest=*]
-    s = s.replace(
-      /\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi,
-      (_, idx, inner) => `<span style="${roleStyle('s' + idx)}">${inner}<\/span>`
+    s = s.replace(/\[speaker\s*=\s*(1|2)\]([\s\S]+?)\[\/speaker\]/gi, (_, idx, inner) =>
+      `<span style="${roleStyle('s' + idx)}">${inner}<\/span>`
     );
     s = s.replace(/\[guest\s*=\s*(1|2)\]([\s\S]+?)\[\/guest\]/gi, '$2');
-    // final scrub: remove any stray speaker tags that slipped into inline text (notes are handled as blocks)
     s = s.replace(/\[\/?(?:s1|s2|g1|g2)\]/gi, '');
     return s;
   }
@@ -8124,6 +8848,11 @@ let _toast = function (msg, opts) {
   }
 
   function renderScript(text) {
+    // transient in-flight guard to prevent re-entrant renders
+    try {
+      if (window.__tp_rs_inflight) return;
+      window.__tp_rs_inflight = true;
+    } catch {}
     const t = String(text || '');
 
     // Tokenize for speech sync (strip tags so only spoken words are matched)
@@ -8150,10 +8879,12 @@ let _toast = function (msg, opts) {
     }
     const paragraphs = outParts.filter(Boolean).join('');
 
-    scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
-    applyTypography();
-    // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
-    applyBottomPad();
+  scriptEl.innerHTML = paragraphs || '<p><em>Paste text in the editor to begin…</em></p>';
+  applyTypography();
+  // Ensure enough breathing room at the bottom so the last lines can reach the marker comfortably
+  applyBottomPad();
+  // Refresh the end spacer and endgame HUD now that layout/padding changed
+  try { refreshEndSpacer(); } catch {}
     // currentIndex = 0; // Do not reset index when rendering script for speech sync
 
     // Build paragraph index
@@ -8162,7 +8893,7 @@ let _toast = function (msg, opts) {
     try {
       __anchorObs?.ensure?.();
     } catch {}
-    const paras = Array.from(scriptEl.querySelectorAll('p'));
+  const paras = Array.from(scriptEl.querySelectorAll('p'));
     try {
       __anchorObs?.observeAll?.(paras);
     } catch {}
@@ -8195,13 +8926,48 @@ let _toast = function (msg, opts) {
       );
     }
 
+    // Two-pass: 1) gather normalized tokens per paragraph and compute signature counts
+    const paraTokenList = [];
     for (const el of paras) {
-      const toks = normTokens(el.textContent || '');
+      try {
+        const toks = normTokens(el.textContent || '');
+        paraTokenList.push(toks);
+      } catch {
+        paraTokenList.push([]);
+      }
+    }
+    // Build signature counts (first 4 tokens per paragraph)
+    try {
+      __vSigCount = new Map();
+      for (const toks of paraTokenList) {
+        try {
+          const sig = (Array.isArray(toks) ? toks.slice(0, 4).join(' ') : '') || '';
+          if (sig) __vSigCount.set(sig, (__vSigCount.get(sig) || 0) + 1);
+        } catch {}
+      }
+    } catch {}
+
+    // 2) now build paraIndex and related structures using accurate __vSigCount
+    for (let idx = 0; idx < paras.length; idx++) {
+      const el = paras[idx];
+      const toks = paraTokenList[idx] || [];
       const wc = toks.length || 1;
       const key = normLineKey(el.textContent || '');
       const isNonSpoken = isNonSpokenLine(el.textContent || '');
-      const paraIdx = paraIndex.length; // Current paragraph index
-      paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken });
+      const paraIdx = paraIndex.length;
+      // Mark meta/branding lines: short or repeated headers
+      let isMeta = false;
+      try {
+        const low = key || '';
+        if (low && low.startsWith('bs with joe')) isMeta = true;
+        const tokCount = (low.split(/\s+/) || []).length;
+        if (tokCount <= 5) isMeta = true;
+        const sig = toks.slice(0, 4).join(' ');
+        const vSigCount = __vSigCount.get(sig) || 0;
+        if (vSigCount > 1) isMeta = true;
+      } catch {}
+
+      paraIndex.push({ el, start: acc, end: acc + wc - 1, key, isNonSpoken, isMeta });
       el.dataset.words = wc;
       el.dataset.idx = paraIdx;
       el.dataset.lineIdx = paraIdx; // for line-index.js
@@ -8227,6 +8993,12 @@ let _toast = function (msg, opts) {
         if (key) __lineFreq.set(key, (__lineFreq.get(key) || 0) + 1);
       } catch {}
     }
+    // Build a script vocab set for quick overlap checks (used by inVocabRatio)
+    try {
+      const vocab = new Set();
+      for (const toks of __paraTokens) for (const t of toks) vocab.add(t);
+      window.__SCRIPT_VOCAB = vocab;
+    } catch {}
 
     // Mirror to display AFTER data attributes are set
     try {
@@ -8256,7 +9028,7 @@ let _toast = function (msg, opts) {
       if (typeof window.buildLineIndex === 'function') {
         lineIndex = window.buildLineIndex(viewer);
       }
-    } catch (e) {
+    } catch {
       console.warn('line-index build failed', e);
     }
     // Build virtual merged lines for matcher duplicate disambiguation
@@ -8392,6 +9164,25 @@ let _toast = function (msg, opts) {
       paraIndex[0]?.el ||
       null;
     if (currentEl) currentEl.classList.add('active');
+  // Notify presence of script (hasScript) for gating heavy subsystems
+    try {
+      const totalLines = (__paraTokens && __paraTokens.length) || 0;
+      try {
+        // Compute from editor text to avoid arming engines on empty/placeholder pages
+        const src = (typeof editor !== 'undefined' && editor ? String(editor.value || '') : '') .trim();
+        const tokenCount = src ? src.split(/\s+/).filter(Boolean).length : 0;
+        const nonMetaLines = src
+          .split(/\r?\n/)
+          .map((s) => (s || '').trim())
+          .filter((s) => s && !/^\[(?:note|s\d+|guest\d+)\]$/i.test(s) && !/^\[\/(?:note|s\d+|guest\d+)\]$/i.test(s)).length;
+        const hasScript = tokenCount >= 20 && nonMetaLines >= 3;
+        try { if (hasScript) window.tpSetHasScript && window.tpSetHasScript(true); } catch {}
+        try { if (hasScript) console.log('[TP-TRACE]', 'rs:complete'); } catch {}
+      } catch {}
+      try { window.__tpHudInc && window.__tpHudInc('render', 'lines', totalLines); } catch {}
+    } catch {}
+    // clear transient in-flight guard so subsequent renders are allowed
+    try { window.__tp_rs_inflight = false; } catch {}
   }
 
   // Dynamic bottom padding so the marker can sit over the final paragraphs
@@ -8406,6 +9197,81 @@ let _toast = function (msg, opts) {
       if (scriptEl) scriptEl.style.paddingBottom = `${pad}px`;
       // Reset endgame on viewport changes that affect marker position
       __scrollCtl?.resetEndgame?.();
+      // Also refresh the end spacer immediately whenever bottom padding is recomputed
+      try { refreshEndSpacer(); } catch {}
+    } catch {}
+  }
+
+  // Ensure an end spacer element exists and scales so the last line can reach the marker.
+  // viewer: the scrolling container; scriptRoot: element that contains paragraphs (scriptEl)
+  function ensureEndSpacer(viewer, scriptRoot, markerPct = 0.4) {
+    try {
+      if (!viewer || !scriptRoot) return;
+      let spacer = document.getElementById('tp_end_spacer');
+      if (!spacer) {
+        spacer = document.createElement('div');
+        spacer.id = 'tp_end_spacer';
+        spacer.style.width = '100%';
+        spacer.style.display = 'block';
+        spacer.style.pointerEvents = 'none';
+        // append at end of script root so it contributes to scrollHeight
+        scriptRoot.appendChild(spacer);
+      }
+      // Compute required pad so the final text can be pushed up to the marker line
+      const pct = typeof markerPct === 'number' && isFinite(markerPct) ? markerPct : 0.4;
+      const markerPad = Math.ceil((viewer.clientHeight || window.innerHeight || 800) * (1 - pct) + 24);
+      spacer.style.height = markerPad + 'px';
+    } catch {}
+  }
+
+  // HUD helper that forwards to HUD.log when available
+  function hud(evt, data) {
+    try {
+      if (window.HUD && typeof window.HUD.log === 'function') window.HUD.log(evt, data);
+    } catch {}
+  }
+
+  // Track endgame enter/exit and emit HUD metrics. Uses the last paragraph element
+  // and compares its viewport top to the marker Y (also viewport coord) to decide.
+  let __tpEndgame = false;
+  function updateEndgameState() {
+    try {
+      if (!viewer || !scriptEl) return;
+      if (!paraIndex || !paraIndex.length) return;
+      const lastPara = paraIndex[paraIndex.length - 1];
+      if (!lastPara || !lastPara.el) return;
+      const vRect = viewer.getBoundingClientRect();
+      const lastLineRect = lastPara.el.getBoundingClientRect();
+      const markerTopLocal = (() => {
+        try {
+          return (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4) * (viewer.clientHeight || 0);
+        } catch {
+          return 0.4 * (viewer.clientHeight || 0);
+        }
+      })();
+      // markerY in viewport coordinates
+      const markerY = vRect.top + markerTopLocal;
+      // lastLineRect.top is already viewport Y
+      const distPx = Math.round(lastLineRect.top - markerY);
+      const atOrPast = lastLineRect.top <= markerY;
+      // Emit lightweight HUD metric and toggle enter/exit events
+      try { hud('end:metrics', { distPx, atOrPast }); } catch {}
+      if (!__tpEndgame && atOrPast) {
+        __tpEndgame = true;
+        try { hud('end:enter', { ts: Date.now(), distPx }); } catch {}
+      } else if (__tpEndgame && !atOrPast) {
+        __tpEndgame = false;
+        try { hud('end:exit', { ts: Date.now(), distPx }); } catch {}
+      }
+    } catch {}
+  }
+
+  // Refresh helper wired to resize and other layout changes
+  function refreshEndSpacer() {
+    try {
+      const pct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+      try { ensureEndSpacer(viewer, scriptEl, pct); } catch {}
+      try { updateEndgameState(); } catch {}
     } catch {}
   }
 
@@ -8426,6 +9292,8 @@ let _toast = function (msg, opts) {
       let tId = 0;
       const loop = () => {
         try {
+          // Skip end-drift behavior when there is no script loaded or watchdog not armed
+          try { if (!window.__tp_has_script || !window.__tp_wd_armed) { tId = setTimeout(loop, TICK_MS); return; } } catch {}
           const now = performance.now();
           const sc = viewer;
           if (!sc) return;
@@ -8489,17 +9357,19 @@ let _toast = function (msg, opts) {
   }, 1500);
 
   // --- Token normalization (used by DOCX import, renderScript, and matcher) ---
+  // Delegating stub: prefer window.normTokens (from ui/normTokens.js or TS build)
   function normTokens(text) {
+    try {
+      if (typeof window.normTokens === 'function' && window.normTokens !== normTokens) {
+        return window.normTokens(text);
+      }
+    } catch {}
+    // Fallback inline legacy implementation (kept behaviorally equivalent)
     let t = String(text)
       .toLowerCase()
       .replace(/’/g, "'")
-      // expand common contractions
       .replace(/\b(won't)\b/g, 'will not')
-      // generic n't expansion for common auxiliaries/verbs (avoid 'won't' which is handled above)
-      .replace(
-        /\b(can|do|does|is|are|was|were|has|have|had|would|should|could|did)n['’]t\b/g,
-        '$1 not'
-      )
+      .replace(/\b(can|do|does|is|are|was|were|has|have|had|would|should|could|did)n['’]t\b/g, '$1 not')
       .replace(/\b(\w+)'re\b/g, '$1 are')
       .replace(/\b(\w+)'ll\b/g, '$1 will')
       .replace(/\b(\w+)'ve\b/g, '$1 have')
@@ -8508,61 +9378,28 @@ let _toast = function (msg, opts) {
       .replace(/\bit's\b/g, 'it is')
       .replace(/\bthat's\b/g, 'that is');
 
-    // split number ranges: 76–86, 8-7 → "76 86", "8 7"
     t = t.replace(/(\d+)\s*[\u2010-\u2015-]\s*(\d+)/g, '$1 $2');
-
-    // turn percent into a word so "86 %" ≈ "eighty six percent"
     t = t.replace(/%/g, ' percent');
-
-    // split hyphenated words into what you actually say: matter-of-fact → matter of fact
     t = t.replace(/([a-z])[\u2010-\u2015-]([a-z])/gi, '$1 $2');
 
-    // strip punctuation broadly (unicode-aware) + long dashes
     try {
       t = t.replace(/[^\p{L}\p{N}\s]/gu, ' ');
     } catch {
       t = t.replace(/[.,!?;:()"\[\]`]/g, ' ');
     }
     t = t.replace(/[\u2010-\u2015]/g, ' ');
-
-    // collapse whitespace (pre-tokenization)
     t = t.replace(/\s+/g, ' ').trim();
-
     const raw = t.split(/\s+/).filter(Boolean);
 
-    // numerals 0..99 → words (helps overlap)
     const ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-    const teens = [
-      'ten',
-      'eleven',
-      'twelve',
-      'thirteen',
-      'fourteen',
-      'fifteen',
-      'sixteen',
-      'seventeen',
-      'eighteen',
-      'nineteen',
-    ];
-    const tens = [
-      '',
-      '',
-      'twenty',
-      'thirty',
-      'forty',
-      'fifty',
-      'sixty',
-      'seventy',
-      'eighty',
-      'ninety',
-    ];
+    const teens = ['ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+    const tens = ['','', 'twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
     const numToWords = (n) => {
       n = Number(n);
       if (Number.isNaN(n) || n < 0 || n > 99) return null;
       if (n < 10) return ones[n];
       if (n < 20) return teens[n - 10];
-      const t = Math.floor(n / 10),
-        o = n % 10;
+      const t = Math.floor(n / 10), o = n % 10;
       return o ? `${tens[t]} ${ones[o]}` : tens[t];
     };
 
@@ -8583,14 +9420,27 @@ let _toast = function (msg, opts) {
   /* ──────────────────────────────────────────────────────────────
    * Smart Tagging (names → roles)
    * ────────────────────────────────────────────────────────────── */
+  // Delegating stub: prefer window.normalizeSimpleTagTypos (from ui/normalize.js or TS build)
   function normalizeSimpleTagTypos(text) {
-    // Fix common bracket typos like [ s1 ]
+    try {
+      if (typeof window.normalizeSimpleTagTypos === 'function' && window.normalizeSimpleTagTypos !== normalizeSimpleTagTypos) {
+        return window.normalizeSimpleTagTypos(text);
+      }
+    } catch {}
+    // Fallback (same behavior as legacy)
     return String(text || '')
       .replace(/\[\s*(s1|s2|g1|g2)\s*\]/gi, '[$1]')
       .replace(/\[\s*\/(s1|s2|g1|g2)\s*\]/gi, '[/$1]');
   }
 
+  // Delegating stub: prefer window.smartTag (from ui/smartTag.js or TS build)
   function smartTag(input, opts = {}) {
+    try {
+      if (typeof window.smartTag === 'function' && window.smartTag !== smartTag) {
+        return window.smartTag(input, opts);
+      }
+    } catch {}
+    // Fallback: inline legacy implementation
     // if already tagged, do nothing (prevents double-wrapping on re-run)
     if (/\[(s1|s2|g1|g2)\]/i.test(input)) return input;
 
@@ -8705,6 +9555,7 @@ let _toast = function (msg, opts) {
       }
       displayReady = false;
       displayChip.textContent = 'Display: open';
+  try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
       closeDisplayBtn.disabled = true; // will be enabled by global DISPLAY_READY handler
       // Kick off handshake retry pings: every 300ms up to ~3s or until READY.
       if (displayHelloTimer) {
@@ -8739,6 +9590,7 @@ let _toast = function (msg, opts) {
     displayReady = false;
     closeDisplayBtn.disabled = true;
     displayChip.textContent = 'Display: closed';
+    try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
   }
   // TP: display-send
   function sendToDisplay(payload) {
@@ -8784,6 +9636,7 @@ let _toast = function (msg, opts) {
       }
       const topStr = Math.round(viewer.scrollTop || 0).toLocaleString();
       debugPosChip.textContent = `A:${pct}% S:${topStr}`;
+      try { updateEndgameState(); } catch {}
     } catch {}
   }
   let __debugPosRaf = 0;
@@ -8793,6 +9646,8 @@ let _toast = function (msg, opts) {
     __debugPosPending = true;
     __debugPosRaf && cancelAnimationFrame(__debugPosRaf);
     __debugPosRaf = requestAnimationFrame(() => {
+      // Guard: only run debug/update UI when script present and watchdog armed
+      try { if (!window.__tp_has_script || !window.__tp_wd_armed) { __debugPosPending = false; return; } } catch {}
       __debugPosPending = false;
       updateDebugPosChipImmediate();
     });
@@ -8804,6 +9659,8 @@ let _toast = function (msg, opts) {
     _wdLastT = 0;
   function deadmanWatchdog(idx) {
     try {
+      // Respect global guard: do nothing when no script or watchdog not armed
+      try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
       const sc = getScroller();
       if (!sc) return;
       // Don’t fight auto-scroll
@@ -8845,6 +9702,7 @@ let _toast = function (msg, opts) {
     try {
       __scrollCtl?.stopAutoCatchup?.();
     } catch {}
+    try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
 
     // prefer user input; fall back to last saved; else default 60
     let pxSpeed = parseFloat(autoSpeed.value);
@@ -8858,37 +9716,159 @@ let _toast = function (msg, opts) {
     autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
     autoToggle.classList.add('active');
 
+    // Snap the nearest readable line to the marker immediately to avoid
+    // initial overshoot/undershoot oscillation. Also ensure the end spacer
+    // exists in case layout/padding changed since render.
+    try {
+      try { ensureEndSpacer(viewer, scriptEl); } catch {}
+      // Determine a sensible start element: most-visible or currentIndex paragraph
+      const snapEl = (() => {
+        try {
+          const vis = __anchorObs?.mostVisibleEl?.() || null;
+          if (vis) return vis;
+          const p = (paraIndex || []).find((p) => currentIndex >= p.start && currentIndex <= p.end) ||
+            (paraIndex || [])[0];
+          return p?.el || null;
+        } catch {
+          return null;
+        }
+      })();
+      if (snapEl && viewer && typeof computeErrPx === 'function') {
+        // Compute delta and apply direct scroll to align the element to marker
+        const vRect = viewer.getBoundingClientRect();
+        const pct = typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4;
+        const markerY = vRect.top + (viewer.clientHeight || vRect.height) * pct;
+        try {
+          const r = snapEl.getBoundingClientRect();
+          const delta = Math.round(r.top - markerY);
+          // apply immediate alignment
+          try {
+            const next = Math.max(0, Math.min(viewer.scrollTop + delta, viewer.scrollHeight));
+            if (typeof requestScroll === 'function') requestScroll(next);
+            else viewer.scrollTop = next;
+          } catch {
+            viewer.scrollTop += delta;
+          }
+          try { hud('sync:snap', { delta: Math.round(delta) }); } catch {}
+        } catch {}
+      }
+    } catch {}
     // clear any previous timer
     if (autoTimer) clearInterval(autoTimer);
 
-    // Use requestAnimationFrame for smooth, accurate timing
+    // Use requestAnimationFrame for smooth, accurate timing.
+    // Lazy-load the adaptive governor so we don't add startup weight.
     let lastTime = performance.now();
     let startTime = performance.now();
-    autoTimer = () => {
+    let gov = null;
+    // HUD bridge for governor
+    const _govHud = (tag, data) => { try { (window.tp_hud || window.__tpHud)?.(tag, data); } catch {} };
+
+    // Per-viewport base speed helpers (nearest-10vh key) -------------------------------------------------
+    function _vpBaseKey() {
+      try {
+        const vh = Math.round((window.innerHeight || 0) / 10) * 10;
+        return `tp_base_speed_px_s@vh=${vh}`;
+      } catch {
+        return 'tp_base_speed_px_s';
+      }
+    }
+    function loadBaseSpeed() {
+      try {
+        const k = _vpBaseKey();
+        const v = localStorage.getItem(k) || localStorage.getItem('tp_base_speed_px_s');
+        return Number(v || 120);
+      } catch {
+        return 120;
+      }
+    }
+    function saveBaseSpeed(px) {
+      try {
+        const k = _vpBaseKey();
+        localStorage.setItem(k, String(px));
+        // keep legacy key for compatibility
+        localStorage.setItem('tp_base_speed_px_s', String(px));
+      } catch {}
+    }
+
+    // Wire user-driven change to inform governor when present
+    const onUserSpeedChange = (pxPerSec) => {
+      try {
+        if (gov && typeof gov.onManualAdjust === 'function') gov.onManualAdjust(pxPerSec);
+      } catch {}
+      saveBaseSpeed(pxPerSec);
+    };
+    // Listen for live UI edits to autoSpeed and propagate
+    try {
+      autoSpeed.addEventListener('input', () => {
+        const v = parseFloat(autoSpeed.value) || 0;
+        onUserSpeedChange(v);
+      });
+    } catch {}
+
+    // Momentary speed multiplier controlled by keys (Shift = +10%, Alt = -12%)
+    let __momentaryMult = 1;
+    const _onKey = (e) => {
+      try {
+        const next = e.shiftKey ? 1.1 : e.altKey ? 0.88 : 1;
+        if (next !== __momentaryMult) {
+          __momentaryMult = next;
+          try { (window.tp_hud || window.__tpHud)?.('speed:momentary', { n: __momentaryMult }); } catch {}
+        }
+      } catch {}
+    };
+    // Listen on window to catch both keydown and keyup changes
+    window.addEventListener('keydown', _onKey);
+    window.addEventListener('keyup', _onKey);
+
+    autoTimer = async () => {
       const now = performance.now();
       const dt = (now - lastTime) / 1000; // actual seconds elapsed
       lastTime = now;
       const elapsed = (now - startTime) / 1000; // total elapsed time
 
-      // live-update if user changes the number while running
+      // live-update base speed from UI
       const live = parseFloat(autoSpeed.value);
-      if (live && live > 0 && live !== pxSpeed) {
-        pxSpeed = live;
-        localStorage.setItem('autoPxSpeed', String(pxSpeed));
-        autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+      if (live && live > 0) {
+        try { if (gov && typeof gov.setBase === 'function') gov.setBase(live); } catch {}
       }
 
-      // Initial speed boost for first 3 seconds to get past potential matching issues
-      let effectiveSpeed = pxSpeed;
-      if (elapsed < 3.0) {
-        effectiveSpeed = pxSpeed + 4; // +4px/s boost for smoother initial advancement
-        autoToggle.textContent = `Auto-scroll: ${effectiveSpeed.toFixed(0)}px/s (boost)`;
+      // Ensure governor is loaded
+      if (!gov) {
+        try {
+          const mod = await import((window.__TP_ADDV || ((p) => p))('./controllers/adaptiveSpeed.js'));
+          const lastGood = Number((typeof loadBaseSpeed === 'function' ? loadBaseSpeed() : (localStorage.getItem('tp_base_speed_px_s') || pxSpeed || 25)) || 25);
+          const GovCtor = mod && (mod.SpeedGovernor || (mod.default && mod.default.SpeedGovernor));
+          if (GovCtor) gov = new GovCtor(lastGood, _govHud);
+          else gov = null;
+        } catch (err) {
+          // fallback to legacy stepping if import fails
+          console.debug && console.debug('[adaptiveSpeed] import failed', err);
+          gov = null;
+        }
+        // publish governor globally for speech-alignment samples to reach it
+        try { window.__tpGov = gov; } catch {}
+      }
+
+      // compute dy using governor when available; apply momentary multiplier
+      let dy = 0;
+      if (gov && typeof gov.tick === 'function') {
+        const vpx = gov.tick();
+        // convert px/sec to px for this frame using dt
+        dy = vpx * dt * __momentaryMult;
       } else {
-        autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
+        // legacy behavior: smooth soft-start ramp from 0 -> base over ~1200ms
+        try {
+          const SOFT_START_MS = 1200;
+          const alpha = Math.max(0, Math.min(1, elapsed / (SOFT_START_MS / 1000)));
+          // cubic ease-out: 1 - (1-alpha)^3
+          const eased = 1 - Math.pow(1 - alpha, 3);
+          const px = eased * pxSpeed * __momentaryMult;
+          dy = px * dt;
+        } catch {
+          dy = pxSpeed * dt * __momentaryMult;
+        }
       }
-
-      // convert px/s to px per frame
-      let dy = effectiveSpeed * dt;
 
       // Apply PLL bias if hybrid lock is enabled
       if (isHybrid()) {
@@ -8901,15 +9881,22 @@ let _toast = function (msg, opts) {
         viewer.scrollTop += dy;
       }
 
-      {
+      // Mirror to display
+      try {
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max ? viewer.scrollTop / max : 0;
         sendToDisplay({ type: 'scroll', top: viewer.scrollTop, ratio });
-      }
+      } catch {}
 
       // Continue the animation loop
       if (autoTimer) requestAnimationFrame(autoTimer);
     };
+
+    // register momentary handlers on window so stopAutoScroll can clean them up
+    try {
+      window.__tpMomentaryHandlers = { onKey: _onKey };
+    } catch {}
+
     requestAnimationFrame(autoTimer);
   }
 
@@ -8918,6 +9905,17 @@ let _toast = function (msg, opts) {
       cancelAnimationFrame(autoTimer);
       autoTimer = null;
     }
+    // remove momentary key handlers if installed
+    try {
+      const h = window.__tpMomentaryHandlers || null;
+      if (h && typeof h.onKey === 'function') {
+        try { window.removeEventListener('keydown', h.onKey); } catch {}
+        try { window.removeEventListener('keyup', h.onKey); } catch {}
+      }
+      try { window.__tpMomentaryHandlers = null; } catch {}
+    } catch {}
+    try { window.__tpGov = null; } catch {}
+    try { if (!speechOn) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
     autoToggle.classList.remove('active');
     autoToggle.textContent = 'Auto-scroll: Off';
   }
@@ -8994,6 +9992,18 @@ let _toast = function (msg, opts) {
         return false;
       const a = bridge ? null : window.__recorder?.get?.('obs');
 
+      // Guard: if OBS is not enabled in recorder settings or the UI checkbox, skip OBS actions
+      try {
+        const settings = __recorder && __recorder.getSettings ? __recorder.getSettings() : null;
+        const obsEnabledInSettings = settings && Array.isArray(settings.selected) ? settings.selected.indexOf('obs') >= 0 : false;
+        const enableObsUi = !!document.getElementById('enableObs')?.checked;
+        if (!obsEnabledInSettings && !enableObsUi) {
+          // OBS explicitly disabled — do not attempt scene switching or starting the recorder
+          if (window.__TP_DEV) console.debug('[OBS] ensureRecordingMini: OBS disabled by settings/UI — skipping');
+          return false;
+        }
+      } catch {}
+
       // 1) Disk space check (best-effort)
       try {
         if (bridge && typeof bridge.getStats === 'function') {
@@ -9028,20 +10038,116 @@ let _toast = function (msg, opts) {
         // ignore GetRecordStatus errors and continue
       }
 
-      // 3) Scene sanity (preferred scene or fallback)
+      // 3) Scene sanity — SAFE flow
+      // Default behavior: do nothing. If the user has a preferred scene configured,
+      // treat it as optional: validate it exists first and only switch if it differs
+      // from the current program scene and the connection is stable.
       try {
         const settings = __recorder.getSettings?.() || {};
-        let sceneName = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
-        if (!sceneName) sceneName = 'Anvil-Default';
-        if (sceneName) {
+        let preferredScene = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
+        // If no explicit preferred scene, skip any scene changes entirely
+        if (preferredScene) {
           try {
-            if (bridge && typeof bridge.setCurrentProgramScene === 'function')
-              await bridge.setCurrentProgramScene(sceneName);
-            else if (a && a.call) await a.call('SetCurrentProgramScene', { sceneName });
-            else if (typeof a.setCurrentProgramScene === 'function')
-              await a.setCurrentProgramScene(sceneName);
-            else if (window.obsSocket && typeof window.obsSocket.call === 'function')
-              await window.obsSocket.call('SetCurrentProgramScene', { sceneName });
+            // wait a small quiet window to ensure connection is stable
+            await new Promise((r) => setTimeout(r, 600));
+
+            // helper to read current program scene and scene list from bridge/adapters
+            let currentProgram = null;
+            let scenes = null;
+            try {
+              if (bridge && typeof bridge.getCurrentProgramScene === 'function')
+                currentProgram = await bridge.getCurrentProgramScene();
+              else if (a && a.call) {
+                try {
+                  const r = await a.call('GetCurrentProgramScene');
+                  currentProgram = r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName);
+                } catch {}
+              }
+            } catch {}
+            try {
+              if (bridge && typeof bridge.getSceneList === 'function') scenes = await bridge.getSceneList();
+              else if (a && a.call) {
+                try {
+                  const res = await a.call('GetSceneList');
+                  scenes = res && (res.scenes || res.sceneList || null);
+                } catch {}
+              }
+            } catch {}
+
+            // Normalize scenes names to an array of string names if possible
+            let sceneNames = null;
+            try {
+              if (Array.isArray(scenes)) sceneNames = scenes.map((s) => s && s.sceneName ? s.sceneName : s && s.name ? s.name : s);
+            } catch {}
+            // Dev diagnostic: log discovered scenes and current program
+            try {
+              if (window.__TP_DEV) {
+                try { console.debug('[OBS-SCENE] preferredScene=', preferredScene); } catch {}
+                try { console.debug('[OBS-SCENE] currentProgram=', currentProgram); } catch {}
+                try { console.debug('[OBS-SCENE] sceneNames=', sceneNames); } catch {}
+              }
+            } catch {}
+
+            // Only proceed if preferredScene exists in the scene list (exact match)
+            const exists = Array.isArray(sceneNames) ? sceneNames.indexOf(preferredScene) >= 0 : false;
+            if (!exists) {
+              // Preferred scene not found: do nothing (leave program scene as-is)
+              try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene not found; skipping'); } catch {}
+            } else {
+              // If the preferred scene is already the current program scene, do nothing
+              if (currentProgram && String(currentProgram) === String(preferredScene)) {
+                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene already active; skipping'); } catch {}
+              } else {
+                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene exists and differs; will set when quiet'); } catch {}
+                // Defer actual SetCurrentProgramScene until no transition is active.
+                // We listen for a TransitionEnd-like event or wait a short quiet window of 500ms.
+                const doSet = async () => {
+                  try {
+                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] invoking SetCurrentProgramScene ->', preferredScene); } catch {}
+                    if (bridge && typeof bridge.setCurrentProgramScene === 'function') {
+                      await bridge.setCurrentProgramScene(preferredScene);
+                    } else if (a && a.call) {
+                      await a.call('SetCurrentProgramScene', { sceneName: preferredScene });
+                    } else if (typeof a.setCurrentProgramScene === 'function') {
+                      await a.setCurrentProgramScene(preferredScene);
+                    } else if (window.obsSocket && typeof window.obsSocket.call === 'function') {
+                      await window.obsSocket.call('SetCurrentProgramScene', { sceneName: preferredScene });
+                    }
+                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] SetCurrentProgramScene complete'); } catch {}
+                  } catch {
+                    try { if (window.__TP_DEV) console.error('[OBS-SCENE] SetCurrentProgramScene failed', se); } catch {}
+                  }
+                };
+
+                // Try to detect a transition API; otherwise wait 500ms quiet and set
+                let transitionHandled = false;
+                try {
+                  if (bridge && typeof bridge.on === 'function') {
+                    const off = bridge.on('TransitionEnd', async () => {
+                      if (transitionHandled) return;
+                      transitionHandled = true;
+                      try {
+                        off && off();
+                      } catch {}
+                      await doSet();
+                    });
+                    // fallback: set a timeout in case TransitionEnd never fires
+                    setTimeout(async () => {
+                      if (transitionHandled) return;
+                      transitionHandled = true;
+                      await doSet();
+                    }, 800);
+                  } else {
+                    // no transition API: wait a short quiet window then set
+                    setTimeout(async () => {
+                      await doSet();
+                    }, 600);
+                  }
+                } catch {
+                  try { if (window.__TP_DEV) console.error('[OBS-SCENE] transition detection failed', e); } catch {}
+                }
+              }
+            }
           } catch {}
         }
       } catch {}
@@ -9230,7 +10336,7 @@ let _toast = function (msg, opts) {
           window.matcher?.reset?.();
         } catch {}
       }
-    } catch (e) {
+    } catch {
       console.warn(e);
       // Safe fallback
       setHybrid(false);
@@ -9276,13 +10382,13 @@ let _toast = function (msg, opts) {
               __recorder?.start?.();
             } catch {}
             resolve();
-          } catch (e) {
+          } catch {
             reject(e);
           }
         });
       });
       return true;
-    } catch (e) {
+    } catch {
       console.warn('ASR start failed:', e);
       return false;
     }
@@ -9295,7 +10401,7 @@ let _toast = function (msg, opts) {
       try {
         __recorder?.stop?.();
       } catch {}
-    } catch (e) {
+    } catch {
       console.warn('ASR stop failed:', e);
     }
   }
@@ -9316,7 +10422,8 @@ let _toast = function (msg, opts) {
     console.log('[TP-Pro] init() wrapper start');
     try {
       await _initCore();
-      console.log('[TP-Pro] init() wrapper end (success)');
+  console.log('[TP-Pro] init() wrapper end (success)');
+  try { window.tpMarkInitDone && window.tpMarkInitDone('init-wrapper-end'); } catch {}
       // After DOM ready and core init, fetch and propagate the build version
       (async function attachVersionEverywhere() {
         try {
@@ -9370,6 +10477,9 @@ let _toast = function (msg, opts) {
    * ────────────────────────────────────────────────────────────── */
   async function startCamera() {
     try {
+      if (window.__tpCamera && typeof window.__tpCamera.startCamera === 'function') {
+        try { return await window.__tpCamera.startCamera(); } catch {}
+      }
       const id = camDeviceSel?.value || undefined;
       const stream = await navigator.mediaDevices.getUserMedia({
         video: id ? { deviceId: { exact: id } } : true,
@@ -9418,7 +10528,7 @@ let _toast = function (msg, opts) {
         if (displayWin && !displayWin.closed && displayReady) await ensureCamPeer();
       } catch {}
       populateDevices();
-    } catch {
+    } catch (e) {
       warn('startCamera failed', e);
     }
   }
@@ -9442,72 +10552,22 @@ let _toast = function (msg, opts) {
     } catch {}
   }
   function stopCamera() {
-    wantCamRTC = false;
     try {
-      const s = camVideo?.srcObject;
-      if (s) s.getTracks().forEach((t) => t.stop());
-    } catch {}
-    camVideo.srcObject = null;
-    camWrap.style.display = 'none';
-    startCamBtn.disabled = false;
-    stopCamBtn.disabled = true;
-    camStream = null;
-    updateCamRtcChip('CamRTC: idle');
-    try {
-      sendToDisplay({ type: 'webrtc-stop' });
-    } catch {}
-    try {
-      if (camPC) {
-        camPC.close();
-        camPC = null;
+      if (window.__tpCamera && typeof window.__tpCamera.stopCamera === 'function') {
+        try { return window.__tpCamera.stopCamera(); } catch {}
       }
+      wantCamRTC = false;
+      try { const s = camVideo?.srcObject; if (s) s.getTracks().forEach(t=>t.stop()); } catch {}
+      camVideo.srcObject = null; camWrap.style.display = 'none'; startCamBtn.disabled = false; stopCamBtn.disabled = true; camStream = null; updateCamRtcChip('CamRTC: idle');
+      try { sendToDisplay({ type: 'webrtc-stop' }); } catch {}
+      try { if (camPC) { camPC.close(); camPC = null; } } catch {}
     } catch {}
   }
   function applyCamSizing() {
-    const pct = Math.max(15, Math.min(60, Number(camSize.value) || 28));
-    camWrap.style.width = pct + '%';
     try {
-      sendToDisplay({ type: 'cam-sizing', pct });
-    } catch {}
-  }
-  function applyCamOpacity() {
-    const op = Math.max(0.2, Math.min(1, (Number(camOpacity.value) || 100) / 100));
-    camWrap.style.opacity = String(op);
-    try {
-      sendToDisplay({ type: 'cam-opacity', opacity: op });
-    } catch {}
-  }
-  function applyCamMirror() {
-    camWrap.classList.toggle('mirrored', !!camMirror.checked);
-    try {
-      sendToDisplay({ type: 'cam-mirror', on: !!camMirror.checked });
-    } catch {}
-  }
-
-  // Simple fallback: draw current video frame to a hidden canvas and postImage (future implementation placeholder)
-  function enableCanvasMirrorFallback(reswitch) {
-    try {
-      // Avoid reinitializing if already active
-      if (window.__camCanvasFallback && !reswitch) return;
-      const cvs = window.__camCanvasFallback || document.createElement('canvas');
-      window.__camCanvasFallback = cvs;
-      const ctx = cvs.getContext('2d');
-      function pump() {
-        try {
-          if (!camVideo || !camVideo.videoWidth) {
-            requestAnimationFrame(pump);
-            return;
-          }
-          cvs.width = camVideo.videoWidth;
-          cvs.height = camVideo.videoHeight;
-          ctx.drawImage(camVideo, 0, 0);
-          // Potential: send via postMessage with cvs.toDataURL('image/webp',0.6) throttled
-          // For now: only keep canvas for possible local preview tools
-        } catch {}
-        requestAnimationFrame(pump);
-      }
-      requestAnimationFrame(pump);
-      updateCamRtcChip('CamRTC: fallback');
+      const pct = Math.max(15, Math.min(60, Number(camSize.value) || 28));
+      camWrap.style.width = pct + '%';
+      try { sendToDisplay({ type: 'cam-sizing', pct }); } catch {}
     } catch {}
   }
 
@@ -9654,7 +10714,7 @@ let _toast = function (msg, opts) {
         sendToDisplay({ type: 'cam-opacity', opacity: op });
         sendToDisplay({ type: 'cam-mirror', on: !!camMirror.checked });
       } catch {}
-    } catch (e) {
+    } catch {
       warn('switchCamera failed', e);
       throw e;
     }
@@ -9666,7 +10726,7 @@ let _toast = function (msg, opts) {
       } else {
         await camVideo.requestPictureInPicture();
       }
-    } catch (e) {
+    } catch {
       warn('PiP failed', e);
     }
   }
@@ -9738,7 +10798,7 @@ let _toast = function (msg, opts) {
         } catch {}
         a.remove();
       }, 1000);
-    } catch (e) {
+    } catch {
       try {
         alert('Download failed: ' + (e?.message || e));
       } catch {}
@@ -9785,7 +10845,7 @@ let _toast = function (msg, opts) {
             debug({ tag: 'speech:grammar', installed: false, reason: 'no-SpeechGrammarList' });
         } catch {}
       }
-    } catch (e) {
+    } catch {
       try {
         if (typeof debug === 'function') debug({ tag: 'speech:grammar:error', e: String(e) });
       } catch {}
@@ -9802,6 +10862,7 @@ let _toast = function (msg, opts) {
       try {
         window.HUD?.bus?.emit('speech:toggle', true);
       } catch {}
+      try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
     };
 
     let _lastInterimAt = 0;
@@ -9844,6 +10905,7 @@ let _toast = function (msg, opts) {
       try {
         window.HUD?.bus?.emit('speech:toggle', false);
       } catch {}
+      try { if (!autoTimer) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
       try {
         __scrollCtl?.stopAutoCatchup?.();
       } catch {}
@@ -9884,85 +10946,31 @@ let _toast = function (msg, opts) {
     } catch {}
   }
 
-  // TP: docx-mammoth
-  async function ensureMammoth() {
-    if (window.mammoth) return window.mammoth;
-    const loadScript = (src) =>
-      new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.async = true;
-        s.onload = res;
-        s.onerror = () => rej(new Error('Failed to load ' + src));
-        document.head.appendChild(s);
-      });
-    // Try primary CDN, then alternate, then local vendor copy if present
-    const sources = [
-      'https://unpkg.com/mammoth/mammoth.browser.min.js',
-      'https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js',
-      // Optional local fallback (place file at d:/teleprompter/vendor/mammoth/mammoth.browser.min.js)
-      'vendor/mammoth/mammoth.browser.min.js',
-    ];
-    let lastErr;
-    for (const src of sources) {
-      try {
-        await loadScript(src);
-        if (window.mammoth) return window.mammoth;
-      } catch {
-        lastErr = e;
-      }
-    }
-    throw new Error(
-      'Mammoth failed to load from CDN and local fallback. ' + (lastErr?.message || '')
-    );
+  // TP: docx-mammoth (delegated to ui/upload.js)
+  // Renamed to _ensureMammoth so unused-vars lint rule (allowed /^_/) doesn't complain.
+  async function _ensureMammoth() {
+    try {
+      if (typeof window.ensureMammoth === 'function') return await window.ensureMammoth();
+    } catch {}
+    return null;
   }
 
-  // TP: upload-file
+  // TP: upload-file (delegates to extracted module)
   async function _uploadFromFile(file) {
-    const lower = (file.name || '').toLowerCase();
-    const isDocx =
-      lower.endsWith('.docx') ||
-      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-    if (isDocx) {
-      try {
-        const mammoth = await ensureMammoth();
-        const arrayBuffer = await file.arrayBuffer();
-        const { value } = await mammoth.extractRawText({ arrayBuffer });
-        const text = String(value || '')
-          .replace(/\r\n/g, '\n')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-        // Pipeline: raw (Mammoth) -> Normalize (if available) -> render normalized
-        editor.value = text;
-        let normalized = false;
-        try {
-          if (typeof window.normalizeToStandard === 'function') {
-            window.normalizeToStandard();
-            normalized = true;
-          } else if (typeof window.fallbackNormalize === 'function') {
-            window.fallbackNormalize();
-            normalized = true;
-          }
-        } catch {}
-        renderScript(editor.value);
-        setStatus(`Loaded "${file.name}" (.docx)${normalized ? ' and normalized' : ''}.`);
-      } catch (e) {
-        err(e);
-        setStatus('Failed to read .docx: ' + (e?.message || e));
-      }
-      return;
+    try {
+      if (typeof window._uploadFromFile === 'function') return window._uploadFromFile(file);
+      const s = document.createElement('script');
+      s.src = './ui/upload.js';
+      s.async = true;
+      document.head.appendChild(s);
+      await new Promise((res, rej) => {
+        s.onload = res;
+        s.onerror = rej;
+      });
+      if (typeof window._uploadFromFile === 'function') return window._uploadFromFile(file);
+    } catch {
+      try { console.warn('upload delegate failed', e); } catch {}
     }
-
-    // Plain text / md / rtf / .text → read as text (RTF will include markup)
-    const reader = new FileReader();
-    reader.onload = () => {
-      editor.value = reader.result || '';
-      renderScript(editor.value);
-      setStatus(`Loaded “${file.name}”.`);
-    };
-    reader.onerror = () => setStatus('Failed to read file.');
-    reader.readAsText(file, 'utf-8');
   }
 
   // Debug HUD moved to debug-tools.js
@@ -10137,7 +11145,7 @@ let _toast = function (msg, opts) {
       bar.onclick = () => {
         panel.classList.toggle('hidden');
       };
-    } catch (e) {
+    } catch {
       try {
         console.warn('Self-checks UI failed:', e);
       } catch {}
@@ -10413,3 +11421,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     } catch {}
   })();
 })(); // end main IIFE (restored)
+

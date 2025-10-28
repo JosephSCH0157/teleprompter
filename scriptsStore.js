@@ -69,6 +69,7 @@ const Scripts = {
 // CommonJS export for environments that don't use ES modules
 try {
   if (typeof window !== 'undefined') window.Scripts = Scripts;
-} catch (e) {
-  void e;
+} catch {
+  void 0;
 }
+

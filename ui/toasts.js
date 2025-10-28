@@ -38,11 +38,11 @@ function toast(msg, opts) {
       t.classList.remove('show');
       setTimeout(() => t.remove(), 120);
     }, AUTO_FADE_MS);
-  } catch (e) {
+  } catch {
     try {
-      console.debug('[toast] failed to render', e, msg, opts || '');
-    } catch (e2) {
-      console.debug('toast fallback log failed', e2);
+      console.debug('[toast] failed to render', String(msg || ''), opts || '');
+    } catch {
+      console.debug('toast fallback log failed');
     }
   }
 }
@@ -58,11 +58,12 @@ try {
     window.toast = toast;
     window.initToastContainer = initToastContainer;
   }
-} catch (e) {
-  void e;
-}
+  } catch {
+    void 0;
+  }
 
 // No module.exports here to avoid referencing 'module' in non-CommonJS lint environments
 
 // Note: we intentionally do NOT attach this API to `window` here.
 // Consumers should import { toast } from './ui/toasts.js'.
+

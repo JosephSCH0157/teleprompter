@@ -28,6 +28,10 @@ async function main() {
 
   // Start the static server in-process
   console.log('[e2e] starting static server...');
+  // If running the smoke harness, prefer a deterministic non-dev port and ensure
+  // the static server listens on that port so the loader can see ?ci=1 without dev mode.
+  const effectivePort = RUN_SMOKE ? 5180 : port;
+  try { process.env.PORT = String(effectivePort); } catch (_e) {}
   const server = require('./static_server.js');
 
   // Wait briefly for server to be ready (it's synchronous listen)
@@ -46,10 +50,11 @@ async function main() {
     }
   });
 
-  const url = `http://127.0.0.1:${port}/teleprompter_pro.html`;
+  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
     try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (_e) { /* ignore */ }
+    try { globalThis.__TP_SKIP_BOOT_FOR_TESTS = !!cfg.skip; } catch (_e) { /* ignore */ }
     try {
       if (cfg.stub) {
         (function () {
@@ -83,8 +88,34 @@ async function main() {
         })();
       }
     } catch (_e) { /* ignore */ }
-  }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS });
-
+  }, { host: OBS_HOST, port: OBS_PORT, pass: OBS_PASS, stub: STUB_OBS, skip: !!HEADLESS });
+  // Ensure page boot short-circuits adapter probing when running headless/CI
+  // If running headless (CI) and not explicitly stubbing OBS, install a minimal recorder
+  // shim so the smoke harness sees a recorder and an obs adapter without touching real hosts.
+  if (isHeadless && !STUB_OBS) {
+    try {
+      await page.evaluateOnNewDocument(() => {
+        try {
+          if (globalThis.__REC_HEADLESS_INSTALLED__) return;
+          globalThis.__REC_HEADLESS_INSTALLED__ = true;
+          const makeObsStub = () => ({
+            configure: async () => {},
+            connect: async () => true,
+            test: async () => true,
+            getLastError: () => null,
+          });
+          if (!globalThis.__recorder) {
+            globalThis.__recorder = {
+              initBuiltIns: async () => true,
+              getAdapter: (id) => (id === 'obs' ? makeObsStub() : null),
+              get: (id) => (id === 'obs' ? makeObsStub() : null),
+              adapters: { obs: makeObsStub() },
+            };
+          }
+        } catch (e) { /* ignore */ }
+      });
+    } catch (e) { /* ignore */ }
+  }
   // If we're stubbing OBS, also inject a tiny recorder shim early so the page sees a recorder
   // and the smoke-drive can locate an obs adapter reliably. The shim uses the global WebSocket
   // (which will be proxied above) so send/open events are captured in __WS_SENT__/__WS_OPENED__.
@@ -374,12 +405,12 @@ async function main() {
       try {
         await browser.close();
       } catch (e) {
-        void e;
+        void 0;
       }
       try {
         server.close();
       } catch (e) {
-        void e;
+        void 0;
       }
       rl.close();
       process.exit(0);

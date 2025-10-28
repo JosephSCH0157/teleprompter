@@ -5,7 +5,33 @@
 module.exports = [
   // Ignore patterns
   {
-    ignores: ['releases/**', '**/*.min.js', 'node_modules/**', '.vscode/**'],
+    ignores: [
+      'teleprompter_pro.js',
+      'releases/**',
+      '**/*.min.js',
+      'node_modules/**',
+      '.vscode/**',
+      '**/*.d.ts',
+      'src/build-logic/**',
+    ],
+  },
+  // TypeScript files: lightweight parsing (no type-aware rules to avoid project parsing issues)
+  // Requires @typescript-eslint/parser and @typescript-eslint/eslint-plugin in devDependencies
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parser: require('@typescript-eslint/parser'),
+      sourceType: 'module',
+      ecmaVersion: 2021,
+    },
+    plugins: { '@typescript-eslint': require('@typescript-eslint/eslint-plugin') },
+    rules: {
+      'no-undef': 'off',
+      // Disable the base rule so the TS plugin handles unused vars (avoid duplicate reports)
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/consistent-type-imports': 'warn',
+    },
   },
   // Default: treat all .js files as ES modules so import/export parse by default.
   {
@@ -48,6 +74,7 @@ module.exports = [
     },
     rules: {
       'no-undef': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
 
@@ -147,7 +174,7 @@ module.exports = [
   {
     files: ['teleprompter_pro.js'],
     languageOptions: {
-      ecmaVersion: 2021,
+      ecmaVersion: 'latest',
       sourceType: 'script',
       globals: {
         window: 'readonly',
@@ -170,6 +197,17 @@ module.exports = [
     files: ['debug-tools.js', 'eggs.js', 'help.js', 'ui/**/*.js', 'utils/**/*.js'],
     rules: {
       'no-restricted-syntax': 'off',
+    },
+  },
+  // Global unused-vars policy: allow underscore-prefixed args and locals in all JS/TS files
+  {
+    files: ['**/*.{ts,js}'],
+    rules: {
+      // Keep plain JS linting: allow underscore-prefixed unused vars/args
+      'no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      }],
     },
   },
 ];

@@ -1,28 +1,39 @@
 {
   "name": "teleprompter",
   "type": "module",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "private": true,
   "scripts": {
-    "lint": "eslint . --ext .js",
-    "lint:fix": "eslint . --ext .js --fix",
+    "lint": "eslint . --ext .js,.ts --max-warnings=0",
+    "lint:fix": "eslint . --ext .js,.ts --fix",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
-  "smoke": "node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
-  "smoke:ci": "node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
-  "smoke:strict": "node tools/teleprompter_e2e.js --runSmoke --headless",
-  "smoke:strict:slow": "node tools/teleprompter_e2e.js --runSmoke --timeout=60000 --headless",
-    "types": "tsc -p jsconfig.json --noEmit",
+    "build:logic": "tsc -b src/logic",
+    "typecheck": "npm run build:logic && tsc -p tsconfig.json --noEmit",
+    "smoke": "node tools/static_server.js & node tools/smoke_test.js --calm --timeout=120000",
+    "lint:ts": "eslint \"**/*.{ts,tsx}\"",
+    "smoke:ci": "node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
+    "smoke:strict": "node tools/teleprompter_e2e.js --runSmoke --headless",
+    "smoke:strict:slow": "node tools/teleprompter_e2e.js --runSmoke --timeout=60000 --headless",
+    "types": "tsc -p tsconfig.json --noEmit",
     "check": "npm run lint && npm run types",
+    "gate": "npm run lint && npm run types && npm run smoke:strict && node tools/ui_crawl.js && node tools/validate_ui_crawl.js",
+    "gate:quick": "npm run lint && npm run types && npm run smoke",
+    "test:save-ci": "node tools/test_save_ci.js",
+    "test:obs-scene-ci": "node tools/test_obs_scene_ci.js",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.3",
+    "playwright": "^1.56.1",
     "prettier": "^3.3.0",
-    "typescript": "^5.6.0"
+    "puppeteer": "^24.26.1",
+    "typescript": "^5.5.4"
   },
   "lint-staged": {
     "*.{js,jsx}": [

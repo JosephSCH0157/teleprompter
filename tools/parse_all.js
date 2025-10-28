@@ -31,11 +31,11 @@ for (const f of files) {
       try {
         // Fallback to script parsing
         acorn.parse(src, { ecmaVersion: 2022, locations: true, sourceType: 'script' });
-      } catch (eScript) {
+      } catch {
         fails.push({ file: f, error: eScript.message });
       }
     }
-  } catch (e) {
+  } catch {
     fails.push({ file: f, error: e.message });
   }
 }
@@ -46,3 +46,4 @@ if (fails.length) {
   process.exit(2);
 }
 console.log('PARSE_OK');
+

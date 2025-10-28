@@ -14,6 +14,7 @@ let _backoffMs = 1000; // start 1s
 const _backoffMax = 5000;
 const _backoffFactor = 2;
 const _listeners = { connect: [], disconnect: [], recordstate: [], error: [] };
+let _lastScene = null;
 
 function _getElem(id) {
   try {
@@ -174,6 +175,41 @@ const bridge = {
       return { outputActive: false };
     }
   },
+  async getSceneList() {
+    try {
+      await _connectOnce();
+      if (!_obsClient) return null;
+      const res = await _obsClient.call('GetSceneList');
+      // res.scenes expected
+      return res && (res.scenes || res.sceneList || null);
+    } catch (e) {
+      _emit('error', e);
+      return null;
+    }
+  },
+  async getCurrentProgramScene() {
+    try {
+      await _connectOnce();
+      if (!_obsClient) return null;
+      // try likely method names
+      try {
+        const r = await _obsClient.call('GetCurrentProgramScene');
+        return r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName || null);
+      } catch {
+        // fallback name
+        try {
+          const r2 = await _obsClient.call('GetProgramScene');
+          return r2 && (r2.currentProgramScene || r2.sceneName || null);
+        } catch (e2) {
+          _emit('error', e2);
+          return null;
+        }
+      }
+    } catch (e) {
+      _emit('error', e);
+      return null;
+    }
+  },
   async getStats() {
     return _getStats();
   },
@@ -181,7 +217,10 @@ const bridge = {
     try {
       await _connectOnce();
       if (!_obsClient) throw new Error('Not connected');
-      return await _obsClient.call('SetCurrentProgramScene', { sceneName });
+      const target = sceneName || _lastScene || 'default';
+      const res = await _obsClient.call('SetCurrentProgramScene', { sceneName: target });
+      try { _lastScene = target; } catch {}
+      return res;
     } catch (e) {
       _emit('error', e);
       throw e;
@@ -216,3 +255,4 @@ try {
 } catch {}
 
 export default bridge;
+

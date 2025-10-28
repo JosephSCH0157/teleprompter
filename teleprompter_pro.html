@@ -2,84 +2,141 @@
 
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>Teleprompter — Pro v1_6_1</title>
-<link href="data:," rel="icon"/>
-<script defer src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
-<script>
-  // DEV gating for build label: add a class on <html> if dev is enabled
-  (function(){
-    try {
-      var Q = new URLSearchParams(location.search);
-      var DEV = Q.has('dev') || (function(){ try { return localStorage.getItem('tp_dev_mode') === '1'; } catch(e){ return false; } })() || (location.hash||'').indexOf('dev') !== -1;
-      if (DEV) { document.documentElement.classList.add('tp-dev'); }
-    } catch {}
-  })();
-  // Note: teleprompter_pro.js will also set window.__TP_DEV
-</script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<!-- Safe requestScroll polyfill: defined early so callers can rely on it -->
-<script>
-  (function(){
-    try {
-      if (!window.requestScroll) {
-        window.requestScroll = function(arg){
-          try {
-            var top = (typeof arg === 'object') ? Number(arg && arg.top) : Number(arg);
-            if (!isFinite(top)) top = 0;
-            var behavior = (typeof arg === 'object' && arg && arg.behavior) ? String(arg.behavior) : 'smooth';
-            if (typeof window.scrollTo === 'function') {
-              window.scrollTo({ top: top, behavior: behavior });
-            } else {
-              (document.scrollingElement || document.documentElement || document.body).scrollTop = top;
-            }
-          } catch {}
-        };
-      }
-    } catch {}
-  })();
-  // In-app helpers will override this with a coalesced scroller scheduler when ready
-</script>
+  <title>Teleprompter — Pro v1_6_2</title>
+  <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="theme-color" content="#0b0f19" />
+  <meta name="color-scheme" content="dark light" />
 
-<script>
-  (function(){
-    try{
-      var DEV = document.documentElement.classList.contains('tp-dev');
-      var qs = new URLSearchParams(location.search);
-      var V = qs.get('v') || (DEV ? Date.now().toString(36) : 'dev-20251007');
-      var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = add('teleprompter_pro.css');
-      document.head.appendChild(link);
-      // publish V for JS to use in dynamic imports
-      window.__TP_DEV = DEV; window.__TP_DEV_VERSION = V;
-    }catch(e){
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'teleprompter_pro.css?v=dev-20251007';
-      document.head.appendChild(link);
-    }
-  })();
-</script>
-<style>
-  #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui, sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
-  html.tp-dev #anvil-build-label{display:block}
-  @media print{#anvil-build-label{display:none}}
-  @media (max-width: 420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
-</style>
+  <!-- Canonical helps SEO (avoid /index.html vs /) -->
+  <link rel="canonical" href="https://example.com/teleprompter/" />
+
+  <!-- Favicons -->
+  <link rel="icon" href="data:," />
+
+  <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
+  <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
+  <!-- If you serve fonts or CDN assets, add preconnects for those origins, too -->
+
+  <!-- Load CSS in a simple, reliable way -->
+  <link rel="stylesheet" href="teleprompter_pro.css">
+
+  <!-- Single dev module loader: import source entry directly -->
+  <script type="module">
+    window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
+    window.__TP_BOOT_INFO = { path: 'dev', isDev: true, imported: false };
+    import('./src/index.js')
+      .then(() => { window.__TP_BOOT_INFO.imported = true; window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev ok'}); })
+      .catch(e  => { window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev fail', err:String(e)}); });
+  </script>
+
+  <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
+  <script>
+    (function(){
+      try {
+        var Q=new URLSearchParams(location.search);
+        var DEV = Q.has('dev') || (function(){try{return localStorage.getItem('tp_dev_mode')==='1'}catch(e){return false}})() || (location.hash||'').indexOf('dev')!==-1;
+        if (DEV) document.documentElement.classList.add('tp-dev');
+        window.__TP_DEV = DEV;
+      } catch {}
+    })();
+  </script>
+
+  <!-- Safe requestScroll polyfill (kept) -->
+  <script>
+    (function(){
+      try {
+        if (!window.requestScroll) {
+          window.requestScroll = function(arg){
+            try {
+              var top = (typeof arg==='object')?Number(arg&&arg.top):Number(arg);
+              if (!isFinite(top)) top = 0;
+              var behavior = (typeof arg==='object'&&arg&&arg.behavior)?String(arg.behavior):'smooth';
+              if (typeof window.scrollTo==='function') window.scrollTo({top,behavior});
+              else (document.scrollingElement||document.documentElement||document.body).scrollTop = top;
+            } catch {}
+          };
+        }
+      } catch {}
+    })();
+  </script>
+
+  <!-- Third-party: mammoth will be loaded lazily by ui/upload.js when needed -->
+
+  <!-- (helpers loaded from modules in dev via src/index.js) -->
+
+  
+  
+
+  <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
+  <script src="ui-sanitize.js"></script>
+
+  <!-- Single loader above; no additional booters here. -->
+
+  <!-- App store & centralized Settings wiring -->
+  <script src="src/state/app-store.js"></script>
+  <script src="src/ui/settings.js"></script>
+  <!-- Media modules (mic, camera, display bridge) -->
+  <script src="src/media/mic.js"></script>
+  <script src="src/media/camera.js"></script>
+  <script src="src/media/display-bridge.js"></script>
+
+  <!-- Inline critical CSS (small, ~2KB): topbar, chips, basic app grid and first-screen editor/viewer -->
+  <style>
+    :root{--bg:#0b0f19;--fg:#e6eef8;--muted:#9fb4c9;--chip-bg:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+    .topbar{display:flex;align-items:center;gap:8px;padding:8px 12px;height:48px;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
+    .topbar strong{font-weight:600;margin-right:6px}
+    .chip{display:inline-block;padding:4px 8px;border-radius:8px;background:var(--chip-bg);color:var(--fg);font-size:13px}
+    .inl-1{margin-left:auto}
+    .app{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;box-sizing:border-box}
+    .panel{background:transparent;color:var(--muted);max-height:calc(100vh - 92px);overflow:auto}
+    .viewer{background:transparent;padding:6px;min-height:calc(100vh - 92px);overflow:auto}
+    textarea#editor{width:100%;height:36vh;min-height:160px;background:#07101a;color:var(--fg);border:1px solid rgba(255,255,255,0.03);padding:10px;box-sizing:border-box;font:inherit}
+    .script .line{padding:6px 0;color:var(--fg)}
+    #dbMeterTop{width:86px;height:12px;background:linear-gradient(90deg,#18364a,#0b2a3a);border-radius:6px;margin-left:6px}
+    button.chip{border:0;background:transparent;color:var(--fg);cursor:pointer}
+    @media (max-width:900px){.app{grid-template-columns:1fr;}.topbar{height:56px;padding:10px}}
+    /* Extra tiny critical rules to stabilize first-paint for HUD and overlays */
+    #hud-root{position:fixed;right:12px;top:12px;z-index:2147483630;pointer-events:none;min-width:140px}
+    .overlay{display:none}
+    .overlay.hidden{display:none}
+    .overlay .sheet{background:#07101a;color:var(--fg);border-radius:8px;padding:10px}
+    button,select,input{font:inherit}
+    /* Present mode: hide left panel and expand viewer */
+    html.tp-present .panel{display:none !important}
+    html.tp-present .app{grid-template-columns:1fr !important}
+  </style>
+
+  <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
+
+  <!-- Build badge (dev only) -->
+  <style>
+    #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui,sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
+    html.tp-dev #anvil-build-label{display:block}
+    @media print{#anvil-build-label{display:none}}
+    @media (max-width:420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
+  </style>
+
+  <!-- (Optional, prod) Tight CSP once everything is settled
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://unpkg.com; connect-src 'self' http://192.168.1.200:4455 ws://192.168.1.200:4455;"/>
+  -->
 </head>
+
 <body>
 <div class="topbar">
 <strong>Teleprompter_Pro</strong>
 <span class="chip" id="saveChip">Draft: —</span>
 <span class="chip" id="permChip">Mic: unknown</span>
 <span class="chip" id="displayChip">Display: closed</span>
-<span class="chip" id="recChip">Speech: idle</span>
+<span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
 <span class="chip" id="scrollChip">Scroll: idle</span>
 <span class="chip" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
 <span class="chip" id="camRtcChip">CamRTC: idle</span>
+<span class="chip" id="speakerIndexChip">Speakers: —</span>
 <!-- dB Meter (top bar mini) -->
 <div id="dbMeterTop" title="Input level"></div>
 <!-- Present Mode (top bar) -->
@@ -87,6 +144,8 @@
 <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
 <!-- Help/Shortcuts Button -->
 <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
+<!-- Self-checks chip (clickable) -->
+<span id="selfChecksChip" class="chip chip-muted">Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em></span>
 <!-- Speakers legend -->
 <div class="legend" id="legend"></div>
 </div>
@@ -247,9 +306,7 @@
 <main class="viewer" id="viewer">
 <div class="marker"></div>
 <div class="script" id="script">
-  <div class="line" data-line-idx="0">First line…</div>
-  <div class="line" data-line-idx="1">Second line…</div>
-  <!-- ... -->
+  
 </div>
 <div class="camWrap" id="camWrap">
 <video autoplay="" id="camVideo" muted=""></video>
@@ -300,50 +357,18 @@
     <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
   </div>
 </div>
-<script>
-  (function(){
-    try{
-      var DEV = window.__TP_DEV || document.documentElement.classList.contains('tp-dev');
-      var V = window.__TP_DEV_VERSION || (new URLSearchParams(location.search).get('v') || (DEV ? Date.now().toString(36) : 'dev-20251007'));
-      var add=function(p){return p+(p.indexOf('?')>=0?'&':'?')+'v='+V};
-      // Load a few small helper modules as ES modules first (backwards compatible)
-  var moduleFiles = [ add('./utils/safe-dom.js'), add('./ui/toasts.js'), add('./ui/scripts-ui.js'), add('./ui/cam-draggable.js'), add('teleprompter_pro.js') ];
-      moduleFiles.forEach(function(m){
-        var s = document.createElement('script');
-        s.type = 'module';
-        s.src = m;
-        document.head.appendChild(s);
-      });
-      // Then load the remaining classic scripts
-      var jsFiles = [ add('./debug-tools.js'), add('./debug-seed.js'), add('./sim-history.js') ];
-      jsFiles.forEach(function(src) {
-        var script = document.createElement('script');
-        script.src = src;
-        script.defer = true;
-        document.head.appendChild(script);
-      });
-    }catch(e){
-      var jsFiles = [
-        './debug-tools.js?v=dev-20251007',
-        './debug-seed.js?v=dev-20251007',
-        './sim-history.js?v=dev-20251007',
-        './ui/toasts.js?v=dev-20251007',
-        'teleprompter_pro.js?v=dev-20251007'
-      ];
-      jsFiles.forEach(function(src) {
-        var script = document.createElement('script');
-        script.src = src;
-        script.defer = true;
-        document.head.appendChild(script);
-      });
-    }
-  })();
-</script>
+<!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
 
 <!-- Build label -->
 <div id="anvil-build-label">
   ANVIL build 2025-10-15 00:00 • baseline: mainframe • HUD wired
 </div>
+
+<!-- HUD mount -->
+<div id="hud-root" data-role="hud-root"></div>
+
+  <!-- Present Mode exit button (visible only in Present Mode) -->
+  <button id="presentExitBtn" class="present-exit" type="button">Exit Present (Esc)</button>
 
 </body>
 </html>

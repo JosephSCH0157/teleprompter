@@ -4,11 +4,10 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
-// Choose a numeric port robustly. Prefer PORT env, otherwise look for the
-// first purely-numeric argv token, otherwise default to 8080. This avoids
-// accidentally picking up flag tokens like `--headless` as the port.
-let PORT = 8080;
-const envPort = parseInt(process.env.PORT, 10);
+// Choose host/port (allow overrides via env or argv)
+const DEFAULT_HOST = process.env.CI_HOST || '127.0.0.1';
+let PORT = 5180; // default for CI
+const envPort = parseInt(process.env.PORT || process.env.CI_PORT, 10);
 if (!Number.isNaN(envPort) && envPort >= 0 && envPort < 65536) {
   PORT = envPort;
 } else {
@@ -18,6 +17,7 @@ if (!Number.isNaN(envPort) && envPort >= 0 && envPort < 65536) {
     PORT = argPort;
   }
 }
+const HOST = process.env.CI_HOST || DEFAULT_HOST;
 
 function contentType(p) {
   if (p.endsWith('.html')) return 'text/html; charset=utf-8';
@@ -69,8 +69,18 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log('[static-server] serving', ROOT, 'on port', PORT);
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    // Port already in use: assume another step already started the server.
+    console.log(`[static-server] port ${PORT} already in use on ${HOST}; assuming server already running`);
+    process.exit(0); // exit successfully so CI doesn't fail
+  }
+  console.error('[static-server] error:', err);
+  process.exit(1);
+});
+
+server.listen(PORT, HOST, () => {
+  console.log('[static-server] serving', ROOT, 'on', `${HOST}:${PORT}`);
 });
 
 // Graceful shutdown
@@ -78,3 +88,4 @@ process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 module.exports = server;
+

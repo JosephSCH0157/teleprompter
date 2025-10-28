@@ -4,6 +4,8 @@
 //   const sh = createScrollerHelpers(() => document.getElementById('viewer'));
 //   sh.scrollByPx(10);
 
+import { requestWrite } from './src/boot/scheduler.js';
+
 export function createScrollerHelpers(getScroller) {
   let _pendingTop = null,
     _rafId = 0;
@@ -32,14 +34,17 @@ export function createScrollerHelpers(getScroller) {
       const t = _pendingTop;
       _pendingTop = null;
       _rafId = 0;
-      try {
-        sc.scrollTo({ top: t, behavior: 'auto' });
-      } catch {
-        sc.scrollTop = t;
-      }
-      try {
-        window.__lastScrollTarget = null;
-      } catch {}
+      // Use scheduler to perform DOM write in a single-writer queue
+      requestWrite(() => {
+        try {
+          sc.scrollTo({ top: t, behavior: 'auto' });
+        } catch {
+          sc.scrollTop = t;
+        }
+        try {
+          window.__lastScrollTarget = null;
+        } catch {}
+      });
       // Do NOT read layout here; defer reads to next frame.
     });
   }

@@ -1,4 +1,4 @@
-1.6.1
-ANVIL build: 2025-10-15 00:00
+1.6.2
+ANVIL build: 2025-10-22 00:00
 Baseline: mainframe
-Notes: Bridge refactor, OBS guardrails (disk check, scene sanity, reconnect), UI updates and docs
+Notes: Per-viewport base speed persistence, mic re-request robustness, UI sanitization and minor stability fixes

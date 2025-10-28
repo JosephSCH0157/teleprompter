@@ -20,6 +20,11 @@ const fs = require('fs');
     page.on('response', res => {
       if (res.status() >= 400) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
     });
+  // Choose host/port (CI-aware). Default to 127.0.0.1:5180 to match CI/static_server defaults.
+  const HOST = process.env.CI_HOST || '127.0.0.1';
+  const PORT = String(process.env.CI_PORT || process.env.PORT || '5180');
+  // Ensure the in-process static server binds to the chosen port
+  try { process.env.PORT = PORT; } catch {}
   // start static server in-process so the page is reachable
   try { require('./static_server.js'); } catch { /* ignore */ }
 
@@ -40,7 +45,11 @@ const fs = require('fs');
   }catch{}
   }, { url: 'ws://127.0.0.1:4455', password: '' });
 
-    await page.goto('http://127.0.0.1:8080/teleprompter_pro.html', { waitUntil: 'networkidle2', timeout: 30000 });
+  // Build crawl URL and append ?ci=1 to enable CI profile in the app
+  const baseUrl = `http://${HOST}:${PORT}/teleprompter_pro.html`;
+  const url = baseUrl.includes('?') ? `${baseUrl}&ci=1` : `${baseUrl}?ci=1`;
+  try { out.url = url; out.ci = true; } catch {}
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     // wait a little for UI to settle
     await page.waitForTimeout(1000);
 
@@ -114,6 +123,25 @@ const fs = require('fs');
     }
 
     await page.waitForTimeout(500);
+    // collect file input metadata (hidden state / size / aria-label)
+    try {
+      const fileInputs = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('input[type=file]')).map((el) => {
+          const r = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          return {
+            id: el.id || null,
+            hidden: el.hasAttribute('hidden') || style.display === 'none' || style.visibility === 'hidden' || r.width < 6 || r.height < 6,
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+            ariaLabel: el.getAttribute('aria-label') || null,
+          };
+        })
+      );
+      out.fileInputs = fileInputs;
+    } catch {
+      out.fileInputs = [];
+    }
     await browser.close();
   }catch(_e){ out.errors.push({ type:'fatal', message: String(_e) }); }
   const p = 'tools/ui_crawl_report.json'; fs.writeFileSync(p, JSON.stringify(out,null,2));

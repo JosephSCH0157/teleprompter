@@ -20,8 +20,8 @@ function hasBin(bin) {
   const projRoot = procCwd ? path.resolve(procCwd, '..') : path.resolve('.', '..');
     const p = r.resolve(bin, { paths: [projRoot] });
     return !!p;
-  } catch (e) {
-    void e;
+  } catch {
+    void 0;
     return false;
   }
 }
@@ -32,8 +32,8 @@ function stagedFiles() {
     const out = spawnSync('git', ['diff', '--cached', '--name-only'], { encoding: 'utf8' });
     if (!out || out.status !== 0) return [];
     return (out.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  } catch (e) {
-    void e;
+  } catch {
+    void 0;
     return [];
   }
 }
@@ -89,8 +89,8 @@ async function main() {
           return 1;
         }
         return 0;
-      } catch (e) {
-        void e;
+      } catch {
+        void 0;
       }
     }
 
@@ -105,3 +105,4 @@ async function main() {
 }
 
 main();
+

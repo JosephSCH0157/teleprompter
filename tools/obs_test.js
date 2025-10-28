@@ -19,10 +19,11 @@ async function main() {
       await obs.disconnect();
     } catch {}
     process.exit(0);
-  } catch (err) {
+  } catch {
     console.error('[obs_test] ERROR:', err && err.message ? err.message : err);
     process.exit(2);
   }
 }
 
 main();
+
