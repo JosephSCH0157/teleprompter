@@ -3,6 +3,8 @@
   // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
   const DEVICE_KEY = 'tp_mic_device_v1';
   const OBS_ENABLED_KEY = 'tp_obs_enabled';
+  const OBS_HOST_KEY = 'tp_obs_host';
+  const OBS_PASSWORD_KEY = 'tp_obs_password';
   const OBS_SCENE_KEY = 'tp_obs_scene';
   const OBS_RECONNECT_KEY = 'tp_obs_reconnect';
   const AUTO_RECORD_KEY = 'tp_auto_record';
@@ -16,6 +18,8 @@
     obsEnabled: OBS_ENABLED_KEY,
     obsScene: OBS_SCENE_KEY,
     obsReconnect: OBS_RECONNECT_KEY,
+    obsHost: OBS_HOST_KEY,
+    obsPassword: OBS_PASSWORD_KEY,
     autoRecord: AUTO_RECORD_KEY,
     prerollSeconds: PREROLL_SEC_KEY,
     devHud: DEV_HUD_KEY,
@@ -28,15 +32,16 @@
     obsEnabled: (function(){ try { return localStorage.getItem(OBS_ENABLED_KEY) === '1'; } catch { return false; } })(),
   obsScene: (function(){ try { return localStorage.getItem(OBS_SCENE_KEY) || ''; } catch { return ''; } })(),
   obsReconnect: (function(){ try { return localStorage.getItem(OBS_RECONNECT_KEY) === '1'; } catch { return false; } })(),
-    autoRecord: (function(){ try { return localStorage.getItem(AUTO_RECORD_KEY) === '1'; } catch { return false; } })(),
+  autoRecord: (function(){ try { return localStorage.getItem(AUTO_RECORD_KEY) === '1'; } catch { return false; } })(),
   prerollSeconds: (function(){ try { const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY)||'3',10); return isFinite(n) ? Math.max(0, Math.min(10, n)) : 3; } catch { return 3; } })(),
   devHud: (function(){ try { return localStorage.getItem(DEV_HUD_KEY) === '1'; } catch { return false; } })(),
+  obsHost: (function(){ try { return localStorage.getItem(OBS_HOST_KEY) || ''; } catch { return ''; } })(),
+  obsPassword: (function(){ try { return localStorage.getItem(OBS_PASSWORD_KEY) || ''; } catch { return ''; } })(),
 
     // transient session state (not persisted)
   obsUrl: '',
   obsPort: '',
   obsSecure: false,
-  obsPassword: '',
   };
 
   const subs = Object.create(null);

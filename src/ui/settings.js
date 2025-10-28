@@ -65,7 +65,12 @@
         '  <div class="row">',
         '    <label><input type="checkbox" id="settingsEnableObs"/> Enable OBS</label>',
         '  </div>',
-        '  <div class="row">',
+  '  <div class="row">',
+  '    <label>IP/Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1"/></label>',
+  '    <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>',
+  '  </div>',
+  '  <div class="row microcopy" style="color:#9fb4c9;font-size:12px">Port defaults to 4455; uses ws://</div>',
+  '  <div class="row">',
         '    <label>Scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name"/></label>',
         '    <label><input type="checkbox" id="settingsObsReconnect"/> Auto-reconnect</label>',
         '  </div>',
@@ -234,25 +239,56 @@
         mainPass.addEventListener('input', () => { try { if (obsPassS.value !== mainPass.value) obsPassS.value = mainPass.value; } catch {} });
       }
 
-      // Wire OBS Scene/Auto-reconnect
+      // Wire OBS Host/Password/Scene/Auto-reconnect
+      const obsHost = q('settingsObsHost');
+      const obsPass = q('settingsObsPassword');
       const obsScene = q('settingsObsScene');
       const obsReconn = q('settingsObsReconnect');
+      if (obsHost && hasStore) obsHost.addEventListener('input', () => S.set('obsHost', String(obsHost.value||'')));
+      if (obsPass && hasStore) obsPass.addEventListener('input', () => S.set('obsPassword', String(obsPass.value||'')));
       if (obsScene && hasStore) obsScene.addEventListener('input', () => S.set('obsScene', String(obsScene.value||'')));
       if (obsReconn && hasStore) obsReconn.addEventListener('change', () => S.set('obsReconnect', !!obsReconn.checked));
       if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('obsHost', v => { try { if (obsHost && obsHost.value !== v) obsHost.value = v || ''; } catch {} });
+        S.subscribe('obsPassword', v => { try { if (obsPass && obsPass.value !== v) obsPass.value = v || ''; } catch {} });
         S.subscribe('obsScene', v => { try { if (obsScene && obsScene.value !== v) obsScene.value = v || ''; } catch {} });
         S.subscribe('obsReconnect', v => { try { if (obsReconn && obsReconn.checked !== !!v) obsReconn.checked = !!v; } catch {} });
       }
 
-      // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth
-      if (hasStore && typeof S.subscribe === 'function') {
-        S.subscribe('obsEnabled', v => {
+      // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth and manage connection
+      function ensureObsConnection(){
+        try {
+          const enabled = hasStore ? !!S.get('obsEnabled') : false;
+          const host = hasStore ? String(S.get('obsHost')||'') : '';
+          const pass = hasStore ? String(S.get('obsPassword')||'') : '';
+          const statusEl = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+          const setStatus = (txt) => { try { if (statusEl) statusEl.textContent = txt; } catch {} };
+          if (!enabled) {
+            if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
+            window.__tpObsConn = null; setStatus && setStatus('disabled'); return;
+          }
+          if (!host || !window.__tpOBS || typeof window.__tpOBS.connect !== 'function') return;
+          if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
+          const url = 'ws://' + host + ':4455';
           try {
-            const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
-            if (pill) pill.textContent = v ? 'enabled' : 'disabled';
+            const conn = window.__tpOBS.connect(url, pass);
+            window.__tpObsConn = conn;
+            if (conn && conn.on) {
+              conn.on('connecting', () => setStatus('connecting'));
+              conn.on('open', () => setStatus('connected'));
+              conn.on('error', () => setStatus('error'));
+              conn.on('closed', () => setStatus('closed'));
+            }
           } catch {}
-        });
+        } catch {}
       }
+      if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('obsEnabled', (v) => { try { if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v; } catch {} ensureObsConnection(); });
+        S.subscribe('obsHost', ensureObsConnection);
+        S.subscribe('obsPassword', ensureObsConnection);
+      }
+      // Initial connection attempt after mount
+      setTimeout(ensureObsConnection, 0);
 
       // Dev HUD toggle (advanced)
       const devHud = q('settingsDevHud');

@@ -99,6 +99,16 @@ async function boot() {
     try { await (Adapters.obsAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] obsAdapter.init failed', e); }
     try { await (Adapters.recorderAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] recorderAdapter.init failed', e); }
 
+    // Expose OBS/Recorder adapter instances to the global so non-module settings code can connect
+    try {
+      if (!window.__tpOBS && Adapters.obsAdapter?.create) {
+        window.__tpOBS = Adapters.obsAdapter.create();
+      }
+      if (!window.__tpRecorder && Adapters.recorderAdapter?.create) {
+        window.__tpRecorder = Adapters.recorderAdapter.create();
+      }
+    } catch {}
+
     // Initialize features
     try { initPersistence(); } catch (e) { console.warn('[src/index] initPersistence failed', e); }
     try { initTelemetry(); } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
