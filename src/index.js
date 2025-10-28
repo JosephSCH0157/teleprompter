@@ -159,6 +159,17 @@ async function boot() {
                 }
                 if (chip) chip.textContent = 'Speech: running';
                 btn.textContent = 'Stop speech sync';
+                // If OBS is enabled, kick off recording (best-effort)
+                try {
+                  const S = window.__tpStore;
+                  if (S && S.get && S.get('obsEnabled')) {
+                    const obs = window.__tpOBS;
+                    const conn = window.__tpObsConn;
+                    if (obs && typeof obs.startRecording === 'function' && conn) {
+                      obs.startRecording(conn);
+                    }
+                  }
+                } catch {}
               } catch {
                 if (chip) chip.textContent = 'Speech: error';
                 running = false;
@@ -169,6 +180,17 @@ async function boot() {
               running = false;
               if (chip) chip.textContent = 'Speech: idle';
               btn.textContent = 'Start speech sync';
+              // If OBS is enabled, stop recording (best-effort)
+              try {
+                const S = window.__tpStore;
+                if (S && S.get && S.get('obsEnabled')) {
+                  const obs = window.__tpOBS;
+                  const conn = window.__tpObsConn;
+                  if (obs && typeof obs.stopRecording === 'function' && conn) {
+                    obs.stopRecording(conn);
+                  }
+                }
+              } catch {}
             }
           } catch {}
         });
