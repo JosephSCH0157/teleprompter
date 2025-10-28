@@ -122,6 +122,9 @@
     .overlay.hidden{display:none}
     .overlay .sheet{background:#07101a;color:var(--fg);border-radius:8px;padding:10px}
     button,select,input{font:inherit}
+    /* Present mode: hide left panel and expand viewer */
+    html.tp-present .panel{display:none !important}
+    html.tp-present .app{grid-template-columns:1fr !important}
   </style>
 
   <!-- Main app: load compiled module entry (built from /src/index.ts) -->
