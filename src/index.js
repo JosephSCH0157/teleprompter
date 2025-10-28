@@ -85,6 +85,9 @@ async function boot() {
   // Minimal script renderer for module boot path
   try { await import('./ui/render.js'); } catch (e) { console.warn('[src/index] render init failed', e); }
 
+    // Make camera overlay draggable (top-right by default; drag to reposition; dblclick to reset)
+    try { await import('../ui/cam-draggable.js'); } catch (e) { console.warn('[src/index] cam-draggable init failed', e); }
+
     // Legacy matcher constants for parity (dev only)
     try {
       if (window?.__TP_BOOT_INFO?.isDev) {
