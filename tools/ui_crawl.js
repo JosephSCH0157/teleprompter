@@ -20,6 +20,11 @@ const fs = require('fs');
     page.on('response', res => {
       if (res.status() >= 400) out.errors.push({ type: 'response', url: res.url(), status: res.status() });
     });
+  // Choose host/port (CI-aware). Default to 127.0.0.1:5180 to match CI/static_server defaults.
+  const HOST = process.env.CI_HOST || '127.0.0.1';
+  const PORT = String(process.env.CI_PORT || process.env.PORT || '5180');
+  // Ensure the in-process static server binds to the chosen port
+  try { process.env.PORT = PORT; } catch {}
   // start static server in-process so the page is reachable
   try { require('./static_server.js'); } catch { /* ignore */ }
 
@@ -40,7 +45,10 @@ const fs = require('fs');
   }catch{}
   }, { url: 'ws://127.0.0.1:4455', password: '' });
 
-    await page.goto('http://127.0.0.1:8080/teleprompter_pro.html', { waitUntil: 'networkidle2', timeout: 30000 });
+  // Build crawl URL and append ?ci=1 to enable CI profile in the app
+  const baseUrl = `http://${HOST}:${PORT}/teleprompter_pro.html`;
+  const url = baseUrl.includes('?') ? `${baseUrl}&ci=1` : `${baseUrl}?ci=1`;
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     // wait a little for UI to settle
     await page.waitForTimeout(1000);
 
