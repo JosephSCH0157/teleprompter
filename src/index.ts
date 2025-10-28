@@ -90,6 +90,21 @@ try {
 			});
 		} catch {}
 
+		// Auto-recompute scroll step after typography changes
+		try {
+			window.addEventListener('tp:lineMetricsDirty', () => {
+				try {
+					const root = document.documentElement;
+					const cs = getComputedStyle(root);
+					const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+					const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+					const pxPerLine = fs * lh;
+					const stepPx = Math.round(pxPerLine * 7); // ~7 lines per step
+					try { (window as any).__tpAuto?.setStepPx?.(stepPx); } catch {}
+				} catch {}
+			});
+		} catch {}
+
 		// Ctrl/Cmd + Mouse Wheel to adjust font size (main by default, Ctrl+Alt for display)
 		try {
 			const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));

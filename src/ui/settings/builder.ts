@@ -18,8 +18,16 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <label>Word spacing (em) <input id="typoWord-main" type="number" min="0" max="0.5" step="0.01"></label>
             <label>Text color <input id="typoColor-main" type="text" placeholder="#e5e7eb"></label>
             <label>Background <input id="typoBg-main" type="text" placeholder="#0b0f14"></label>
+            <div id="typoContrastWarn-main" class="settings-small" style="color:#ffb74d"></div>
             <label>Max line width (ch) <input id="typoMaxCh-main" type="number" min="20" max="90"></label>
             <label>Dim others (0..0.7) <input id="typoDim-main" type="number" min="0" max="0.7" step="0.05"></label>
+          </div>
+          <div class="settings-inline-row">
+            <button id="typoResetMain" class="chip">Reset to Default</button>
+            <button id="typoCopyMainToDisplay" class="chip">Copy ➜ Display</button>
+            <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="readable">Readable</button>
+            <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="studio">Studio</button>
+            <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="bigroom">Big Room</button>
           </div>
         </div>
 
@@ -34,8 +42,16 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <label>Word spacing (em) <input id="typoWord-display" type="number" min="0" max="0.5" step="0.01"></label>
             <label>Text color <input id="typoColor-display" type="text" placeholder="#f3f4f6"></label>
             <label>Background <input id="typoBg-display" type="text" placeholder="#05080c"></label>
+            <div id="typoContrastWarn-display" class="settings-small" style="color:#ffb74d"></div>
             <label>Max line width (ch) <input id="typoMaxCh-display" type="number" min="20" max="90"></label>
             <label>Dim others (0..0.7) <input id="typoDim-display" type="number" min="0" max="0.7" step="0.05"></label>
+          </div>
+          <div class="settings-inline-row">
+            <button id="typoResetDisplay" class="chip">Reset to Default</button>
+            <button id="typoCopyDisplayToMain" class="chip">Copy ➜ Main</button>
+            <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="readable">Readable</button>
+            <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="studio">Studio</button>
+            <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="bigroom">Big Room</button>
           </div>
         </div>
       </div>

@@ -75,6 +75,35 @@ const URL_TO_OPEN = RAW_URL;
       const hasToast = await waitFor('#tp_toast_container'); // toast container
       const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
 
+      // Cheap E2E: assert CSS var changes propagate to display
+      try {
+        // Open settings so the builder mounts (ensures inputs exist)
+        await page.click('#settingsBtn');
+        await page.waitForSelector('#settingsBody');
+        // Type font size into main field if present
+        const hasMainFS = await page.$('#typoFontSize-main');
+        if (hasMainFS) {
+          await page.fill('#typoFontSize-main', '60');
+          // small pause to flush rAF/store
+          await page.waitForTimeout(50);
+          const sizeMain = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--tp-font-size').trim());
+          if (sizeMain !== '60px') throw new Error('main font var not set');
+          // Open display window and check mirrored var
+          await page.click('#openDisplayBtn');
+          await page.waitForTimeout(200);
+          const sizeDisp = await page.evaluate(() => {
+            try {
+              const w = window.__tpDisplayWindow;
+              if (!w) return null;
+              return w.getComputedStyle(w.document.documentElement).getPropertyValue('--tp-font-size').trim();
+            } catch { return null; }
+          });
+          if (sizeDisp !== '60px') throw new Error('display font var not mirrored');
+        }
+      } catch (e) {
+        warnLogs.push('[typo-smoke] ' + (e?.message || String(e)));
+      }
+
       // Grab a couple runtime flags if present
       const { initDone, appVersion, ctx } = await page.evaluate(() => ({
         initDone: !!(window.__tp_init_done || (window.App && (window.App.inited || window.App.initDone))),
