@@ -43,19 +43,38 @@ async function computeAuth(pass, salt, challenge) {
   }
 }
 
-export function connect(url, pass) {
+export function connect(urlOrOpts, pass) {
   const emitter = createEmitter();
-  if (typeof WebSocket === 'undefined' || !url) {
+  const isStringUrl = typeof urlOrOpts === 'string';
+  const options = isStringUrl ? { url: urlOrOpts, password: pass } : (urlOrOpts || {});
+  const {
+    url, // optional legacy direct URL
+    host = '127.0.0.1',
+    port = 4455,
+    secure = false,
+    reconnect = true,
+    maxDelay = 15000,
+  } = options;
+  const pwd = Object.prototype.hasOwnProperty.call(options, 'password') ? options.password : pass;
+
+  if (typeof WebSocket === 'undefined' || (!url && !host)) {
     setTimeout(() => { emitter.emit('connecting'); emitter.emit('error', new Error('WebSocket not available or url missing')); emitter.emit('closed'); }, 0);
     return Object.assign(emitter, { close: () => {}, request: async () => ({ ok:false, error:'no-ws' }) });
   }
 
   let ws = null;
-  let closed = false;
+  let closedByUser = false;
   let identified = false;
   let hello = null;
   const pending = new Map(); // id -> {resolve,reject}
   let rid = 1;
+  let retry = 0;
+
+  const mkUrl = () => {
+    if (url) return url;
+    const proto = secure ? 'wss' : 'ws';
+    return `${proto}://${host}:${port}`;
+  };
 
   const send = (obj) => {
     try { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); } catch {}
@@ -66,7 +85,7 @@ export function connect(url, pass) {
       const d = { rpcVersion: 1 };
       const authInfo = hello && hello.authentication;
       if (authInfo && authInfo.challenge && authInfo.salt) {
-        const auth = await computeAuth(pass||'', authInfo.salt, authInfo.challenge);
+        const auth = await computeAuth(pwd||'', authInfo.salt, authInfo.challenge);
         d.authentication = auth;
       }
       send({ op: 1, d });
@@ -85,6 +104,24 @@ export function connect(url, pass) {
     if (op === 2) { // Identified
       identified = true;
       emitter.emit('identified');
+      try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified' } })); } catch {}
+      return;
+    }
+    if (op === 5) { // Event
+      try {
+        const { eventType, eventData } = d || {};
+        if (eventType === 'RecordStateChanged') {
+          const recording = !!(eventData && eventData.outputActive);
+          try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', recording } })); } catch {}
+        }
+        if (eventType === 'ExitStarted') {
+          try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'closed', recording: false } })); } catch {}
+        }
+        if (eventType === 'CurrentProgramSceneChanged') {
+          const scene = eventData && eventData.sceneName;
+          try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', scene } })); } catch {}
+        }
+      } catch {}
       return;
     }
     if (op === 7) { // RequestResponse
@@ -110,20 +147,27 @@ export function connect(url, pass) {
     } catch { resolve({ ok:false, error:'send-failed' }); }
   });
 
+  const schedule = () => {
+    if (!reconnect || closedByUser) return;
+    const delay = Math.min(1000 * Math.pow(2, retry++), maxDelay);
+    setTimeout(() => { try { openSocket(); } catch {} }, delay);
+  };
+
   const openSocket = () => {
     try {
       emitter.emit('connecting');
-      ws = new WebSocket(url);
-      ws.onopen = () => { emitter.emit('open'); };
+      try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'connecting' } })); } catch {}
+      ws = new WebSocket(mkUrl());
+      ws.onopen = () => { emitter.emit('open'); retry = 0; try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'open', recording: false } })); } catch {} };
       ws.onmessage = onMessage;
-      ws.onerror = () => { emitter.emit('error', new Error('WebSocket error')); };
-      ws.onclose = () => { emitter.emit('closed'); };
+      ws.onerror = () => { emitter.emit('error', new Error('WebSocket error')); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'error' } })); } catch {} };
+      ws.onclose = () => { emitter.emit('closed'); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'closed', recording: false } })); } catch {} schedule(); };
     } catch (err) { emitter.emit('error', err); }
   };
-  setTimeout(() => { if (!closed) openSocket(); }, 0);
+  setTimeout(() => { if (!closedByUser) openSocket(); }, 0);
 
   const api = Object.assign(emitter, {
-    close() { closed = true; try { if (ws) ws.close(1000,'client'); } catch {} emitter.emit('closed'); },
+    close() { closedByUser = true; try { if (ws) ws.close(1000,'client'); } catch {} emitter.emit('closed'); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'closed', recording: false } })); } catch {} },
     request,
     isIdentified() { return !!identified; },
   });
@@ -138,7 +182,26 @@ export function createOBSAdapter() {
     async start() { return Promise.resolve(); },
     async stop() { return Promise.resolve(); },
     connect,
-    async startRecording(conn){ try { return await (conn && conn.request && conn.request('StartRecord', {})); } catch { return { ok:false }; } },
-    async stopRecording(conn){ try { return await (conn && conn.request && conn.request('StopRecord', {})); } catch { return { ok:false }; } },
+    async startRecording(conn){
+      try {
+        if (!conn || !conn.request) return { ok:false };
+        // Optional: set scene before recording if configured
+        try {
+          const scene = (window.__tpStore && typeof window.__tpStore.get === 'function') ? String(window.__tpStore.get('obsScene') || '') : '';
+          if (scene) { await conn.request('SetCurrentProgramScene', { sceneName: scene }); }
+        } catch {}
+        const res = await conn.request('StartRecord', {});
+        if (res && res.ok) { try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', recording: true } })); } catch {} }
+        return res;
+      } catch { return { ok:false }; }
+    },
+    async stopRecording(conn){
+      try {
+        if (!conn || !conn.request) return { ok:false };
+        const res = await conn.request('StopRecord', {});
+        if (res && res.ok) { try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', recording: false } })); } catch {} }
+        return res;
+      } catch { return { ok:false }; }
+    },
   };
 }

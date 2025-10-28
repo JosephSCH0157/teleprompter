@@ -262,6 +262,7 @@
           const enabled = hasStore ? !!S.get('obsEnabled') : false;
           const host = hasStore ? String(S.get('obsHost')||'') : '';
           const pass = hasStore ? String(S.get('obsPassword')||'') : '';
+          const shouldReconnect = hasStore ? !!S.get('obsReconnect') : true;
           const statusEl = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
           const setStatus = (txt) => { try { if (statusEl) statusEl.textContent = txt; } catch {} };
           if (!enabled) {
@@ -270,9 +271,8 @@
           }
           if (!host || !window.__tpOBS || typeof window.__tpOBS.connect !== 'function') return;
           if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
-          const url = 'ws://' + host + ':4455';
           try {
-            const conn = window.__tpOBS.connect(url, pass);
+            const conn = window.__tpOBS.connect({ host, port: 4455, secure: false, password: pass, reconnect: shouldReconnect });
             window.__tpObsConn = conn;
             if (conn && conn.on) {
               conn.on('connecting', () => setStatus('connecting'));
