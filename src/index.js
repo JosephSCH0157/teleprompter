@@ -15,8 +15,10 @@ import * as UI from './ui/dom.js';
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
   if (window?.__TP_BOOT_INFO?.isDev) {
-    // Load debug helper dynamically in dev
+  // Load debug helper dynamically in dev
     import('../debug-tools.js').catch(() => {});
+  // Load legacy self-checks (provides window.runSelfChecks)
+  import('../ui/selfChecks.js').catch(() => {});
     // Install safe no-op shims so early UI clicks never throw before adapters/media load
     // Display bridge (both shapes)
     window.__tpDisplay = window.__tpDisplay || {

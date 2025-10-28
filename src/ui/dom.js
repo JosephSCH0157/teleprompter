@@ -336,7 +336,82 @@ function initSelfChecksChip() {
     const txt = document.getElementById('selfChecksText');
     if (!chip || !txt) return;
     chip.title = 'Click to run self-checks';
-    chip.addEventListener('click', () => { try { txt.textContent = '6/6 ✔'; } catch {} });
+
+    const runLocalChecks = () => {
+      const checks = [];
+      try {
+        // Overlays wiring
+        const openBtn = document.getElementById('shortcutsBtn');
+        const ov = document.getElementById('shortcutsOverlay');
+        openBtn && openBtn.click();
+        const opened = ov && !ov.classList.contains('hidden');
+        // close via Escape
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        const closed = ov && ov.classList.contains('hidden');
+        checks.push({ name: 'Overlays open/close', pass: Boolean(opened && closed) });
+      } catch { checks.push({ name: 'Overlays open/close', pass: false }); }
+
+      try {
+        // Present mode toggle + escape
+        const btn = document.getElementById('presentBtn');
+        const root = document.documentElement;
+        const was = root.classList.contains('tp-present');
+        btn && btn.click();
+        const on = root.classList.contains('tp-present');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        const off = !root.classList.contains('tp-present');
+        // restore initial if needed
+        if (was && !root.classList.contains('tp-present')) btn && btn.click();
+        checks.push({ name: 'Present Mode toggle', pass: Boolean(on && off) });
+      } catch { checks.push({ name: 'Present Mode toggle', pass: false }); }
+
+      try {
+        // dB meter listener
+        const hostTop = document.getElementById('dbMeterTop');
+        const fill = hostTop && hostTop.querySelector('i');
+        const prev = fill && getComputedStyle(fill).transform;
+        window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: -12 } }));
+        const next = fill && getComputedStyle(fill).transform;
+        const changed = prev !== next;
+        checks.push({ name: 'dB meter updates', pass: Boolean(hostTop && fill && changed) });
+      } catch { checks.push({ name: 'dB meter updates', pass: false }); }
+
+      try {
+        // Legend hydration (4 tags)
+        const legend = document.getElementById('legend');
+        const good = !!(legend && legend.querySelectorAll('.tag').length >= 4);
+        checks.push({ name: 'Legend hydrated', pass: good });
+      } catch { checks.push({ name: 'Legend hydrated', pass: false }); }
+
+      return checks;
+    };
+
+    const renderResult = (checks) => {
+      try {
+        const total = checks.length;
+        const passed = checks.filter(c => c.pass).length;
+        txt.textContent = `${passed}/${total} ${passed===total ? '✔' : '•'}`;
+        console.table(checks);
+      } catch {}
+    };
+
+    const runChecks = () => {
+      try {
+        if (typeof window.runSelfChecks === 'function') {
+          const legacy = window.runSelfChecks();
+          // Merge with local checks for wiring specifics
+          const local = runLocalChecks();
+          renderResult([ ...legacy, ...local ]);
+        } else {
+          renderResult(runLocalChecks());
+        }
+      } catch { txt.textContent = '0/0 •'; }
+    };
+
+    // Initial quick pass after hydration
+    setTimeout(runChecks, 0);
+    // On click, re-run and show console table
+    chip.addEventListener('click', runChecks);
   } catch {}
 }
 
