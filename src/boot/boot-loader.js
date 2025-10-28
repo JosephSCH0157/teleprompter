@@ -14,12 +14,14 @@
 
   (async () => {
     if (isDev) {
-      // DEV: avoid importing TS sources (.ts) via .js path to prevent 404 noise; rely on legacy fallback
-      // The legacy bundle (teleprompter_pro.js) will initialize the app in dev.
-      return;
+      // DEV: Prefer running the source module entry directly (no build required)
+      // src/index.js auto-runs boot() when imported as a module
+      await tryImport('/src/index.js');
+      // If source import fails, allow page-level fallback to load the legacy bundle
+    } else {
+      // PROD: try dist; if missing, fall back to legacy bundle handled by the page
+      await tryImport('/dist/index.js');
+      // No further import attempts here; allow page-level fallback to load the legacy bundle.
     }
-    // PROD: try dist; if missing, fall back to legacy bundle handled by the page
-    if (await tryImport('/dist/index.js')) return;
-    // No further import attempts here; allow page-level fallback to load the legacy bundle.
   })();
 })();

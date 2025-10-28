@@ -142,19 +142,22 @@
             `;
             document.head.appendChild(modBootstrapper);
 
-            // Also insert a legacy nomodule fallback in case modules aren't supported or the import fails later.
+            // Also insert a legacy fallback in case modules aren't supported or the import fails later.
             var fallback = document.createElement('script');
             fallback.defer = true;
-            // In dev/CI we want the legacy bundle to load even in modern browsers (no dist build in dev)
-            try { if (!(window.__TP_DEV || IS_TEST)) fallback.setAttribute('nomodule', ''); } catch (e) {}
+            // In CI we want the legacy bundle to load even in modern browsers; in DEV keep nomodule so modern browsers skip it
+            try { if (!IS_TEST) fallback.setAttribute('nomodule', ''); } catch (e) {}
             fallback.src = '/teleprompter_pro.js?v=' + encodeURIComponent(V);
             document.head.appendChild(fallback);
           } catch (e) {
             // In very old browsers, just load the legacy bundle synchronously as before.
             var s = document.createElement('script');
             s.defer = true;
-            // In dev/CI, avoid nomodule so it always executes
-            try { if (!(window.__TP_DEV || (function(){ try { var _q=new URLSearchParams(location.search); return _q.has('ci'); } catch(_e){ return false; } })())) s.setAttribute('nomodule', ''); } catch (e) {}
+            // In CI, avoid nomodule so it executes; otherwise keep nomodule
+            try {
+              var __IS_TEST__ = (function(){ try { var _q=new URLSearchParams(location.search); return _q.has('ci') || (localStorage.getItem('tp_ci')==='1'); } catch(_e){ return false; } })();
+              if (!__IS_TEST__) s.setAttribute('nomodule', '');
+            } catch (e) {}
             s.src = '/teleprompter_pro.js?v=' + encodeURIComponent(V);
             document.head.appendChild(s);
           }
