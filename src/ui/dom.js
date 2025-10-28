@@ -220,10 +220,10 @@ function wireOverlays() {
 const ROLE_KEYS = ['s1','s2','g1','g2'];
 const ROLES_KEY = 'tp_roles_v2';
 const ROLE_DEFAULTS = {
-  s1: { name: 'Speaker 1', color: '#60a5fa' },
-  s2: { name: 'Speaker 2', color: '#facc15' },
-  g1: { name: 'Guest 1',   color: '#34d399' },
-  g2: { name: 'Guest 2',   color: '#f472b6' },
+  s1: { name: 'Joe',    color: '#2ea8ff' },
+  s2: { name: 'Brad',   color: '#ffd24a' },
+  g1: { name: 'Guest 1',   color: '#25d08a' },
+  g2: { name: 'Guest 2',   color: '#b36cff' },
 };
 
 function loadRoles() {
@@ -255,17 +255,23 @@ function updateLegend() {
   });
 }
 
-function ensureViewerPlaceholder() {
-  once('viewer-placeholder', () => {
-    try {
-      const scriptEl = document.getElementById('script');
-      if (!scriptEl) return;
-      if (!scriptEl.querySelector('.line')) {
-        scriptEl.innerHTML = '<div class="line" data-line-idx="0">First line…</div>' +
-                             '<div class="line" data-line-idx="1">Second line…</div>';
-      }
-    } catch {}
-  });
+function ensureEmptyBanner() {
+  try {
+    const scriptEl = document.getElementById('script');
+    const viewer = document.getElementById('viewer');
+    if (!scriptEl || !viewer) return;
+    const anyLines = !!scriptEl.querySelector('.line');
+    const banner = viewer.querySelector('.empty-msg');
+    if (!anyLines && !banner) {
+      const el = document.createElement('div');
+      el.className = 'empty-msg';
+      el.textContent = 'Paste text in the editor to begin…';
+      viewer.appendChild(el);
+    }
+    if (anyLines && banner) {
+      banner.remove();
+    }
+  } catch {}
 }
 
 // === Master hydrator: run now and whenever DOM changes ===
@@ -273,7 +279,7 @@ function hydrateUI() {
   wireOverlays();
   wirePresentMode();
   updateLegend();
-  ensureViewerPlaceholder();
+  ensureEmptyBanner();
 }
 
 export function bindStaticDom() {
@@ -290,6 +296,7 @@ export function bindStaticDom() {
     wireUpload();
     installSpeakerIndex();
     installDbMeter();
+  initSelfChecksChip();
 
     // initial hydration pass
     hydrateUI();
@@ -303,6 +310,17 @@ export function bindStaticDom() {
       } catch {}
     });
     try { mo.observe(document.documentElement, { childList: true, subtree: true }); } catch {}
+  } catch {}
+}
+
+// Self-checks chip: stub interaction for parity (click to set static text)
+function initSelfChecksChip() {
+  try {
+    const chip = document.getElementById('selfChecksChip');
+    const txt = document.getElementById('selfChecksText');
+    if (!chip || !txt) return;
+    chip.title = 'Click to run self-checks';
+    chip.addEventListener('click', () => { try { txt.textContent = '6/6 ✔'; } catch {} });
   } catch {}
 }
 

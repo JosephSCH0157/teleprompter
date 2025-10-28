@@ -418,3 +418,38 @@ html.tp-present .present-exit { display: inline-flex; }
 }
 
 /* (Removed empty script hint overlay; using classic placeholder lines) */
+
+/* Topbar hairline */
+.topbar { border-bottom: 1px solid rgba(255,255,255,.12); }
+
+/* Hide numeric speaker chip (we use colored legend instead) */
+#speakerIndexChip { display: none !important; }
+
+/* Overlays */
+.hidden { display: none !important; }
+.overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.55); z-index: 9990;
+}
+.overlay .sheet {
+    max-width: min(900px, 92vw); max-height: 86vh; overflow: auto;
+    background: #0f1115; border: 1px solid rgba(255,255,255,.15); border-radius: 14px;
+    padding: 16px 18px;
+}
+
+/* Colored speaker legend (right side of topbar) */
+.legend { display: inline-flex; gap: 10px; align-items: center; margin-left: 14px; }
+.legend .tag { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; opacity: .9; }
+.legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* Centered empty-script banner inside the viewer */
+#viewer { position: relative; }
+#viewer .empty-msg {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-style: italic;
+    font-size: clamp(26px, 4.8vw, 72px);
+    color: rgba(255,255,255,.85);
+    text-align: center;
+    pointer-events: none;
+}
