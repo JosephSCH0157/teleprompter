@@ -197,6 +197,25 @@
                       const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                       wrap.scrollTop = Math.round(Math.max(0, Math.min(1, msg.anchorRatio)) * max);
                     }
+                  } else if (msg && msg.kind === 'tp:typography' && msg.source === 'main') {
+                    // Apply CSS variables directly from payload
+                    try {
+                      const s = document.documentElement.style;
+                      const x = msg.t || {};
+                      if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
+                      if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
+                      if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
+                      if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
+                      if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
+                      if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
+                      if (x.color) s.setProperty('--tp-fg', x.color);
+                      if (x.background) s.setProperty('--tp-bg', x.background);
+                      if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
+                      if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                    } catch {}
+                    // reflow helpers
+                    applyScaled();
+                    applyBottomPad();
                   }
                 } catch {}
               });
@@ -240,6 +259,25 @@
               }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
+              if (d && d.kind === 'tp:typography' && d.source === 'main') {
+                try {
+                  const s = document.documentElement.style;
+                  const x = d.t || {};
+                  if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
+                  if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
+                  if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
+                  if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
+                  if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
+                  if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
+                  if (x.color) s.setProperty('--tp-fg', x.color);
+                  if (x.background) s.setProperty('--tp-bg', x.background);
+                  if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
+                  if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                } catch {}
+                applyScaled();
+                applyBottomPad();
+                return;
+              }
               if(d.type==='scroll'){
                 // Guard against out-of-order scrolls using seq/ts if present
                 try{

@@ -83,7 +83,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inl-10{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
 
 
-    :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; }
+        :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; 
+            /* Typography tokens (runtime-updated via CSS variables) */
+            --tp-font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+            --tp-font-size: 56px;
+            --tp-line-height: 1.42;
+            --tp-weight: 500;
+            --tp-letter-spacing: 0.01em;
+            --tp-word-spacing: 0.02em;
+            --tp-fg: #e5e7eb;
+            --tp-bg: #0b0f14;
+            --tp-maxch: 60;
+            --tp-dim: 0.25;
+        }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
@@ -182,9 +194,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     .status{font-size:12px;color:var(--muted)}
     .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:0 0 0 8px}
 
-    .viewer{position:relative;overflow:auto;min-height:0}
-    .script{max-width:900px;margin:0 auto;padding:40px}
-    .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
+    .viewer{position:relative;overflow:auto;min-height:0; background: var(--tp-bg, transparent);}
+    .script{max-width: calc(var(--tp-maxch, 60) * 1ch); margin:0 auto; padding:40px}
+    .script p{
+        font-family: var(--tp-font-family);
+        font-size: var(--tp-font-size);
+        line-height: var(--tp-line-height);
+        font-weight: var(--tp-weight);
+        letter-spacing: var(--tp-letter-spacing);
+        word-spacing: var(--tp-word-spacing);
+        color: var(--tp-fg);
+        margin: 0 0 28px;
+    }
+    /* Optional helpers if lines are marked */
+    .tp-line { opacity: calc(1 - var(--tp-dim)); transition: opacity 120ms linear; }
+    .tp-line.is-active { opacity: 1; }
     .u{ text-decoration: underline; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 
