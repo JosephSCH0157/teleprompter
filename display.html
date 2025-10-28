@@ -197,7 +197,7 @@
                       const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                       wrap.scrollTop = Math.round(Math.max(0, Math.min(1, msg.anchorRatio)) * max);
                     }
-                  } else if (msg && msg.kind === 'tp:typography' && msg.source === 'main') {
+                  } else if (msg && msg.kind === 'tp:typography' && msg.source === 'main' && msg.display === 'display') {
                     // Apply CSS variables directly from payload
                     try {
                       const s = document.documentElement.style;
@@ -259,7 +259,7 @@
               }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
-              if (d && d.kind === 'tp:typography' && d.source === 'main') {
+              if (d && d.kind === 'tp:typography' && d.source === 'main' && d.display === 'display') {
                 try {
                   const s = document.documentElement.style;
                   const x = d.t || {};
