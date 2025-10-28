@@ -11,7 +11,7 @@ export type AutoAPI = {
 
 export type ScrollRouterOpts = { auto: AutoAPI };
 
-const LS_KEY = 'tp_scroll_mode_v1';
+const LS_KEY = 'scrollMode';
 
 const DEFAULTS = {
   mode: 'hybrid' as 'timed'|'step'|'hybrid'|'wpm'|'asr'|'rehearsal',
@@ -25,14 +25,12 @@ const state: { mode: Mode } & typeof DEFAULTS = { ...DEFAULTS } as any;
 let viewer: HTMLElement | null = null;
 
 function persistMode() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ mode: state.mode })); } catch {}
+  try { localStorage.setItem(LS_KEY, state.mode); } catch {}
 }
 function restoreMode() {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
-    const s = JSON.parse(raw);
-    if (s && typeof s.mode === 'string') state.mode = s.mode as Mode;
+    const m = localStorage.getItem(LS_KEY);
+    if (m) state.mode = m as Mode;
   } catch {}
 }
 
@@ -103,10 +101,8 @@ function applyMode(m: Mode){
   state.mode = m;
   persistMode();
   viewer = document.getElementById('viewer') as HTMLElement | null;
-  // update chip/select if present
+  // update select if present
   try {
-    const chip = document.getElementById('modeChip');
-    if (chip) chip.textContent = `Mode: ${m[0].toUpperCase()+m.slice(1)}`;
     const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
     if (sel && sel.value !== m) sel.value = m;
   } catch {}
@@ -126,6 +122,9 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         applyMode(v);
       }
     }, { capture: true });
+    // Screen-reader live announcement on the single control
+    const modeSel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+    modeSel?.setAttribute('aria-live', 'polite');
   } catch {}
 
   // Step mode keys
