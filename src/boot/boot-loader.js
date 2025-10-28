@@ -1,44 +1,42 @@
-// Boot loader for legacy pages: try to run the compiled TS boot initializer if present.
-// If `window.__tpBootLoaded` is set, skip.
-(() => {
-  // Minimal boot trace breadcrumbs for DevTools diagnostics
-  try {
-    window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
-    window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'boot-loader', msg: 'start' });
-  } catch {}
+// boot-loader.js — singleton guard + clean dev/prod import
+(function (g) {
+  if (g.__TP_LOADER_RAN__) return; // singleton guard so it never boots twice
+  g.__TP_LOADER_RAN__ = true;
 
-  const q = new URLSearchParams(location.search);
-  const isCI = q.has('ci') || (() => { try { return localStorage.getItem('tp_ci') === '1'; } catch { return false; } })();
-  const isDev = (q.has('dev') || (() => { try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })() || (window.__TP_DEV === true)) && !isCI;
-  // Expose a CI boot guard so in-page code can short-circuit probing during CI/smoke runs
-  try { window.__TP_SKIP_BOOT_FOR_TESTS = !!isCI; } catch {};
-  try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'boot-loader', msg: 'env', isCI, isDev }); } catch {}
+  const push = (e) => (g.__TP_BOOT_TRACE = g.__TP_BOOT_TRACE || []).push({ ts: performance.now(), ...e });
 
-  const tryImport = async (path) => {
-    try { await import(path); return true; }
-    catch (e) { if (isDev) try { console.warn('[boot-loader] import failed:', path, e); } catch {} return false; }
-  };
+  const isDev = /\bdev=1\b/.test(location.search) || /\bdev\b/.test(location.hash) ||
+                (function(){ try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
+  g.__TP_BOOT_INFO = Object.assign(g.__TP_BOOT_INFO || {}, { isDev, path: isDev ? 'dev' : 'prod' });
+
+  push({ tag: 'boot-loader', msg: 'start', isDev });
 
   (async () => {
-    if (isDev) {
-      // DEV: Prefer running the source module entry directly (no build required)
-      // src/index.js auto-runs boot() when imported as a module
-      try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'boot-loader', msg: 'import /src/index.js (dev) → start' }); } catch {}
-      const ok = await tryImport('/src/index.js');
+    try {
+      const v = encodeURIComponent(g.__TP_ADDV || 'dev');
+      if (isDev) {
+        // We are in /src/boot/boot-loader.js → dev entry is ../index.js
+        push({ tag: 'boot-loader', msg: 'import ../index.js → start' });
+        await import(`../index.js?v=${v}`);
+        push({ tag: 'boot-loader', msg: 'import ../index.js → done', ok: true });
+      } else {
+        // Prod bundle lives at /dist/index.js → from /src/boot use ../../dist/index.js
+        push({ tag: 'boot-loader', msg: 'import ../../dist/index.js → start' });
+        await import(`../../dist/index.js?v=${v}`);
+        push({ tag: 'boot-loader', msg: 'import ../../dist/index.js → done', ok: true });
+      }
+      g.__TP_BOOT_INFO.imported = true;
+    } catch (err) {
+      g.__TP_BOOT_INFO.imported = false;
+      push({ tag: 'boot-loader', msg: 'import failed', ok: false, err: String(err) });
+      // Optional: legacy fallback
       try {
-        window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'boot-loader', msg: 'import /src/index.js (dev) → done', ok });
-        window.__TP_BOOT_INFO = { path: 'dev', isCI, isDev, imported: ok };
+        const s = document.createElement('script');
+        s.src = './teleprompter_pro.js';
+        s.onload = () => push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
+        s.onerror = () => push({ tag: 'boot-loader', msg: 'legacy failed', ok: false });
+        document.head.appendChild(s);
       } catch {}
-      // If source import fails, allow page-level fallback to load the legacy bundle
-    } else {
-      // PROD: try dist; if missing, fall back to legacy bundle handled by the page
-      try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'boot-loader', msg: 'import /dist/index.js (prod) → start' }); } catch {}
-      const ok = await tryImport('/dist/index.js');
-      try {
-        window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'boot-loader', msg: 'import /dist/index.js (prod) → done', ok });
-        window.__TP_BOOT_INFO = { path: 'prod', isCI, isDev, imported: ok };
-      } catch {}
-      // No further import attempts here; allow page-level fallback to load the legacy bundle.
     }
   })();
-})();
+})(window);
