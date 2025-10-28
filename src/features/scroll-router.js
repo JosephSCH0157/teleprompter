@@ -20,7 +20,6 @@ const state = { ...DEFAULTS };
 let viewer = null;
 
 // ---------- utilities ----------
-const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 function persist() {
   try { localStorage.setItem(LS_KEY, JSON.stringify({ mode: state.mode })); } catch {}
 }
@@ -75,14 +74,13 @@ function holdCreepStart(pxPerSec=8, dir=+1) {
 function holdCreepStop() { cancelAnimationFrame(creepRaf); creepRaf=0; }
 
 // ---------- HYBRID MODE (VAD gates Auto) ----------
-let speaking=false, gateTimer=0, lastDb=-60;
+let speaking=false, gateTimer=0;
 function setSpeaking(on) {
   if (on === speaking) return;
   speaking = on;
   Auto.setEnabled(on);
 }
 function hybridHandleDb(db) {
-  lastDb = db;
   const { attackMs, releaseMs, thresholdDb } = state.hybrid;
   clearTimeout(gateTimer);
   if (db >= thresholdDb) {
@@ -95,9 +93,9 @@ function hybridHandleDb(db) {
 }
 
 // ---------- WPM / ASR / REH stubs (wire later) ----------
-function wpmUpdate(/*wpm*/) { /* when ready, map → Auto speed */ }
-function asrUpdate(/*alignment*/) { /* when ready, snap to target line */ }
-function rehMarkPause(/*punctuation*/){ /* later */ }
+function _wpmUpdate(/*wpm*/) { /* when ready, map → Auto speed */ }
+function _asrUpdate(/*alignment*/) { /* when ready, snap to target line */ }
+function _rehMarkPause(/*punctuation*/){ /* later */ }
 
 // ---------- MODE ROUTER ----------
 function applyMode(m) {
@@ -142,16 +140,29 @@ export function installScrollRouter() {
   // Keyboard helpers for Step mode
   document.addEventListener('keydown', (e)=>{
     if (state.mode !== 'step') return;
-    if (e.key === 'PageDown') { e.preventDefault(); step(+1); }
-    if (e.key === 'PageUp')   { e.preventDefault(); step(-1); }
+    if (e.key === 'PageDown') {
+      // eslint-disable-next-line no-restricted-syntax
+      e.preventDefault();
+      step(+1);
+    }
+    if (e.key === 'PageUp')   {
+      // eslint-disable-next-line no-restricted-syntax
+      e.preventDefault();
+      step(-1);
+    }
     if (e.key === ' ') { // hold to creep
+      // eslint-disable-next-line no-restricted-syntax
       e.preventDefault();
       holdCreepStart(state.step.holdCreep, +1);
     }
   }, {capture:true});
   document.addEventListener('keyup', (e)=>{
     if (state.mode !== 'step') return;
-    if (e.key === ' ') { e.preventDefault(); holdCreepStop(); }
+    if (e.key === ' ') {
+      // eslint-disable-next-line no-restricted-syntax
+      e.preventDefault();
+      holdCreepStop();
+    }
   }, {capture:true});
 
   // Hybrid listens to dB events and gates the Auto engine

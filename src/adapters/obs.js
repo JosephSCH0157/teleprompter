@@ -122,7 +122,6 @@ export function connect(urlOrOpts, pass) {
           try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', scene } })); } catch {}
         }
       } catch {}
-      return;
     }
     if (op === 7) { // RequestResponse
       try {
@@ -135,7 +134,6 @@ export function connect(urlOrOpts, pass) {
           else entry.resolve({ ok: false, code: status && status.code, error: (status && status.comment) || 'request-failed' });
         }
       } catch {}
-      return;
     }
   };
 
