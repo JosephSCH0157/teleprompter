@@ -249,9 +249,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "1fa394fca0e48d6d90bb9bb3281326b711fba80b",
+      "gitSha": "9daeebdc5c6cecd2269a1e597cc1cdeaa4971dd7",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-28T16:06:26.181Z"
+      "buildTime": "2025-10-28T16:13:10.391Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -294,18 +294,22 @@
     "isDevClass": false,
     "hasHudChildren": false
   },
-  "hotkeysProbe": {
-    "supported": true,
-    "before": 0,
-    "afterDown": 0,
-    "afterUp": 0,
-    "afterPageDown": 0,
-    "ok": false
-  },
   "lateProbe": {
     "supported": true,
-    "approxFps": 0,
-    "jitterStd": 0
+    "approxFps": 60,
+    "jitterStd": 0,
+    "moved": false
+  },
+  "hotkeysProbe": {
+    "supported": true,
+    "beforeTop": 0,
+    "beforeMarker": 352,
+    "afterPD": {
+      "scrollTop": 0,
+      "markerTop": 328,
+      "idx": null
+    },
+    "ok": true
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }

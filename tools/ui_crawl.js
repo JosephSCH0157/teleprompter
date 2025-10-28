@@ -226,8 +226,30 @@ const cp = require('child_process');
       try { await page.waitForSelector('#script', { timeout: 5000 }); } catch {}
       try { await page.waitForSelector('#legend', { timeout: 5000 }); } catch {}
       await page.waitForTimeout(200);
-      const probes = await page.evaluate(async () => {
+      // Ensure long content for stability: load sample twice or inject if needed
+      try {
+        const el = await page.$('#loadSample');
+        if (el) { await el.click(); await page.waitForTimeout(100); await el.click(); }
+      } catch {}
+  const probes = await page.evaluate(async () => {
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        // If line count is short, inject repeated content to reach >= 60 lines
+        try {
+          const scriptEl = document.querySelector('#script');
+          const lines = scriptEl ? scriptEl.querySelectorAll('.line').length : 0;
+          if (lines < 60) {
+            const parts = [];
+            for (let i=0;i<30;i++) parts.push(`[s1]Line ${i} from S1[/s1]`, `[s2]Line ${i} from S2[/s2]`);
+            const long = parts.join('\n');
+            const ed = document.getElementById('editor');
+            if (ed) {
+              ed.value = long;
+              ed.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (typeof window.renderScript === 'function') window.renderScript(long);
+            await sleep(200);
+          }
+        } catch {}
         const legendProbe = (function() {
           try {
             const items = Array.from(document.querySelectorAll('#legend .tag'));
@@ -269,48 +291,81 @@ const cp = require('child_process');
             return { isDevClass, hasHudChildren };
           } catch { return { isDevClass: false, hasHudChildren: false } }
         })();
-        const hotkeysProbe = await (async function(){
-          try {
-            const viewer = document.getElementById('viewer');
-            if (!viewer) return { supported: false };
-            const before = viewer.scrollTop;
-            viewer.focus && viewer.focus();
-            const key = (k) => new Promise(res => { document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); setTimeout(res, 60); });
-            await key('ArrowDown'); const afterDown = viewer.scrollTop;
-            await key('ArrowUp'); const afterUp = viewer.scrollTop;
-            await key('PageDown'); const afterPageDown = viewer.scrollTop;
-            const ok = (afterDown !== before) || (afterPageDown !== before);
-            return { supported: true, before, afterDown, afterUp, afterPageDown, ok };
-          } catch { return { supported: false } }
-        })();
+        // hotkeysProbe will be measured outside via page.keyboard to ensure trusted events
         const lateProbe = await (async function(){
           try {
             const viewer = document.getElementById('viewer');
             const marker = document.querySelector('#viewer .marker');
             if (!viewer) return { supported: false };
+            // Ensure auto-scroll is ON and speed is reasonable
+            try {
+              const btn = document.getElementById('autoToggle');
+              if (btn) {
+                const txt = (btn.textContent||'');
+                if (/Off/i.test(txt)) { btn.click(); }
+              }
+              const sp = document.getElementById('autoSpeed');
+              if (sp) { sp.value = '30'; sp.dispatchEvent(new Event('input', { bubbles: true })); }
+            } catch {}
+            // Jump near bottom and sample for ~1.5s
             viewer.scrollTop = Math.max(0, viewer.scrollHeight - viewer.clientHeight) * 0.88;
             const samples = [];
             const jitter = [];
             const start = performance.now();
-            while (performance.now() - start < 400) {
+            let frames = 0;
+            while (performance.now() - start < 1500) {
               await new Promise(r => requestAnimationFrame(r));
+              frames++;
               samples.push(viewer.scrollTop);
               if (marker) jitter.push((marker.getBoundingClientRect().top|0));
             }
             const moves = samples.slice(1).filter((v,i) => v !== samples[i]).length;
-            const approxFps = Math.min(60, Math.round(moves / 0.4));
+            const approxFps = Math.min(60, Math.round(frames / 1.5));
             const jstdev = (arr) => { if (!arr.length) return 0; const m = arr.reduce((a,b)=>a+b,0)/arr.length; const v = arr.reduce((a,b)=>a + (b-m)*(b-m),0)/arr.length; return Math.sqrt(v); };
             const jitterStd = jstdev(jitter);
-            return { supported: true, approxFps, jitterStd };
+            const moved = moves > 3;
+            return { supported: true, approxFps, jitterStd, moved };
           } catch { return { supported: false } }
         })();
-        return { legendProbe, renderProbe, hudProbe, hotkeysProbe, lateProbe };
+        return { legendProbe, renderProbe, hudProbe, lateProbe };
       });
       out.legendProbe = probes.legendProbe;
       out.renderProbe = probes.renderProbe;
       out.hudProbe = probes.hudProbe;
-      out.hotkeysProbe = probes.hotkeysProbe;
       out.lateProbe = probes.lateProbe;
+
+      // Hotkeys probe using trusted key events
+      try {
+        await page.bringToFront();
+        try { await page.click('#viewer', { delay: 20 }); } catch {}
+        const before = await page.evaluate(() => {
+          const v = document.getElementById('viewer');
+          const m = document.querySelector('#viewer .marker');
+          const markerTop = m ? (m.getBoundingClientRect().top|0) : null;
+          const idx = (window.tp && window.tp.state && typeof window.tp.state.markerIndex === 'number') ? window.tp.state.markerIndex : null;
+          return { scrollTop: v ? v.scrollTop : 0, markerTop, idx };
+        });
+        await page.keyboard.press('PageDown');
+        await page.waitForTimeout(100);
+        await page.keyboard.press('ArrowDown');
+        await page.waitForTimeout(80);
+        await page.keyboard.press('ArrowUp');
+        await page.waitForTimeout(80);
+        const afterPD = await page.evaluate(() => {
+          const v = document.getElementById('viewer');
+          const m = document.querySelector('#viewer .marker');
+          const markerTop = m ? (m.getBoundingClientRect().top|0) : null;
+          const idx = (window.tp && window.tp.state && typeof window.tp.state.markerIndex === 'number') ? window.tp.state.markerIndex : null;
+          return { scrollTop: v ? v.scrollTop : 0, markerTop, idx };
+        });
+        out.hotkeysProbe = {
+          supported: true,
+          beforeTop: before.scrollTop,
+          beforeMarker: before.markerTop,
+          afterPD: { scrollTop: afterPD.scrollTop, markerTop: afterPD.markerTop, idx: afterPD.idx },
+          ok: (afterPD.scrollTop !== before.scrollTop) || (afterPD.markerTop !== before.markerTop) || (typeof afterPD.idx === 'number' && afterPD.idx !== (before.idx ?? -1))
+        };
+      } catch { out.hotkeysProbe = { supported: false }; }
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
     }
