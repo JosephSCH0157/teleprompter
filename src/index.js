@@ -63,6 +63,26 @@ async function boot() {
       try { eggs.installAboutPopover && eggs.installAboutPopover(); } catch {}
     } catch (e) { console.warn('[src/index] eggs init failed', e); }
 
+    // Help UI (ensure Normalize/Validate buttons in Help overlay)
+    try {
+      const help = await import('../help.js');
+      try { help.ensureHelpUI && help.ensureHelpUI(); } catch {}
+    } catch (e) { console.warn('[src/index] help init failed', e); }
+
+    // Script tools: expose normalize/validate globals for buttons and Help actions
+    try { await import('./script/tools-loader.js'); } catch (e) { console.warn('[src/index] tools-loader import failed', e); }
+
+    // Legacy matcher constants for parity (dev only)
+    try {
+      if (window?.__TP_BOOT_INFO?.isDev) {
+        if (typeof window.SIM_THRESHOLD !== 'number') window.SIM_THRESHOLD = 0.58;
+        if (typeof window.MATCH_WINDOW_AHEAD !== 'number') window.MATCH_WINDOW_AHEAD = 400;
+        if (typeof window.MATCH_WINDOW_BACK !== 'number') window.MATCH_WINDOW_BACK = 120;
+        if (typeof window.STRICT_FORWARD_SIM !== 'number') window.STRICT_FORWARD_SIM = 0.6;
+        if (typeof window.MAX_JUMP_AHEAD_WORDS !== 'number') window.MAX_JUMP_AHEAD_WORDS = 40;
+      }
+    } catch {}
+
     // Initialize adapters (best-effort)
     try { await (Adapters.obsAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] obsAdapter.init failed', e); }
     try { await (Adapters.recorderAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] recorderAdapter.init failed', e); }

@@ -314,6 +314,25 @@ export function bindStaticDom() {
     installDbMeter();
   initSelfChecksChip();
 
+    // Wire normalize button(s) for parity (top bar / settings / help)
+    try {
+      const tryWire = (id) => {
+        const btn = document.getElementById(id);
+        if (btn && !btn.dataset.wired) {
+          btn.dataset.wired = '1';
+          btn.addEventListener('click', () => {
+            try {
+              if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
+              else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
+            } catch {}
+          });
+        }
+      };
+      tryWire('normalizeTopBtn');
+      tryWire('normalizeBtn');
+      tryWire('settingsNormalize');
+    } catch {}
+
     // initial hydration pass
     hydrateUI();
 
@@ -363,14 +382,16 @@ function initSelfChecksChip() {
       } catch { checks.push({ name: 'Present Mode controls', pass: false }); }
 
       try {
-        // dB meter listener
+        // dB meter listener (robust: toggle across two extremes to avoid equal-state no-op)
         const hostTop = document.getElementById('dbMeterTop');
         const fill = hostTop && hostTop.querySelector('i');
-        const prev = fill && getComputedStyle(fill).transform;
-        window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: -12 } }));
-        const next = fill && getComputedStyle(fill).transform;
-        const changed = prev !== next;
-        checks.push({ name: 'dB meter updates', pass: Boolean(hostTop && fill && changed) });
+        const t0 = fill && getComputedStyle(fill).transform;
+        window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: -60 } }));
+        const t1 = fill && getComputedStyle(fill).transform;
+        window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: 0 } }));
+        const t2 = fill && getComputedStyle(fill).transform;
+        const changed = !!(hostTop && fill && t0 && (t1 !== t0 || t2 !== t1));
+        checks.push({ name: 'dB meter updates', pass: changed });
       } catch { checks.push({ name: 'dB meter updates', pass: false }); }
 
       try {
