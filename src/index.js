@@ -53,6 +53,14 @@ async function boot() {
     await Core.init();
     UI.bindStaticDom();
 
+    // Easter eggs (party mode on dB meter, Konami theme, etc.)
+    try {
+      const eggs = await import('../eggs.js');
+      try { eggs.installEasterEggs && eggs.installEasterEggs(); } catch {}
+      try { eggs.installCKEgg && eggs.installCKEgg(); } catch {}
+      try { eggs.installAboutPopover && eggs.installAboutPopover(); } catch {}
+    } catch (e) { console.warn('[src/index] eggs init failed', e); }
+
     // Initialize adapters (best-effort)
     try { await (Adapters.obsAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] obsAdapter.init failed', e); }
     try { await (Adapters.recorderAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] recorderAdapter.init failed', e); }
