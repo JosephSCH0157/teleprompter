@@ -23,7 +23,11 @@
       const html = [
         '<div data-tab-content="general">',
         '  <h4>General</h4>',
-        '  <div class="row">Application settings will appear here.</div>',
+        '  <div class="row">',
+        '    <label>Font size <input id="settingsFontSize" type="number" min="16" max="96" step="2" class="select-md"/></label>',
+        '    <label>Line height <input id="settingsLineHeight" type="number" min="1.1" max="2" step="0.05" class="select-md"/></label>',
+        '  </div>',
+        '  <div class="settings-small">Applies to both the main script and the external display.</div>',
         '</div>',
         '',
         '<div data-tab-content="media" style="display:none">',
@@ -229,6 +233,43 @@
         });
         S.subscribe && S.subscribe('prerollSeconds', (v) => { try { if (settingsPreroll.value !== String(v)) settingsPreroll.value = String(v); } catch {} });
       }
+
+      // Typography (Font size / Line height) — Settings is source-of-truth; mirror to main hidden inputs
+      try {
+        const fsS = q('settingsFontSize');
+        const lhS = q('settingsLineHeight');
+        const fsMain = q('fontSize');
+        const lhMain = q('lineHeight');
+        const applyFromSettings = () => {
+          try {
+            if (fsS && fsMain) {
+              if (fsMain.value !== fsS.value) fsMain.value = fsS.value;
+              try { fsMain.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+            }
+            if (lhS && lhMain) {
+              if (lhMain.value !== lhS.value) lhMain.value = lhS.value;
+              try { lhMain.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+            }
+            // Monolith path: apply immediately when helper exists
+            try { if (typeof window.applyTypography === 'function') window.applyTypography(); } catch {}
+            // Persist to localStorage for legacy boot hydration
+            try {
+              if (fsS && fsS.value) localStorage.setItem('tp_font_size_v1', String(fsS.value));
+              if (lhS && lhS.value) localStorage.setItem('tp_line_height_v1', String(lhS.value));
+            } catch {}
+          } catch {}
+        };
+        if (fsS) fsS.addEventListener('input', applyFromSettings);
+        if (lhS) lhS.addEventListener('input', applyFromSettings);
+        // Initial sync: prefer existing main values or stored values
+        try {
+          const storedFS = (function(){ try { return localStorage.getItem('tp_font_size_v1'); } catch { return null; } })();
+          const storedLH = (function(){ try { return localStorage.getItem('tp_line_height_v1'); } catch { return null; } })();
+          if (fsS) fsS.value = (fsMain && fsMain.value) || storedFS || '48';
+          if (lhS) lhS.value = (lhMain && lhMain.value) || storedLH || '1.35';
+          applyFromSettings();
+        } catch {}
+      } catch {}
 
       // Mirror OBS URL/password live between settings overlay and main panel via input events
       const obsUrlS = q('settingsObsUrl');
