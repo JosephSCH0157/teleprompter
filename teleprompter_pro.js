@@ -5736,8 +5736,23 @@ let _toast = function (msg, opts) {
     resetBtn.addEventListener('click', resetTimer);
 
     loadSample.addEventListener('click', () => {
-      editor.value =
-        'Welcome to [b]Teleprompter Pro[/b].\n\nUse [s1]roles[/s1], [note]notes[/note], and colors like [color=#ff0]this[/color].';
+      const sample = [
+        '[s1]',
+        '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
+        'Cras justo odio, dapibus ac facilisis in, egestas eget quam.',
+        '[/s1]',
+        '',
+        '[s2]',
+        '[color=#ffcc00]Vestibulum[/color] [bg=#112233]ante[/bg] ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae;',
+        'Integer posuere erat a ante venenatis dapibus posuere velit aliquet.',
+        '[/s2]',
+        '',
+        '[g1]',
+        'Curabitur [b]non nulla[/b] sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada.',
+        'Maecenas faucibus mollis interdum.',
+        '[/g1]',
+      ].join('\n');
+      editor.value = sample;
       renderScript(editor.value);
     });
     clearText.addEventListener('click', () => {

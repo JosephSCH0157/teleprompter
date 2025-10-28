@@ -144,19 +144,19 @@ async function main() {
                   } catch (ex) { rej(ex); }
                 });
               },
-              test() {
-                return new Promise(async (res) => {
+              async test() {
+                try {
+                  // Ensure connected
+                  if (!ws || ws.readyState !== 1) {
+                    try { await this.connect(); } catch {}
+                  }
                   try {
-                    // Ensure connected
-                    if (!ws || ws.readyState !== 1) {
-                      try { await this.connect(); } catch {}
-                    }
-                    try {
-                      // Send a minimal IDENTIFY-like payload so the stub records it
-                      const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
-                      ws && ws.send && ws.send(id);
-                    } catch {}
+                    // Send a minimal IDENTIFY-like payload so the stub records it
+                    const id = JSON.stringify({ op: 1, d: { rpcVersion: 1 } });
+                    ws && ws.send && ws.send(id);
                   } catch {}
+                } catch {}
+                return new Promise((res) => {
                   setTimeout(() => res(true), 100);
                 });
               },
@@ -385,12 +385,12 @@ async function main() {
       const v = Number(y) || 0;
       const ok = await page.evaluate((val) => {
         try {
-          if (typeof tpScrollTo === 'function') {
-            tpScrollTo(val);
-            return true;
-          }
           if (typeof window.tpScrollTo === 'function') {
             window.tpScrollTo(val);
+            return true;
+          }
+          if (typeof tpScrollTo !== 'undefined' && typeof tpScrollTo === 'function') {
+            tpScrollTo(val);
             return true;
           }
           // fallback: set scrollTop directly on the main wrapper
