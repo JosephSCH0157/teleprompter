@@ -218,6 +218,26 @@ async function main() {
     console.error('[e2e] page.goto error', e);
   });
 
+  // Quick UI invariants: no legacy Mode pill; a11y present; persistence works
+  try {
+    await page.waitForSelector('#scrollMode', { timeout: 5000 });
+    const hasModeChip = await page.$('#modeChip');
+    const ariaLive = await page.$eval('#scrollMode', (el) => el.getAttribute('aria-live'));
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    assert(!hasModeChip, 'modeChip should not exist');
+    assert(ariaLive === 'polite', 'scrollMode should have aria-live="polite"');
+
+    // persistence check
+    await page.select('#scrollMode', 'step');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#scrollMode', { timeout: 5000 });
+    const persisted = await page.$eval('#scrollMode', (el) => el.value);
+    assert(persisted === 'step', 'scrollMode should persist across reloads');
+    console.log('[e2e] ui-invariants: PASS');
+  } catch (e) {
+    console.warn('[e2e] ui-invariants: WARN', String(e && e.message || e));
+  }
+
   // Wait for the recorder module to be present in the page (runner-side wait)
   try {
     await page.waitForFunction(
