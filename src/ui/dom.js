@@ -78,7 +78,31 @@ function wireUpload() {
   on(inp, 'change', async () => {
     try {
       const f = inp && inp.files && inp.files[0];
-      if (f && typeof window._uploadFromFile === 'function') await window._uploadFromFile(f);
+      if (!f) return;
+      if (typeof window._uploadFromFile === 'function') {
+        await window._uploadFromFile(f);
+        return;
+      }
+      // Fallback: handle basic text locally; docx via lazy upload module
+      const lower = (f.name || '').toLowerCase();
+      const isDocx = lower.endsWith('.docx') || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      if (isDocx) {
+        try { await import('../../ui/upload.js'); } catch {}
+        if (typeof window._uploadFromFile === 'function') { await window._uploadFromFile(f); return; }
+      }
+      // Read as text
+      const txt = await f.text();
+      const ed = document.getElementById('editor');
+      if (ed && 'value' in ed) {
+        ed.value = txt;
+        try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+      }
+      try {
+        if (typeof window.normalizeToStandard === 'function') window.normalizeToStandard();
+        else if (typeof window.fallbackNormalize === 'function') window.fallbackNormalize();
+      } catch {}
+      try { if (typeof window.renderScript === 'function') window.renderScript(ed && ed.value || txt); } catch {}
+      try { if (typeof window.setStatus === 'function') window.setStatus('Loaded "' + (f.name||'file') + '"'); } catch {}
     } catch {}
   });
 }

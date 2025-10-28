@@ -72,6 +72,9 @@ async function boot() {
     // Script tools: expose normalize/validate globals for buttons and Help actions
     try { await import('./script/tools-loader.js'); } catch (e) { console.warn('[src/index] tools-loader import failed', e); }
 
+    // Upload handler: expose window._uploadFromFile for Upload button; supports .docx via mammoth
+    try { await import('../ui/upload.js'); } catch (e) { console.warn('[src/index] upload handler init failed', e); }
+
     // Legacy matcher constants for parity (dev only)
     try {
       if (window?.__TP_BOOT_INFO?.isDev) {
