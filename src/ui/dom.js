@@ -150,6 +150,11 @@ function wireLoadSample() {
       'Curabitur [b]non nulla[/b] sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada.',
       'Maecenas faucibus mollis interdum.',
       '[/g1]',
+      '',
+      '[g2]',
+      'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. [i]Etiam porta sem malesuada[/i] magna mollis euismod.',
+      '[bg=#003344][color=#a4e8ff]Quisque[/color][/bg] sit amet est a [u]libero[/u] mollis tristique.',
+      '[/g2]',
     ].join('\n');
     btn.addEventListener('click', () => {
       try {
