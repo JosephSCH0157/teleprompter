@@ -11,10 +11,10 @@ import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
+import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
 import { initToasts } from './features/toasts.js';
 import * as UI from './ui/dom.js';
-import { installSpeech } from './features/speech-loader.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
