@@ -159,7 +159,7 @@ try {
     const dr = va[0]-vb[0], dg = va[1]-vb[1], db = va[2]-vb[2];
     return Math.sqrt(dr*dr + dg*dg + db*db);
   };
-  const threshold = 8; // accept tiny differences
+  const threshold = 12; // accept tiny differences, require clearer separation
   if (!lineCount || iHello < 0 || iWorld < 0) {
     const msg = 'render — sample lines not rendered correctly';
     if (CI_STRICT) { console.error('FAIL ' + msg, renderProbe); allOk = false; } else { console.warn('WARN ' + msg, renderProbe); }
@@ -174,10 +174,20 @@ try {
   }
   // HUD/Prod guard (best-effort)
   if (hudProbe && typeof hudProbe === 'object') {
-    if (!hudProbe.isDevClass && !hudProbe.hasHudChildren) {
-      console.log('PASS hud-prod-guard — HUD absent in non-dev');
+    const devQuery = /[?&]dev=1(?!\d)/.test(reportUrl);
+    if (devQuery) {
+      if (hudProbe.hasHudChildren || hudProbe.isDevClass) {
+        console.log('PASS hud-dev-guard — HUD present in dev');
+      } else {
+        const msg = 'hud-dev-guard — HUD absent in dev';
+        if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+      }
     } else {
-      console.warn('WARN hud-prod-guard — HUD present or dev class set');
+      if (!hudProbe.isDevClass && !hudProbe.hasHudChildren) {
+        console.log('PASS hud-prod-guard — HUD absent in non-dev');
+      } else {
+        console.warn('WARN hud-prod-guard — HUD present or dev class set');
+      }
     }
   }
   // Hotkeys probe (best-effort)
@@ -197,6 +207,16 @@ try {
     else {
       const msg = `late-probe — fps=${lateProbe.approxFps}, jitterStd=${lateProbe.jitterStd}`;
       if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+    }
+  }
+
+  // Auto-scroll UI wiring check
+  if (report.autoScrollUi) {
+    if (report.autoScrollUi.ok) {
+      console.log('PASS auto-scroll-ui —', JSON.stringify(report.autoScrollUi));
+    } else {
+      const msg = 'auto-scroll-ui — toggle did not flip to On when enabled';
+      if (CI_STRICT) { console.error('FAIL ' + msg, JSON.stringify(report.autoScrollUi)); allOk = false; } else { console.warn('WARN ' + msg, JSON.stringify(report.autoScrollUi)); }
     }
   }
 } catch (e) {

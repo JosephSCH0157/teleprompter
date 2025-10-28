@@ -337,35 +337,76 @@ const cp = require('child_process');
       // Hotkeys probe using trusted key events
       try {
         await page.bringToFront();
-        try { await page.click('#viewer', { delay: 20 }); } catch {}
-        const before = await page.evaluate(() => {
-          const v = document.getElementById('viewer');
-          const m = document.querySelector('#viewer .marker');
-          const markerTop = m ? (m.getBoundingClientRect().top|0) : null;
-          const idx = (window.tp && window.tp.state && typeof window.tp.state.markerIndex === 'number') ? window.tp.state.markerIndex : null;
-          return { scrollTop: v ? v.scrollTop : 0, markerTop, idx };
-        });
+        // Prefer data-testid selectors but fallback to ids/classes
+        const viewportSel = '[data-testid="script-viewport"]';
+        const markerSel = '[data-testid="marker"]';
+        try {
+          const vp = await page.$(viewportSel);
+          if (vp) { await vp.click({ delay: 20 }); }
+          else { await page.click('#viewer', { delay: 20 }); }
+        } catch {}
+        const snap = async () => await page.evaluate((vpSel, mkSel) => {
+          const vp = document.querySelector(vpSel) || document.getElementById('viewer');
+          const mk = document.querySelector(mkSel) || document.querySelector('#viewer .marker');
+          return {
+            idx: (window.tp && window.tp.state && typeof window.tp.state.markerIndex === 'number') ? window.tp.state.markerIndex : null,
+            top: mk ? (mk.getBoundingClientRect().top|0) : 0,
+            st: vp ? vp.scrollTop : 0,
+          };
+        }, viewportSel, markerSel);
+        const before = await snap();
         await page.keyboard.press('PageDown');
         await page.waitForTimeout(100);
         await page.keyboard.press('ArrowDown');
-        await page.waitForTimeout(80);
-        await page.keyboard.press('ArrowUp');
-        await page.waitForTimeout(80);
-        const afterPD = await page.evaluate(() => {
-          const v = document.getElementById('viewer');
-          const m = document.querySelector('#viewer .marker');
-          const markerTop = m ? (m.getBoundingClientRect().top|0) : null;
-          const idx = (window.tp && window.tp.state && typeof window.tp.state.markerIndex === 'number') ? window.tp.state.markerIndex : null;
-          return { scrollTop: v ? v.scrollTop : 0, markerTop, idx };
-        });
-        out.hotkeysProbe = {
-          supported: true,
-          beforeTop: before.scrollTop,
-          beforeMarker: before.markerTop,
-          afterPD: { scrollTop: afterPD.scrollTop, markerTop: afterPD.markerTop, idx: afterPD.idx },
-          ok: (afterPD.scrollTop !== before.scrollTop) || (afterPD.markerTop !== before.markerTop) || (typeof afterPD.idx === 'number' && afterPD.idx !== (before.idx ?? -1))
-        };
+        await page.waitForTimeout(100);
+        const after = await snap();
+        const moved = (after.idx != null && before.idx != null && after.idx !== before.idx)
+                   || Math.abs(after.top - before.top) >= 8
+                   || (after.st - before.st) >= 1;
+        out.hotkeysProbe = { supported: true, before, after, ok: !!moved };
       } catch { out.hotkeysProbe = { supported: false }; }
+
+      // Before asserting auto-scroll UI, re-ensure long content so the toggle doesn't immediately flip Off at end-of-scroll
+      try {
+        await page.evaluate(async () => {
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          try {
+            const scriptEl = document.querySelector('#script');
+            const lines = scriptEl ? scriptEl.querySelectorAll('.line').length : 0;
+            if (lines < 60) {
+              const parts = [];
+              for (let i=0;i<30;i++) parts.push(`[s1]Line ${i} from S1[/s1]`, `[s2]Line ${i} from S2[/s2]`);
+              const long = parts.join('\n');
+              const ed = document.getElementById('editor');
+              if (ed) {
+                ed.value = long;
+                ed.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+              if (typeof window.renderScript === 'function') window.renderScript(long);
+              await sleep(200);
+            }
+          } catch {}
+        });
+      } catch {}
+
+      // Auto-scroll UI assertion: ensure toggle flips to "On" when enabled
+      try {
+        const getTxt = async () => {
+          try { return await page.$eval('#autoToggle', el => (el.textContent||'').trim()); } catch { return ''; }
+        };
+        const was = await getTxt();
+        try { await page.$eval('#autoToggle', el => el.scrollIntoView({behavior:'instant', block:'center'})); } catch {}
+        let now = was;
+        if (/Off/i.test(was)) {
+          for (let i=0;i<2;i++) {
+            try { await page.click('#autoToggle', { delay: 20 }); } catch {}
+            await page.waitForTimeout(150);
+            now = await getTxt();
+            if (/On/i.test(now)) break;
+          }
+        }
+        out.autoScrollUi = { was, now, ok: /On/i.test(now) };
+      } catch {}
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
     }
