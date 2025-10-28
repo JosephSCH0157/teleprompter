@@ -276,13 +276,24 @@ function installObsChip() {
         chip = document.createElement('span');
         chip.id = 'obsChip';
         chip.className = 'chip';
-        chip.textContent = 'OBS: disconnected';
+        // Create structured content: label + optional test icon
+        const label = document.createElement('span');
+        label.className = 'obs-chip-label';
+        label.textContent = 'OBS: disconnected';
+        const icon = document.createElement('i');
+        icon.className = 'obs-test-icon';
+        icon.setAttribute('aria-hidden','true');
+        chip.appendChild(label);
+        chip.appendChild(icon);
         topbar && topbar.appendChild(chip);
       }
+      const labelEl = chip.querySelector('.obs-chip-label') || chip;
+      const iconEl = chip.querySelector('.obs-test-icon');
+      let hideTimer = null;
       const render = ({ status = 'disconnected', recording = false, scene } = {}) => {
         try {
           const s = String(status||'disconnected');
-          chip.textContent = `OBS: ${s}${recording ? ' • REC' : ''}${scene ? ` • ${scene}` : ''}`;
+          labelEl.textContent = `OBS: ${s}${recording ? ' • REC' : ''}${scene ? ` • ${scene}` : ''}`;
           // reset state classes and apply new one(s)
           const base = ['chip'];
           if (s === 'identified' || s === 'open') base.push('obs-connected');
@@ -294,6 +305,21 @@ function installObsChip() {
       };
       render();
       window.addEventListener('tp:obs', (e) => { try { render((e && e.detail) || {}); } catch {} });
+      // Show a brief test icon feedback when test completes
+      window.addEventListener('tp:obs-test', (e) => {
+        try {
+          const d = (e && e.detail) || {}; const ok = !!d.ok;
+          if (!iconEl) return;
+          iconEl.textContent = ok ? '✓' : '!';
+          iconEl.classList.remove('ok','error','show');
+          iconEl.classList.add(ok ? 'ok' : 'error');
+          // force reflow for transition
+          void iconEl.offsetWidth;
+          iconEl.classList.add('show');
+          if (hideTimer) clearTimeout(hideTimer);
+          hideTimer = setTimeout(() => { try { iconEl.classList.remove('show'); } catch {} }, 2500);
+        } catch {}
+      });
     } catch {}
   });
 }
