@@ -14,6 +14,7 @@ import { initScroll } from './features/scroll.js';
 import { initTelemetry } from './features/telemetry.js';
 import { initToasts } from './features/toasts.js';
 import * as UI from './ui/dom.js';
+import { installSpeech } from './features/speech-loader.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
@@ -116,68 +117,8 @@ async function boot() {
     try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
     try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
 
-    // Wire Start speech sync button if SpeechRecognition is available (no TS imports)
-    try {
-      const btn = document.getElementById('recBtn');
-      const chip = document.getElementById('recChip');
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (btn && SR) {
-        btn.disabled = false;
-        let running = false;
-        let recog = null;
-        btn.addEventListener('click', async () => {
-          try {
-            if (!running) {
-              running = true;
-              if (chip) chip.textContent = 'Speech: starting…';
-              try {
-                // Create a simple recognizer directly via Web Speech API
-                const r = new SR();
-                recog = r;
-                r.continuous = true;
-                r.interimResults = true;
-                r.lang = 'en-US';
-                r.onresult = () => { /* no-op matcher for now; future hook */ };
-                try { r.start(); } catch {}
-                if (chip) chip.textContent = 'Speech: running';
-                btn.textContent = 'Stop speech sync';
-                // If OBS is enabled, kick off recording (best-effort)
-                try {
-                  const S = window.__tpStore;
-                  if (S && S.get && S.get('obsEnabled')) {
-                    const obs = window.__tpOBS;
-                    const conn = window.__tpObsConn;
-                    if (obs && typeof obs.startRecording === 'function' && conn) {
-                      obs.startRecording(conn);
-                    }
-                  }
-                } catch {}
-              } catch {
-                if (chip) chip.textContent = 'Speech: error';
-                running = false;
-              }
-            } else {
-              try { recog && recog.stop && recog.stop(); } catch {}
-              recog = null;
-              running = false;
-              if (chip) chip.textContent = 'Speech: idle';
-              btn.textContent = 'Start speech sync';
-              // If OBS is enabled, stop recording (best-effort)
-              try {
-                const S = window.__tpStore;
-                if (S && S.get && S.get('obsEnabled')) {
-                  const obs = window.__tpOBS;
-                  const conn = window.__tpObsConn;
-                  if (obs && typeof obs.stopRecording === 'function' && conn) {
-                    obs.stopRecording(conn);
-                  }
-                }
-              } catch {}
-            }
-          } catch {}
-        });
-      }
-    } catch (e) { console.warn('[src/index] speech button wiring failed', e); }
+      // Install speech start/stop delegator
+      try { installSpeech(); } catch (e) { console.warn('[src/index] installSpeech failed', e); }
 
     // Wire Auto-scroll controls (independent of speech/mic)
     try {
