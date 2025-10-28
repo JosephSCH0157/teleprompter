@@ -152,6 +152,35 @@ function wirePresentMode() {
   } catch {}
 }
 
+function installSpeakerIndex() {
+  try {
+    const host = $('speakerIndexChip');
+    if (!host) return;
+    const editor = $('editor') || $('scriptInput') || $('sourceText');
+    const viewer = $('viewer');
+    const getText = () => {
+      try { if (editor && 'value' in editor) return editor.value; } catch {}
+      try { return (viewer && viewer.textContent) || ''; } catch {}
+      return '';
+    };
+    const countTag = (tag) => {
+      try { const m = getText().match(new RegExp('\\\[' + tag + '\\]', 'g')); return m ? m.length : 0; } catch { return 0; }
+    };
+    const render = () => {
+      try {
+        const s1 = countTag('s1');
+        const s2 = countTag('s2');
+        const g = countTag('g1') + countTag('g2');
+        host.textContent = `Speakers: S1 ${s1} • S2 ${s2}${g ? ` • G ${g}` : ''}`;
+      } catch {}
+    };
+    render();
+    on(document, 'input', (e) => {
+      try { const id = (e && e.target && e.target.id) ? String(e.target.id) : ''; if (/editor|script|source/i.test(id)) render(); } catch {}
+    });
+  } catch {}
+}
+
 export function bindStaticDom() {
   console.log('[src/ui/dom] bindStaticDom');
   try {
@@ -161,6 +190,7 @@ export function bindStaticDom() {
     wireCamera();
     wireUpload();
     wirePresentMode();
+    installSpeakerIndex();
   } catch {}
 }
 
