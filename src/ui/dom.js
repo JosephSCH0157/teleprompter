@@ -192,6 +192,13 @@ function wireOverlays() {
           const btn = $id(name + 'Btn');
           const dlg = $id(name + 'Overlay');
           if (!dlg) return;
+          // Ensure settings content is mounted before showing
+          if (name === 'settings') {
+            try {
+              const api = (window.__tp && window.__tp.settings) ? window.__tp.settings : null;
+              if (api && typeof api.mount === 'function') api.mount();
+            } catch {}
+          }
           dlg.classList.remove('hidden');
           btn && btn.setAttribute('aria-expanded', 'true');
         } catch {}

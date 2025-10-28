@@ -1,13 +1,20 @@
 (function(){
-  // Settings UI centralization: binds overlay and main panel to a single store
+  // Settings UI centralization: binds overlay and main panel; tolerates no-store mode
   const S = window.__tpStore;
-  if (!S) {
-    // Defer until store exists
-    setTimeout(() => { try { if (window.__tpStore) init(); else init(); } catch {} }, 50);
-    return;
-  }
+  const hasStore = !!S;
 
   function q(id) { return document.getElementById(id); }
+
+  function showTab(tab){
+    try {
+      const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      const sb = document.getElementById('settingsBody');
+      if (!sb) return;
+      const cards = Array.from(sb.querySelectorAll('[data-tab-content]'));
+      cards.forEach(c => { c.style.display = (c.getAttribute('data-tab-content') === tab) ? '' : 'none'; });
+    } catch {}
+  }
 
   function init() {
     try {
@@ -15,23 +22,18 @@
       const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
       tabs.forEach(t => {
         t.addEventListener('click', () => {
-          try { S.set('settingsTab', t.dataset.tab); } catch {}
+          const tab = t.dataset.tab;
+          if (!tab) return;
+          if (hasStore) { try { S.set('settingsTab', tab); } catch {} }
+          else showTab(tab);
         });
       });
-      S.subscribe('settingsTab', tab => {
-        try {
-          tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-          const sb = document.getElementById('settingsBody');
-          if (sb) {
-            // use existing setupSettingsTabs behavior lightly: show target card
-            const cards = Array.from(sb.querySelectorAll('.settings-card'));
-            cards.forEach(c => {
-              const vis = c.dataset.tab === tab;
-              if (vis) c.style.display = 'flex'; else c.style.display = 'none';
-            });
-          }
-        } catch {}
-      });
+      if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('settingsTab', tab => { try { if (tab) showTab(tab); } catch {} });
+      }
+      // Ensure a default tab is visible on first open
+      const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
+      showTab(active && active.getAttribute('data-tab') || 'general');
 
       // Mic device selector
       const settingsMicSel = q('settingsMicSel');
@@ -39,29 +41,35 @@
       if (settingsMicSel) {
         settingsMicSel.addEventListener('change', () => S.set('micDevice', settingsMicSel.value));
       }
-      S.subscribe('micDevice', v => {
-        try {
-          if (settingsMicSel && settingsMicSel.value !== v) settingsMicSel.value = v || '';
-          if (micDeviceSel && micDeviceSel.value !== v) micDeviceSel.value = v || '';
-        } catch {}
-      });
+      if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('micDevice', v => {
+          try {
+            if (settingsMicSel && settingsMicSel.value !== v) settingsMicSel.value = v || '';
+            if (micDeviceSel && micDeviceSel.value !== v) micDeviceSel.value = v || '';
+          } catch {}
+        });
+      }
 
       // OBS enabled toggle: central write path
       const settingsEnableObs = q('settingsEnableObs');
       const mainEnableObs = q('enableObs');
-      if (settingsEnableObs) settingsEnableObs.addEventListener('change', () => S.set('obsEnabled', !!settingsEnableObs.checked));
-      if (mainEnableObs) mainEnableObs.addEventListener('change', () => S.set('obsEnabled', !!mainEnableObs.checked));
-      S.subscribe('obsEnabled', v => {
-        try {
-          if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v;
-          if (mainEnableObs && mainEnableObs.checked !== !!v) mainEnableObs.checked = !!v;
-        } catch {}
-      });
+      if (settingsEnableObs && hasStore) settingsEnableObs.addEventListener('change', () => S.set('obsEnabled', !!settingsEnableObs.checked));
+      if (mainEnableObs && hasStore) mainEnableObs.addEventListener('change', () => S.set('obsEnabled', !!mainEnableObs.checked));
+      if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('obsEnabled', v => {
+          try {
+            if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v;
+            if (mainEnableObs && mainEnableObs.checked !== !!v) mainEnableObs.checked = !!v;
+          } catch {}
+        });
+      }
 
       // Auto-record toggle maps to a single key
       const autoRec = q('autoRecordToggle') || q('autoRecord');
-      if (autoRec) autoRec.addEventListener('change', () => S.set('autoRecord', !!autoRec.checked));
-      S.subscribe('autoRecord', v => { try { if (autoRec) autoRec.checked = !!v; } catch {} });
+      if (autoRec && hasStore) autoRec.addEventListener('change', () => S.set('autoRecord', !!autoRec.checked));
+      if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('autoRecord', v => { try { if (autoRec) autoRec.checked = !!v; } catch {} });
+      }
 
       // Mirror OBS URL/password live between settings overlay and main panel via input events
       const obsUrlS = q('settingsObsUrl');
@@ -78,12 +86,14 @@
       }
 
       // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth
-      S.subscribe('obsEnabled', v => {
-        try {
-          const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
-          if (pill) pill.textContent = v ? 'enabled' : 'disabled';
-        } catch {}
-      });
+      if (hasStore && typeof S.subscribe === 'function') {
+        S.subscribe('obsEnabled', v => {
+          try {
+            const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+            if (pill) pill.textContent = v ? 'enabled' : 'disabled';
+          } catch {}
+        });
+      }
 
     } catch {}
   }
