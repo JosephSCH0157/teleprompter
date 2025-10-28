@@ -129,6 +129,38 @@ function wireCamera() {
   on(mir, 'change', () => { try { window.__tpCamera?.applyCamMirror?.(); } catch {} });
 }
 
+function wireLoadSample() {
+  try {
+    const btn = $('loadSample');
+    const ed = $('editor');
+    if (!btn || !ed || btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    const sample = [
+      '[s1]',
+      '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
+      'Cras justo odio, dapibus ac facilisis in, egestas eget quam.',
+      '[/s1]',
+      '',
+      '[s2]',
+      '[color=#ffcc00]Vestibulum[/color] [bg=#112233]ante[/bg] ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae;',
+      'Integer posuere erat a ante venenatis dapibus posuere velit aliquet.',
+      '[/s2]',
+      '',
+      '[g1]',
+      'Curabitur [b]non nulla[/b] sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada.',
+      'Maecenas faucibus mollis interdum.',
+      '[/g1]',
+    ].join('\n');
+    btn.addEventListener('click', () => {
+      try {
+        if ('value' in ed) ed.value = sample;
+        // re-render via both event and direct call for robustness
+        try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+        try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch {}
+      } catch {}
+    });
+  } catch {}
+}
 function wireUpload() {
   const btn = $('uploadFileBtn');
   const inp = $('uploadFile');
@@ -506,6 +538,7 @@ export function bindStaticDom() {
     wireMic();
     wireCamera();
     wireUpload();
+  wireLoadSample();
     installSpeakerIndex();
     installDbMeter();
     installObsChip();
