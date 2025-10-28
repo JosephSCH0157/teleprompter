@@ -75,6 +75,10 @@
         '    <label>Scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name"/></label>',
         '    <label><input type="checkbox" id="settingsObsReconnect"/> Auto-reconnect</label>',
         '  </div>',
+  '  <div class="row">',
+  '    <button id="settingsObsTest" class="chip btn-chip" type="button">Test connection</button>',
+  '    <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>',
+  '  </div>',
         '</div>',
         '',
         '<div data-tab-content="advanced" style="display:none">',
@@ -245,6 +249,8 @@
       const obsPass = q('settingsObsPassword');
       const obsScene = q('settingsObsScene');
       const obsReconn = q('settingsObsReconnect');
+      const obsTestBtn = q('settingsObsTest');
+      const obsTestMsg = q('settingsObsTestMsg');
       if (obsHost && hasStore) obsHost.addEventListener('input', () => S.set('obsHost', String(obsHost.value||'')));
       if (obsPass && hasStore) obsPass.addEventListener('input', () => S.set('obsPassword', String(obsPass.value||'')));
       if (obsScene && hasStore) obsScene.addEventListener('input', () => S.set('obsScene', String(obsScene.value||'')));
@@ -254,6 +260,63 @@
         S.subscribe('obsPassword', v => { try { if (obsPass && obsPass.value !== v) obsPass.value = v || ''; } catch {} });
         S.subscribe('obsScene', v => { try { if (obsScene && obsScene.value !== v) obsScene.value = v || ''; } catch {} });
         S.subscribe('obsReconnect', v => { try { if (obsReconn && obsReconn.checked !== !!v) obsReconn.checked = !!v; } catch {} });
+      }
+
+      // OBS Test connection button
+      if (obsTestBtn) {
+        obsTestBtn.addEventListener('click', async () => {
+          try {
+            const host = hasStore ? String(S.get('obsHost')||'') : (obsHost ? String(obsHost.value||'') : '');
+            const pass = hasStore ? String(S.get('obsPassword')||'') : (obsPass ? String(obsPass.value||'') : '');
+            const reconnect = false; // temporary test connection should not linger
+            const port = 4455;
+            const secure = false;
+            const setMsg = (ok, txt) => {
+              try {
+                if (!obsTestMsg) return;
+                obsTestMsg.textContent = String(txt||'');
+                obsTestMsg.classList.remove('obs-test-ok','obs-test-error');
+                obsTestMsg.classList.add(ok ? 'obs-test-ok' : 'obs-test-error');
+              } catch {}
+            };
+            if (!host) { setMsg(false, 'Enter IP/Host and try again'); return; }
+            if (!window.__tpOBS || typeof window.__tpOBS.connect !== 'function') { setMsg(false, 'OBS adapter unavailable'); return; }
+            if (obsTestMsg) { obsTestMsg.textContent = 'Testing…'; obsTestMsg.classList.remove('obs-test-ok','obs-test-error'); }
+
+            const existing = window.__tpObsConn;
+            // Use existing identified connection if available
+            if (existing && typeof existing.isIdentified === 'function' && existing.isIdentified()) {
+              try {
+                const res = await existing.request('GetVersion', {});
+                if (res && res.ok) setMsg(true, 'Connected • ' + (res.data && (res.data.obsVersion || 'OK')));
+                else setMsg(false, 'Connected but request failed');
+              } catch { setMsg(false, 'Connected but request failed'); }
+              return;
+            }
+
+            // Temporary connection for test
+            const conn = window.__tpOBS.connect({ host, port, secure, password: pass, reconnect });
+            let done = false;
+            const cleanup = () => { try { if (conn && conn.close) conn.close(); } catch {} };
+            const timeout = setTimeout(() => { if (!done) { done = true; setMsg(false, 'Timeout waiting for OBS'); cleanup(); } }, 7000);
+            try {
+              await new Promise((resolve, reject) => {
+                try {
+                  conn.on && conn.on('identified', resolve);
+                  conn.on && conn.on('closed', () => reject(new Error('closed')));
+                  conn.on && conn.on('error', () => reject(new Error('error')));
+                } catch { reject(new Error('listener-failed')); }
+              });
+              const res = await conn.request('GetVersion', {});
+              if (res && res.ok) setMsg(true, 'Connected • ' + (res.data && (res.data.obsVersion || 'OK')));
+              else setMsg(false, 'Connected but request failed');
+            } catch {
+              setMsg(false, 'Failed to connect');
+            } finally {
+              done = true; clearTimeout(timeout); cleanup();
+            }
+          } catch {}
+        });
       }
 
       // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth and manage connection
