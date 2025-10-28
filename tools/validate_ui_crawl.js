@@ -25,7 +25,11 @@ const fileInputs = Array.isArray(report.fileInputs) ? report.fileInputs : [];
 const consoleEntries = Array.isArray(report.console) ? report.console : [];
 const legendProbe = Array.isArray(report.legendProbe) ? report.legendProbe : [];
 const renderProbe = report.renderProbe || {};
+const hudProbe = report.hudProbe || {};
+const hotkeysProbe = report.hotkeysProbe || {};
+const lateProbe = report.lateProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
+const meta = report.meta || {};
 // CI detection retained for potential future use; currently not used in validation rules
 const _isCI = !!(
   (process && process.env && (process.env.SMOKE_CI === '1' || process.env.CI === 'true' || process.env.CI === '1')) ||
@@ -75,7 +79,15 @@ const expectations = [
 
 let allOk = true;
 let uploadMatched = false;
+const CI_STRICT = String(process.env.CI_STRICT || '0') === '1';
+const UPDATE_BASELINE = process.argv.includes('--update-baseline');
+const VERBOSE = process.argv.includes('--verbose');
+const BASELINE_FILE = require('path').join(__dirname, '..', 'tests', 'baselines', 'ui_crawl.v1.json');
+
 console.log('Validating UI crawl report:', reportPath);
+if (meta && meta.build) {
+  console.log('Build meta:', JSON.stringify(meta.build));
+}
 for (const ex of expectations) {
   const byId = ex.ids && findByIdCandidates(ex.ids);
   const byText = ex.text && findByTextRegex(ex.text);
@@ -135,20 +147,91 @@ if (!allOk) {
 // Additional probes validation: ensure legend exists and renderer applies different colors
 try {
   if (legendProbe.length < 2) {
-    console.warn('WARN legend — expected 2+ legend items, found', legendProbe.length);
+    const msg = 'legend — expected 2+ legend items, found ' + legendProbe.length;
+    if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
   } else {
     console.log('PASS legend — items:', legendProbe.length);
   }
   const { lineCount, iHello, iWorld, cHello, cWorld } = renderProbe;
+  const colorDist = (a,b) => {
+    const parse = (s) => { const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i.exec(String(s)||''); return m? [parseInt(m[1],10),parseInt(m[2],10),parseInt(m[3],10)] : null; };
+    const va = parse(a), vb = parse(b); if (!va || !vb) return 0;
+    const dr = va[0]-vb[0], dg = va[1]-vb[1], db = va[2]-vb[2];
+    return Math.sqrt(dr*dr + dg*dg + db*db);
+  };
+  const threshold = 8; // accept tiny differences
   if (!lineCount || iHello < 0 || iWorld < 0) {
-    console.warn('WARN render — sample lines not rendered (ci profile or renderer not wired in this build)', renderProbe);
-  } else if (!cHello || !cWorld || cHello === cWorld) {
-    console.warn('WARN render-colors — expected distinct colors for S1 and S2', { cHello, cWorld });
+    const msg = 'render — sample lines not rendered correctly';
+    if (CI_STRICT) { console.error('FAIL ' + msg, renderProbe); allOk = false; } else { console.warn('WARN ' + msg, renderProbe); }
   } else {
-    console.log('PASS render-colors —', cHello, 'vs', cWorld);
+    const dist = colorDist(cHello, cWorld);
+    if (!cHello || !cWorld || dist <= threshold) {
+      const msg = `render-colors — expected distinct colors beyond threshold (dist=${Math.round(dist)})`;
+      if (CI_STRICT) { console.error('FAIL ' + msg, { cHello, cWorld }); allOk = false; } else { console.warn('WARN ' + msg, { cHello, cWorld }); }
+    } else {
+      console.log('PASS render-colors —', cHello, 'vs', cWorld, `(dist≈${Math.round(dist)})`);
+    }
+  }
+  // HUD/Prod guard (best-effort)
+  if (hudProbe && typeof hudProbe === 'object') {
+    if (!hudProbe.isDevClass && !hudProbe.hasHudChildren) {
+      console.log('PASS hud-prod-guard — HUD absent in non-dev');
+    } else {
+      console.warn('WARN hud-prod-guard — HUD present or dev class set');
+    }
+  }
+  // Hotkeys probe (best-effort)
+  if (hotkeysProbe && hotkeysProbe.supported) {
+    const moved = (hotkeysProbe.afterDown !== hotkeysProbe.before) || (hotkeysProbe.afterPageDown !== hotkeysProbe.before);
+    if (moved) console.log('PASS hotkeys — scroll reacted to keys');
+    else {
+      const msg = 'hotkeys — no scroll change after keys';
+      if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+    }
+  }
+  // Late-script probe: warn if jitter too high or fps too low
+  if (lateProbe && lateProbe.supported) {
+    const fpsOk = (lateProbe.approxFps || 0) >= 20; // tiny threshold just to catch regressions
+    const jitterOk = (lateProbe.jitterStd || 0) <= 4; // px tolerance
+    if (fpsOk && jitterOk) console.log('PASS late-probe — fps≈', lateProbe.approxFps, 'jitterStd≈', Math.round((lateProbe.jitterStd || 0)*10)/10);
+    else {
+      const msg = `late-probe — fps=${lateProbe.approxFps}, jitterStd=${lateProbe.jitterStd}`;
+      if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+    }
   }
 } catch (e) {
   console.warn('WARN probes evaluation failed:', String(e && e.message || e));
+}
+
+// Baseline support (schema + CLI)
+try {
+  const path = require('path');
+  if (UPDATE_BASELINE) {
+    if (String(process.env.ALLOW_BASELINE_UPDATE || '0') !== '1') {
+      console.error('Refusing to update baseline without ALLOW_BASELINE_UPDATE=1');
+      process.exit(3);
+    }
+    const dir = path.dirname(BASELINE_FILE);
+    require('fs').mkdirSync(dir, { recursive: true });
+    require('fs').writeFileSync(BASELINE_FILE, JSON.stringify(report, null, 2));
+    console.log('Baseline updated:', BASELINE_FILE);
+  } else if (require('fs').existsSync(BASELINE_FILE)) {
+    // Minimal summary compare: number of controls and legend/render presence
+    const base = JSON.parse(require('fs').readFileSync(BASELINE_FILE, 'utf8'));
+    const deltaControls = (clicked.length || 0) - ((base.clicked || []).length || 0);
+    console.log(`Summary: controls now=${clicked.length} (Δ${deltaControls>=0?'+':''}${deltaControls}) legend=${legendProbe.length} lines=${renderProbe.lineCount||0}`);
+    if (VERBOSE) {
+      // print small diff of control ids
+      const curIds = new Set(clicked.map(c=>c.id).filter(Boolean));
+      const baseIds = new Set((base.clicked||[]).map(c=>c.id).filter(Boolean));
+      const added = [...curIds].filter(x=>!baseIds.has(x));
+      const removed = [...baseIds].filter(x=>!curIds.has(x));
+      if (added.length) console.log('Added controls:', added);
+      if (removed.length) console.log('Removed controls:', removed);
+    }
+  }
+} catch (e) {
+  console.warn('WARN baseline handling failed:', String(e && e.message || e));
 }
 
 if (!allOk) {
