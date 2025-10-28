@@ -16,6 +16,8 @@
     "smoke:strict:slow": "node tools/teleprompter_e2e.js --runSmoke --timeout=60000 --headless",
     "types": "tsc -p tsconfig.json --noEmit",
     "check": "npm run lint && npm run types",
+    "gate": "npm run lint && npm run types && npm run smoke:strict && node tools/ui_crawl.js && node tools/validate_ui_crawl.js",
+    "gate:quick": "npm run lint && npm run types && npm run smoke",
     "test:save-ci": "node tools/test_save_ci.js",
     "test:obs-scene-ci": "node tools/test_obs_scene_ci.js",
     "prepare": "husky"
