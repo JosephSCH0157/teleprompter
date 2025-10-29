@@ -18,6 +18,16 @@ const DEFAULTS = {
 };
 
 const state = { ...DEFAULTS };
+let VAD_PROFILE = null;
+const PROF_KEY = 'tp_vad_profile_v1';
+const APPLY_KEY = 'tp_vad_apply_hybrid';
+function loadVadProfile(){
+  try {
+    const raw = localStorage.getItem(PROF_KEY);
+    const apply = localStorage.getItem(APPLY_KEY) === '1';
+    VAD_PROFILE = raw ? { apply, ...(JSON.parse(raw)||{}) } : null;
+  } catch { VAD_PROFILE = null; }
+}
 let viewer = null;
 let orch = null;
 
@@ -83,13 +93,34 @@ function setSpeaking(on) {
   Auto.setEnabled(on);
 }
 function hybridHandleDb(db) {
-  const { attackMs, releaseMs, thresholdDb } = state.hybrid;
   clearTimeout(gateTimer);
+  // Prefer calibrated profile when applied
+  if (VAD_PROFILE && VAD_PROFILE.apply) {
+    const atk = Number(VAD_PROFILE.attackMs) || state.hybrid.attackMs;
+    const rel = Number(VAD_PROFILE.releaseMs) || state.hybrid.releaseMs;
+    const ton = Number(VAD_PROFILE.tonDb);
+    const toff = Number(VAD_PROFILE.toffDb);
+    if (speaking) {
+      // sustain while above toff; else release after rel
+      if (Number.isFinite(toff) && db >= toff) {
+        gateTimer = setTimeout(()=> setSpeaking(true), 0);
+      } else {
+        gateTimer = setTimeout(()=> setSpeaking(false), rel);
+      }
+    } else {
+      if (Number.isFinite(ton) && db >= ton) {
+        gateTimer = setTimeout(()=> setSpeaking(true), atk);
+      } else {
+        gateTimer = setTimeout(()=> setSpeaking(false), 0);
+      }
+    }
+    return;
+  }
+  // Fallback: single-threshold behavior
+  const { attackMs, releaseMs, thresholdDb } = state.hybrid;
   if (db >= thresholdDb) {
-    // attack: require brief sustain above threshold
     gateTimer = setTimeout(()=> setSpeaking(true), attackMs);
   } else {
-    // release: brief sustain below threshold → pause
     gateTimer = setTimeout(()=> setSpeaking(false), releaseMs);
   }
 }
@@ -140,6 +171,7 @@ export function step(dir=+1) { if (state.mode === 'step') stepOnce(dir); }
 export function installScrollRouter() {
   restore();
   applyMode(state.mode);
+  loadVadProfile();
 
   // Mode selector (UI)
   document.addEventListener('change', (e)=>{
@@ -187,6 +219,11 @@ export function installScrollRouter() {
     const db = e.detail?.db ?? -60;
     hybridHandleDb(db);
   });
+  // Refresh VAD profile if it changes
+  window.addEventListener('storage', (e) => {
+    try { if (e && (e.key === PROF_KEY || e.key === APPLY_KEY)) loadVadProfile(); } catch {}
+  });
+  window.addEventListener('tp:vad:profile', () => { try { loadVadProfile(); } catch {} });
 }
 
 

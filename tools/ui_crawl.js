@@ -339,7 +339,8 @@ const cp = require('child_process');
             if (mediaTab) { mediaTab.click(); await sleep(60); }
             const micSel = document.getElementById('settingsMicSel');
             const micLevel = document.querySelector('#settingsMicLevel i');
-            return { hasBody: !!body, tabs: (tabs && tabs.length) || 0, hasMedia: !!mediaTab, hasMicSel: !!micSel, hasMicLevel: !!micLevel };
+            const asrBtn = document.getElementById('asrCalibBtn');
+            return { hasBody: !!body, tabs: (tabs && tabs.length) || 0, hasMedia: !!mediaTab, hasMicSel: !!micSel, hasMicLevel: !!micLevel, hasAsrCalibBtn: !!asrBtn };
           } catch { return { hasBody:false, tabs:0, hasMedia:false, hasMicSel:false, hasMicLevel:false }; }
         })();
         return { legendProbe, renderProbe, hudProbe, lateProbe, settingsProbe };

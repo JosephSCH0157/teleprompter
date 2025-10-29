@@ -225,6 +225,12 @@ try {
       const msg = 'settings-media — Media tab or mic selector missing';
       if (CI_STRICT) { console.error('FAIL ' + msg, settingsProbe); allOk = false; } else { console.warn('WARN ' + msg, settingsProbe); }
     }
+    if (settingsProbe.hasAsrCalibBtn) {
+      console.log('PASS settings-asr — Calibration button present');
+    } else {
+      const msg = 'settings-asr — Calibration button missing';
+      if (CI_STRICT) { console.error('FAIL ' + msg, settingsProbe); allOk = false; } else { console.warn('WARN ' + msg, settingsProbe); }
+    }
   }
 
   // Auto-scroll UI wiring check
