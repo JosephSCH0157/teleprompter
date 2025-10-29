@@ -319,6 +319,14 @@
               if (fsS && fsS.value) localStorage.setItem('tp_font_size_v1', String(fsS.value));
               if (lhS && lhS.value) localStorage.setItem('tp_line_height_v1', String(lhS.value));
             } catch {}
+            // Broadcast to Display immediately (no link preference required)
+            try {
+              const fs = fsS && fsS.value ? Number(fsS.value) : undefined;
+              const lh = lhS && lhS.value ? Number(lhS.value) : undefined;
+              const payload = { kind:'tp:typography', source:'main', display:'display', t: { fontSizePx: fs, lineHeight: lh } };
+              try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+              try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
+            } catch {}
           } catch {}
         };
         if (fsS) fsS.addEventListener('input', applyFromSettings);
