@@ -52,8 +52,8 @@
       analyser.fftSize = 2048;
       src.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
-  const topBars = buildDbBars(document.getElementById('dbMeterTop'));
-  let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let _peakHold = { value:0, lastUpdate: performance.now(), decay:0.9 };
+      const topBars = buildDbBars(document.getElementById('dbMeterTop'));
+      let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let _peakHold = { value: dBFloor, lastUpdate: performance.now(), decay: 0.9 };
       function draw(){
         if (!analyser || !data) { dbAnim = null; return; }
         analyser.getByteFrequencyData(data);
@@ -65,7 +65,14 @@
         if (level>levelSmooth) levelSmooth = levelSmooth + (level-levelSmooth)*attack; else levelSmooth = levelSmooth + (level-levelSmooth)*release;
         const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth*topBars.length)));
         for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i<bars);
-        try { if (!window.__tp_has_script || !window.__tp_wd_armed) return; } catch {}
+        // simple peak hold (in dB)
+        try {
+          const now = performance.now();
+          _peakHold.value = Math.max(dB, _peakHold.value * _peakHold.decay + dB * (1 - _peakHold.decay));
+          _peakHold.lastUpdate = now;
+        } catch {}
+        // Broadcast dB event for UI (meters, calibration, hybrid gating, ASR adapters)
+        try { window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: dB, peak: _peakHold.value } })); } catch {}
         dbAnim = requestAnimationFrame(draw);
       }
       draw();
