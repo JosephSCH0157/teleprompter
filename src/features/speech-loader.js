@@ -117,9 +117,10 @@ export function installSpeech() {
         return false;
       })();
 
+      // Optional probe: only if explicitly opted-in; default avoids 404 noise in dev
+      const probeOptIn = (() => { try { return localStorage.getItem('tp_speech_probe') === '1' || new URLSearchParams(location.search).get('probe') === '1'; } catch { return false; } })();
       let hasOrchestrator = hasGlobalOrch;
-      if (!hasOrchestrator && !ciGuard) {
-        // Best-effort existence probe without loading it (skip under CI to avoid 404 noise)
+      if (!hasOrchestrator && !ciGuard && probeOptIn) {
         try {
           const res = await fetch('/speech/orchestrator.js', { method: 'HEAD', cache: 'no-store' });
           hasOrchestrator = !!res && res.ok;
@@ -129,9 +130,9 @@ export function installSpeech() {
       const supported = SRAvail || hasOrchestrator;
       const canUse = supported || force;
 
-      if (canUse) setReadyUi(); else setUnsupportedUi();
-      // Stash a flag for start path to decide whether to attempt dynamic import
-      try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
+  if (canUse) setReadyUi(); else setUnsupportedUi();
+  // Stash a flag for start path to decide whether to attempt dynamic import (no probe by default)
+  try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
     } catch {}
   })();
 
