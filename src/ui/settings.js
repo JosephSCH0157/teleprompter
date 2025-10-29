@@ -259,6 +259,19 @@
             }
             // Monolith path: apply immediately when helper exists
             try { if (typeof window.applyTypography === 'function') window.applyTypography(); } catch {}
+            // Modular path fallback: set CSS vars directly so updates are visible immediately
+            try {
+              const root = document.documentElement;
+              if (fsS && fsS.value) root.style.setProperty('--tp-font-size', String(fsS.value) + 'px');
+              if (lhS && lhS.value) root.style.setProperty('--tp-line-height', String(lhS.value));
+              try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+              // persist per-display (main) under shared store so reload restores
+              const KEY = 'tp_typography_v1';
+              const raw = localStorage.getItem(KEY);
+              const st = raw ? JSON.parse(raw) : {};
+              st.main = { ...(st.main||{}), fontSizePx: Number(fsS && fsS.value || 0), lineHeight: Number(lhS && lhS.value || 0) };
+              localStorage.setItem(KEY, JSON.stringify(st));
+            } catch {}
             // Persist to localStorage for legacy boot hydration
             try {
               if (fsS && fsS.value) localStorage.setItem('tp_font_size_v1', String(fsS.value));
