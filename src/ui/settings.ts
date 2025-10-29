@@ -1,5 +1,5 @@
 import { initAsrSettingsUI } from './settings/asrWizard';
-import { buildSettingsContent as buildFromBuilder } from './settings/builder';
+import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { bindHybridGateSetting } from './settings/hybridGate';
 import { setupSettingsTabs } from './settings/tabs';
 import { bindTypographyPanel } from './settings/typographyPanel';
@@ -19,15 +19,16 @@ export function mountSettings(rootEl: HTMLElement | null) {
       const html = buildFromBuilder(rootEl) || '';
       if (html) rootEl.innerHTML = html;
     } catch {}
-    try { wireSettingsDynamic(rootEl); } catch {}
-    try { setupSettingsTabs(rootEl); } catch {}
+  try { wireSettingsDynamic(rootEl); } catch {}
+  try { setupSettingsTabs(rootEl); } catch {}
     // Bind new typography panels (main + display)
     try { bindTypographyPanel('main'); } catch {}
     try { bindTypographyPanel('display'); } catch {}
-  // Bind Hybrid gate preference select
-  try { bindHybridGateSetting(rootEl); } catch {}
-  // Initialize ASR settings card (device list, permissions)
-  try { initAsrSettingsUI(); } catch {}
+    // Add ASR wizard card under Media tab and initialize it
+    try { addAsrWizardCard(rootEl); } catch {}
+    try { initAsrSettingsUI(); } catch {}
+    // Bind Hybrid gate preference select
+    try { bindHybridGateSetting(rootEl); } catch {}
 
     // Legacy compatibility: mirror minimal font size/line height controls if present
     try {

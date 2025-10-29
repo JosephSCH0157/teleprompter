@@ -108,3 +108,54 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
 
 export { };
 
+// Append the ASR Calibration wizard card into the Settings UI (under Media tab if present)
+export function addAsrWizardCard(root: HTMLElement) {
+  try {
+    if (!root) return;
+    // Avoid duplicates
+    if (root.querySelector('#asrSettings')) return;
+    const container = (root.querySelector('[data-tab-content="media"]') || root) as HTMLElement;
+    const sec = document.createElement('section');
+    sec.className = 'settings-card';
+    sec.id = 'asrSettings';
+    sec.innerHTML = `
+      <h3>ASR Input (Calibration)</h3>
+
+      <div class="row">
+        <label class="grow">Microphone <select id="asrDevice"></select></label>
+        <button id="asrRefreshDevs" class="btn">Refresh</button>
+        <button id="asrGrantPerm" class="btn">Grant mic access</button>
+      </div>
+
+      <div class="row">
+        <label><input id="asrAEC" type="checkbox"> Echo cancellation</label>
+        <label><input id="asrNS"  type="checkbox"> Noise suppression</label>
+        <label><input id="asrAGC" type="checkbox"> Auto gain</label>
+        <span id="asrFlagsBadge" class="badge muted" style="display:none;margin-left:auto;"></span>
+      </div>
+
+      <div class="row">
+        <label class="grow">Profile label <input id="asrLabel" placeholder="Studio A • MV7 • no AEC"></label>
+      </div>
+
+      <div class="row">
+        <div id="asrMeter" class="asr-meter"><div class="marker" aria-hidden="true"></div></div>
+      </div>
+      <div class="row spread">
+        <div>Noise: <span id="asrNoise">–</span> dBFS</div>
+        <div>Speech: <span id="asrSpeech">–</span> dBFS</div>
+        <div>SNR: <span id="asrSnr">–</span> dB</div>
+      </div>
+
+      <div class="row gap">
+        <button id="asrStartBtn" class="btn primary">Start calibration</button>
+        <button id="asrPreviewBtn" class="btn">Preview (gate)</button>
+        <button id="asrPreviewStop" class="btn">Stop preview</button>
+        <button id="asrSaveBtn" class="btn success">Save profile</button>
+      </div>
+      <small class="muted">Tip: Use headphones; leave NS/AGC off for best timing. Enable AEC only if using speakers.</small>
+    `;
+    container.appendChild(sec);
+  } catch {}
+}
+
