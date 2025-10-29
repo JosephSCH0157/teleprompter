@@ -587,6 +587,9 @@
 
         async function runCalibration(){
           try {
+            // Ensure mic is requested so dB events are flowing
+            try { if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') await window.__tpMic.requestMic(); } catch {}
+            if (btn) { btn.disabled = true; btn.textContent = 'Calibrating…'; }
             const atk = Math.max(20, Math.min(500, parseInt(attackInp && attackInp.value || '80', 10) || 80));
             const rel = Math.max(80, Math.min(1000, parseInt(releaseInp && releaseInp.value || '300', 10) || 300));
             // Phase 1: room noise
@@ -614,6 +617,8 @@
             else { try { localStorage.removeItem(APPLY_KEY); } catch {} }
             // Notify listeners (router can re-read profile)
             try { window.dispatchEvent(new CustomEvent('tp:vad:profile', { detail: profile })); } catch {}
+            if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; }
+            try { if (window.toast) window.toast('Calibration saved', { type:'ok' }); } catch {}
           } catch {}
         }
         if (btn && !btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', runCalibration); }

@@ -178,6 +178,13 @@
       }
     },
     {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+      }
+    },
+    {
       "type": "log",
       "text": "[src/adapters/obs] init",
       "location": {
@@ -239,13 +246,6 @@
         "lineNumber": 191,
         "columnNumber": 10
       }
-    },
-    {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
     }
   ],
   "notes": [
@@ -259,9 +259,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "257da98ff7f1f7bfe5013dab9b286979ca537220",
+      "gitSha": "c5f779467b67663a9b3cb83a87c6e05c92c83691",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-29T06:39:23.309Z"
+      "buildTime": "2025-10-29T11:38:20.549Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
