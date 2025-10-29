@@ -97,6 +97,25 @@ async function boot() {
     try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
 
+    // Pre-seed a wider default script column if user hasn't set one yet
+    try {
+      const KEY = 'tp_typography_v1';
+      let st; try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { st = {}; }
+      const existing = st && st.main && st.main.maxLineWidthCh;
+      if (!(typeof existing === 'number' && isFinite(existing))) {
+        document.documentElement.style.setProperty('--tp-maxch', '95');
+        st.main = { ...(st.main || {}), maxLineWidthCh: 95 };
+        try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {}
+        try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+        // Best-effort broadcast to display so it aligns if already open
+        try {
+          const payload = { kind: 'tp:typography', source: 'main', display: 'display', t: { maxLineWidthCh: 95 } };
+          try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+          try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
+        } catch {}
+      }
+    } catch {}
+
     // One-time migration: tp_vad_profile_v1 -> tp_asr_profiles_v1 (unified ASR store)
     try {
       const MIG_FLAG = 'tp_asr_profiles_v1_migrated';
