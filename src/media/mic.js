@@ -52,7 +52,10 @@
       analyser.fftSize = 2048;
       src.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
-      const topBars = buildDbBars(document.getElementById('dbMeterTop'));
+      // If a unified meter is already wired (src/ui/dom.js installs an <i> fill), do not rebuild bars
+      const hostTop = document.getElementById('dbMeterTop');
+      const unifiedFill = hostTop && hostTop.querySelector && hostTop.querySelector('i');
+      const topBars = (!unifiedFill) ? buildDbBars(hostTop) : [];
       let levelSmooth = 0; const dBFloor = -60; const attack = 0.55; const release = 0.15; let _peakHold = { value: dBFloor, lastUpdate: performance.now(), decay: 0.9 };
       function draw(){
         if (!analyser || !data) { dbAnim = null; return; }
@@ -63,8 +66,11 @@
         let level = (dB - dBFloor)/(0-dBFloor);
         if (!isFinite(level) || level < 0) level=0; else if (level>1) level=1;
         if (level>levelSmooth) levelSmooth = levelSmooth + (level-levelSmooth)*attack; else levelSmooth = levelSmooth + (level-levelSmooth)*release;
-        const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth*topBars.length)));
-        for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i<bars);
+        // Update legacy 12 bars only if we own them; unified meter listens to tp:db events below
+        if (topBars && topBars.length) {
+          const bars = Math.max(0, Math.min(topBars.length, Math.round(levelSmooth*topBars.length)));
+          for (let i=0;i<topBars.length;i++) topBars[i].classList.toggle('on', i<bars);
+        }
         // simple peak hold (in dB)
         try {
           const now = performance.now();
