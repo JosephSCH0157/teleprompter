@@ -107,6 +107,8 @@ function applyMode(m: Mode){
 import { createVadEventAdapter } from '../asr/v2/adapters/vad';
 import { createOrchestrator } from '../asr/v2/orchestrator';
 import { getUiPrefs, onUiPrefs } from '../settings/uiPrefs';
+import { createOrchestrator } from '../asr/v2/orchestrator';
+import { createVadEventAdapter } from '../asr/v2/adapters/vad';
 
 export function installScrollRouter(opts: ScrollRouterOpts){
   try { (window as any).__tpScrollRouterTsActive = true; } catch {}
@@ -474,6 +476,25 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   }
 
   onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
+
+  // ASR v2 Orchestrator (minimal integration): start on 'wpm'/'asr', stop otherwise
+  const orch = createOrchestrator();
+  let orchRunning = false;
+  async function ensureOrchestratorForMode() {
+    try {
+      if (state.mode === 'wpm' || state.mode === 'asr') {
+        if (!orchRunning) {
+          await orch.start(createVadEventAdapter()); // use VAD events for speaking; WPM updates when tokens are available
+          orch.setMode('assist');
+          orchRunning = true;
+        }
+      } else if (orchRunning) {
+        await orch.stop();
+        orchRunning = false;
+      }
+    } catch {}
+  }
+  ensureOrchestratorForMode();
 
   // Hybrid gating via dB and/or VAD per user preference
   let userEnabled = false; // reflects user's Auto on/off intent
