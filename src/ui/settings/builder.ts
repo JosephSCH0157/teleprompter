@@ -78,6 +78,18 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <select id="settingsCamSel" class="select-md"></select>
         </label>
       </div>
+
+      <h4>Hybrid Gate</h4>
+      <div class="row">
+        <label>Hybrid gate source
+          <select id="hybridGate" class="select-md">
+            <option value="db_or_vad">VAD or dB (default)</option>
+            <option value="vad">VAD only</option>
+            <option value="db">dB only</option>
+            <option value="db_and_vad">VAD and dB</option>
+          </select>
+        </label>
+      </div>
     </div>
 
     <div data-tab-content="recording" style="display:none">

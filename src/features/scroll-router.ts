@@ -108,10 +108,37 @@ function applyMode(m: Mode){
   } catch {}
 }
 
+import { getUiPrefs, onUiPrefs } from '../settings/uiPrefs';
+
 export function installScrollRouter(opts: ScrollRouterOpts){
   const { auto } = opts;
   restoreMode();
   applyMode(state.mode);
+
+  // Hybrid gating via dB and/or VAD per user preference
+  let userEnabled = false; // reflects user's Auto on/off intent
+  let dbGate = false;      // set from tp:db
+  let vadGate = false;     // set from tp:vad
+  let gatePref = getUiPrefs().hybridGate;
+
+  function applyGate() {
+    if (state.mode !== 'hybrid') {
+      // Outside Hybrid, honor user toggle directly
+      if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled);
+      return;
+    }
+    let gateWanted = false;
+    switch (gatePref) {
+      case 'db':         gateWanted = dbGate; break;
+      case 'vad':        gateWanted = vadGate; break;
+      case 'db_and_vad': gateWanted = dbGate && vadGate; break;
+      case 'db_or_vad':
+      default:           gateWanted = dbGate || vadGate; break;
+    }
+    if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled && gateWanted);
+  }
+
+  onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
 
   // Mode selector
   try {
@@ -141,12 +168,32 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     }, { capture: true });
   } catch {}
 
-  // Hybrid VAD gate
+  // Hybrid gates
   try {
     window.addEventListener('tp:db' as any, (e: any)=>{
-      if (state.mode !== 'hybrid') return;
       const db = (e && e.detail && typeof e.detail.db === 'number') ? e.detail.db : -60;
+      // keep legacy handler as a fallback smoothing on dbGate
       hybridHandleDb(db, auto);
+      dbGate = (db >= DEFAULTS.hybrid.thresholdDb);
+      applyGate();
+    });
+    window.addEventListener('tp:vad' as any, (e: any) => {
+      vadGate = !!(e && e.detail && e.detail.speaking);
+      applyGate();
     });
   } catch {}
+
+  // Wire user Auto toggle intent
+  try {
+    document.addEventListener('click', (ev) => {
+      const t = ev.target as HTMLElement | null;
+      if (t?.id === 'autoToggle') {
+        userEnabled = !userEnabled;
+        applyGate();
+      }
+    }, { capture: true });
+  } catch {}
+
+  // Ensure initial gate application
+  if (state.mode === 'hybrid') applyGate();
 }

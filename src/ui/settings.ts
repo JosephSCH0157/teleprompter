@@ -3,6 +3,7 @@ import { buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { setupSettingsTabs } from './settings/tabs';
 import { bindTypographyPanel } from './settings/typographyPanel';
 import { wireSettingsDynamic } from './settings/wire';
+import { bindHybridGateSetting } from './settings/hybridGate';
 
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null) {
@@ -23,6 +24,8 @@ export function mountSettings(rootEl: HTMLElement | null) {
     // Bind new typography panels (main + display)
     try { bindTypographyPanel('main'); } catch {}
     try { bindTypographyPanel('display'); } catch {}
+  // Bind Hybrid gate preference select
+  try { bindHybridGateSetting(rootEl); } catch {}
   // Initialize ASR settings card (device list, permissions)
   try { initAsrSettingsUI(); } catch {}
 

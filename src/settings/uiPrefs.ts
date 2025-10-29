@@ -1,8 +1,13 @@
 const KEY = 'tp_ui_prefs_v1';
-export type UiPrefs = { linkTypography: boolean };
+export type HybridGatePref = 'db' | 'vad' | 'db_or_vad' | 'db_and_vad';
+export type UiPrefs = { linkTypography: boolean; hybridGate: HybridGatePref };
 let state: UiPrefs = (() => {
-  try { return { linkTypography: false, ...(JSON.parse(localStorage.getItem(KEY) || '{}')||{}) }; }
-  catch { return { linkTypography: false }; }
+  try {
+    const parsed = (JSON.parse(localStorage.getItem(KEY) || '{}') || {}) as Partial<UiPrefs>;
+    return { linkTypography: false, hybridGate: 'db_or_vad', ...parsed } as UiPrefs;
+  } catch {
+    return { linkTypography: false, hybridGate: 'db_or_vad' } as UiPrefs;
+  }
 })();
 const subs = new Set<(_s: UiPrefs)=>void>();
 export const getUiPrefs = () => state;
