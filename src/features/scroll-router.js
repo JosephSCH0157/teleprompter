@@ -104,33 +104,56 @@ function holdCreepStart(pxPerSec=8, dir=+1) {
 }
 function holdCreepStop() { cancelAnimationFrame(creepRaf); creepRaf=0; }
 
-// ---------- HYBRID MODE (VAD gates Auto) ----------
-let speaking=false, gateTimer=0;
-function setSpeaking(on) {
-  if (on === speaking) return;
-  speaking = on;
-  Auto.setEnabled(on);
+// ---------- HYBRID MODE (VAD/DB combine) ----------
+let userEnabled = false; // user's Auto toggle intent
+let dbGate = false, vadGate = false; // per-source gates
+let dbAvail = false, vadAvail = false; // source availability
+let gateTimer=0; // for dbGate smoothing
+let gatePref = (function(){ try { return (JSON.parse(localStorage.getItem('tp_ui_prefs_v1')||'{}')||{}).hybridGate || 'db_or_vad'; } catch { return 'db_or_vad'; } })();
+
+function combinedGate(pref, _dbAvail, _vadAvail, _dbGate, _vadGate){
+  if (pref === 'db_and_vad' && (!_dbAvail || !_vadAvail)) return false;
+  if (pref === 'db')  return _dbAvail  ? _dbGate  : false;
+  if (pref === 'vad') return _vadAvail ? _vadGate : false;
+  const okDb = _dbAvail ? _dbGate : false;
+  const okVad = _vadAvail ? _vadGate : false;
+  return okDb || okVad;
 }
+
+function applyGate(){
+  const enabled = userEnabled && combinedGate(gatePref, dbAvail, vadAvail, dbGate, vadGate);
+  try { Auto.setEnabled(enabled); } catch {}
+  try {
+    const chip = document.getElementById('autoChip');
+    if (chip) {
+      const stateTxt = userEnabled ? (enabled ? 'On' : 'Paused') : 'Manual';
+      chip.textContent = `Auto: ${stateTxt}`;
+      chip.setAttribute('data-state', stateTxt.toLowerCase());
+    }
+  } catch {}
+}
+
 function hybridHandleDb(db) {
   clearTimeout(gateTimer);
+  dbAvail = true;
   // Prefer calibrated profile when applied
   if (VAD_PROFILE && VAD_PROFILE.apply) {
     const atk = Number(VAD_PROFILE.attackMs) || state.hybrid.attackMs;
     const rel = Number(VAD_PROFILE.releaseMs) || state.hybrid.releaseMs;
     const ton = Number(VAD_PROFILE.tonDb);
     const toff = Number(VAD_PROFILE.toffDb);
-    if (speaking) {
+    if (dbGate) {
       // sustain while above toff; else release after rel
       if (Number.isFinite(toff) && db >= toff) {
-        gateTimer = setTimeout(()=> setSpeaking(true), 0);
+        gateTimer = setTimeout(()=> { dbGate = true; applyGate(); }, 0);
       } else {
-        gateTimer = setTimeout(()=> setSpeaking(false), rel);
+        gateTimer = setTimeout(()=> { dbGate = false; applyGate(); }, rel);
       }
     } else {
       if (Number.isFinite(ton) && db >= ton) {
-        gateTimer = setTimeout(()=> setSpeaking(true), atk);
+        gateTimer = setTimeout(()=> { dbGate = true; applyGate(); }, atk);
       } else {
-        gateTimer = setTimeout(()=> setSpeaking(false), 0);
+        gateTimer = setTimeout(()=> { dbGate = false; applyGate(); }, 0);
       }
     }
     return;
@@ -138,9 +161,9 @@ function hybridHandleDb(db) {
   // Fallback: single-threshold behavior
   const { attackMs, releaseMs, thresholdDb } = state.hybrid;
   if (db >= thresholdDb) {
-    gateTimer = setTimeout(()=> setSpeaking(true), attackMs);
+    gateTimer = setTimeout(()=> { dbGate = true; applyGate(); }, attackMs);
   } else {
-    gateTimer = setTimeout(()=> setSpeaking(false), releaseMs);
+    gateTimer = setTimeout(()=> { dbGate = false; applyGate(); }, releaseMs);
   }
 }
 
@@ -160,9 +183,9 @@ function applyMode(m) {
   if (m === 'timed') {
     Auto.setEnabled(false); // user will press the Auto button to start
   } else if (m === 'hybrid') {
-    Auto.setEnabled(false); speaking=false; // waits for VAD gate
+    Auto.setEnabled(false); // waits for gate
   } else {
-    Auto.setEnabled(false); speaking=false; // step/wpm/asr/reh start paused
+    Auto.setEnabled(false); // step/wpm/asr/reh start paused
   }
 
   // Start/stop ASR orchestrator for assisted modes
@@ -238,11 +261,39 @@ export function installScrollRouter() {
     const db = e.detail?.db ?? -60;
     hybridHandleDb(db);
   });
+  // VAD events: mark availability and gate boolean
+  window.addEventListener('tp:vad', (e) => {
+    if (state.mode !== 'hybrid') return;
+    vadAvail = true;
+    vadGate = !!(e && e.detail && e.detail.speaking);
+    applyGate();
+  });
   // Refresh VAD profile if it changes
   window.addEventListener('storage', (e) => {
-    try { if (e && (e.key === ASR_KEY || e.key === PREF_KEY || e.key === APPLY_KEY || e.key === 'tp_vad_profile_v1')) loadVadProfile(); } catch {}
+    try {
+      if (!e) return;
+      if (e.key === ASR_KEY || e.key === PREF_KEY || e.key === APPLY_KEY || e.key === 'tp_vad_profile_v1') loadVadProfile();
+      if (e.key === PREF_KEY) {
+        try { gatePref = (JSON.parse(e.newValue||'{}')||{}).hybridGate || gatePref; } catch {}
+      }
+    } catch {}
   });
   window.addEventListener('tp:vad:profile', () => { try { loadVadProfile(); } catch {} });
+
+  // Capture user Auto toggle intent
+  try {
+    document.addEventListener('click', (ev) => {
+      const t = ev && ev.target;
+      if (t && t.closest && t.closest('#autoToggle')) {
+        userEnabled = !userEnabled;
+        setTimeout(applyGate, 0);
+      }
+    }, { capture: true });
+  } catch {}
+
+  // Initialize userEnabled from current Auto state and apply once
+  try { userEnabled = !!(Auto.getState && Auto.getState().enabled); } catch {}
+  applyGate();
 }
 
 
