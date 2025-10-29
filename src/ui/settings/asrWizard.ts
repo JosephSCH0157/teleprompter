@@ -1,5 +1,5 @@
 import { runCalibration } from '../../asr/calibration';
-import { setActiveProfile, upsertProfile } from '../../asr/store';
+import { setActiveProfile, upsertProfile, getAsrState } from '../../asr/store';
 
 let current: Awaited<ReturnType<typeof runCalibration>> | null = null;
 
@@ -9,6 +9,37 @@ function toast(msg: string) {
   try { (window as any).tpToast?.ok?.(msg); } catch {}
   try { (window as any).tpToast?.show?.(msg); } catch {}
   try { console.log('[ASR]', msg); } catch {}
+}
+
+// Populate microphone select and grant labels helpers
+async function populateMicSelect() {
+  try {
+    const sel = $('asrDevice') as HTMLSelectElement | null;
+    if (!sel || !navigator.mediaDevices?.enumerateDevices) return;
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const mics = devs.filter(d => d.kind === 'audioinput');
+    sel.innerHTML = '';
+    mics.forEach((d, i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId || '';
+      o.textContent = d.label || `Microphone ${i + 1}`;
+      sel.appendChild(o);
+    });
+    // Preselect active profile's device if present
+    try {
+      const s = getAsrState();
+      const devId = s.activeProfileId ? s.profiles[s.activeProfileId]?.capture.deviceId : undefined;
+      if (devId) sel.value = devId;
+    } catch {}
+  } catch {}
+}
+
+async function grantMicLabels() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    toast('Mic access granted — device names unlocked.');
+  } catch { toast('Mic access denied. You can still calibrate with generic names.'); }
+  await populateMicSelect();
 }
 
 function mapDbToPct(db: number) {
@@ -85,6 +116,9 @@ function wire() {
         toast('ASR profile saved and activated.');
       } catch {}
     });
+    // Device list helpers if present
+    $('asrRefreshDevs')?.addEventListener('click', () => { populateMicSelect(); });
+    $('asrGrantPerm')?.addEventListener('click', () => { grantMicLabels(); });
   } catch {}
 }
 
@@ -101,3 +135,14 @@ try {
 try { (window as any).startAsrWizard = startAsrWizard; } catch {}
 
 try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire(); } catch {}
+
+// Exported init for Settings mount flow
+export async function initAsrSettingsUI() {
+  try {
+    await populateMicSelect();
+    // Sensible defaults for flags (unchecked by default)
+    try { ( $('asrAEC') as HTMLInputElement | null )?.removeAttribute('checked'); } catch {}
+    try { ( $('asrNS')  as HTMLInputElement | null )?.removeAttribute('checked'); } catch {}
+    try { ( $('asrAGC') as HTMLInputElement | null )?.removeAttribute('checked'); } catch {}
+  } catch {}
+}
