@@ -10,6 +10,8 @@ bootstrap().catch(() => {});
 
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
+// Settings → ASR wizard wiring (safe to import; guards on element presence)
+import './ui/settings/asrWizard';
 
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.

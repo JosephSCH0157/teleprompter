@@ -75,6 +75,40 @@ const URL_TO_OPEN = RAW_URL;
       const hasToast = await waitFor('#tp_toast_container'); // toast container
       const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
 
+      // VAD gate latency (simulated)
+      try {
+        const result = await page.evaluate(() => {
+          const prof = { vad: { tonDb: -30, toffDb: -36, attackMs: 80, releaseMs: 300 } };
+          let gate = false, onCounter = 0, offCounter = 0; const ms = 20;
+          const step = (rmsDb) => {
+            const speaking = gate
+              ? (rmsDb > prof.vad.toffDb ? (offCounter=0, true) : ((offCounter+=ms) < prof.vad.releaseMs))
+              : (rmsDb > prof.vad.tonDb  ? ((onCounter+=ms) >= prof.vad.attackMs) : (onCounter=0, false));
+            gate = speaking; return gate;
+          };
+          let frames = 0; // open
+          while (!step(prof.vad.tonDb + 3) && frames < 1000) frames++;
+          const openOk = frames >= Math.ceil(prof.vad.attackMs / ms) - 1;
+          frames = 0; // close
+          while (step(prof.vad.toffDb - 3) && frames < 1000) frames++;
+          const closeOk = frames >= Math.ceil(prof.vad.releaseMs / ms) - 1;
+          return { openOk, closeOk };
+        });
+        if (!result.openOk || !result.closeOk) warnLogs.push('[smoke] VAD latency check failed');
+      } catch (e) {
+        warnLogs.push('[smoke] VAD latency check error: ' + (e?.message || String(e)));
+      }
+
+      // Sane profile formula (synthetic): ton must be above noise
+      try {
+        const ok = await page.evaluate(() => {
+          const noise = -50, speech = -20; // dBFS
+          const ton = Math.max(noise + 10, Math.min(-20, speech - 4));
+          return ton > noise;
+        });
+        if (!ok) warnLogs.push('[smoke] tonDb should be above noise floor');
+      } catch {}
+
       // Typography smoke guard: a line node must respond to font-size var changes
       try {
         const SEL = '#viewer .script :is(p,.line,.tp-line)';
