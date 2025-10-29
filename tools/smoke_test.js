@@ -109,6 +109,19 @@ const URL_TO_OPEN = RAW_URL;
         if (!ok) warnLogs.push('[smoke] tonDb should be above noise floor');
       } catch {}
 
+      // Auto chip probe: ensure presence and text changes after toggling Auto
+      try {
+        await page.waitForSelector('#autoChip', { timeout: 5000 });
+        const before = await page.$eval('#autoChip', n => (n.textContent || '').trim());
+        // Toggle Auto once
+        await page.click('#autoToggle');
+        await page.waitForTimeout(150);
+        const after = await page.$eval('#autoChip', n => (n.textContent || '').trim());
+        if (before === after) warnLogs.push('[smoke] autoChip text did not change after #autoToggle click');
+      } catch (e) {
+        warnLogs.push('[smoke] autoChip probe error: ' + (e?.message || String(e)));
+      }
+
       // Typography smoke guard: a line node must respond to font-size var changes
       try {
         const SEL = '#viewer .script :is(p,.line,.tp-line)';
