@@ -350,6 +350,18 @@ body.ck::after{
     word-spacing: var(--tp-word-spacing);
     color: var(--tp-fg);
 }
+
+/* Teleprompter typography — apply to actual line nodes */
+#viewer .script .line,
+#wrap   .script .line {
+    font-family:     var(--tp-font-family) !important;
+    font-size:       var(--tp-font-size)   !important;
+    line-height:     var(--tp-line-height) !important;
+    font-weight:     var(--tp-weight);
+    letter-spacing:  var(--tp-letter-spacing);
+    word-spacing:    var(--tp-word-spacing);
+    color:           var(--tp-fg);
+}
 .tp-check{display:inline-flex;align-items:center;gap:.5rem}
 .tp-check input{vertical-align:middle}
 
