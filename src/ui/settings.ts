@@ -2,6 +2,7 @@ import { buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { setupSettingsTabs } from './settings/tabs';
 import { bindTypographyPanel } from './settings/typographyPanel';
 import { wireSettingsDynamic } from './settings/wire';
+import { initAsrSettingsUI } from './settings/asrWizard';
 
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null) {
@@ -22,6 +23,8 @@ export function mountSettings(rootEl: HTMLElement | null) {
     // Bind new typography panels (main + display)
     try { bindTypographyPanel('main'); } catch {}
     try { bindTypographyPanel('display'); } catch {}
+  // Initialize ASR settings card (device list, permissions)
+  try { initAsrSettingsUI(); } catch {}
 
     // Legacy compatibility: mirror minimal font size/line height controls if present
     try {
