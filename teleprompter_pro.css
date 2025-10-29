@@ -578,3 +578,10 @@ html.tp-present .present-exit { display: inline-flex; }
 .asr-meter::before, .asr-meter::after { content:""; position:absolute; top:0; width:2px; height:100%; opacity:.6; pointer-events:none; }
 .asr-meter::before { left: calc(var(--asr-ton, -1%) - 1px);  background:#60a5fa; }   /* on-threshold (blue) */
 .asr-meter::after  { left: calc(var(--asr-toff, -1%) - 1px); background:#f472b6; } /* off-threshold (pink) */
+
+/* Auto status chip */
+.topbar #autoChip { margin-left: .5rem; }
+#autoChip       { background: #374151; color:#fff; border-radius:999px; padding:2px 8px; font: 500 12px/1 system-ui, sans-serif; }
+#autoChip.on    { background:#16a34a; }   /* On (green)   */
+#autoChip.paused{ background:#f59e0b; }   /* Paused (amber) */
+#autoChip.manual{ background:#6b7280; }   /* Manual (gray)  */

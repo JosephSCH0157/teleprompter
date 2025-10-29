@@ -481,10 +481,24 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let vadGate = false;     // set from tp:vad
   let gatePref = getUiPrefs().hybridGate;
 
+  // Chip helpers
+  const chipEl = () => document.getElementById('autoChip');
+  function setAutoChip(state: 'on' | 'paused' | 'manual', detail?: string) {
+    const el = chipEl();
+    if (!el) return;
+    el.textContent = `Auto: ${state === 'on' ? 'On' : state === 'paused' ? 'Paused' : 'Manual'}`;
+    el.classList.remove('on','paused','manual');
+    el.classList.add(state);
+    el.setAttribute('data-state', state);
+    if (detail) el.title = detail;
+  }
+
   function applyGate() {
     if (state.mode !== 'hybrid') {
       // Outside Hybrid, honor user toggle directly
       if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled);
+      const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'}`;
+      setAutoChip(userEnabled ? 'on' : 'manual', detail);
       return;
     }
     let gateWanted = false;
@@ -495,7 +509,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       case 'db_or_vad':
       default:           gateWanted = dbGate || vadGate; break;
     }
-    if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled && gateWanted);
+    const enabled = userEnabled && gateWanted;
+    if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
+    const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
+    setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
   }
 
   onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
