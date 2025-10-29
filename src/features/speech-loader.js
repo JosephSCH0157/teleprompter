@@ -47,6 +47,24 @@ function setRecUi(on) {
 }
 
 export function installSpeech() {
+  // Enable/disable the button based on browser support (mirrors legacy behavior)
+  try {
+    const btn = document.getElementById('recBtn');
+    const SRAvail = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (btn) {
+      if (!SRAvail) {
+        btn.disabled = true;
+        btn.title = 'Speech recognition not supported in this browser';
+        const chip = document.getElementById('recChip');
+        if (chip) chip.textContent = 'Speech: unsupported';
+      } else {
+        btn.disabled = false;
+        try { btn.removeAttribute('title'); } catch {}
+        btn.title = 'Start speech sync';
+      }
+    }
+  } catch {}
+
   // delegated wiring keeps working even if the button re-renders
   document.addEventListener('click', async (e) => {
     const t = e && e.target;
