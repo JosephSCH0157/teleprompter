@@ -10,6 +10,7 @@ export function initObsUI() {
 
   // Inputs (use either Settings overlay or main panel ids)
   const urlIn  = (byId<HTMLInputElement>('settingsObsUrl')    || byId<HTMLInputElement>('obsUrl'));
+  const hostIn = byId<HTMLInputElement>('settingsObsHost');
   const passIn = (byId<HTMLInputElement>('settingsObsPassword')|| byId<HTMLInputElement>('obsPassword'));
   const enable = (byId<HTMLInputElement>('settingsEnableObs')  || byId<HTMLInputElement>('enableObs'));
 
@@ -20,7 +21,13 @@ export function initObsUI() {
   const pill     = (byId<HTMLElement>('obsStatusText') || byId<HTMLElement>('obsStatus'));
   const testMsg  = byId<HTMLElement>('settingsObsTestMsg');
 
-  const getUrl  = () => (urlIn?.value?.trim() || 'ws://127.0.0.1:4455');
+  const getUrl  = () => {
+    const u = urlIn?.value?.trim();
+    if (u) return u;
+    const h = hostIn?.value?.trim();
+    if (h) return `ws://${h}${/:[0-9]+$/.test(h) ? '' : ':4455'}`;
+    return 'ws://127.0.0.1:4455';
+  };
   const getPass = () => (passIn?.value ?? '');
 
   // Initialize recorder bridge with UI hooks
@@ -39,6 +46,7 @@ export function initObsUI() {
   // Live config updates → apply to bridge
   try { enable?.addEventListener('change', () => rec.setEnabled(!!enable.checked)); } catch {}
   try { urlIn?.addEventListener('change', () => rec.reconfigure(parseWsUrl(getUrl(), getPass()))); } catch {}
+  try { hostIn?.addEventListener('change', () => rec.reconfigure(parseWsUrl(getUrl(), getPass()))); } catch {}
   try { passIn?.addEventListener('change', () => rec.reconfigure({ password: getPass() })); } catch {}
 
   // “Test” = connect with testOnly=true under the hood
@@ -94,4 +102,14 @@ export function initObsUI() {
       return { secure: url.protocol === 'wss:', host: url.hostname, port: Number(url.port || 4455), password: pass } as any;
     } catch { return { password: pass } as any; }
   }
+
+  // Bridge to central store if present, so toggles from Settings drive the bridge too
+  try {
+    const S = (window as any).__tpStore;
+    if (S && typeof S.subscribe === 'function') {
+      try { S.subscribe('obsEnabled', (v: any) => { try { rec.setEnabled(!!v); } catch {} }); } catch {}
+      try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : getUrl(), getPass())); } catch {} }); } catch {}
+      try { S.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
+    }
+  } catch {}
 }

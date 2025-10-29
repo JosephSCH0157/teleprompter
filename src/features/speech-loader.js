@@ -289,6 +289,8 @@ export function installSpeech() {
           await startBackend();
           // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
           try { await doAutoRecordStart(); } catch {}
+          // Ensure mic stream is granted so Hybrid gates (dB/VAD) can open
+          try { await window.__tpMic?.requestMic?.(); } catch {}
         });
       } catch (e) {
         running = false;
