@@ -23,21 +23,38 @@ function createEmitter() {
   };
 }
 
-// Helpers for auth: auth = base64(sha256(base64(sha256(pass + salt)) + challenge))
-async function sha256Base64(input) {
-  const enc = new TextEncoder().encode(String(input));
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin);
+// OBS v5 auth: secret = base64(sha256(password + base64Decode(salt)))
+//              auth   = base64(sha256(secret + challenge))
+function _b64ToBytes(b64) {
+  try {
+    const bin = atob(String(b64 || ''));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch { return new Uint8Array(); }
 }
-
+function _bufToB64(buf) {
+  try {
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  } catch { return ''; }
+}
 async function computeAuth(pass, salt, challenge) {
   try {
-    const secret = await sha256Base64(String(pass || '') + String(salt || ''));
-    const auth = await sha256Base64(String(secret) + String(challenge || ''));
-    return auth;
+    const enc = new TextEncoder();
+    const passBytes = enc.encode(String(pass || ''));
+    const saltBytes = _b64ToBytes(salt || '');
+    // concat(passBytes, saltBytes)
+    const combo = new Uint8Array(passBytes.length + saltBytes.length);
+    combo.set(passBytes, 0);
+    combo.set(saltBytes, passBytes.length);
+    const secretBuf = await crypto.subtle.digest('SHA-256', combo);
+    const secretB64 = _bufToB64(secretBuf);
+    const authInput = enc.encode(String(secretB64) + String(challenge || ''));
+    const authBuf = await crypto.subtle.digest('SHA-256', authInput);
+    return _bufToB64(authBuf);
   } catch {
     return '';
   }
