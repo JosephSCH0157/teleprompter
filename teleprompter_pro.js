@@ -5181,7 +5181,8 @@ let _toast = function (msg, opts) {
       const v = parseFloat(autoSpeed.value) || 0;
       localStorage.setItem('autoPxSpeed', String(v));
       if (!autoTimer) {
-        autoToggle.textContent = v > 0 ? `Auto-scroll: ${v}px/s` : 'Auto-scroll: Off';
+        // When stopped, reflect clear OFF state regardless of value
+        autoToggle.textContent = 'Auto-scroll: Off';
       }
     });
 
@@ -9796,8 +9797,11 @@ let _toast = function (msg, opts) {
     }
     localStorage.setItem('autoPxSpeed', String(pxSpeed));
 
-    autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
-    autoToggle.classList.add('active');
+  autoToggle.dataset.state = 'on';
+  autoToggle.textContent = `Auto-scroll: On — ${pxSpeed} px/s`;
+  autoToggle.classList.add('active');
+  // seed central scroll controller if present
+  try { if (window.__scrollCtl?.setSpeed) window.__scrollCtl.setSpeed(pxSpeed); } catch {}
 
     // Snap the nearest readable line to the marker immediately to avoid
     // initial overshoot/undershoot oscillation. Also ensure the end spacer
@@ -9999,8 +10003,9 @@ let _toast = function (msg, opts) {
     } catch {}
     try { window.__tpGov = null; } catch {}
     try { if (!speechOn) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
-    autoToggle.classList.remove('active');
-    autoToggle.textContent = 'Auto-scroll: Off';
+  autoToggle.classList.remove('active');
+  autoToggle.dataset.state = 'off';
+  autoToggle.textContent = 'Auto-scroll: Off';
   }
 
   // Resume catch-up controller if speech sync is active — via heuristic gate
@@ -10032,9 +10037,18 @@ let _toast = function (msg, opts) {
   function tweakSpeed(delta) {
     onUserAutoNudge(); // Gate soft-advance during manual speed adjustments
     let v = Number(autoSpeed.value) || 0;
-    v = Math.max(0, Math.min(300, v + delta));
-    autoSpeed.value = String(v);
-    if (autoTimer) autoToggle.textContent = `Auto-scroll: On (${v}px/s)`;
+    v = v + delta;
+    try {
+      // Route through centralized setter so engine/label stay in sync
+      if (typeof window.__setAutoSpeed === 'function') {
+        window.__setAutoSpeed(v, 'tweak');
+      } else {
+        // Fallback: clamp and reflect locally if setter not available
+        v = Math.max(0, Math.min(300, v));
+        autoSpeed.value = String(v);
+        if (autoTimer) autoToggle.textContent = `Auto-scroll: On — ${v} px/s`;
+      }
+    } catch {}
   }
 
   function startTimer() {
@@ -11386,7 +11400,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
 
   // ── Auto-scroll fine control (micro + coarse) ─────────────────────────
   (function setupAutoSpeedControls() {
-    const AUTO_MIN = 0,
+    const AUTO_MIN = 5,
       AUTO_MAX = 300,
       STEP_FINE = 1,
       STEP_COARSE = 5;
