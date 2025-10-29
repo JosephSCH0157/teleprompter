@@ -183,7 +183,10 @@ function applyMode(m) {
   if (m === 'timed') {
     Auto.setEnabled(false); // user will press the Auto button to start
   } else if (m === 'hybrid') {
-    Auto.setEnabled(false); // waits for gate
+    // In Hybrid mode, default user intent is ON and speed preset to 21 px/s.
+    try { Auto.setSpeed && Auto.setSpeed(21); } catch {}
+    userEnabled = true; // let the gate control actual movement
+    Auto.setEnabled(false); // engine follows gate; applyGate() will enable if open
   } else {
     Auto.setEnabled(false); // step/wpm/asr/reh start paused
   }
@@ -201,6 +204,9 @@ function applyMode(m) {
   // Update select if present
   const sel = document.getElementById('scrollMode');
   if (sel && sel.value !== m) sel.value = m;
+
+  // Recompute gate effects after mode change
+  try { applyGate(); } catch {}
 }
 
 export function getMode(){ return state.mode; }
