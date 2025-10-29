@@ -40,7 +40,33 @@ export function bindTypographyPanel(display: DisplayId) {
       const patch: any = {};
       const n = Number(input.value);
       patch[k] = isNaN(n) ? input.value : n;
+      // A) Apply to main on input: update CSS vars immediately and notify reflow
+      try {
+        if (display === 'main') {
+          const docEl = document.documentElement;
+          if (k === 'fontSizePx' && typeof patch[k] === 'number') {
+            docEl.style.setProperty('--tp-font-size', String(patch[k]) + 'px');
+          }
+          if (k === 'lineHeight' && typeof patch[k] === 'number') {
+            docEl.style.setProperty('--tp-line-height', String(patch[k]));
+          }
+          if (k === 'fontSizePx' || k === 'lineHeight') {
+            window.dispatchEvent(new CustomEvent('tp:lineMetricsDirty'));
+          }
+        }
+      } catch {}
       setTypography(display, patch);
+      // B) Always push Display updates to the external window (regardless of link toggle)
+      try {
+        if (display === 'display') {
+          const msg = { kind: 'tp:typography', source: 'main', display: 'display', t: patch };
+          try { new BroadcastChannel('tp_display').postMessage(msg as any); } catch {}
+          try {
+            const w = (window as any).__tpDisplayWindow;
+            if (w && !w.closed) w.postMessage(msg, '*');
+          } catch {}
+        }
+      } catch {}
       refreshFromStore();
     });
   });
