@@ -17,7 +17,10 @@ function openSettingsToAsr(startWizard?: boolean) {
     // Scroll into ASR card
     setTimeout(() => {
       const sec = document.getElementById('asrSettings');
-      if (sec) { try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { sec.scrollIntoView(); } }
+      if (sec) {
+        try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { sec.scrollIntoView(); }
+        try { sec.classList.add('asr-highlight'); setTimeout(() => sec.classList.remove('asr-highlight'), 1400); } catch {}
+      }
       // focus device select if present
       const devSel = document.getElementById('asrDevice') as HTMLSelectElement | null;
       devSel?.focus?.();
