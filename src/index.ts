@@ -23,6 +23,7 @@ import { installScrollRouter } from './features/scroll-router';
 import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
+import { startVadAdapter } from './asr/vadAdapter';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
@@ -155,6 +156,19 @@ try {
 				const LINE_SEL = '#viewer .script :is(p,.line,.tp-line)';
 				try { if (!document.querySelector(LINE_SEL)) console.warn('[TP] No line nodes matched — check renderer/markup'); } catch {}
 			}
+		} catch {}
+
+		// Start/stop VAD adapter when mic stream is provided
+		try {
+			let stopVad: (() => void) | null = null;
+			window.addEventListener('tp:mic:stream', (e: any) => {
+				try { stopVad?.(); } catch {}
+				try {
+					const s: MediaStream | undefined = e?.detail?.stream;
+					if (s) stopVad = startVadAdapter(s, (_speaking: boolean, _rms: number) => {});
+				} catch {}
+			});
+			window.addEventListener('beforeunload', () => { try { stopVad?.(); } catch {} });
 		} catch {}
 	});
 } catch {}

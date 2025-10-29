@@ -25,6 +25,9 @@ export function startVadAdapter(stream: MediaStream, onGate: (speaking: boolean,
         : (rmsDb > prof.vad.tonDb  ? ((onCounter+=ms) >= prof.vad.attackMs) : (onCounter=0, false));
       gate = speaking as boolean;
       try { onGate(gate, rmsDb); } catch {}
+      try {
+        window.dispatchEvent(new CustomEvent('tp:vad', { detail: { speaking: gate, rmsDbfs: rmsDb } }));
+      } catch {}
   await new Promise(r => setTimeout(r, ms));
   // Continue loop while context is not closed: check state where supported
   const stateOk = (ctx as any).state ? ((ctx as any).state !== 'closed') : true;

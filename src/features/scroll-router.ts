@@ -475,6 +475,31 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
 
+  // Hybrid gating via dB and/or VAD per user preference
+  let userEnabled = false; // reflects user's Auto on/off intent
+  let dbGate = false;      // set from tp:db
+  let vadGate = false;     // set from tp:vad
+  let gatePref = getUiPrefs().hybridGate;
+
+  function applyGate() {
+    if (state.mode !== 'hybrid') {
+      // Outside Hybrid, honor user toggle directly
+      if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled);
+      return;
+    }
+    let gateWanted = false;
+    switch (gatePref) {
+      case 'db':         gateWanted = dbGate; break;
+      case 'vad':        gateWanted = vadGate; break;
+      case 'db_and_vad': gateWanted = dbGate && vadGate; break;
+      case 'db_or_vad':
+      default:           gateWanted = dbGate || vadGate; break;
+    }
+    if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled && gateWanted);
+  }
+
+  onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
+
   // Mode selector
   try {
     document.addEventListener('change', (e: Event)=>{
