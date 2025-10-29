@@ -154,6 +154,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (detail) el.title = detail;
   }
 
+  const getStoredSpeed = (): number => {
+    try { return Number(localStorage.getItem('tp_auto_speed') || '60') || 60; } catch { return 60; }
+  };
+
   function applyGate() {
     if (state.mode !== 'hybrid') {
       // Outside Hybrid, honor user toggle directly
@@ -162,9 +166,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       setAutoChip(userEnabled ? 'on' : 'manual', detail);
       // Reflect user intent on the main Auto button label
       try {
-        const btn = document.getElementById('autoToggle');
+        const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
         if (btn) {
-          btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+          if (userEnabled) btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
+          else btn.textContent = 'Auto-scroll: Off';
           btn.setAttribute('aria-pressed', String(!!userEnabled));
           btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
         }
@@ -183,13 +188,22 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
     const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
-    // Reflect user intent on the main Auto button label (On even if gated Paused)
+    // Reflect user intent on the main Auto button label with speed and paused state
     try {
-      const btn = document.getElementById('autoToggle');
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
       if (btn) {
-        btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+        const s = getStoredSpeed();
+        if (!userEnabled) {
+          btn.textContent = 'Auto-scroll: Off';
+          btn.setAttribute('data-state', 'off');
+        } else if (enabled) {
+          btn.textContent = `Auto-scroll: On — ${s} px/s`;
+          btn.setAttribute('data-state', 'on');
+        } else {
+          btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+          btn.setAttribute('data-state', 'paused');
+        }
         btn.setAttribute('aria-pressed', String(!!userEnabled));
-        btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
       }
     } catch {}
   }
@@ -252,13 +266,32 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     }, { capture: true });
   } catch {}
 
-  // Default Hybrid intent to ON at startup for parity with UX; apply once
+  // Default Hybrid intent to ON at startup; set initial label with stored speed and apply once
   if (state.mode === 'hybrid') {
     userEnabled = true;
+    try {
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+      if (btn) {
+        btn.dataset.state = 'on';
+        btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
+      }
+    } catch {}
     applyGate();
   } else {
     applyGate();
   }
   // If ASR modes selected initially, ensure orchestrator
   if (state.mode === 'wpm' || state.mode === 'asr') ensureOrchestratorForMode();
+
+  // Keep the label in sync with speed changes while intent is ON/paused
+  try {
+    document.addEventListener('tp:autoSpeed' as any, (e: any) => {
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+      if (!btn) return;
+      const ds = btn.dataset?.state || '';
+      const s = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : getStoredSpeed();
+      if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
+      if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+    });
+  } catch {}
 }
