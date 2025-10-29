@@ -108,7 +108,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
             --tp-word-spacing: 0.02em;
             --tp-fg: #e5e7eb;
             --tp-bg: #0b0f14;
-            --tp-maxch: 60;
+            --tp-maxch: 95;
             --tp-dim: 0.25;
         }
     html,body{height:100%}
