@@ -56,6 +56,19 @@
         '    <button id="settingsRequestMicBtn" class="chip">Request mic</button>',
         '    <button id="settingsReleaseMicBtn" class="chip">Release mic</button>',
         '  </div>',
+  '  <h4>ASR / Mic Calibration</h4>',
+  '  <div class="row microcopy" style="color:#9fb4c9;font-size:12px">Use Start to measure room noise, then speak to measure voice. We0ll derive safe thresholds for voice activity detection.</div>',
+  '  <div class="row" style="align-items:center;gap:10px">',
+  '    <button id="asrCalibBtn" class="chip">Start calibration</button>',
+  '    <label><input type="checkbox" id="asrApplyHybrid"/> Apply to Hybrid Gate</label>',
+  '  </div>',
+  '  <div class="row settings-small" id="asrCalibReadout">',
+  '    Noise: <strong id="asrNoiseDb">—</strong> • Speech: <strong id="asrSpeechDb">—</strong> • ton: <strong id="asrTonDb">—</strong> • toff: <strong id="asrToffDb">—</strong>',
+  '  </div>',
+  '  <div class="row">',
+  '    <label>Attack (ms) <input id="asrAttackMs" type="number" min="20" max="500" step="10" value="80" class="select-sm"/></label>',
+  '    <label>Release (ms) <input id="asrReleaseMs" type="number" min="80" max="1000" step="20" value="300" class="select-sm"/></label>',
+  '  </div>',
         '  <h4>Camera</h4>',
         '  <div class="row">',
         '    <label>Device',
@@ -535,6 +548,76 @@
             if (dbSpan) dbSpan.textContent = (Number.isFinite(db) ? db.toFixed(0) : '–∞') + ' dB';
           } catch {}
         });
+      } catch {}
+
+      // ASR / Mic Calibration wiring
+      try {
+        const btn = q('asrCalibBtn');
+        const chk = q('asrApplyHybrid');
+        const outNoise = q('asrNoiseDb');
+        const outSpeech = q('asrSpeechDb');
+        const outTon = q('asrTonDb');
+        const outToff = q('asrToffDb');
+        const attackInp = q('asrAttackMs');
+        const releaseInp = q('asrReleaseMs');
+        const PROF_KEY = 'tp_vad_profile_v1';
+        const APPLY_KEY = 'tp_vad_apply_hybrid';
+        // Restore prior profile
+        try {
+          const raw = localStorage.getItem(PROF_KEY);
+          if (raw) {
+            const p = JSON.parse(raw);
+            if (outNoise && p && typeof p.noiseDb === 'number') outNoise.textContent = String(p.noiseDb.toFixed(0)) + ' dB';
+            if (outSpeech && p && typeof p.speechDb === 'number') outSpeech.textContent = String(p.speechDb.toFixed(0)) + ' dB';
+            if (outTon && p && typeof p.tonDb === 'number') outTon.textContent = String(p.tonDb.toFixed(0)) + ' dB';
+            if (outToff && p && typeof p.toffDb === 'number') outToff.textContent = String(p.toffDb.toFixed(0)) + ' dB';
+            if (attackInp && typeof p.attackMs === 'number') attackInp.value = String(p.attackMs);
+            if (releaseInp && typeof p.releaseMs === 'number') releaseInp.value = String(p.releaseMs);
+          }
+          if (chk) chk.checked = localStorage.getItem(APPLY_KEY) === '1';
+        } catch {}
+
+        const measure = (ms) => new Promise((resolve) => {
+          const vals = [];
+          const onDb = (e) => { try { const db = (e && e.detail && typeof e.detail.db === 'number') ? e.detail.db : NaN; if (Number.isFinite(db)) vals.push(db); } catch {} };
+          try { window.addEventListener('tp:db', onDb); } catch {}
+          setTimeout(() => { try { window.removeEventListener('tp:db', onDb); } catch {} resolve(vals); }, ms);
+        });
+        const avg = (arr) => { if (!arr || !arr.length) return NaN; return arr.reduce((a,b)=>a+b,0)/arr.length; };
+
+        async function runCalibration(){
+          try {
+            const atk = Math.max(20, Math.min(500, parseInt(attackInp && attackInp.value || '80', 10) || 80));
+            const rel = Math.max(80, Math.min(1000, parseInt(releaseInp && releaseInp.value || '300', 10) || 300));
+            // Phase 1: room noise
+            const noiseVals = await measure(1500);
+            const noise = avg(noiseVals);
+            if (outNoise) outNoise.textContent = Number.isFinite(noise) ? (noise.toFixed(0) + ' dB') : '—';
+            // Phase 2: speech
+            const speechVals = await measure(1800);
+            const speech = avg(speechVals);
+            if (outSpeech) outSpeech.textContent = Number.isFinite(speech) ? (speech.toFixed(0) + ' dB') : '—';
+            // Derive thresholds
+            let ton = -30, toff = -36;
+            if (Number.isFinite(noise) && Number.isFinite(speech)) {
+              const minTon = noise + 8;
+              const maxTon = speech - 4;
+              ton = Math.min(-20, Math.max(minTon, Math.min(maxTon, -26)));
+              toff = ton - 6;
+            }
+            if (outTon) outTon.textContent = ton.toFixed(0) + ' dB';
+            if (outToff) outToff.textContent = toff.toFixed(0) + ' dB';
+            // Persist profile
+            const profile = { noiseDb: noise, speechDb: speech, tonDb: ton, toffDb: toff, attackMs: atk, releaseMs: rel, t: Date.now() };
+            try { localStorage.setItem(PROF_KEY, JSON.stringify(profile)); } catch {}
+            if (chk && chk.checked) { try { localStorage.setItem(APPLY_KEY, '1'); } catch {} }
+            else { try { localStorage.removeItem(APPLY_KEY); } catch {} }
+            // Notify listeners (router can re-read profile)
+            try { window.dispatchEvent(new CustomEvent('tp:vad:profile', { detail: profile })); } catch {}
+          } catch {}
+        }
+        if (btn && !btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', runCalibration); }
+        if (chk) chk.addEventListener('change', () => { try { localStorage.setItem(APPLY_KEY, chk.checked ? '1' : '0'); } catch {} });
       } catch {}
 
       // Refresh device labels after permission grant
