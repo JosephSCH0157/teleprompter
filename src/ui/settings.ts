@@ -10,7 +10,8 @@ export function mountSettings(rootEl: HTMLElement | null) {
   try {
     // Prefer legacy in-file builder when present for safe migration
     if (typeof (window as any).buildSettingsContent === 'function') {
-      try { (window as any).buildSettingsContent(); return; } catch {}
+      // Call legacy builder to preserve existing panels, but continue to inject new cards
+      try { (window as any).buildSettingsContent(); } catch {}
     }
 
     if (!rootEl) return;
