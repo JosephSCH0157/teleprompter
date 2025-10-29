@@ -109,11 +109,32 @@ function applyMode(m: Mode){
 }
 
 import { getUiPrefs, onUiPrefs } from '../settings/uiPrefs';
+import { createOrchestrator } from '../asr/v2/orchestrator';
+import { createVadEventAdapter } from '../asr/v2/adapters/vad';
 
 export function installScrollRouter(opts: ScrollRouterOpts){
   const { auto } = opts;
   restoreMode();
   applyMode(state.mode);
+
+  // ASR v2 Orchestrator (minimal integration): start on 'wpm'/'asr', stop otherwise
+  const orch = createOrchestrator();
+  let orchRunning = false;
+  async function ensureOrchestratorForMode() {
+    try {
+      if (state.mode === 'wpm' || state.mode === 'asr') {
+        if (!orchRunning) {
+          await orch.start(createVadEventAdapter()); // use VAD events for speaking; WPM updates when tokens are available
+          orch.setMode('assist');
+          orchRunning = true;
+        }
+      } else if (orchRunning) {
+        await orch.stop();
+        orchRunning = false;
+      }
+    } catch {}
+  }
+  ensureOrchestratorForMode();
 
   // Hybrid gating via dB and/or VAD per user preference
   let userEnabled = false; // reflects user's Auto on/off intent
@@ -165,6 +186,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         const v = (t as HTMLSelectElement).value as Mode;
         applyMode(v);
         applyGate();
+        ensureOrchestratorForMode();
       }
     }, { capture: true });
     // Screen-reader live announcement on the single control
@@ -214,4 +236,6 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   // Ensure initial gate application
   if (state.mode === 'hybrid') applyGate();
+  // If ASR modes selected initially, ensure orchestrator
+  if (state.mode === 'wpm' || state.mode === 'asr') ensureOrchestratorForMode();
 }
