@@ -1,8 +1,8 @@
+import { initAsrSettingsUI } from './settings/asrWizard';
 import { buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { setupSettingsTabs } from './settings/tabs';
 import { bindTypographyPanel } from './settings/typographyPanel';
 import { wireSettingsDynamic } from './settings/wire';
-import { initAsrSettingsUI } from './settings/asrWizard';
 
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null) {
