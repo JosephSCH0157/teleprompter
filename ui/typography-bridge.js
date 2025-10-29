@@ -104,11 +104,15 @@
       }, { passive: false });
     } catch {}
 
-    // Shift + Wheel over viewer → adjust font size without Ctrl/Cmd
-    try {
-      const viewer = document.getElementById('viewer');
-      if (viewer) {
-        viewer.addEventListener('wheel', (e) => {
+    // Shift + Wheel over viewer (main) or wrap (display) → adjust font size without Ctrl/Cmd
+    function wireLocalWheelTargets() {
+      try {
+        const targetId = (DISPLAY_ID === 'display') ? 'wrap' : 'viewer';
+        const host = document.getElementById(targetId);
+        if (!host) return;
+        if (host.__tpWheelWired) return; // idempotent
+        Object.defineProperty(host, '__tpWheelWired', { value: true, configurable: true });
+        host.addEventListener('wheel', (e) => {
           try {
             if (!e.shiftKey || e.ctrlKey || e.metaKey) return;
             const tag = (e.target && e.target.tagName || '').toLowerCase();
@@ -122,7 +126,17 @@
             applyTypographyVars(next, lh);
           } catch {}
         }, { passive: false });
-      }
+      } catch {}
+    }
+    // Wire after DOM is ready and re-wire if the target gets replaced
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => { try { wireLocalWheelTargets(); } catch {} });
+    } else {
+      wireLocalWheelTargets();
+    }
+    try {
+      const mo = new MutationObserver(() => { try { wireLocalWheelTargets(); } catch {} });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
     } catch {}
   } catch {}
 })();
