@@ -17,6 +17,7 @@ import './ui/settings/asrWizard';
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
+import './asr/v2/prompts';
 import { startVadAdapter } from './asr/vadAdapter';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
@@ -25,7 +26,6 @@ import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
-import './asr/v2/prompts';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
