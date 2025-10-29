@@ -24,6 +24,8 @@ import './media/display-bridge.js';
 import * as UI from './ui/dom.js';
 // Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
 import '../ui/typography-bridge.js';
+// Scripts Save/Load UI (dropdown + buttons wiring)
+import '../ui/scripts-ui.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
