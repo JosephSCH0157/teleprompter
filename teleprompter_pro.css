@@ -2,6 +2,21 @@
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px;z-index:9999}
 .overlay.hidden{display:none}
 .overlay .sheet{background:#0e141b;border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:720px;width:100%;padding:20px}
+
+/* Mic pill popover menu (compact) */
+#micMenu{font:13px/1.2 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#e6eef8;background:rgba(12,16,24,.98);border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.45);padding:6px 6px;min-width:220px;-webkit-backdrop-filter:saturate(1.2) blur(4px);backdrop-filter:saturate(1.2) blur(4px)}
+#micMenu .mm-item{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:transparent;color:#e6eef8;border-radius:8px;cursor:pointer}
+#micMenu .mm-item:hover{background:rgba(255,255,255,.06)}
+#micMenu .mm-hdr{font-size:11px;letter-spacing:.02em;text-transform:uppercase;color:#9fb4c9;margin:4px 6px}
+#micMenu .mm-empty{font-size:12px;color:#9fb4c9;opacity:.9;padding:6px 8px}
+
+/* Subtle highlight when navigating to ASR card */
+#asrSettings.asr-highlight{outline:2px solid rgba(46,168,255,.28);box-shadow:0 0 0 2px rgba(46,168,255,.18) inset, 0 0 0 6px rgba(46,168,255,.06);animation:asrPulse 1200ms ease-out 1;border-radius:12px}
+@keyframes asrPulse{0%{background:rgba(46,168,255,.06)}80%{background:rgba(46,168,255,.02)}100%{background:transparent}}
+
+/* Toast action button (small, unobtrusive) */
+.tp-toast .tp-toast-action{margin-left:10px;padding:4px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:inherit;cursor:pointer}
+.tp-toast .tp-toast-action:hover{background:rgba(255,255,255,.1)}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .shortcuts-grid{display:grid;grid-template-columns:180px 1fr;gap:10px 16px;margin:8px 0 12px}
 .shortcuts-grid .dim,.dim{opacity:.7}

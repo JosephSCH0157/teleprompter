@@ -42,7 +42,10 @@ export function mountSettings(rootEl: HTMLElement | null) {
             const media = rootEl.querySelector('[data-tab-content="media"]') as HTMLElement | null;
             if (media) media.style.display = '';
             const sec = document.getElementById('asrSettings');
-            if (sec) { try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { sec.scrollIntoView(); } }
+            if (sec) {
+              try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { sec.scrollIntoView(); }
+              try { sec.classList.add('asr-highlight'); setTimeout(() => sec.classList.remove('asr-highlight'), 1400); } catch {}
+            }
           } catch {}
         }
       }, { capture: true });
