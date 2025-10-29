@@ -468,11 +468,11 @@ export function connect({ testOnly } = {}) {
 
                 const saltBytes = base64ToUint8Array(salt);
                 const passBytes = enc(pass);
-                const secretInput = concatUint8(saltBytes, passBytes);
-                const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
+                // OBS v5 auth: secret = b64(sha256(passBytes + saltBytes))
+                //              auth   = b64(sha256(secretB64 + challenge))
+                const passPlusSalt = concatUint8(passBytes, saltBytes);
+                const secretBuf = await crypto.subtle.digest('SHA-256', passPlusSalt);
                 const secretB64 = b64(secretBuf);
-
-                // Alternate variant: SHA256(secretB64 + challenge)
                 const authInputStr = secretB64 + challenge;
                 const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
                 auth = b64(authBuf);
