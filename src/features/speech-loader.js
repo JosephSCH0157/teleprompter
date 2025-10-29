@@ -4,6 +4,22 @@
 let running = false;
 let rec = null; // SR instance or orchestrator handle
 
+// Small router to bridge transcripts to both legacy and modern paths
+function routeTranscript(text, isFinal) {
+  try {
+    if (!text) return;
+    // Legacy monolith path
+    if (typeof window.advanceByTranscript === 'function') {
+      try { window.advanceByTranscript(text, !!isFinal); } catch {}
+    }
+    // Modern/event-bus path (HUD bus if present)
+    try {
+      const payload = { text, final: !!isFinal, t: performance.now() };
+      window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload);
+    } catch {}
+  } catch {}
+}
+
 // (dynamic import of '/speech/orchestrator.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
@@ -123,18 +139,54 @@ export function installSpeech() {
     async function startBackend() {
       if (window.__tpSpeechOrchestrator?.start) {
         rec = await window.__tpSpeechOrchestrator.start();
+        // Orchestrator bridge: subscribe to events if available
+        try {
+          if (rec && typeof rec.on === 'function') {
+            try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
+            try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
+          }
+        } catch {}
+        try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
         return;
       }
       try {
         const mod = await import('/speech/orchestrator.js');
-        if (mod?.startOrchestrator) { rec = await mod.startOrchestrator(); return; }
+        if (mod?.startOrchestrator) {
+          rec = await mod.startOrchestrator();
+          // Orchestrator bridge: subscribe to events if available
+          try {
+            if (rec && typeof rec.on === 'function') {
+              try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
+              try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
+            }
+          } catch {}
+          try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
+          return;
+        }
       } catch {}
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) throw new Error('NoSpeechBackend');
       const sr = new SR();
       sr.interimResults = true;
       sr.continuous = true;
-      sr.onresult = (e) => { try { (HUD?.log || console.debug)?.('speech', { results: e?.results?.length || 0 }); } catch {} };
+      // Web Speech → route finals and throttled partials
+      let _lastInterimAt = 0;
+      sr.onresult = (e) => {
+        try {
+          let interim = '', finals = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const r = e.results[i];
+            if (r.isFinal) finals += (r[0]?.transcript || '') + ' ';
+            else interim += (r[0]?.transcript || '') + ' ';
+          }
+          if (finals) routeTranscript(finals, true);
+          const now = performance.now();
+          if (interim && now - _lastInterimAt > 150) {
+            _lastInterimAt = now;
+            routeTranscript(interim, false);
+          }
+        } catch {}
+      };
       sr.onerror = (e) => { try { (HUD?.log || console.warn)?.('speech', { error: e?.error || String(e) }); } catch {} };
       sr.onend = () => { if (running) stopSpeech(); };
       try { sr.start(); } catch {}
@@ -197,6 +249,10 @@ export function installSpeech() {
       if (btn) btn.disabled = true; // debounce
       try {
         running = true;
+        // Flip UI + legacy speech gate immediately
+        try { document.body.classList.add('listening'); } catch {}
+        try { window.HUD?.bus?.emit('speech:toggle', true); } catch {}
+        try { window.speechOn = true; } catch {}
         setListeningUi(true);
         try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
         const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
@@ -227,6 +283,10 @@ export function installSpeech() {
         hidePreroll();
         await doAutoRecordStop();
         setReadyUi();
+        // Flip UI + legacy speech gate off
+        try { document.body.classList.remove('listening'); } catch {}
+        try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}
+        try { window.speechOn = false; } catch {}
         try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
       } finally {
         if (btn) btn.disabled = false;
