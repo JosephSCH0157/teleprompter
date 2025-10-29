@@ -1,4 +1,4 @@
-import type { InputAdapter, AdapterStatus, VadFeature } from '../types';
+import type { AdapterStatus, InputAdapter, VadFeature } from '../types';
 
 export function createVadEventAdapter(): InputAdapter {
   let ready = false;

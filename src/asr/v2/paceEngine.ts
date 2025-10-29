@@ -1,4 +1,4 @@
-import type { PaceEngine, PaceMode, PaceCaps, Tempo } from './types';
+import type { PaceCaps, PaceEngine, PaceMode, Tempo } from './types';
 
 function clamp(n: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, n)); }
 
