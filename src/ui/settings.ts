@@ -30,6 +30,24 @@ export function mountSettings(rootEl: HTMLElement | null) {
     // Bind Hybrid gate preference select
     try { bindHybridGateSetting(rootEl); } catch {}
 
+    // Inline link: Hybrid row → jump to ASR settings card
+    try {
+      rootEl.addEventListener('click', (e: Event) => {
+        const t = e.target as HTMLElement | null;
+        if (t && (t as HTMLElement).id === 'linkAsrSettings') {
+          e.preventDefault();
+          try {
+            // ensure Media tab visible
+            rootEl.querySelectorAll('[data-tab-content]')?.forEach((c) => ((c as HTMLElement).style.display = 'none'));
+            const media = rootEl.querySelector('[data-tab-content="media"]') as HTMLElement | null;
+            if (media) media.style.display = '';
+            const sec = document.getElementById('asrSettings');
+            if (sec) { try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { sec.scrollIntoView(); } }
+          } catch {}
+        }
+      }, { capture: true });
+    } catch {}
+
     // Legacy compatibility: mirror minimal font size/line height controls if present
     try {
       const fsS = document.getElementById('settingsFontSize') as HTMLInputElement | null;

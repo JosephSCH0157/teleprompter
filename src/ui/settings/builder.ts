@@ -89,6 +89,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <option value="db_and_vad">VAD and dB</option>
           </select>
         </label>
+        <a id="linkAsrSettings" href="#asrSettings" class="settings-link" style="margin-left:12px">ASR settings</a>
       </div>
     </div>
 
