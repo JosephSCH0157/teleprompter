@@ -338,6 +338,18 @@ body.ck::after{
 .obs-test-error{background:rgba(224,62,62,0.06);color:#ffd6d6;border:1px solid rgba(224,62,62,0.12)}
 
 /* Settings: consistent checkbox label alignment/visibility */
+
+/* Typography runtime hook (last wins) */
+#viewer .script p,
+#viewer .script .tp-line {
+    font-family: var(--tp-font-family);
+    font-size: var(--tp-font-size);
+    line-height: var(--tp-line-height);
+    font-weight: var(--tp-weight);
+    letter-spacing: var(--tp-letter-spacing);
+    word-spacing: var(--tp-word-spacing);
+    color: var(--tp-fg);
+}
 .tp-check{display:inline-flex;align-items:center;gap:.5rem}
 .tp-check input{vertical-align:middle}
 
