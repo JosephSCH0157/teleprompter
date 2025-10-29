@@ -574,6 +574,17 @@
         S.subscribe('devHud', v => {
           try {
             if (devHud && devHud.checked !== !!v) devHud.checked = !!v;
+            // Show/hide the modern HUD (installed by debug-tools)
+            try {
+              if (v && typeof window.__tpInstallHUD === 'function' && !window.__tpHud) {
+                window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+              }
+              if (window.__tpHud) {
+                if (v) { try { window.__tpHud.show && window.__tpHud.show(); } catch {} }
+                else { try { window.__tpHud.hide && window.__tpHud.hide(); } catch {} }
+              }
+            } catch {}
+            // Back-compat: toggle legacy mount visibility if present
             const hud = document.getElementById('hud-root');
             if (hud) hud.style.display = v ? '' : 'none';
           } catch {}

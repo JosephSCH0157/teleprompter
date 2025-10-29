@@ -31,7 +31,35 @@ import '../ui/scripts-ui.js';
 try {
   if (window?.__TP_BOOT_INFO?.isDev) {
   // Load debug helper dynamically in dev
-    import('../debug-tools.js').catch(() => {});
+    import('../debug-tools.js')
+      .then(() => {
+        // If the advanced setting is enabled, auto-install HUD; also subscribe to toggle
+        try {
+          const S = window.__tpStore || null;
+          const ensureHud = (on) => {
+            try {
+              // Install once
+              if (on && typeof window.__tpInstallHUD === 'function' && !window.__tpHud) {
+                window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+              }
+              // Show/hide if instance exists
+              if (window.__tpHud) {
+                if (on) { try { window.__tpHud.show && window.__tpHud.show(); } catch {} }
+                else { try { window.__tpHud.hide && window.__tpHud.hide(); } catch {} }
+              }
+            } catch {}
+          };
+          // Apply current preference (if store available)
+          try { if (S && typeof S.get === 'function') ensureHud(!!S.get('devHud')); } catch {}
+          // Subscribe for future changes
+          try { if (S && typeof S.subscribe === 'function') S.subscribe('devHud', (v) => ensureHud(!!v)); } catch {}
+          // Fallback: if no store yet, attempt a best-effort install when DEV flag is present
+          if (!S) {
+            try { ensureHud(true); } catch {}
+          }
+        } catch {}
+      })
+      .catch(() => {});
   // Load legacy self-checks (provides window.runSelfChecks)
   import('../ui/selfChecks.js').catch(() => {});
     // Install safe no-op shims so early UI clicks never throw before adapters/media load
