@@ -105,10 +105,21 @@ export function installSpeech() {
       const SRAvail = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
       const hasGlobalOrch = !!(window.__tpSpeechOrchestrator);
       const force = (() => { try { return localStorage.getItem('tp_speech_force') === '1'; } catch {} return false; })();
+      const ciGuard = (() => {
+        try {
+          const ls = localStorage.getItem('tp_ci');
+          if (ls === '1') return true;
+        } catch {}
+        try {
+          const sp = new URLSearchParams(location.search);
+          if (sp.get('ci') === '1') return true;
+        } catch {}
+        return false;
+      })();
 
       let hasOrchestrator = hasGlobalOrch;
-      if (!hasOrchestrator) {
-        // Best-effort existence probe without loading it
+      if (!hasOrchestrator && !ciGuard) {
+        // Best-effort existence probe without loading it (skip under CI to avoid 404 noise)
         try {
           const res = await fetch('/speech/orchestrator.js', { method: 'HEAD', cache: 'no-store' });
           hasOrchestrator = !!res && res.ok;
@@ -119,6 +130,8 @@ export function installSpeech() {
       const canUse = supported || force;
 
       if (canUse) setReadyUi(); else setUnsupportedUi();
+      // Stash a flag for start path to decide whether to attempt dynamic import
+      try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
     } catch {}
   })();
 
@@ -162,18 +175,21 @@ export function installSpeech() {
         return;
       }
       try {
-        const mod = await import('/speech/orchestrator.js');
-        if (mod?.startOrchestrator) {
-          rec = await mod.startOrchestrator();
-          // Orchestrator bridge: subscribe to events if available
-          try {
-            if (rec && typeof rec.on === 'function') {
-              try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
-              try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
-            }
-          } catch {}
-          try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
-          return;
+        // Attempt dynamic import only if probed as present and not under CI
+        if (window.__tpSpeechCanDynImport) {
+          const mod = await import('/speech/orchestrator.js');
+          if (mod?.startOrchestrator) {
+            rec = await mod.startOrchestrator();
+            // Orchestrator bridge: subscribe to events if available
+            try {
+              if (rec && typeof rec.on === 'function') {
+                try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
+                try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
+              }
+            } catch {}
+            try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
+            return;
+          }
         }
       } catch {}
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

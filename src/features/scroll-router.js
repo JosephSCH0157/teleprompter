@@ -131,6 +131,15 @@ function applyGate(){
       chip.setAttribute('data-state', stateTxt.toLowerCase());
     }
   } catch {}
+  // Reflect user intent on the main Auto button label
+  try {
+    const btn = document.getElementById('autoToggle');
+    if (btn) {
+      btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+      btn.setAttribute('aria-pressed', String(!!userEnabled));
+      btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
+    }
+  } catch {}
 }
 
 function hybridHandleDb(db) {
@@ -313,7 +322,9 @@ export function installScrollRouter() {
   } catch {}
 
   // Initialize userEnabled from current Auto state and apply once
-  try { userEnabled = !!(Auto.getState && Auto.getState().enabled); } catch {}
+  try {
+    if (state.mode === 'hybrid') userEnabled = true; else userEnabled = !!(Auto.getState && Auto.getState().enabled);
+  } catch {}
   applyGate();
 }
 
