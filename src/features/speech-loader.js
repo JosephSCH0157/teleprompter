@@ -7,7 +7,7 @@ let rec = null; // SR instance or orchestrator handle
 // (dynamic import of '/speech/orchestrator.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
-function startWebSpeech() {
+function _startWebSpeech() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
     try { console.warn('[speech] Web Speech not available'); } catch {}
@@ -34,6 +34,7 @@ function setReadyUi() {
     if (btn) {
       btn.disabled = false;
       btn.title = 'Start speech sync';
+      try { btn.textContent = 'Start speech sync'; } catch {}
     }
     if (chip) chip.textContent = 'Speech: ready';
     try { document.body.classList.add('speech-ready'); } catch {}
@@ -97,6 +98,7 @@ export function installSpeech() {
   document.addEventListener('click', async (e) => {
     const t = e && e.target;
     try { if (!t?.closest?.('#recBtn')) return; } catch { return; }
+    const btn = document.getElementById('recBtn');
 
   const S = window.__tpStore;
   const HUD = window.HUD || window.__tpHud;
@@ -118,54 +120,62 @@ export function installSpeech() {
       } catch {}
     }
 
+    async function startBackend() {
+      if (window.__tpSpeechOrchestrator?.start) {
+        rec = await window.__tpSpeechOrchestrator.start();
+        return;
+      }
+      try {
+        const mod = await import('/speech/orchestrator.js');
+        if (mod?.startOrchestrator) { rec = await mod.startOrchestrator(); return; }
+      } catch {}
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) throw new Error('NoSpeechBackend');
+      const sr = new SR();
+      sr.interimResults = true;
+      sr.continuous = true;
+      sr.onresult = (e) => { try { (HUD?.log || console.debug)?.('speech', { results: e?.results?.length || 0 }); } catch {} };
+      sr.onerror = (e) => { try { (HUD?.log || console.warn)?.('speech', { error: e?.error || String(e) }); } catch {} };
+      sr.onend = () => { if (running) stopSpeech(); };
+      try { sr.start(); } catch {}
+      rec = sr;
+    }
+
     async function startSpeech() {
       if (running) return;
-      running = true;
-      setListeningUi(true);
-      try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
-
+      if (btn && btn.disabled) return;
+      if (btn) btn.disabled = true; // debounce
       try {
-        if (window.__tpSpeechOrchestrator && typeof window.__tpSpeechOrchestrator.start === 'function') {
-          rec = await window.__tpSpeechOrchestrator.start();
-        } else {
-          // Try to load orchestrator if present on server
-          try {
-            const mod = await import('/speech/orchestrator.js');
-            if (mod?.startOrchestrator) {
-              rec = await mod.startOrchestrator();
-            } else {
-              // Fallback to Web Speech
-              const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-              if (SR) {
-                const r = new SR();
-                r.interimResults = true;
-                r.continuous = true;
-                r.onresult = (e) => { try { (HUD?.log || console.debug)?.('speech', { onresult: true, len: e?.results?.length || 0 }); } catch {} };
-                r.onerror = (e) => { try { (HUD?.log || console.warn)?.('speech', { error: e?.error || String(e) }); } catch {} };
-                r.onend = () => { if (running) stopSpeech(); };
-                try { r.start(); } catch {}
-                rec = { stop: () => { try { r.stop(); } catch {} } };
-              } else {
-                rec = startWebSpeech();
-              }
-            }
-          } catch (e) {
-            (HUD?.log || console.warn)?.('speech', { startError: String(e?.message || e) });
-          }
-        }
-      } catch {}
-
-      await doAutoRecordStart();
+        running = true;
+        setListeningUi(true);
+        try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
+        await startBackend();
+        await doAutoRecordStart();
+      } catch (e) {
+        running = false;
+        setListeningUi(false);
+        setReadyUi();
+        try { (HUD?.log || console.warn)?.('speech', { startError: String(e?.message || e) }); } catch {}
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     async function stopSpeech() {
       if (!running) return;
-      running = false;
-      setListeningUi(false);
-      try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
-      try { rec?.stop?.(); } catch {}
-      rec = null;
-      await doAutoRecordStop();
+      if (btn && btn.disabled) return;
+      if (btn) btn.disabled = true; // debounce
+      try {
+        running = false;
+        setListeningUi(false);
+        try { rec?.stop?.(); } catch {}
+        rec = null;
+        await doAutoRecordStop();
+        setReadyUi();
+        try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     if (!running) await startSpeech(); else await stopSpeech();
