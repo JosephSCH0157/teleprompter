@@ -61,6 +61,7 @@
   '  <div class="row" style="align-items:center;gap:10px">',
   '    <button id="asrCalibBtn" class="chip">Start calibration</button>',
   '    <label><input type="checkbox" id="asrApplyHybrid"/> Apply to Hybrid Gate</label>',
+  '    <span id="asrCalibProgress" class="microcopy" style="margin-left:4px;color:#9fb4c9;font-size:12px">Ready</span>',
   '  </div>',
   '  <div class="row settings-small" id="asrCalibReadout">',
   '    Noise: <strong id="asrNoiseDb">—</strong> • Speech: <strong id="asrSpeechDb">—</strong> • ton: <strong id="asrTonDb">—</strong> • toff: <strong id="asrToffDb">—</strong>',
@@ -554,6 +555,7 @@
       try {
         const btn = q('asrCalibBtn');
         const chk = q('asrApplyHybrid');
+        const prog = q('asrCalibProgress');
         const outNoise = q('asrNoiseDb');
         const outSpeech = q('asrSpeechDb');
         const outTon = q('asrTonDb');
@@ -585,19 +587,40 @@
         });
         const avg = (arr) => { if (!arr || !arr.length) return NaN; return arr.reduce((a,b)=>a+b,0)/arr.length; };
 
+        function startPhase(label, ms){
+          try {
+            if (!prog) return () => {};
+            const t0 = Date.now();
+            const update = () => {
+              const elapsed = Date.now() - t0;
+              const rem = Math.max(0, ms - elapsed);
+              const secs = Math.ceil(rem / 1000);
+              prog.textContent = label + ' ' + secs + 's';
+            };
+            update();
+            const id = setInterval(update, 200);
+            return () => { try { clearInterval(id); } catch {} };
+          } catch { return () => {}; }
+        }
+
         async function runCalibration(){
           try {
             // Ensure mic is requested so dB events are flowing
             try { if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') await window.__tpMic.requestMic(); } catch {}
             if (btn) { btn.disabled = true; btn.textContent = 'Calibrating…'; }
+            if (prog) { prog.textContent = 'Preparing…'; }
             const atk = Math.max(20, Math.min(500, parseInt(attackInp && attackInp.value || '80', 10) || 80));
             const rel = Math.max(80, Math.min(1000, parseInt(releaseInp && releaseInp.value || '300', 10) || 300));
             // Phase 1: room noise
+            const stop1 = startPhase('Quiet…', 1500);
             const noiseVals = await measure(1500);
+            stop1 && stop1();
             const noise = avg(noiseVals);
             if (outNoise) outNoise.textContent = Number.isFinite(noise) ? (noise.toFixed(0) + ' dB') : '—';
             // Phase 2: speech
+            const stop2 = startPhase('Speak…', 1800);
             const speechVals = await measure(1800);
+            stop2 && stop2();
             const speech = avg(speechVals);
             if (outSpeech) outSpeech.textContent = Number.isFinite(speech) ? (speech.toFixed(0) + ' dB') : '—';
             // Derive thresholds
@@ -618,6 +641,7 @@
             // Notify listeners (router can re-read profile)
             try { window.dispatchEvent(new CustomEvent('tp:vad:profile', { detail: profile })); } catch {}
             if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; }
+            if (prog) { prog.textContent = 'Saved'; setTimeout(() => { try { if (prog.textContent === 'Saved') prog.textContent = 'Ready'; } catch {} }, 1500); }
             try { if (window.toast) window.toast('Calibration saved', { type:'ok' }); } catch {}
           } catch {}
         }
