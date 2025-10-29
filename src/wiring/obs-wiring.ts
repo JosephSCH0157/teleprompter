@@ -7,94 +7,107 @@ import * as rec from '../../recorders.js';
 
 export function initObsUI() {
   const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
+  const pillEl = () => (byId<HTMLElement>('obsStatusText') || byId<HTMLElement>('obsStatus'));
+  const testMsgEl = () => byId<HTMLElement>('settingsObsTestMsg');
 
-  // Inputs (use either Settings overlay or main panel ids)
-  const urlIn  = (byId<HTMLInputElement>('settingsObsUrl')    || byId<HTMLInputElement>('obsUrl'));
-  const hostIn = byId<HTMLInputElement>('settingsObsHost');
-  const passIn = (byId<HTMLInputElement>('settingsObsPassword')|| byId<HTMLInputElement>('obsPassword'));
-  const enable = (byId<HTMLInputElement>('settingsEnableObs')  || byId<HTMLInputElement>('enableObs'));
-
-  // Buttons / status
-  const testBtn  = byId<HTMLButtonElement>('settingsObsTest');
-  const syncBtn  = byId<HTMLButtonElement>('settingsObsSyncTest');
-  const pokeBtn  = byId<HTMLButtonElement>('settingsObsPoke'); // optional
-  const pill     = (byId<HTMLElement>('obsStatusText') || byId<HTMLElement>('obsStatus'));
-  const testMsg  = byId<HTMLElement>('settingsObsTestMsg');
-
-  const getUrl  = () => {
+  const readUrl = () => {
+    const urlIn = (byId<HTMLInputElement>('settingsObsUrl') || byId<HTMLInputElement>('obsUrl'));
+    const hostIn = byId<HTMLInputElement>('settingsObsHost');
     const u = urlIn?.value?.trim();
     if (u) return u;
     const h = hostIn?.value?.trim();
     if (h) return `ws://${h}${/:[0-9]+$/.test(h) ? '' : ':4455'}`;
     return 'ws://127.0.0.1:4455';
   };
-  const getPass = () => (passIn?.value ?? '');
+  const readPass = () => (byId<HTMLInputElement>('settingsObsPassword')?.value ?? byId<HTMLInputElement>('obsPassword')?.value ?? '');
+  const readEnabled = () => !!(byId<HTMLInputElement>('settingsEnableObs')?.checked || byId<HTMLInputElement>('enableObs')?.checked);
 
-  // Initialize recorder bridge with UI hooks
+  // Initialize recorder bridge with dynamic getters
   try {
     rec.init({
-      getUrl,
-      getPass,
-      isEnabled: () => !!(enable?.checked),
+      getUrl: readUrl,
+      getPass: readPass,
+      isEnabled: readEnabled,
       onStatus: (txt: string, ok: boolean) => {
-        try { if (pill) pill.textContent = ok ? 'connected' : (txt || 'disconnected'); } catch {}
+        try { const p = pillEl(); if (p) p.textContent = ok ? 'connected' : (txt || 'disconnected'); } catch {}
       },
-      onRecordState: (_active: boolean) => { /* hook if needed */ },
+      onRecordState: (_active: boolean) => {},
     });
   } catch {}
 
-  // Live config updates → apply to bridge
-  try { enable?.addEventListener('change', () => rec.setEnabled(!!enable.checked)); } catch {}
-  try { urlIn?.addEventListener('change', () => rec.reconfigure(parseWsUrl(getUrl(), getPass()))); } catch {}
-  try { hostIn?.addEventListener('change', () => rec.reconfigure(parseWsUrl(getUrl(), getPass()))); } catch {}
-  try { passIn?.addEventListener('change', () => rec.reconfigure({ password: getPass() })); } catch {}
-
-  // “Test” = connect with testOnly=true under the hood
+  // Delegated listeners so it works even if Settings overlay mounts later
   try {
-    testBtn?.addEventListener('click', async () => {
-      clearMsg(); pill && (pill.textContent = 'testing…');
-      try {
-        const ok = await rec.test();
-        if (!ok) throw new Error('test failed');
-        okMsg('OBS test: OK'); pill && (pill.textContent = 'ok');
-      } catch (e: any) {
-        errMsg('OBS test failed: ' + (e?.message || String(e))); pill && (pill.textContent = 'failed');
+    document.addEventListener('change', (e) => {
+      const t = e.target as HTMLElement | null;
+      const id = (t as any)?.id || '';
+      if (id === 'settingsEnableObs' || id === 'enableObs') {
+        try { rec.setEnabled(readEnabled()); } catch {}
       }
-    });
+      if (id === 'settingsObsUrl' || id === 'obsUrl' || id === 'settingsObsHost') {
+        try { rec.reconfigure(parseWsUrl(readUrl(), readPass())); } catch {}
+      }
+      if (id === 'settingsObsPassword' || id === 'obsPassword') {
+        try { rec.reconfigure({ password: readPass() } as any); } catch {}
+      }
+    }, { capture: true });
   } catch {}
 
-  // “Sync & Test” = push current URL/pass to bridge, then test
+  // Delegated Test/Sync/Poke buttons
   try {
-    syncBtn?.addEventListener('click', async () => {
-      clearMsg();
-      try {
-        await rec.reconfigure(parseWsUrl(getUrl(), getPass()));
-        const ok = await rec.test();
-        if (!ok) throw new Error('test failed');
-        okMsg('OBS sync+test: OK'); pill && (pill.textContent = 'ok');
-      } catch (e: any) {
-        errMsg('OBS sync+test failed: ' + (e?.message || String(e)));
+    document.addEventListener('click', async (e) => {
+      const t = e.target as HTMLElement | null;
+      const id = (t as any)?.id || '';
+      const pill = pillEl();
+      const testMsg = testMsgEl();
+      const clearMsg = () => { try { if (testMsg) { testMsg.textContent = ''; testMsg.classList.remove('obs-test-ok','obs-test-error'); } } catch {} };
+      const okMsg = (s: string) => { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-ok'); } } catch {} };
+      const errMsg = (s: string) => { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-error'); } } catch {} };
+
+      if (id === 'settingsObsTest') {
+        clearMsg(); if (pill) pill.textContent = 'testing…';
+        try {
+          await rec.reconfigure(parseWsUrl(readUrl(), readPass()));
+          const ok = await rec.test();
+          if (!ok) throw new Error('test failed');
+          okMsg('OBS test: OK'); if (pill) pill.textContent = 'ok';
+        } catch (err: any) {
+          errMsg('OBS test failed: ' + (err?.message || String(err))); if (pill) pill.textContent = 'failed';
+        }
       }
-    });
+      if (id === 'settingsObsSyncTest') {
+        clearMsg(); if (pill) pill.textContent = 'testing…';
+        try {
+          await rec.reconfigure(parseWsUrl(readUrl(), readPass()));
+          const ok = await rec.test();
+          if (!ok) throw new Error('test failed');
+          okMsg('OBS sync+test: OK'); if (pill) pill.textContent = 'ok';
+        } catch (err: any) {
+          errMsg('OBS sync+test failed: ' + (err?.message || String(err))); if (pill) pill.textContent = 'failed';
+        }
+      }
+      if (id === 'settingsObsPoke') {
+        clearMsg();
+        try {
+          const ok = await rec.test();
+          if (!ok) throw new Error('poke failed');
+          okMsg('OBS poke: OK');
+        } catch (err: any) {
+          errMsg('OBS poke failed: ' + (err?.message || String(err)));
+        }
+      }
+    }, { capture: true });
   } catch {}
 
-  // Optional: “Poke” (no-op call to verify RPC works)
+  // Reflect recorder status in the pill whenever it changes
   try {
-    pokeBtn?.addEventListener('click', async () => {
-      clearMsg();
+    window.addEventListener('tp-recorder-status' as any, (e: any) => {
       try {
-        const ok = await rec.test();
-        if (!ok) throw new Error('poke failed');
-        okMsg('OBS poke: OK');
-      } catch (e: any) {
-        errMsg('OBS poke failed: ' + (e?.message || String(e)));
-      }
+        const p = pillEl();
+        const d = e?.detail || {};
+        if (p) p.textContent = d.ok ? 'connected' : (d.state || 'disconnected');
+      } catch {}
     });
   } catch {}
-
-  function clearMsg() { try { if (testMsg) { testMsg.textContent = ''; testMsg.classList.remove('obs-test-ok','obs-test-error'); } } catch {} }
-  function okMsg(s: string) { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-ok'); } } catch {} }
-  function errMsg(s: string) { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-error'); } } catch {} }
 
   function parseWsUrl(u: string, pass: string) {
     try {
@@ -108,7 +121,7 @@ export function initObsUI() {
     const S = (window as any).__tpStore;
     if (S && typeof S.subscribe === 'function') {
       try { S.subscribe('obsEnabled', (v: any) => { try { rec.setEnabled(!!v); } catch {} }); } catch {}
-      try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : getUrl(), getPass())); } catch {} }); } catch {}
+      try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
       try { S.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
     }
   } catch {}
