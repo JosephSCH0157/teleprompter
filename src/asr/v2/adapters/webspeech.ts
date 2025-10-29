@@ -7,6 +7,8 @@ export function createWebSpeechAdapter(): InputAdapter {
   const subs = new Set<(f: WebSpeechFeature) => void>();
   let rec: any = null;
   let started = false;
+  let restartCount = 0;
+  let firstRestartAt = 0;
 
   function status(): AdapterStatus { return { kind: 'webspeech', ready, error }; }
 
@@ -33,7 +35,16 @@ export function createWebSpeechAdapter(): InputAdapter {
         } catch (e) {}
       };
       rec.onerror = (e: any) => { const msg = String(e?.error || e?.message || 'error'); emitAsrError({ code: 'webspeech', message: msg }); error = msg; };
-      rec.onend = () => { /* auto-restart logic could be added later */ };
+      rec.onend = () => {
+        try {
+          const now = performance.now();
+          if (!firstRestartAt || (now - firstRestartAt) > 60000) { firstRestartAt = now; restartCount = 1; }
+          else restartCount++;
+          if (restartCount >= 2) { emitAsrError({ code: 'webspeech_restarts', message: 'Web Speech restarted' }); }
+        } catch {}
+        // optional: try to restart
+        try { rec.start?.(); } catch {}
+      };
       rec.start();
       ready = true; started = true;
     } catch (e: any) { error = String(e?.message || e); ready = false; }

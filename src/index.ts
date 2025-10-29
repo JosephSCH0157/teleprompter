@@ -25,6 +25,7 @@ import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
+import './asr/v2/prompts';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
