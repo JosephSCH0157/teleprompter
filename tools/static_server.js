@@ -73,7 +73,18 @@ server.on('error', (err) => {
   if (err && err.code === 'EADDRINUSE') {
     // Port already in use: assume another step already started the server.
     console.log(`[static-server] port ${PORT} already in use on ${HOST}; assuming server already running`);
-    process.exit(0); // exit successfully so CI doesn't fail
+    // If this script is being required by another module (e.g., smoke_test.js),
+    // don't terminate the parent process. Only exit when executed directly.
+    try {
+      if (require && require.main === module) {
+        process.exit(0); // exit successfully so CI doesn't fail
+      }
+      // When required, just return early and let the caller continue.
+      return;
+    } catch {
+      // In non-CommonJS contexts, fall back to non-fatal behavior
+      return;
+    }
   }
   console.error('[static-server] error:', err);
   process.exit(1);
