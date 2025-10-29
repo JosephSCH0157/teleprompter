@@ -1,9 +1,9 @@
 // src/asr/v2/orchestrator.js
 // Minimal orchestrator: VAD assist → enable/disable Auto; WPM assist → set speed
+import { createVadAdapter } from './adapters/vad.js';
+import { createFeatureSynth } from './featureSynth.js';
 import { createMotor } from './motor.js';
 import { createPaceEngine } from './paceEngine.js';
-import { createFeatureSynth } from './featureSynth.js';
-import { createVadAdapter } from './adapters/vad.js';
 
 export function createOrchestrator() {
   const motor = createMotor();

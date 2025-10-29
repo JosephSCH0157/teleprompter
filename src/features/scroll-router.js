@@ -3,8 +3,8 @@
 // Modes: 'timed' (existing Auto), 'step', 'hybrid' (voice-gated Auto), stubs for 'wpm','asr','reh'
 
 // Dependencies: existing Auto controller (autoscroll.js) and dB events (tp:db) from mic.js
-import * as Auto from './autoscroll.js';
 import { createOrchestrator } from '../asr/v2/orchestrator.js';
+import * as Auto from './autoscroll.js';
 
 const LS_KEY = 'scrollMode';
 const DEFAULTS = {
