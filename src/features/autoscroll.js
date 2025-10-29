@@ -61,12 +61,12 @@ export function setEnabled(v) {
 }
 
 export function inc() { speed = Math.min(200, speed + 1); if (enabled) loop(); }
-export function dec() { speed = Math.max(1, speed - 1);  if (enabled) loop(); }
+export function dec() { speed = Math.max(5, speed - 1);  if (enabled) loop(); }
 export function getState() { return { enabled, speed }; }
 
 export function setSpeed(pxPerSec) {
   const v = Number(pxPerSec);
-  if (Number.isFinite(v)) speed = Math.max(1, Math.min(200, v));
+  if (Number.isFinite(v)) speed = Math.max(5, Math.min(200, v));
 }
 
 export function nudge(pixels) {

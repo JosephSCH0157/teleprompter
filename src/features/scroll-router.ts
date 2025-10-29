@@ -160,6 +160,15 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled);
       const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'}`;
       setAutoChip(userEnabled ? 'on' : 'manual', detail);
+      // Reflect user intent on the main Auto button label
+      try {
+        const btn = document.getElementById('autoToggle');
+        if (btn) {
+          btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+          btn.setAttribute('aria-pressed', String(!!userEnabled));
+          btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
+        }
+      } catch {}
       return;
     }
     let gateWanted = false;
@@ -174,6 +183,15 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
     const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
+    // Reflect user intent on the main Auto button label (On even if gated Paused)
+    try {
+      const btn = document.getElementById('autoToggle');
+      if (btn) {
+        btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+        btn.setAttribute('aria-pressed', String(!!userEnabled));
+        btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
+      }
+    } catch {}
   }
 
   onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
@@ -234,8 +252,13 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     }, { capture: true });
   } catch {}
 
-  // Ensure initial gate application
-  if (state.mode === 'hybrid') applyGate();
+  // Default Hybrid intent to ON at startup for parity with UX; apply once
+  if (state.mode === 'hybrid') {
+    userEnabled = true;
+    applyGate();
+  } else {
+    applyGate();
+  }
   // If ASR modes selected initially, ensure orchestrator
   if (state.mode === 'wpm' || state.mode === 'asr') ensureOrchestratorForMode();
 }

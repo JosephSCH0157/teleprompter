@@ -36,15 +36,11 @@ try {
 		try {
 			const onClick = (e: Event) => {
 				const t = e && (e.target as any);
-				try { if (t?.closest?.('#autoToggle')) return (Auto as any).toggle?.(); } catch {}
+				// The Scroll Router manages #autoToggle intent; avoid double-toggling here
 				try { if (t?.closest?.('#autoInc'))    return (Auto as any).inc?.(); } catch {}
 				try { if (t?.closest?.('#autoDec'))    return (Auto as any).dec?.(); } catch {}
 			};
 			document.addEventListener('click', onClick, { capture: true });
-			document.addEventListener('mousedown', (e) => {
-				const t = e && (e.target as any);
-				try { if (t?.closest?.('#autoToggle')) return (Auto as any).toggle?.(); } catch {}
-			}, { capture: true });
 		} catch {}
 
 		// Install the new Scroll Router (Step/Hybrid; WPM/ASR/Rehearsal stubs)
