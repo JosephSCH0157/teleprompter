@@ -790,6 +790,79 @@
           // After building, ensure tabs show active one
           const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
           showTab(active && active.getAttribute('data-tab') || 'general');
+          // Critical post-mount wiring for controls that require existing DOM
+          try {
+            // Mic buttons (fallback wiring in case init ran before content existed)
+            const reqBtn = q('settingsRequestMicBtn');
+            const relBtn = q('settingsReleaseMicBtn');
+            if (reqBtn && !reqBtn.dataset.wired) { reqBtn.dataset.wired='1'; reqBtn.addEventListener('click', async () => { try { await (window.__tpMic?.requestMic?.() || Promise.resolve()); } catch {} }); }
+            if (relBtn && !relBtn.dataset.wired) { relBtn.dataset.wired='1'; relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} }); }
+          } catch {}
+          try {
+            // Typography + width (idempotent wiring)
+            const fsS = q('settingsFontSize');
+            const lhS = q('settingsLineHeight');
+            const maxChMain = q('settingsMaxChMain');
+            const maxChDisp = q('settingsMaxChDisplay');
+            const applyVars = () => {
+              try {
+                const root = document.documentElement;
+                const fs = fsS && fsS.value ? Number(fsS.value) : NaN;
+                const lh = lhS && lhS.value ? Number(lhS.value) : NaN;
+                if (Number.isFinite(fs)) root.style.setProperty('--tp-font-size', String(fs) + 'px');
+                if (Number.isFinite(lh)) root.style.setProperty('--tp-line-height', String(lh));
+                try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+                // persist under tp_typography_v1 (main)
+                const KEY = 'tp_typography_v1';
+                const raw = localStorage.getItem(KEY);
+                const st = raw ? JSON.parse(raw) : {};
+                st.main = { ...(st.main||{}),
+                  ...(Number.isFinite(fs)?{fontSizePx:fs}:{ }),
+                  ...(Number.isFinite(lh)?{lineHeight:lh}:{ })
+                };
+                localStorage.setItem(KEY, JSON.stringify(st));
+                // immediate broadcast to display
+                const payload = { kind:'tp:typography', source:'main', display:'display', t: { fontSizePx: fs, lineHeight: lh } };
+                try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+                try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
+              } catch {}
+            };
+            if (fsS && !fsS.dataset.wired) { fsS.dataset.wired='1'; fsS.addEventListener('input', applyVars); }
+            if (lhS && !lhS.dataset.wired) { lhS.dataset.wired='1'; lhS.addEventListener('input', applyVars); }
+            const setRootMaxCh = (val) => {
+              try {
+                const n = Math.max(40, Math.min(140, Number(val)));
+                if (!Number.isFinite(n)) return;
+                document.documentElement.style.setProperty('--tp-maxch', String(n));
+                const KEY = 'tp_typography_v1';
+                const raw = localStorage.getItem(KEY);
+                const st = raw ? JSON.parse(raw) : {};
+                st.main = { ...(st.main||{}), maxLineWidthCh: n };
+                localStorage.setItem(KEY, JSON.stringify(st));
+                window.dispatchEvent(new Event('tp:lineMetricsDirty'));
+              } catch {}
+            };
+            const sendToDisplayTypography = (t) => {
+              try {
+                const payload = { kind:'tp:typography', source:'main', display:'display', t: { ...t } };
+                try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+                try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
+              } catch {}
+            };
+            if (maxChMain && !maxChMain.dataset.wired) { maxChMain.dataset.wired='1'; maxChMain.addEventListener('input', () => setRootMaxCh(maxChMain.value)); }
+            if (maxChDisp && !maxChDisp.dataset.wired) { maxChDisp.dataset.wired='1'; maxChDisp.addEventListener('input', () => {
+              try {
+                const n = Math.max(40, Math.min(140, Number(maxChDisp.value)));
+                if (!Number.isFinite(n)) return;
+                const KEY = 'tp_typography_v1';
+                const raw = localStorage.getItem(KEY);
+                const st = raw ? JSON.parse(raw) : {};
+                st.display = { ...(st.display||{}), maxLineWidthCh: n };
+                localStorage.setItem(KEY, JSON.stringify(st));
+                sendToDisplayTypography({ maxLineWidthCh: n });
+              } catch {}
+            }); }
+          } catch {}
         } catch {}
       };
     }
