@@ -339,17 +339,8 @@ body.ck::after{
 
 /* Settings: consistent checkbox label alignment/visibility */
 
-/* Typography runtime hook (last wins) */
-#viewer .script p,
-#viewer .script .tp-line {
-    font-family: var(--tp-font-family);
-    font-size: var(--tp-font-size);
-    line-height: var(--tp-line-height);
-    font-weight: var(--tp-weight);
-    letter-spacing: var(--tp-letter-spacing);
-    word-spacing: var(--tp-word-spacing);
-    color: var(--tp-fg);
-}
+/* Intentionally removed the redundant p/.tp-line last-wins block.
+   Typography now applies to actual .line nodes only in the block below. */
 
 /* Teleprompter typography — apply to actual line nodes */
 #viewer .script .line,
