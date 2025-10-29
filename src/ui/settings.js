@@ -27,6 +27,10 @@
         '    <label>Font size <input id="settingsFontSize" type="number" min="16" max="96" step="2" class="select-md"/></label>',
         '    <label>Line height <input id="settingsLineHeight" type="number" min="1.1" max="2" step="0.05" class="select-md"/></label>',
         '  </div>',
+        '  <div class="row">',
+        '    <label>Max line width (ch – Main)<input id="settingsMaxChMain" type="number" min="40" max="140" step="1" class="select-md" placeholder="95"/></label>',
+        '    <label>Max line width (ch – Display)<input id="settingsMaxChDisplay" type="number" min="40" max="140" step="1" class="select-md" placeholder="95"/></label>',
+        '  </div>',
         '  <div class="settings-small">Typography applies locally by default. Use Link to mirror changes.</div>',
         '  <label class="row" style="align-items:center;gap:8px;">',
         '    <input id="typoLink" type="checkbox"/> Link typography across displays (size & spacing)',
@@ -260,8 +264,31 @@
       try {
         const fsS = q('settingsFontSize');
         const lhS = q('settingsLineHeight');
+        const maxChMain = q('settingsMaxChMain');
+        const maxChDisp = q('settingsMaxChDisplay');
         const fsMain = q('fontSize');
         const lhMain = q('lineHeight');
+        const setRootMaxCh = (val) => {
+          try {
+            const n = Math.max(40, Math.min(140, Number(val)));
+            if (!Number.isFinite(n)) return;
+            document.documentElement.style.setProperty('--tp-maxch', String(n));
+            // persist under tp_typography_v1 for 'main'
+            const KEY = 'tp_typography_v1';
+            const raw = localStorage.getItem(KEY);
+            const st = raw ? JSON.parse(raw) : {};
+            st.main = { ...(st.main||{}), maxLineWidthCh: n };
+            localStorage.setItem(KEY, JSON.stringify(st));
+            window.dispatchEvent(new Event('tp:lineMetricsDirty'));
+          } catch {}
+        };
+        const sendToDisplayTypography = (t) => {
+          try {
+            const payload = { kind:'tp:typography', source:'main', display:'display', t: { ...t } };
+            try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+            try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
+          } catch {}
+        };
         const applyFromSettings = () => {
           try {
             if (fsS && fsMain) {
@@ -296,12 +323,42 @@
         };
         if (fsS) fsS.addEventListener('input', applyFromSettings);
         if (lhS) lhS.addEventListener('input', applyFromSettings);
+        if (maxChMain) maxChMain.addEventListener('input', () => { try { setRootMaxCh(maxChMain.value); } catch {} });
+        if (maxChDisp) maxChDisp.addEventListener('input', () => {
+          try {
+            const n = Math.max(40, Math.min(140, Number(maxChDisp.value)));
+            if (!Number.isFinite(n)) return;
+            // Persist under display bucket so it survives reload
+            const KEY = 'tp_typography_v1';
+            const raw = localStorage.getItem(KEY);
+            const st = raw ? JSON.parse(raw) : {};
+            st.display = { ...(st.display||{}), maxLineWidthCh: n };
+            localStorage.setItem(KEY, JSON.stringify(st));
+            // Immediate broadcast to display
+            sendToDisplayTypography({ maxLineWidthCh: n });
+          } catch {}
+        });
         // Initial sync: prefer existing main values or stored values
         try {
           const storedFS = (function(){ try { return localStorage.getItem('tp_font_size_v1'); } catch { return null; } })();
           const storedLH = (function(){ try { return localStorage.getItem('tp_line_height_v1'); } catch { return null; } })();
+          const KEY = 'tp_typography_v1';
+          const raw = localStorage.getItem(KEY);
+          const st = raw ? JSON.parse(raw) : {};
+          const ownMain = (st && st.main) || {};
+          const ownDisp = (st && st.display) || {};
           if (fsS) fsS.value = (fsMain && fsMain.value) || storedFS || '48';
           if (lhS) lhS.value = (lhMain && lhMain.value) || storedLH || '1.35';
+          // Hydrate maxCh inputs from computed style or store
+          try {
+            const cs = getComputedStyle(document.documentElement);
+            const curMax = parseFloat(cs.getPropertyValue('--tp-maxch'));
+            const mainVal = Number.isFinite(ownMain.maxLineWidthCh) ? ownMain.maxLineWidthCh : (Number.isFinite(curMax)?curMax:95);
+            if (maxChMain) maxChMain.value = String(mainVal);
+            // For display, use stored display value if available; otherwise show blank default
+            const dispVal = Number.isFinite(ownDisp.maxLineWidthCh) ? ownDisp.maxLineWidthCh : '';
+            if (maxChDisp) maxChDisp.value = dispVal === '' ? '' : String(dispVal);
+          } catch {}
           applyFromSettings();
         } catch {}
       } catch {}
