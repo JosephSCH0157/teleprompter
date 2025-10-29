@@ -7,6 +7,8 @@ export type AutoAPI = {
   inc?: () => void;
   dec?: () => void;
   setEnabled?: (_on: boolean) => void;
+  setSpeed?: (v: number) => void;
+  getState?: () => { enabled: boolean; speed: number };
 };
 
 export type ScrollRouterOpts = { auto: AutoAPI };
@@ -23,6 +25,11 @@ type Mode = typeof DEFAULTS.mode;
 
 const state: { mode: Mode } & typeof DEFAULTS = { ...DEFAULTS } as any;
 let viewer: HTMLElement | null = null;
+
+// Debug bypass: set via DevTools localStorage.setItem('tp_hybrid_bypass','1') to force gate open
+const isHybridBypass = () => {
+  try { return localStorage.getItem('tp_hybrid_bypass') === '1'; } catch { return false; }
+};
 
 function persistMode() {
   try { localStorage.setItem(LS_KEY, state.mode); } catch {}
@@ -184,7 +191,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       case 'db_or_vad':
       default:           gateWanted = dbGate || vadGate; break;
     }
-    const enabled = userEnabled && gateWanted;
+    const enabled = userEnabled && (isHybridBypass() ? true : gateWanted);
     if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
     const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
@@ -269,6 +276,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   // Default Hybrid intent to ON at startup; set initial label with stored speed and apply once
   if (state.mode === 'hybrid') {
     userEnabled = true;
+    // Seed engine speed from storage so ticks use the intended value
+    try { auto.setSpeed?.(getStoredSpeed()); } catch {}
     try {
       const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
       if (btn) {
@@ -293,5 +302,25 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
       if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
     });
+  } catch {}
+
+  // Global keybindings for speed tweaks — use the single setter
+  try {
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      try {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        const tag = (target.tagName || '').toLowerCase();
+        const isTyping = tag === 'input' || tag === 'textarea' || (target as any).isContentEditable;
+        if (isTyping) return;
+        const wantUp = e.key === '+' || e.code === 'NumpadAdd' || e.key === 'ArrowUp';
+        const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
+        if (!wantUp && !wantDown) return;
+        e.preventDefault();
+        const cur = Number(auto?.getState?.().speed) || getStoredSpeed();
+        const next = cur + (wantUp ? 5 : -5);
+        auto?.setSpeed?.(next);
+      } catch {}
+    }, { capture: true });
   } catch {}
 }

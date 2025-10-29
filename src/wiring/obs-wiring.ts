@@ -4,6 +4,7 @@
 
 // @ts-ignore - recorders.js is JS
 import * as rec from '../../recorders.js';
+import { obsTestConnect } from '../dev/obs-probe';
 
 export function initObsUI() {
   const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
@@ -66,10 +67,12 @@ export function initObsUI() {
       if (id === 'settingsObsTest') {
         clearMsg(); if (pill) pill.textContent = 'testing…';
         try {
-          await rec.reconfigure(parseWsUrl(readUrl(), readPass()));
-          const ok = await rec.test();
-          if (!ok) throw new Error('test failed');
-          okMsg('OBS test: OK'); if (pill) pill.textContent = 'ok';
+          const url = readUrl();
+          const pass = readPass();
+          // Run a real v5 handshake probe to validate connectivity
+          const { version } = await obsTestConnect(url, pass);
+          okMsg('OBS test: OK' + (version ? ` (v${version})` : ''));
+          if (pill) pill.textContent = version ? `connected (${version})` : 'connected';
         } catch (err: any) {
           errMsg('OBS test failed: ' + (err?.message || String(err))); if (pill) pill.textContent = 'failed';
         }
