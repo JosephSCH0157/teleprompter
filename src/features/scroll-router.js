@@ -135,9 +135,18 @@ function applyGate(){
   try {
     const btn = document.getElementById('autoToggle');
     if (btn) {
-      btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+      const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
+      if (!userEnabled) {
+        btn.textContent = 'Auto-scroll: Off';
+        btn.setAttribute('data-state','off');
+      } else if (enabled) {
+        btn.textContent = `Auto-scroll: On — ${s} px/s`;
+        btn.setAttribute('data-state','on');
+      } else {
+        btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+        btn.setAttribute('data-state','paused');
+      }
       btn.setAttribute('aria-pressed', String(!!userEnabled));
-      btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
     }
   } catch {}
 }
@@ -323,9 +332,30 @@ export function installScrollRouter() {
 
   // Initialize userEnabled from current Auto state and apply once
   try {
-    if (state.mode === 'hybrid') userEnabled = true; else userEnabled = !!(Auto.getState && Auto.getState().enabled);
+    if (state.mode === 'hybrid') {
+      userEnabled = true;
+      const btn = document.getElementById('autoToggle');
+      if (btn) {
+        const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
+        btn.dataset.state = 'on';
+        btn.textContent = `Auto-scroll: On — ${s} px/s`;
+      }
+    } else {
+      userEnabled = !!(Auto.getState && Auto.getState().enabled);
+    }
   } catch {}
   applyGate();
+  // Keep the label in sync with speed changes
+  try {
+    document.addEventListener('tp:autoSpeed', (e)=>{
+      const btn = document.getElementById('autoToggle');
+      if (!btn) return;
+      const ds = btn.dataset && btn.dataset.state || '';
+      const s = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
+      if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
+      if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+    });
+  } catch {}
 }
 
 

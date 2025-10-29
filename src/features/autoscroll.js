@@ -60,13 +60,28 @@ export function setEnabled(v) {
   loop();
 }
 
-export function inc() { speed = Math.min(200, speed + 1); if (enabled) loop(); }
-export function dec() { speed = Math.max(5, speed - 1);  if (enabled) loop(); }
+export function inc() { setSpeed(speed + 1); if (enabled) loop(); }
+export function dec() { setSpeed(speed - 1);  if (enabled) loop(); }
 export function getState() { return { enabled, speed }; }
 
 export function setSpeed(pxPerSec) {
   const v = Number(pxPerSec);
-  if (Number.isFinite(v)) speed = Math.max(5, Math.min(200, v));
+  if (!Number.isFinite(v)) return;
+  speed = Math.max(5, Math.min(200, v));
+  // Persist and notify engine if present
+  try { localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
+  try { window.__scrollCtl?.setSpeed?.(speed); } catch {}
+  // Tell listeners (router, UI) about speed change
+  try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail: { speed } })); } catch {}
+  // If UI is in 'on' state, reflect the current speed on the button
+  try {
+    const btn = document.getElementById('autoToggle');
+    const st = btn?.dataset?.state || '';
+    if (btn && st) {
+      if (st === 'on') btn.textContent = `Auto-scroll: On — ${speed} px/s`;
+      else if (st === 'paused') btn.textContent = `Auto-scroll: Paused — ${speed} px/s`;
+    }
+  } catch {}
 }
 
 export function nudge(pixels) {

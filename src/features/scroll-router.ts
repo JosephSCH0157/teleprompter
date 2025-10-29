@@ -516,6 +516,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (detail) el.title = detail;
   }
 
+  const getStoredSpeed = (): number => {
+    try { return Number(localStorage.getItem('tp_auto_speed') || '60') || 60; } catch { return 60; }
+  };
+
   function applyGate() {
     if (state.mode !== 'hybrid') {
       // Outside Hybrid, honor user toggle directly
@@ -524,9 +528,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       setAutoChip(userEnabled ? 'on' : 'manual', detail);
       // Reflect user intent on the main Auto button label
       try {
-        const btn = document.getElementById('autoToggle');
+        const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
         if (btn) {
-          btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+          if (userEnabled) btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
+          else btn.textContent = 'Auto-scroll: Off';
           btn.setAttribute('aria-pressed', String(!!userEnabled));
           btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
         }
@@ -545,13 +550,22 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
     const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
-    // Reflect user intent on the main Auto button label (On even if gated Paused)
+    // Reflect user intent on the main Auto button label with speed and paused state
     try {
-      const btn = document.getElementById('autoToggle');
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
       if (btn) {
-        btn.textContent = userEnabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+        const s = getStoredSpeed();
+        if (!userEnabled) {
+          btn.textContent = 'Auto-scroll: Off';
+          btn.setAttribute('data-state', 'off');
+        } else if (enabled) {
+          btn.textContent = `Auto-scroll: On — ${s} px/s`;
+          btn.setAttribute('data-state', 'on');
+        } else {
+          btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+          btn.setAttribute('data-state', 'paused');
+        }
         btn.setAttribute('aria-pressed', String(!!userEnabled));
-        btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
       }
     } catch {}
   }
