@@ -17,13 +17,13 @@ import './ui/settings/asrWizard';
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
+import { startVadAdapter } from './asr/vadAdapter';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
 import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
-import { startVadAdapter } from './asr/vadAdapter';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
