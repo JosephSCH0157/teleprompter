@@ -562,3 +562,19 @@ html.tp-present .present-exit { display: inline-flex; }
         background: #fff; border-radius: 1px;
         box-shadow: 0 0 6px rgba(255,255,255,.6);
 }
+
+/* Class-based meter (supports Settings card wizard) */
+.asr-meter { position:relative; height:12px; border-radius:8px; overflow:hidden;
+    background: linear-gradient(to right,
+        #6b7280 0% 50%,    /* gray = noise */
+        #22c55e 50% 80%,   /* green = target voice */
+        #f59e0b 80% 95%,   /* amber = hot */
+        #ef4444 95% 100%   /* red = clip */
+    );
+}
+.asr-meter .marker { position:absolute; top:-3px; width:2px; height:18px; background:#fff;
+    left: calc(var(--asr-level, 0%) - 1px);
+}
+.asr-meter::before, .asr-meter::after { content:""; position:absolute; top:0; width:2px; height:100%; opacity:.6; pointer-events:none; }
+.asr-meter::before { left: calc(var(--asr-ton, -1%) - 1px);  background:#60a5fa; }   /* on-threshold (blue) */
+.asr-meter::after  { left: calc(var(--asr-toff, -1%) - 1px); background:#f472b6; } /* off-threshold (pink) */

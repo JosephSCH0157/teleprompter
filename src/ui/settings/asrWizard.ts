@@ -116,6 +116,26 @@ function wire() {
         toast('ASR profile saved and activated.');
       } catch {}
     });
+    // NS/AGC timing badge
+    const updateFlagsBadge = () => {
+      try {
+        const badge = $('asrFlagsBadge') as HTMLElement | null;
+        if (!badge) return;
+        const ns = !!( $('asrNS')  as HTMLInputElement | null )?.checked;
+        const ag = !!( $('asrAGC') as HTMLInputElement | null )?.checked;
+        if (ns || ag) {
+          badge.style.display = 'inline-block';
+          const parts = [ns && 'NS', ag && 'AGC'].filter(Boolean).join(' + ');
+          badge.textContent = `Timing may vary: ${parts}`;
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch {}
+    };
+    ['asrNS','asrAGC'].forEach(id => {
+      try { ( $(id) as HTMLInputElement | null )?.addEventListener('change', updateFlagsBadge); } catch {}
+    });
+    updateFlagsBadge();
     // Device list helpers if present
     $('asrRefreshDevs')?.addEventListener('click', () => { populateMicSelect(); });
     $('asrGrantPerm')?.addEventListener('click', () => { grantMicLabels(); });
