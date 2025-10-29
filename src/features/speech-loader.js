@@ -141,6 +141,56 @@ export function installSpeech() {
       rec = sr;
     }
 
+    // --- Pre-roll helpers (main + display) ---
+    function sendToDisplay(payload) {
+      try {
+        if (window.__tpDisplay && typeof window.__tpDisplay.sendToDisplay === 'function') {
+          window.__tpDisplay.sendToDisplay(payload);
+          return;
+        }
+      } catch {}
+      try {
+        const w = window.__tpDisplayWindow;
+        if (w && !w.closed) w.postMessage(payload, '*');
+      } catch {}
+    }
+
+    function showPreroll(v) {
+      try {
+        const overlay = document.getElementById('countOverlay');
+        const num = document.getElementById('countNum');
+        if (overlay) overlay.style.display = 'flex';
+        if (num && typeof v === 'number') num.textContent = String(v);
+      } catch {}
+      try { sendToDisplay({ type: 'preroll', show: true, n: v }); } catch {}
+    }
+    function hidePreroll() {
+      try {
+        const overlay = document.getElementById('countOverlay');
+        if (overlay) overlay.style.display = 'none';
+      } catch {}
+      try { sendToDisplay({ type: 'preroll', show: false }); } catch {}
+    }
+
+    async function beginCountdownThen(sec, fn) {
+      const n0 = Math.max(0, Number(sec) || 0);
+      if (!n0) { hidePreroll(); await fn(); return; }
+      let n = n0;
+      let armed = false;
+      const tick = async () => {
+        showPreroll(n);
+        if (!armed) { armed = true; await doAutoRecordStart(); }
+        if (n <= 0) {
+          hidePreroll();
+          await fn();
+        } else {
+          setTimeout(() => { n -= 1; void tick(); }, 1000);
+        }
+      };
+      // Show immediately, then start ticking down
+      n = n0; void tick();
+    }
+
     async function startSpeech() {
       if (running) return;
       if (btn && btn.disabled) return;
@@ -149,8 +199,12 @@ export function installSpeech() {
         running = true;
         setListeningUi(true);
         try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
-        await startBackend();
-        await doAutoRecordStart();
+        const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
+        await beginCountdownThen(sec, async () => {
+          await startBackend();
+          // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
+          try { await doAutoRecordStart(); } catch {}
+        });
       } catch (e) {
         running = false;
         setListeningUi(false);
@@ -170,6 +224,7 @@ export function installSpeech() {
         setListeningUi(false);
         try { rec?.stop?.(); } catch {}
         rec = null;
+        hidePreroll();
         await doAutoRecordStop();
         setReadyUi();
         try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
