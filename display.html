@@ -83,9 +83,17 @@
                 }
               };
             }
-            // TP: zoom-guard (display)
+            // TP: zoom-guard (display) + in-app Ctrl/Cmd + Wheel zoom
             try {
-              window.addEventListener('wheel', (e)=>{ if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false });
+              window.addEventListener('wheel', (e)=>{
+                try {
+                  if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    const step = 0.05;
+                    nudgeScale(e.deltaY < 0 ? +step : -step);
+                  }
+                } catch {}
+              }, { passive: false });
               window.addEventListener('keydown', (e)=>{
                 if (e.ctrlKey || e.metaKey) {
                   const k = (e.key||'');
@@ -213,6 +221,10 @@
                       if (x.background) s.setProperty('--tp-bg', x.background);
                       if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
                       if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                      // Also update our base metrics so applyScaled reflects the new values
+                      if (x.fontSizePx != null || x.lineHeight != null) {
+                        applyBase(x.fontSizePx, x.lineHeight);
+                      }
                     } catch {}
                     // reflow helpers
                     applyScaled();
@@ -274,6 +286,10 @@
                   if (x.background) s.setProperty('--tp-bg', x.background);
                   if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
                   if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                  // Sync our base metrics for inline sizing
+                  if (x.fontSizePx != null || x.lineHeight != null) {
+                    applyBase(x.fontSizePx, x.lineHeight);
+                  }
                 } catch {}
                 applyScaled();
                 applyBottomPad();
