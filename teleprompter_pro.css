@@ -235,6 +235,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     /* Make record button clearly red while listening */
     body.listening #recBtn{ background:#c81919; color:#fff; border-color:#ff6969; box-shadow:0 0 0 1px #ff696955 inset; }
     body.listening #recBtn:hover{ background:#b31818; }
+    /* Speech state niceties */
+    body.speech-ready #recBtn{ cursor:pointer; }
+    body.speech-listening #recBtn{ outline:2px solid var(--accent, #6cf); outline-offset:2px; }
 
     @supports(height: 100dvh){ body{ min-height:100dvh; } }
 

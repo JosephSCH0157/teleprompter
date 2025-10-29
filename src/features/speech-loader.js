@@ -4,17 +4,7 @@
 let running = false;
 let rec = null; // SR instance or orchestrator handle
 
-async function tryLoadBuiltTs() {
-  // Absolute path so it’s not relative to module location.
-  try {
-    // Quick existence check (avoids noisy import errors)
-    const res = await fetch('/speech/orchestrator.js', { method: 'HEAD' });
-    if (!res.ok) return null;
-    // Load the compiled/bundled TS orchestrator (ESM)
-    const mod = await import('/speech/orchestrator.js');
-    return mod && (mod.startOrchestrator || mod.default?.startOrchestrator) ? (mod.startOrchestrator || mod.default) : null;
-  } catch { return null; }
-}
+// (dynamic import of '/speech/orchestrator.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
 function startWebSpeech() {
@@ -37,12 +27,41 @@ function startWebSpeech() {
   return { stop: () => { try { r.stop(); } catch {} } };
 }
 
-function setRecUi(on) {
+function setReadyUi() {
   try {
     const btn = document.getElementById('recBtn');
-    const chip = document.getElementById('recChip');
+    const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
+    if (btn) {
+      btn.disabled = false;
+      btn.title = 'Start speech sync';
+    }
+    if (chip) chip.textContent = 'Speech: ready';
+    try { document.body.classList.add('speech-ready'); } catch {}
+  } catch {}
+}
+function setUnsupportedUi() {
+  try {
+    const btn = document.getElementById('recBtn');
+    const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
+    if (btn) {
+      btn.disabled = true;
+      btn.title = 'Speech not supported in this browser';
+    }
+    if (chip) chip.textContent = 'Speech: unsupported';
+    try { document.body.classList.remove('speech-ready', 'speech-listening', 'listening'); } catch {}
+  } catch {}
+}
+function setListeningUi(on) {
+  try {
+    const btn = document.getElementById('recBtn');
+    const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
     if (btn) btn.textContent = on ? 'Stop speech sync' : 'Start speech sync';
-    if (chip) chip.textContent = on ? 'Speech: On' : 'Speech: Off';
+    if (chip) chip.textContent = on ? 'Speech: listening…' : 'Speech: stopped';
+    try {
+      document.body.classList.toggle('speech-listening', !!on);
+      // Maintain legacy class for existing CSS rules
+      document.body.classList.toggle('listening', !!on);
+    } catch {}
   } catch {}
 }
 
@@ -53,7 +72,6 @@ export function installSpeech() {
     try {
       const btn = document.getElementById('recBtn');
       if (!btn) return;
-      const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
 
       const SRAvail = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
       const hasGlobalOrch = !!(window.__tpSpeechOrchestrator);
@@ -63,7 +81,7 @@ export function installSpeech() {
       if (!hasOrchestrator) {
         // Best-effort existence probe without loading it
         try {
-          const res = await fetch('/speech/orchestrator.js', { method: 'HEAD' });
+          const res = await fetch('/speech/orchestrator.js', { method: 'HEAD', cache: 'no-store' });
           hasOrchestrator = !!res && res.ok;
         } catch {}
       }
@@ -71,15 +89,7 @@ export function installSpeech() {
       const supported = SRAvail || hasOrchestrator;
       const canUse = supported || force;
 
-      if (canUse) {
-        btn.disabled = false;
-        btn.title = 'Start speech sync';
-        if (chip) chip.textContent = 'Speech: ready';
-      } else {
-        btn.disabled = true;
-        btn.title = 'Speech not supported in this browser';
-        if (chip) chip.textContent = 'Speech: unsupported';
-      }
+      if (canUse) setReadyUi(); else setUnsupportedUi();
     } catch {}
   })();
 
@@ -88,8 +98,8 @@ export function installSpeech() {
     const t = e && e.target;
     try { if (!t?.closest?.('#recBtn')) return; } catch { return; }
 
-    const S = window.__tpStore;
-    const HUD = window.HUD || window.__tpHud;
+  const S = window.__tpStore;
+  const HUD = window.HUD || window.__tpHud;
 
     async function doAutoRecordStart() {
       try {
@@ -111,31 +121,36 @@ export function installSpeech() {
     async function startSpeech() {
       if (running) return;
       running = true;
-      setRecUi(true);
+      setListeningUi(true);
       try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
 
       try {
         if (window.__tpSpeechOrchestrator && typeof window.__tpSpeechOrchestrator.start === 'function') {
           rec = await window.__tpSpeechOrchestrator.start();
         } else {
-          const api = await tryLoadBuiltTs();
-          if (api && typeof api.startOrchestrator === 'function') {
-            rec = await api.startOrchestrator();
-          } else {
-            // Web Speech fallback
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SR) {
-              const r = new SR();
-              r.interimResults = true;
-              r.continuous = true;
-              r.onresult = (e) => { try { (HUD?.log || console.debug)?.('speech', { onresult: true, len: e?.results?.length || 0 }); } catch {} };
-              r.onerror = (e) => { try { (HUD?.log || console.warn)?.('speech', { error: e?.error || String(e) }); } catch {} };
-              r.onend = () => { if (running) stopSpeech(); };
-              try { r.start(); } catch {}
-              rec = { stop: () => { try { r.stop(); } catch {} } };
+          // Try to load orchestrator if present on server
+          try {
+            const mod = await import('/speech/orchestrator.js');
+            if (mod?.startOrchestrator) {
+              rec = await mod.startOrchestrator();
             } else {
-              rec = startWebSpeech();
+              // Fallback to Web Speech
+              const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+              if (SR) {
+                const r = new SR();
+                r.interimResults = true;
+                r.continuous = true;
+                r.onresult = (e) => { try { (HUD?.log || console.debug)?.('speech', { onresult: true, len: e?.results?.length || 0 }); } catch {} };
+                r.onerror = (e) => { try { (HUD?.log || console.warn)?.('speech', { error: e?.error || String(e) }); } catch {} };
+                r.onend = () => { if (running) stopSpeech(); };
+                try { r.start(); } catch {}
+                rec = { stop: () => { try { r.stop(); } catch {} } };
+              } else {
+                rec = startWebSpeech();
+              }
             }
+          } catch (e) {
+            (HUD?.log || console.warn)?.('speech', { startError: String(e?.message || e) });
           }
         }
       } catch {}
@@ -146,7 +161,7 @@ export function installSpeech() {
     async function stopSpeech() {
       if (!running) return;
       running = false;
-      setRecUi(false);
+      setListeningUi(false);
       try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
       try { rec?.stop?.(); } catch {}
       rec = null;
