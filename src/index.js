@@ -66,6 +66,62 @@ async function boot() {
     // Dev-only parity guard: verifies key UI elements and wiring exist
     try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
+
+    // One-time migration: tp_vad_profile_v1 -> tp_asr_profiles_v1 (unified ASR store)
+    try {
+      const MIG_FLAG = 'tp_asr_profiles_v1_migrated';
+      const OLD_KEY = 'tp_vad_profile_v1';
+      const NEW_KEY = 'tp_asr_profiles_v1';
+      if (!localStorage.getItem(MIG_FLAG)) {
+        const raw = localStorage.getItem(OLD_KEY);
+        if (raw) {
+          try {
+            const p = JSON.parse(raw) || {};
+            const now = Date.now();
+            const deviceId = String((window.__tpStore && window.__tpStore.get && window.__tpStore.get('micDevice')) || '') || '';
+            const id = `vad::${deviceId || 'unknown'}`;
+            const unified = {
+              id,
+              label: p.label || 'VAD Cal',
+              capture: {
+                deviceId,
+                sampleRateHz: p.sr || 48000,
+                channelCount: 1,
+                echoCancellation: !!p.aec,
+                noiseSuppression: !!p.ns,
+                autoGainControl: !!p.agc,
+              },
+              cal: {
+                noiseRmsDbfs: Number(p.noise || p.noiseDb || -50),
+                noisePeakDbfs: Number(p.noisePeak || (p.noiseDb != null ? p.noiseDb + 6 : -44)),
+                speechRmsDbfs: Number(p.speech || p.speechDb || -20),
+                speechPeakDbfs: Number(p.speechPeak || (p.speechDb != null ? p.speechDb + 6 : -14)),
+                snrDb: Number((p.speech || p.speechDb || -20) - (p.noise || p.noiseDb || -50)),
+              },
+              vad: {
+                tonDb: Number(p.tonDb != null ? p.tonDb : -28),
+                toffDb: Number(p.toffDb != null ? p.toffDb : -34),
+                attackMs: Number(p.attackMs != null ? p.attackMs : 80),
+                releaseMs: Number(p.releaseMs != null ? p.releaseMs : 300),
+              },
+              filters: {},
+              createdAt: now,
+              updatedAt: now,
+            };
+            // Upsert into unified store (localStorage)
+            let asrState;
+            try { asrState = JSON.parse(localStorage.getItem(NEW_KEY) || '{}') || {}; } catch { asrState = {}; }
+            asrState.profiles = asrState.profiles || {};
+            asrState.profiles[unified.id] = unified;
+            if (!asrState.activeProfileId) asrState.activeProfileId = unified.id;
+            try { localStorage.setItem(NEW_KEY, JSON.stringify(asrState)); } catch {}
+            // Cleanup old key and mark migrated
+            try { localStorage.removeItem(OLD_KEY); } catch {}
+            try { localStorage.setItem(MIG_FLAG, '1'); } catch {}
+          } catch {}
+        }
+      }
+    } catch {}
   UI.bindStaticDom();
   // Ensure autoscroll engine is initialized before wiring router/UI
   try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}

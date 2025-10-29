@@ -13,7 +13,12 @@ export function createOrchestrator(): Orchestrator {
   let unsub: (() => void) | null = null;
   const errors: string[] = [];
 
-  function setMode(m: PaceMode) { mode = m; engine.setMode(m); }
+  const ModeAliases: Record<string, PaceMode> = { wpm: 'assist', asr: 'assist', vad: 'vad', align: 'align', assist: 'assist' };
+  function setMode(m: PaceMode | string) {
+    const norm = (ModeAliases as any)[m] || m;
+    mode = norm as PaceMode;
+    engine.setMode(mode);
+  }
   function setGovernor(c: any) { engine.setCaps(c); }
   function setSensitivity(mult: number) { engine.setSensitivity(mult); }
   function setAlignStrategy(_s: any) { /* stub until 1.6.3 */ }
@@ -26,6 +31,8 @@ export function createOrchestrator(): Orchestrator {
   async function start(a: InputAdapter): Promise<void> {
     if (started) return;
     adapter = a;
+    let restarts = 0;
+    let asrErrUnsub: (() => void) | null = null;
     unsub = a.onFeature((f) => {
       try {
         synth.push(f as any);
@@ -40,6 +47,21 @@ export function createOrchestrator(): Orchestrator {
     await a.start();
     started = true;
     try { motor.setEnabled(true); } catch {}
+
+    // Basic restart backoff on ASR errors (once), then fall back to VAD mode
+    try {
+      const onErr = () => {
+        if (restarts++ === 0) {
+          setTimeout(async () => { try { await adapter?.start(); if ((window as any).toast) (window as any).toast('ASR restarted'); } catch {} }, 300);
+        } else {
+          setMode('vad');
+          try { if ((window as any).toast) (window as any).toast('ASR unstable → VAD fallback'); } catch {}
+        }
+      };
+      const h = onErr as EventListener;
+      window.addEventListener('tp:asr:error' as any, h);
+      asrErrUnsub = () => { try { window.removeEventListener('tp:asr:error' as any, h); } catch {} };
+    } catch {}
   }
 
   async function stop(): Promise<void> {

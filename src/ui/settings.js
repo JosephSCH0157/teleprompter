@@ -63,6 +63,7 @@
   '    <label><input type="checkbox" id="asrApplyHybrid"/> Apply to Hybrid Gate</label>',
   '    <span id="asrCalibProgress" class="microcopy" style="margin-left:4px;color:#9fb4c9;font-size:12px">Ready</span>',
   '  </div>',
+  '  <div class="row settings-small" id="asrHybridUsing" style="color:#9fb4c9;font-size:12px">Using: —</div>',
   '  <div class="row settings-small" id="asrCalibReadout">',
   '    Noise: <strong id="asrNoiseDb">—</strong> • Speech: <strong id="asrSpeechDb">—</strong> • ton: <strong id="asrTonDb">—</strong> • toff: <strong id="asrToffDb">—</strong>',
   '  </div>',
@@ -562,11 +563,48 @@
         const outToff = q('asrToffDb');
         const attackInp = q('asrAttackMs');
         const releaseInp = q('asrReleaseMs');
-        const PROF_KEY = 'tp_vad_profile_v1';
+        const VAD_PROF_KEY = 'tp_vad_profile_v1'; // legacy
+        const ASR_KEY = 'tp_asr_profiles_v1';
+        const UIPREF_KEY = 'tp_ui_prefs_v1';
         const APPLY_KEY = 'tp_vad_apply_hybrid';
-        // Restore prior profile
+
+        function readUiPrefs(){ try { return JSON.parse(localStorage.getItem(UIPREF_KEY)||'{}')||{}; } catch { return {}; } }
+        function writeUiPrefs(p){ try { const cur = readUiPrefs(); localStorage.setItem(UIPREF_KEY, JSON.stringify({ ...cur, ...p })); } catch {} }
+
+        function readAsrState(){ try { return JSON.parse(localStorage.getItem(ASR_KEY)||'{}')||{}; } catch { return {}; } }
+        function writeAsrState(next){ try { localStorage.setItem(ASR_KEY, JSON.stringify(next||{})); } catch {} }
+        function upsertAsrProfile(profile){
+          try {
+            const st = readAsrState();
+            st.profiles = st.profiles || {};
+            st.profiles[profile.id] = { ...profile, updatedAt: Date.now() };
+            if (!st.activeProfileId) st.activeProfileId = profile.id;
+            writeAsrState(st);
+          } catch {}
+        }
+        function pickHybridProfile(){
+          try {
+            const st = readAsrState();
+            const prefs = readUiPrefs();
+            const id = prefs.hybridUseProfileId && st.profiles && st.profiles[prefs.hybridUseProfileId] ? prefs.hybridUseProfileId : st.activeProfileId;
+            return id && st.profiles ? st.profiles[id] : null;
+          } catch { return null; }
+        }
+        function updateHybridUsingUI(){
+          try {
+            const el = q('asrHybridUsing'); if (!el) return;
+            const prof = pickHybridProfile();
+            if (prof && prof.vad) {
+              const v = prof.vad;
+              el.textContent = `Using: ${prof.label||prof.id} • On ${Math.round(v.tonDb)} dB / Off ${Math.round(v.toffDb)} dB (${v.attackMs}/${v.releaseMs} ms)`;
+            } else {
+              el.textContent = 'Using: —';
+            }
+          } catch {}
+        }
+        // Restore prior profile (legacy readouts for continuity)
         try {
-          const raw = localStorage.getItem(PROF_KEY);
+          const raw = localStorage.getItem(VAD_PROF_KEY);
           if (raw) {
             const p = JSON.parse(raw);
             if (outNoise && p && typeof p.noiseDb === 'number') outNoise.textContent = String(p.noiseDb.toFixed(0)) + ' dB';
@@ -577,6 +615,7 @@
             if (releaseInp && typeof p.releaseMs === 'number') releaseInp.value = String(p.releaseMs);
           }
           if (chk) chk.checked = localStorage.getItem(APPLY_KEY) === '1';
+          updateHybridUsingUI();
         } catch {}
 
         const measure = (ms) => new Promise((resolve) => {
@@ -633,20 +672,41 @@
             }
             if (outTon) outTon.textContent = ton.toFixed(0) + ' dB';
             if (outToff) outToff.textContent = toff.toFixed(0) + ' dB';
-            // Persist profile
-            const profile = { noiseDb: noise, speechDb: speech, tonDb: ton, toffDb: toff, attackMs: atk, releaseMs: rel, t: Date.now() };
-            try { localStorage.setItem(PROF_KEY, JSON.stringify(profile)); } catch {}
-            if (chk && chk.checked) { try { localStorage.setItem(APPLY_KEY, '1'); } catch {} }
-            else { try { localStorage.removeItem(APPLY_KEY); } catch {} }
+            // Persist to unified ASR store
+            const deviceId = (function(){ try { return (document.getElementById('settingsMicSel')||{}).value || ''; } catch { return ''; } })();
+            const id = `vad::${deviceId || 'unknown'}`;
+            const asrProf = {
+              id,
+              label: 'VAD Cal',
+              capture: { deviceId, sampleRateHz: 48000, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+              cal: { noiseRmsDbfs: Number(noise||-50), noisePeakDbfs: Number((noise||-50)+6), speechRmsDbfs: Number(speech||-20), speechPeakDbfs: Number((speech||-20)+6), snrDb: Number((speech||-20) - (noise||-50)) },
+              vad: { tonDb: Number(ton), toffDb: Number(toff), attackMs: Number(atk), releaseMs: Number(rel) },
+              filters: {}, createdAt: Date.now(), updatedAt: Date.now()
+            };
+            upsertAsrProfile(asrProf);
+            // Apply preference and apply flag
+            if (chk && chk.checked) {
+              try { localStorage.setItem(APPLY_KEY, '1'); } catch {}
+              writeUiPrefs({ hybridUseProfileId: id });
+            } else {
+              try { localStorage.removeItem(APPLY_KEY); } catch {}
+            }
             // Notify listeners (router can re-read profile)
-            try { window.dispatchEvent(new CustomEvent('tp:vad:profile', { detail: profile })); } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:vad:profile', { detail: asrProf })); } catch {}
             if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; }
             if (prog) { prog.textContent = 'Saved'; setTimeout(() => { try { if (prog.textContent === 'Saved') prog.textContent = 'Ready'; } catch {} }, 1500); }
             try { if (window.toast) window.toast('Calibration saved', { type:'ok' }); } catch {}
+            updateHybridUsingUI();
           } catch {}
         }
         if (btn && !btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', runCalibration); }
         if (chk) chk.addEventListener('change', () => { try { localStorage.setItem(APPLY_KEY, chk.checked ? '1' : '0'); } catch {} });
+        // Keep "Using:" label fresh on storage changes
+        try {
+          window.addEventListener('storage', (e) => {
+            try { if (e && (e.key === ASR_KEY || e.key === UIPREF_KEY)) updateHybridUsingUI(); } catch {}
+          });
+        } catch {}
       } catch {}
 
       // Refresh device labels after permission grant

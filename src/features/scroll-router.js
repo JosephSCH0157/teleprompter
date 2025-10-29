@@ -19,13 +19,32 @@ const DEFAULTS = {
 
 const state = { ...DEFAULTS };
 let VAD_PROFILE = null;
-const PROF_KEY = 'tp_vad_profile_v1';
-const APPLY_KEY = 'tp_vad_apply_hybrid';
+const ASR_KEY = 'tp_asr_profiles_v1';
+const PREF_KEY = 'tp_ui_prefs_v1';
+const APPLY_KEY = 'tp_vad_apply_hybrid'; // keep existing apply flag for now
+function _pickProfileId(asrState, prefs){
+  try {
+    const prefId = prefs && prefs.hybridUseProfileId;
+    if (prefId && asrState && asrState.profiles && asrState.profiles[prefId]) return prefId;
+    return (asrState && asrState.activeProfileId) || null;
+  } catch { return null; }
+}
 function loadVadProfile(){
   try {
-    const raw = localStorage.getItem(PROF_KEY);
     const apply = localStorage.getItem(APPLY_KEY) === '1';
-    VAD_PROFILE = raw ? { apply, ...(JSON.parse(raw)||{}) } : null;
+    const asrRaw = localStorage.getItem(ASR_KEY);
+    const prefsRaw = localStorage.getItem(PREF_KEY);
+    const asr = asrRaw ? (JSON.parse(asrRaw)||{}) : null;
+    const prefs = prefsRaw ? (JSON.parse(prefsRaw)||{}) : null;
+    const id = _pickProfileId(asr, prefs);
+    if (id && asr && asr.profiles && asr.profiles[id] && asr.profiles[id].vad) {
+      const p = asr.profiles[id];
+      VAD_PROFILE = { apply, tonDb: Number(p.vad.tonDb), toffDb: Number(p.vad.toffDb), attackMs: Number(p.vad.attackMs), releaseMs: Number(p.vad.releaseMs), label: p.label };
+    } else {
+      // Fallback to legacy key if present
+      const raw = localStorage.getItem('tp_vad_profile_v1');
+      VAD_PROFILE = raw ? { apply, ...(JSON.parse(raw)||{}) } : null;
+    }
   } catch { VAD_PROFILE = null; }
 }
 let viewer = null;
@@ -221,7 +240,7 @@ export function installScrollRouter() {
   });
   // Refresh VAD profile if it changes
   window.addEventListener('storage', (e) => {
-    try { if (e && (e.key === PROF_KEY || e.key === APPLY_KEY)) loadVadProfile(); } catch {}
+    try { if (e && (e.key === ASR_KEY || e.key === PREF_KEY || e.key === APPLY_KEY || e.key === 'tp_vad_profile_v1')) loadVadProfile(); } catch {}
   });
   window.addEventListener('tp:vad:profile', () => { try { loadVadProfile(); } catch {} });
 }

@@ -1,12 +1,18 @@
 // src/asr/v2/paceEngine.js
-// Minimal pace engine: map WPM to px/s with a rough coefficient
-export function createPaceEngine(opts = {}) {
-  const cfg = { wpl: 8, lh: 1.35, pxPerLine: 28, ...opts };
-  const coef = (cfg.pxPerLine || 28) / (cfg.wpl || 8);
-  return {
-    mapWpmToPx(wpm) {
-      const w = Math.max(60, Math.min(240, Number(wpm)||0));
-      return Math.round(w * coef);
+// Improved pace mapping: WPM -> px/s using CSS vars, with a WPL hint
+export function createPaceEngine() {
+  function mapWpmToPxPerSec(wpm, doc) {
+    try {
+      const cs = doc.defaultView ? doc.defaultView.getComputedStyle(doc.documentElement) : getComputedStyle(document.documentElement);
+      const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+      const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+      const lineHeightPx = fs * lh;
+      const wpl = parseFloat(localStorage.getItem('tp_wpl_hint') || '8') || 8;
+      const linesPerSec = (Number(wpm)||0) / 60 / wpl;
+      return linesPerSec * lineHeightPx;
+    } catch {
+      return ((Number(wpm)||0) / 60) / 8 * (56 * 1.4);
     }
-  };
+  }
+  return { mapWpmToPx: (wpm) => mapWpmToPxPerSec(wpm, document) };
 }
