@@ -95,7 +95,22 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
 
     <div data-tab-content="recording" style="display:none">
       <h4>Recording</h4>
-      <div class="row">Recording settings live here.</div>
+      <div class="settings-card anim-in">
+        <h4>OBS (WebSocket)</h4>
+        <div class="row">
+          <label><input type="checkbox" id="settingsEnableObs"/> Enable OBS</label>
+          <span id="obsStatusText" class="badge muted" style="margin-left:auto">disconnected</span>
+        </div>
+        <div class="settings-inline-row">
+          <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455"/></label>
+          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>
+        </div>
+        <div class="row gap">
+          <button id="settingsObsTest" class="chip btn-chip" type="button">Test connection</button>
+          <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>
+        </div>
+        <small class="muted">OBS ➜ Tools ➜ WebSocket Server Settings (default port 4455). Use this host and password.</small>
+      </div>
     </div>
 
     <div data-tab-content="advanced" style="display:none">
