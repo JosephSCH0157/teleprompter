@@ -1,5 +1,5 @@
 import { runCalibration } from '../../asr/calibration';
-import { upsertProfile, setActiveProfile } from '../../asr/store';
+import { setActiveProfile, upsertProfile } from '../../asr/store';
 
 let current: Awaited<ReturnType<typeof runCalibration>> | null = null;
 
