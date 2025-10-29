@@ -268,8 +268,13 @@ const URL_TO_OPEN = RAW_URL;
     }
 
     if (playwright) {
-      const makeBrowser = () => playwright.chromium.launch({ headless: true, args: ciArgs });
-      return await runWithPage(makeBrowser, 'playwright');
+      try {
+        const makeBrowser = () => playwright.chromium.launch({ headless: true, args: ciArgs });
+        return await runWithPage(makeBrowser, 'playwright');
+      } catch (e) {
+        console.warn('[SMOKE] Playwright launch failed, falling back to Puppeteer:', e && e.message || e);
+        // fall through to Puppeteer
+      }
     }
 
     // Puppeteer fallback
