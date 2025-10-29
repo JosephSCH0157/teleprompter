@@ -615,3 +615,18 @@ html.tp-present .present-exit { display: inline-flex; }
     font-size: var(--tp-font-size, 56px) !important;
     line-height: var(--tp-line-height, 1.4) !important;
 }
+
+/* Responsive script column (main #viewer and display #wrap) */
+#viewer .script,
+#wrap   .script {
+    /* center the column and keep some breathing room at the edges */
+    margin-inline: auto;
+    padding-inline: max(16px, 3vw);
+
+    /* prefer character-based width, but flex to viewport */
+    /* --tp-maxch is per-window (set by your Typography store) */
+    max-width: min(
+        calc(var(--tp-maxch, 95) * 1ch),
+        calc(100vw - 2 * max(16px, 3vw))
+    );
+}

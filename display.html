@@ -50,6 +50,16 @@
             font-size: var(--tp-font-size, 56px) !important;
             line-height: var(--tp-line-height, 1.4) !important;
           }
+          /* Responsive script column (main #viewer and display #wrap) */
+          #viewer .script,
+          #wrap   .script {
+            margin-inline: auto;
+            padding-inline: max(16px, 3vw);
+            max-width: min(
+              calc(var(--tp-maxch, 95) * 1ch),
+              calc(100vw - 2 * max(16px, 3vw))
+            );
+          }
         </style></head>
         <body>
           <header id="displayTopbar">
