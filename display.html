@@ -41,6 +41,15 @@
           #mirrorCamWrap{position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;z-index:1200;}
           #mirrorCamVideo{width:100%;max-width:100%;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;display:block;}
           #mirrorCamLoading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px system-ui;color:#9ba7b2;background:rgba(0,0,0,.55);border:1px solid var(--edge);border-radius:12px;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}
+          /* === Typography vars and application (Pack A) === */
+          :root{ --tp-font-size:56px; --tp-line-height:1.4; }
+          #viewer .script .line,
+          #viewer .script p,
+          #wrap   .script .line,
+          #wrap   .script p{
+            font-size: var(--tp-font-size, 56px) !important;
+            line-height: var(--tp-line-height, 1.4) !important;
+          }
         </style></head>
         <body>
           <header id="displayTopbar">

@@ -600,3 +600,18 @@ html.tp-present .present-exit { display: inline-flex; }
 #autoChip.on    { background:#16a34a; }   /* On (green)   */
 #autoChip.paused{ background:#f59e0b; }   /* Paused (amber) */
 #autoChip.manual{ background:#6b7280; }   /* Manual (gray)  */
+
+/* === Typography vars and application (Pack A) === */
+:root{
+    --tp-font-size: 56px;      /* default */
+    --tp-line-height: 1.4;     /* default (unitless multiplier) */
+}
+
+/* Lines in the script (both windows; supports .line and <p>) */
+#viewer .script .line,
+#viewer .script p,
+#wrap   .script .line,
+#wrap   .script p{
+    font-size: var(--tp-font-size, 56px) !important;
+    line-height: var(--tp-line-height, 1.4) !important;
+}

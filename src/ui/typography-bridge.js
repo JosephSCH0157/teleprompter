@@ -17,9 +17,22 @@
         const lh = Number.isFinite(lineH) ? clamp(lineH, 1.1, 2.0) : curLH;
         root.style.setProperty('--tp-font-size', String(fs) + 'px');
         root.style.setProperty('--tp-line-height', String(lh));
+        // Persist legacy keys for hydration
         try { localStorage.setItem('tp_font_size_v1', String(fs)); } catch {}
         try { localStorage.setItem('tp_line_height_v1', String(lh)); } catch {}
+        // Notify local listeners
         try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+        // Broadcast to Display immediately (no link toggle required)
+        try {
+          const snap = { fontSizePx: fs, lineHeight: lh };
+          const payload = { kind: 'tp:typography', source: 'main', display: 'display', t: snap };
+          try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+          try {
+            const w = window.__tpDisplayWindow || (window.tpDisplay && window.tpDisplay.win) || null;
+            if (w && !w.closed) w.postMessage(payload, '*');
+          } catch {}
+        } catch {}
+        // Also support older path
         try { window.sendToDisplay && window.sendToDisplay({ type: 'typography', fontSize: fs, lineHeight: lh }); } catch {}
       } catch {}
     }
@@ -28,8 +41,9 @@
     try {
       window.applyTypography = function(){
         try {
-          const fsEl = document.getElementById('fontSize');
-          const lhEl = document.getElementById('lineHeight');
+          const pick = (ids) => { for (const id of ids) { const el = document.getElementById(id); if (el) return el; } return null; };
+          const fsEl = pick(['typoFontSize-main','fontSize-main','settingsFontSize','fontSize']);
+          const lhEl = pick(['typoLineHeight-main','lineHeight-main','settingsLineHeight','lineHeight']);
           const fs = fsEl && 'value' in fsEl ? Number(fsEl.value) : NaN;
           const lh = lhEl && 'value' in lhEl ? Number(lhEl.value) : NaN;
           applyTypographyVars(fs, lh);

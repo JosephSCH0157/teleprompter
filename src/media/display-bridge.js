@@ -14,6 +14,23 @@
       displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
       try { window.__tpDisplayWindow = displayWin || null; } catch {}
       if (!displayWin) { setStatus && setStatus('Pop-up blocked. Allow pop-ups and try again.'); document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: blocked'); return; }
+      // Ensure typography bridge is present even if the display page is minimal
+      try {
+        const tryInject = () => {
+          try {
+            const doc = displayWin && displayWin.document;
+            if (!doc) return;
+            const already = doc.querySelector('script[src*="typography-bridge.js"]');
+            if (!already) {
+              const s = doc.createElement('script'); s.type = 'module'; s.src = 'typography-bridge.js';
+              (doc.head || doc.documentElement).appendChild(s);
+            }
+          } catch {}
+        };
+        // Try soon after open; in case DOM not ready, try again shortly
+        setTimeout(tryInject, 50);
+        setTimeout(tryInject, 250);
+      } catch {}
       displayReady = false;
       const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
       if (chip) chip.textContent = 'Display: open';
