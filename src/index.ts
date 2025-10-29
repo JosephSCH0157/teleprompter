@@ -26,9 +26,12 @@ import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
+import { initObsUI } from './wiring/obs-wiring';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
+			// OBS Settings wiring (inline bridge-backed "Test connect")
+			try { initObsUI(); } catch {}
 		// Ensure autoscroll engine is initialized
 		try { (Auto as any).initAutoScroll?.(); } catch {}
 
