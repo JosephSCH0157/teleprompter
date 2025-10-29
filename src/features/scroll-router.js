@@ -179,6 +179,18 @@ function applyMode(m) {
   // Ensure viewer ref is current
   viewer = document.getElementById('viewer');
 
+  // Flip global flags/classes for Rehearsal watermark + no-record promise
+  try {
+    const isRehearsal = (m === 'rehearsal');
+    document.body && document.body.classList && document.body.classList.toggle('mode-rehearsal', isRehearsal);
+    try { window.__tpNoRecord = isRehearsal; } catch {}
+    try { window.HUD?.bus?.emit('mode:rehearsal', isRehearsal); } catch {}
+    if (isRehearsal) {
+      // Ensure the timed driver is the active engine (no-op if unavailable)
+      try { window.scrollController?.setDriver?.('timed'); } catch {}
+    }
+  } catch {}
+
   // Base rule: Timed & Hybrid may run the Auto engine; Step never does.
   if (m === 'timed') {
     Auto.setEnabled(false); // user will press the Auto button to start
@@ -187,6 +199,9 @@ function applyMode(m) {
     try { Auto.setSpeed && Auto.setSpeed(21); } catch {}
     userEnabled = true; // let the gate control actual movement
     Auto.setEnabled(false); // engine follows gate; applyGate() will enable if open
+  } else if (m === 'rehearsal') {
+    // Rehearsal: steady timed auto-scroll; user uses the Auto toggle as usual
+    Auto.setEnabled(false);
   } else {
     Auto.setEnabled(false); // step/wpm/asr/reh start paused
   }
