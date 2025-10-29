@@ -27,7 +27,17 @@ function toast(msg, opts) {
     prune(container);
     const t = document.createElement('div');
     t.className = 'tp-toast show ' + (opts && opts.type ? String(opts.type) : '');
-    t.textContent = String(msg || '');
+    // message + optional action button
+    const txt = document.createElement('span');
+    txt.textContent = String(msg || '');
+    t.appendChild(txt);
+    if (opts && typeof opts.action === 'function') {
+      const btn = document.createElement('button');
+      btn.textContent = String(opts.actionLabel || 'Open');
+      btn.className = 'tp-toast-action';
+      btn.addEventListener('click', (ev) => { ev.stopPropagation(); try { opts.action(); } catch {} t.classList.remove('show'); setTimeout(() => t.remove(), 120); });
+      t.appendChild(btn);
+    }
     t.addEventListener('click', () => {
       t.classList.remove('show');
       setTimeout(() => t.remove(), 120);
