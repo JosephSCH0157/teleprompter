@@ -2,7 +2,7 @@
 // If /speech/orchestrator.js exists (built from TS), we load it instead.
 
 let running = false;
-let recog = null;
+let rec = null; // SR instance or orchestrator handle
 
 async function tryLoadBuiltTs() {
   // Absolute path so it’s not relative to module location.
@@ -47,67 +47,112 @@ function setRecUi(on) {
 }
 
 export function installSpeech() {
-  // Enable/disable the button based on browser support (mirrors legacy behavior)
-  try {
-    const btn = document.getElementById('recBtn');
-    const SRAvail = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (btn) {
-      if (!SRAvail) {
-        btn.disabled = true;
-        btn.title = 'Speech recognition not supported in this browser';
-        const chip = document.getElementById('recChip');
-        if (chip) chip.textContent = 'Speech: unsupported';
-      } else {
-        btn.disabled = false;
-        try { btn.removeAttribute('title'); } catch {}
-        btn.title = 'Start speech sync';
+  // Enable/disable the button based on browser support or orchestrator presence.
+  // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
+  (async () => {
+    try {
+      const btn = document.getElementById('recBtn');
+      if (!btn) return;
+      const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
+
+      const SRAvail = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      const hasGlobalOrch = !!(window.__tpSpeechOrchestrator);
+      const force = (() => { try { return localStorage.getItem('tp_speech_force') === '1'; } catch {} return false; })();
+
+      let hasOrchestrator = hasGlobalOrch;
+      if (!hasOrchestrator) {
+        // Best-effort existence probe without loading it
+        try {
+          const res = await fetch('/speech/orchestrator.js', { method: 'HEAD' });
+          hasOrchestrator = !!res && res.ok;
+        } catch {}
       }
-    }
-  } catch {}
+
+      const supported = SRAvail || hasOrchestrator;
+      const canUse = supported || force;
+
+      if (canUse) {
+        btn.disabled = false;
+        btn.title = 'Start speech sync';
+        if (chip) chip.textContent = 'Speech: ready';
+      } else {
+        btn.disabled = true;
+        btn.title = 'Speech not supported in this browser';
+        if (chip) chip.textContent = 'Speech: unsupported';
+      }
+    } catch {}
+  })();
 
   // delegated wiring keeps working even if the button re-renders
   document.addEventListener('click', async (e) => {
     const t = e && e.target;
     try { if (!t?.closest?.('#recBtn')) return; } catch { return; }
 
-    if (!running) {
-      running = true; setRecUi(true);
+    const S = window.__tpStore;
+    const HUD = window.HUD || window.__tpHud;
 
-      // Choose compiled TS orchestrator if present, else Web Speech
-      let api = await tryLoadBuiltTs();
-      if (api && typeof api.startOrchestrator === 'function') {
-        try { recog = await api.startOrchestrator(); } catch { recog = null; }
-      } else {
-        recog = startWebSpeech();
-      }
-
-      // If OBS is enabled, kick off recording (best-effort)
+    async function doAutoRecordStart() {
       try {
-        const S = window.__tpStore;
-        if (S && S.get && S.get('obsEnabled')) {
-          const obs = window.__tpOBS;
-          const conn = window.__tpObsConn;
-          if (obs && typeof obs.startRecording === 'function' && conn) {
-            obs.startRecording(conn);
-          }
-        }
-      } catch {}
-    } else {
-      running = false; setRecUi(false);
-      try { recog?.stop?.(); } catch {}
-      recog = null;
-
-      // If OBS is enabled, stop recording (best-effort)
-      try {
-        const S = window.__tpStore;
-        if (S && S.get && S.get('obsEnabled')) {
-          const obs = window.__tpOBS;
-          const conn = window.__tpObsConn;
-          if (obs && typeof obs.stopRecording === 'function' && conn) {
-            obs.stopRecording(conn);
-          }
+        const auto = S?.get?.('autoRecord');
+        const obsEnabled = S?.get?.('obsEnabled');
+        if (auto && obsEnabled) {
+          const mod = await import('/recorders.js');
+          await mod.startSelected();
         }
       } catch {}
     }
+    async function doAutoRecordStop() {
+      try {
+        const mod = await import('/recorders.js');
+        await mod.stopSelected();
+      } catch {}
+    }
+
+    async function startSpeech() {
+      if (running) return;
+      running = true;
+      setRecUi(true);
+      try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
+
+      try {
+        if (window.__tpSpeechOrchestrator && typeof window.__tpSpeechOrchestrator.start === 'function') {
+          rec = await window.__tpSpeechOrchestrator.start();
+        } else {
+          const api = await tryLoadBuiltTs();
+          if (api && typeof api.startOrchestrator === 'function') {
+            rec = await api.startOrchestrator();
+          } else {
+            // Web Speech fallback
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SR) {
+              const r = new SR();
+              r.interimResults = true;
+              r.continuous = true;
+              r.onresult = (e) => { try { (HUD?.log || console.debug)?.('speech', { onresult: true, len: e?.results?.length || 0 }); } catch {} };
+              r.onerror = (e) => { try { (HUD?.log || console.warn)?.('speech', { error: e?.error || String(e) }); } catch {} };
+              r.onend = () => { if (running) stopSpeech(); };
+              try { r.start(); } catch {}
+              rec = { stop: () => { try { r.stop(); } catch {} } };
+            } else {
+              rec = startWebSpeech();
+            }
+          }
+        }
+      } catch {}
+
+      await doAutoRecordStart();
+    }
+
+    async function stopSpeech() {
+      if (!running) return;
+      running = false;
+      setRecUi(false);
+      try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
+      try { rec?.stop?.(); } catch {}
+      rec = null;
+      await doAutoRecordStop();
+    }
+
+    if (!running) await startSpeech(); else await stopSpeech();
   }, { capture: true });
 }
