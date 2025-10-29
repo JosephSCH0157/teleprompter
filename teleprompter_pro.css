@@ -239,6 +239,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     body.speech-ready #recBtn{ cursor:pointer; }
     body.speech-listening #recBtn{ outline:2px solid var(--accent, #6cf); outline-offset:2px; }
 
+    /* Rehearsal watermark (main control window only) */
+    body.mode-rehearsal::after{
+        content:'REHEARSAL • NO RECORDING';
+        position:fixed; top:50%; left:50%; transform: translate(-50%, -50%) rotate(-15deg);
+        opacity:.085; font-weight:800; font-size:min(7vw, 72px); letter-spacing:.18em;
+        color:var(--fg, #e7ebf0);
+        text-shadow: 0 0 1px rgba(255,255,255,.25), 0 0 30px rgba(0,0,0,.35);
+        pointer-events:none; -webkit-user-select:none; user-select:none; z-index:9999;
+    }
+    body.mode-rehearsal .topbar { box-shadow: 0 0 0 2px #6cf inset; }
+
     @supports(height: 100dvh){ body{ min-height:100dvh; } }
 
     /* Camera overlay - fixed to viewport so it doesn't scroll with the script */

@@ -134,6 +134,13 @@ async function guarded(fn) {
   }
 }
 
+// Global guard: skip starting any recorders in Rehearsal mode
+function isNoRecordMode() {
+  try {
+    return !!(window.__tpNoRecord || (typeof document !== 'undefined' && document.body && document.body.classList && document.body.classList.contains('mode-rehearsal')));
+  } catch { return false; }
+}
+
 function selectedIds() {
   const ids = Array.isArray(settings.selected) ? settings.selected.slice() : [];
   if (settings.mode === 'single' && ids.length > 1) ids.length = 1;
@@ -143,6 +150,10 @@ function selectedIds() {
 /** Start selected recorders based on settings (respects mode, timeouts, failPolicy). */
 export async function startSelected() {
   return guarded(async () => {
+    if (isNoRecordMode()) {
+      try { window.HUD?.log?.('rehearsal', { skip: 'startSelected (no-record)' }); } catch {}
+      return { results: [], started: [] };
+    }
     applyConfigs();
     const ids = selectedIds();
     const started = [];
@@ -184,6 +195,10 @@ export async function startSelected() {
 /** Stop selected recorders (parallel, timeout per adapter). */
 export async function stopSelected() {
   return guarded(async () => {
+    // Allow stop to proceed even in no-record mode (safe cleanup)
+    if (isNoRecordMode()) {
+      try { window.HUD?.log?.('rehearsal', { note: 'stopSelected (allowed during no-record)' }); } catch {}
+    }
     const ids = selectedIds();
     const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
     const rs = await Promise.all(

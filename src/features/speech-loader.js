@@ -4,10 +4,22 @@
 let running = false;
 let rec = null; // SR instance or orchestrator handle
 
+function inRehearsal() {
+  try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
+}
+
 // Small router to bridge transcripts to both legacy and modern paths
 function routeTranscript(text, isFinal) {
   try {
     if (!text) return;
+    // In rehearsal, never steer — emit to HUD only
+    if (inRehearsal()) {
+      try {
+        const payload = { text, final: !!isFinal, t: performance.now() };
+        window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload);
+      } catch {}
+      return;
+    }
     // Legacy monolith path
     if (typeof window.advanceByTranscript === 'function') {
       try { window.advanceByTranscript(text, !!isFinal); } catch {}
