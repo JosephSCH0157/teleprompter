@@ -146,7 +146,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 53,
+        "lineNumber": 63,
         "columnNumber": 12
       }
     },
@@ -155,7 +155,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 364,
+        "lineNumber": 562,
         "columnNumber": 10
       }
     },
@@ -164,7 +164,7 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 510,
+        "lineNumber": 711,
         "columnNumber": 16
       }
     },
@@ -175,6 +175,13 @@
         "url": "http://127.0.0.1:5180/src/dev/parity-guard.js",
         "lineNumber": 70,
         "columnNumber": 20
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -215,15 +222,6 @@
     },
     {
       "type": "log",
-      "text": "[src/features/toasts] initToasts",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/features/toasts.js",
-        "lineNumber": 2,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
       "text": "[src/features/scroll] initScroll",
       "location": {
         "url": "http://127.0.0.1:5180/src/features/scroll.js",
@@ -245,8 +243,8 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 127,
-        "columnNumber": 12
+        "lineNumber": 191,
+        "columnNumber": 10
       }
     }
   ],
@@ -261,9 +259,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "25712974e0fb112e11d5ef1073cbf590a22b0a98",
+      "gitSha": "3f396901c92bd620aced88618ec45ea35575c401",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-28T18:55:54.794Z"
+      "buildTime": "2025-10-29T06:30:03.732Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -312,6 +310,13 @@
     "jitterStd": 0,
     "moved": false
   },
+  "settingsProbe": {
+    "hasBody": true,
+    "tabs": 4,
+    "hasMedia": true,
+    "hasMicSel": true,
+    "hasMicLevel": true
+  },
   "hotkeysProbe": {
     "supported": true,
     "before": {
@@ -329,6 +334,9 @@
   "autoScrollUi": {
     "was": "Auto-scroll: On",
     "now": "Auto-scroll: On",
+    "chipBefore": "Auto: On",
+    "chipAfter": "Auto: On",
+    "chipChanged": false,
     "ok": true
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"

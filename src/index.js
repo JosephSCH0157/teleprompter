@@ -141,9 +141,29 @@ async function boot() {
       // Install the new features/scroll-router (uses Auto internally)
       try { installScrollRouter(); } catch (e) { console.warn('[src/index] installScrollRouter failed', e); }
       // Resilient event delegation (works in headless + when nodes re-render)
+      let __lastAutoToggleAt = 0;
+      const __applyAutoChip = () => {
+        try {
+          const st = (Auto && typeof Auto.getState === 'function') ? Auto.getState() : null;
+          const chip = document.getElementById('autoChip');
+          if (chip && st) {
+            chip.textContent = st.enabled ? 'Auto: On' : 'Auto: Manual';
+            chip.setAttribute('aria-live','polite');
+            chip.setAttribute('aria-atomic','true');
+          }
+        } catch {}
+      };
       document.addEventListener('click', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
+        try {
+          if (t?.closest?.('#autoToggle')) {
+            __lastAutoToggleAt = Date.now();
+            Auto.toggle();
+            // Reflect immediately for headless probes
+            setTimeout(__applyAutoChip, 0);
+            return;
+          }
+        } catch {}
         try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
@@ -152,7 +172,16 @@ async function boot() {
       // Headless fallback (some runners only dispatch mousedown)
       document.addEventListener('mousedown', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoToggle')) return Auto.toggle(); } catch {}
+        try {
+          if (t?.closest?.('#autoToggle')) {
+            // Avoid double-toggling when both mousedown and click fire
+            if (Date.now() - __lastAutoToggleAt < 200) return;
+            __lastAutoToggleAt = Date.now();
+            Auto.toggle();
+            setTimeout(__applyAutoChip, 0);
+            return;
+          }
+        } catch {}
       }, { capture: true });
     } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }
 

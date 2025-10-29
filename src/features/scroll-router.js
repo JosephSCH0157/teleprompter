@@ -4,6 +4,7 @@
 
 // Dependencies: existing Auto controller (autoscroll.js) and dB events (tp:db) from mic.js
 import * as Auto from './autoscroll.js';
+import { createOrchestrator } from '../asr/v2/orchestrator.js';
 
 const LS_KEY = 'scrollMode';
 const DEFAULTS = {
@@ -18,6 +19,7 @@ const DEFAULTS = {
 
 const state = { ...DEFAULTS };
 let viewer = null;
+let orch = null;
 
 // ---------- utilities ----------
 function persist() {
@@ -112,6 +114,16 @@ function applyMode(m) {
   } else {
     Auto.setEnabled(false); speaking=false; // step/wpm/asr/reh start paused
   }
+
+  // Start/stop ASR orchestrator for assisted modes
+  try {
+    if (!orch) orch = createOrchestrator();
+    if (m === 'wpm' || m === 'asr') {
+      orch.start('assist');
+    } else {
+      orch.stop && orch.stop();
+    }
+  } catch {}
 
   // Update select if present
   const sel = document.getElementById('scrollMode');

@@ -28,6 +28,7 @@ const renderProbe = report.renderProbe || {};
 const hudProbe = report.hudProbe || {};
 const hotkeysProbe = report.hotkeysProbe || {};
 const lateProbe = report.lateProbe || {};
+const settingsProbe = report.settingsProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
 const meta = report.meta || {};
 // CI detection retained for potential future use; currently not used in validation rules
@@ -210,10 +211,33 @@ try {
     }
   }
 
+  // Settings overlay probe
+  if (settingsProbe && typeof settingsProbe === 'object') {
+    if (settingsProbe.hasBody && settingsProbe.tabs >= 2) {
+      console.log('PASS settings-overlay — body present, tabs:', settingsProbe.tabs);
+    } else {
+      const msg = 'settings-overlay — missing body or tabs';
+      if (CI_STRICT) { console.error('FAIL ' + msg, settingsProbe); allOk = false; } else { console.warn('WARN ' + msg, settingsProbe); }
+    }
+    if (settingsProbe.hasMedia && settingsProbe.hasMicSel) {
+      console.log('PASS settings-media — Media tab and mic selector present');
+    } else {
+      const msg = 'settings-media — Media tab or mic selector missing';
+      if (CI_STRICT) { console.error('FAIL ' + msg, settingsProbe); allOk = false; } else { console.warn('WARN ' + msg, settingsProbe); }
+    }
+  }
+
   // Auto-scroll UI wiring check
   if (report.autoScrollUi) {
     if (report.autoScrollUi.ok) {
-      console.log('PASS auto-scroll-ui —', JSON.stringify(report.autoScrollUi));
+      console.log('PASS auto-scroll-ui —', JSON.stringify({ was: report.autoScrollUi.was, now: report.autoScrollUi.now }));
+      // Extra: warn if chip did not change text at all
+      if (report.autoScrollUi && report.autoScrollUi.chipBefore === report.autoScrollUi.chipAfter) {
+        const msg = 'auto-chip — text did not change after toggle';
+        if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+      } else {
+        console.log('PASS auto-chip — text changed');
+      }
     } else {
       const msg = 'auto-scroll-ui — toggle did not flip to On when enabled';
       if (CI_STRICT) { console.error('FAIL ' + msg, JSON.stringify(report.autoScrollUi)); allOk = false; } else { console.warn('WARN ' + msg, JSON.stringify(report.autoScrollUi)); }

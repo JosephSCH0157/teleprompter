@@ -3,13 +3,24 @@ let enabled = false;
 let speed = 16;          // px/sec default
 let raf = 0;
 let viewer = null;
+let autoChip = null;
 
 function applyLabel() {
   const btn = document.getElementById('autoToggle');
-  if (!btn) return;
-  // Validator expects strictly On/Off wording
-  btn.textContent = enabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
-  btn.setAttribute('aria-pressed', String(enabled));
+  if (btn) {
+    // Validator expects strictly On/Off wording
+    btn.textContent = enabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+    btn.setAttribute('aria-pressed', String(enabled));
+  }
+  try {
+    autoChip = autoChip || document.getElementById('autoChip');
+    if (autoChip) {
+      autoChip.textContent = enabled ? 'Auto: On' : 'Auto: Manual';
+      autoChip.setAttribute('aria-live','polite');
+      autoChip.setAttribute('aria-atomic','true');
+      autoChip.title = enabled ? 'Auto scroll is enabled' : 'Auto scroll is manual/off';
+    }
+  } catch {}
 }
 
 function loop() {
@@ -27,6 +38,7 @@ function loop() {
 
 export function initAutoScroll() {
   viewer = document.getElementById('viewer');
+  autoChip = document.getElementById('autoChip');
   applyLabel();
   // keep resilient if viewer gets replaced
   const mo = new MutationObserver(() => {
