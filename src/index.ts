@@ -21,10 +21,10 @@ import { startVadAdapter } from './asr/vadAdapter';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
-import './ui/micMenu';
 import { applyTypographyTo } from './features/typography';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
+import './ui/micMenu';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
