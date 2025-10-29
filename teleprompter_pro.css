@@ -342,17 +342,7 @@ body.ck::after{
 /* Intentionally removed the redundant p/.tp-line last-wins block.
    Typography now applies to actual .line nodes only in the block below. */
 
-/* Teleprompter typography — apply to actual line nodes */
-#viewer .script .line,
-#wrap   .script .line {
-    font-family:     var(--tp-font-family) !important;
-    font-size:       var(--tp-font-size)   !important;
-    line-height:     var(--tp-line-height) !important;
-    font-weight:     var(--tp-weight);
-    letter-spacing:  var(--tp-letter-spacing);
-    word-spacing:    var(--tp-word-spacing);
-    color:           var(--tp-fg);
-}
+/* Moved unified typography block to the very end of the file */
 .tp-check{display:inline-flex;align-items:center;gap:.5rem}
 .tp-check input{vertical-align:middle}
 
@@ -530,3 +520,17 @@ html.tp-present .present-exit { display: inline-flex; }
 .topbar .topbar-label { margin-right: 6px; opacity: .8; }
 /* Screen-reader only label helper */
 .sr-only{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap;border:0;padding:0;margin:-1px}
+
+/* Teleprompter typography — unified and future-proof (last wins)
+   Covers past/present/future markup by selecting any p/.line/.tp-line under script on main or display.
+   We use !important on size/line-height/family until all upstream clamps are removed. */
+#viewer .script :is(p, .line, .tp-line),
+#wrap   .script :is(p, .line, .tp-line) {
+    font-family:    var(--tp-font-family) !important;
+    font-size:      var(--tp-font-size)   !important;
+    line-height:    var(--tp-line-height) !important;
+    font-weight:    var(--tp-weight);
+    letter-spacing: var(--tp-letter-spacing);
+    word-spacing:   var(--tp-word-spacing);
+    color:          var(--tp-fg);
+}

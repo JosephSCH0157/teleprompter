@@ -75,6 +75,34 @@ const URL_TO_OPEN = RAW_URL;
       const hasToast = await waitFor('#tp_toast_container'); // toast container
       const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
 
+      // Typography smoke guard: a line node must respond to font-size var changes
+      try {
+        const SEL = '#viewer .script :is(p,.line,.tp-line)';
+        // Ensure at least one candidate exists; if not, create a temporary one
+        const hadAny = await page.$(SEL);
+        if (!hadAny) {
+          await page.evaluate(() => {
+            try {
+              const host = document.getElementById('script');
+              if (host) {
+                const div = document.createElement('div');
+                div.className = 'line tp-line';
+                try { div.dataset.tpLine = '1'; } catch {}
+                div.textContent = 'smoke-guard-temp';
+                host.appendChild(div);
+              }
+            } catch {}
+          });
+        }
+        const before = await page.$eval(SEL, el => getComputedStyle(el).fontSize);
+        await page.evaluate(() => document.documentElement.style.setProperty('--tp-font-size','64px'));
+        await page.waitForTimeout(30);
+        const after  = await page.$eval(SEL, el => getComputedStyle(el).fontSize);
+        if (after === before) warnLogs.push('[smoke] inline typography must affect actual line nodes');
+      } catch (e) {
+        warnLogs.push('[smoke] line typography guard failed: ' + (e?.message || String(e)));
+      }
+
       // Cheap E2E: assert CSS var changes propagate to display
       try {
         // Open settings so the builder mounts (ensures inputs exist)
