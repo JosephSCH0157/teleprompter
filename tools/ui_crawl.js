@@ -327,12 +327,28 @@ const cp = require('child_process');
             return { supported: true, approxFps, jitterStd, moved };
           } catch { return { supported: false } }
         })();
-        return { legendProbe, renderProbe, hudProbe, lateProbe };
+        // Settings probe: ensure overlay opens and Media tab content renders basics
+        const settingsProbe = await (async function(){
+          try {
+            const btn = document.getElementById('settingsBtn');
+            if (btn) btn.click();
+            await sleep(150);
+            const body = document.getElementById('settingsBody');
+            const tabs = document.querySelectorAll('#settingsTabs .settings-tab');
+            const mediaTab = Array.from(tabs).find(t=>t && t.textContent && /media/i.test(t.textContent));
+            if (mediaTab) { mediaTab.click(); await sleep(60); }
+            const micSel = document.getElementById('settingsMicSel');
+            const micLevel = document.querySelector('#settingsMicLevel i');
+            return { hasBody: !!body, tabs: (tabs && tabs.length) || 0, hasMedia: !!mediaTab, hasMicSel: !!micSel, hasMicLevel: !!micLevel };
+          } catch { return { hasBody:false, tabs:0, hasMedia:false, hasMicSel:false, hasMicLevel:false }; }
+        })();
+        return { legendProbe, renderProbe, hudProbe, lateProbe, settingsProbe };
       });
       out.legendProbe = probes.legendProbe;
       out.renderProbe = probes.renderProbe;
       out.hudProbe = probes.hudProbe;
       out.lateProbe = probes.lateProbe;
+      out.settingsProbe = probes.settingsProbe;
 
       // Hotkeys probe using trusted key events
       try {
@@ -396,7 +412,11 @@ const cp = require('child_process');
         const getTxt = async () => {
           try { return await page.$eval('#autoToggle', el => (el.textContent||'').trim()); } catch { return ''; }
         };
+        const getChip = async () => {
+          try { return await page.$eval('#autoChip', el => (el.textContent||'').trim()); } catch { return ''; }
+        };
         const was = await getTxt();
+        const chipBefore = await getChip();
         try { await page.$eval('#autoToggle', el => el.scrollIntoView({behavior:'instant', block:'center'})); } catch {}
         let now = was;
         if (/Off/i.test(was)) {
@@ -407,6 +427,7 @@ const cp = require('child_process');
             if (/On/i.test(now)) break;
           }
         }
+        const chipAfter = await getChip();
         // As a semantic fallback, treat it as OK if the viewport starts moving after toggle
         let moved = false;
         try {
@@ -421,7 +442,7 @@ const cp = require('child_process');
             return after > before;
           });
         } catch {}
-        out.autoScrollUi = { was, now, ok: (/On/i.test(now) || moved) };
+        out.autoScrollUi = { was, now, chipBefore, chipAfter, chipChanged: chipBefore !== chipAfter, ok: (/On/i.test(now) || moved) };
       } catch {}
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
