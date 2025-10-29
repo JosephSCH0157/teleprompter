@@ -143,5 +143,16 @@ try {
 				}, { passive: false });
 			}
 		} catch {}
+
+		// Dev-only sanity ping: ensure our line selector matches something at boot
+		try {
+			const isDevHost = () => {
+				try { return /^(localhost|127\.0\.0\.1)$/i.test(location.hostname); } catch { return false; }
+			};
+			if (isDevHost()) {
+				const LINE_SEL = '#viewer .script :is(p,.line,.tp-line)';
+				try { if (!document.querySelector(LINE_SEL)) console.warn('[TP] No line nodes matched — check renderer/markup'); } catch {}
+			}
+		} catch {}
 	});
 } catch {}

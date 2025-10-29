@@ -40,12 +40,16 @@ export function renderScript(text = '') {
       if (ln.trim() === '') { // blank spacer line
         const div = document.createElement('div');
         div.className = 'line';
+        try { div.classList.add('tp-line'); } catch {}
+        try { div.dataset.tpLine = '1'; } catch {}
         div.textContent = '';
         host.appendChild(div);
         continue;
       }
       const div = document.createElement('div');
       div.className = 'line';
+      try { div.classList.add('tp-line'); } catch {}
+      try { div.dataset.tpLine = '1'; } catch {}
       // inline formatting (safe: formatter escapes first)
       div.innerHTML = fmt(ln);
       if (curRole) {
