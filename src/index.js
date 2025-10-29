@@ -18,7 +18,8 @@ import { initTelemetry } from './features/telemetry.js';
 import '../ui/format.js';
 import '../ui/inline-shim.js';
 // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
-import { initToasts } from './features/toasts.js';
+// Lightweight toast system (attaches window.toast/initToastContainer)
+import '../ui/toasts.js';
 import './media/display-bridge.js';
 import * as UI from './ui/dom.js';
 // Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
@@ -128,7 +129,7 @@ async function boot() {
     // Initialize features
     try { initPersistence(); } catch (e) { console.warn('[src/index] initPersistence failed', e); }
     try { initTelemetry(); } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
-    try { initToasts(); } catch (e) { console.warn('[src/index] initToasts failed', e); }
+  try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
   try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
     try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
 
@@ -157,7 +158,9 @@ async function boot() {
 
     // Typography bridge is installed via './ui/typography-bridge.js'
 
-    console.log('[src/index] boot completed');
+  // Mark init as complete for headless checks/smoke tests
+  try { window.__tp_init_done = true; } catch {}
+  console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);
