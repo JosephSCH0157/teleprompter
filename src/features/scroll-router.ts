@@ -108,9 +108,9 @@ function applyMode(m: Mode){
   } catch {}
 }
 
-import { getUiPrefs, onUiPrefs } from '../settings/uiPrefs';
-import { createOrchestrator } from '../asr/v2/orchestrator';
 import { createVadEventAdapter } from '../asr/v2/adapters/vad';
+import { createOrchestrator } from '../asr/v2/orchestrator';
+import { getUiPrefs, onUiPrefs } from '../settings/uiPrefs';
 
 export function installScrollRouter(opts: ScrollRouterOpts){
   const { auto } = opts;

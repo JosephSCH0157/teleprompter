@@ -1,5 +1,5 @@
-import type { InputAdapter, AdapterStatus, WebSpeechFeature } from '../types';
-import { emitTokensEvent, emitAsrError } from '../types';
+import type { AdapterStatus, InputAdapter, WebSpeechFeature } from '../types';
+import { emitAsrError, emitTokensEvent } from '../types';
 
 export function createWebSpeechAdapter(): InputAdapter {
   let ready = false;

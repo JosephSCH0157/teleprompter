@@ -1,7 +1,7 @@
-import type { InputAdapter, Orchestrator, OrchestratorStatus, PaceMode } from './types';
 import { createFeatureSynth } from './featureSynth';
-import { createPaceEngine } from './paceEngine';
 import { createAutoMotor } from './motor';
+import { createPaceEngine } from './paceEngine';
+import type { InputAdapter, Orchestrator, OrchestratorStatus, PaceMode } from './types';
 
 export function createOrchestrator(): Orchestrator {
   const synth = createFeatureSynth();
