@@ -38,11 +38,11 @@ try {
           const S = window.__tpStore || null;
           const ensureHud = (on) => {
             try {
-              // Install once
-              if (on && typeof window.__tpInstallHUD === 'function' && !window.__tpHud) {
+              // Install once unconditionally in dev so the hotkey (~) always works
+              if (typeof window.__tpInstallHUD === 'function' && !window.__tpHud) {
                 window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
               }
-              // Show/hide if instance exists
+              // Show/hide if instance exists based on preference
               if (window.__tpHud) {
                 if (on) { try { window.__tpHud.show && window.__tpHud.show(); } catch {} }
                 else { try { window.__tpHud.hide && window.__tpHud.hide(); } catch {} }
@@ -53,10 +53,8 @@ try {
           try { if (S && typeof S.get === 'function') ensureHud(!!S.get('devHud')); } catch {}
           // Subscribe for future changes
           try { if (S && typeof S.subscribe === 'function') S.subscribe('devHud', (v) => ensureHud(!!v)); } catch {}
-          // Fallback: if no store yet, attempt a best-effort install when DEV flag is present
-          if (!S) {
-            try { ensureHud(true); } catch {}
-          }
+          // Ensure install even before store is ready so hotkey works immediately
+          if (!S) { try { ensureHud(false); } catch {} }
         } catch {}
       })
       .catch(() => {});
