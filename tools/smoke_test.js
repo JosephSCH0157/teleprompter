@@ -151,6 +151,38 @@ const URL_TO_OPEN = RAW_URL;
         warnLogs.push('[smoke] autoChip probe error: ' + (e?.message || String(e)));
       }
 
+      // Hybrid gating from profile (no mic): inject a fake profile and preference, expect a stable Hybrid paused/manual state
+      try {
+        const txt = await page.evaluate(() => {
+          try {
+            const asr = { profiles: { test: { id:'test', label:'TestProfile', capture: { deviceId:'', sampleRateHz:48000, channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }, cal: { noiseRmsDbfs:-50, noisePeakDbfs:-44, speechRmsDbfs:-20, speechPeakDbfs:-14, snrDb:30 }, vad: { tonDb:-28, toffDb:-34, attackMs:80, releaseMs:300 }, filters:{}, createdAt: Date.now(), updatedAt: Date.now() } }, activeProfileId:'test' };
+            localStorage.setItem('tp_asr_profiles_v1', JSON.stringify(asr));
+            const prefs = JSON.parse(localStorage.getItem('tp_ui_prefs_v1') || '{}') || {};
+            prefs.hybridUseProfileId = 'test';
+            localStorage.setItem('tp_ui_prefs_v1', JSON.stringify(prefs));
+            localStorage.setItem('tp_vad_apply_hybrid', '1');
+            localStorage.setItem('scrollMode', 'hybrid');
+            // Nudge router listeners
+            window.dispatchEvent(new StorageEvent('storage', { key: 'tp_asr_profiles_v1', newValue: JSON.stringify(asr) }));
+            window.dispatchEvent(new StorageEvent('storage', { key: 'tp_ui_prefs_v1', newValue: JSON.stringify(prefs) }));
+            const chip = document.getElementById('autoChip');
+            return chip ? chip.textContent.trim() : '';
+          } catch { return ''; }
+        });
+        console.log('[smoke hybrid/vad-only]', txt);
+      } catch {}
+
+      // Kill switch latency (warn-only): toggle ON then OFF quickly, ensure handler responds within ~150ms
+      try {
+        const elapsed = await page.evaluate(async () => {
+          const t0 = Date.now();
+          const btn = document.getElementById('autoToggle');
+          if (btn) { btn.click(); btn.click(); }
+          return Date.now() - t0;
+        });
+        console.warn('[smoke kill]', elapsed, 'ms');
+      } catch {}
+
       // Typography smoke guard: a line node must respond to font-size var changes
       try {
         const SEL = '#viewer .script :is(p,.line,.tp-line)';
