@@ -53,6 +53,8 @@ try {
 				inc:    (Auto as any).inc,
 				dec:    (Auto as any).dec,
 				setEnabled: (Auto as any).setEnabled,
+				setSpeed: (Auto as any).setSpeed,
+				getState: (Auto as any).getState,
 			}});
 		} catch {}
 

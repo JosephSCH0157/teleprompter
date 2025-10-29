@@ -546,7 +546,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       case 'db_or_vad':
       default:           gateWanted = dbGate || vadGate; break;
     }
-    const enabled = userEnabled && gateWanted;
+    const enabled = userEnabled && (isHybridBypass() ? true : gateWanted);
     if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
     const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
