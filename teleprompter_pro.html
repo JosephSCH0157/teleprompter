@@ -23,13 +23,21 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- Single dev module loader: import source entry directly -->
+  <!-- Single dev module loader: import source entry directly; fall back to legacy bundle on failure -->
   <script type="module">
     window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
     window.__TP_BOOT_INFO = { path: 'dev', isDev: true, imported: false };
     import('./src/index.js')
       .then(() => { window.__TP_BOOT_INFO.imported = true; window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev ok'}); })
-      .catch(e  => { window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev fail', err:String(e)}); });
+      .catch(e  => {
+        try { window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev fail', err:String(e)}); } catch {}
+        // Fallback to legacy monolith for environments without module support or missing files
+        try {
+          var s = document.createElement('script'); s.src = 'teleprompter_pro.js'; s.defer = true;
+          document.head.appendChild(s);
+          window.__TP_BOOT_TRACE.push({tag:'loader',msg:'legacy fallback injected'});
+        } catch {}
+      });
   </script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
