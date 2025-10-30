@@ -28,7 +28,7 @@
     window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || [];
     window.__TP_BOOT_INFO = { path: 'dev', isDev: true, imported: false };
     import('./src/index.js')
-      .then(() => { window.__TP_BOOT_INFO.imported = true; window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev ok'}); })
+      .then(() => { window.__TP_BOOT_INFO.imported = true; window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev ok'}); try { window.__TP_ACTIVE_RUNTIME = 'module'; } catch {} })
       .catch(e  => {
         try { window.__TP_BOOT_TRACE.push({tag:'loader',msg:'dev fail', err:String(e)}); } catch {}
         // Fallback to legacy monolith for environments without module support or missing files
@@ -83,15 +83,7 @@
 
   <!-- Single loader above; no additional booters here. -->
 
-  <!-- App store & centralized Settings wiring -->
-  <script src="src/state/app-store.js"></script>
-  <script src="src/ui/settings.js"></script>
-  <!-- Media modules (mic, camera, display bridge) -->
-  <script src="src/media/mic.js"></script>
-  <script src="src/media/camera.js"></script>
-  <script src="src/media/display-bridge.js"></script>
-  <!-- Legacy mic calibration hook (inert unless asrCalibBtn exists) -->
-  <script src="src/media/legacy-calibrator.js"></script>
+  <!-- Module runtime controls the page; legacy direct scripts removed to avoid double wiring -->
 
   <!-- Inline critical CSS (small, ~2KB): topbar, chips, basic app grid and first-screen editor/viewer -->
   <style>
