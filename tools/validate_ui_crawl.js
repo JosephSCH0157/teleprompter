@@ -29,6 +29,7 @@ const hudProbe = report.hudProbe || {};
 const hotkeysProbe = report.hotkeysProbe || {};
 const lateProbe = report.lateProbe || {};
 const settingsProbe = report.settingsProbe || {};
+const obsTestProbe = report.obsTestProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
 const meta = report.meta || {};
 // CI detection retained for potential future use; currently not used in validation rules
@@ -231,6 +232,30 @@ try {
       const msg = 'settings-asr — Calibration button missing';
       if (CI_STRICT) { console.error('FAIL ' + msg, settingsProbe); allOk = false; } else { console.warn('WARN ' + msg, settingsProbe); }
     }
+  }
+
+  // OBS Test control assertions (regression guard)
+  try {
+    if (obsTestProbe && obsTestProbe.hasBtn) {
+      console.log('PASS obs-test-btn — button present', obsTestProbe.btnId ? `(#${obsTestProbe.btnId})` : '');
+    } else {
+      console.error('FAIL obs-test-btn — Test connection button not found');
+      allOk = false;
+    }
+    if (obsTestProbe && obsTestProbe.hasDataAction) {
+      console.log('PASS obs-test-data-action — data-action="obs-test" present');
+    } else {
+      console.error('FAIL obs-test-data-action — expected data-action="obs-test" attribute');
+      allOk = false;
+    }
+    if (obsTestProbe && obsTestProbe.hasPillAfter) {
+      console.log('PASS obs-test-pill — status pill present after click');
+    } else {
+      console.error('FAIL obs-test-pill — status pill missing after click');
+      allOk = false;
+    }
+  } catch (e) {
+    console.warn('WARN obs-test validation failed:', String(e && e.message || e));
   }
 
   // Auto-scroll UI wiring check

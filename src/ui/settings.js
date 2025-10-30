@@ -455,31 +455,35 @@
   const mainUrl = q('obsUrl');
   const obsPassS = q('settingsObsPassword');
   const mainPass = q('obsPassword');
-      if (obsUrlS && mainUrl) {
-        obsUrlS.addEventListener('input', () => { try { if (mainUrl.value !== obsUrlS.value) mainUrl.value = obsUrlS.value; } catch {} });
-        mainUrl.addEventListener('input', () => { try { if (obsUrlS.value !== mainUrl.value) obsUrlS.value = mainUrl.value; } catch {} });
-      }
-      if (obsPassS && mainPass) {
-        obsPassS.addEventListener('input', () => { try { if (mainPass.value !== obsPassS.value) mainPass.value = obsPassS.value; } catch {} });
-        mainPass.addEventListener('input', () => { try { if (obsPassS.value !== mainPass.value) obsPassS.value = mainPass.value; } catch {} });
-      }
-
-      // Wire OBS Host/Password/Scene/Auto-reconnect
+      // OBS fields and controls
       const obsHost = q('settingsObsHost');
       const obsPass = q('settingsObsPassword');
       const obsScene = q('settingsObsScene');
       const obsReconn = q('settingsObsReconnect');
       const obsTestBtn = q('settingsObsTest');
       const obsTestMsg = q('settingsObsTestMsg');
-      if (obsHost && hasStore) obsHost.addEventListener('input', () => S.set('obsHost', String(obsHost.value||'')));
-      if (obsPass && hasStore) obsPass.addEventListener('input', () => S.set('obsPassword', String(obsPass.value||'')));
-      if (obsScene && hasStore) obsScene.addEventListener('input', () => S.set('obsScene', String(obsScene.value||'')));
-      if (obsReconn && hasStore) obsReconn.addEventListener('change', () => S.set('obsReconnect', !!obsReconn.checked));
-      if (hasStore && typeof S.subscribe === 'function') {
-        S.subscribe('obsHost', v => { try { if (obsHost && obsHost.value !== v) obsHost.value = v || ''; } catch {} });
-        S.subscribe('obsPassword', v => { try { if (obsPass && obsPass.value !== v) obsPass.value = v || ''; } catch {} });
-        S.subscribe('obsScene', v => { try { if (obsScene && obsScene.value !== v) obsScene.value = v || ''; } catch {} });
-        S.subscribe('obsReconnect', v => { try { if (obsReconn && obsReconn.checked !== !!v) obsReconn.checked = !!v; } catch {} });
+      // Skip legacy OBS input mirroring when TS inline bridge owns OBS to avoid duplicate churn
+      if (!window.__tpObsInlineBridgeActive) {
+        if (obsUrlS && mainUrl) {
+          obsUrlS.addEventListener('input', () => { try { if (mainUrl.value !== obsUrlS.value) mainUrl.value = obsUrlS.value; } catch {} });
+          mainUrl.addEventListener('input', () => { try { if (obsUrlS.value !== mainUrl.value) obsUrlS.value = mainUrl.value; } catch {} });
+        }
+        if (obsPassS && mainPass) {
+          obsPassS.addEventListener('input', () => { try { if (mainPass.value !== obsPassS.value) mainPass.value = obsPassS.value; } catch {} });
+          mainPass.addEventListener('input', () => { try { if (obsPassS.value !== mainPass.value) obsPassS.value = mainPass.value; } catch {} });
+        }
+
+  // Wire OBS Host/Password/Scene/Auto-reconnect
+        if (obsHost && hasStore) obsHost.addEventListener('input', () => S.set('obsHost', String(obsHost.value||'')));
+        if (obsPass && hasStore) obsPass.addEventListener('input', () => S.set('obsPassword', String(obsPass.value||'')));
+        if (obsScene && hasStore) obsScene.addEventListener('input', () => S.set('obsScene', String(obsScene.value||'')));
+        if (obsReconn && hasStore) obsReconn.addEventListener('change', () => S.set('obsReconnect', !!obsReconn.checked));
+        if (hasStore && typeof S.subscribe === 'function') {
+          S.subscribe('obsHost', v => { try { if (obsHost && obsHost.value !== v) obsHost.value = v || ''; } catch {} });
+          S.subscribe('obsPassword', v => { try { if (obsPass && obsPass.value !== v) obsPass.value = v || ''; } catch {} });
+          S.subscribe('obsScene', v => { try { if (obsScene && obsScene.value !== v) obsScene.value = v || ''; } catch {} });
+          S.subscribe('obsReconnect', v => { try { if (obsReconn && obsReconn.checked !== !!v) obsReconn.checked = !!v; } catch {} });
+        }
       }
 
       // OBS Test connection button (skip if inline TS bridge is active)

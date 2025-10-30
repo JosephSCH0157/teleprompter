@@ -343,13 +343,31 @@ const cp = require('child_process');
             return { hasBody: !!body, tabs: (tabs && tabs.length) || 0, hasMedia: !!mediaTab, hasMicSel: !!micSel, hasMicLevel: !!micLevel, hasAsrCalibBtn: !!asrBtn };
           } catch { return { hasBody:false, tabs:0, hasMedia:false, hasMicSel:false, hasMicLevel:false }; }
         })();
-        return { legendProbe, renderProbe, hudProbe, lateProbe, settingsProbe };
+        // OBS Test probe: find button, confirm data-action, and ensure pill appears after click
+        const obsTestProbe = await (async function(){
+          try {
+            const sel = '#settingsObsTest, #obsTest, [data-action="obs-test"]';
+            const btn = document.querySelector(sel);
+            const hadPillBefore = !!(document.getElementById('obsStatusText') || document.getElementById('obsStatus'));
+            const hasBtn = !!btn;
+            const hasDataAction = !!(btn && btn.getAttribute && btn.getAttribute('data-action'));
+            if (btn && btn.click) {
+              btn.click();
+              await sleep(50);
+            }
+            const hasPillAfter = !!(document.getElementById('obsStatusText') || document.getElementById('obsStatus'));
+            const btnId = btn && btn.id || null;
+            return { hasBtn, hasDataAction, hadPillBefore, hasPillAfter, btnId };
+          } catch { return { hasBtn:false, hasDataAction:false, hadPillBefore:false, hasPillAfter:false } }
+        })();
+        return { legendProbe, renderProbe, hudProbe, lateProbe, settingsProbe, obsTestProbe };
       });
       out.legendProbe = probes.legendProbe;
       out.renderProbe = probes.renderProbe;
       out.hudProbe = probes.hudProbe;
       out.lateProbe = probes.lateProbe;
       out.settingsProbe = probes.settingsProbe;
+      out.obsTestProbe = probes.obsTestProbe;
 
       // Hotkeys probe using trusted key events
       try {
