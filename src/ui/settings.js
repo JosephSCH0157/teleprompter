@@ -482,8 +482,8 @@
         S.subscribe('obsReconnect', v => { try { if (obsReconn && obsReconn.checked !== !!v) obsReconn.checked = !!v; } catch {} });
       }
 
-      // OBS Test connection button
-      if (obsTestBtn) {
+      // OBS Test connection button (skip if inline TS bridge is active)
+      if (obsTestBtn && !window.__tpObsInlineBridgeActive) {
         obsTestBtn.addEventListener('click', async () => {
           try {
             const host = hasStore ? String(S.get('obsHost')||'') : (obsHost ? String(obsHost.value||'') : '');
@@ -542,6 +542,7 @@
 
       // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth and manage connection
       function ensureObsConnection(){
+        if (window.__tpObsInlineBridgeActive) return; // TS inline bridge manages OBS; avoid double connections
         try {
           const enabled = hasStore ? !!S.get('obsEnabled') : false;
           const host = hasStore ? String(S.get('obsHost')||'') : '';
