@@ -190,6 +190,21 @@ async function boot() {
   // Ensure autoscroll engine is initialized before wiring router/UI
   try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
 
+  // Provide a minimal global scroll controller facade for dev/CI bridges and diagnostics.
+  // This delegates to the single authoritative Auto engine to avoid double-ownership.
+  try {
+    if (!window.__scrollCtl) {
+      window.__scrollCtl = {
+        start: () => { try { Auto.setEnabled(true); } catch {} },
+        stop: () => { try { Auto.setEnabled(false); } catch {} },
+        setSpeed: (s) => { try { Auto.setSpeed(s); } catch {} },
+        isActive: () => {
+          try { const st = (typeof Auto.getState === 'function') ? Auto.getState() : null; return !!(st && st.enabled); } catch { return false; }
+        },
+      };
+    }
+  } catch {}
+
   // Party-mode eggs (UI + bus triggers)
   try { Eggs.install({ bus }); } catch {}
 
