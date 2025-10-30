@@ -298,7 +298,7 @@ async function boot() {
             __lastAutoToggleAt = Date.now();
             Auto.toggle();
             setTimeout(__applyAutoChip, 0);
-            return;
+            // no explicit return needed; end of handler
           }
         } catch {}
       }, { capture: true });

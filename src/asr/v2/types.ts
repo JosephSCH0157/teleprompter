@@ -3,7 +3,7 @@
 export interface InputAdapter {
   start(): Promise<void>;
   stop(): Promise<void>;
-  onFeature(fn: (f: Features) => void): () => void; // subscribe/unsub
+  onFeature(_fn: (_f: Features) => void): () => void; // subscribe/unsub
   status(): AdapterStatus;
 }
 
@@ -42,7 +42,7 @@ export type Tempo = {
 };
 
 export interface FeatureSynth {
-  push(f: Features): void;
+  push(_f: Features): void;
   getTempo(): Tempo;
   getSpeaking(): boolean;
 }
@@ -58,28 +58,28 @@ export interface PaceCaps {
 export type PaceMode = 'assist' | 'align' | 'vad';
 
 export interface PaceEngine {
-  setMode(m: PaceMode): void;
-  setCaps(c: Partial<PaceCaps>): void;
-  setSensitivity(mult: number): void;      // 0.5..1.5
-  setCatchupBias(level: 'off'|'low'|'med'): void;
-  consume(tempo: Tempo, speaking: boolean): void;
+  setMode(_m: PaceMode): void;
+  setCaps(_c: Partial<PaceCaps>): void;
+  setSensitivity(_mult: number): void;      // 0.5..1.5
+  setCatchupBias(_level: 'off'|'low'|'med'): void;
+  consume(_tempo: Tempo, _speaking: boolean): void;
   getTargetPxs(): number; // smoothed target
 }
 
 // Follower (alignment) — stubbed for 1.6.2
 export type AlignStrategy = 'free' | 'paragraph' | 'line';
 export interface Follower {
-  setStrategy(s: AlignStrategy): void;
-  suggestAnchor(anchorId: string): void;
+  setStrategy(_s: AlignStrategy): void;
+  suggestAnchor(_anchorId: string): void;
   advanceOnTokenBurst(): void;
   release(): void;
 }
 
 // Motor
 export interface Motor {
-  setEnabled(on: boolean): void;
-  setVelocity(pxs: number): void;
-  tick(now: number): void;
+  setEnabled(_on: boolean): void;
+  setVelocity(_pxs: number): void;
+  tick(_now: number): void;
 }
 
 // Orchestrator
@@ -92,12 +92,12 @@ export interface OrchestratorStatus {
 }
 
 export interface Orchestrator {
-  start(adapter: InputAdapter): Promise<void>;
+  start(_adapter: InputAdapter): Promise<void>;
   stop(): Promise<void>;
-  setMode(m: PaceMode): void;
-  setGovernor(caps: Partial<PaceCaps>): void;
-  setSensitivity(mult: number): void;
-  setAlignStrategy(s: AlignStrategy): void;
+  setMode(_m: PaceMode): void;
+  setGovernor(_caps: Partial<PaceCaps>): void;
+  setSensitivity(_mult: number): void;
+  setAlignStrategy(_s: AlignStrategy): void;
   getStatus(): OrchestratorStatus;
 }
 

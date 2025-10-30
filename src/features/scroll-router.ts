@@ -7,7 +7,7 @@ export type AutoAPI = {
   inc?: () => void;
   dec?: () => void;
   setEnabled?: (_on: boolean) => void;
-  setSpeed?: (v: number) => void;
+  setSpeed?: (_v: number) => void;
   getState?: () => { enabled: boolean; speed: number };
 };
 
@@ -223,8 +223,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     document.addEventListener('change', (e: Event)=>{
       const t = e.target as HTMLElement | null;
       if ((t as HTMLSelectElement)?.id === 'scrollMode') {
-        const v = (t as HTMLSelectElement).value as Mode;
-        applyMode(v);
+  const modeVal = (t as HTMLSelectElement).value as Mode;
+  applyMode(modeVal);
         applyGate();
         ensureOrchestratorForMode();
       }

@@ -6,10 +6,8 @@ function openSettingsToAsr(startWizard?: boolean) {
     // Open overlay
     (window as any).__tpSettings?.open?.();
     // Switch to Media tab
-    const body = document.getElementById('settingsBody');
     const overlay = document.getElementById('settingsOverlay');
     if (overlay) overlay.classList.remove('hidden');
-    const root = document.getElementById('settingsTabs')?.closest('.sheet') || document;
     const tabsRoot = document.getElementById('settingsTabs') || document;
     tabsRoot?.querySelectorAll('[data-tab-content]')?.forEach((c) => ((c as HTMLElement).style.display = 'none'));
     const media = document.querySelector('[data-tab-content="media"]') as HTMLElement | null;

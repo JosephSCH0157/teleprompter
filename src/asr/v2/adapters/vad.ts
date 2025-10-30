@@ -3,7 +3,7 @@ import type { AdapterStatus, InputAdapter, VadFeature } from '../types';
 export function createVadEventAdapter(): InputAdapter {
   let ready = false;
   let error: string | undefined;
-  const subs = new Set<(f: VadFeature) => void>();
+  const subs = new Set<(_f: VadFeature) => void>();
   let unsub: (() => void) | null = null;
 
   function status(): AdapterStatus { return { kind: 'vad', ready, error }; }
@@ -33,7 +33,7 @@ export function createVadEventAdapter(): InputAdapter {
     ready = false;
   }
 
-  function onFeature(fn: (f: VadFeature) => void) { subs.add(fn); return () => subs.delete(fn); }
+  function onFeature(fn: (_f: VadFeature) => void) { subs.add(fn); return () => subs.delete(fn); }
 
   return { start, stop, onFeature: onFeature as any, status };
 }

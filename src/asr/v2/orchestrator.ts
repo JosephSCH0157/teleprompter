@@ -11,6 +11,7 @@ export function createOrchestrator(): Orchestrator {
   let started = false;
   let adapter: InputAdapter | null = null;
   let unsub: (() => void) | null = null;
+  let asrErrUnsub: (() => void) | null = null;
   const errors: string[] = [];
 
   const ModeAliases: Record<string, PaceMode> = { wpm: 'assist', asr: 'assist', vad: 'vad', align: 'align', assist: 'assist' };
@@ -31,8 +32,7 @@ export function createOrchestrator(): Orchestrator {
   async function start(a: InputAdapter): Promise<void> {
     if (started) return;
     adapter = a;
-    let restarts = 0;
-    let asrErrUnsub: (() => void) | null = null;
+  let restarts = 0;
     unsub = a.onFeature((f) => {
       try {
         synth.push(f as any);
@@ -67,6 +67,7 @@ export function createOrchestrator(): Orchestrator {
   async function stop(): Promise<void> {
     try { unsub?.(); unsub = null; } catch {}
     try { await adapter?.stop(); } catch {}
+    try { asrErrUnsub?.(); asrErrUnsub = null; } catch {}
     adapter = null;
     started = false;
   }
