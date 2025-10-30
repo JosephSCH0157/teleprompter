@@ -4,7 +4,6 @@
 
 import * as Adapters from './adapters/index.js';
 // Provide legacy-compatible app store for settings/state persistence (exposes window.__tpStore)
-import './state/app-store.js';
 import * as Mic from './adapters/mic.js';
 import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
@@ -15,6 +14,7 @@ import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
+import './state/app-store.js';
 // Ensure inline formatter is present (provides window.formatInlineMarkup)
 import '../ui/format.js';
 import '../ui/inline-shim.js';
