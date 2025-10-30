@@ -1,368 +1,673 @@
-// src/features/scroll-router.js
-// Owns the active scroll strategy and routes UI/events to it.
-// Modes: 'timed' (existing Auto), 'step', 'hybrid' (voice-gated Auto), stubs for 'wpm','asr','reh'
-
-// Dependencies: existing Auto controller (autoscroll.js) and dB events (tp:db) from mic.js
-import { createOrchestrator } from '../asr/v2/orchestrator.js';
-import * as Auto from './autoscroll.js';
-
-const LS_KEY = 'scrollMode';
-const DEFAULTS = {
-  mode: 'hybrid',
-  timed:   { speed: 22, rampMs: 300 },
-  step:    { unit: 'line', snap: true, holdCreep: 8 },     // unit: 'line'|'paragraph'|'block'
-  hybrid:  { speed: 20, attackMs: 150, releaseMs: 350, thresholdDb: -42 },
-  wpm:     { target: 170, minPx: 10, maxPx: 120, ewma: 0.3 },
-  asr:     { aggr: 0.6, recoverChars: 80 },
-  reh:     { pauseAt: '.,;:?!', resumeMs: 900, cue: 'visual', loop: null },
-};
-
-const state = { ...DEFAULTS };
-let VAD_PROFILE = null;
-const ASR_KEY = 'tp_asr_profiles_v1';
-const PREF_KEY = 'tp_ui_prefs_v1';
-const APPLY_KEY = 'tp_vad_apply_hybrid'; // keep existing apply flag for now
-function _pickProfileId(asrState, prefs){
-  try {
-    const prefId = prefs && prefs.hybridUseProfileId;
-    if (prefId && asrState && asrState.profiles && asrState.profiles[prefId]) return prefId;
-    return (asrState && asrState.activeProfileId) || null;
-  } catch { return null; }
-}
-function loadVadProfile(){
-  try {
-    const apply = localStorage.getItem(APPLY_KEY) === '1';
-    const asrRaw = localStorage.getItem(ASR_KEY);
-    const prefsRaw = localStorage.getItem(PREF_KEY);
-    const asr = asrRaw ? (JSON.parse(asrRaw)||{}) : null;
-    const prefs = prefsRaw ? (JSON.parse(prefsRaw)||{}) : null;
-    const id = _pickProfileId(asr, prefs);
-    if (id && asr && asr.profiles && asr.profiles[id] && asr.profiles[id].vad) {
-      const p = asr.profiles[id];
-      VAD_PROFILE = { apply, tonDb: Number(p.vad.tonDb), toffDb: Number(p.vad.toffDb), attackMs: Number(p.vad.attackMs), releaseMs: Number(p.vad.releaseMs), label: p.label };
-    } else {
-      // Fallback to legacy key if present
-      const raw = localStorage.getItem('tp_vad_profile_v1');
-      VAD_PROFILE = raw ? { apply, ...(JSON.parse(raw)||{}) } : null;
+// src/asr/v2/adapters/vad.ts
+function createVadEventAdapter() {
+  let ready = false;
+  let error;
+  const subs2 = /* @__PURE__ */ new Set();
+  let unsub = null;
+  function status() {
+    return { kind: "vad", ready, error };
+  }
+  async function start() {
+    try {
+      if (unsub) return;
+      const onEv = (e) => {
+        try {
+          const d = e?.detail || {};
+          const f = { kind: "gate", speaking: !!d.speaking, rmsDbfs: Number(d.rmsDbfs) || -60 };
+          subs2.forEach((fn) => {
+            try {
+              fn(f);
+            } catch {
+            }
+          });
+        } catch {
+        }
+      };
+      const h = onEv;
+      window.addEventListener("tp:vad", h);
+      unsub = () => {
+        try {
+          window.removeEventListener("tp:vad", h);
+        } catch {
+        }
+      };
+      ready = true;
+    } catch (e) {
+      error = String(e?.message || e);
+      ready = false;
     }
-  } catch { VAD_PROFILE = null; }
+  }
+  async function stop() {
+    try {
+      unsub?.();
+      unsub = null;
+    } catch {
+    }
+    ready = false;
+  }
+  function onFeature(fn) {
+    subs2.add(fn);
+    return () => subs2.delete(fn);
+  }
+  return { start, stop, onFeature, status };
 }
-let viewer = null;
-let orch = null;
 
-// ---------- utilities ----------
-function persist() {
-  try { localStorage.setItem(LS_KEY, state.mode); } catch {}
+// src/asr/v2/featureSynth.ts
+function createFeatureSynth() {
+  const TOK_WIN_MS = 5e3;
+  let toks = [];
+  let lastTokensKey = "";
+  let speakingWanted = false;
+  let speaking2 = false;
+  let lastSpeakChange = 0;
+  const ATTACK_MS = 80, RELEASE_MS = 300;
+  let lastActivityMs = performance.now();
+  let wpmEma;
+  const ALPHA = 0.3;
+  function dedupeKey(list) {
+    return list.map((x) => x.text).join("|");
+  }
+  function wordsInWindow(now) {
+    const start = now - TOK_WIN_MS;
+    toks = toks.filter((t) => t.t >= start);
+    let words = 0;
+    for (const t of toks) {
+      words += (t.text || "").trim().split(/\s+/).filter(Boolean).length;
+    }
+    return words;
+  }
+  function push(f) {
+    const now = performance.now();
+    if (f.kind === "tokens") {
+      const key = dedupeKey(f.tokens);
+      if (f.final || key !== lastTokensKey) {
+        lastTokensKey = key;
+        for (const tk of f.tokens) {
+          toks.push({ text: tk.text, t: now });
+        }
+        lastActivityMs = now;
+        speakingWanted = true;
+      }
+    } else if (f.kind === "gate") {
+      speakingWanted = !!f.speaking;
+      if (f.speaking) lastActivityMs = now;
+    }
+    if (speakingWanted && !speaking2) {
+      if (now - lastSpeakChange >= ATTACK_MS) {
+        speaking2 = true;
+        lastSpeakChange = now;
+      }
+    } else if (!speakingWanted && speaking2) {
+      if (now - lastSpeakChange >= RELEASE_MS) {
+        speaking2 = false;
+        lastSpeakChange = now;
+      }
+    }
+    const words = wordsInWindow(now);
+    const instWpm = words * 60 * (1e3 / TOK_WIN_MS);
+    if (words > 0) {
+      wpmEma = wpmEma == null ? instWpm : ALPHA * instWpm + (1 - ALPHA) * wpmEma;
+    }
+  }
+  function getTempo() {
+    const now = performance.now();
+    const pauseMs = Math.max(0, now - lastActivityMs);
+    return { wpm: wpmEma, pauseMs };
+  }
+  function getSpeaking() {
+    return speaking2;
+  }
+  return { push, getTempo, getSpeaking };
 }
-function restore() {
+
+// src/asr/v2/motor.ts
+function createAutoMotor() {
+  const Auto = window.__tpAuto || window.Auto || {};
+  function setEnabled(on) {
+    try {
+      (Auto.setEnabled ?? Auto.toggle)?.(on);
+    } catch {
+    }
+  }
+  function setVelocity(pxs) {
+    try {
+      Auto.setSpeed?.(pxs);
+    } catch {
+    }
+  }
+  function tick(_now) {
+  }
+  return { setEnabled, setVelocity, tick };
+}
+
+// src/asr/v2/paceEngine.ts
+function clamp(n, lo, hi) {
+  return Math.min(hi, Math.max(lo, n));
+}
+function createPaceEngine() {
+  let mode = "assist";
+  let caps = { minPxs: 10, maxPxs: 220, accelCap: 60, decayMs: 250 };
+  let sens = 1;
+  let _catchup = "off";
+  let target = 0;
+  let lastUpdate = performance.now();
+  let lastWpm;
+  const DEAD_WPM = 8;
+  const ALPHA = 0.3;
+  const SPEAKING_PXS = 45;
+  function mapWpmToPxPerSec(wpm, doc) {
+    try {
+      const cs = getComputedStyle(doc.documentElement);
+      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+      const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+      const lineHeightPx = fsPx * lhScale;
+      const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+      const linesPerSec = wpm / 60 / wpl;
+      return linesPerSec * lineHeightPx;
+    } catch {
+      return wpm / 60 / 8 * (56 * 1.4);
+    }
+  }
+  function setMode(m) {
+    mode = m;
+  }
+  function setCaps(c) {
+    caps = { ...caps, ...c };
+  }
+  function setSensitivity(mult) {
+    sens = clamp(mult, 0.5, 1.5);
+  }
+  function setCatchupBias(level) {
+    _catchup = level;
+  }
+  function consume(tempo, speaking2) {
+    const now = performance.now();
+    const dt = Math.max(1e-3, (now - lastUpdate) / 1e3);
+    lastUpdate = now;
+    if (mode === "vad") {
+      const tgt = speaking2 ? SPEAKING_PXS : target * Math.pow(0.85, dt * (1e3 / caps.decayMs));
+      const maxStep = caps.accelCap * dt;
+      const next = target + clamp(tgt - target, -maxStep, maxStep);
+      target = clamp(next, caps.minPxs, caps.maxPxs);
+      return;
+    }
+    let wpm = tempo.wpm;
+    if ((wpm == null || !isFinite(wpm)) && speaking2) {
+      const baseline = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
+      wpm = baseline;
+    }
+    if (wpm == null || !isFinite(wpm)) return;
+    if (!(lastWpm != null && Math.abs(wpm - lastWpm) < DEAD_WPM)) {
+      lastWpm = wpm;
+      const pxsRaw = mapWpmToPxPerSec(wpm, document) * sens;
+      const smoothed = target === 0 ? pxsRaw : ALPHA * pxsRaw + (1 - ALPHA) * target;
+      const maxStep = caps.accelCap * dt;
+      const next = target + clamp(smoothed - target, -maxStep, maxStep);
+      target = clamp(next, caps.minPxs, caps.maxPxs);
+    }
+  }
+  function getTargetPxs() {
+    return clamp(target, caps.minPxs, caps.maxPxs);
+  }
+  return { setMode, setCaps, setSensitivity, setCatchupBias, consume, getTargetPxs };
+}
+
+// src/asr/v2/orchestrator.ts
+function createOrchestrator() {
+  const synth = createFeatureSynth();
+  const engine = createPaceEngine();
+  const motor = createAutoMotor();
+  let mode = "assist";
+  let started = false;
+  let adapter = null;
+  let unsub = null;
+  let asrErrUnsub = null;
+  const errors = [];
+  const ModeAliases = { wpm: "assist", asr: "assist", vad: "vad", align: "align", assist: "assist" };
+  function setMode(m) {
+    const norm = ModeAliases[m] || m;
+    mode = norm;
+    engine.setMode(mode);
+  }
+  function setGovernor(c) {
+    engine.setCaps(c);
+  }
+  function setSensitivity(mult) {
+    engine.setSensitivity(mult);
+  }
+  function setAlignStrategy(_s) {
+  }
+  function getStatus() {
+    const tempo = synth.getTempo();
+    return { mode, wpm: tempo.wpm, speaking: synth.getSpeaking(), targetPxs: engine.getTargetPxs(), errors: [...errors] };
+  }
+  async function start(a) {
+    if (started) return;
+    adapter = a;
+    let restarts = 0;
+    unsub = a.onFeature((f) => {
+      try {
+        synth.push(f);
+        const tempo = synth.getTempo();
+        const speaking2 = synth.getSpeaking();
+        engine.consume(tempo, speaking2);
+        const pxs = engine.getTargetPxs();
+        try {
+          motor.setVelocity(pxs);
+        } catch {
+        }
+      } catch {
+      }
+    });
+    await a.start();
+    started = true;
+    try {
+      motor.setEnabled(true);
+    } catch {
+    }
+    try {
+      const onErr = () => {
+        if (restarts++ === 0) {
+          setTimeout(async () => {
+            try {
+              await adapter?.start();
+              if (window.toast) window.toast("ASR restarted");
+            } catch {
+            }
+          }, 300);
+        } else {
+          setMode("vad");
+          try {
+            if (window.toast) window.toast("ASR unstable \u2192 VAD fallback");
+          } catch {
+          }
+        }
+      };
+      const h = onErr;
+      window.addEventListener("tp:asr:error", h);
+      asrErrUnsub = () => {
+        try {
+          window.removeEventListener("tp:asr:error", h);
+        } catch {
+        }
+      };
+    } catch {
+    }
+  }
+  async function stop() {
+    try {
+      unsub?.();
+      unsub = null;
+    } catch {
+    }
+    try {
+      await adapter?.stop();
+    } catch {
+    }
+    try {
+      asrErrUnsub?.();
+      asrErrUnsub = null;
+    } catch {
+    }
+    adapter = null;
+    started = false;
+  }
+  return { start, stop, setMode, setGovernor, setSensitivity, setAlignStrategy, getStatus };
+}
+
+// src/settings/uiPrefs.ts
+var KEY = "tp_ui_prefs_v1";
+var state = (() => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(KEY) || "{}") || {};
+    return { linkTypography: false, hybridGate: "db_or_vad", hybridUseProfileId: parsed.hybridUseProfileId || null, ...parsed };
+  } catch {
+    return { linkTypography: false, hybridGate: "db_or_vad", hybridUseProfileId: null };
+  }
+})();
+var subs = /* @__PURE__ */ new Set();
+var getUiPrefs = () => state;
+var onUiPrefs = (fn) => (subs.add(fn), () => subs.delete(fn));
+
+// src/features/scroll-router.ts
+var LS_KEY = "scrollMode";
+var DEFAULTS = {
+  mode: "hybrid",
+  step: { holdCreep: 8 },
+  hybrid: { attackMs: 150, releaseMs: 350, thresholdDb: -42 }
+};
+var state2 = { ...DEFAULTS };
+var viewer = null;
+var isHybridBypass = () => {
+  try {
+    return localStorage.getItem("tp_hybrid_bypass") === "1";
+  } catch {
+    return false;
+  }
+};
+function persistMode() {
+  try {
+    localStorage.setItem(LS_KEY, state2.mode);
+  } catch {
+  }
+}
+function restoreMode() {
   try {
     const m = localStorage.getItem(LS_KEY);
-    if (m) state.mode = m;
-  } catch {}
+    if (m) state2.mode = m;
+  } catch {
+  }
 }
-
-// ---------- STEP MODE ----------
-function findNextLine(offsetTop, dir=+1) {
-  const lines = viewer?.querySelectorAll?.('.line');
-  if (!viewer || !lines?.length) return null;
-  const y = offsetTop ?? viewer.scrollTop;
+function findNextLine(offsetTop, dir) {
+  if (!viewer) return null;
+  const lines = viewer.querySelectorAll(".line");
+  if (!lines || !lines.length) return null;
+  const y = Number.isFinite(offsetTop) ? offsetTop : viewer.scrollTop;
   if (dir > 0) {
-    for (let i=0;i<lines.length;i++) {
-      const t = lines[i].offsetTop;
-      if (t > y + 2) return lines[i];
+    for (let i = 0; i < lines.length; i++) {
+      const el = lines[i];
+      if (el.offsetTop > y + 2) return el;
     }
-    return lines[lines.length-1];
+    return lines[lines.length - 1];
   } else {
     let prev = lines[0];
-    for (let i=0;i<lines.length;i++) {
-      const t = lines[i].offsetTop;
-      if (t >= y - 2) return prev;
-      prev = lines[i];
+    for (let i = 0; i < lines.length; i++) {
+      const el = lines[i];
+      if (el.offsetTop >= y - 2) return prev;
+      prev = el;
     }
     return prev;
   }
 }
-function stepOnce(dir=+1) {
-  if (!viewer) viewer = document.getElementById('viewer');
+function stepOnce(dir) {
+  if (!viewer) viewer = document.getElementById("viewer");
   if (!viewer) return;
   const next = findNextLine(viewer.scrollTop, dir);
   if (!next) return;
   viewer.scrollTop = Math.max(0, next.offsetTop - 6);
 }
-// optional “press-and-hold creep”
-let creepRaf=0, creepLast=0;
-function holdCreepStart(pxPerSec=8, dir=+1) {
+var creepRaf = 0;
+var creepLast = 0;
+function holdCreepStart(pxPerSec = DEFAULTS.step.holdCreep, dir = 1) {
+  if (!viewer) viewer = document.getElementById("viewer");
+  if (!viewer) return;
   cancelAnimationFrame(creepRaf);
-  if (!viewer) viewer = document.getElementById('viewer');
   creepLast = performance.now();
-  const tick = (now)=>{
-    const dt = (now - creepLast)/1000; creepLast = now;
-    viewer.scrollTop += dir * pxPerSec * dt;
+  const tick = (now) => {
+    const dt = (now - creepLast) / 1e3;
+    creepLast = now;
+    try {
+      if (viewer) viewer.scrollTop += dir * pxPerSec * dt;
+    } catch {
+    }
     creepRaf = requestAnimationFrame(tick);
   };
   creepRaf = requestAnimationFrame(tick);
 }
-function holdCreepStop() { cancelAnimationFrame(creepRaf); creepRaf=0; }
-
-// ---------- HYBRID MODE (VAD/DB combine) ----------
-let userEnabled = false; // user's Auto toggle intent
-let dbGate = false, vadGate = false; // per-source gates
-let dbAvail = false, vadAvail = false; // source availability
-let gateTimer=0; // for dbGate smoothing
-let gatePref = (function(){ try { return (JSON.parse(localStorage.getItem('tp_ui_prefs_v1')||'{}')||{}).hybridGate || 'db_or_vad'; } catch { return 'db_or_vad'; } })();
-
-function combinedGate(pref, _dbAvail, _vadAvail, _dbGate, _vadGate){
-  if (pref === 'db_and_vad' && (!_dbAvail || !_vadAvail)) return false;
-  if (pref === 'db')  return _dbAvail  ? _dbGate  : false;
-  if (pref === 'vad') return _vadAvail ? _vadGate : false;
-  const okDb = _dbAvail ? _dbGate : false;
-  const okVad = _vadAvail ? _vadGate : false;
-  return okDb || okVad;
+function holdCreepStop() {
+  cancelAnimationFrame(creepRaf);
+  creepRaf = 0;
 }
-
-function applyGate(){
-  const enabled = userEnabled && combinedGate(gatePref, dbAvail, vadAvail, dbGate, vadGate);
-  try { Auto.setEnabled(enabled); } catch {}
-  try {
-    const chip = document.getElementById('autoChip');
-    if (chip) {
-      const stateTxt = userEnabled ? (enabled ? 'On' : 'Paused') : 'Manual';
-      chip.textContent = `Auto: ${stateTxt}`;
-      chip.setAttribute('data-state', stateTxt.toLowerCase());
-    }
-  } catch {}
-  // Reflect user intent on the main Auto button label
-  try {
-    const btn = document.getElementById('autoToggle');
-    if (btn) {
-      const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
-      if (!userEnabled) {
-        btn.textContent = 'Auto-scroll: Off';
-        btn.setAttribute('data-state','off');
-      } else if (enabled) {
-        btn.textContent = `Auto-scroll: On — ${s} px/s`;
-        btn.setAttribute('data-state','on');
-      } else {
-        btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
-        btn.setAttribute('data-state','paused');
-      }
-      btn.setAttribute('aria-pressed', String(!!userEnabled));
-    }
-  } catch {}
+var speaking = false;
+var gateTimer;
+function setSpeaking(on, auto) {
+  if (on === speaking) return;
+  speaking = on;
+  if (typeof auto.setEnabled === "function") auto.setEnabled(on);
+  else auto.toggle();
 }
-
-function hybridHandleDb(db) {
-  clearTimeout(gateTimer);
-  dbAvail = true;
-  // Prefer calibrated profile when applied
-  if (VAD_PROFILE && VAD_PROFILE.apply) {
-    const atk = Number(VAD_PROFILE.attackMs) || state.hybrid.attackMs;
-    const rel = Number(VAD_PROFILE.releaseMs) || state.hybrid.releaseMs;
-    const ton = Number(VAD_PROFILE.tonDb);
-    const toff = Number(VAD_PROFILE.toffDb);
-    if (dbGate) {
-      // sustain while above toff; else release after rel
-      if (Number.isFinite(toff) && db >= toff) {
-        gateTimer = setTimeout(()=> { dbGate = true; applyGate(); }, 0);
-      } else {
-        gateTimer = setTimeout(()=> { dbGate = false; applyGate(); }, rel);
-      }
-    } else {
-      if (Number.isFinite(ton) && db >= ton) {
-        gateTimer = setTimeout(()=> { dbGate = true; applyGate(); }, atk);
-      } else {
-        gateTimer = setTimeout(()=> { dbGate = false; applyGate(); }, 0);
-      }
-    }
-    return;
-  }
-  // Fallback: single-threshold behavior
-  const { attackMs, releaseMs, thresholdDb } = state.hybrid;
-  if (db >= thresholdDb) {
-    gateTimer = setTimeout(()=> { dbGate = true; applyGate(); }, attackMs);
-  } else {
-    gateTimer = setTimeout(()=> { dbGate = false; applyGate(); }, releaseMs);
-  }
+function hybridHandleDb(db, auto) {
+  const { attackMs, releaseMs, thresholdDb } = DEFAULTS.hybrid;
+  if (gateTimer) clearTimeout(gateTimer);
+  if (db >= thresholdDb) gateTimer = setTimeout(() => setSpeaking(true, auto), attackMs);
+  else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
-
-// ---------- WPM / ASR / REH stubs (wire later) ----------
-function _wpmUpdate(/*wpm*/) { /* when ready, map → Auto speed */ }
-function _asrUpdate(/*alignment*/) { /* when ready, snap to target line */ }
-function _rehMarkPause(/*punctuation*/){ /* later */ }
-
-// ---------- MODE ROUTER ----------
 function applyMode(m) {
-  state.mode = m;
-  persist();
-  // Ensure viewer ref is current
-  viewer = document.getElementById('viewer');
-
-  // Flip global flags/classes for Rehearsal watermark + no-record promise
+  state2.mode = m;
+  persistMode();
+  viewer = document.getElementById("viewer");
   try {
-    const isRehearsal = (m === 'rehearsal');
-    document.body && document.body.classList && document.body.classList.toggle('mode-rehearsal', isRehearsal);
-    try { window.__tpNoRecord = isRehearsal; } catch {}
-    try { window.HUD?.bus?.emit('mode:rehearsal', isRehearsal); } catch {}
-    if (isRehearsal) {
-      // Ensure the timed driver is the active engine (no-op if unavailable)
-      try { window.scrollController?.setDriver?.('timed'); } catch {}
-    }
-  } catch {}
-
-  // Base rule: Timed & Hybrid may run the Auto engine; Step never does.
-  if (m === 'timed') {
-    Auto.setEnabled(false); // user will press the Auto button to start
-  } else if (m === 'hybrid') {
-    // In Hybrid mode, default user intent is ON and speed preset to 21 px/s.
-    try { Auto.setSpeed && Auto.setSpeed(21); } catch {}
-    userEnabled = true; // let the gate control actual movement
-    Auto.setEnabled(false); // engine follows gate; applyGate() will enable if open
-  } else if (m === 'rehearsal') {
-    // Rehearsal: steady timed auto-scroll; user uses the Auto toggle as usual
-    Auto.setEnabled(false);
-  } else {
-    Auto.setEnabled(false); // step/wpm/asr/reh start paused
+    const sel = document.getElementById("scrollMode");
+    if (sel && sel.value !== m) sel.value = m;
+  } catch {
   }
-
-  // Start/stop ASR orchestrator for assisted modes
-  try {
-    if (!orch) orch = createOrchestrator();
-    if (m === 'wpm' || m === 'asr') {
-      orch.start('assist');
-    } else {
-      orch.stop && orch.stop();
-    }
-  } catch {}
-
-  // Update select if present
-  const sel = document.getElementById('scrollMode');
-  if (sel && sel.value !== m) sel.value = m;
-
-  // Recompute gate effects after mode change
-  try { applyGate(); } catch {}
 }
-
-export function getMode(){ return state.mode; }
-export function setMode(m){ applyMode(m); }
-
-// Public actions the UI can call
-export function step(dir=+1) { if (state.mode === 'step') stepOnce(dir); }
-
-// Install router once
-export function installScrollRouter() {
-  try { if (window.__tpScrollRouterTsActive) return; } catch {}
-  try { window.__tpScrollRouterJsActive = true; } catch {}
-  restore();
-  applyMode(state.mode);
-  loadVadProfile();
-
-  // Mode selector (UI)
-  document.addEventListener('change', (e)=>{
-    const t = e.target;
-    if (t?.id === 'scrollMode') setMode(t.value);
-  }, {capture:true});
-
-  // Ensure the select announces changes for screen readers
+function installScrollRouter(opts) {
   try {
-    const modeSel = document.getElementById('scrollMode');
-    modeSel && modeSel.setAttribute('aria-live', 'polite');
-  } catch {}
-
-  // Keyboard helpers for Step mode
-  document.addEventListener('keydown', (e)=>{
-    if (state.mode !== 'step') return;
-    if (e.key === 'PageDown') {
-      // eslint-disable-next-line no-restricted-syntax
-      e.preventDefault();
-      step(+1);
+    window.__tpScrollRouterTsActive = true;
+  } catch {
+  }
+  const { auto } = opts;
+  restoreMode();
+  applyMode(state2.mode);
+  const orch = createOrchestrator();
+  let orchRunning = false;
+  async function ensureOrchestratorForMode() {
+    try {
+      if (state2.mode === "wpm" || state2.mode === "asr") {
+        if (!orchRunning) {
+          await orch.start(createVadEventAdapter());
+          orch.setMode("assist");
+          orchRunning = true;
+        }
+      } else if (orchRunning) {
+        await orch.stop();
+        orchRunning = false;
+      }
+    } catch {
     }
-    if (e.key === 'PageUp')   {
-      // eslint-disable-next-line no-restricted-syntax
-      e.preventDefault();
-      step(-1);
+  }
+  ensureOrchestratorForMode();
+  let userEnabled = false;
+  let dbGate = false;
+  let vadGate = false;
+  let gatePref = getUiPrefs().hybridGate;
+  const chipEl = () => document.getElementById("autoChip");
+  function setAutoChip(state3, detail) {
+    const el = chipEl();
+    if (!el) return;
+    el.textContent = `Auto: ${state3 === "on" ? "On" : state3 === "paused" ? "Paused" : "Manual"}`;
+    el.classList.remove("on", "paused", "manual");
+    el.classList.add(state3);
+    el.setAttribute("data-state", state3);
+    if (detail) el.title = detail;
+  }
+  const getStoredSpeed = () => {
+    try {
+      return Number(localStorage.getItem("tp_auto_speed") || "60") || 60;
+    } catch {
+      return 60;
     }
-    if (e.key === ' ') { // hold to creep
-      // eslint-disable-next-line no-restricted-syntax
-      e.preventDefault();
-      holdCreepStart(state.step.holdCreep, +1);
+  };
+  function applyGate() {
+    if (state2.mode !== "hybrid") {
+      if (typeof auto.setEnabled === "function") auto.setEnabled(userEnabled);
+      const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"}`;
+      setAutoChip(userEnabled ? "on" : "manual", detail2);
+      try {
+        const btn = document.getElementById("autoToggle");
+        if (btn) {
+          if (userEnabled) btn.textContent = `Auto-scroll: On \u2014 ${getStoredSpeed()} px/s`;
+          else btn.textContent = "Auto-scroll: Off";
+          btn.setAttribute("aria-pressed", String(!!userEnabled));
+          btn.setAttribute("data-state", userEnabled ? "on" : "off");
+        }
+      } catch {
+      }
+      return;
     }
-  }, {capture:true});
-  document.addEventListener('keyup', (e)=>{
-    if (state.mode !== 'step') return;
-    if (e.key === ' ') {
-      // eslint-disable-next-line no-restricted-syntax
-      e.preventDefault();
-      holdCreepStop();
+    let gateWanted = false;
+    switch (gatePref) {
+      case "db":
+        gateWanted = dbGate;
+        break;
+      case "vad":
+        gateWanted = vadGate;
+        break;
+      case "db_and_vad":
+        gateWanted = dbGate && vadGate;
+        break;
+      case "db_or_vad":
+      default:
+        gateWanted = dbGate || vadGate;
+        break;
     }
-  }, {capture:true});
-
-  // Hybrid listens to dB events and gates the Auto engine
-  window.addEventListener('tp:db', (e)=>{
-    if (state.mode !== 'hybrid') return;
-    const db = e.detail?.db ?? -60;
-    hybridHandleDb(db);
-  });
-  // VAD events: mark availability and gate boolean
-  window.addEventListener('tp:vad', (e) => {
-    if (state.mode !== 'hybrid') return;
-    vadAvail = true;
-    vadGate = !!(e && e.detail && e.detail.speaking);
+    const enabled = userEnabled && (isHybridBypass() ? true : gateWanted);
+    if (typeof auto.setEnabled === "function") auto.setEnabled(enabled);
+    const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
+    setAutoChip(userEnabled ? enabled ? "on" : "paused" : "manual", detail);
+    try {
+      const btn = document.getElementById("autoToggle");
+      if (btn) {
+        const s = getStoredSpeed();
+        if (!userEnabled) {
+          btn.textContent = "Auto-scroll: Off";
+          btn.setAttribute("data-state", "off");
+        } else if (enabled) {
+          btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`;
+          btn.setAttribute("data-state", "on");
+        } else {
+          btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`;
+          btn.setAttribute("data-state", "paused");
+        }
+        btn.setAttribute("aria-pressed", String(!!userEnabled));
+      }
+    } catch {
+    }
+  }
+  onUiPrefs((p) => {
+    gatePref = p.hybridGate;
     applyGate();
   });
-  // Refresh VAD profile if it changes
-  window.addEventListener('storage', (e) => {
-    try {
-      if (!e) return;
-      if (e.key === ASR_KEY || e.key === PREF_KEY || e.key === APPLY_KEY || e.key === 'tp_vad_profile_v1') loadVadProfile();
-      if (e.key === PREF_KEY) {
-        try { gatePref = (JSON.parse(e.newValue||'{}')||{}).hybridGate || gatePref; } catch {}
-      }
-    } catch {}
-  });
-  window.addEventListener('tp:vad:profile', () => { try { loadVadProfile(); } catch {} });
-
-  // Capture user Auto toggle intent
   try {
-    document.addEventListener('click', (ev) => {
-      const t = ev && ev.target;
-      if (t && t.closest && t.closest('#autoToggle')) {
-        userEnabled = !userEnabled;
-        setTimeout(applyGate, 0);
+    document.addEventListener("change", (e) => {
+      const t = e.target;
+      if (t?.id === "scrollMode") {
+        const modeVal = t.value;
+        applyMode(modeVal);
+        applyGate();
+        ensureOrchestratorForMode();
       }
     }, { capture: true });
-  } catch {}
-
-  // Initialize userEnabled from current Auto state and apply once
+    const modeSel = document.getElementById("scrollMode");
+    modeSel?.setAttribute("aria-live", "polite");
+  } catch {
+  }
   try {
-    if (state.mode === 'hybrid') {
-      userEnabled = true;
-      const btn = document.getElementById('autoToggle');
-      if (btn) {
-        const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
-        btn.dataset.state = 'on';
-        btn.textContent = `Auto-scroll: On — ${s} px/s`;
+    document.addEventListener("keydown", (e) => {
+      if (state2.mode !== "step") return;
+      if (e.key === "PageDown") {
+        // eslint-disable-next-line no-restricted-syntax
+        e.preventDefault();
+        stepOnce(1);
       }
-    } else {
-      userEnabled = !!(Auto.getState && Auto.getState().enabled);
-    }
-  } catch {}
-  applyGate();
-  // Keep the label in sync with speed changes
+      if (e.key === "PageUp") {
+        // eslint-disable-next-line no-restricted-syntax
+        e.preventDefault();
+        stepOnce(-1);
+      }
+      if (e.key === " ") {
+        // eslint-disable-next-line no-restricted-syntax
+        e.preventDefault();
+        holdCreepStart(DEFAULTS.step.holdCreep, 1);
+      }
+    }, { capture: true });
+    document.addEventListener("keyup", (e) => {
+      if (state2.mode !== "step") return;
+      if (e.key === " ") {
+        // eslint-disable-next-line no-restricted-syntax
+        e.preventDefault();
+        holdCreepStop();
+      }
+    }, { capture: true });
+  } catch {
+  }
   try {
-    document.addEventListener('tp:autoSpeed', (e)=>{
-      const btn = document.getElementById('autoToggle');
-      if (!btn) return;
-      const ds = btn.dataset && btn.dataset.state || '';
-      const s = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
-      if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
-      if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+    window.addEventListener("tp:db", (e) => {
+      const db = e && e.detail && typeof e.detail.db === "number" ? e.detail.db : -60;
+      hybridHandleDb(db, auto);
+      dbGate = db >= DEFAULTS.hybrid.thresholdDb;
+      applyGate();
     });
-  } catch {}
+    window.addEventListener("tp:vad", (e) => {
+      vadGate = !!(e && e.detail && e.detail.speaking);
+      applyGate();
+    });
+  } catch {
+  }
+  try {
+    document.addEventListener("click", (ev) => {
+      const t = ev.target;
+      if (t?.id === "autoToggle") {
+        const was = userEnabled;
+        userEnabled = !userEnabled;
+        if (!was && userEnabled) {
+          try {
+            auto.setSpeed?.(getStoredSpeed());
+          } catch {
+          }
+          try {
+            window.__scrollCtl?.setSpeed?.(getStoredSpeed());
+          } catch {
+          }
+        }
+        applyGate();
+      }
+    }, { capture: true });
+  } catch {
+  }
+  if (state2.mode === "hybrid") {
+    userEnabled = true;
+    try {
+      auto.setSpeed?.(getStoredSpeed());
+    } catch {
+    }
+    try {
+      const btn = document.getElementById("autoToggle");
+      if (btn) {
+        btn.dataset.state = "on";
+        btn.textContent = `Auto-scroll: On \u2014 ${getStoredSpeed()} px/s`;
+      }
+    } catch {
+    }
+    applyGate();
+  } else {
+    applyGate();
+  }
+  if (state2.mode === "wpm" || state2.mode === "asr") ensureOrchestratorForMode();
+  try {
+    document.addEventListener("tp:autoSpeed", (e) => {
+      const btn = document.getElementById("autoToggle");
+      if (!btn) return;
+      const ds = btn.dataset?.state || "";
+      const s = e && e.detail && typeof e.detail.speed === "number" ? e.detail.speed : getStoredSpeed();
+      if (ds === "on") btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`;
+      if (ds === "paused") btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`;
+    });
+  } catch {
+  }
+  try {
+    document.addEventListener("keydown", (e) => {
+      try {
+        const target = e.target;
+        if (!target) return;
+        const tag = (target.tagName || "").toUpperCase();
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || target.isContentEditable) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const wantUp = e.key === "+" || e.code === "NumpadAdd" || e.key === "ArrowUp";
+        const wantDown = e.key === "-" || e.code === "NumpadSubtract" || e.key === "ArrowDown";
+        if (!wantUp && !wantDown) return;
+        // eslint-disable-next-line no-restricted-syntax
+        e.preventDefault();
+        const cur = Number(auto?.getState?.().speed) || getStoredSpeed();
+        const next = cur + (wantUp ? 5 : -5);
+        auto?.setSpeed?.(next);
+      } catch {
+      }
+    }, { capture: true });
+  } catch {
+  }
 }
-
-
-// This router does not replace your autoscroll.js. It uses it.
-
-// Step Mode: PageDown/PageUp advance to next/prev line; Space (hold) creeps slowly.
-
-// Hybrid Mode: listens to tp:db; above threshold ⇒ start; below ⇒ pause.
+export {
+  installScrollRouter
+};
