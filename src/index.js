@@ -3,6 +3,8 @@
 // delegates the heavy lifting to the legacy loader until a full migration is done.
 
 import * as Adapters from './adapters/index.js';
+// Provide legacy-compatible app store for settings/state persistence (exposes window.__tpStore)
+import './state/app-store.js';
 import * as Mic from './adapters/mic.js';
 import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
@@ -387,13 +389,25 @@ async function boot() {
         setTimeout(wireSpeedInput, 250);
       } catch {}
 
-      // Stop autoscroll defensively when speech stops (also done in speech-loader)
+      // Stop autoscroll with a short buffer after speech stops to avoid abrupt cutoffs
       try {
+        let autoStopTimer = null;
         window.addEventListener('tp:speech-state', (ev) => {
-          try { if (ev?.detail && ev.detail.running) return; } catch {}
-          try { window.__scrollCtl?.stop?.(); } catch {}
-          try { Auto.setEnabled(false); } catch {}
-          try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+          const isRunning = !!(ev && ev.detail && ev.detail.running);
+          try {
+            if (isRunning) {
+              if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
+              return;
+            }
+          } catch {}
+          // Delay stop by 2.5s to allow natural sentence tails
+          if (autoStopTimer) { try { clearTimeout(autoStopTimer); } catch {} }
+          autoStopTimer = setTimeout(() => {
+            try { window.__scrollCtl?.stop?.(); } catch {}
+            try { Auto.setEnabled(false); } catch {}
+            try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+            autoStopTimer = null;
+          }, 2500);
         });
       } catch {}
     } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }

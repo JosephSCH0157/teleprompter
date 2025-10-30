@@ -1,6 +1,6 @@
 // One entry point for speech. Uses Web Speech by default.
 // If /speech/orchestrator.js exists (built from TS), we load it instead.
-import * as Auto from './autoscroll.js';
+// Autoscroll is managed externally; buffered stop handled in index listener
 
 let running = false;
 let rec = null; // SR instance or orchestrator handle
@@ -320,10 +320,7 @@ export function installSpeech() {
         try { document.body.classList.remove('listening'); } catch {}
         try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}
         try { window.speechOn = false; } catch {}
-        // Stop any autoscroll motion in main and clean fallbacks
-        try { Auto.setEnabled(false); } catch {}
-        try { window.__scrollCtl?.stop?.(); } catch {}
-        try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+        // Do not stop autoscroll immediately; index listener applies a brief buffer before stopping
         // Broadcast a stop to the display window and reinforce current position
         try {
           const root = (window.__tpScrollRoot) || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
