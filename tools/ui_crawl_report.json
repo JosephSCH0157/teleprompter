@@ -273,6 +273,33 @@
         "lineNumber": 30,
         "columnNumber": 17
       }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
     }
   ],
   "notes": [
@@ -286,9 +313,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "c18755a52910c825c38015993452b3b5d3621db5",
+      "gitSha": "91539119d2a1d613131a687c29198cb206deed03",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T01:01:16.013Z"
+      "buildTime": "2025-10-30T01:18:30.601Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -349,7 +376,7 @@
     "hasBtn": true,
     "hasDataAction": true,
     "hadPillBefore": false,
-    "hasPillAfter": false,
+    "hasPillAfter": true,
     "btnId": "settingsObsTest"
   },
   "scrollProbe": {
@@ -377,7 +404,7 @@
     "chipBefore": "Auto: Manual",
     "chipAfter": "Auto: Manual",
     "chipChanged": false,
-    "ok": false
+    "ok": true
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }

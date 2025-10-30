@@ -273,6 +273,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         // When intent flips ON, seed speed so engine warms and label reflects immediately
         if (!was && userEnabled) {
           try { auto.setSpeed?.(getStoredSpeed()); } catch {}
+          // Additionally, prime the low-level controller with the current speed if available
+          try { (window as any).__scrollCtl?.setSpeed?.(getStoredSpeed()); } catch {}
         }
         applyGate();
       }
