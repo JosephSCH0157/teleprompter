@@ -82,6 +82,20 @@
           </div>
           <div id="preRoll"><div class="card"><div class="hint">Begin speaking in</div><div class="num" id="preRollNum">3</div></div></div>
           <script>
+            // Expose our scroll root to the opener so main can target the right viewer
+            try {
+              const setOpenerRoot = () => {
+                try {
+                  if (window.opener && !window.opener.closed) {
+                    const wrap = document.getElementById('wrap');
+                    if (wrap) window.opener.__tpDisplayViewerEl = wrap;
+                  }
+                } catch {}
+              };
+              document.addEventListener('DOMContentLoaded', setOpenerRoot);
+              // Also try again after a small delay to catch late-mount
+              setTimeout(setOpenerRoot, 250);
+            } catch {}
             const scriptEl = document.getElementById('script');
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
