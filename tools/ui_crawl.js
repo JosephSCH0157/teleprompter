@@ -226,6 +226,8 @@ const cp = require('child_process');
       try { await page.waitForSelector('#script', { timeout: 5000 }); } catch {}
       try { await page.waitForSelector('#legend', { timeout: 5000 }); } catch {}
       await page.waitForTimeout(200);
+        // Force Hybrid gate open during probe to make movement deterministic
+        try { await page.evaluate(() => localStorage.setItem('tp_hybrid_bypass','1')); } catch {}
       // Ensure long content for stability: load sample twice or inject if needed
       try {
         const el = await page.$('#loadSample');
@@ -391,6 +393,8 @@ const cp = require('child_process');
       } catch (e) {
         out.scrollProbe = { err: String(e && e.message || e) };
       }
+      // Remove Hybrid bypass flag after probe
+      try { await page.evaluate(() => localStorage.removeItem('tp_hybrid_bypass')); } catch {}
 
       // Hotkeys probe using trusted key events
       try {

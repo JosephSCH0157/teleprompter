@@ -137,6 +137,73 @@
 </head>
 
 <body>
+<!-- Safety bridge: guarantees OBS Test pill + basic Auto-scroll movement even if TS listeners fail to bind -->
+<script>
+(function(){
+  try {
+    if (window.__TP_SAFETY_BRIDGE) return; window.__TP_SAFETY_BRIDGE = '1.0';
+    var q = function(s){ return document.querySelector(s); };
+    var selTest = '#settingsObsTest,#obsTest,[data-action="obs-test"]';
+    var selAuto = '#autoToggle,[data-action="auto-toggle"]';
+    var selInc  = '#autoInc,[data-action="auto-inc"]';
+    var selDec  = '#autoDec,[data-action="auto-dec"]';
+
+    function ensurePill(btn){
+      var pill = q('#obsStatusText,#obsStatus');
+      if (!pill) { pill = document.createElement('span'); pill.id = 'obsStatusText'; pill.style.marginLeft = '8px'; btn.after(pill); }
+      return pill;
+    }
+    function getViewer(){ return q('#viewer,[data-role="viewer"]') || document.scrollingElement || document.documentElement; }
+
+    async function handler(e){
+      try {
+        var t = e && e.target && (e.target.closest ? e.target.closest(selTest+','+selAuto+','+selInc+','+selDec) : null);
+        if (!t) return;
+        // OBS Test connection
+        if (t.matches && t.matches(selTest)) {
+          if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
+          var pill = ensurePill(t); pill.textContent = 'testing…';
+          try {
+            var url  = (q('#settingsObsUrl,#obsUrl') && q('#settingsObsUrl,#obsUrl').value && q('#settingsObsUrl,#obsUrl').value.trim()) || 'ws://127.0.0.1:4455';
+            var pass = (q('#settingsObsPassword,#obsPassword') && q('#settingsObsPassword,#obsPassword').value) || '';
+            if (typeof window.__obsTestConnect === 'function') {
+              var res = await window.__obsTestConnect(url, pass);
+              var ver = (res && (res.version||res.obsWebSocketVersion||res.obsVersion)) || null;
+              pill.textContent = ver ? ('connected ('+ver+')') : 'connected';
+            } else {
+              pill.textContent = 'failed: probe not loaded';
+            }
+          } catch (err) {
+            pill.textContent = 'failed: ' + (err && (err.message||String(err)));
+            try { console.warn('[OBS test failed]', err); } catch {}
+          }
+          return;
+        }
+        // Auto toggle / speed fallback
+        var btn = q(selAuto); if (!btn) return;
+        if (e.cancelable) e.preventDefault(); if (e.stopPropagation) e.stopPropagation();
+        window.__autoSpeed = Math.max(5, (window.__autoSpeed || 60) + (t.matches && t.matches(selInc) ? 5 : (t.matches && t.matches(selDec) ? -5 : 0)));
+        if (t.matches && t.matches(selAuto)) { btn.dataset.state = (btn.dataset.state === 'on' ? 'off' : 'on'); }
+        var isOn = btn.dataset.state === 'on';
+        btn.textContent = isOn ? ('Auto-scroll: On — ' + window.__autoSpeed + ' px/s') : 'Auto-scroll: Off';
+        try { clearInterval(window.__autoFallbackTimer); } catch {}
+        if (isOn) {
+          try {
+            if (window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function') { window.__scrollCtl.setSpeed(window.__autoSpeed); }
+            if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') { window.__scrollCtl.start(); }
+          } catch {}
+          if (!(window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function')) {
+            var viewer = getViewer();
+            window.__autoFallbackTimer = setInterval(function(){ try { viewer.scrollTop += window.__autoSpeed / 10; } catch {} }, 100);
+          }
+        }
+      } catch {}
+    }
+    document.addEventListener('click', handler, true);
+    document.addEventListener('click', handler, false);
+  } catch {}
+})();
+</script>
 <div class="topbar">
 <strong>Teleprompter_Pro</strong>
 <span class="chip" id="saveChip">Draft: —</span>
