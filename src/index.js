@@ -278,6 +278,15 @@ async function boot() {
           if (t?.closest?.('#autoToggle')) {
             __lastAutoToggleAt = Date.now();
             Auto.toggle();
+            // If just enabled, warm the engine with the persisted speed for immediate consistency
+            try {
+              const st = Auto.getState ? Auto.getState() : null;
+              if (st && st.enabled) {
+                const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
+                Auto.setSpeed(s);
+                try { window.__scrollCtl?.setSpeed?.(s); } catch {}
+              }
+            } catch {}
             // Reflect immediately for headless probes
             setTimeout(__applyAutoChip, 0);
             return;
@@ -297,11 +306,58 @@ async function boot() {
             if (Date.now() - __lastAutoToggleAt < 200) return;
             __lastAutoToggleAt = Date.now();
             Auto.toggle();
+            // If just enabled, warm the engine with the persisted speed
+            try {
+              const st = Auto.getState ? Auto.getState() : null;
+              if (st && st.enabled) {
+                const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
+                Auto.setSpeed(s);
+                try { window.__scrollCtl?.setSpeed?.(s); } catch {}
+              }
+            } catch {}
             setTimeout(__applyAutoChip, 0);
             // no explicit return needed; end of handler
           }
         } catch {}
       }, { capture: true });
+
+      // Unified auto-speed input + wheel handling
+      try {
+        const wireSpeedInput = () => {
+          const inp = document.getElementById('autoSpeed');
+          if (!inp) return;
+          // input/change both: keep persisted and labels in sync via Auto.setSpeed
+          const onChange = () => { try { Auto.setSpeed(inp.value); } catch {} };
+          inp.addEventListener('input', onChange, { capture: true });
+          inp.addEventListener('change', onChange, { capture: true });
+          // Wheel on input adjusts ±1 (Shift: ±5)
+          inp.addEventListener('wheel', (ev) => {
+            try {
+              // eslint-disable-next-line no-restricted-syntax
+              ev.preventDefault();
+              const step = ev.shiftKey ? 5 : 1;
+              const dir = (ev.deltaY < 0) ? +1 : -1;
+              const cur = Number(inp.value || '0') || 0;
+              const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 100) / 100));
+              inp.value = String(next);
+              Auto.setSpeed(next);
+            } catch {}
+          }, { passive: false });
+        };
+        // wire now and after small delay in case DOM re-renders
+        wireSpeedInput();
+        setTimeout(wireSpeedInput, 250);
+      } catch {}
+
+      // Stop autoscroll defensively when speech stops (also done in speech-loader)
+      try {
+        window.addEventListener('tp:speech-state', (ev) => {
+          try { if (ev?.detail && ev.detail.running) return; } catch {}
+          try { window.__scrollCtl?.stop?.(); } catch {}
+          try { Auto.setEnabled(false); } catch {}
+          try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+        });
+      } catch {}
     } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }
 
     // Typography bridge is installed via './ui/typography-bridge.js'
