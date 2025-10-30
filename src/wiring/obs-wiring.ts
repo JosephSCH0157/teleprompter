@@ -7,6 +7,7 @@ import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
 
 export function initObsUI() {
+  try { (window as any).__tpObsInlineBridgeActive = true; } catch {}
   const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
   const pillEl = () => (byId<HTMLElement>('obsStatusText') || byId<HTMLElement>('obsStatus'));
   const testMsgEl = () => byId<HTMLElement>('settingsObsTestMsg');
@@ -65,6 +66,7 @@ export function initObsUI() {
       const errMsg = (s: string) => { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-error'); } } catch {} };
 
       if (id === 'settingsObsTest') {
+        try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
         clearMsg(); if (pill) pill.textContent = 'testing…';
         try {
           const url = readUrl();
