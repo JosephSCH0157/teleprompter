@@ -336,6 +336,9 @@ async function boot() {
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
+        // Settings overlay mic controls (delegated so they work regardless of mount timing)
+        try { if (t?.closest?.('#settingsRequestMicBtn')) return Mic.requestMic(); } catch {}
+        try { if (t?.closest?.('#settingsReleaseMicBtn')) return Mic.releaseMic(); } catch {}
       }, { capture: true });
       // Headless fallback (some runners only dispatch mousedown)
       document.addEventListener('mousedown', (e) => {
