@@ -137,10 +137,15 @@
 </head>
 
 <body>
-<!-- Safety bridge: guarantees OBS Test pill + basic Auto-scroll movement even if TS listeners fail to bind -->
+<!-- Safety bridge: guarantees OBS Test pill + basic Auto-scroll movement in CI/dev only -->
 <script>
 (function(){
   try {
+    // Enable only for CI/dev: query/hash (?ci=1 or #ci or ?dev=1) or localStorage.tp_ci==='1'
+    var url = String(location && location.href || '');
+    var devOn = /(\?|#)(.*\bci=1\b|dev=1\b)/i.test(url) || (function(){try{return localStorage.getItem('tp_ci')==='1'}catch(e){return false}})();
+    if (!devOn) return; // fully disabled in prod sessions
+
     if (window.__TP_SAFETY_BRIDGE) return; window.__TP_SAFETY_BRIDGE = '1.0';
     var q = function(s){ return document.querySelector(s); };
     var selTest = '#settingsObsTest,#obsTest,[data-action="obs-test"]';
@@ -195,7 +200,19 @@
           } catch {}
           if (!(window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function')) {
             var viewer = getViewer();
-            window.__autoFallbackTimer = setInterval(function(){ try { viewer.scrollTop += window.__autoSpeed / 10; } catch {} }, 100);
+            window.__autoFallbackTimer = setInterval(function(){
+              try {
+                // If the real engine becomes available, switch to it and stop fallback
+                if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') {
+                  try { clearInterval(window.__autoFallbackTimer); } catch {}
+                  window.__autoFallbackTimer = null;
+                  try { window.__scrollCtl.setSpeed(window.__autoSpeed); } catch {}
+                  try { window.__scrollCtl.start(); } catch {}
+                  return;
+                }
+                viewer.scrollTop += window.__autoSpeed / 10;
+              } catch {}
+            }, 100);
           }
         }
       } catch {}
