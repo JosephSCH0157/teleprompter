@@ -181,8 +181,9 @@
         }
         // Auto toggle / speed fallback
         var btn = q(selAuto); if (!btn) return;
-        if (e.cancelable) e.preventDefault(); if (e.stopPropagation) e.stopPropagation();
+        if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
         window.__autoSpeed = Math.max(5, (window.__autoSpeed || 60) + (t.matches && t.matches(selInc) ? 5 : (t.matches && t.matches(selDec) ? -5 : 0)));
+        if (!btn.dataset.state) btn.dataset.state = 'off';
         if (t.matches && t.matches(selAuto)) { btn.dataset.state = (btn.dataset.state === 'on' ? 'off' : 'on'); }
         var isOn = btn.dataset.state === 'on';
         btn.textContent = isOn ? ('Auto-scroll: On — ' + window.__autoSpeed + ' px/s') : 'Auto-scroll: Off';
