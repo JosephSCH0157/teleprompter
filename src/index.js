@@ -10,7 +10,6 @@ import * as Auto from './features/autoscroll.js';
 import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
-import { installScrollRouter } from './features/scroll-router.js';
 import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
@@ -268,8 +267,20 @@ async function boot() {
 
     // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
     try {
-      // Install the new features/scroll-router (uses Auto internally)
-      try { installScrollRouter(); } catch (e) { console.warn('[src/index] installScrollRouter failed', e); }
+      // Prefer the compiled TS router when available; fall back to JS router
+      try {
+        let mod = null;
+        try {
+          mod = await import('/dist/features/scroll-router.js');
+          try { window.__tpScrollRouterTsActive = true; } catch {}
+        } catch {}
+        if (!mod) {
+          mod = await import('./features/scroll-router.js');
+        }
+        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter(); } catch (e) {
+          console.warn('[src/index] installScrollRouter failed', e);
+        }
+      } catch (e) { console.warn('[src/index] router import failed', e); }
       // Resilient event delegation (works in headless + when nodes re-render)
       let __lastAutoToggleAt = 0;
       const __applyAutoChip = () => {

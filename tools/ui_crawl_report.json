@@ -42,7 +42,7 @@
     },
     {
       "id": "autoToggle",
-      "text": "Auto-scroll: Paused — 21 px/s"
+      "text": "Auto-scroll: Off"
     },
     {
       "id": "startCam",
@@ -146,7 +146,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 93,
+        "lineNumber": 92,
         "columnNumber": 12
       }
     },
@@ -232,11 +232,20 @@
       }
     },
     {
+      "type": "warning",
+      "text": "[src/index] installScrollRouter failed JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/index.js",
+        "lineNumber": 280,
+        "columnNumber": 18
+      }
+    },
+    {
       "type": "log",
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 377,
+        "lineNumber": 388,
         "columnNumber": 10
       }
     },
@@ -295,9 +304,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "cc07c3a12293d630bc02552fa3dbd181c95ad1be",
+      "gitSha": "f33417314a2da8d9878df401a41704d243ac3803",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T08:25:52.965Z"
+      "buildTime": "2025-10-30T08:30:42.188Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -383,8 +392,8 @@
   "autoScrollUi": {
     "was": "Auto-scroll: On — 70 px/s",
     "now": "Auto-scroll: On — 70 px/s",
-    "chipBefore": "Auto: Paused",
-    "chipAfter": "Auto: Paused",
+    "chipBefore": "Auto: Manual",
+    "chipAfter": "Auto: Manual",
     "chipChanged": false,
     "ok": true
   },
