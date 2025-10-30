@@ -262,6 +262,10 @@
 
       // Typography (Font size / Line height) — Settings is source-of-truth; mirror to main hidden inputs
       try {
+        // If TS is driving typography, skip legacy listeners & writes
+        if (window.__tpTsTypographyActive) {
+          // no-op: TS path owns typography and wheel bindings
+        } else {
         const fsS = q('settingsFontSize');
         const lhS = q('settingsLineHeight');
         const maxChMain = q('settingsMaxChMain');
@@ -369,6 +373,7 @@
           } catch {}
           applyFromSettings();
         } catch {}
+        }
       } catch {}
 
       // Link typography pref + Copy buttons
@@ -824,6 +829,10 @@
           } catch {}
           try {
             // Typography + width (idempotent wiring)
+            // If TS is driving typography, skip legacy listeners & writes
+            if (window.__tpTsTypographyActive) {
+              // no-op: TS path owns typography and wheel bindings
+            } else {
             const fsS = q('settingsFontSize');
             const lhS = q('settingsLineHeight');
             const maxChMain = q('settingsMaxChMain');
@@ -886,6 +895,7 @@
                 sendToDisplayTypography({ maxLineWidthCh: n });
               } catch {}
             }); }
+            }
           } catch {}
         } catch {}
       };

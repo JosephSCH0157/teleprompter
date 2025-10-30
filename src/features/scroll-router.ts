@@ -311,9 +311,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       try {
         const target = e.target as HTMLElement | null;
         if (!target) return;
-        const tag = (target.tagName || '').toLowerCase();
-        const isTyping = tag === 'input' || tag === 'textarea' || (target as any).isContentEditable;
-        if (isTyping) return;
+        const tag = (target.tagName || '').toUpperCase();
+        // ignore when typing/selecting or with modifiers
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || (target as any).isContentEditable) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         const wantUp = e.key === '+' || e.code === 'NumpadAdd' || e.key === 'ArrowUp';
         const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
         if (!wantUp && !wantDown) return;
