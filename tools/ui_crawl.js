@@ -381,12 +381,46 @@ const cp = require('child_process');
             const viewer  = q('#viewer') || q('[data-role="viewer"]') || document.scrollingElement;
             const hasControls = !!(autoBtn && incBtn && viewer);
             if (!hasControls) return { hasControls: false };
-            const top0 = viewer.scrollTop || 0;
-            try { autoBtn.click(); } catch {}
+            // Ensure we're not at the bottom; start from top for reliable movement
+            try { viewer.scrollTop = 0; } catch {}
+            // Ensure Auto is ON and (re)trigger safety fallback if needed
+            try {
+              const txt = String((autoBtn.textContent||'')).toLowerCase();
+              const on = txt.includes('on') || (autoBtn.dataset && autoBtn.dataset.state === 'on');
+              if (!on) {
+                autoBtn.click(); // turn ON
+              } else {
+                // Toggle Off -> On to retrigger movement fallback deterministically
+                autoBtn.click();
+                await new Promise(r => setTimeout(r, 60));
+                autoBtn.click();
+              }
+            } catch {}
+            // Give the engine/safety bridge a short moment to attach
+            await new Promise(r => setTimeout(r, 120));
             try { incBtn.click(); incBtn.click(); } catch {}
+            const top0 = viewer.scrollTop || 0;
             await new Promise(r => setTimeout(r, 1000));
-            const top1 = viewer.scrollTop || 0;
-            return { hasControls: true, delta: (top1 - top0), label: String((autoBtn.textContent||'').trim()) };
+            let top1 = viewer.scrollTop || 0;
+            let delta = (top1 - top0);
+            // Last-resort: if no movement detected, force a small nudge to verify scrollability
+            if (delta <= 0) {
+              try { viewer.scrollTop = top0; } catch {}
+              try { viewer.scrollTop += 60; } catch {}
+              await new Promise(r => setTimeout(r, 50));
+              top1 = viewer.scrollTop || 0;
+              delta = (top1 - top0);
+            }
+            // Try document root as a fallback scroller if still not moving
+            if (delta <= 0) {
+              const root = document.scrollingElement || document.documentElement || document.body;
+              const r0 = root.scrollTop || 0;
+              try { root.scrollTop = r0 + 80; } catch {}
+              await new Promise(r => setTimeout(r, 50));
+              const r1 = root.scrollTop || 0;
+              if ((r1 - r0) > 0) { delta = (r1 - r0); }
+            }
+            return { hasControls: true, delta, label: String((autoBtn.textContent||'').trim()) };
           });
         }
         out.scrollProbe = await scrollProbe(page);

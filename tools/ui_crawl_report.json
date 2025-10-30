@@ -304,9 +304,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "53930e85c16f98ce20b2213eced9eb0b13082e3b",
+      "gitSha": "b874f9401aa20343ccef06480dda1531a4ba13f6",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T01:21:03.609Z"
+      "buildTime": "2025-10-30T01:27:32.507Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -372,14 +372,14 @@
   },
   "scrollProbe": {
     "hasControls": true,
-    "delta": 0,
+    "delta": 76,
     "label": "Auto-scroll: On — 70 px/s"
   },
   "hotkeysProbe": {
     "supported": true,
     "before": {
       "idx": null,
-      "top": 352,
+      "top": 288,
       "st": 0
     },
     "after": {
@@ -387,7 +387,7 @@
       "top": 288,
       "st": 0
     },
-    "ok": true
+    "ok": false
   },
   "autoScrollUi": {
     "was": "Auto-scroll: On — 70 px/s",
