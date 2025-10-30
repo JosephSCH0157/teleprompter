@@ -106,7 +106,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>
         </div>
         <div class="row gap">
-          <button id="settingsObsTest" class="chip btn-chip" type="button">Test connection</button>
+          <button id="settingsObsTest" data-action="obs-test" class="chip btn-chip" type="button">Test connection</button>
           <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>
         </div>
         <small class="muted">OBS ➜ Tools ➜ WebSocket Server Settings (default port 4455). Use this host and password.</small>

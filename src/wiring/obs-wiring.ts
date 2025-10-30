@@ -59,14 +59,25 @@ export function initObsUI() {
     document.addEventListener('click', async (e) => {
       const t = e.target as HTMLElement | null;
       const id = (t as any)?.id || '';
-      const pill = pillEl();
+      let pill = pillEl();
       const testMsg = testMsgEl();
       const clearMsg = () => { try { if (testMsg) { testMsg.textContent = ''; testMsg.classList.remove('obs-test-ok','obs-test-error'); } } catch {} };
       const okMsg = (s: string) => { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-ok'); } } catch {} };
       const errMsg = (s: string) => { try { if (testMsg) { testMsg.textContent = s; testMsg.classList.add('obs-test-error'); } } catch {} };
 
-      if (id === 'settingsObsTest') {
+      const testBtn = (t && (t.closest('#settingsObsTest,#obsTest,[data-action="obs-test"]') as HTMLElement | null)) || null;
+      if (testBtn) {
         try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+        // Ensure a pill exists near the button if missing
+        if (!pill && testBtn && testBtn.parentElement) {
+          try {
+            const span = document.createElement('span');
+            span.id = 'obsStatusText';
+            span.style.marginLeft = '8px';
+            testBtn.after(span);
+            pill = span as any;
+          } catch {}
+        }
         clearMsg(); if (pill) pill.textContent = 'testing…';
         try {
           const url = readUrl();
