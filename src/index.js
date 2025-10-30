@@ -27,6 +27,8 @@ import * as UI from './ui/dom.js';
 import '../ui/typography-bridge.js';
 // Scripts Save/Load UI (dropdown + buttons wiring)
 import '../ui/scripts-ui.js';
+// OBS wiring: ensure Test button is always handled (claims OBS controls before legacy wiring)
+import './wiring/wire.js';
 // Settings overlay and media/OBS wiring (module path)
 import './ui/settings.js';
 
