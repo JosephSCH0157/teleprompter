@@ -30,6 +30,7 @@ const hotkeysProbe = report.hotkeysProbe || {};
 const lateProbe = report.lateProbe || {};
 const settingsProbe = report.settingsProbe || {};
 const obsTestProbe = report.obsTestProbe || {};
+const scrollProbe = report.scrollProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
 const meta = report.meta || {};
 // CI detection retained for potential future use; currently not used in validation rules
@@ -273,6 +274,28 @@ try {
       const msg = 'auto-scroll-ui — toggle did not flip to On when enabled';
       if (CI_STRICT) { console.error('FAIL ' + msg, JSON.stringify(report.autoScrollUi)); allOk = false; } else { console.warn('WARN ' + msg, JSON.stringify(report.autoScrollUi)); }
     }
+  }
+
+  // Mini scroll proof (engine should move without OBS/ASR)
+  try {
+    if (!scrollProbe || scrollProbe.hasControls === false) {
+      console.error('FAIL scroll-probe-missing-controls — auto/inc/viewer not found');
+      allOk = false;
+    } else if (typeof scrollProbe.delta !== 'number') {
+      console.error('FAIL scroll-probe-no-delta — missing movement delta');
+      allOk = false;
+    } else if (scrollProbe.delta <= 0) {
+      console.error('FAIL scroll-probe-no-movement — engine did not move');
+      allOk = false;
+    } else {
+      console.log('PASS scroll-probe — delta=', scrollProbe.delta, 'label=', scrollProbe.label);
+      const lbl = String(scrollProbe.label || '');
+      if (!/Auto-scroll:\s*(On|Paused)/i.test(lbl)) {
+        console.warn('WARN scroll-probe-label-bad — label not On/Paused:', lbl);
+      }
+    }
+  } catch (e) {
+    console.warn('WARN scroll-probe validation failed:', String(e && e.message || e));
   }
 } catch (e) {
   console.warn('WARN probes evaluation failed:', String(e && e.message || e));
