@@ -4,6 +4,7 @@ let speed = 16;          // px/sec default
 let raf = 0;
 let viewer = null;
 let autoChip = null;
+let _fracCarry = 0;      // fractional accumulator to avoid stalling at low speeds
 
 function applyLabel() {
   const btn = document.getElementById('autoToggle');
@@ -30,7 +31,13 @@ function loop() {
   const step = (now) => {
     const dt = (now - last) / 1000;
     last = now;
-    try { viewer.scrollTop += speed * dt; } catch {}
+    try {
+      // Accumulate fractional sub-pixel deltas so very low speeds still advance consistently
+      const delta = speed * dt + _fracCarry;
+      const whole = (delta >= 0) ? Math.floor(delta) : Math.ceil(delta);
+      _fracCarry = delta - whole;
+      if (whole !== 0) viewer.scrollTop += whole;
+    } catch {}
     raf = requestAnimationFrame(step);
   };
   raf = requestAnimationFrame(step);
@@ -39,6 +46,17 @@ function loop() {
 export function initAutoScroll() {
   viewer = document.getElementById('viewer');
   autoChip = document.getElementById('autoChip');
+  // Warm speed from storage and reflect in the numeric input if present
+  try {
+    const s = Number(localStorage.getItem('tp_auto_speed') || '')
+    if (Number.isFinite(s) && s > 0) {
+      speed = Math.max(5, Math.min(200, s));
+      try { const inp = document.getElementById('autoSpeed'); if (inp) inp.value = String(speed); } catch {}
+    } else {
+      // Initialize input to current default
+      try { const inp2 = document.getElementById('autoSpeed'); if (inp2) inp2.value = String(speed); } catch {}
+    }
+  } catch {}
   applyLabel();
   // keep resilient if viewer gets replaced
   const mo = new MutationObserver(() => {
@@ -67,12 +85,14 @@ export function getState() { return { enabled, speed }; }
 export function setSpeed(pxPerSec) {
   const v = Number(pxPerSec);
   if (!Number.isFinite(v)) return;
-  speed = Math.max(5, Math.min(200, v));
+  speed = Math.max(1, Math.min(200, v));
   // Persist and notify engine if present
   try { localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
   try { window.__scrollCtl?.setSpeed?.(speed); } catch {}
   // Tell listeners (router, UI) about speed change
   try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail: { speed } })); } catch {}
+  // Reflect to numeric input, if present
+  try { const inp = document.getElementById('autoSpeed'); if (inp) inp.value = String(speed); } catch {}
   // If UI is in 'on' state, reflect the current speed on the button
   try {
     const btn = document.getElementById('autoToggle');

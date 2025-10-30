@@ -1,5 +1,6 @@
 // One entry point for speech. Uses Web Speech by default.
 // If /speech/orchestrator.js exists (built from TS), we load it instead.
+import * as Auto from './autoscroll.js';
 
 let running = false;
 let rec = null; // SR instance or orchestrator handle
@@ -283,6 +284,7 @@ export function installSpeech() {
         try { window.HUD?.bus?.emit('speech:toggle', true); } catch {}
         try { window.speechOn = true; } catch {}
         setListeningUi(true);
+        try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
         try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
         const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
         await beginCountdownThen(sec, async () => {
@@ -318,6 +320,19 @@ export function installSpeech() {
         try { document.body.classList.remove('listening'); } catch {}
         try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}
         try { window.speechOn = false; } catch {}
+        // Stop any autoscroll motion in main and clean fallbacks
+        try { Auto.setEnabled(false); } catch {}
+        try { window.__scrollCtl?.stop?.(); } catch {}
+        try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+        // Broadcast a stop to the display window and reinforce current position
+        try {
+          const root = (window.__tpScrollRoot) || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+          const cur = root ? (root.scrollTop|0) : 0;
+          sendToDisplay({ type: 'scroll', top: cur });
+          // Optional: semantic auto-stop marker for future listeners
+          sendToDisplay({ type: 'auto', op: 'stop' });
+        } catch {}
+        try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
         try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
       } finally {
         if (btn) btn.disabled = false;
