@@ -231,6 +231,51 @@ function wireUpload() {
   });
 }
 
+function wireScriptControls() {
+  try {
+    const clearBtn = document.getElementById('clearText');
+    const resetBtn = document.getElementById('resetScriptBtn');
+    const editor = document.getElementById('editor');
+    const title = document.getElementById('scriptTitle');
+
+    if (clearBtn && !clearBtn.dataset.wired) {
+      clearBtn.dataset.wired = '1';
+      clearBtn.addEventListener('click', () => {
+        try {
+          if (editor && 'value' in editor) {
+            editor.value = '';
+            try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+            try { if (typeof window.renderScript === 'function') window.renderScript(''); } catch {}
+          }
+          try { (window.setStatus || (()=>{}))('Cleared'); } catch {}
+        } catch {}
+      });
+    }
+
+    if (resetBtn && !resetBtn.dataset.wired) {
+      resetBtn.dataset.wired = '1';
+      resetBtn.addEventListener('click', () => {
+        try {
+          if (title && 'value' in title) title.value = '';
+          if (editor && 'value' in editor) {
+            editor.value = '';
+            try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+            try { if (typeof window.renderScript === 'function') window.renderScript(''); } catch {}
+          }
+          // Reset scroll position to the top for clarity
+          try {
+            const scroller = document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+            if (scroller) scroller.scrollTop = 0;
+          } catch {}
+          // Refresh scripts dropdown (if exposed by scripts-ui)
+          try { if (typeof window.initScriptsUI === 'function') window.initScriptsUI(); } catch {}
+          try { (window.setStatus || (()=>{}))('Script reset'); } catch {}
+        } catch {}
+      });
+    }
+  } catch {}
+}
+
 function wirePresentMode() {
   once('present', () => {
     const btn = $id('presentBtn');
@@ -572,6 +617,7 @@ export function bindStaticDom() {
     wireMic();
     wireCamera();
     wireUpload();
+    wireScriptControls();
   wireLoadSample();
     installSpeakerIndex();
     installDbMeter();

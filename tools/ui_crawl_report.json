@@ -155,7 +155,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 562,
+        "lineNumber": 607,
         "columnNumber": 10
       }
     },
@@ -164,7 +164,7 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 711,
+        "lineNumber": 757,
         "columnNumber": 16
       }
     },
@@ -267,7 +267,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -304,9 +304,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "d5a6749138259897ed9dced2b649c5df46cddbe6",
+      "gitSha": "5fa25158f4011f87ed143acc66984402c771611a",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T08:07:06.763Z"
+      "buildTime": "2025-10-30T08:16:03.829Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
