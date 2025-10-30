@@ -30,6 +30,14 @@ import '../ui/scripts-ui.js';
 // Settings overlay and media/OBS wiring (module path)
 import './ui/settings.js';
 
+// Single-source mic adapter facade for legacy callers
+try {
+  window.__tpMic = {
+    requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
+    releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
+  };
+} catch {}
+
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
   if (window?.__TP_BOOT_INFO?.isDev) {
@@ -207,6 +215,30 @@ async function boot() {
     }
   } catch {}
 
+  // Centralized Settings mic button delegation (capture so we win races) — bind once
+  try {
+    if (!window.__tpSettingsDelegatesActive) {
+      window.__tpSettingsDelegatesActive = true;
+      const clickSel = [
+        '#settingsRequestMicBtn',
+        '[data-action="settings-request-mic"]',
+        '#settingsReleaseMicBtn',
+        '[data-action="settings-release-mic"]',
+      ].join(',');
+      document.addEventListener('click', (ev) => {
+        try {
+          const el = ev.target?.closest?.(clickSel);
+          if (!el) return;
+          // eslint-disable-next-line no-restricted-syntax
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          if (el.matches('#settingsRequestMicBtn,[data-action="settings-request-mic"]')) { try { Mic.requestMic?.(); } catch {} return; }
+          if (el.matches('#settingsReleaseMicBtn,[data-action="settings-release-mic"]')) { try { Mic.releaseMic?.(); } catch {} return; }
+        } catch {}
+      }, true);
+    }
+  } catch {}
+
   // Party-mode eggs (UI + bus triggers)
   try { Eggs.install({ bus }); } catch {}
 
@@ -260,10 +292,13 @@ async function boot() {
       }
       // Bridge mic adapter to legacy-global shape for Settings overlay and other consumers
       try {
-        if (Mic && (typeof Mic.requestMic === 'function' || typeof Mic.releaseMic === 'function')) {
+        if (
+          Mic && (typeof Mic.requestMic === 'function' || typeof Mic.releaseMic === 'function') &&
+          (!window.__tpMic || typeof window.__tpMic.requestMic !== 'function' || typeof window.__tpMic.releaseMic !== 'function')
+        ) {
           window.__tpMic = {
-            requestMic: async () => { try { await Mic.requestMic(); } catch {} },
-            releaseMic: () => { try { Mic.releaseMic && Mic.releaseMic(); } catch {} },
+            requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
+            releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
           };
         }
       } catch {}
@@ -336,9 +371,6 @@ async function boot() {
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
-        // Settings overlay mic controls (delegated so they work regardless of mount timing)
-        try { if (t?.closest?.('#settingsRequestMicBtn')) return Mic.requestMic(); } catch {}
-        try { if (t?.closest?.('#settingsReleaseMicBtn')) return Mic.releaseMic(); } catch {}
       }, { capture: true });
       // Headless fallback (some runners only dispatch mousedown)
       document.addEventListener('mousedown', (e) => {
