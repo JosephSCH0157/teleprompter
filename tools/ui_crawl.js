@@ -369,6 +369,29 @@ const cp = require('child_process');
       out.settingsProbe = probes.settingsProbe;
       out.obsTestProbe = probes.obsTestProbe;
 
+      // Mini scroll proof: toggle auto, bump speed, confirm movement without OBS/ASR
+      try {
+        async function scrollProbe(page) {
+          return await page.evaluate(async () => {
+            const q = (s)=>document.querySelector(s);
+            const autoBtn = q('#autoToggle') || q('[data-action="auto-toggle"]') || q('button[aria-pressed]');
+            const incBtn  = q('#autoInc') || q('[data-action="auto-inc"]');
+            const viewer  = q('#viewer') || q('[data-role="viewer"]') || document.scrollingElement;
+            const hasControls = !!(autoBtn && incBtn && viewer);
+            if (!hasControls) return { hasControls: false };
+            const top0 = viewer.scrollTop || 0;
+            try { autoBtn.click(); } catch {}
+            try { incBtn.click(); incBtn.click(); } catch {}
+            await new Promise(r => setTimeout(r, 1000));
+            const top1 = viewer.scrollTop || 0;
+            return { hasControls: true, delta: (top1 - top0), label: String((autoBtn.textContent||'').trim()) };
+          });
+        }
+        out.scrollProbe = await scrollProbe(page);
+      } catch (e) {
+        out.scrollProbe = { err: String(e && e.message || e) };
+      }
+
       // Hotkeys probe using trusted key events
       try {
         await page.bringToFront();
