@@ -4,6 +4,8 @@
 // - Prevents browser zoom and adds wheel-based font-size adjustments
 
 (function(){
+  try { if (window.__tpTsTypographyActive) return; } catch {}
+  try { window.__tpTypographyBridgeActive = true; } catch {}
   try {
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 

@@ -250,6 +250,8 @@ export function step(dir=+1) { if (state.mode === 'step') stepOnce(dir); }
 
 // Install router once
 export function installScrollRouter() {
+  try { if (window.__tpScrollRouterTsActive) return; } catch {}
+  try { window.__tpScrollRouterJsActive = true; } catch {}
   restore();
   applyMode(state.mode);
   loadVadProfile();

@@ -120,6 +120,7 @@ import { createOrchestrator } from '../asr/v2/orchestrator';
 import { getUiPrefs, onUiPrefs } from '../settings/uiPrefs';
 
 export function installScrollRouter(opts: ScrollRouterOpts){
+  try { (window as any).__tpScrollRouterTsActive = true; } catch {}
   const { auto } = opts;
   restoreMode();
   applyMode(state.mode);

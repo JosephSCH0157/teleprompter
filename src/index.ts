@@ -81,6 +81,8 @@ try {
 
 		// Apply typography to main window and, if present, to display window
 		try {
+			// Mark TS typography path active so legacy bridge can stand down
+			try { (window as any).__tpTsTypographyActive = true; } catch {}
 			applyTypographyTo(window, 'main');
 			const w = (window as any).__tpDisplayWindow as Window | null;
 			if (w) applyTypographyTo(w, 'display');
@@ -118,6 +120,11 @@ try {
 
 		// Ctrl/Cmd + Mouse Wheel to adjust font size (main by default, Ctrl+Alt for display)
 		try {
+			// If legacy typography bridge is present, skip TS wheel bindings to avoid duplicate handling
+			if ((window as any).__tpTypographyBridgeActive) {
+				// still keep TS store/reactivity, but avoid attaching wheel listeners twice
+				throw new Error('skip-ts-wheel');
+			}
 			const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 			window.addEventListener('wheel', (e: WheelEvent) => {
 				try {
@@ -134,6 +141,7 @@ try {
 
 		// Shift + Wheel over the viewer to adjust font size (no Ctrl/Cmd required)
 		try {
+			if ((window as any).__tpTypographyBridgeActive) { throw new Error('skip-ts-wheel'); }
 			const clamp2 = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 			const viewer = document.getElementById('viewer');
 			if (viewer) {
