@@ -146,7 +146,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 91,
+        "lineNumber": 93,
         "columnNumber": 12
       }
     },
@@ -236,7 +236,7 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 366,
+        "lineNumber": 377,
         "columnNumber": 10
       }
     },
@@ -245,15 +245,6 @@
       "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:cam-mirror JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     },
     {
@@ -267,7 +258,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:render JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -304,9 +295,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "5fa25158f4011f87ed143acc66984402c771611a",
+      "gitSha": "cc07c3a12293d630bc02552fa3dbd181c95ad1be",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T08:16:03.829Z"
+      "buildTime": "2025-10-30T08:25:52.965Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

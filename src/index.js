@@ -26,6 +26,8 @@ import * as UI from './ui/dom.js';
 import '../ui/typography-bridge.js';
 // Scripts Save/Load UI (dropdown + buttons wiring)
 import '../ui/scripts-ui.js';
+// Settings overlay and media/OBS wiring (module path)
+import './ui/settings.js';
 
 // Dev-only helpers and safety stubs: keep out of prod bundle
 try {
@@ -240,6 +242,15 @@ async function boot() {
       if (!window.__tpOBS && Adapters.obsAdapter?.create) {
         window.__tpOBS = Adapters.obsAdapter.create();
       }
+      // Bridge mic adapter to legacy-global shape for Settings overlay and other consumers
+      try {
+        if (Mic && (typeof Mic.requestMic === 'function' || typeof Mic.releaseMic === 'function')) {
+          window.__tpMic = {
+            requestMic: async () => { try { await Mic.requestMic(); } catch {} },
+            releaseMic: () => { try { Mic.releaseMic && Mic.releaseMic(); } catch {} },
+          };
+        }
+      } catch {}
       if (!window.__tpRecorder && Adapters.recorderAdapter?.create) {
         window.__tpRecorder = Adapters.recorderAdapter.create();
       }
