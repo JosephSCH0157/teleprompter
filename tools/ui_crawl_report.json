@@ -291,15 +291,6 @@
         "lineNumber": 30,
         "columnNumber": 17
       }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
     }
   ],
   "notes": [
@@ -313,9 +304,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "91539119d2a1d613131a687c29198cb206deed03",
+      "gitSha": "53930e85c16f98ce20b2213eced9eb0b13082e3b",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T01:18:30.601Z"
+      "buildTime": "2025-10-30T01:21:03.609Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -382,7 +373,7 @@
   "scrollProbe": {
     "hasControls": true,
     "delta": 0,
-    "label": "Auto-scroll: Off"
+    "label": "Auto-scroll: On — 70 px/s"
   },
   "hotkeysProbe": {
     "supported": true,
@@ -399,10 +390,10 @@
     "ok": true
   },
   "autoScrollUi": {
-    "was": "Auto-scroll: Off",
-    "now": "Auto-scroll: Off",
-    "chipBefore": "Auto: Manual",
-    "chipAfter": "Auto: Manual",
+    "was": "Auto-scroll: On — 70 px/s",
+    "now": "Auto-scroll: On — 70 px/s",
+    "chipBefore": "Auto: Paused",
+    "chipAfter": "Auto: Paused",
     "chipChanged": false,
     "ok": true
   },
