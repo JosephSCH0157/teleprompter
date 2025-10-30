@@ -1,6 +1,6 @@
 import { getAsrState } from './store';
 
-export function startVadAdapter(stream: MediaStream, onGate: (speaking: boolean, rmsDbfs: number) => void) {
+export function startVadAdapter(stream: MediaStream, onGate: (_speaking: boolean, _rmsDbfs: number) => void) {
   const AudioCtx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
   const ctx: AudioContext = new AudioCtx();
   const src = ctx.createMediaStreamSource(stream);

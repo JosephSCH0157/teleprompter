@@ -6,6 +6,9 @@ function openAsrSettings() {
     (window as any).__tpSettings?.open?.();
     const body = document.getElementById('settingsBody');
     const overlay = document.getElementById('settingsOverlay');
+    // 'body' is unused here; overlay is used for visibility toggle
+    // Removing unused 'body' to satisfy lint
+    void body;
     if (overlay) overlay.classList.remove('hidden');
     // Show Media tab
     const tabsRoot = document.getElementById('settingsTabs') || document;

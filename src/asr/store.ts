@@ -1,4 +1,4 @@
-import { AsrProfile, AsrProfileId, AsrState } from './schema';
+import type { AsrProfile, AsrProfileId, AsrState } from './schema';
 
 const KEY = 'tp_asr_profiles_v1';
 
@@ -12,7 +12,7 @@ let state: AsrState = (() => {
   }
 })();
 
-const subs = new Set<(s: AsrState) => void>();
+const subs = new Set<(_s: AsrState) => void>();
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
@@ -33,7 +33,7 @@ export function setActiveProfile(id: AsrProfileId) {
   save();
 }
 
-export function onAsr(fn: (s: AsrState) => void) {
+export function onAsr(fn: (_s: AsrState) => void) {
   subs.add(fn);
   return () => subs.delete(fn);
 }

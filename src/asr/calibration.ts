@@ -1,4 +1,4 @@
-import { AsrProfile, CalMetrics, VadThresholds } from './schema';
+import type { AsrProfile, CalMetrics, VadThresholds } from './schema';
 
 const DB_EPS = 1e-12;
 const toDb = (x: number) => 20 * Math.log10(Math.max(x, DB_EPS));
@@ -7,7 +7,7 @@ export async function runCalibration(opts: {
   deviceId: string,
   label: string,
   flags: { echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean; sampleRateHz?: number }
-}): Promise<{ profile: AsrProfile; preview: (stop?: boolean) => void }> {
+}): Promise<{ profile: AsrProfile; preview: (_stop?: boolean) => void }> {
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {

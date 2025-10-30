@@ -4,7 +4,7 @@ import { emitAsrError, emitTokensEvent } from '../types';
 export function createWebSpeechAdapter(): InputAdapter {
   let ready = false;
   let error: string | undefined;
-  const subs = new Set<(f: WebSpeechFeature) => void>();
+  const subs = new Set<(_f: WebSpeechFeature) => void>();
   let rec: any = null;
   let started = false;
   let restartCount = 0;
@@ -32,7 +32,7 @@ export function createWebSpeechAdapter(): InputAdapter {
             subs.forEach(fn => { try { fn(feat); } catch {} });
             emitTokensEvent({ tokens, final });
           }
-        } catch (e) {}
+        } catch {}
       };
       rec.onerror = (e: any) => { const msg = String(e?.error || e?.message || 'error'); emitAsrError({ code: 'webspeech', message: msg }); error = msg; };
       rec.onend = () => {
@@ -51,6 +51,6 @@ export function createWebSpeechAdapter(): InputAdapter {
   }
 
   async function stop(): Promise<void> { try { rec?.stop?.(); } catch {} started = false; ready = false; }
-  function onFeature(fn: (f: WebSpeechFeature) => void) { subs.add(fn); return () => subs.delete(fn); }
+  function onFeature(fn: (_f: WebSpeechFeature) => void) { subs.add(fn); return () => subs.delete(fn); }
   return { start, stop, onFeature: onFeature as any, status };
 }

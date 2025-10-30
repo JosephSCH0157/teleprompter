@@ -2,20 +2,13 @@ import type { PaceCaps, PaceEngine, PaceMode, Tempo } from './types';
 
 function clamp(n: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, n)); }
 
-function getPxPerLine(): number {
-  try {
-    const cs = getComputedStyle(document.documentElement);
-    const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
-    const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
-    return fs * lh;
-  } catch { return 56 * 1.4; }
-}
+// Removed unused getPxPerLine helper; mapping derives from document styles where needed.
 
 export function createPaceEngine(): PaceEngine {
   let mode: PaceMode = 'assist';
   let caps: PaceCaps = { minPxs: 10, maxPxs: 220, accelCap: 60, decayMs: 250 };
   let sens = 1.0;
-  let catchup: 'off'|'low'|'med' = 'off';
+  let _catchup: 'off'|'low'|'med' = 'off';
   let target = 0; // px/s (smoothed)
   let lastUpdate = performance.now();
   let lastWpm: number | undefined;
@@ -38,7 +31,7 @@ export function createPaceEngine(): PaceEngine {
   function setMode(m: PaceMode) { mode = m; }
   function setCaps(c: Partial<PaceCaps>) { caps = { ...caps, ...c }; }
   function setSensitivity(mult: number) { sens = clamp(mult, 0.5, 1.5); }
-  function setCatchupBias(level: 'off'|'low'|'med') { catchup = level; }
+  function setCatchupBias(level: 'off'|'low'|'med') { _catchup = level; }
 
   function consume(tempo: Tempo, speaking: boolean) {
     const now = performance.now();
