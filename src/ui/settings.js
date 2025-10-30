@@ -56,10 +56,10 @@
   '      Device: <span id="settingsMicDeviceName">—</span> • Level: <span id="settingsMicDb">–∞ dB</span>',
   '    </div>',
   '  </div>',
-        '  <div class="row">',
-        '    <button id="settingsRequestMicBtn" class="chip">Request mic</button>',
-        '    <button id="settingsReleaseMicBtn" class="chip">Release mic</button>',
-        '  </div>',
+  '  <div class="row">',
+  '    <button id="settingsRequestMicBtn" data-action="settings-request-mic" class="chip">Request mic</button>',
+  '    <button id="settingsReleaseMicBtn" data-action="settings-release-mic" class="chip">Release mic</button>',
+  '  </div>',
   '  <h4>ASR / Mic Calibration</h4>',
   '  <div class="row microcopy" style="color:#9fb4c9;font-size:12px">Use Start to measure room noise, then speak to measure voice. We0ll derive safe thresholds for voice activity detection.</div>',
   '  <div class="row" style="align-items:center;gap:10px">',
@@ -182,12 +182,14 @@
       const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
       showTab(active && active.getAttribute('data-tab') || 'general');
 
-      // Wire settings overlay mic buttons (fallback to window.__tpMic when available)
+      // Wire settings overlay mic buttons (fallback) — skip if centralized delegates are active
       try {
-        const reqBtn = q('settingsRequestMicBtn');
-        const relBtn = q('settingsReleaseMicBtn');
-        if (reqBtn) reqBtn.addEventListener('click', async () => { try { await (window.__tpMic?.requestMic?.() || Promise.resolve()); } catch {} });
-        if (relBtn) relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} });
+        if (!window.__tpSettingsDelegatesActive) {
+          const reqBtn = q('settingsRequestMicBtn');
+          const relBtn = q('settingsReleaseMicBtn');
+          if (reqBtn) reqBtn.addEventListener('click', async () => { try { await (window.__tpMic?.requestMic?.() || Promise.resolve()); } catch {} });
+          if (relBtn) relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} });
+        }
       } catch {}
 
       // Wire mic device selector (persist to store when available; mirror main panel select)
@@ -821,11 +823,13 @@
           showTab(active && active.getAttribute('data-tab') || 'general');
           // Critical post-mount wiring for controls that require existing DOM
           try {
-            // Mic buttons (fallback wiring in case init ran before content existed)
-            const reqBtn = q('settingsRequestMicBtn');
-            const relBtn = q('settingsReleaseMicBtn');
-            if (reqBtn && !reqBtn.dataset.wired) { reqBtn.dataset.wired='1'; reqBtn.addEventListener('click', async () => { try { await (window.__tpMic?.requestMic?.() || Promise.resolve()); } catch {} }); }
-            if (relBtn && !relBtn.dataset.wired) { relBtn.dataset.wired='1'; relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} }); }
+            // Mic buttons (fallback wiring if delegates not active)
+            if (!window.__tpSettingsDelegatesActive) {
+              const reqBtn = q('settingsRequestMicBtn');
+              const relBtn = q('settingsReleaseMicBtn');
+              if (reqBtn && !reqBtn.dataset.wired) { reqBtn.dataset.wired='1'; reqBtn.addEventListener('click', async () => { try { await (window.__tpMic?.requestMic?.() || Promise.resolve()); } catch {} }); }
+              if (relBtn && !relBtn.dataset.wired) { relBtn.dataset.wired='1'; relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} }); }
+            }
           } catch {}
           try {
             // ASR / Mic Calibration post-mount wiring (in case init ran before content existed)

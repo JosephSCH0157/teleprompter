@@ -6,6 +6,9 @@
 import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
 
+// Optional: expose a dev console hook for quick OBS probes
+try { if (location.search.includes('dev=1')) { (window as any).__obsTestConnect = obsTestConnect; } } catch {}
+
 export function initObsUI() {
   try { (window as any).__tpObsInlineBridgeActive = true; } catch {}
   const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
