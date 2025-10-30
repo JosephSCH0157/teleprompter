@@ -304,9 +304,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "b874f9401aa20343ccef06480dda1531a4ba13f6",
+      "gitSha": "c34c08adb7672830bde9de4480a6aa1bc0586bea",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T01:27:32.507Z"
+      "buildTime": "2025-10-30T01:39:51.496Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
