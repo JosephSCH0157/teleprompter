@@ -828,6 +828,155 @@
             if (relBtn && !relBtn.dataset.wired) { relBtn.dataset.wired='1'; relBtn.addEventListener('click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} }); }
           } catch {}
           try {
+            // ASR / Mic Calibration post-mount wiring (in case init ran before content existed)
+            (function(){
+              const btn = q('asrCalibBtn');
+              if (!btn || btn.dataset.wired) return;
+              const chk = q('asrApplyHybrid');
+              const prog = q('asrCalibProgress');
+              const outNoise = q('asrNoiseDb');
+              const outSpeech = q('asrSpeechDb');
+              const outTon = q('asrTonDb');
+              const outToff = q('asrToffDb');
+              const attackInp = q('asrAttackMs');
+              const releaseInp = q('asrReleaseMs');
+              const VAD_PROF_KEY = 'tp_vad_profile_v1';
+              const ASR_KEY = 'tp_asr_profiles_v1';
+              const UIPREF_KEY = 'tp_ui_prefs_v1';
+              const APPLY_KEY = 'tp_vad_apply_hybrid';
+
+              function readUiPrefs(){ try { return JSON.parse(localStorage.getItem(UIPREF_KEY)||'{}')||{}; } catch { return {}; } }
+              function writeUiPrefs(p){ try { const cur = readUiPrefs(); localStorage.setItem(UIPREF_KEY, JSON.stringify({ ...cur, ...p })); } catch {} }
+              function readAsrState(){ try { return JSON.parse(localStorage.getItem(ASR_KEY)||'{}')||{}; } catch { return {}; } }
+              function writeAsrState(next){ try { localStorage.setItem(ASR_KEY, JSON.stringify(next||{})); } catch {} }
+              function upsertAsrProfile(profile){
+                try {
+                  const st = readAsrState();
+                  st.profiles = st.profiles || {};
+                  st.profiles[profile.id] = { ...profile, updatedAt: Date.now() };
+                  if (!st.activeProfileId) st.activeProfileId = profile.id;
+                  writeAsrState(st);
+                } catch {}
+              }
+              function pickHybridProfile(){
+                try {
+                  const st = readAsrState();
+                  const prefs = readUiPrefs();
+                  const id = prefs.hybridUseProfileId && st.profiles && st.profiles[prefs.hybridUseProfileId] ? prefs.hybridUseProfileId : st.activeProfileId;
+                  return id && st.profiles ? st.profiles[id] : null;
+                } catch { return null; }
+              }
+              function updateHybridUsingUI(){
+                try {
+                  const el = q('asrHybridUsing'); if (!el) return;
+                  const prof = pickHybridProfile();
+                  if (prof && prof.vad) {
+                    const v = prof.vad;
+                    el.textContent = `Using: ${prof.label||prof.id} • On ${Math.round(v.tonDb)} dB / Off ${Math.round(v.toffDb)} dB (${v.attackMs}/${v.releaseMs} ms)`;
+                  } else {
+                    el.textContent = 'Using: —';
+                  }
+                } catch {}
+              }
+              // Restore prior profile UI snippets
+              try {
+                const raw = localStorage.getItem(VAD_PROF_KEY);
+                if (raw) {
+                  const p = JSON.parse(raw);
+                  if (outNoise && p && typeof p.noiseDb === 'number') outNoise.textContent = String(p.noiseDb.toFixed(0)) + ' dB';
+                  if (outSpeech && p && typeof p.speechDb === 'number') outSpeech.textContent = String(p.speechDb.toFixed(0)) + ' dB';
+                  if (outTon && p && typeof p.tonDb === 'number') outTon.textContent = String(p.tonDb.toFixed(0)) + ' dB';
+                  if (outToff && p && typeof p.toffDb === 'number') outToff.textContent = String(p.toffDb.toFixed(0)) + ' dB';
+                  if (attackInp && typeof p.attackMs === 'number') attackInp.value = String(p.attackMs);
+                  if (releaseInp && typeof p.releaseMs === 'number') releaseInp.value = String(p.releaseMs);
+                }
+                if (chk) chk.checked = localStorage.getItem(APPLY_KEY) === '1';
+                updateHybridUsingUI();
+              } catch {}
+
+              const measure = (ms) => new Promise((resolve) => {
+                const vals = [];
+                const onDb = (e) => { try { const db = (e && e.detail && typeof e.detail.db === 'number') ? e.detail.db : NaN; if (Number.isFinite(db)) vals.push(db); } catch {} };
+                try { window.addEventListener('tp:db', onDb); } catch {}
+                setTimeout(() => { try { window.removeEventListener('tp:db', onDb); } catch {} resolve(vals); }, ms);
+              });
+              const avg = (arr) => { if (!arr || !arr.length) return NaN; return arr.reduce((a,b)=>a+b,0)/arr.length; };
+              function startPhase(label, ms){
+                try {
+                  if (!prog) return () => {};
+                  const t0 = Date.now();
+                  const update = () => {
+                    const elapsed = Date.now() - t0;
+                    const rem = Math.max(0, ms - elapsed);
+                    const secs = Math.ceil(rem / 1000);
+                    prog.textContent = label + ' ' + secs + 's';
+                  };
+                  update();
+                  const id = setInterval(update, 200);
+                  return () => { try { clearInterval(id); } catch {} };
+                } catch { return () => {}; }
+              }
+              async function runCalibration(){
+                try {
+                  try { if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') await window.__tpMic.requestMic(); } catch {}
+                  if (btn) { btn.disabled = true; btn.textContent = 'Calibrating…'; }
+                  if (prog) { prog.textContent = 'Preparing…'; }
+                  const atk = Math.max(20, Math.min(500, parseInt(attackInp && attackInp.value || '80', 10) || 80));
+                  const rel = Math.max(80, Math.min(1000, parseInt(releaseInp && releaseInp.value || '300', 10) || 300));
+                  const stop1 = startPhase('Quiet…', 1500);
+                  const noiseVals = await measure(1500);
+                  stop1 && stop1();
+                  const noise = avg(noiseVals);
+                  if (outNoise) outNoise.textContent = Number.isFinite(noise) ? (noise.toFixed(0) + ' dB') : '—';
+                  const stop2 = startPhase('Speak…', 1800);
+                  const speechVals = await measure(1800);
+                  stop2 && stop2();
+                  const speech = avg(speechVals);
+                  if (outSpeech) outSpeech.textContent = Number.isFinite(speech) ? (speech.toFixed(0) + ' dB') : '—';
+                  let ton = -30, toff = -36;
+                  if (Number.isFinite(noise) && Number.isFinite(speech)) {
+                    const minTon = noise + 8;
+                    const maxTon = speech - 4;
+                    ton = Math.min(-20, Math.max(minTon, Math.min(maxTon, -26)));
+                    toff = ton - 6;
+                  }
+                  if (outTon) outTon.textContent = ton.toFixed(0) + ' dB';
+                  if (outToff) outToff.textContent = toff.toFixed(0) + ' dB';
+                  const deviceId = (function(){ try { return (document.getElementById('settingsMicSel')||{}).value || ''; } catch { return ''; } })();
+                  const id = `vad::${deviceId || 'unknown'}`;
+                  const asrProf = {
+                    id,
+                    label: 'VAD Cal',
+                    capture: { deviceId, sampleRateHz: 48000, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+                    cal: { noiseRmsDbfs: Number(noise||-50), noisePeakDbfs: Number((noise||-50)+6), speechRmsDbfs: Number(speech||-20), speechPeakDbfs: Number((speech||-20)+6), snrDb: Number((speech||-20) - (noise||-50)) },
+                    vad: { tonDb: Number(ton), toffDb: Number(toff), attackMs: Number(atk), releaseMs: Number(rel) },
+                    filters: {}, createdAt: Date.now(), updatedAt: Date.now()
+                  };
+                  upsertAsrProfile(asrProf);
+                  if (chk && chk.checked) {
+                    try { localStorage.setItem(APPLY_KEY, '1'); } catch {}
+                    writeUiPrefs({ hybridUseProfileId: id });
+                  } else {
+                    try { localStorage.removeItem(APPLY_KEY); } catch {}
+                  }
+                  try { window.dispatchEvent(new CustomEvent('tp:vad:profile', { detail: asrProf })); } catch {}
+                  if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; }
+                  if (prog) { prog.textContent = 'Saved'; setTimeout(() => { try { if (prog.textContent === 'Saved') prog.textContent = 'Ready'; } catch {} }, 1500); }
+                  try { if (window.toast) window.toast('Calibration saved', { type:'ok' }); } catch {}
+                  updateHybridUsingUI();
+                } catch {}
+              }
+              btn.dataset.wired = '1';
+              btn.addEventListener('click', runCalibration);
+              if (chk) chk.addEventListener('change', () => { try { localStorage.setItem(APPLY_KEY, chk.checked ? '1' : '0'); } catch {} });
+              try {
+                window.addEventListener('storage', (e) => {
+                  try { if (e && (e.key === ASR_KEY || e.key === UIPREF_KEY)) updateHybridUsingUI(); } catch {}
+                });
+              } catch {}
+            })();
+          } catch {}
+          try {
             // Typography + width (idempotent wiring)
             // If TS is driving typography, skip legacy listeners & writes
             if (window.__tpTsTypographyActive) {
