@@ -106,7 +106,7 @@
         '    <label><input type="checkbox" id="settingsObsReconnect"/> Auto-reconnect</label>',
         '  </div>',
   '  <div class="row">',
-  '    <button id="settingsObsTest" class="chip btn-chip" type="button">Test connection</button>',
+  '    <button id="settingsObsTest" data-action="obs-test" class="chip btn-chip" type="button">Test connection</button>',
   '    <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>',
   '  </div>',
         '</div>',
@@ -451,10 +451,10 @@
       } catch {}
 
       // Mirror OBS URL/password live between settings overlay and main panel via input events
-      const obsUrlS = q('settingsObsUrl');
-      const mainUrl = q('obsUrl');
-      const obsPassS = q('settingsObsPass');
-      const mainPass = q('obsPassword');
+  const obsUrlS = q('settingsObsUrl');
+  const mainUrl = q('obsUrl');
+  const obsPassS = q('settingsObsPassword');
+  const mainPass = q('obsPassword');
       if (obsUrlS && mainUrl) {
         obsUrlS.addEventListener('input', () => { try { if (mainUrl.value !== obsUrlS.value) mainUrl.value = obsUrlS.value; } catch {} });
         mainUrl.addEventListener('input', () => { try { if (obsUrlS.value !== mainUrl.value) obsUrlS.value = mainUrl.value; } catch {} });
