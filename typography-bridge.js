@@ -23,7 +23,9 @@ try {
     (e) => {
       try {
         if (!e.ctrlKey && !e.metaKey) return;
-        e.preventDefault();
+        // Prevent browser zoom on Ctrl/Cmd + wheel (intentional in-app zoom)
+        // eslint-disable-next-line no-restricted-syntax
+        if (e.cancelable) e.preventDefault();
         bumpFont(e.deltaY < 0 ? +2 : -2);
       } catch {}
     },
@@ -42,7 +44,9 @@ function bindShiftWheel() {
       (e) => {
         try {
           if (!e.shiftKey) return;
-          e.preventDefault();
+          // Prevent default scroll when using Shift + wheel to adjust typography
+          // eslint-disable-next-line no-restricted-syntax
+          if (e.cancelable) e.preventDefault();
           bumpFont(e.deltaY < 0 ? +2 : -2);
         } catch {}
       },
