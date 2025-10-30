@@ -277,7 +277,8 @@ async function boot() {
         if (!mod) {
           mod = await import('./features/scroll-router.js');
         }
-        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter(); } catch (e) {
+        // Pass the Auto API to the router so it can drive the engine
+        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter({ auto: Auto }); } catch (e) {
           console.warn('[src/index] installScrollRouter failed', e);
         }
       } catch (e) { console.warn('[src/index] router import failed', e); }

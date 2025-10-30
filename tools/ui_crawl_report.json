@@ -232,20 +232,11 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[src/index] installScrollRouter failed JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 280,
-        "columnNumber": 18
-      }
-    },
-    {
       "type": "log",
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 388,
+        "lineNumber": 389,
         "columnNumber": 10
       }
     },
@@ -267,7 +258,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -304,9 +295,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "fccb394ae55bb37b671f2edea7f3b3f9040693a7",
+      "gitSha": "0e6bb4702dead146a34bce5a10aa234e9b5256b9",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T08:36:01.306Z"
+      "buildTime": "2025-10-30T08:41:34.544Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
