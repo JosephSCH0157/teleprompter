@@ -56,7 +56,7 @@ export function initObsUI() {
 
   // Delegated Test/Sync/Poke buttons
   try {
-    document.addEventListener('click', async (e) => {
+    const onObsClick = async (e: Event) => {
       const t = e.target as HTMLElement | null;
       const id = (t as any)?.id || '';
       let pill = pillEl();
@@ -111,7 +111,11 @@ export function initObsUI() {
           errMsg('OBS poke failed: ' + (err?.message || String(err)));
         }
       }
-    }, { capture: true });
+    };
+    // Capture-phase interception (primary)
+    document.addEventListener('click', onObsClick as any, { capture: true });
+    // Bubble-phase interception (belt-and-suspenders)
+    document.addEventListener('click', onObsClick as any, { capture: false });
   } catch {}
 
   // Reflect recorder status in the pill whenever it changes
