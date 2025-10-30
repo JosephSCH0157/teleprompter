@@ -268,7 +268,12 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     document.addEventListener('click', (ev) => {
       const t = ev.target as HTMLElement | null;
       if (t?.id === 'autoToggle') {
+        const was = userEnabled;
         userEnabled = !userEnabled;
+        // When intent flips ON, seed speed so engine warms and label reflects immediately
+        if (!was && userEnabled) {
+          try { auto.setSpeed?.(getStoredSpeed()); } catch {}
+        }
         applyGate();
       }
     }, { capture: true });

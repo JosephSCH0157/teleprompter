@@ -170,6 +170,22 @@ async function boot() {
       }
     } catch {}
   UI.bindStaticDom();
+  // Choose and expose the active scroll root so legacy/TS controllers agree (main vs display)
+  try {
+    function getScrollRoot(){
+      try {
+        const disp = (window && window.__tpDisplayViewerEl) || null;
+        if (disp && disp.isConnected) return disp;
+      } catch {}
+      try {
+        const inPage = document.getElementById('viewer') || document.querySelector('[data-role="viewer"]');
+        return inPage || (document.scrollingElement || document.documentElement);
+      } catch {}
+      return document.documentElement;
+    }
+    const root = getScrollRoot();
+    try { window.__tpScrollRoot = root; } catch {}
+  } catch {}
   // Ensure autoscroll engine is initialized before wiring router/UI
   try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
 
