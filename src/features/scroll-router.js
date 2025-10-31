@@ -621,6 +621,16 @@ function installScrollRouter(opts) {
     });
   } catch {
   }
+  // Allow external intent control (e.g., speech start/stop) to flip user intent deterministically
+  try {
+    window.addEventListener("tp:autoIntent", (e) => {
+      try {
+        const on = !!(e && e.detail && (e.detail.on ?? e.detail.enabled));
+        userEnabled = !!on;
+        applyGate();
+      } catch {}
+    });
+  } catch {}
   try {
     document.addEventListener("click", (ev) => {
       const t = ev.target;

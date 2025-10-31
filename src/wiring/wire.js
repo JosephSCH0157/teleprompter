@@ -22,18 +22,24 @@ function ensureObsPill(fromEl, text) {
 }
 
 function defaultObsProbe(urlLike, pass) {
-  // Fallback probe using the global OBS adapter if dev probe isn't available.
+  // Fallback probe using the global OBS adapter. Optionally keep connection sticky.
   return new Promise((resolve, reject) => {
     try {
       const adapter = (window && window.__tpOBS) || null;
       if (!adapter || typeof adapter.connect !== 'function') return reject(new Error('OBS adapter unavailable'));
-      let connOpts = { host: '127.0.0.1', port: 4455, secure: false, password: String(pass || '') };
+      let connOpts = { host: '127.0.0.1', port: 4455, secure: false, password: String(pass || ''), reconnect: true };
       try {
         const u = new URL(String(urlLike || 'ws://127.0.0.1:4455'));
-        connOpts = { host: u.hostname, port: Number(u.port || 4455), secure: (u.protocol === 'wss:'), password: String(pass || '') };
+        connOpts = { host: u.hostname, port: Number(u.port || 4455), secure: (u.protocol === 'wss:'), password: String(pass || ''), reconnect: true };
       } catch {}
-      const conn = adapter.connect({ ...connOpts, reconnect: false });
-      const cleanup = () => { try { conn && conn.close && conn.close(); } catch {} };
+      const sticky = (() => { try { return window.__tpObsSticky === true || localStorage.getItem('tp_obs_sticky') === '1'; } catch { return false; } })();
+      // Reuse existing sticky connection if present
+      let conn = sticky && window.__tpObsConn ? window.__tpObsConn : null;
+      if (!conn) {
+        conn = adapter.connect({ ...connOpts, reconnect: true });
+        if (sticky) { try { window.__tpObsConn = conn; } catch {} }
+      }
+      const cleanup = () => { try { if (!sticky) conn && conn.close && conn.close(); } catch {} };
       let done = false;
       const tm = setTimeout(() => { if (!done) { done = true; cleanup(); reject(new Error('timeout')); } }, 8000);
       try {
