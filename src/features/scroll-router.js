@@ -463,6 +463,26 @@ function installScrollRouter(opts) {
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
   const chipEl = () => document.getElementById("autoChip");
+  function emitAutoState() {
+    try {
+      const btn = document.getElementById("autoToggle");
+      const chip = chipEl();
+      const st = (btn && btn.getAttribute && btn.getAttribute("data-state")) || "";
+      const gate = st === "on" ? "on" : st === "paused" ? "paused" : "manual";
+      const speed = (auto && typeof (auto.getState || {}).call === "function")
+        ? (auto.getState().speed)
+        : (function(){ try { return Number(localStorage.getItem("tp_auto_speed")||"0")||0; } catch { return 0; } })();
+      const payload = {
+        intentOn: !!userEnabled,
+        gate,
+        speed,
+        label: (btn && btn.textContent || "").trim(),
+        chip: (chip && chip.textContent || "").trim(),
+      };
+      try { (window.__tp_onAutoStateChange || null) && window.__tp_onAutoStateChange(payload); } catch {}
+      try { document.dispatchEvent(new CustomEvent("tp:autoState", { detail: payload })); } catch {}
+    } catch {}
+  }
   function setAutoChip(state3, detail) {
     const el = chipEl();
     if (!el) return;
@@ -494,6 +514,7 @@ function installScrollRouter(opts) {
         }
       } catch {
       }
+      try { emitAutoState(); } catch {}
       return;
     }
     let gateWanted = false;
@@ -534,6 +555,7 @@ function installScrollRouter(opts) {
       }
     } catch {
     }
+    try { emitAutoState(); } catch {}
   }
   onUiPrefs((p) => {
     gatePref = p.hybridGate;
@@ -647,6 +669,7 @@ function installScrollRouter(opts) {
       const s = e && e.detail && typeof e.detail.speed === "number" ? e.detail.speed : getStoredSpeed();
       if (ds === "on") btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`;
       if (ds === "paused") btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`;
+      try { emitAutoState(); } catch {}
     });
   } catch {
   }

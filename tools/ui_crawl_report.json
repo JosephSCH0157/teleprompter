@@ -143,10 +143,28 @@
   "console": [
     {
       "type": "log",
+      "text": "[obs.state] wire init (claim bridge) ",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/wiring/wire.js",
+        "lineNumber": 6,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[obs.ui] delegate installed JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/wiring/wire.js",
+        "lineNumber": 6,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 92,
+        "lineNumber": 104,
         "columnNumber": 12
       }
     },
@@ -175,6 +193,13 @@
         "url": "http://127.0.0.1:5180/src/dev/parity-guard.js",
         "lineNumber": 70,
         "columnNumber": 20
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -236,15 +261,8 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 389,
+        "lineNumber": 417,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -257,8 +275,17 @@
       }
     },
     {
+      "type": "warning",
+      "text": "[OBS test failed] JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 174,
+        "columnNumber": 26
+      }
+    },
+    {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:render JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -276,7 +303,16 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -295,9 +331,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "0e6bb4702dead146a34bce5a10aa234e9b5256b9",
+      "gitSha": "e965f4599fa0ac80da00329d71d34a2be23cd679",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-30T08:41:34.544Z"
+      "buildTime": "2025-10-31T02:49:59.997Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -366,27 +402,14 @@
     "delta": 76,
     "label": "Auto-scroll: On — 70 px/s"
   },
-  "hotkeysProbe": {
-    "supported": true,
-    "before": {
-      "idx": null,
-      "top": 288,
-      "st": 0
-    },
-    "after": {
-      "idx": null,
-      "top": 288,
-      "st": 0
-    },
-    "ok": false
-  },
-  "autoScrollUi": {
-    "was": "Auto-scroll: On — 70 px/s",
-    "now": "Auto-scroll: On — 70 px/s",
-    "chipBefore": "Auto: Manual",
-    "chipAfter": "Auto: Manual",
-    "chipChanged": false,
-    "ok": true
+  "autoState": {
+    "sawEvent": true,
+    "intentOn": true,
+    "gate": "on",
+    "speed": 80,
+    "label": "Auto-scroll: On — 80 px/s",
+    "chip": "Auto: Manual",
+    "delta": 0
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }

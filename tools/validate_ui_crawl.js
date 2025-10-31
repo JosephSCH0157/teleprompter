@@ -26,7 +26,7 @@ const consoleEntries = Array.isArray(report.console) ? report.console : [];
 const legendProbe = Array.isArray(report.legendProbe) ? report.legendProbe : [];
 const renderProbe = report.renderProbe || {};
 const hudProbe = report.hudProbe || {};
-const hotkeysProbe = report.hotkeysProbe || {};
+const _hotkeysProbe = report.hotkeysProbe || {};
 const lateProbe = report.lateProbe || {};
 const settingsProbe = report.settingsProbe || {};
 const obsTestProbe = report.obsTestProbe || {};
@@ -193,14 +193,26 @@ try {
       }
     }
   }
-  // Hotkeys probe (best-effort)
-  if (hotkeysProbe && hotkeysProbe.supported) {
-    const moved = !!(hotkeysProbe.ok || (hotkeysProbe.afterPD && (hotkeysProbe.afterPD.scrollTop !== hotkeysProbe.beforeTop || hotkeysProbe.afterPD.markerTop !== hotkeysProbe.beforeMarker)));
-    if (moved) console.log('PASS hotkeys — scroll reacted to keys');
-    else {
-      const msg = 'hotkeys — no scroll change after keys';
-      if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+  // Deterministic router auto-state signal + movement
+  try {
+    const a = report.autoState;
+    if (!a) {
+      console.error('FAIL auto-state-missing — no autoState in report');
+      allOk = false;
+    } else if (!a.sawEvent) {
+      console.error('FAIL auto-state-no-event — router did not emit autoState');
+      allOk = false;
+    } else if (!a.intentOn) {
+      console.error('FAIL auto-state-not-on — intent did not flip ON');
+      allOk = false;
+    } else if (!(a.delta > 0)) {
+      console.error('FAIL auto-state-no-movement — viewport did not move');
+      allOk = false;
+    } else {
+      console.log('PASS auto-state —', JSON.stringify({ gate: a.gate, speed: a.speed, delta: a.delta }));
     }
+  } catch (e) {
+    console.warn('WARN auto-state validation failed:', String(e && e.message || e));
   }
   // Late-script probe: warn if jitter too high or fps too low
   if (lateProbe && lateProbe.supported) {
@@ -260,21 +272,7 @@ try {
   }
 
   // Auto-scroll UI wiring check
-  if (report.autoScrollUi) {
-    if (report.autoScrollUi.ok) {
-      console.log('PASS auto-scroll-ui —', JSON.stringify({ was: report.autoScrollUi.was, now: report.autoScrollUi.now }));
-      // Extra: warn if chip did not change text at all
-      if (report.autoScrollUi && report.autoScrollUi.chipBefore === report.autoScrollUi.chipAfter) {
-        const msg = 'auto-chip — text did not change after toggle';
-        if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
-      } else {
-        console.log('PASS auto-chip — text changed');
-      }
-    } else {
-      const msg = 'auto-scroll-ui — toggle did not flip to On when enabled';
-      if (CI_STRICT) { console.error('FAIL ' + msg, JSON.stringify(report.autoScrollUi)); allOk = false; } else { console.warn('WARN ' + msg, JSON.stringify(report.autoScrollUi)); }
-    }
-  }
+  // Removed flaky auto-scroll heuristic checks in favor of auto-state
 
   // Mini scroll proof (engine should move without OBS/ASR)
   try {

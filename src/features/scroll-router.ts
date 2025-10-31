@@ -152,6 +152,24 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   // Chip helpers
   const chipEl = () => document.getElementById('autoChip');
+  function emitAutoState() {
+    try {
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+      const chip = chipEl();
+      const st = (btn && btn.getAttribute && btn.getAttribute('data-state')) || '';
+      const gate: 'manual'|'paused'|'on' = (st === 'on') ? 'on' : (st === 'paused') ? 'paused' : 'manual';
+      const speed = typeof opts.auto.getState === 'function' ? (opts.auto.getState()?.speed) : (Number(localStorage.getItem('tp_auto_speed')||'0')||0);
+      const payload = {
+        intentOn: !!userEnabled,
+        gate,
+        speed,
+        label: (btn && btn.textContent || '').trim(),
+        chip: (chip && chip.textContent || '').trim(),
+      };
+      try { (window as any).__tp_onAutoStateChange?.(payload); } catch {}
+      try { document.dispatchEvent(new CustomEvent('tp:autoState', { detail: payload })); } catch {}
+    } catch {}
+  }
   function setAutoChip(state: 'on' | 'paused' | 'manual', detail?: string) {
     const el = chipEl();
     if (!el) return;
@@ -182,6 +200,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
           btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
         }
       } catch {}
+      try { emitAutoState(); } catch {}
       return;
     }
     let gateWanted = false;
@@ -214,6 +233,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         btn.setAttribute('aria-pressed', String(!!userEnabled));
       }
     } catch {}
+    try { emitAutoState(); } catch {}
   }
 
   onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
@@ -309,6 +329,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       const s = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : getStoredSpeed();
       if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
       if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+      try { emitAutoState(); } catch {}
     });
   } catch {}
 
