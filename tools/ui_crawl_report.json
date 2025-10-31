@@ -275,15 +275,6 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[OBS test failed] JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-        "lineNumber": 174,
-        "columnNumber": 26
-      }
-    },
-    {
       "type": "debug",
       "text": "[HUD] display:render JSHandle@object",
       "location": {
@@ -331,9 +322,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "e965f4599fa0ac80da00329d71d34a2be23cd679",
+      "gitSha": "163a4b2779506cac08c3df58b8b26ef7170b5654",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-31T02:49:59.997Z"
+      "buildTime": "2025-10-31T02:52:33.184Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -409,7 +400,7 @@
     "speed": 80,
     "label": "Auto-scroll: On — 80 px/s",
     "chip": "Auto: Manual",
-    "delta": 0
+    "delta": 76
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }
