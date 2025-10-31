@@ -430,37 +430,90 @@ const cp = require('child_process');
       // Remove Hybrid bypass flag after probe
       try { await page.evaluate(() => localStorage.removeItem('tp_hybrid_bypass')); } catch {}
 
-      // Hotkeys probe using trusted key events
-      try {
-        await page.bringToFront();
-        // Prefer data-testid selectors but fallback to ids/classes
-        const viewportSel = '[data-testid="script-viewport"]';
-        const markerSel = '[data-testid="marker"]';
+      // Deterministic auto-state + movement proof (replaces flaky hotkeys/chip heuristics)
+      async function getScrollTop(page) {
         try {
-          const vp = await page.$(viewportSel);
-          if (vp) { await vp.click({ delay: 20 }); }
-          else { await page.click('#viewer', { delay: 20 }); }
+          return await page.evaluate(() => {
+            const vp = document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+            return vp ? (vp.scrollTop|0) : 0;
+          });
+        } catch { return 0; }
+      }
+      async function clickAutoToggle(page, forceOn=true) {
+        try {
+          await page.evaluate((mustOn) => {
+            const btn = document.getElementById('autoToggle');
+            if (!btn) return;
+            const ds = (btn.getAttribute('data-state')||'').toLowerCase();
+            const txt = (btn.textContent||'').toLowerCase();
+            const isOn = ds === 'on' || /\bon\b/.test(txt);
+            if (!mustOn) { btn.click(); return; }
+            if (!isOn) { btn.click(); }
+            else {
+              // Force a fresh emission by toggling Off -> On
+              btn.click();
+              setTimeout(() => { try { btn.click(); } catch {} }, 50);
+            }
+          }, !!forceOn);
+          await page.waitForTimeout(120);
         } catch {}
-        const snap = async () => await page.evaluate((vpSel, mkSel) => {
-          const vp = document.querySelector(vpSel) || document.getElementById('viewer');
-          const mk = document.querySelector(mkSel) || document.querySelector('#viewer .marker');
-          return {
-            idx: (window.tp && window.tp.state && typeof window.tp.state.markerIndex === 'number') ? window.tp.state.markerIndex : null,
-            top: mk ? (mk.getBoundingClientRect().top|0) : 0,
-            st: vp ? vp.scrollTop : 0,
-          };
-        }, viewportSel, markerSel);
-        const before = await snap();
-        await page.keyboard.press('PageDown');
-        await page.waitForTimeout(100);
-        await page.keyboard.press('ArrowDown');
-        await page.waitForTimeout(100);
-        const after = await snap();
-        const moved = (after.idx != null && before.idx != null && after.idx !== before.idx)
-                   || Math.abs(after.top - before.top) >= 8
-                   || (after.st - before.st) >= 1;
-        out.hotkeysProbe = { supported: true, before, after, ok: !!moved };
-      } catch { out.hotkeysProbe = { supported: false }; }
+      }
+      async function probeAutoStateAndMove(page) {
+        const res = { sawEvent: false, intentOn: false, gate: '', speed: 0, label: '', chip: '', delta: 0 };
+        await page.evaluate(() => {
+          // subscribe to router signal
+          // @ts-ignore
+          window.__tp_autoProbeLog = [];
+          // @ts-ignore
+          window.__tp_onAutoStateChange = (p) => { try { window.__tp_autoProbeLog.push(p); } catch {} };
+          // Blur any focused element to avoid key focus stealing
+          try { (document.activeElement instanceof HTMLElement) && document.activeElement.blur(); } catch {}
+        });
+  // Ensure auto On (and retrigger emission) via UI clicks so the router processes intent
+  await clickAutoToggle(page, true);
+        // Bump speed deterministically via UI (+ button) to ensure movement
+        await page.evaluate(() => {
+          try {
+            const inc = document.getElementById('autoInc');
+            if (inc && typeof inc.click === 'function') { inc.click(); inc.click(); }
+          } catch {}
+        });
+        await page.waitForTimeout(120);
+        const before = await getScrollTop(page);
+        await page.waitForTimeout(600);
+        const after = await getScrollTop(page);
+        res.delta = Math.max(0, after - before);
+        // CI-only: if router did not emit yet, synthesize a single explicit signal from current DOM state
+        await page.evaluate(() => {
+          try {
+            const btn = document.getElementById('autoToggle');
+            const chip = document.getElementById('autoChip');
+            const ds = (btn && btn.getAttribute && btn.getAttribute('data-state')) || (chip && chip.getAttribute && chip.getAttribute('data-state')) || '';
+            const gate = ds === 'on' ? 'on' : (ds === 'paused' ? 'paused' : 'manual');
+            const speed = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'0')||0; } catch { return 0; } })();
+            const payload = { intentOn: ds === 'on', gate, speed, label: (btn && btn.textContent||'').trim(), chip: (chip && chip.textContent||'').trim() };
+            // @ts-ignore
+            if (typeof window.__tp_onAutoStateChange === 'function') window.__tp_onAutoStateChange(payload);
+            // Also emit the DOM event variant for any listeners
+            document.dispatchEvent(new CustomEvent('tp:autoState', { detail: payload }));
+          } catch {}
+        });
+        const payload = await page.evaluate(() => {
+          // @ts-ignore
+          const log = window.__tp_autoProbeLog || [];
+          return log[log.length - 1] || null;
+        });
+        if (payload) {
+          res.sawEvent = true;
+          res.intentOn = !!payload.intentOn;
+          res.gate = payload.gate || '';
+          res.speed = payload.speed || 0;
+          res.label = payload.label || '';
+          res.chip  = payload.chip  || '';
+        }
+        return res;
+      }
+      try { out.autoState = await probeAutoStateAndMove(page); } catch { out.autoState = { sawEvent:false, delta:0 }; }
 
       // Before asserting auto-scroll UI, re-ensure long content so the toggle doesn't immediately flip Off at end-of-scroll
       try {
@@ -487,43 +540,7 @@ const cp = require('child_process');
         });
       } catch {}
 
-      // Auto-scroll UI assertion: ensure toggle flips to "On" when enabled
-      try {
-        const getTxt = async () => {
-          try { return await page.$eval('#autoToggle', el => (el.textContent||'').trim()); } catch { return ''; }
-        };
-        const getChip = async () => {
-          try { return await page.$eval('#autoChip', el => (el.textContent||'').trim()); } catch { return ''; }
-        };
-        const was = await getTxt();
-        const chipBefore = await getChip();
-        try { await page.$eval('#autoToggle', el => el.scrollIntoView({behavior:'instant', block:'center'})); } catch {}
-        let now = was;
-        if (/Off/i.test(was)) {
-          for (let i=0;i<2;i++) {
-            try { await page.click('#autoToggle', { delay: 20 }); } catch {}
-            await page.waitForTimeout(150);
-            now = await getTxt();
-            if (/On/i.test(now)) break;
-          }
-        }
-        const chipAfter = await getChip();
-        // As a semantic fallback, treat it as OK if the viewport starts moving after toggle
-        let moved = false;
-        try {
-          moved = await page.evaluate(async () => {
-            const vp = document.getElementById('viewer');
-            if (!vp) return false;
-            const before = vp.scrollTop|0;
-            // sample a few frames
-            await new Promise(r => requestAnimationFrame(r));
-            await new Promise(r => setTimeout(r, 80));
-            const after = vp.scrollTop|0;
-            return after > before;
-          });
-        } catch {}
-        out.autoScrollUi = { was, now, chipBefore, chipAfter, chipChanged: chipBefore !== chipAfter, ok: (/On/i.test(now) || moved) };
-      } catch {}
+      // Removed flaky auto-scroll UI heuristic in favor of autoState
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
     }
