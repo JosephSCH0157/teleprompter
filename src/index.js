@@ -330,6 +330,7 @@ async function boot() {
         } catch {}
         if (!mod) {
           mod = await import('./features/scroll-router.js');
+          try { window.__tpScrollRouterJsActive = true; } catch {}
         }
         // Pass the Auto API to the router so it can drive the engine
         try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter({ auto: Auto }); } catch (e) {
