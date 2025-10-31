@@ -285,6 +285,8 @@ export function installSpeech() {
         try { window.speechOn = true; } catch {}
         setListeningUi(true);
         try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
+  // Ensure Hybrid router intent flips ON when speech starts
+  try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
         try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
         const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
         await beginCountdownThen(sec, async () => {
@@ -334,6 +336,8 @@ export function installSpeech() {
           sendToDisplay({ type: 'auto', op: 'stop' });
         } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
+  // Optionally flip user intent OFF when speech stops
+  try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
         try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
       } finally {
         if (btn) btn.disabled = false;
