@@ -18,7 +18,8 @@ const LS_KEY = 'scrollMode';
 const DEFAULTS = {
   mode: 'hybrid' as 'timed'|'step'|'hybrid'|'wpm'|'asr'|'rehearsal',
   step:    { holdCreep: 8 },
-  hybrid:  { attackMs: 150, releaseMs: 350, thresholdDb: -42 },
+  // hybrid speech-gated Auto: db/VAD gate with attack/release; plus silence buffer before stopping
+  hybrid:  { attackMs: 150, releaseMs: 350, thresholdDb: -42, silenceStopMs: 1500 },
 };
 
 type Mode = typeof DEFAULTS.mode;
@@ -149,6 +150,9 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let dbGate = false;      // set from tp:db
   let vadGate = false;     // set from tp:vad
   let gatePref = getUiPrefs().hybridGate;
+  // Track actual engine state and manage delayed stop when speech falls silent
+  let enabledNow: boolean = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
+  let silenceTimer: number | undefined;
 
   // Chip helpers
   const chipEl = () => document.getElementById('autoChip');
@@ -187,7 +191,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   function applyGate() {
     if (state.mode !== 'hybrid') {
       // Outside Hybrid, honor user toggle directly
+      // Cancel any pending delayed stop
+      if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
       if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled);
+      enabledNow = !!userEnabled;
       const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'}`;
       setAutoChip(userEnabled ? 'on' : 'manual', detail);
       // Reflect user intent on the main Auto button label
@@ -203,18 +210,65 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       try { emitAutoState(); } catch {}
       return;
     }
-    let gateWanted = false;
-    switch (gatePref) {
-      case 'db':         gateWanted = dbGate; break;
-      case 'vad':        gateWanted = vadGate; break;
-      case 'db_and_vad': gateWanted = dbGate && vadGate; break;
-      case 'db_or_vad':
-      default:           gateWanted = dbGate || vadGate; break;
+    const computeGateWanted = () => {
+      switch (gatePref) {
+        case 'db':         return dbGate;
+        case 'vad':        return vadGate;
+        case 'db_and_vad': return dbGate && vadGate;
+        case 'db_or_vad':
+        default:           return dbGate || vadGate;
+      }
+    };
+    const gateWanted = computeGateWanted();
+    const wantEnabled = userEnabled && (isHybridBypass() ? true : gateWanted);
+    const dueToGateSilence = userEnabled && !isHybridBypass() && !gateWanted;
+
+    if (wantEnabled) {
+      // Speech present (or bypass): ensure running immediately; cancel pending stop
+      if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
+      if (!enabledNow) {
+        try { auto.setEnabled?.(true); } catch {}
+        enabledNow = true;
+      }
+    } else {
+      // We want to disable. If the reason is speech silence while user intent is ON, buffer the stop.
+      if (dueToGateSilence && enabledNow) {
+        if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} }
+        silenceTimer = setTimeout(() => {
+          try {
+            // Re-evaluate latest desire to avoid stale disable
+            const stillGateWanted = computeGateWanted();
+            const stillWantEnabled = userEnabled && (isHybridBypass() ? true : stillGateWanted);
+            if (!stillWantEnabled && enabledNow) {
+              try { auto.setEnabled?.(false); } catch {}
+              enabledNow = false;
+              // Update UI to reflect paused state after delayed stop
+              const s = getStoredSpeed();
+              const detail2 = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
+              setAutoChip(userEnabled ? 'paused' : 'manual', detail2);
+              try {
+                const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+                if (btn) {
+                  if (userEnabled) { btn.textContent = `Auto-scroll: Paused — ${s} px/s`; btn.setAttribute('data-state', 'paused'); }
+                  else { btn.textContent = 'Auto-scroll: Off'; btn.setAttribute('data-state', 'off'); }
+                  btn.setAttribute('aria-pressed', String(!!userEnabled));
+                }
+              } catch {}
+              try { emitAutoState(); } catch {}
+            }
+          } catch {}
+          silenceTimer = undefined;
+        }, DEFAULTS.hybrid.silenceStopMs) as unknown as number;
+      } else {
+        // Immediate disable (user turned it off, changed mode, or already disabled)
+        if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
+        if (enabledNow) { try { auto.setEnabled?.(false); } catch {} enabledNow = false; }
+      }
     }
-    const enabled = userEnabled && (isHybridBypass() ? true : gateWanted);
-    if (typeof auto.setEnabled === 'function') auto.setEnabled(enabled);
+
     const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
-    setAutoChip(userEnabled ? (enabled ? 'on' : 'paused') : 'manual', detail);
+    // UI reflects the actual engine state (enabledNow), not the instantaneous gate desire
+    setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
     // Reflect user intent on the main Auto button label with speed and paused state
     try {
       const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
@@ -223,7 +277,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         if (!userEnabled) {
           btn.textContent = 'Auto-scroll: Off';
           btn.setAttribute('data-state', 'off');
-        } else if (enabled) {
+        } else if (enabledNow) {
           btn.textContent = `Auto-scroll: On — ${s} px/s`;
           btn.setAttribute('data-state', 'on');
         } else {
