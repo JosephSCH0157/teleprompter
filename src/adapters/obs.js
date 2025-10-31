@@ -121,7 +121,14 @@ export function connect(urlOrOpts, pass) {
     if (op === 2) { // Identified
       identified = true;
       emitter.emit('identified');
-      try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified' } })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', authOK: true } })); } catch {}
+      // Proactively fetch current scene to complete initial state snapshot
+      try {
+        const res = await request('GetCurrentProgramScene', {});
+        if (res && res.ok && res.data && res.data.currentProgramSceneName) {
+          try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', authOK: true, scene: res.data.currentProgramSceneName } })); } catch {}
+        }
+      } catch {}
       return;
     }
     if (op === 5) { // Event
