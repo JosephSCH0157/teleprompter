@@ -59,14 +59,9 @@ export function initSettingsWiring() {
     // Claim OBS ownership so legacy settings wiring stands down
     window.__tpObsInlineBridgeActive = true;
 
-    // Best-effort: if a dev probe exists, expose it; otherwise use the fallback
+    // Provide a probe globally; avoid dynamic imports that can 404 in dev unless explicitly wired elsewhere
     if (typeof window.__obsTestConnect !== 'function') {
-      try {
-        // Try to import a compiled dev probe if present; ignore failures
-        import('../dev/obs-probe.js').then((mod) => {
-          try { window.__obsTestConnect = mod && (mod.obsTestConnect || mod.default) ? (mod.obsTestConnect || mod.default) : defaultObsProbe; } catch { window.__obsTestConnect = defaultObsProbe; }
-        }).catch(() => { window.__obsTestConnect = defaultObsProbe; });
-      } catch { window.__obsTestConnect = defaultObsProbe; }
+      window.__obsTestConnect = defaultObsProbe;
     }
 
     // Delegated, capture-phase handler so it always fires
