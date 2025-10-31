@@ -478,11 +478,9 @@ const cp = require('child_process');
             if (inc && typeof inc.click === 'function') { inc.click(); inc.click(); }
           } catch {}
         });
-  await page.waitForTimeout(150);
-  // Start from top for a reliable delta
-  await page.evaluate(() => { try { const v = document.getElementById('viewer') || document.scrollingElement; if (v) v.scrollTop = 0; } catch {} });
-  const before = await getScrollTop(page);
-  await page.waitForTimeout(1000);
+        await page.waitForTimeout(120);
+        const before = await getScrollTop(page);
+        await page.waitForTimeout(600);
         const after = await getScrollTop(page);
         res.delta = Math.max(0, after - before);
         // CI-only: if router did not emit yet, synthesize a single explicit signal from current DOM state
@@ -515,12 +513,7 @@ const cp = require('child_process');
         }
         return res;
       }
-      try {
-        out.autoState = await probeAutoStateAndMove(page);
-        if (out.autoState && (!out.autoState.delta || out.autoState.delta <= 0) && out.scrollProbe && out.scrollProbe.delta > 0) {
-          out.autoState.delta = out.scrollProbe.delta;
-        }
-      } catch { out.autoState = { sawEvent:false, delta:0 }; }
+      try { out.autoState = await probeAutoStateAndMove(page); } catch { out.autoState = { sawEvent:false, delta:0 }; }
 
       // Before asserting auto-scroll UI, re-ensure long content so the toggle doesn't immediately flip Off at end-of-scroll
       try {
