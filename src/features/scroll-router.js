@@ -334,7 +334,7 @@ var LS_KEY = "scrollMode";
 var DEFAULTS = {
   mode: "hybrid",
   step: { holdCreep: 8 },
-  hybrid: { attackMs: 150, releaseMs: 350, thresholdDb: -42 }
+  hybrid: { attackMs: 150, releaseMs: 350, thresholdDb: -42, silenceStopMs: 1500 }
 };
 var state2 = { ...DEFAULTS };
 var viewer = null;
@@ -462,6 +462,14 @@ function installScrollRouter(opts) {
   let dbGate = false;
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
+  let enabledNow = (() => {
+    try {
+      return !!opts.auto.getState?.().enabled;
+    } catch {
+      return false;
+    }
+  })();
+  let silenceTimer;
   const chipEl = () => document.getElementById("autoChip");
   function emitAutoState() {
     try {
@@ -501,7 +509,15 @@ function installScrollRouter(opts) {
   };
   function applyGate() {
     if (state2.mode !== "hybrid") {
+      if (silenceTimer) {
+        try {
+          clearTimeout(silenceTimer);
+        } catch {
+        }
+        silenceTimer = void 0;
+      }
       if (typeof auto.setEnabled === "function") auto.setEnabled(userEnabled);
+      enabledNow = !!userEnabled;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"}`;
       setAutoChip(userEnabled ? "on" : "manual", detail2);
       try {
@@ -517,26 +533,97 @@ function installScrollRouter(opts) {
       try { emitAutoState(); } catch {}
       return;
     }
-    let gateWanted = false;
-    switch (gatePref) {
-      case "db":
-        gateWanted = dbGate;
-        break;
-      case "vad":
-        gateWanted = vadGate;
-        break;
-      case "db_and_vad":
-        gateWanted = dbGate && vadGate;
-        break;
-      case "db_or_vad":
-      default:
-        gateWanted = dbGate || vadGate;
-        break;
+    const computeGateWanted = () => {
+      switch (gatePref) {
+        case "db":
+          return dbGate;
+        case "vad":
+          return vadGate;
+        case "db_and_vad":
+          return dbGate && vadGate;
+        case "db_or_vad":
+        default:
+          return dbGate || vadGate;
+      }
+    };
+    const gateWanted = computeGateWanted();
+    const wantEnabled = userEnabled && (isHybridBypass() ? true : gateWanted);
+    const dueToGateSilence = userEnabled && !isHybridBypass() && !gateWanted;
+    if (wantEnabled) {
+      if (silenceTimer) {
+        try {
+          clearTimeout(silenceTimer);
+        } catch {
+        }
+        silenceTimer = void 0;
+      }
+      if (!enabledNow) {
+        try {
+          auto.setEnabled?.(true);
+        } catch {
+        }
+        enabledNow = true;
+      }
+    } else {
+      if (dueToGateSilence && enabledNow) {
+        if (silenceTimer) {
+          try {
+            clearTimeout(silenceTimer);
+          } catch {
+          }
+        }
+        silenceTimer = setTimeout(() => {
+          try {
+            const stillGateWanted = computeGateWanted();
+            const stillWantEnabled = userEnabled && (isHybridBypass() ? true : stillGateWanted);
+            if (!stillWantEnabled && enabledNow) {
+              try {
+                auto.setEnabled?.(false);
+              } catch {
+              }
+              enabledNow = false;
+              const s2 = getStoredSpeed();
+              const detail3 = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
+              setAutoChip(userEnabled ? "paused" : "manual", detail3);
+              try {
+                const btn2 = document.getElementById("autoToggle");
+                if (btn2) {
+                  if (userEnabled) {
+                    btn2.textContent = `Auto-scroll: Paused \u2014 ${s2} px/s`;
+                    btn2.setAttribute("data-state", "paused");
+                  } else {
+                    btn2.textContent = "Auto-scroll: Off";
+                    btn2.setAttribute("data-state", "off");
+                  }
+                  btn2.setAttribute("aria-pressed", String(!!userEnabled));
+                }
+              } catch {}
+              try {
+                emitAutoState();
+              } catch {}
+            }
+          } catch {}
+          silenceTimer = void 0;
+        }, DEFAULTS.hybrid.silenceStopMs);
+      } else {
+        if (silenceTimer) {
+          try {
+            clearTimeout(silenceTimer);
+          } catch {
+          }
+          silenceTimer = void 0;
+        }
+        if (enabledNow) {
+          try {
+            auto.setEnabled?.(false);
+          } catch {
+          }
+          enabledNow = false;
+        }
+      }
     }
-    const enabled = userEnabled && (isHybridBypass() ? true : gateWanted);
-    if (typeof auto.setEnabled === "function") auto.setEnabled(enabled);
     const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
-    setAutoChip(userEnabled ? enabled ? "on" : "paused" : "manual", detail);
+    setAutoChip(userEnabled ? enabledNow ? "on" : "paused" : "manual", detail);
     try {
       const btn = document.getElementById("autoToggle");
       if (btn) {
@@ -544,7 +631,7 @@ function installScrollRouter(opts) {
         if (!userEnabled) {
           btn.textContent = "Auto-scroll: Off";
           btn.setAttribute("data-state", "off");
-        } else if (enabled) {
+        } else if (enabledNow) {
           btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`;
           btn.setAttribute("data-state", "on");
         } else {

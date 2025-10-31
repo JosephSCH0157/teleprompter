@@ -22,6 +22,7 @@ Stability and alignment improvements across matching, scrolling, and observabili
 - Speech
 	- Phrase hints via SpeechGrammarList (JSGF) with small weight (0.4) for domain terms (ban, confiscation, transfer, possession); maxAlternatives increased.
 	- **Pause Breathing**: PLL controller responds to speech pauses (onspeechend/onaudioend) with faster bias decay for natural feel.
+  - Hybrid Auto-stop buffer: when using speech-activated Hybrid mode, auto-scroll now waits for 1.5s of continuous silence before pausing, reducing choppy stop/starts.
 
 - HUD/Debug
 	- Candidate vs commit logs separated; sim histogram and time-between-commits retained; scroll WPS gated to speech and started on first write; quiet filter for noisy tags.
