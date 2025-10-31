@@ -150,6 +150,17 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let dbGate = false;      // set from tp:db
   let vadGate = false;     // set from tp:vad
   let gatePref = getUiPrefs().hybridGate;
+  // Require global speech sync to be active in any mode for Auto to actually run
+  let speechActive = false;
+  try {
+    window.addEventListener('tp:speech-state' as any, (e: any) => {
+      try {
+        const running = !!(e && e.detail && e.detail.running);
+        speechActive = running;
+        applyGate();
+      } catch {}
+    });
+  } catch {}
   // Track actual engine state and manage delayed stop when speech falls silent
   let enabledNow: boolean = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
   let silenceTimer: number | undefined;
@@ -190,21 +201,28 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   function applyGate() {
     if (state.mode !== 'hybrid') {
-      // Outside Hybrid, honor user toggle directly
-      // Cancel any pending delayed stop
+      // Outside Hybrid, require speech sync to be active and user intent On
       if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
-      if (typeof auto.setEnabled === 'function') auto.setEnabled(userEnabled);
-      enabledNow = !!userEnabled;
-      const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'}`;
-      setAutoChip(userEnabled ? 'on' : 'manual', detail);
-      // Reflect user intent on the main Auto button label
+      const want = !!userEnabled && !!speechActive;
+      if (typeof auto.setEnabled === 'function') auto.setEnabled(want);
+      enabledNow = want;
+      const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'} • Speech:${speechActive ? '1' : '0'}`;
+      setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
       try {
         const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
         if (btn) {
-          if (userEnabled) btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
-          else btn.textContent = 'Auto-scroll: Off';
+          const s = getStoredSpeed();
+          if (!userEnabled) {
+            btn.textContent = 'Auto-scroll: Off';
+            btn.setAttribute('data-state', 'off');
+          } else if (enabledNow) {
+            btn.textContent = `Auto-scroll: On — ${s} px/s`;
+            btn.setAttribute('data-state', 'on');
+          } else {
+            btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+            btn.setAttribute('data-state', 'paused');
+          }
           btn.setAttribute('aria-pressed', String(!!userEnabled));
-          btn.setAttribute('data-state', userEnabled ? 'on' : 'off');
         }
       } catch {}
       try { emitAutoState(); } catch {}
@@ -219,9 +237,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         default:           return dbGate || vadGate;
       }
     };
-    const gateWanted = computeGateWanted();
-    const wantEnabled = userEnabled && (isHybridBypass() ? true : gateWanted);
-    const dueToGateSilence = userEnabled && !isHybridBypass() && !gateWanted;
+  const gateWanted = computeGateWanted();
+  // In Hybrid, require speech active AND gate (unless bypass)
+  const wantEnabled = userEnabled && speechActive && (isHybridBypass() ? true : gateWanted);
+  const dueToGateSilence = userEnabled && speechActive && !isHybridBypass() && !gateWanted;
 
     if (wantEnabled) {
       // Speech present (or bypass): ensure running immediately; cancel pending stop
@@ -266,7 +285,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       }
     }
 
-    const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
+  const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • Speech:${speechActive?'1':'0'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     // UI reflects the actual engine state (enabledNow), not the instantaneous gate desire
     setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
     // Reflect user intent on the main Auto button label with speed and paused state

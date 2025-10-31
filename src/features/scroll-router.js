@@ -462,6 +462,16 @@ function installScrollRouter(opts) {
   let dbGate = false;
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
+  let speechActive = false;
+  try {
+    window.addEventListener("tp:speech-state", (e) => {
+      try {
+        const running = !!(e && e.detail && e.detail.running);
+        speechActive = running;
+        applyGate();
+      } catch {}
+    });
+  } catch {}
   let enabledNow = (() => {
     try {
       return !!opts.auto.getState?.().enabled;
@@ -510,26 +520,24 @@ function installScrollRouter(opts) {
   function applyGate() {
     if (state2.mode !== "hybrid") {
       if (silenceTimer) {
-        try {
-          clearTimeout(silenceTimer);
-        } catch {
-        }
+        try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      if (typeof auto.setEnabled === "function") auto.setEnabled(userEnabled);
-      enabledNow = !!userEnabled;
-      const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"}`;
-      setAutoChip(userEnabled ? "on" : "manual", detail2);
+      const want = !!userEnabled && !!speechActive;
+      if (typeof auto.setEnabled === "function") auto.setEnabled(want);
+      enabledNow = want;
+      const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
+      setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
       try {
         const btn = document.getElementById("autoToggle");
         if (btn) {
-          if (userEnabled) btn.textContent = `Auto-scroll: On \u2014 ${getStoredSpeed()} px/s`;
-          else btn.textContent = "Auto-scroll: Off";
+          const s = getStoredSpeed();
+          if (!userEnabled) { btn.textContent = "Auto-scroll: Off"; btn.setAttribute("data-state", "off"); }
+          else if (enabledNow) { btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`; btn.setAttribute("data-state", "on"); }
+          else { btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`; btn.setAttribute("data-state", "paused"); }
           btn.setAttribute("aria-pressed", String(!!userEnabled));
-          btn.setAttribute("data-state", userEnabled ? "on" : "off");
         }
-      } catch {
-      }
+      } catch {}
       try { emitAutoState(); } catch {}
       return;
     }
@@ -546,9 +554,9 @@ function installScrollRouter(opts) {
           return dbGate || vadGate;
       }
     };
-    const gateWanted = computeGateWanted();
-    const wantEnabled = userEnabled && (isHybridBypass() ? true : gateWanted);
-    const dueToGateSilence = userEnabled && !isHybridBypass() && !gateWanted;
+  const gateWanted = computeGateWanted();
+  const wantEnabled = userEnabled && speechActive && (isHybridBypass() ? true : gateWanted);
+  const dueToGateSilence = userEnabled && speechActive && !isHybridBypass() && !gateWanted;
     if (wantEnabled) {
       if (silenceTimer) {
         try {
@@ -622,7 +630,7 @@ function installScrollRouter(opts) {
         }
       }
     }
-    const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
+  const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
     setAutoChip(userEnabled ? enabledNow ? "on" : "paused" : "manual", detail);
     try {
       const btn = document.getElementById("autoToggle");
