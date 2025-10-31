@@ -311,6 +311,9 @@ export function installSpeech() {
       try {
         running = false;
         setListeningUi(false);
+        // Hard-stop autoscroll immediately when the user stops speech sync.
+        try { window.__scrollCtl?.stop?.(); } catch {}
+        try { (window.Auto || window.__tpAuto || window.__scrollCtl)?.setEnabled?.(false); } catch {}
         try { rec?.stop?.(); } catch {}
         rec = null;
         hidePreroll();
@@ -320,7 +323,8 @@ export function installSpeech() {
         try { document.body.classList.remove('listening'); } catch {}
         try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}
         try { window.speechOn = false; } catch {}
-        // Do not stop autoscroll immediately; index listener applies a brief buffer before stopping
+  // Index still listens for tp:speech-state to apply a brief buffer for non-manual stops,
+  // but manual Stop above already halted autoscroll.
         // Broadcast a stop to the display window and reinforce current position
         try {
           const root = (window.__tpScrollRoot) || document.getElementById('viewer') || document.scrollingElement || document.documentElement;
