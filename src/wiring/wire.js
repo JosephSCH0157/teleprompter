@@ -2,6 +2,10 @@
 // Own the OBS Test button wiring in the module runtime and expose a simple probe.
 
 const OBS_TEST_SEL = '#settingsObsTest,[data-action="obs-test"],#obsTest';
+let __obsDelegateCount = 0;
+function log(tag, msg, extra){
+  try { console.log(`[obs.${tag}] ${msg}`, extra || ''); } catch {}
+}
 
 function ensureObsPill(fromEl, text) {
   try {
@@ -58,6 +62,7 @@ export function initSettingsWiring() {
     window.__tpObsWireActive = true;
     // Claim OBS ownership so legacy settings wiring stands down
     window.__tpObsInlineBridgeActive = true;
+    log('state', 'wire init (claim bridge)');
 
     // Provide a probe globally; avoid dynamic imports that can 404 in dev unless explicitly wired elsewhere
     if (typeof window.__obsTestConnect !== 'function') {
@@ -75,6 +80,7 @@ export function initSettingsWiring() {
         ev.stopImmediatePropagation();
 
   ensureObsPill(btn, 'testing…');
+        log('ui', 'Test click');
         const hostEl = document.getElementById('settingsObsHost');
         const passEl = document.getElementById('settingsObsPassword');
         const hostRaw = (hostEl && hostEl.value ? String(hostEl.value) : '').trim();
@@ -85,14 +91,24 @@ export function initSettingsWiring() {
         Promise.resolve()
           .then(() => probe(host, pass))
           .then((res) => {
-            const v = res && res.version ? `connected (${res.version})` : 'connected';
+            const version = (res && res.version) || '';
+            const v = version ? `connected (${version})` : 'connected';
             ensureObsPill(btn, v);
+            try { window.dispatchEvent(new CustomEvent('tp:obs-test', { detail: { ok: true, version } })); } catch {}
+            log('state', 'probe ok', { version });
           })
           .catch((err) => {
-            ensureObsPill(btn, 'failed: ' + (err && err.message ? err.message : String(err)));
+            const msg = (err && err.message ? err.message : String(err));
+            ensureObsPill(btn, 'failed: ' + msg);
+            try { window.dispatchEvent(new CustomEvent('tp:obs-test', { detail: { ok: false, error: msg } })); } catch {}
+            log('state', 'probe failed', { error: msg });
           });
       } catch {}
     }, true);
+    __obsDelegateCount += 1; log('ui', `delegate installed`, { listenerCount: __obsDelegateCount });
+
+    // Expose a tiny introspection hook for sanity checks
+    try { window.__tpObsWiringInfo = () => ({ wireActive: !!window.__tpObsWireActive, delegateListeners: __obsDelegateCount, claimedBridge: !!window.__tpObsInlineBridgeActive }); } catch {}
   } catch {}
 }
 
