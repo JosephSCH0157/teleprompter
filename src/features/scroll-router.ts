@@ -283,6 +283,17 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     });
   } catch {}
 
+  // External user intent control (speech start/stop, automation)
+  try {
+    window.addEventListener('tp:autoIntent' as any, (e: any) => {
+      try {
+        const on = !!(e && e.detail && ((e.detail.on !== undefined) ? e.detail.on : e.detail.enabled));
+        userEnabled = !!on;
+        applyGate();
+      } catch {}
+    });
+  } catch {}
+
   // Wire user Auto toggle intent
   try {
     document.addEventListener('click', (ev) => {
