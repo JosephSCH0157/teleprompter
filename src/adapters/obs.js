@@ -138,6 +138,10 @@ export function connect(urlOrOpts, pass) {
           const recording = !!(eventData && eventData.outputActive);
           try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', recording } })); } catch {}
         }
+        if (eventType === 'StreamStateChanged') {
+          const streaming = !!(eventData && eventData.outputActive);
+          try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', streaming } })); } catch {}
+        }
         if (eventType === 'ExitStarted') {
           try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'closed', recording: false } })); } catch {}
         }
@@ -204,6 +208,22 @@ export function createOBSAdapter() {
     async start() { return Promise.resolve(); },
     async stop() { return Promise.resolve(); },
     connect,
+    async startStreaming(conn){
+      try {
+        if (!conn || !conn.request) return { ok:false };
+        const res = await conn.request('StartStream', {});
+        if (res && res.ok) { try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', streaming: true } })); } catch {} }
+        return res;
+      } catch { return { ok:false }; }
+    },
+    async stopStreaming(conn){
+      try {
+        if (!conn || !conn.request) return { ok:false };
+        const res = await conn.request('StopStream', {});
+        if (res && res.ok) { try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', streaming: false } })); } catch {} }
+        return res;
+      } catch { return { ok:false }; }
+    },
     async startRecording(conn){
       try {
         if (!conn || !conn.request) return { ok:false };
