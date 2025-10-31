@@ -349,53 +349,14 @@ async function boot() {
           }
         } catch {}
       };
+      // Let the Scroll Router own #autoToggle behavior to avoid double-ownership.
+      // We still delegate clicks for speed +/- and mic buttons.
       document.addEventListener('click', (e) => {
         const t = e && e.target;
-        try {
-          if (t?.closest?.('#autoToggle')) {
-            __lastAutoToggleAt = Date.now();
-            Auto.toggle();
-            // If just enabled, warm the engine with the persisted speed for immediate consistency
-            try {
-              const st = Auto.getState ? Auto.getState() : null;
-              if (st && st.enabled) {
-                const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
-                Auto.setSpeed(s);
-                try { window.__scrollCtl?.setSpeed?.(s); } catch {}
-              }
-            } catch {}
-            // Reflect immediately for headless probes
-            setTimeout(__applyAutoChip, 0);
-            return;
-          }
-        } catch {}
         try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
         try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
-      }, { capture: true });
-      // Headless fallback (some runners only dispatch mousedown)
-      document.addEventListener('mousedown', (e) => {
-        const t = e && e.target;
-        try {
-          if (t?.closest?.('#autoToggle')) {
-            // Avoid double-toggling when both mousedown and click fire
-            if (Date.now() - __lastAutoToggleAt < 200) return;
-            __lastAutoToggleAt = Date.now();
-            Auto.toggle();
-            // If just enabled, warm the engine with the persisted speed
-            try {
-              const st = Auto.getState ? Auto.getState() : null;
-              if (st && st.enabled) {
-                const s = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'60')||60; } catch { return 60; } })();
-                Auto.setSpeed(s);
-                try { window.__scrollCtl?.setSpeed?.(s); } catch {}
-              }
-            } catch {}
-            setTimeout(__applyAutoChip, 0);
-            // no explicit return needed; end of handler
-          }
-        } catch {}
       }, { capture: true });
 
       // Unified auto-speed input + wheel handling

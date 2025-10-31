@@ -8,14 +8,18 @@ let _fracCarry = 0;      // fractional accumulator to avoid stalling at low spee
 
 function applyLabel() {
   const btn = document.getElementById('autoToggle');
-  if (btn) {
-    // Validator expects strictly On/Off wording
+  // If the Scroll Router is active and managing state (data-state present), don't override its labeling.
+  const managedByRouter = !!(btn && btn.dataset && btn.dataset.state);
+  if (btn && !managedByRouter) {
+    // Fallback labeling only when router isn't present
     btn.textContent = enabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
     btn.setAttribute('aria-pressed', String(enabled));
   }
   try {
     autoChip = autoChip || document.getElementById('autoChip');
-    if (autoChip) {
+    // If router is managing the chip (it sets data-state), avoid fighting it.
+    const chipManaged = !!(autoChip && autoChip.getAttribute && autoChip.getAttribute('data-state'));
+    if (autoChip && !chipManaged) {
       autoChip.textContent = enabled ? 'Auto: On' : 'Auto: Manual';
       autoChip.setAttribute('aria-live','polite');
       autoChip.setAttribute('aria-atomic','true');
@@ -97,6 +101,7 @@ export function setSpeed(pxPerSec) {
   try {
     const btn = document.getElementById('autoToggle');
     const st = btn?.dataset?.state || '';
+    // Only adjust when router is managing state, to keep styles in sync
     if (btn && st) {
       if (st === 'on') btn.textContent = `Auto-scroll: On — ${speed} px/s`;
       else if (st === 'paused') btn.textContent = `Auto-scroll: Paused — ${speed} px/s`;

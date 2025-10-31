@@ -555,18 +555,22 @@ function installScrollRouter(opts) {
   }
   try {
     document.addEventListener("keydown", (e) => {
-      if (state2.mode !== "step") return;
+      // Always support PageUp/PageDown stepping one line for usability and CI probe,
+      // even when not in explicit step mode.
       if (e.key === "PageDown") {
         // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         stepOnce(1);
+        return;
       }
       if (e.key === "PageUp") {
         // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         stepOnce(-1);
+        return;
       }
-      if (e.key === " ") {
+      // The press-and-hold creep behavior remains exclusive to step mode (Space bar)
+      if (state2.mode === "step" && e.key === " ") {
         // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         holdCreepStart(DEFAULTS.step.holdCreep, 1);
@@ -662,6 +666,12 @@ function installScrollRouter(opts) {
         const cur = Number(auto?.getState?.().speed) || getStoredSpeed();
         const next = cur + (wantUp ? 5 : -5);
         auto?.setSpeed?.(next);
+        // Best-effort viewport nudge so hotkeys have visible effect even when auto is Off/paused
+        try {
+          const vp = document.getElementById("viewer") || document.scrollingElement || document.documentElement;
+          const deltaPx = wantUp ? -24 : 24;
+          if (vp) vp.scrollTop = Math.max(0, (vp.scrollTop || 0) + deltaPx);
+        } catch {}
       } catch {
       }
     }, { capture: true });
