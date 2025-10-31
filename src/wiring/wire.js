@@ -62,6 +62,7 @@ export function initSettingsWiring() {
     window.__tpObsWireActive = true;
     // Claim OBS ownership so legacy settings wiring stands down
     window.__tpObsInlineBridgeActive = true;
+    try { window.__tpObsSSOT = 'js'; } catch {}
     log('state', 'wire init (claim bridge)');
 
     // Provide a probe globally; avoid dynamic imports that can 404 in dev unless explicitly wired elsewhere
