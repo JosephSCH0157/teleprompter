@@ -24,6 +24,15 @@ export function initObsUI() {
   const pillEl = () => (byId<HTMLElement>('obsStatusText') || byId<HTMLElement>('obsStatus'));
   const testMsgEl = () => byId<HTMLElement>('settingsObsTestMsg');
 
+  // Persistent Enable OBS flag (UI-independent), drives connection and reconnection
+  const OBS_EN_KEY = 'tp_obs_enabled_v1';
+  let obsEnabled = (() => { try { return localStorage.getItem(OBS_EN_KEY) === '1'; } catch { return false; } })();
+  const getObsEnabled = () => obsEnabled;
+  const setObsEnabled = (on: boolean) => {
+    obsEnabled = !!on;
+    try { localStorage.setItem(OBS_EN_KEY, obsEnabled ? '1' : '0'); } catch {}
+  };
+
   const readUrl = () => {
     const urlIn = (byId<HTMLInputElement>('settingsObsUrl') || byId<HTMLInputElement>('obsUrl'));
     const hostIn = byId<HTMLInputElement>('settingsObsHost');
@@ -34,14 +43,24 @@ export function initObsUI() {
     return 'ws://127.0.0.1:4455';
   };
   const readPass = () => (byId<HTMLInputElement>('settingsObsPassword')?.value ?? byId<HTMLInputElement>('obsPassword')?.value ?? '');
-  const readEnabled = () => !!(byId<HTMLInputElement>('settingsEnableObs')?.checked || byId<HTMLInputElement>('enableObs')?.checked);
+  // UI checkbox reader is used to reflect state in the UI only; the engine relies on getObsEnabled()
+  const readEnabledFromUI = () => !!(byId<HTMLInputElement>('settingsEnableObs')?.checked || byId<HTMLInputElement>('enableObs')?.checked);
+  const writeEnabledToUI = (on: boolean) => {
+    try {
+      const elA = byId<HTMLInputElement>('settingsEnableObs');
+      const elB = byId<HTMLInputElement>('enableObs');
+      if (elA) elA.checked = !!on;
+      if (elB) elB.checked = !!on;
+    } catch {}
+  };
 
   // Initialize recorder bridge with dynamic getters
   try {
     rec.init({
       getUrl: readUrl,
       getPass: readPass,
-      isEnabled: readEnabled,
+      // Important: drive connection using the persistent flag, not the transient UI
+      isEnabled: getObsEnabled,
       onStatus: (txt: string, ok: boolean) => {
         try { const p = pillEl(); if (p) p.textContent = ok ? 'connected' : (txt || 'disconnected'); } catch {}
       },
@@ -55,7 +74,10 @@ export function initObsUI() {
       const t = e.target as HTMLElement | null;
       const id = (t as any)?.id || '';
       if (id === 'settingsEnableObs' || id === 'enableObs') {
-        try { rec.setEnabled(readEnabled()); } catch {}
+        // Persist and apply immediately
+        const on = readEnabledFromUI();
+        setObsEnabled(on);
+        try { rec.setEnabled(on); } catch {}
       }
       if (id === 'settingsObsUrl' || id === 'obsUrl' || id === 'settingsObsHost') {
         try { rec.reconfigure(parseWsUrl(readUrl(), readPass())); } catch {}
@@ -64,6 +86,19 @@ export function initObsUI() {
         try { rec.reconfigure({ password: readPass() } as any); } catch {}
       }
     }, { capture: true });
+  } catch {}
+
+  // If the overlay/checkbox renders later, reflect the persisted state into it.
+  try {
+    const mo = new MutationObserver(() => {
+      try {
+        const el = byId<HTMLInputElement>('settingsEnableObs') || byId<HTMLInputElement>('enableObs');
+        if (el) writeEnabledToUI(getObsEnabled());
+      } catch {}
+    });
+    try { mo.observe(document.documentElement, { childList: true, subtree: true }); } catch {}
+    // Also attempt an immediate sync in case the checkbox already exists
+    writeEnabledToUI(getObsEnabled());
   } catch {}
 
   // Delegated Test/Sync/Poke buttons
@@ -152,9 +187,19 @@ export function initObsUI() {
   try {
     const S = (window as any).__tpStore;
     if (S && typeof S.subscribe === 'function') {
-      try { S.subscribe('obsEnabled', (v: any) => { try { rec.setEnabled(!!v); } catch {} }); } catch {}
+      try { S.subscribe('obsEnabled', (v: any) => { try { setObsEnabled(!!v); rec.setEnabled(!!v); } catch {} }); } catch {}
       try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
       try { S.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
     }
+  } catch {}
+
+  // On load: apply persisted state (connect if enabled), and ensure clean disconnect on page close
+  try {
+    if (getObsEnabled()) {
+      try { rec.setEnabled(true); } catch {}
+    }
+  } catch {}
+  try {
+    window.addEventListener('beforeunload', () => { try { rec.setEnabled(false); } catch {} });
   } catch {}
 }
