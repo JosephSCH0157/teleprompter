@@ -1655,10 +1655,10 @@ let _toast = function (msg, opts) {
       if (mainEnable) {
         mainEnable.checked = !!obsEnable.checked;
         mainEnable.dispatchEvent(new Event('change', { bubbles: true }));
-        return;
+        // continue below to ensure persistent connect/disconnect
       }
 
-      // If main toggle not present, update recorder settings directly
+      // Always update recorder settings
       try {
         if (__recorder?.getSettings && __recorder?.setSettings) {
           const s = __recorder.getSettings();
@@ -1668,6 +1668,35 @@ let _toast = function (msg, opts) {
         }
         _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
       } catch {}
+
+      // Persistent connect/disconnect
+      try {
+        // Prefer the bridge if present, else the adapter
+        let bridge = window.__obsBridge;
+        if (!bridge && typeof ensureObsBridge === 'function') bridge = await ensureObsBridge();
+        if (bridge && typeof bridge.isConnected === 'function') {
+          if (obsEnable.checked) {
+            if (!bridge.isConnected()) {
+              try { await bridge.start?.(); } catch {}
+            }
+          } else {
+            if (bridge.isConnected()) {
+              try { await bridge.stop?.(); } catch {}
+            }
+          }
+        } else if (window.__recorder && typeof window.__recorder.get === 'function') {
+          const obsAdapter = window.__recorder.get('obs');
+          if (obsAdapter) {
+            if (obsEnable.checked) {
+              if (typeof obsAdapter.connect === 'function') await obsAdapter.connect();
+            } else {
+              if (typeof obsAdapter.disconnect === 'function') await obsAdapter.disconnect();
+            }
+          }
+        }
+      } catch (err) {
+        try { window.HUD?.warn?.('obs:persistent_connect_fail', String(err && err.message || err)); } catch {}
+      }
     });
     // Mirror URL
     obsUrlS?.addEventListener('change', () => {
