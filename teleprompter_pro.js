@@ -1917,24 +1917,8 @@ let _toast = function (msg, opts) {
           const on = !!e.currentTarget.checked;
           setObsEnabled(on);
           try {
-            // prefer recorder adapter
-            const recModule = await loadRecorder();
-            const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
-            if (on) {
-              // init may be safe/no-op if already initialized
-              try {
-                await (rec?.init?.() ?? Promise.resolve());
-              } catch {}
-              try {
-                await (rec?.connect?.() ?? Promise.resolve());
-              } catch {}
-              updateBadge('connecting…');
-            } else {
-              try {
-                await (rec?.disconnect?.() ?? Promise.resolve());
-              } catch {}
-              updateBadge('disabled');
-            }
+            await obsApplyEnabled(on);
+            updateBadge(on ? 'connecting…' : 'disabled');
           } catch (err) {
             console.warn('[OBS] toggle error', err);
             updateBadge('error');
@@ -3193,66 +3177,29 @@ let _toast = function (msg, opts) {
   // Hydrate OBS fields from persistent store (do this early, before settings sync)
   function hydrateObsFieldsFromStore() {
     try {
-      const loadObsCreds = function () {
-        try {
-          const url = localStorage.getItem('tp_obs_url') || '';
-          // Do not load passwords from storage; keep them in-memory only
-          const pass = '';
-          const remember = localStorage.getItem('tp_obs_remember') === '1';
-          return { url, pass, remember };
-        } catch {
-          return { url: '', pass: '', remember: false };
+      (async () => {
+        const mainEnable = document.getElementById('enableObs');
+        if (mainEnable) {
+          mainEnable.checked = !!obsEnable.checked;
+          mainEnable.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      };
-  const { url, remember } = loadObsCreds();
-  const urlMain = document.getElementById('obsUrl');
-  const urlSet = document.getElementById('settingsObsUrl');
-      const chkMain = document.getElementById('rememberObs');
-      const chkSet = document.getElementById('settingsObsRemember');
-
-      // If no stored URL, prefer the DEFAULT_OBS_URL for hydration (prevents 127.0.0.1 fallback)
-      const hydratedUrl = (url && url.trim()) || DEFAULT_OBS_URL;
-      if (hydratedUrl && urlMain && !urlMain.value) urlMain.value = hydratedUrl;
-      if (url && urlSet && !urlSet.value) urlSet.value = url;
-  // Passwords are intentionally not hydrated from storage
-
-  if (chkMain) chkMain.checked = !!remember;
-  if (chkSet) chkSet.checked = !!remember;
-    } catch {
-      void e;
-    }
-  }
-
-  // Simple on-page debug panel for OBS events (only shown when __TP_DEV)
-  function _ensureObsDebugPanel() {
-    try {
-      if (!window.__TP_DEV) return null;
-      let p = document.getElementById('obsDebugPanel');
-      if (p) return p;
-      p = document.createElement('div');
-      p.id = 'obsDebugPanel';
-      p.style.position = 'fixed';
-      p.style.right = '12px';
-      p.style.bottom = '12px';
-      p.style.width = '320px';
-      p.style.maxHeight = '40vh';
-      p.style.overflow = 'auto';
-      p.style.background = 'rgba(10,12,15,0.95)';
-      p.style.color = '#cfe';
-      p.style.fontSize = '12px';
-      p.style.border = '1px solid #334';
-      p.style.padding = '8px';
-      p.style.zIndex = '99999';
-      p.style.borderRadius = '8px';
-      p.innerHTML =
-        '<div style="font-weight:bold;margin-bottom:6px">OBS Debug</div><div id="obsDebugMsgs"></div><div style="margin-top:6px;text-align:right"><button id="obsDebugDump">Dump handshake</button> <button id="obsDebugClear">Clear</button></div>';
-      document.body.appendChild(p);
-      const clearBtn = document.getElementById('obsDebugClear');
-      clearBtn?.addEventListener('click', () => {
-        const msgs = document.getElementById('obsDebugMsgs');
-        if (msgs) msgs.innerHTML = '';
-      });
-      const dumpBtn = document.getElementById('obsDebugDump');
+        // Always update recorder settings
+        try {
+          if (__recorder?.getSettings && __recorder?.setSettings) {
+            const s = __recorder.getSettings();
+            let sel = (s.selected || []).filter((id) => id !== 'obs');
+            if (obsEnable.checked) sel.push('obs');
+            __recorder.setSettings({ selected: sel });
+          }
+          _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
+        } catch {}
+        // Use unified OBS enable/disable logic
+        try {
+          await obsApplyEnabled(!!obsEnable.checked);
+        } catch (err) {
+          try { window.HUD?.warn?.('obs:persistent_connect_fail', String(err && err.message || err)); } catch {}
+        }
+      })();
       dumpBtn?.addEventListener('click', () => {
         try {
           const msgs = document.getElementById('obsDebugMsgs');
