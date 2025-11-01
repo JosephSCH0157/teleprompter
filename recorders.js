@@ -1,3 +1,39 @@
+// --- Compatibility shim (legacy callers expect a registry) ---
+export function initCompat() {
+  // Create a minimal registry surface the old code expects.
+  if (typeof window !== 'undefined') {
+    if (!window.__recorder) {
+      window.__recorder = {
+        get(name) {
+          return name === 'obs' ? recorder : null;
+        }
+      };
+    }
+    // Also expose a global for anything still probing window.recorders
+    window.recorders = window.recorders || window.__recorder;
+  }
+  return typeof window !== 'undefined' ? window.__recorder : { get: () => null };
+}
+
+// Provide a default export that looks like a registry (for dynamic import paths)
+export default {
+  init: initCompat,
+  get(name) {
+    return name === 'obs' ? recorder : null;
+  },
+  // Also surface the modern API explicitly if anyone wants it
+  recorder
+};
+
+// UMD-style safety net for non-module script loads
+if (typeof window !== 'undefined') {
+  window.__recorder = window.__recorder || {
+    get(name) {
+      return name === 'obs' ? recorder : null;
+    }
+  };
+  window.recorders = window.recorders || window.__recorder;
+}
 // Simple recorder adapter registry
 // Usage:
 //   import { register, get, all } from './recorders.js';
