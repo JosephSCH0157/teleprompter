@@ -1,3 +1,42 @@
+// --- Speech Supervisor integration ---
+import { SpeechSupervisor } from './src/speech/SpeechSupervisor.js';
+let speech = null;
+function hudSpeech(status) {
+  try { window.__hud?.log?.('speech', status); } catch {}
+  console.debug('[speech]', status);
+}
+function handleSpeechResult(e) {
+  try { window.__scrollRouter?.onSpeechResult?.(e); } catch {}
+}
+function ensureSpeech() {
+  if (speech) return speech;
+  speech = new SpeechSupervisor({
+    lang: document.getElementById('settingsLang')?.value || 'en-US',
+    interim: false,
+    onResult: handleSpeechResult,
+    onStatus: hudSpeech,
+  });
+  return speech;
+}
+
+// Wire up start/stop buttons for speech/Hybrid
+document.getElementById('btnStartSpeech')?.addEventListener('click', async () => {
+  ensureSpeech().start();
+  try { window.__scrollRouter?.setListening?.(true); } catch {}
+});
+document.getElementById('btnStopSpeech')?.addEventListener('click', async () => {
+  if (speech) await speech.stop({ manual: true });
+  try { window.__scrollRouter?.setListening?.(false); } catch {}
+});
+
+// Page lifecycle: stop on unload, resume if desired on pageshow
+window.addEventListener('beforeunload', () => {
+  if (speech) speech.stop({ manual: false });
+});
+window.addEventListener('pageshow', () => {
+  // Optionally auto-resume if a toggle is set
+  // if (shouldAutoResume) ensureSpeech().start();
+});
 /* Teleprompter Pro — JS CLEAN (v1.5.8) */
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
