@@ -5071,14 +5071,21 @@ let _toast = function (msg, opts) {
     }
     try {
       const scMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-control.js'));
-      __scrollCtl = new scMod.default({
-        getViewerTop: () => viewer.scrollTop,
-        requestScroll: (top) => {
-          viewer.scrollTop = top;
+      __scrollCtl = new scMod.default(
+        {
+          getViewerTop: () => viewer.scrollTop,
+          requestScroll: (top) => {
+            viewer.scrollTop = top;
+          },
+          getViewportHeight: () => viewer.clientHeight,
+          getViewerElement: () => viewer,
         },
-        getViewportHeight: () => viewer.clientHeight,
-        getViewerElement: () => viewer,
-      });
+        (tag, data) => {
+          try {
+            window.HUD?.log?.('display:' + String(tag || ''), data);
+          } catch {}
+        }
+      );
     } catch {
       console.warn('scroll-control load failed', e);
     }
@@ -8698,7 +8705,9 @@ let _toast = function (msg, opts) {
       currentEl.classList.add('current');
     } catch {}
 
-    const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
+  const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
+  // Feed desired target into the scroll controller so the motor tracks speech alignment
+  try { __scrollCtl?.updateMatch?.({ nextTop: desiredTop }); } catch {}
 
     // Marker distance clamping: |y(active) - y(marker)| ≤ L_max (1.2 viewport lines)
     const L_MAX = 1.2 * (viewer.clientHeight || 800); // 1.2 viewport lines
