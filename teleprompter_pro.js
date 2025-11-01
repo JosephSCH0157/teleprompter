@@ -2349,80 +2349,128 @@ let _toast = function (msg, opts) {
   let __anchorObs = null; // set after io-anchor.js loads
   let __scrollCtl = null; // set after scroll-control.js loads
   // Small helper: add version/cache-buster if provided by the host (kept local)
-  const addV = (p) => (window.__TP_ADDV ? window.__TP_ADDV(p) : p);
-  // Recorder lazy loader
+
+  // --- Unified robust OBS loader/toggle helper ---
   let __rec = null;
-  async function loadRecorder() {
-    if (__rec) return __rec;
-    try {
-      const addV = window.__TP_ADDV || ((p) => p);
-      const m = await import(addV('./recorders.js'));
-      try {
-        const modKeys = m && typeof m === 'object' ? Object.keys(m) : [];
-        const defaultKeys = m && m.default && typeof m.default === 'object' ? Object.keys(m.default) : [];
-        console.debug('[TP-Pro] recorder module keys:', modKeys.length, modKeys, defaultKeys.length, defaultKeys);
-      } catch {
-        try { console.debug('[TP-Pro] recorder module keys: <uninspectable module>'); } catch {}
-      }
-      __rec = m;
-      if (!__rec || typeof __rec.init !== 'function') {
-        console.warn('[TP-Pro] recorders.js loaded but no init() export found');
-      }
-      return __rec;
-    } catch (e) {
-      console.error('[TP-Pro] Failed to import recorders.js', e);
-      return null;
-    }
-  }
-
-  // Lazy-load the OBS bridge module on-demand. Returns window.__obsBridge when available.
   let __obsBridgeLoaded = null;
-  async function ensureObsBridge() {
-    try {
-      if (typeof window !== 'undefined' && window.__obsBridge) return window.__obsBridge;
-      if (__obsBridgeLoaded) return __obsBridgeLoaded;
-      const path = addV('./adapters/obsBridge.js');
-      await import(path);
-      __obsBridgeLoaded = typeof window !== 'undefined' ? window.__obsBridge || null : null;
-      return __obsBridgeLoaded;
-    } catch (err) {
-      try { console.warn('[TP-Pro] ensureObsBridge failed', err); } catch {}
-      return null;
-    }
-  }
-
-  // Note: camera recorder is lazy-loaded via loadRecorder(); DOCX/mammoth is handled by
-  // ui/upload.js and exposed via window.ensureMammoth/_ensureMammoth later in this file.
-  // ==================================================
-  // OBS adapter helper: ensure adapter availability + wrapper
-  // ==================================================
   let __obsAdapterWrapper = null;
-  async function ensureObsAdapter({ timeoutMs = 5000, pollInterval = 200 } = {}) {
-    try {
-      if (__obsAdapterWrapper) return __obsAdapterWrapper;
+  // Always load bridge first, then recorder, then adapter
+  async function robustLoadObs({ timeoutMs = 5000, pollInterval = 200 } = {}) {
+    // Load bridge (idempotent)
+    if (!__obsBridgeLoaded) {
+      try {
+        const addV = window.__TP_ADDV || ((p) => p);
+        const path = addV('./adapters/obsBridge.js');
+        await import(path);
+        __obsBridgeLoaded = typeof window !== 'undefined' ? window.__obsBridge || null : null;
+      } catch (err) {
+        try { console.warn('[TP-Pro] robustLoadObs: bridge load failed', err); } catch {}
+        __obsBridgeLoaded = null;
+      }
+    }
+    // Load recorder (idempotent)
+    if (!__rec) {
+      try {
+        const addV = window.__TP_ADDV || ((p) => p);
+        const m = await import(addV('./recorders.js'));
+        __rec = m;
+        if (!__rec || typeof __rec.init !== 'function') {
+          console.warn('[TP-Pro] recorders.js loaded but no init() export found');
+        }
+      } catch (e) {
+        console.error('[TP-Pro] Failed to import recorders.js', e);
+        __rec = null;
+      }
+    }
+    // Load adapter (idempotent, poll for registry)
+    if (!__obsAdapterWrapper) {
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         try {
-          const reg = await loadRecorder();
-          if (reg && typeof reg.get === 'function') {
-            const a = reg.get('obs');
+          if (__rec && typeof __rec.get === 'function') {
+            const a = __rec.get('obs');
             if (a) {
-              // Wrap once and return
               __obsAdapterWrapper = wrapObsAdapter(a);
-              return __obsAdapterWrapper;
+              break;
             }
           }
-        } catch {
-          void e;
-        }
-        // brief pause
+        } catch {}
         await new Promise((res) => setTimeout(res, pollInterval));
       }
-      return null;
-    } catch {
-      void e;
-      return null;
     }
+    return { bridge: __obsBridgeLoaded, recorder: __rec, adapter: __obsAdapterWrapper };
+  }
+
+  // --- Unified toggle wiring for both header and Settings ---
+  function wireUnifiedObsToggles() {
+    // Header toggle
+    const enableObsChk = document.getElementById('enableObs');
+    // Settings toggle
+    const settingsEnableObs = document.getElementById('settingsEnableObs');
+    if (!enableObsChk && !settingsEnableObs) return;
+    // Helper to sync both toggles
+    function syncToggles(val) {
+      if (enableObsChk) enableObsChk.checked = !!val;
+      if (settingsEnableObs) settingsEnableObs.checked = !!val;
+    }
+    // Main handler for toggle changes
+    async function onToggleChange(e) {
+      const checked = e?.target?.checked ?? enableObsChk?.checked ?? settingsEnableObs?.checked;
+      syncToggles(checked);
+      const { bridge, adapter } = await robustLoadObs();
+      // Prefer bridge if available
+      if (bridge && typeof bridge.isConnected === 'function') {
+        try {
+          if (checked) {
+            if (!bridge.isConnected()) await bridge.start?.();
+          } else {
+            if (bridge.isConnected()) await bridge.stop?.();
+          }
+        } catch (err) {
+          window.HUD?.warn?.('obs:toggle_bridge_fail', String(err && err.message || err));
+        }
+      } else if (adapter) {
+        try {
+          if (checked) await adapter.connect?.();
+          else await adapter.disconnect?.();
+        } catch (err) {
+          window.HUD?.warn?.('obs:toggle_adapter_fail', String(err && err.message || err));
+        }
+      }
+    }
+    // Wire both toggles
+    if (enableObsChk && !enableObsChk.__unifiedWired) {
+      enableObsChk.addEventListener('change', onToggleChange);
+      enableObsChk.__unifiedWired = true;
+    }
+    if (settingsEnableObs && !settingsEnableObs.__unifiedWired) {
+      settingsEnableObs.addEventListener('change', onToggleChange);
+      settingsEnableObs.__unifiedWired = true;
+    }
+  }
+
+  // --- Page-lifecycle cleanup for OBS bridge/recorder ---
+  function wireObsCleanup() {
+    window.addEventListener('beforeunload', async () => {
+      try {
+        const { bridge, adapter } = await robustLoadObs({ timeoutMs: 1000 });
+        if (bridge && typeof bridge.stop === 'function') await bridge.stop();
+        if (adapter && typeof adapter.disconnect === 'function') await adapter.disconnect();
+      } catch {}
+    });
+  }
+
+  // --- Patch entry: call these after DOM is ready ---
+  function applyUnifiedObsLoaderPatch() {
+    wireUnifiedObsToggles();
+    wireObsCleanup();
+  }
+
+  // --- Call patch after DOMContentLoaded ---
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyUnifiedObsLoaderPatch, { once: true });
+  } else {
+    applyUnifiedObsLoaderPatch();
   }
 
   function appendObsLogLine(msg) {
