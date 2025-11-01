@@ -1,6 +1,6 @@
 // --- SpeechSupervisor.js ---
 export class SpeechSupervisor {
-  constructor({ onResult, onStatus, lang = 'en-US', interim = false } = {}) {
+  constructor({ onResult, onStatus, lang = 'en-US', interim = false, onFatal } = {}) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) throw new Error('Web Speech API not available');
 
@@ -17,6 +17,13 @@ export class SpeechSupervisor {
     this._lastResultTs = 0;
     this._backoffMs = 200;            // will cap at 3000
     this._chunkTimer = null;          // proactive recycle timer
+    this._networkErrorCount = 0;
+    this._lastNetworkError = 0;
+    this._fatalBackoffMs = 30000; // 30s pause after repeated failures
+    this.onFatal = onFatal || ((err) => {
+      console.error('[speech] fatal error', err);
+      this.onStatus({ type: 'fatal', error: err });
+    });
   }
 
   _makeRecognizer() {
@@ -31,8 +38,29 @@ export class SpeechSupervisor {
     };
 
     r.onerror = (e) => {
-      this.onStatus({ type: 'error', error: e.error || String(e) });
+      const errType = e.error || String(e);
+      this.onStatus({ type: 'error', error: errType });
       // Typical culprits: 'network', 'no-speech', 'audio-capture'
+      // Robust network error handling
+      if (errType === 'network') {
+        const now = Date.now();
+        if (now - this._lastNetworkError > 60000) {
+          this._networkErrorCount = 0;
+        }
+        this._networkErrorCount++;
+        this._lastNetworkError = now;
+        if (this._networkErrorCount >= 3) {
+          // Too many consecutive network errors, pause longer and notify
+          this.onStatus({ type: 'network-fatal', count: this._networkErrorCount });
+          this.shouldListen = false;
+          setTimeout(() => {
+            this._networkErrorCount = 0;
+            this.shouldListen = true;
+            this.start();
+          }, this._fatalBackoffMs);
+          this.onFatal('Too many consecutive network errors. Pausing for 30s.');
+        }
+      }
       // Let onend handle restart to avoid double starts.
     };
 
