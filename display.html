@@ -228,6 +228,23 @@
               chan.addEventListener('message', (e) => {
                 try {
                   const msg = e?.data || {};
+                  // Lightweight mirror/diagnostic channel
+                  if (msg && msg.t === 'display:ping') {
+                    try { chan.postMessage({ t: 'display:pong' }); } catch {}
+                    return;
+                  }
+                  if (msg && msg.t === 'scrollTop') {
+                    try {
+                      const top = Math.max(0, Number(msg.v) | 0);
+                      requestAnimationFrame(() => {
+                        try { wrap.scrollTo({ top, behavior: 'auto' }); } catch {}
+                        if (msg.ask) {
+                          try { chan.postMessage({ t: 'display:applied', v: wrap.scrollTop | 0 }); } catch {}
+                        }
+                      });
+                    } catch {}
+                    return;
+                  }
                   if (msg && msg.kind === 'tp:script' && msg.source === 'main') {
                     try { window.__lastDisplayHash = msg.textHash || ''; } catch {}
                     if (typeof msg.text === 'string') {

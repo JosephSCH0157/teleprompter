@@ -90,11 +90,11 @@ async function _connectOnce() {
   try {
     const client = await _createClient();
     // wire basic events
-    client.on('ConnectionClosed', () => {
+    client.on('ConnectionClosed', (d) => {
       _connected = false;
       _setObsConnChip(false);
-      _emit('disconnect');
-      try { window.HUD?.log?.('obs:close', { via: 'obs-websocket-js' }); } catch {}
+      _emit('disconnect', d);
+      try { window.HUD?.warn?.('obs:close', d || { via: 'obs-websocket-js' }); } catch {}
       if (_autoReconnect) _scheduleReconnect();
     });
     client.on('ConnectionOpened', () => {
@@ -103,6 +103,9 @@ async function _connectOnce() {
       _setObsConnChip(true);
       _emit('connect');
     });
+    // Extra observability
+    try { client.on('Identified', () => { try { window.HUD?.log?.('obs:identified'); } catch {} }); } catch {}
+    try { client.on('CurrentProgramSceneChanged', (e) => { try { _emit('scene', e); window.HUD?.log?.('obs:scene', e); } catch {} }); } catch {}
     client.on('RecordStateChanged', (ev) => {
       try {
         const active = !!(ev && (ev.outputActive || ev.outputActive === true));
@@ -119,6 +122,11 @@ async function _connectOnce() {
     _connected = true;
     _setObsConnChip(true);
     _emit('connect');
+    try {
+      // Surface version info once connected
+      const ver = await client.call('GetVersion').catch(() => null);
+      if (ver) { try { window.HUD?.log?.('obs:connected', ver); } catch {} }
+    } catch {}
     _connecting = false;
     return true;
   } catch (e) {
