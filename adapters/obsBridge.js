@@ -59,8 +59,22 @@ function _setRecChipRecording(active) {
 
 async function _ensureObsLib() {
   if (typeof window !== 'undefined' && window.OBSWebSocket) return window.OBSWebSocket;
-  const mod = await import('https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm');
-  return mod.default || mod.OBSWebSocket || mod;
+  // Try primary CDN, then a secondary fallback to improve resilience in restricted networks
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm');
+    return mod.default || mod.OBSWebSocket || mod;
+  } catch (e1) {
+    try { void e1; } catch {}
+    try {
+      const mod2 = await import('https://unpkg.com/obs-websocket-js@5.0.4/dist/obs-ws.min.js');
+      // Some UMD builds attach to window; prefer global if present
+      if (typeof window !== 'undefined' && window.OBSWebSocket) return window.OBSWebSocket;
+      return mod2.default || mod2.OBSWebSocket || mod2;
+    } catch (e2) {
+      try { window.HUD?.log?.('obs:error', 'obs-websocket-js load failed'); } catch {}
+      throw e2;
+    }
+  }
 }
 
 async function _createClient() {
