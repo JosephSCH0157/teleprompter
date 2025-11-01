@@ -28,7 +28,6 @@ let _toast = function (msg, opts) {
   try {
     // dev flag early so we can silence noisy warnings in production
             const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
-            const saveBaseSpeed = window.saveBaseSpeed; // Ensure saveBaseSpeed is defined
     // idle flag — don't start heavy subsystems until a script exists
     if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
     if (window.__TP_ALREADY_BOOTED__) {
@@ -207,6 +206,7 @@ let _toast = function (msg, opts) {
     }
     return null;
   }
+  try { void $id; } catch {}
   // Late-init timer handle: used to avoid scheduling fallback when init starts later
   let _lateInitTimer = null;
     window.addEventListener('DOMContentLoaded', () => {
@@ -1073,7 +1073,7 @@ let _toast = function (msg, opts) {
   // Dynamic wiring helper must exist before buildSettingsContent uses it
   // (Removed duplicate wireSettingsDynamic definition; primary is declared near top.)
 
-  function buildSettingsContent() {
+  function _buildSettingsContent() {
     const body = document.getElementById('settingsBody');
     if (!body) return;
     // Idempotency guard: if cards already exist, treat as already-built and sync values.
@@ -3575,7 +3575,7 @@ let _toast = function (msg, opts) {
             if (typeof renderScript === 'function') renderScript(out);
             setStatus && setStatus('Normalized.');
           }
-        } catch (err) {
+        } catch {
           void 0;
         }
       });

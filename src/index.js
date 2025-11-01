@@ -234,8 +234,11 @@ async function boot() {
           // eslint-disable-next-line no-restricted-syntax
           ev.preventDefault();
           ev.stopImmediatePropagation();
-          if (el.matches('#settingsRequestMicBtn,[data-action="settings-request-mic"]')) { try { Mic.requestMic?.(); } catch {} return; }
-          if (el.matches('#settingsReleaseMicBtn,[data-action="settings-release-mic"]')) { try { Mic.releaseMic?.(); } catch {} return; }
+          if (el.matches('#settingsRequestMicBtn,[data-action="settings-request-mic"]')) {
+            try { Mic.requestMic?.(); } catch {}
+          } else if (el.matches('#settingsReleaseMicBtn,[data-action="settings-release-mic"]')) {
+            try { Mic.releaseMic?.(); } catch {}
+          }
         } catch {}
       }, true);
     }
