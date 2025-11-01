@@ -15,6 +15,24 @@ const _backoffMax = 5000;
 const _backoffFactor = 2;
 const _listeners = { connect: [], disconnect: [], recordstate: [], error: [] };
 let _lastScene = null;
+let _keepAliveTimer = null;
+function _startKeepAlive() {
+  if (_keepAliveTimer) return;
+  _keepAliveTimer = setInterval(() => {
+    try {
+      if (_obsClient && _connected) {
+        // cheap request OBS will answer quickly
+        _obsClient.call && _obsClient.call('GetVersion').catch(() => {});
+      }
+    } catch {}
+  }, 15000);
+}
+function _stopKeepAlive() {
+  if (_keepAliveTimer) {
+    clearInterval(_keepAliveTimer);
+    _keepAliveTimer = null;
+  }
+}
 
 function _getElem(id) {
   try {
@@ -94,6 +112,7 @@ async function _connectOnce() {
       _connected = false;
       _setObsConnChip(false);
       _emit('disconnect', d);
+      _stopKeepAlive();
       try { window.HUD?.warn?.('obs:close', d || { via: 'obs-websocket-js' }); } catch {}
       if (_autoReconnect) _scheduleReconnect();
     });
@@ -102,6 +121,7 @@ async function _connectOnce() {
       _backoffMs = 1000;
       _setObsConnChip(true);
       _emit('connect');
+      _startKeepAlive();
     });
     // Extra observability
     try { client.on('Identified', () => { try { window.HUD?.log?.('obs:identified'); } catch {} }); } catch {}

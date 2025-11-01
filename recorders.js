@@ -341,6 +341,8 @@ let _cfgBridge = {
   onRecordState: () => {},
 };
 
+let _enabled = false;
+
 export function initBridge(opts = {}) {
   _cfgBridge = { ..._cfgBridge, ...opts };
   try {
@@ -414,135 +416,21 @@ function reconnectSoon(ms = 400) {
   } catch {}
 }
 
-export function connect({ testOnly } = {}) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!_cfgBridge.isEnabled() && !testOnly) return reject(new Error('disabled'));
-  // Prefer an explicitly provided bridge URL, otherwise build from obsCfg
-  const cfgUrl = obsCfg && obsCfg.host ? `${obsCfg.secure ? 'wss' : 'ws'}://${obsCfg.host}:${obsCfg.port}` : null;
-  const url = _cfgBridge.getUrl?.() || cfgUrl || 'ws://127.0.0.1:4455';
-  const pass = _cfgBridge.getPass?.() || '';
-      try {
-        _ws && _ws.close(1000, 'reconnect');
-      } catch {}
-      _identified = false;
-      _connecting = true;
-      try {
-        _cfgBridge.onStatus?.('connecting…', false);
-      } catch {}
-
-      _ws = new WebSocket(url);
-
-      _ws.onopen = () => {
-        /* wait for Hello */
-      };
-
-      _ws.onmessage = async (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.op === 0) {
-            try {
-              const { challenge, salt } = msg.d.authentication || {};
-              const rpcVersion = 1;
-              let auth;
-              if (challenge && salt && pass) {
-                // Decode base64 salt to bytes
-                const base64ToUint8Array = (b64Str) => {
-                  try {
-                    const bin = atob(b64Str);
-                    const a = new Uint8Array(bin.length);
-                    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-                    return a;
-                  } catch {
-                    return new Uint8Array();
-                  }
-                };
-                const concatUint8 = (a, b) => {
-                  const out = new Uint8Array(a.length + b.length);
-                  out.set(a, 0);
-                  out.set(b, a.length);
-                  return out;
-                };
-                const enc = (s) => new TextEncoder().encode(s);
-                const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-
-                const saltBytes = base64ToUint8Array(salt);
-                const passBytes = enc(pass);
-                // OBS v5 auth: secret = b64(sha256(passBytes + saltBytes))
-                //              auth   = b64(sha256(secretB64 + challenge))
-                const passPlusSalt = concatUint8(passBytes, saltBytes);
-                const secretBuf = await crypto.subtle.digest('SHA-256', passPlusSalt);
-                const secretB64 = b64(secretBuf);
-                const authInputStr = secretB64 + challenge;
-                const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
-                auth = b64(authBuf);
-              }
-              _ws.send(JSON.stringify({ op: 1, d: { rpcVersion, authentication: auth } }));
-            } catch {
-              try {
-                _cfgBridge.onStatus?.('auth compute error', false);
-              } catch {}
-              return _ws.close(4000, 'auth-error');
-            }
-          } else if (msg.op === 2) {
-            _identified = true;
-            _connecting = false;
-            try {
-              _cfgBridge.onStatus?.('connected', true);
-            } catch {}
-            if (testOnly) {
-              try {
-                _ws.close(1000, 'test-ok');
-              } catch {}
-              resolve(true);
-            }
-          } else if (msg.op === 7) {
-            const evType = msg.d?.eventType;
-            if (evType === 'RecordStateChanged') {
-              const st = msg.d?.eventData?.outputState?.toLowerCase() || 'idle';
-              try {
-                _cfgBridge.onRecordState?.(st);
-              } catch {}
-            }
-          }
-        } catch {
-          try {
-            _cfgBridge.onStatus?.('msg-parse-error', false);
-          } catch {}
-        }
-      };
-
-      _ws.onerror = (_e) => {
-        try {
-          _cfgBridge.onStatus?.('socket error', false);
-        } catch {}
-        try { window.HUD?.log?.('obs:error', String(_e && (_e.message || _e.type) || 'error')); } catch {}
-        _connecting = false;
-      };
-
-      _ws.onclose = (e) => {
-        try {
-          const code = e?.code || 0;
-          const reason = e?.reason || '';
-          _identified = false;
-          _connecting = false;
-          try {
-            _cfgBridge.onStatus?.(`closed ${code} ${reason}`.trim(), false);
-          } catch {}
-          try { window.HUD?.log?.('obs:close', { code, reason }); } catch {}
-          if (!testOnly && _cfgBridge.isEnabled() && code !== 1000) reconnectSoon(800);
-          if (testOnly) reject(new Error(`close ${code}`));
-        } catch (ee) {
-          if (testOnly) reject(ee);
-        }
-      };
-    } catch (outer) {
-      try {
-        _cfgBridge.onStatus?.('connect-exception', false);
-      } catch {}
-      return reject(outer);
+export async function connect({ testOnly = false, reason = 'runtime' } = {}) {
+  // If the bridge isn’t loaded yet, try to load it (once)
+  if (!window.__obsBridge || !window.__obsBridge.connect) {
+    if (typeof window.__loadObsBridge === 'function') {
+      try { await window.__loadObsBridge(); } catch {}
     }
-  });
+  }
+  // If still not present, surface a clear error
+  if (!window.__obsBridge || !window.__obsBridge.connect) {
+    throw new Error('OBS bridge is not available on the page.');
+  }
+  // Mark desire for a persistent session; the bridge’s onclose will check this
+  _cfgBridge.isEnabled = () => _enabled === true;
+  // Hand off to the bridge
+  return window.__obsBridge.connect({ testOnly, reason });
 }
 
 export function isConnected() {
