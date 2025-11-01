@@ -196,7 +196,7 @@
               const delta = targetTop - currentTop;
 
               // Hysteresis: ignore tiny corrections
-              if (Math.abs(delta) < 6) {
+              if (Math.abs(delta) < 2) {
                 logScrollCommand(targetTop, currentTop, delta, 'N/A', 'tiny');
                 return;
               }

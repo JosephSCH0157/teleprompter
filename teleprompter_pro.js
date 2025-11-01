@@ -10635,6 +10635,14 @@ let _toast = function (msg, opts) {
       if (window.__tpCamera && typeof window.__tpCamera.startCamera === 'function') {
         try { return await window.__tpCamera.startCamera(); } catch {}
       }
+      // Quick environment/permission diagnostics
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus && setStatus('Camera API not available in this browser');
+        } else if (!window.isSecureContext && !/^localhost$|^127\.0\.0\.1$/.test(location.hostname || '')) {
+          setStatus && setStatus('Camera requires HTTPS or localhost');
+        }
+      } catch {}
       const id = camDeviceSel?.value || undefined;
       const stream = await navigator.mediaDevices.getUserMedia({
         video: id ? { deviceId: { exact: id } } : true,
@@ -10685,6 +10693,19 @@ let _toast = function (msg, opts) {
       populateDevices();
     } catch (e) {
       warn('startCamera failed', e);
+      try {
+        const name = (e && (e.name || e.code)) || 'Error';
+        let msg = 'Camera failed: ' + (e && (e.message || String(e)));
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          msg = 'Camera permission denied — allow access and try again';
+        } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+          msg = 'No matching camera device — pick a different device';
+        } else if (!window.isSecureContext && !/^localhost$|^127\.0\.0\.1$/.test(location.hostname || '')) {
+          msg = 'Insecure context — use HTTPS or localhost to access camera';
+        }
+        setStatus && setStatus(msg);
+        try { _toast && _toast(msg, { type: 'error' }); } catch {}
+      } catch {}
     }
   }
   function watchCamTracks(stream) {
