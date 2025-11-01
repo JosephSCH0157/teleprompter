@@ -5202,6 +5202,15 @@ let _toast = function (msg, opts) {
 
     // OBS enable toggle wiring (after recorder module possibly loaded)
     if (enableObsChk) {
+        // Double-wiring guard and SSOT marker for JS bridge
+        try {
+          if (window.__tpObsWireActive) {
+            try { window.HUD?.warn?.('obs:doublewire'); } catch {}
+          } else {
+            window.__tpObsWireActive = true;
+            window.__tpObsSSOT = 'js';
+          }
+        } catch {}
       const applyFromSettings = () => {
         try {
           if (!__recorder?.getSettings) return;
@@ -5243,6 +5252,14 @@ let _toast = function (msg, opts) {
                   password: obsPassInput?.value || s.configs?.obs?.password || '',
                 });
                 window.__obsBridge.enableAutoReconnect(!!recEl?.checked);
+                // Attach one-time event taps for visibility
+                if (!window.__tpObsEventsWired) {
+                  window.__tpObsEventsWired = true;
+                  try { window.__obsBridge.on('connect', () => { try { window.HUD?.log?.('obs:connect'); } catch {} }); } catch {}
+                  try { window.__obsBridge.on('disconnect', (d) => { try { window.HUD?.warn?.('obs:disconnect', d); } catch {} }); } catch {}
+                  try { window.__obsBridge.on('recordstate', (on) => { try { window.HUD?.log?.('obs:recordstate', { on }); } catch {} }); } catch {}
+                  try { window.__obsBridge.on('error', (e) => { try { window.HUD?.warn?.('obs:error', String(e && e.message || e)); } catch {} }); } catch {}
+                }
               } catch {}
             }
           } catch {}
@@ -10639,8 +10656,10 @@ let _toast = function (msg, opts) {
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           setStatus && setStatus('Camera API not available in this browser');
+          try { window.HUD?.warn?.('cam:error', { reason: 'no_gum' }); } catch {}
         } else if (!window.isSecureContext && !/^localhost$|^127\.0\.0\.1$/.test(location.hostname || '')) {
           setStatus && setStatus('Camera requires HTTPS or localhost');
+          try { window.HUD?.warn?.('cam:error', { reason: 'insecure_context' }); } catch {}
         }
       } catch {}
       const id = camDeviceSel?.value || undefined;
@@ -10669,11 +10688,13 @@ let _toast = function (msg, opts) {
         // Autoplay might be blocked (iOS). Provide a simple tap-to-start fallback.
         warn('Camera autoplay blocked, waiting for user gesture', err);
         setStatus('Tap the video to start the camera');
+        try { window.HUD?.log?.('cam:autoplay_block'); } catch {}
         const onTap = async () => {
           try {
             await camVideo.play();
             setStatus('');
             camVideo.removeEventListener('click', onTap);
+            try { window.HUD?.log?.('cam:tap_play'); } catch {}
           } catch {}
         };
         camVideo.addEventListener('click', onTap, { once: true });
@@ -10685,6 +10706,7 @@ let _toast = function (msg, opts) {
       applyCamOpacity();
       applyCamMirror();
       camStream = stream;
+      try { window.HUD?.log?.('cam:start', { tracks: (stream?.getVideoTracks?.()||[]).length|0 }); } catch {}
       wantCamRTC = true;
       // Kick off WebRTC mirroring if display is open/ready
       try {
@@ -10705,6 +10727,7 @@ let _toast = function (msg, opts) {
         }
         setStatus && setStatus(msg);
         try { _toast && _toast(msg, { type: 'error' }); } catch {}
+        try { window.HUD?.warn?.('cam:error', { e: (e && (e.name||e.code)) || 'unknown' }); } catch {}
       } catch {}
     }
   }
