@@ -1,19 +1,26 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Serve (live-server)",
-      "type": "shell",
-      "command": "npx live-server --port=8080 --no-browser --watch=.",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
-      }
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Serve (live-server)",
+			"type": "shell",
+			"command": "npx live-server --port=8080 --no-browser --watch=.",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Serve (live-server)",
+			"type": "shell",
+			"command": "npx live-server --port=8080 --no-browser --watch=.",
+			"isBackground": true,
+			"group": "build"
+		}
+	]
 }

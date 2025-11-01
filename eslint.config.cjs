@@ -194,7 +194,7 @@ module.exports = [
 
   // Legacy UI and helper files: relax the preventDefault restriction and similar
   {
-    files: ['debug-tools.js', 'eggs.js', 'help.js', 'ui/**/*.js', 'utils/**/*.js'],
+    files: ['debug-tools.js', 'eggs.js', 'help.js', 'ui/**/*.js', 'src/ui/**/*.js', 'utils/**/*.js'],
     rules: {
       'no-restricted-syntax': 'off',
     },

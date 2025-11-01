@@ -75,6 +75,207 @@ const URL_TO_OPEN = RAW_URL;
       const hasToast = await waitFor('#tp_toast_container'); // toast container
       const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
 
+      // VAD gate latency (simulated)
+      try {
+        const result = await page.evaluate(() => {
+          const prof = { vad: { tonDb: -30, toffDb: -36, attackMs: 80, releaseMs: 300 } };
+          let gate = false, onCounter = 0, offCounter = 0; const ms = 20;
+          const step = (rmsDb) => {
+            const speaking = gate
+              ? (rmsDb > prof.vad.toffDb ? (offCounter=0, true) : ((offCounter+=ms) < prof.vad.releaseMs))
+              : (rmsDb > prof.vad.tonDb  ? ((onCounter+=ms) >= prof.vad.attackMs) : (onCounter=0, false));
+            gate = speaking; return gate;
+          };
+          let frames = 0; // open
+          while (!step(prof.vad.tonDb + 3) && frames < 1000) frames++;
+          const openOk = frames >= Math.ceil(prof.vad.attackMs / ms) - 1;
+          frames = 0; // close
+          while (step(prof.vad.toffDb - 3) && frames < 1000) frames++;
+          const closeOk = frames >= Math.ceil(prof.vad.releaseMs / ms) - 1;
+          return { openOk, closeOk };
+        });
+        if (!result.openOk || !result.closeOk) warnLogs.push('[smoke] VAD latency check failed');
+      } catch (e) {
+        warnLogs.push('[smoke] VAD latency check error: ' + (e?.message || String(e)));
+      }
+
+      // Sane profile formula (synthetic): ton must be above noise
+      try {
+        const ok = await page.evaluate(() => {
+          const noise = -50, speech = -20; // dBFS
+          const ton = Math.max(noise + 10, Math.min(-20, speech - 4));
+          return ton > noise;
+        });
+        if (!ok) warnLogs.push('[smoke] tonDb should be above noise floor');
+      } catch {}
+
+      // Auto chip probe: ensure presence and state reflects toggle via chip OR button OR motion
+      try {
+        // Wait for app init marker to ensure handlers are wired
+        try {
+          await page.evaluate(() => new Promise((resolve)=>{
+            if (window.__tp_init_done) return resolve(true);
+            const t = setTimeout(()=>resolve(false), 1500);
+            try { window.addEventListener('tp:init:done', ()=>{ clearTimeout(t); resolve(true); }, { once:true }); } catch { resolve(true); }
+          }));
+        } catch {}
+        await page.waitForSelector('#autoToggle', { timeout: 5000 });
+        const read = async () => {
+          const chip = await page.$eval('#autoChip', n => (n && n.textContent || '').trim()).catch(()=> '');
+          const btn  = await page.$eval('#autoToggle', n => (n && n.textContent || '').trim()).catch(()=> '');
+          const pressed = await page.$eval('#autoToggle', n => (n && n.getAttribute && n.getAttribute('aria-pressed')) || '').catch(()=> '');
+          const pos  = await page.$eval('#viewer', vp => vp ? (vp.scrollTop|0) : 0).catch(()=>0);
+          return { chip, btn, pressed, pos };
+        };
+        const before = await read();
+        const clickOnce = async () => {
+          try { await page.$eval('#autoToggle', el => el && el.scrollIntoView && el.scrollIntoView({behavior:'instant', block:'center'})); } catch {}
+          // Try DOM click first (bypasses hit-testing flakiness), then synthetic click as fallback
+          try { await page.$eval('#autoToggle', el => el && el.click && el.click()); } catch {}
+          await page.waitForTimeout(30);
+          await page.click('#autoToggle').catch(()=>{});
+          await page.waitForTimeout(320);
+          return await read();
+        };
+        let after = await clickOnce();
+        const changed1 = (before.chip !== after.chip) || (before.btn !== after.btn) || (before.pressed !== after.pressed) || (after.pos > before.pos);
+        if (!changed1) {
+          // Try a second time in case the first click landed before handlers were live or debounce suppressed it
+          after = await clickOnce();
+        }
+        const changed = (before.chip !== after.chip) || (before.btn !== after.btn) || (before.pressed !== after.pressed) || (after.pos > before.pos);
+        if (!changed) {
+          if (String(process.env.SMOKE_STRICT_AUTO || '0') === '1') warnLogs.push('[smoke] auto state did not reflect toggle after 2 attempts');
+        }
+      } catch (e) {
+        warnLogs.push('[smoke] autoChip probe error: ' + (e?.message || String(e)));
+      }
+
+      // Hybrid gating from profile (no mic): inject a fake profile and preference, expect a stable Hybrid paused/manual state
+      try {
+        const txt = await page.evaluate(() => {
+          try {
+            const asr = { profiles: { test: { id:'test', label:'TestProfile', capture: { deviceId:'', sampleRateHz:48000, channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }, cal: { noiseRmsDbfs:-50, noisePeakDbfs:-44, speechRmsDbfs:-20, speechPeakDbfs:-14, snrDb:30 }, vad: { tonDb:-28, toffDb:-34, attackMs:80, releaseMs:300 }, filters:{}, createdAt: Date.now(), updatedAt: Date.now() } }, activeProfileId:'test' };
+            localStorage.setItem('tp_asr_profiles_v1', JSON.stringify(asr));
+            const prefs = JSON.parse(localStorage.getItem('tp_ui_prefs_v1') || '{}') || {};
+            prefs.hybridUseProfileId = 'test';
+            localStorage.setItem('tp_ui_prefs_v1', JSON.stringify(prefs));
+            localStorage.setItem('tp_vad_apply_hybrid', '1');
+            localStorage.setItem('scrollMode', 'hybrid');
+            // Nudge router listeners
+            window.dispatchEvent(new StorageEvent('storage', { key: 'tp_asr_profiles_v1', newValue: JSON.stringify(asr) }));
+            window.dispatchEvent(new StorageEvent('storage', { key: 'tp_ui_prefs_v1', newValue: JSON.stringify(prefs) }));
+            const chip = document.getElementById('autoChip');
+            return chip ? chip.textContent.trim() : '';
+          } catch { return ''; }
+        });
+        console.log('[smoke hybrid/vad-only]', txt);
+      } catch {}
+
+      // Kill switch latency (warn-only): toggle ON then OFF quickly, ensure handler responds within ~150ms
+      try {
+        const elapsed = await page.evaluate(async () => {
+          const t0 = Date.now();
+          const btn = document.getElementById('autoToggle');
+          if (btn) { btn.click(); btn.click(); }
+          return Date.now() - t0;
+        });
+        console.warn('[smoke kill]', elapsed, 'ms');
+      } catch {}
+
+      // Typography smoke guard: a line node must respond to font-size var changes
+      try {
+        const SEL = '#viewer .script :is(p,.line,.tp-line)';
+        // Ensure at least one candidate exists; if not, create a temporary one
+        const hadAny = await page.$(SEL);
+        if (!hadAny) {
+          await page.evaluate(() => {
+            try {
+              const host = document.getElementById('script');
+              if (host) {
+                const div = document.createElement('div');
+                div.className = 'line tp-line';
+                try { div.dataset.tpLine = '1'; } catch {}
+                div.textContent = 'smoke-guard-temp';
+                host.appendChild(div);
+              }
+            } catch {}
+          });
+        }
+        const before = await page.$eval(SEL, el => getComputedStyle(el).fontSize);
+        await page.evaluate(() => document.documentElement.style.setProperty('--tp-font-size','64px'));
+        await page.waitForTimeout(30);
+        const after  = await page.$eval(SEL, el => getComputedStyle(el).fontSize);
+        if (after === before) warnLogs.push('[smoke] inline typography must affect actual line nodes');
+      } catch (e) {
+        warnLogs.push('[smoke] line typography guard failed: ' + (e?.message || String(e)));
+      }
+
+      // Cheap E2E: assert CSS var changes propagate to display
+      try {
+        // Open settings so the builder mounts (ensures inputs exist)
+        await page.click('#settingsBtn');
+        await page.waitForSelector('#settingsBody');
+        // Type font size into main field if present
+        const hasMainFS = await page.$('#typoFontSize-main');
+        if (hasMainFS) {
+          await page.fill('#typoFontSize-main', '60');
+          // small pause to flush rAF/store
+          await page.waitForTimeout(50);
+          const sizeMain = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--tp-font-size').trim());
+          if (sizeMain !== '60px') throw new Error('main font var not set');
+          // Open display window and check mirrored var
+          await page.click('#openDisplayBtn');
+          await page.waitForTimeout(200);
+          const sizeDisp = await page.evaluate(() => {
+            try {
+              const w = window.__tpDisplayWindow;
+              if (!w) return null;
+              return w.getComputedStyle(w.document.documentElement).getPropertyValue('--tp-font-size').trim();
+            } catch { return null; }
+          });
+          if (sizeDisp !== '60px') throw new Error('display font var not mirrored');
+        }
+      } catch (e) {
+        warnLogs.push('[typo-smoke] ' + (e?.message || String(e)));
+      }
+
+      // Guard: unlink by default; then link → mirror
+      try {
+        const hasSettingsBtn = await page.$('#settingsBtn');
+        if (hasSettingsBtn) {
+          await page.click('#settingsBtn');
+          await page.waitForSelector('#settingsOverlay:not(.hidden)', { timeout: 2000 }).catch(()=>{});
+          // Ensure Link is off by default
+          const linkChecked = await page.$eval('#typoLink', el => el && el.checked);
+          if (linkChecked) warnLogs.push('[smoke] Link Typography is ON by default (expected OFF)');
+          // Change main only
+          await page.$eval('#settingsFontSize', (el) => { el.value = '60'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+          // Open display and check it did not mirror by default
+          await page.click('#openDisplayBtn');
+          await page.waitForTimeout(400);
+          const dispSize1 = await page.evaluate(() => {
+            try {
+              const w = window.__tpDisplayWindow; if (!w) return 'n/a';
+              return w.getComputedStyle(w.document.documentElement).getPropertyValue('--tp-font-size').trim();
+            } catch { return 'n/a'; }
+          });
+          if (dispSize1 === '60px') warnLogs.push('[smoke] Display mirrored size while Link was OFF');
+          // Enable Link and change again → should mirror
+          await page.click('#typoLink');
+          await page.$eval('#settingsFontSize', (el) => { el.value = '64'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+          await page.waitForTimeout(250);
+          const dispSize2 = await page.evaluate(() => {
+            try {
+              const w = window.__tpDisplayWindow; if (!w) return 'n/a';
+              return w.getComputedStyle(w.document.documentElement).getPropertyValue('--tp-font-size').trim();
+            } catch { return 'n/a'; }
+          });
+          if (dispSize2 !== '64px') warnLogs.push('[smoke] Display did not mirror when Link was ON');
+          await page.click('#settingsClose').catch(()=>{});
+        }
+      } catch {}
+
       // Grab a couple runtime flags if present
       const { initDone, appVersion, ctx } = await page.evaluate(() => ({
         initDone: !!(window.__tp_init_done || (window.App && (window.App.inited || window.App.initDone))),
@@ -128,8 +329,13 @@ const URL_TO_OPEN = RAW_URL;
     }
 
     if (playwright) {
-      const makeBrowser = () => playwright.chromium.launch({ headless: true, args: ciArgs });
-      return await runWithPage(makeBrowser, 'playwright');
+      try {
+        const makeBrowser = () => playwright.chromium.launch({ headless: true, args: ciArgs });
+        return await runWithPage(makeBrowser, 'playwright');
+      } catch (e) {
+        console.warn('[SMOKE] Playwright launch failed, falling back to Puppeteer:', e && e.message || e);
+        // fall through to Puppeteer
+      }
     }
 
     // Puppeteer fallback

@@ -4,6 +4,15 @@
   let camPC = null;
   let _wantCamRTC = false;
 
+  function setCamButtons(active) {
+    try {
+      const startBtn = document.getElementById('startCam');
+      const stopBtn = document.getElementById('stopCam');
+      if (startBtn) startBtn.disabled = !!active;
+      if (stopBtn) stopBtn.disabled = !active;
+    } catch {}
+  }
+
   function applyCamSizing() {
     try {
       const camWrap = document.getElementById('camWrap');
@@ -38,6 +47,8 @@
 
   async function startCamera() {
     try {
+      // Ensure any previous stream is fully stopped before starting
+      if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
       const camDeviceSel = document.getElementById('camDevice') || document.getElementById('settingsCamSel');
       const id = camDeviceSel?.value || undefined;
       const stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id } } : true, audio: false });
@@ -48,6 +59,7 @@
       camVideo.srcObject = stream;
       camWrap.style.display = 'block';
       camStream = stream;
+      setCamButtons(true);
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
       try { if (window.__tpMic) window.__tpMic.populateDevices && window.__tpMic.populateDevices(); } catch {}
     } catch (e) { console.warn('startCamera failed', e); }
@@ -62,6 +74,7 @@
       if (camVideo) camVideo.srcObject = null;
       if (camWrap) camWrap.style.display = 'none';
       camStream = null;
+      setCamButtons(false);
       try { window.sendToDisplay && window.sendToDisplay({ type: 'webrtc-stop' }); } catch {}
       if (camPC) { try { camPC.close(); } catch {} camPC = null; }
     } catch (e) { console.warn('stopCamera failed', e); }

@@ -15,6 +15,24 @@ const _backoffMax = 5000;
 const _backoffFactor = 2;
 const _listeners = { connect: [], disconnect: [], recordstate: [], error: [] };
 let _lastScene = null;
+let _keepAliveTimer = null;
+function _startKeepAlive() {
+  if (_keepAliveTimer) return;
+  _keepAliveTimer = setInterval(() => {
+    try {
+      if (_obsClient && _connected) {
+        // cheap request OBS will answer quickly
+        _obsClient.call && _obsClient.call('GetVersion').catch(() => {});
+      }
+    } catch {}
+  }, 15000);
+}
+function _stopKeepAlive() {
+  if (_keepAliveTimer) {
+    clearInterval(_keepAliveTimer);
+    _keepAliveTimer = null;
+  }
+}
 
 function _getElem(id) {
   try {
@@ -59,8 +77,22 @@ function _setRecChipRecording(active) {
 
 async function _ensureObsLib() {
   if (typeof window !== 'undefined' && window.OBSWebSocket) return window.OBSWebSocket;
-  const mod = await import('https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm');
-  return mod.default || mod.OBSWebSocket || mod;
+  // Try primary CDN, then a secondary fallback to improve resilience in restricted networks
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm');
+    return mod.default || mod.OBSWebSocket || mod;
+  } catch (e1) {
+    try { void e1; } catch {}
+    try {
+      const mod2 = await import('https://unpkg.com/obs-websocket-js@5.0.4/dist/obs-ws.min.js');
+      // Some UMD builds attach to window; prefer global if present
+      if (typeof window !== 'undefined' && window.OBSWebSocket) return window.OBSWebSocket;
+      return mod2.default || mod2.OBSWebSocket || mod2;
+    } catch (e2) {
+      try { window.HUD?.log?.('obs:error', 'obs-websocket-js load failed'); } catch {}
+      throw e2;
+    }
+  }
 }
 
 async function _createClient() {
@@ -76,10 +108,12 @@ async function _connectOnce() {
   try {
     const client = await _createClient();
     // wire basic events
-    client.on('ConnectionClosed', () => {
+    client.on('ConnectionClosed', (d) => {
       _connected = false;
       _setObsConnChip(false);
-      _emit('disconnect');
+      _emit('disconnect', d);
+      _stopKeepAlive();
+      try { window.HUD?.warn?.('obs:close', d || { via: 'obs-websocket-js' }); } catch {}
       if (_autoReconnect) _scheduleReconnect();
     });
     client.on('ConnectionOpened', () => {
@@ -87,7 +121,11 @@ async function _connectOnce() {
       _backoffMs = 1000;
       _setObsConnChip(true);
       _emit('connect');
+      _startKeepAlive();
     });
+    // Extra observability
+    try { client.on('Identified', () => { try { window.HUD?.log?.('obs:identified'); } catch {} }); } catch {}
+    try { client.on('CurrentProgramSceneChanged', (e) => { try { _emit('scene', e); window.HUD?.log?.('obs:scene', e); } catch {} }); } catch {}
     client.on('RecordStateChanged', (ev) => {
       try {
         const active = !!(ev && (ev.outputActive || ev.outputActive === true));
@@ -104,6 +142,11 @@ async function _connectOnce() {
     _connected = true;
     _setObsConnChip(true);
     _emit('connect');
+    try {
+      // Surface version info once connected
+      const ver = await client.call('GetVersion').catch(() => null);
+      if (ver) { try { window.HUD?.log?.('obs:connected', ver); } catch {} }
+    } catch {}
     _connecting = false;
     return true;
   } catch (e) {
@@ -111,6 +154,7 @@ async function _connectOnce() {
     _connected = false;
     _setObsConnChip(false);
     _emit('error', e);
+    try { window.HUD?.log?.('obs:error', String(e && e.message || e)); } catch {}
     try {
       // ensure client cleared to allow fresh attempts
       _obsClient?.disconnect();

@@ -78,8 +78,9 @@ async function requestMic(): Promise<MediaStream> {
     const chosenEl = document.getElementById('settingsMicSel') as HTMLSelectElement | null;
     const chosenId = chosenEl ? (chosenEl.value || undefined) : undefined;
     const constraints: MediaStreamConstraints = { audio: { deviceId: chosenId ? { exact: chosenId } as any : undefined } };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
     audioStream = stream;
+  try { window.dispatchEvent(new CustomEvent('tp:mic:stream', { detail: { stream } })); } catch {}
     try { const permChip = document.getElementById('permChip'); if (permChip) permChip.textContent = 'Mic: allowed'; } catch {}
   startDbMeter(stream);
   try { (window as any).__tpMic = (window as any).__tpMic || {}; (window as any).__tpMic.__lastStream = stream; } catch {}

@@ -132,8 +132,11 @@ export default function createScrollController(adapters = {}, telemetry) {
   }
   const log = telemetry || (() => {});
 
-  // Adapters with sensible browser defaults
-  const root = document.scrollingElement || document.documentElement;
+  // Adapters with sensible browser defaults; prefer an explicit app-provided scroll root
+  const globalRoot = (typeof window !== 'undefined' && (window.__tpScrollRoot || null)) || null;
+  const root = (globalRoot && globalRoot.nodeType === 1
+    ? globalRoot
+    : (document.getElementById('viewer') || document.scrollingElement || document.documentElement));
   const A = {
     getViewerTop: adapters.getViewerTop || (() => root.scrollTop || 0),
     requestScroll:
@@ -155,7 +158,7 @@ export default function createScrollController(adapters = {}, telemetry) {
       }),
     getViewportHeight:
       adapters.getViewportHeight || (() => root.clientHeight || window.innerHeight || 0),
-    getViewerElement: adapters.getViewerElement || (() => document.getElementById('viewer')),
+    getViewerElement: adapters.getViewerElement || (() => (root && root.nodeType === 1 ? root : document.getElementById('viewer'))),
     emit:
       adapters.emit ||
       ((event, data) => {
