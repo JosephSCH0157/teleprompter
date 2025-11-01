@@ -1815,6 +1815,9 @@ let _toast = function (msg, opts) {
 
     async function wireObsToggle() {
       try {
+        // Double-wiring guard: ensure settings toggle is wired only once
+        if (window.__tpObsToggleWired) return;
+        window.__tpObsToggleWired = true;
         // If a centralized store exists, let it drive OBS toggle wiring to avoid duplicate bindings
         if (window.__tpStore) {
           const s = window.__tpStore;
@@ -2479,6 +2482,10 @@ let _toast = function (msg, opts) {
     localStorage.setItem('hybridLock', on ? '1' : '0');
     // Only here do we wire speed biasing:
     // e.g., ScrollIntegrator.setBiasSupplier(on ? () => PLL.biasPct : null);
+    try {
+      // HUD heartbeat: surface Hybrid engage/disengage
+      window.HUD?.log?.('hybrid', { on: !!on });
+    } catch {}
   }
   function isHybrid() {
     return HYBRID_ON;
@@ -3101,7 +3108,7 @@ let _toast = function (msg, opts) {
   }
 
   // Simple on-page debug panel for OBS events (only shown when __TP_DEV)
-  function ensureObsDebugPanel() {
+  function _ensureObsDebugPanel() {
     try {
       if (!window.__TP_DEV) return null;
       let p = document.getElementById('obsDebugPanel');
@@ -3682,7 +3689,7 @@ let _toast = function (msg, opts) {
       switch (e.key) {
         case ' ': // Space
           e.preventDefault();
-          if (autoTimer) stopAutoScroll();
+          if (autoTimer) coastToStop();
           else startAutoScroll();
           break;
         case 'ArrowUp':
@@ -5170,7 +5177,7 @@ let _toast = function (msg, opts) {
     lineHeightInput.addEventListener('input', applyTypography);
 
     autoToggle.addEventListener('click', () => {
-      if (autoTimer) return stopAutoScroll();
+      if (autoTimer) return coastToStop();
       if (!parseFloat(autoSpeed.value)) {
         autoSpeed.value = localStorage.getItem('autoPxSpeed') || '25';
       }
@@ -10008,6 +10015,48 @@ let _toast = function (msg, opts) {
   autoToggle.textContent = 'Auto-scroll: Off';
   }
 
+  // Smooth deceleration helper: coast current auto speed to 0 over N ms, then stop
+  function coastToStop() {
+    try {
+      if (!autoTimer) {
+        // already stopped
+        return stopAutoScroll();
+      }
+      const ms = Math.max(0, Number(localStorage.getItem('tp_stop_coast_ms')) || 1500);
+      if (!ms) return stopAutoScroll();
+
+      let start = null;
+      const initial = Math.max(0, Number(autoSpeed?.value) || 0);
+      if (initial <= 0) return stopAutoScroll();
+
+      // Cancel any prior coast loop
+      try { if (window.__tpCoastRAF) cancelAnimationFrame(window.__tpCoastRAF); } catch {}
+
+      const step = (t) => {
+        if (!start) start = t;
+        const el = t - start;
+        const p = Math.min(1, el / ms);
+        const v = Math.max(0, initial * (1 - p));
+        try {
+          // Prefer centralized setter when present to keep labels in sync
+          if (typeof window.__setAutoSpeed === 'function') window.__setAutoSpeed(v, 'coast');
+          else autoSpeed.value = String(v.toFixed(1));
+          if (autoTimer) autoToggle.textContent = `Auto-scroll: On — ${Math.round(v)} px/s`;
+        } catch {}
+        if (p < 1 && autoTimer) {
+          window.__tpCoastRAF = requestAnimationFrame(step);
+        } else {
+          try { if (typeof window.__setAutoSpeed === 'function') window.__setAutoSpeed(0, 'coast-end'); } catch {}
+          stopAutoScroll();
+        }
+      };
+      window.__tpCoastRAF = requestAnimationFrame(step);
+    } catch {
+      // fallback to immediate stop
+      stopAutoScroll();
+    }
+  }
+
   // Resume catch-up controller if speech sync is active — via heuristic gate
   if (recActive) {
     try {
@@ -10405,10 +10454,10 @@ let _toast = function (msg, opts) {
         // optional: initial snap-to-nearest line, forward-only
         snapToViewportAnchor();
       } else {
-        setHybrid(false);
+  setHybrid(false);
         stopASRorVAD();
         PLL.tune({ maxBias: 0 }); // neutralize bias quickly
-        stopAutoScroll();
+  coastToStop();
 
         driver = 'auto';
         try {
@@ -10439,7 +10488,7 @@ let _toast = function (msg, opts) {
       setHybrid(false);
       stopASRorVAD();
       PLL.tune({ maxBias: 0 });
-      stopAutoScroll();
+  coastToStop();
       startAutoScroll(); // fallback to auto-only
       mode = 'AUTO_ONLY';
       driver = 'auto';

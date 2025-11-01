@@ -80,6 +80,7 @@ async function _connectOnce() {
       _connected = false;
       _setObsConnChip(false);
       _emit('disconnect');
+      try { window.HUD?.log?.('obs:close', { via: 'obs-websocket-js' }); } catch {}
       if (_autoReconnect) _scheduleReconnect();
     });
     client.on('ConnectionOpened', () => {
@@ -111,6 +112,7 @@ async function _connectOnce() {
     _connected = false;
     _setObsConnChip(false);
     _emit('error', e);
+    try { window.HUD?.log?.('obs:error', String(e && e.message || e)); } catch {}
     try {
       // ensure client cleared to allow fresh attempts
       _obsClient?.disconnect();

@@ -516,6 +516,7 @@ export function connect({ testOnly } = {}) {
         try {
           _cfgBridge.onStatus?.('socket error', false);
         } catch {}
+        try { window.HUD?.log?.('obs:error', String(_e && (_e.message || _e.type) || 'error')); } catch {}
         _connecting = false;
       };
 
@@ -528,6 +529,7 @@ export function connect({ testOnly } = {}) {
           try {
             _cfgBridge.onStatus?.(`closed ${code} ${reason}`.trim(), false);
           } catch {}
+          try { window.HUD?.log?.('obs:close', { code, reason }); } catch {}
           if (!testOnly && _cfgBridge.isEnabled() && code !== 1000) reconnectSoon(800);
           if (testOnly) reject(new Error(`close ${code}`));
         } catch (ee) {
