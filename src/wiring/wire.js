@@ -122,3 +122,83 @@ export function initSettingsWiring() {
 // Auto-init when imported, but also export for explicit invocation
 try { initSettingsWiring(); } catch {}
 export default initSettingsWiring;
+
+// --- Persistent OBS Enable wiring ---
+// When the "Enable OBS" checkbox is checked, hold an open websocket until
+// unchecked or the page unloads.
+(function setupPersistentObs() {
+  try {
+    const obs =
+      (window.__tpOBS) ||
+      (window.Adapters && window.Adapters.obsAdapter &&
+       window.Adapters.obsAdapter.create && window.Adapters.obsAdapter.create());
+    if (!obs) return;
+
+    const el = {
+      en:  document.getElementById('settingsEnableObs'),
+      host:document.getElementById('settingsObsHost'),
+      port:document.getElementById('settingsObsPort'),
+      sec: document.getElementById('settingsObsSecure'),
+      pw:  document.getElementById('settingsObsPassword'),
+    };
+
+    if (!el.en) return; // Settings panel not mounted in this build
+
+    function urlFromInputs() {
+      const host = (el.host && el.host.value || '127.0.0.1').trim();
+      const port = parseInt(el.port && el.port.value || '4455', 10) || 4455;
+      const secure = !!(el.sec && el.sec.checked);
+      return (secure ? 'wss' : 'ws') + '://' + host + ':' + port;
+    }
+
+    function configureAdapter() {
+      obs.configure({
+        url: urlFromInputs(),
+        password: (el.pw && el.pw.value) || '',
+        // lets the adapter know if it should keep auto-reconnecting
+        isEnabled: () => !!(el.en && el.en.checked),
+      });
+    }
+
+    async function applyEnableState() {
+      configureAdapter();
+      try {
+        if (el.en.checked) {
+          await obs.connect();                 // open (or re-open) persistent connection
+          if (typeof obs.pokeStatusTest === 'function') obs.pokeStatusTest(); // refresh chip/status
+        } else {
+          if (typeof obs.disconnect === 'function') { await obs.disconnect(); }
+          else if (typeof obs.stop === 'function') { await obs.stop(); }      // closes WS in legacy adapter
+        }
+      } catch (e) {
+        console.warn('OBS enable apply failed:', e);
+      }
+    }
+
+    // Toggle wiring
+    el.en.addEventListener('change', applyEnableState, { passive: true });
+
+    // If connection details change while enabled, reconfigure & reconnect
+    [el.host, el.port, el.sec, el.pw].forEach(input => {
+      if (!input) return;
+      input.addEventListener('change', () => {
+        if (el.en && el.en.checked) applyEnableState();
+        else configureAdapter();
+      }, { passive: true });
+    });
+
+    // Close on navigation
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (typeof obs.disconnect === 'function') obs.disconnect();
+        else if (typeof obs.stop === 'function') obs.stop();
+      } catch {}
+    });
+
+    // Boot: if the toggle is already checked (persisted), connect now
+    configureAdapter();
+    if (el.en.checked) setTimeout(() => { applyEnableState(); }, 0);
+  } catch (e) {
+    console.debug('OBS persistent wiring skipped:', e);
+  }
+})();
