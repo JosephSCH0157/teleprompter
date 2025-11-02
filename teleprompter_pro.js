@@ -1,3 +1,12 @@
+// --- HUD hotkey safety (Alt+Shift+H always opens HUD) ---
+window.addEventListener('keydown', (e) => {
+  if (e.altKey && e.shiftKey && e.code === 'KeyH') {
+    e.preventDefault();
+    e.stopPropagation();
+    try { ensureHud?.(); } catch {}
+    try { window.hud?.toggle?.(); } catch {}
+  }
+}, { capture: true });
 // --- Hybrid speech: graceful fallback on network glitches (no more stalls) ---
 (function wireHybridFallback() {
   const sup = window.speechSup || window.__speechSup || window.SpeechSup || null;
