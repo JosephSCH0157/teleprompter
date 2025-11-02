@@ -1,3 +1,179 @@
+// ---- Autoscroll gating (teleprompter_pro.js) ----
+window.__tp_autoscroll_armed = false;
+
+function armAutoscroll() {
+  window.__tp_autoscroll_armed = true;
+}
+
+function disarmAutoscroll() {
+  window.__tp_autoscroll_armed = false;
+  try { window.autoscroll?.stop?.(); } catch {}
+}
+
+// Wrap the real start so it never fires unless armed
+if (window.autoscroll && typeof window.autoscroll.start === 'function') {
+  const __startAutoScroll = window.autoscroll.start.bind(window.autoscroll);
+  window.autoscroll.start = async function (...args) {
+    if (!window.__tp_autoscroll_armed) {
+      console.warn('[autoscroll] blocked: not armed');
+      return;
+    }
+    return __startAutoScroll?.(...args);
+  };
+}
+
+// ---- HUD bring-up guard (teleprompter_pro.js) ----
+function ensureHud() {
+  try {
+    if (!window.__HUD && typeof window.createHud === 'function') {
+      window.__HUD = window.createHud(); // provided by debug-tools.js
+      console.log('[HUD] created');
+    }
+  } catch (e) {
+    console.warn('[HUD] create failed', e);
+  }
+}
+
+// keyboard: Alt+Shift+H toggles HUD
+document.addEventListener('keydown', (e) => {
+  if (e.altKey && e.shiftKey && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
+    ensureHud();
+    window.__HUD?.toggle?.();
+  }
+});
+
+// also try once after DOM is ready:
+document.addEventListener('DOMContentLoaded', () => {
+  // mount, but keep hidden; toggle shows it
+  ensureHud();
+});
+
+// ---- get OBS recorder surface (teleprompter_pro.js) ----
+async function getObsRecorder() {
+  // compatibility: new registry shim from recorders.js (Patch A)
+  if (window.__recorder?.get) return window.__recorder.get('obs');
+
+  // legacy global?
+  if (window.recorders?.get) return window.recorders.get('obs');
+
+  // as a last resort, attempt module load (no-op if already registered)
+  try { await import('./adapters/obs.js'); } catch {}
+  try { await import('./recorders.js'); } catch {}
+
+  return window.__recorder?.get?.('obs') || window.recorders?.get?.('obs') || null;
+}
+
+// ---- OBS persistent lifecycle (teleprompter_pro.js) ----
+let __obsReconnectTimer = null;
+let __obsReconnectTries = 0;
+const __OBS_RECONNECT_MAX = 30000; // cap at 30s
+const __OBS_RECONNECT_BASE = 1000;
+
+function obsEnabledInStorage() {
+  try { return localStorage.getItem('settings.obs.enabled') === '1'; } catch { return false; }
+}
+function setObsEnabledInStorage(v) {
+  try { localStorage.setItem('settings.obs.enabled', v ? '1' : '0'); } catch {}
+}
+
+function obsStatusChip(text, kind = 'muted') {
+  // adapt to your badge API if needed
+  try { window.hud?.obs?.setStatus?.(text, kind); } catch {}
+  const el = document.querySelector('#obsStatusText');
+  if (el) { el.textContent = text; el.dataset.kind = kind; }
+}
+
+function scheduleObsReconnect() {
+  clearTimeout(__obsReconnectTimer);
+  if (!obsEnabledInStorage()) return;
+  const ms = Math.min(__OBS_RECONNECT_MAX, __OBS_RECONNECT_BASE * Math.pow(2, __obsReconnectTries++));
+  __obsReconnectTimer = setTimeout(connectObsPersistently, ms);
+}
+
+async function connectObsPersistently() {
+  const obs = await getObsRecorder();
+  if (!obs) { obsStatusChip('Recorder missing', 'error'); return; }
+
+  try {
+    const cfg = readObsSettingsFromUI(); // implement to pull host/port/secure/password, see below
+    obsStatusChip('Connecting…', 'info');
+    await obs.connect(cfg);   // <-- persistent connect
+    __obsReconnectTries = 0;
+    obsStatusChip('Connected', 'ok');
+
+    // Wire once (idempotent if your adapter guards)
+    obs.off?.('disconnected', scheduleObsReconnect);
+    obs.on?.('disconnected', () => {
+      obsStatusChip('Disconnected', 'warn');
+      scheduleObsReconnect();
+    });
+    obs.off?.('error', scheduleObsReconnect);
+    obs.on?.('error', (e) => {
+      console.warn('[OBS] error', e);
+      obsStatusChip('Error', 'error');
+      scheduleObsReconnect();
+    });
+  } catch (e) {
+    console.warn('[OBS] connect failed', e);
+    obsStatusChip('Connect failed', 'error');
+    scheduleObsReconnect();
+  }
+}
+
+async function disconnectObsPersistently(reason = 'toggle-off') {
+  clearTimeout(__obsReconnectTimer);
+  const obs = await getObsRecorder();
+  try { await obs?.disconnect?.({ reason }); } catch {}
+  obsStatusChip('Disabled', 'muted');
+}
+
+// UI settings reader (very small helper you can adapt to your actual IDs):
+function readObsSettingsFromUI() {
+  const host = (document.querySelector('#obsUrl')?.value || 'localhost').trim();
+  const port = parseInt(document.querySelector('#obsPort')?.value || '4455', 10);
+  const password = document.querySelector('#obsPass')?.value || '';
+  const secure = !!document.querySelector('#obsSecure')?.checked;
+  return { host, port, password, secure };
+}
+
+// ---- Enable OBS checkbox wiring (teleprompter_pro.js) ----
+const enableObsEl = document.querySelector('#enableObs, #settingsEnableObs'); // whichever exists
+if (enableObsEl) {
+  // initial state from storage
+  const enabled = obsEnabledInStorage();
+  enableObsEl.checked = enabled;
+  if (enabled) queueMicrotask(connectObsPersistently);
+
+  enableObsEl.addEventListener('change', (e) => {
+    const isOn = !!e.target.checked;
+    setObsEnabledInStorage(isOn);
+    if (isOn) connectObsPersistently();
+    else disconnectObsPersistently('user-toggle');
+  });
+}
+
+// graceful shutdown
+window.addEventListener('beforeunload', () => {
+  setObsEnabledInStorage(!!document.querySelector('#enableObs')?.checked);
+  // don't await; fire-and-forget
+  const _ = disconnectObsPersistently('page-unload');
+});
+
+// ---- OBS Test Connection button (separate probe) ----
+document.querySelector('#obsTest')?.addEventListener('click', async () => {
+  const obs = await getObsRecorder();
+  if (!obs) return obsStatusChip('Recorder missing', 'error');
+
+  try {
+    const cfg = readObsSettingsFromUI();
+    obsStatusChip('Testing…', 'info');
+    await obs.test?.(cfg);   // your adapter’s short-lived probe
+    obsStatusChip('Test OK', 'ok');
+  } catch (e) {
+    console.warn('[OBS] test failed', e);
+    obsStatusChip('Test failed', 'error');
+  }
+});
 //
 // OBS wiring (robust loader + persistent toggle + once-only test)
 //
