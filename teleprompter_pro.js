@@ -1,3 +1,221 @@
+//
+// OBS wiring (robust loader + persistent toggle + once-only test)
+//
+
+(function OBS_WIRING() {
+  const ns = (window.__TP = window.__TP || {});
+  let stickyReconnectTimer = null;
+
+  // ---- tiny utils
+  const $ = (s) => document.querySelector(s);
+  const on = (el, ev, fn) => el && el.addEventListener(ev, fn, { passive: true });
+
+  // Call first method that exists (for adapter/bridge surface differences)
+  const callFirst = (obj, names, ...args) => {
+    for (const n of names) {
+      if (obj && typeof obj[n] === 'function') return obj[n](...args);
+    }
+    throw new Error('OBS adapter method missing: ' + names.join('|'));
+  };
+
+  // ---- recorder/adapter loader (robust)
+  async function getRecorder() {
+    if (window.__recorder) return window.__recorder;
+    // try normal then nocache fallback
+    let mod;
+    try { mod = await import('./recorders.js'); }
+    catch { mod = await import(`./recorders.js?nocache=${Date.now()}`); }
+    // Patch A exposed default + compat shim; prefer explicit export, then default
+    const rec = mod.recorder || mod.default || mod;
+    window.__recorder = rec;
+    return rec;
+  }
+
+  async function getObsAdapter() {
+    const rec = await getRecorder();
+    const obs = rec.get && rec.get('obs');
+    if (!obs) throw new Error('OBS adapter not registered');
+    return obs;
+  }
+
+  // ---- config reader (tolerant: UI ➜ localStorage ➜ defaults)
+  function readObsCfg() {
+    // Use your existing IDs if present; otherwise fall back to LS.
+    const url = ($('#obsUrl')?.value || localStorage.getItem('obs.url') || 'localhost').trim();
+    const port = parseInt($('#obsPort')?.value ?? localStorage.getItem('obs.port') ?? 4455, 10);
+    const password = $('#obsPass')?.value ?? localStorage.getItem('obs.pass') ?? '';
+    const secure = $('#obsSecure')?.checked ?? (localStorage.getItem('obs.secure') === '1');
+    const autoReconnect = $('#obsReconnect')?.checked ?? true;
+    return { url, port, password, secure, autoReconnect };
+  }
+
+  // ---- status chip
+  function setObsStatus(status, detail) {
+    // status: 'disconnected' | 'connecting' | 'connected' | 'error'
+    ns.__obsStatus = { status, detail, ts: Date.now() };
+    const pill = $('#obsStatusText') || $('#obsStatusChip');
+    if (!pill) return;
+    pill.dataset.status = status;
+    pill.textContent = (
+      status === 'connected' ? 'OBS: Connected' :
+      status === 'connecting' ? 'OBS: Connecting…' :
+      status === 'error' ? `OBS: Error${detail ? ` (${String(detail).slice(0,64)})` : ''}` :
+      'OBS: Disconnected'
+    );
+  }
+
+  // ---- sticky connect (persistent while enabled)
+  async function stickyConnect() {
+    clearTimeout(stickyReconnectTimer);
+    try {
+      const obs = await getObsAdapter();
+      const cfg = readObsCfg();
+
+      // Configure surface first (name differences tolerated)
+      if (obs.configureSurface || obs.configure) {
+        callFirst(obs, ['configureSurface', 'configure'], cfg);
+      } else if (obs.setConfig) {
+        obs.setConfig(cfg);
+      }
+
+      setObsStatus('connecting');
+      // Persistent connect (not once)
+      await callFirst(obs, ['connectSurface', 'connect', 'open', 'start'], { persistent: true });
+
+      // hook status events if available
+      if (typeof obs.on === 'function') {
+        obs.on('status', (s) => {
+          // expect s = { connected, connecting, error, reason }
+          if (s?.error) setObsStatus('error', s.reason || s.error);
+          else if (s?.connected) setObsStatus('connected');
+          else if (s?.connecting) setObsStatus('connecting');
+          else setObsStatus('disconnected');
+        });
+        obs.on('open', () => setObsStatus('connected'));
+        obs.on('close', (ev) => {
+          setObsStatus('disconnected', ev && ev.reason);
+          // auto-reconnect while sticky is on
+          if (isObsEnabled()) {
+            clearTimeout(stickyReconnectTimer);
+            stickyReconnectTimer = setTimeout(() => stickyConnect(), 1500);
+          }
+        });
+        obs.on('error', (e) => setObsStatus('error', e && (e.message || e.type || e)));
+      } else {
+        // fallback poll if no events
+        const poll = async () => {
+          try {
+            const st = await (obs.getStatus?.() ?? {});
+            if (st.connected) setObsStatus('connected'); else setObsStatus('disconnected');
+          } catch (e) { setObsStatus('error', e && e.message); }
+          if (isObsEnabled()) stickyReconnectTimer = setTimeout(poll, 2000);
+        };
+        poll();
+      }
+    } catch (e) {
+      setObsStatus('error', e && e.message);
+      // retry gently if still enabled
+      if (isObsEnabled()) {
+        clearTimeout(stickyReconnectTimer);
+        stickyReconnectTimer = setTimeout(() => stickyConnect(), 2500);
+      }
+    }
+  }
+
+  async function stickyDisconnect() {
+    clearTimeout(stickyReconnectTimer);
+    try {
+      const obs = await getObsAdapter();
+      await callFirst(obs, ['disconnectSurface', 'disconnect', 'close', 'stop']);
+    } catch {}
+    setObsStatus('disconnected');
+  }
+
+  // ---- one-shot test connect (never persistent)
+  async function testConnection() {
+    try {
+      const obs = await getObsAdapter();
+      const cfg = readObsCfg();
+      if (obs.configureSurface || obs.configure) {
+        callFirst(obs, ['configureSurface', 'configure'], cfg);
+      } else if (obs.setConfig) {
+        obs.setConfig(cfg);
+      }
+      setObsStatus('connecting');
+      await callFirst(obs, ['connectSurface', 'connect', 'open', 'start'], { once: true });
+      setObsStatus('connected');
+      // let it close on its own or give it a gentle close after a short delay
+      setTimeout(async () => {
+        try { await callFirst(obs, ['disconnectSurface', 'disconnect', 'close', 'stop']); }
+        catch {}
+        if (!isObsEnabled()) setObsStatus('disconnected');
+      }, 800);
+    } catch (e) {
+      setObsStatus('error', e && e.message);
+    }
+  }
+
+  // ---- toggle wiring
+  function isObsEnabled() {
+    return ($('#enableObs')?.checked ?? $('#settingsEnableObs')?.checked) === true;
+  }
+
+  function wireObsToggle() {
+    const settingsToggle = $('#settingsEnableObs');
+    const mainToggle = $('#enableObs');
+    const testBtn = $('#obsTest') || $('#btnObsTest');
+
+    // mirror both directions (whichever exists)
+    const mirror = (from, to) => from && to && on(from, 'change', () => { to.checked = from.checked; });
+
+    mirror(settingsToggle, mainToggle);
+    mirror(mainToggle, settingsToggle);
+
+    const handle = async () => {
+      const enabled = isObsEnabled();
+      localStorage.setItem('obs.enabled', enabled ? '1' : '0');
+      if (enabled) {
+        await stickyConnect();
+      } else {
+        await stickyDisconnect();
+      }
+    };
+
+    on(settingsToggle, 'change', handle);
+    on(mainToggle, 'change', handle);
+    if (testBtn) on(testBtn, 'click', (e) => { e.preventDefault(); testConnection(); });
+
+    // boot state
+    const bootEnabled = (localStorage.getItem('obs.enabled') === '1');
+    if (settingsToggle) settingsToggle.checked = bootEnabled;
+    if (mainToggle) mainToggle.checked = bootEnabled;
+
+    // hydrate status on boot
+    if (bootEnabled) stickyConnect(); else setObsStatus('disconnected');
+
+    // close politely on unload
+    window.addEventListener('beforeunload', () => {
+      if (isObsEnabled()) { try { navigator.sendBeacon?.('/telemetry/obs-close'); } catch {} }
+      // Let the browser drop the WS; we also try to call disconnect quickly:
+      try { void stickyDisconnect(); } catch {}
+    });
+  }
+
+  // expose a minimal debug surface
+  ns.obsUI = {
+    connect: stickyConnect,
+    disconnect: stickyDisconnect,
+    test: testConnection,
+    status: () => ns.__obsStatus
+  };
+
+  // run when DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireObsToggle);
+  } else {
+    wireObsToggle();
+  }
+})();
 // --- Speech Supervisor integration ---
 import { SpeechSupervisor } from './src/speech/SpeechSupervisor.js';
 let speech = null;
