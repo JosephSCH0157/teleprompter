@@ -64,7 +64,18 @@ async function loadLegacyPiecesAsModules() {
     '../scroll-control.js',
     '../teleprompter_pro.js',
   ];
-  await Promise.all(mods.map(m => import(m)));
+  await Promise.all(mods.map(async (m) => {
+    try {
+      await import(m);
+    } catch (err) {
+      console.error(`[src/index] Failed to import ${m}:`, err);
+      if (window && window.__TP_IMPORT_ERRORS) {
+        window.__TP_IMPORT_ERRORS.push({ mod: m, error: String(err && err.message || err) });
+      } else if (window) {
+        window.__TP_IMPORT_ERRORS = [{ mod: m, error: String(err && err.message || err) }];
+      }
+    }
+  }));
   console.log('[src/index] module imports complete');
 }
 
