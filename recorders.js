@@ -16,45 +16,6 @@ export function initCompat() {
 }
 
 
-// --- Compatibility recorder surface used by the app ---
-// Provides a small surface with idempotent lifecycle and status events.
-export const recorder = (function () {
-  let _state = 'disabled'; // disabled | connecting… | connected | disconnected | error
-  let _initted = false;
-  let _enabled = false;
-
-  function emitStatus(txt, ok) {
-    _state = txt || _state;
-    // Call the inline bridge onStatus if configured
-    try {
-      _cfgBridge.onStatus?.(txt, !!ok);
-    } catch {}
-    // Dispatch a DOM CustomEvent so UI can listen
-    try {
-      const ev = new CustomEvent('tp-recorder-status', { detail: { state: txt, ok: !!ok } });
-      if (typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(ev);
-    } catch {}
-  }
-
-  async function initSurface() {
-    if (_initted) return true;
-    _initted = true;
-    try {
-      // ensure built-ins loaded so adapters are registered
-      await initBuiltIns();
-      emitStatus('recorder initialized', true);
-      return true;
-  } catch {
-      emitStatus('init error', false);
-      return false;
-    }
-  }
-
-  // ...existing code...
-  return {
-    // ...existing code...
-  };
-})();
 
 // Provide a default export that looks like a registry (for dynamic import paths)
 export default {
