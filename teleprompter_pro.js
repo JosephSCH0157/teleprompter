@@ -4056,6 +4056,8 @@ let _toast = function (msg, opts) {
     } else {
       helpBtn.textContent = 'Help';
     }
+    // For downstream code that expects a 'btn' variable
+    const btn = helpBtn;
 
     // --- ensure overlay exists ---
     let overlay = document.getElementById('shortcutsOverlay');
@@ -4234,83 +4236,12 @@ let _toast = function (msg, opts) {
       validateBtn.onclick = () => {
         let msg;
         try {
-            msg = window.validateStandardTags
-              ? window.validateStandardTags(true)
-              : 'Validator missing.';
-          } catch (_e) {
-            msg = 'Validation error: ' + (_e?.message || _e);
-          }
-        try {
-          window.showValidation(msg);
-        } catch {
-          showCopyDialog(msg, 'Validator');
-        }
-      };
-      const modal = document.getElementById('shortcutsOverlay');
-      const title = document.getElementById('shortcutsTitle');
-      const _close = document.getElementById('shortcutsClose');
-      if (!modal) return;
-
-      // Rename button + title
-      if (btn) {
-        btn.textContent = 'Help';
-        btn.setAttribute('aria-label', 'Help and shortcuts');
-      }
-      if (title) {
-        title.textContent = 'Help';
-      }
-
-      // Find the sheet body
-      const sheet = modal.querySelector('.sheet');
-      if (!sheet) return;
-
-      // Prevent duplicate insertion
-      if (sheet.querySelector('#tagGuide')) return;
-
-      const guide = document.createElement('div');
-      guide.id = 'tagGuide';
-      guide.innerHTML = `
-      <hr class="hr" />
-      <details open>
-        <summary><strong>Script Tag Guide</strong></summary>
-        <div class="tag-guide">
-          <p class="dim">Official tags for podcast scripts — consistent and scroll‑ready.</p>
-          <h4>Speaker Tags</h4>
-          <ul>
-            <li><code>[s1] ... [/s1]</code> → Joe</li>
-            <li><code>[s2] ... [/s2]</code> → Brad</li>
-          </ul>
-          <p><em>Always close the tag. Never add <code>: Name</code> after the tag.</em></p>
-
-          <h4>Notes / Cues</h4>
-          <ul>
-            <li><code>[note] ... [/note]</code> — stage direction, tone, pacing, delivery, music cues, etc.</li>
-            <li><strong>Notes must be on their own line</strong> (not inside speaker tags).</li>
-          </ul>
-
-          <h4>Inline Styles</h4>
-          <ul>
-            <li>No inline color, italics, or extra formatting.</li>
-            <li>If emphasis is needed, describe it in a <code>[note]</code> block instead.</li>
-          </ul>
-
-          <h4>Rules</h4>
-          <ul>
-            <li>Every spoken paragraph starts with <code>[s1]</code> or <code>[s2]</code>.</li>
-            <li>Every note uses <code>[note]...[/note]</code> on its own paragraph.</li>
-            <li>No duplicate or stray tags.</li>
-            <li>Keep scripts human‑readable and teleprompter‑friendly.</li>
-          </ul>
-
-          <div class="row" style="margin-top:.6rem">
-            <button id="guideNormalize" class="btn-chip">Normalize current script</button>
-            <button id="guideValidate" class="btn-chip">Validate</button>
-          </div>
-        </div>
-      </details>
-    `;
-
-      // Insert guide after the shortcuts grid
+          const _showValidation = (text) => {
+            const sheet = overlay.querySelector('.sheet') || overlay;
+            let panel = sheet.querySelector('#validatePanel');
+            if (!panel) {
+              const frag = document.createElement('div');
+              frag.innerHTML = `
       const grid = sheet.querySelector('.shortcuts-grid');
       if (grid && grid.parentElement) {
         grid.parentElement.appendChild(guide);
@@ -4318,6 +4249,70 @@ let _toast = function (msg, opts) {
         sheet.appendChild(guide);
       }
 
+              panel = frag.firstElementChild;
+              sheet.appendChild(panel);
+              const copyBtn = panel.querySelector('#copyValidateBtn');
+              if (copyBtn && !copyBtn.dataset.wired) {
+                copyBtn.dataset.wired = '1';
+                copyBtn.addEventListener('click', async () => {
+                  const pre = panel.querySelector('#validateOut');
+                  const txt = pre?.textContent || '';
+                  try {
+                    await navigator.clipboard.writeText(txt);
+                    try {
+                      setStatus && setStatus('Validation copied ✓');
+                    } catch (e) {}
+                  } catch (e) {
+                    // fallback if clipboard API blocked
+                    try {
+                      const sel = window.getSelection();
+                      const r = document.createRange();
+                      r.selectNodeContents(pre);
+                      sel.removeAllRanges();
+                      sel.addRange(r);
+                      document.execCommand('copy');
+                      try {
+                        setStatus && setStatus('Validation copied ✓');
+                      } catch (e) {}
+                    } catch (e) {
+                      try {
+                        setStatus && setStatus('Copy failed: ' + (e?.message || e));
+                      } catch (e) {}
+                    }
+                  }
+                });
+              }
+            }
+            const pre = panel.querySelector('#validateOut');
+            pre.textContent = String(text || '').trim() || 'No issues found.';
+            panel.classList.remove('hidden');
+            // focus so Ctrl/Cmd+C works immediately
+            pre.focus();
+            // auto-select all for instant copy
+            try {
+              const sel = window.getSelection();
+              const r = document.createRange();
+              r.selectNodeContents(pre);
+              sel.removeAllRanges();
+              sel.addRange(r);
+            } catch (e) {}
+          };
+
+          validateBtn.onclick = () => {
+            let msg;
+            try {
+              msg = window.validateStandardTags
+                ? window.validateStandardTags(true)
+                : 'Validator missing.';
+            } catch (_e) {
+              msg = 'Validation error: ' + (_e?.message || _e);
+            }
+            try {
+              window.showValidation(msg);
+            } catch (e) {
+              showCopyDialog(msg, 'Validator');
+            }
+          };
       // Wire quick actions (reuse existing functions if present)
       document.getElementById('guideNormalize')?.addEventListener('click', () => {
         try {
