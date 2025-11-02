@@ -1,3 +1,79 @@
+// --- Hybrid speech: graceful fallback on network glitches (no more stalls) ---
+(function wireHybridFallback() {
+  const sup = window.speechSup || window.__speechSup || window.SpeechSup || null;
+  if (!sup || sup.__wiredHybridFallback) return;
+  sup.__wiredHybridFallback = true;
+
+  let lastCruiseSpeed = null;
+
+  // If you already have a WPM pipe, reuse it; otherwise this is harmless.
+  sup.on?.('wpm', (wpm) => {
+    try {
+      // capture a usable fallback speed whenever ASR is alive
+      lastCruiseSpeed = typeof wpmToSpeed === 'function' ? wpmToSpeed(wpm) : (lastCruiseSpeed || 1.0);
+      if (getScrollMode?.() === 'hybrid' && typeof setSpeed === 'function') {
+        setSpeed(lastCruiseSpeed);
+      }
+    } catch {}
+  });
+
+  // Network glitch → fail soft: switch to Cruise, keep rolling
+  sup.on?.('networkError', (err) => {
+    try { hud?.log?.('speech', { networkError: true, err: String(err) }); } catch {}
+    try {
+      if (getScrollMode?.() === 'hybrid') {
+        if (typeof selectScrollMode === 'function') {
+          selectScrollMode('cruise');
+        } else if (window.scrollRouter?.select) {
+          window.scrollRouter.select('cruise');
+        }
+        if (typeof setSpeed === 'function') {
+          setSpeed(lastCruiseSpeed || defaultCruiseSpeed?.() || 1.0);
+        }
+        toast?.('ASR link down — falling back to Cruise (auto-retrying in background)');
+      }
+    } catch {}
+  });
+
+  // Supervisor reports it is retrying (optional HUD breadcrumb)
+  sup.on?.('retry', (n, backoffMs) => {
+    try { hud?.log?.('speech', { retry: n, backoffMs }); } catch {}
+  });
+
+  // Fully recovered → optionally auto-return to Hybrid
+  sup.on?.('recovered', () => {
+    try { hud?.log?.('speech', { recovered: true }); } catch {}
+    try {
+      // only switch back if user didn't manually change modes
+      if (getScrollMode?.() === 'cruise' && (window.__autoReturnToHybrid ?? true)) {
+        if (typeof selectScrollMode === 'function') {
+          selectScrollMode('hybrid');
+        } else if (window.scrollRouter?.select) {
+          window.scrollRouter.select('hybrid');
+        }
+        toast?.('ASR recovered — back to Hybrid');
+      }
+    } catch {}
+  });
+
+  // Fatal → degrade and keep the show moving
+  sup.on?.('fatal', (err) => {
+    try { hud?.log?.('speech', { fatal: true, err: String(err) }); } catch {}
+    try {
+      if (getScrollMode?.() === 'hybrid') {
+        if (typeof selectScrollMode === 'function') {
+          selectScrollMode('cruise');
+        } else if (window.scrollRouter?.select) {
+          window.scrollRouter.select('cruise');
+        }
+        if (typeof setSpeed === 'function') {
+          setSpeed(lastCruiseSpeed || defaultCruiseSpeed?.() || 1.0);
+        }
+        toast?.('ASR failed — staying in Cruise; you can re-arm Hybrid any time');
+      }
+    } catch {}
+  });
+})();
 // ---- OBS persistence + keepalive -------------------------------------------
 async function __getObsRecorder() {
   if (!window.__recorder || typeof window.__recorder.get !== 'function') {
