@@ -4,7 +4,9 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     e.stopPropagation();
     try { ensureHud?.(); } catch {}
+  try { ensureHud?.(); } catch {}
     try { window.hud?.toggle?.(); } catch {}
+  try { window.hud?.toggle?.(); } catch {}
   }
 }, { capture: true });
 // --- Hybrid speech: graceful fallback on network glitches (no more stalls) ---
@@ -24,11 +26,14 @@ window.addEventListener('keydown', (e) => {
         setSpeed(lastCruiseSpeed);
       }
     } catch {}
+  } catch {}
   });
 
   // Network glitch → fail soft: switch to Cruise, keep rolling
   sup.on?.('networkError', (err) => {
     try { hud?.log?.('speech', { networkError: true, err: String(err) }); } catch {}
+  try { hud?.log?.('speech', { networkError: true, err: String(err) }); } catch {}
+  } catch {}
     try {
       if (getScrollMode?.() === 'hybrid') {
         if (typeof selectScrollMode === 'function') {
@@ -47,11 +52,14 @@ window.addEventListener('keydown', (e) => {
   // Supervisor reports it is retrying (optional HUD breadcrumb)
   sup.on?.('retry', (n, backoffMs) => {
     try { hud?.log?.('speech', { retry: n, backoffMs }); } catch {}
+  try { hud?.log?.('speech', { retry: n, backoffMs }); } catch {}
   });
 
   // Fully recovered → optionally auto-return to Hybrid
   sup.on?.('recovered', () => {
     try { hud?.log?.('speech', { recovered: true }); } catch {}
+  try { hud?.log?.('speech', { recovered: true }); } catch {}
+  } catch {}
     try {
       // only switch back if user didn't manually change modes
       if (getScrollMode?.() === 'cruise' && (window.__autoReturnToHybrid ?? true)) {
@@ -68,6 +76,8 @@ window.addEventListener('keydown', (e) => {
   // Fatal → degrade and keep the show moving
   sup.on?.('fatal', (err) => {
     try { hud?.log?.('speech', { fatal: true, err: String(err) }); } catch {}
+  try { hud?.log?.('speech', { fatal: true, err: String(err) }); } catch {}
+  } catch {}
     try {
       if (getScrollMode?.() === 'hybrid') {
         if (typeof selectScrollMode === 'function') {
@@ -95,6 +105,7 @@ async function __getObsRecorder() {
 
 // cheap wrapper so we always show *something* in the pill
 function setObsStatus(text, ok) {
+  try { updateObsStatusChip?.(text, ok); } catch {}
   try { updateObsStatusChip?.(text, ok); } catch {}
 }
 
@@ -906,7 +917,16 @@ let _toast = function (msg, opts) {
         } catch {
           console.log('[TP-TRACE]', rec.m);
         }
-      } catch {
+  } catch (e) {
+  try { await rec.surface.disconnectSurface(); } catch {}
+  try { clearInterval(window.__obsKeepAlive); } catch {}
+  try { rec.surface.disconnectSurface(); } catch {}
+  try { window.autoscroll?.stop?.(); } catch {}
+  try { await import('./adapters/obs.js'); } catch {}
+  try { await import('./recorders.js'); } catch {}
+  try { return localStorage.getItem('settings.obs.enabled') === '1'; } catch { return false; }
+  try { localStorage.setItem('settings.obs.enabled', v ? '1' : '0'); } catch {}
+  try { window.hud?.obs?.setStatus?.(text, kind); } catch {}
         try {
           console.warn('[TP-TRACE-FAIL]', err);
         } catch {}
