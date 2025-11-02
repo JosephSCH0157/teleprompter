@@ -94,79 +94,13 @@ async function __getObsRecorder() {
 }
 
 // cheap wrapper so we always show *something* in the pill
-function setObsStatus(text, ok) {
-  try { updateObsStatusChip?.(text, ok); } catch {}
-  try { updateObsStatusChip?.(text, ok); } catch {}
-}
 
-async function ensureObsPersistence() {
-  const want = !!getObsEnabled();
-  const rec = await __getObsRecorder();
 
-  clearInterval(window.__obsKeepAlive);
-  if (want) {
-    setObsStatus('connecting…', false);
-    try {
-      // init() is safe if it’s a no-op
-      await rec.init?.();
-      await rec.surface.connectSurface();
-      setObsStatus('connected', true);
-    } catch (e) {
-      setObsStatus('reconnecting…', false);
-    }
 
-    // keepalive: every 5s, if enabled but dropped, reconnect quietly
-    window.__obsKeepAlive = setInterval(async () => {
-      if (!getObsEnabled()) return;
-      try {
-        const ok = await rec.isConnected?.();
-        if (!ok) {
-          setObsStatus('reconnecting…', false);
-          await rec.surface.connectSurface();
-          setObsStatus('connected', true);
-        }
-      } catch {
-        setObsStatus('reconnecting…', false);
-      }
-    }, 5000);
-  } else {
-    try { await rec.surface.disconnectSurface(); } catch {}
-    setObsStatus('disabled', false);
-  }
-
-  // tidy up on page exit
-  if (!window.__obsUnloadBound) {
-    window.__obsUnloadBound = true;
-    window.addEventListener('beforeunload', () => {
-      try { clearInterval(window.__obsKeepAlive); } catch {}
-      try { rec.surface.disconnectSurface(); } catch {}
-    });
-  }
-}
 
 // Mirror Settings <-> Main panel and apply
-function wireObsToggle() {
-  const settingsCb = document.getElementById('settingsEnableObs');
-  const mainCb     = document.getElementById('enableObs');
 
-  const syncUI = (checked) => {
-    if (settingsCb) settingsCb.checked = checked;
-    if (mainCb)     mainCb.checked     = checked;
-  };
 
-  const apply = async (checked) => {
-    setObsEnabled(checked);
-    syncUI(checked);
-    await ensureObsPersistence();
-  };
-
-  settingsCb?.addEventListener('change', (e) => apply(!!e.target.checked));
-  mainCb?.addEventListener('change',     (e) => apply(!!e.target.checked));
-
-  // initial state from prefs
-  syncUI(!!getObsEnabled());
-  ensureObsPersistence();
-}
 // === EARLY global autoscroll guard ===
 window.__AUTO_ARMED = false;
 window.armAutoscroll = () => { window.__AUTO_ARMED = true; };
@@ -268,14 +202,8 @@ document.querySelectorAll('#enableObs, #settingsEnableObs').forEach(cb => {
 // ---- Autoscroll gating (teleprompter_pro.js) ----
 window.__tp_autoscroll_armed = false;
 
-function armAutoscroll() {
-  window.__tp_autoscroll_armed = true;
-}
 
-function disarmAutoscroll() {
-  window.__tp_autoscroll_armed = false;
-  try { window.autoscroll?.stop?.(); } catch {}
-}
+
 
 // Wrap the real start so it never fires unless armed
 if (window.autoscroll && typeof window.autoscroll.start === 'function') {
@@ -300,6 +228,7 @@ function ensureHud() {
     console.warn('[HUD] create failed', e);
   }
 }
+
 
 // keyboard: Alt+Shift+H toggles HUD
 document.addEventListener('keydown', (e) => {
@@ -329,6 +258,7 @@ async function getObsRecorder() {
 
   return window.__recorder?.get?.('obs') || window.recorders?.get?.('obs') || null;
 }
+
 
 // ---- OBS persistent lifecycle (teleprompter_pro.js) ----
 let __obsReconnectTimer = null;
@@ -386,6 +316,7 @@ async function connectObsPersistently() {
     scheduleObsReconnect();
   }
 }
+
 
 async function disconnectObsPersistently(reason = 'toggle-off') {
   clearTimeout(__obsReconnectTimer);
@@ -898,41 +829,58 @@ let _toast = function (msg, opts) {
     try {
       window.APP_VERSION = '1.6.2';
     } catch {}
-    window.__tpBootPush = (m) => {
+  window.__tpBootPush = (m) => {
+    try {
+      const rec = { t: Date.now(), m };
+      window.__TP_BOOT_TRACE.push(rec);
       try {
-        const rec = { t: Date.now(), m };
-        window.__TP_BOOT_TRACE.push(rec);
-        try {
-          console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
-        } catch {
-          console.log('[TP-TRACE]', rec.m);
-        }
-  } catch (e) {
-  try { await rec.surface.disconnectSurface(); } catch {}
-  try { clearInterval(window.__obsKeepAlive); } catch {}
-  try { rec.surface.disconnectSurface(); } catch {}
-  try { window.autoscroll?.stop?.(); } catch {}
-  try { await import('./adapters/obs.js'); } catch {}
-  try { await import('./recorders.js'); } catch {}
-  try { return localStorage.getItem('settings.obs.enabled') === '1'; } catch { return false; }
-  try { localStorage.setItem('settings.obs.enabled', v ? '1' : '0'); } catch {}
-  try { window.hud?.obs?.setStatus?.(text, kind); } catch {}
-        try {
-          console.warn('[TP-TRACE-FAIL]', err);
-        } catch {}
-        // Long-running low-cost poll: keep checking every 5s so that
-        // bridge/recorder instances created later than the initial poll
-        // will still update the status chip. This is intentionally light.
-        try {
-          setInterval(() => {
-            try {
-              if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
-              updateStatus();
-            } catch {}
-          }, 5000);
-        } catch {}
+        console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
+      } catch {
+        console.log('[TP-TRACE]', rec.m);
       }
-    };
+      return;
+    } catch (err) {
+      // Perform async/cleanup work inside an async IIFE so 'await' is not used at top-level
+      (async () => {
+        try {
+          // Try to gracefully disconnect any surface if available (support both sync and promise APIs)
+          if (typeof rec !== 'undefined' && rec && rec.surface && typeof rec.surface.disconnectSurface === 'function') {
+            try {
+              const res = rec.surface.disconnectSurface();
+              if (res && typeof res.then === 'function') {
+                await res;
+              }
+            } catch {}
+          }
+        } catch {}
+        try { clearInterval(window.__obsKeepAlive); } catch {}
+        try {
+          if (typeof rec !== 'undefined' && rec && rec.surface && typeof rec.surface.disconnectSurface === 'function') {
+            try { rec.surface.disconnectSurface(); } catch {}
+          }
+        } catch {}
+        try { window.autoscroll?.stop?.(); } catch {}
+        try { await import('./adapters/obs.js'); } catch {}
+        try { await import('./recorders.js'); } catch {}
+      })().catch(() => { /* swallow async cleanup errors */ });
+
+      try {
+        console.warn('[TP-TRACE-FAIL]', err);
+      } catch {}
+
+      // Long-running low-cost poll: keep checking every 5s so that
+      // bridge/recorder instances created later than the initial poll
+      // will still update the status chip. This is intentionally light.
+      try {
+        setInterval(() => {
+          try {
+            if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
+            updateStatus();
+          } catch {}
+        }, 5000);
+      } catch {}
+    }
+  };
     // Ensure handshake log exists early so the Debug Dump can read it even before adapters run
     try {
       window.__obsHandshakeLog = window.__obsHandshakeLog || [];
@@ -4066,8 +4014,7 @@ let _toast = function (msg, opts) {
     } else {
       helpBtn.textContent = 'Help';
     }
-    // For downstream code that expects a 'btn' variable
-    const btn = helpBtn;
+  // For downstream code that expects a 'btn' variable
 
     // --- ensure overlay exists ---
     let overlay = document.getElementById('shortcutsOverlay');
@@ -4246,83 +4193,25 @@ let _toast = function (msg, opts) {
       validateBtn.onclick = () => {
         let msg;
         try {
-          const _showValidation = (text) => {
-            const sheet = overlay.querySelector('.sheet') || overlay;
-            let panel = sheet.querySelector('#validatePanel');
-            if (!panel) {
-              const frag = document.createElement('div');
-              frag.innerHTML = `
-      const grid = sheet.querySelector('.shortcuts-grid');
-      if (grid && grid.parentElement) {
-        grid.parentElement.appendChild(guide);
-      } else {
-        sheet.appendChild(guide);
-      }
-
-              panel = frag.firstElementChild;
-              sheet.appendChild(panel);
-              const copyBtn = panel.querySelector('#copyValidateBtn');
-              if (copyBtn && !copyBtn.dataset.wired) {
-                copyBtn.dataset.wired = '1';
-                copyBtn.addEventListener('click', async () => {
-                  const pre = panel.querySelector('#validateOut');
-                  const txt = pre?.textContent || '';
-                  try {
-                    await navigator.clipboard.writeText(txt);
-                    try {
-                      setStatus && setStatus('Validation copied ✓');
-                    } catch (e) {}
-                  } catch (e) {
-                    // fallback if clipboard API blocked
-                    try {
-                      const sel = window.getSelection();
-                      const r = document.createRange();
-                      r.selectNodeContents(pre);
-                      sel.removeAllRanges();
-                      sel.addRange(r);
-                      document.execCommand('copy');
-                      try {
-                        setStatus && setStatus('Validation copied ✓');
-                      } catch (e) {}
-                    } catch (e) {
-                      try {
-                        setStatus && setStatus('Copy failed: ' + (e?.message || e));
-                      } catch (e) {}
-                    }
-                  }
-                });
-              }
-            }
-            const pre = panel.querySelector('#validateOut');
-            pre.textContent = String(text || '').trim() || 'No issues found.';
-            panel.classList.remove('hidden');
-            // focus so Ctrl/Cmd+C works immediately
-            pre.focus();
-            // auto-select all for instant copy
-            try {
-              const sel = window.getSelection();
-              const r = document.createRange();
-              r.selectNodeContents(pre);
-              sel.removeAllRanges();
-              sel.addRange(r);
-            } catch (e) {}
-          };
-
-          validateBtn.onclick = () => {
-            let msg;
-            try {
-              msg = window.validateStandardTags
-                ? window.validateStandardTags(true)
-                : 'Validator missing.';
-            } catch (_e) {
-              msg = 'Validation error: ' + (_e?.message || _e);
-            }
-            try {
-              window.showValidation(msg);
-            } catch (e) {
-              showCopyDialog(msg, 'Validator');
-            }
-          };
+          msg = window.validateStandardTags
+            ? window.validateStandardTags(true)
+            : 'Validator missing.';
+        } catch (_e) {
+          msg = 'Validation error: ' + (_e?.message || _e);
+        }
+        try {
+          // Prefer the outer helper if available, otherwise fall back to global helpers
+          if (typeof _showValidation === 'function') {
+            _showValidation(msg);
+          } else if (typeof window.showValidation === 'function') {
+            window.showValidation(msg);
+          } else {
+            showCopyDialog(msg, 'Validator');
+          }
+        } catch {
+          try { showCopyDialog(msg, 'Validator'); } catch {}
+        }
+      };
       // Wire quick actions (reuse existing functions if present)
       document.getElementById('guideNormalize')?.addEventListener('click', () => {
         try {
@@ -7236,7 +7125,7 @@ let _toast = function (msg, opts) {
       div.id = 'tuningPanel';
       div.style.cssText =
         'position:fixed;bottom:8px;right:8px;z-index:9999;background:#111c;border:1px solid #444;padding:8px 10px;font:12px system-ui;color:#eee;box-shadow:0 2px 8px #0009;backdrop-filter:blur(4px);max-width:240px;line-height:1.3;border-radius:6px;';
-      div.innerHTML = `\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>\n          <label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>\n          <label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>\n        </div>\n        <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">\n          <button data-apply style="flex:1 1 auto;">Apply</button>\n          <button data-save style="flex:1 1 auto;">Save</button>\n        </div>\n        <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">\n          <input data-enable type="checkbox"> Override presets\n        </label>\n        <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>\n        <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>\n      `;
+      div.innerHTML = '\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">\n            <span>SIM</span>\n            <input data-k=\"SIM_THRESHOLD\" type=\"number\" step=\"0.01\" min=\"0\" max=\"1\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Win+</span>\n            <input data-k=\"MATCH_WINDOW_AHEAD\" type=\"number\" step=\"10\" min=\"10\" max=\"1000\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Win-</span>\n            <input data-k=\"MATCH_WINDOW_BACK\" type=\"number\" step=\"1\" min=\"0\" max=\"200\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Strict</span>\n            <input data-k=\"STRICT_FORWARD_SIM\" type=\"number\" step=\"0.01\" min=\"0\" max=\"1\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Jump</span>\n            <input data-k=\"MAX_JUMP_AHEAD_WORDS\" type=\"number\" step=\"1\" min=\"1\" max=\"120\">\n          </label>\n        </div>\n        <div style=\"margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;\">\n          <button data-apply style=\"flex:1 1 auto;\">Apply</button>\n          <button data-save style=\"flex:1 1 auto;\">Save</button>\n        </div>\n        <label style=\"display:flex;align-items:center;gap:4px;margin-top:4px;\">\n          <input data-enable type=\"checkbox\"> Override presets\n        </label>\n        <div data-tune-status style=\"font-size:11px;color:#8ec;margin-top:2px;height:14px;\"></div>\n        <div style=\"font-size:10px;color:#999;margin-top:4px;\">Ctrl+Alt+T to re-open</div>\n      ';
       document.body.appendChild(div);
       _tunePanelEl = div;
       _tuneInputs = {};
@@ -12111,31 +12000,48 @@ let _toast = function (msg, opts) {
 
       bar.onclick = () => {
         panel.classList.toggle('hidden');
-        div.innerHTML =
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-          '<strong style="font-size:12px;">Matcher Tuning</strong>' +
-          '<button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>' +
-          '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">' +
-          '<label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>' +
-          '<label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>' +
-          '<label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>' +
-          '<label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>' +
-          '<label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>' +
-          '</div>' +
-          '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">' +
-          '<button data-apply style="flex:1 1 auto;">Apply</button>' +
-          '<button data-save style="flex:1 1 auto;">Save</button>' +
-          '</div>' +
-          '<label style="display:flex;align-items:center;gap:4px;margin-top:4px;">' +
-          '<input data-enable type="checkbox"> Override presets' +
-          '</label>' +
-          '<div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>' +
-          '<div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>';
-    } catch (e) {
+        panel.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <strong style="font-size:12px;">Matcher Tuning</strong>
+            <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 60px;gap:8px;">
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>SIM</span>
+              <input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Win+</span>
+              <input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Win-</span>
+              <input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Strict</span>
+              <input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Jump</span>
+              <input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120">
+            </label>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
+            <button data-apply style="flex:1 1 auto;">Apply</button>
+            <button data-save style="flex:1 1 auto;">Save</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+            <input data-enable type="checkbox"> Override presets
+          </label>
+          <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>
+          <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>
+        `;
+      };
+    } catch {
       try {
-        console.warn('Self-checks UI failed:', e);
-      } catch (err) {}
+        console.warn('Self-checks UI failed');
+      } catch {}
     }
 
     // Ensure a top Normalize button exists for self-checks (in case HTML removed it)
