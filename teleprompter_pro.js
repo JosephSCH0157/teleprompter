@@ -1,3 +1,86 @@
+// ---- OBS persistence + keepalive -------------------------------------------
+async function __getObsRecorder() {
+  if (!window.__recorder || typeof window.__recorder.get !== 'function') {
+    throw new Error('Recorder loader unavailable');
+  }
+  const rec = await window.__recorder.get('obs');
+  if (!rec || !rec.surface) throw new Error('OBS recorder surface missing');
+  return rec;
+}
+
+// cheap wrapper so we always show *something* in the pill
+function setObsStatus(text, ok) {
+  try { updateObsStatusChip?.(text, ok); } catch {}
+}
+
+async function ensureObsPersistence() {
+  const want = !!getObsEnabled();
+  const rec = await __getObsRecorder();
+
+  clearInterval(window.__obsKeepAlive);
+  if (want) {
+    setObsStatus('connecting…', false);
+    try {
+      // init() is safe if it’s a no-op
+      await rec.init?.();
+      await rec.surface.connectSurface();
+      setObsStatus('connected', true);
+    } catch (e) {
+      setObsStatus('reconnecting…', false);
+    }
+
+    // keepalive: every 5s, if enabled but dropped, reconnect quietly
+    window.__obsKeepAlive = setInterval(async () => {
+      if (!getObsEnabled()) return;
+      try {
+        const ok = await rec.isConnected?.();
+        if (!ok) {
+          setObsStatus('reconnecting…', false);
+          await rec.surface.connectSurface();
+          setObsStatus('connected', true);
+        }
+      } catch {
+        setObsStatus('reconnecting…', false);
+      }
+    }, 5000);
+  } else {
+    try { await rec.surface.disconnectSurface(); } catch {}
+    setObsStatus('disabled', false);
+  }
+
+  // tidy up on page exit
+  if (!window.__obsUnloadBound) {
+    window.__obsUnloadBound = true;
+    window.addEventListener('beforeunload', () => {
+      try { clearInterval(window.__obsKeepAlive); } catch {}
+      try { rec.surface.disconnectSurface(); } catch {}
+    });
+  }
+}
+
+// Mirror Settings <-> Main panel and apply
+function wireObsToggle() {
+  const settingsCb = document.getElementById('settingsEnableObs');
+  const mainCb     = document.getElementById('enableObs');
+
+  const syncUI = (checked) => {
+    if (settingsCb) settingsCb.checked = checked;
+    if (mainCb)     mainCb.checked     = checked;
+  };
+
+  const apply = async (checked) => {
+    setObsEnabled(checked);
+    syncUI(checked);
+    await ensureObsPersistence();
+  };
+
+  settingsCb?.addEventListener('change', (e) => apply(!!e.target.checked));
+  mainCb?.addEventListener('change',     (e) => apply(!!e.target.checked));
+
+  // initial state from prefs
+  syncUI(!!getObsEnabled());
+  ensureObsPersistence();
+}
 // === EARLY global autoscroll guard ===
 window.__AUTO_ARMED = false;
 window.armAutoscroll = () => { window.__AUTO_ARMED = true; };
