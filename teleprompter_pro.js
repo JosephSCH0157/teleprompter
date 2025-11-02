@@ -8,15 +8,50 @@ function hudSpeech(status) {
 function handleSpeechResult(e) {
   try { window.__scrollRouter?.onSpeechResult?.(e); } catch {}
 }
-function ensureSpeech() {
-  if (speech) return speech;
-  speech = new SpeechSupervisor({
-    lang: document.getElementById('settingsLang')?.value || 'en-US',
-    interim: false,
-    onResult: handleSpeechResult,
-    onStatus: hudSpeech,
+// --- Hybrid Speech Supervisor: global instance, robust fallback wiring ---
+function startAutoScroll() {
+  try { window.__scrollRouter?.setAuto?.(true); } catch {}
+  try { window.__scrollRouter?.startAuto?.(); } catch {}
+}
+function stopASR() {
+  try { speech?.stop?.({ manual: true }); } catch {}
+}
+function startASRorVAD() {
+  try { return speech?.start?.(); } catch {}
+}
+window.__speechSup = window.__speechSup || new SpeechSupervisor({
+  lang: document.getElementById('settingsLang')?.value || 'en-US',
+  interim: false,
+  onResult: handleSpeechResult,
+  onStatus: hudSpeech,
+  onFatal() {
+    // drop to Auto-Only so scrolling continues
+    try { stopASR?.(); } catch {}
+    try { startAutoScroll?.(); } catch {}
+    try { document.body.classList.remove('listening'); } catch {}
+    try { _toast('Speech offline — retrying…', { type: 'warn' }); } catch {}
+  },
+  onRetry() {
+    try { startASRorVAD?.().catch(() => {}); } catch {}
+  }
+});
+speech = window.__speechSup;
+
+// ASR event hooks (simulate asr.on):
+if (speech && typeof speech.on === 'function') {
+  speech.on('error', (e) => {
+    if (e?.name === 'network' || e?.type === 'network' || e === 'network') {
+      speech.bumpNetworkError?.();
+    }
+    startAutoScroll?.();
   });
-  return speech;
+  speech.on('stop', () => {
+    if (speech.inCooldown?.()) {
+      // don’t treat as user stop; keep auto motor running
+      return;
+    }
+    // ... normal stop handling (manual pause, button state, etc.)
+  });
 }
 
 // Wire up start/stop buttons for speech/Hybrid
