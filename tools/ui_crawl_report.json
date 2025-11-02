@@ -125,21 +125,20 @@
     },
     {
       "checkboxIndex": 1
-    },
-    {
-      "checkboxIndex": 2
-    },
-    {
-      "checkboxIndex": 3
-    },
-    {
-      "checkboxIndex": 4
-    },
-    {
-      "checkboxIndex": 5
     }
   ],
-  "errors": [],
+  "errors": [
+    {
+      "type": "pageerror",
+      "message": "SyntaxError: Cannot use import statement outside a module",
+      "stack": "SyntaxError: Cannot use import statement outside a module"
+    },
+    {
+      "type": "pageerror",
+      "message": "ReferenceError: e is not defined\n_initCore (http://127.0.0.1:5180/teleprompter_pro.js:5838:7)",
+      "stack": "ReferenceError: e is not defined\n_initCore (http://127.0.0.1:5180/teleprompter_pro.js:5838:7)\n    at _initCore (http://127.0.0.1:5180/teleprompter_pro.js:5837:6)"
+    }
+  ],
   "console": [
     {
       "type": "log",
@@ -160,114 +159,350 @@
       }
     },
     {
-      "type": "log",
-      "text": "[src/index] boot()",
+      "type": "warning",
+      "text": "[index.js] module import failed, falling back to legacy teleprompter_pro.js JSHandle@error",
       "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 104,
+        "url": "http://127.0.0.1:5180/index.js",
+        "lineNumber": 11,
         "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[src/ui/dom] bindStaticDom",
+      "text": "[Main] [TP-TRACE] script-enter",
       "location": {
-        "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 607,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "table",
-      "text": "JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 757,
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
         "columnNumber": 16
       }
     },
     {
       "type": "log",
-      "text": "%c[UI PARITY OK] color:#0a0",
+      "text": "[Main] [TP-BOOT 0] entered main IIFE",
       "location": {
-        "url": "http://127.0.0.1:5180/src/dev/parity-guard.js",
-        "lineNumber": 70,
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 888,
+        "columnNumber": 2
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-BOOT 0] installed global error hooks",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 934,
+        "columnNumber": 4
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-boot-block",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] window-init-proxy-installed",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] minimal-boot",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] post-minimalBoot",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-zero-time-init-attempt-scheduled",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] pre-init-scheduling-early",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] init-scheduling-early-exited",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-zoom-guard",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-wireNormalizeButton",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-buildSettingsContent-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-syncSettingsValues-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-setupSettingsTabs-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-fallbackNormalize-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-normalizeToStandard-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-validateStandardTags-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore end",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 7315,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] after-_initCore-def",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] pre-init-scheduling",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] init-scheduling-exited",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[obs] disconnect (user toggle)",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 181,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] early-init-invoking",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] init() wrapper start",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 11251,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore start",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 4274,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[Main] [TP-TRACE] early-init-fallback",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 836,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-Pro] _initCore mid (core UI wired)",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 5782,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "error",
+      "text": "[TP-Pro] init() failed: JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 11275,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "error",
+      "text": "[TP-BOOT unhandled] JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 931,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "warning",
+      "text": "Self-checks UI failed",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 12042,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 9954,
+        "columnNumber": 37
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] end:metrics JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "info",
+      "text": "WATCHDOG STATE: OK -> STALL JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 4616,
+        "columnNumber": 47
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 977,
         "columnNumber": 20
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/adapters/obs] init",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
-        "lineNumber": 3,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/adapters/recorder] init",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/recorder.js",
-        "lineNumber": 3,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/features/persistence] initPersistence",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/features/persistence.js",
-        "lineNumber": 2,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/features/telemetry] initTelemetry",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/features/telemetry.js",
-        "lineNumber": 2,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/features/scroll] initScroll",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/features/scroll.js",
-        "lineNumber": 2,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/features/hotkeys] initHotkeys",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/features/hotkeys.js",
-        "lineNumber": 2,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/index] boot completed",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 417,
-        "columnNumber": 10
-      }
-    },
-    {
       "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -276,7 +511,25 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 977,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -285,7 +538,25 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 977,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -294,7 +565,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -303,7 +574,79 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] end:metrics JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 977,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[TP-TRACE] rs:complete",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 9954,
+        "columnNumber": 37
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 977,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -322,9 +665,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "163a4b2779506cac08c3df58b8b26ef7170b5654",
+      "gitSha": "57491fd13c0911d3d1f79c6115d3896898df49e9",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-10-31T02:52:33.184Z"
+      "buildTime": "2025-11-02T17:16:25.235Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -338,69 +681,52 @@
       "ariaLabel": null
     }
   ],
-  "legendProbe": [
-    {
-      "text": "S1",
-      "color": "rgb(96, 165, 250)"
-    },
-    {
-      "text": "S2",
-      "color": "rgb(250, 204, 21)"
-    },
-    {
-      "text": "G1",
-      "color": "rgb(52, 211, 153)"
-    },
-    {
-      "text": "G2",
-      "color": "rgb(244, 114, 182)"
-    }
-  ],
+  "legendProbe": [],
   "renderProbe": {
-    "lineCount": 3,
-    "iHello": 0,
-    "iWorld": 1,
-    "cHello": "rgb(96, 165, 250)",
-    "cWorld": "rgb(250, 204, 21)"
+    "lineCount": 0,
+    "iHello": -1,
+    "iWorld": -1,
+    "cHello": null,
+    "cWorld": null
   },
   "hudProbe": {
     "isDevClass": false,
-    "hasHudChildren": false
+    "hasHudChildren": true
   },
   "lateProbe": {
     "supported": true,
     "approxFps": 60,
     "jitterStd": 0,
-    "moved": false
+    "moved": true
   },
   "settingsProbe": {
     "hasBody": true,
     "tabs": 4,
     "hasMedia": true,
-    "hasMicSel": true,
-    "hasMicLevel": true,
-    "hasAsrCalibBtn": true
+    "hasMicSel": false,
+    "hasMicLevel": false,
+    "hasAsrCalibBtn": false
   },
   "obsTestProbe": {
-    "hasBtn": true,
-    "hasDataAction": true,
+    "hasBtn": false,
+    "hasDataAction": false,
     "hadPillBefore": false,
-    "hasPillAfter": true,
-    "btnId": "settingsObsTest"
+    "hasPillAfter": false,
+    "btnId": null
   },
   "scrollProbe": {
     "hasControls": true,
-    "delta": 76,
+    "delta": 66.66666412353516,
     "label": "Auto-scroll: On — 70 px/s"
   },
   "autoState": {
     "sawEvent": true,
     "intentOn": true,
     "gate": "on",
-    "speed": 80,
+    "speed": 30,
     "label": "Auto-scroll: On — 80 px/s",
     "chip": "Auto: Manual",
-    "delta": 76
+    "delta": 48
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }
