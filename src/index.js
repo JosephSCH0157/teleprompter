@@ -1,3 +1,11 @@
+// --- Double-boot guard (very top of module) ---
+if (window.__TP_DOUBLE_BOOT_GUARD === 'legacy') {
+  console.warn('[src/index] legacy boot already active — aborting module boot');
+  // Ensure we don't run twice.
+  // Optionally: export nothing to keep module valid.
+}
+window.__TP_DOUBLE_BOOT_GUARD = 'module';
+
 // Minimal bootstrap for the new `src/` modular layout.
 // This file intentionally performs a very small set of init actions and
 // delegates the heavy lifting to the legacy loader until a full migration is done.
@@ -40,65 +48,27 @@ try {
   };
 } catch {}
 
-// Dev-only helpers and safety stubs: keep out of prod bundle
-try {
-  if (window?.__TP_BOOT_INFO?.isDev) {
-  // Load debug helper dynamically in dev
-    import('../debug-tools.js')
-      .then(() => {
-        // If the advanced setting is enabled, auto-install HUD; also subscribe to toggle
-        try {
-          const S = window.__tpStore || null;
-          const ensureHud = (on) => {
-            try {
-              // Install once unconditionally in dev so the hotkey (~) always works
-              if (typeof window.__tpInstallHUD === 'function' && !window.__tpHud) {
-                window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
-              }
-              // Show/hide if instance exists based on preference
-              if (window.__tpHud) {
-                if (on) { try { window.__tpHud.show && window.__tpHud.show(); } catch {} }
-                else { try { window.__tpHud.hide && window.__tpHud.hide(); } catch {} }
-              }
-            } catch {}
-          };
-          // Apply current preference (if store available)
-          try { if (S && typeof S.get === 'function') ensureHud(!!S.get('devHud')); } catch {}
-          // Subscribe for future changes
-          try { if (S && typeof S.subscribe === 'function') S.subscribe('devHud', (v) => ensureHud(!!v)); } catch {}
-          // Ensure install even before store is ready so hotkey works immediately
-          if (!S) { try { ensureHud(false); } catch {} }
-        } catch {}
-      })
-      .catch(() => {});
-  // Load legacy self-checks (provides window.runSelfChecks)
-  import('../ui/selfChecks.js').catch(() => {});
-    // Install safe no-op shims so early UI clicks never throw before adapters/media load
-    // Display bridge (both shapes)
-    window.__tpDisplay = window.__tpDisplay || {
-      openDisplay: function(){}, closeDisplay: function(){}, sendToDisplay: function(){}, handleMessage: function(){}
-    };
-    if (!window.openDisplay) window.openDisplay = function(){};
-    if (!window.closeDisplay) window.closeDisplay = function(){};
-    if (!window.sendToDisplay) window.sendToDisplay = function(){};
-    // Mic
-    window.__tpMic = window.__tpMic || { requestMic: async function(){}, releaseMic: function(){} };
-    // Camera: include both alias sets so any caller shape is safe
-    window.__tpCamera = window.__tpCamera || {};
-    window.__tpCamera.start = window.__tpCamera.start || (async function(){});
-    window.__tpCamera.stop = window.__tpCamera.stop || (function(){});
-    window.__tpCamera.setDevice = window.__tpCamera.setDevice || (function(){});
-    window.__tpCamera.setSize = window.__tpCamera.setSize || (function(){});
-    window.__tpCamera.setOpacity = window.__tpCamera.setOpacity || (function(){});
-    window.__tpCamera.setMirror = window.__tpCamera.setMirror || (function(){});
-    window.__tpCamera.startCamera = window.__tpCamera.startCamera || (async function(){});
-    window.__tpCamera.stopCamera = window.__tpCamera.stopCamera || (function(){});
-    window.__tpCamera.switchCamera = window.__tpCamera.switchCamera || (function(){});
-    window.__tpCamera.applyCamSizing = window.__tpCamera.applyCamSizing || (function(){});
-    window.__tpCamera.applyCamOpacity = window.__tpCamera.applyCamOpacity || (function(){});
-    window.__tpCamera.applyCamMirror = window.__tpCamera.applyCamMirror || (function(){});
-  }
-} catch {}
+
+// --- Load legacy pieces as modules (no classic script injection) ---
+async function loadLegacyPiecesAsModules() {
+  const mods = [
+    '../eggs.js',
+    '../adapters/bridge.js',
+    '../adapters/obs.js',
+    '../recorders.js',
+    '../debug-tools.js',
+    '../debug-seed.js',
+    '../io-anchor.js',
+    '../help.js',
+    '../scroll-helpers.js',
+    '../scroll-control.js',
+    '../teleprompter_pro.js',
+  ];
+  await Promise.all(mods.map(m => import(m)));
+  console.log('[src/index] module imports complete');
+}
+
+await loadLegacyPiecesAsModules();
 
 async function boot() {
   try {
