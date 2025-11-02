@@ -108,6 +108,39 @@ export function setSpeed(pxPerSec) {
     }
   } catch {}
 }
+let _setSpeedReentrant = false;
+export function setSpeed(pxPerSec) {
+  const v = Number(pxPerSec);
+  if (!Number.isFinite(v)) return;
+  const clamped = Math.max(1, Math.min(200, v));
+  if (clamped === speed) return; // No change, skip
+  speed = clamped;
+  // Persist and notify engine if present
+  try { localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
+  // Prevent recursion: only call __scrollCtl.setSpeed if not already inside it
+  if (!_setSpeedReentrant) {
+    try {
+      _setSpeedReentrant = true;
+      window.__scrollCtl?.setSpeed?.(speed);
+    } finally {
+      _setSpeedReentrant = false;
+    }
+  }
+  // Tell listeners (router, UI) about speed change
+  try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail: { speed } })); } catch {}
+  // Reflect to numeric input, if present
+  try { const inp = document.getElementById('autoSpeed'); if (inp) inp.value = String(speed); } catch {}
+  // If UI is in 'on' state, reflect the current speed on the button
+  try {
+    const btn = document.getElementById('autoToggle');
+    const st = btn?.dataset?.state || '';
+    // Only adjust when router is managing state, to keep styles in sync
+    if (btn && st) {
+      if (st === 'on') btn.textContent = `Auto-scroll: On — ${speed} px/s`;
+      else if (st === 'paused') btn.textContent = `Auto-scroll: Paused — ${speed} px/s`;
+    }
+  } catch {}
+}
 
 export function nudge(pixels) {
   try {
