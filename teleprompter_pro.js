@@ -4,9 +4,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     e.stopPropagation();
     try { ensureHud?.(); } catch {}
-  try { ensureHud?.(); } catch {}
     try { window.hud?.toggle?.(); } catch {}
-  try { window.hud?.toggle?.(); } catch {}
   }
 }, { capture: true });
 // --- Hybrid speech: graceful fallback on network glitches (no more stalls) ---
@@ -26,14 +24,11 @@ window.addEventListener('keydown', (e) => {
         setSpeed(lastCruiseSpeed);
       }
     } catch {}
-  } catch {}
   });
 
   // Network glitch → fail soft: switch to Cruise, keep rolling
   sup.on?.('networkError', (err) => {
     try { hud?.log?.('speech', { networkError: true, err: String(err) }); } catch {}
-  try { hud?.log?.('speech', { networkError: true, err: String(err) }); } catch {}
-  } catch {}
     try {
       if (getScrollMode?.() === 'hybrid') {
         if (typeof selectScrollMode === 'function') {
@@ -52,14 +47,11 @@ window.addEventListener('keydown', (e) => {
   // Supervisor reports it is retrying (optional HUD breadcrumb)
   sup.on?.('retry', (n, backoffMs) => {
     try { hud?.log?.('speech', { retry: n, backoffMs }); } catch {}
-  try { hud?.log?.('speech', { retry: n, backoffMs }); } catch {}
   });
 
   // Fully recovered → optionally auto-return to Hybrid
   sup.on?.('recovered', () => {
     try { hud?.log?.('speech', { recovered: true }); } catch {}
-  try { hud?.log?.('speech', { recovered: true }); } catch {}
-  } catch {}
     try {
       // only switch back if user didn't manually change modes
       if (getScrollMode?.() === 'cruise' && (window.__autoReturnToHybrid ?? true)) {
@@ -76,8 +68,6 @@ window.addEventListener('keydown', (e) => {
   // Fatal → degrade and keep the show moving
   sup.on?.('fatal', (err) => {
     try { hud?.log?.('speech', { fatal: true, err: String(err) }); } catch {}
-  try { hud?.log?.('speech', { fatal: true, err: String(err) }); } catch {}
-  } catch {}
     try {
       if (getScrollMode?.() === 'hybrid') {
         if (typeof selectScrollMode === 'function') {
