@@ -1,3 +1,101 @@
+// === EARLY global autoscroll guard ===
+window.__AUTO_ARMED = false;
+window.armAutoscroll = () => { window.__AUTO_ARMED = true; };
+window.disarmAutoscroll = () => { window.__AUTO_ARMED = false; };
+
+// Wrap start() exactly once
+(function wrapAutoscrollStart() {
+  if (!window.autoscroll || window.autoscroll.__wrapped) return;
+  const origStart = window.autoscroll.start.bind(window.autoscroll);
+  window.autoscroll.__wrapped = true;
+  window.autoscroll.start = (...args) => {
+    if (!window.__AUTO_ARMED) {
+      console.warn('[autoscroll] blocked: not armed');
+      return false;
+    }
+    return origStart(...args);
+  };
+})();
+
+// === HUD ensure + hotkey ===
+window.ensureHud = window.ensureHud || function () {
+  if (window.__tpHud && window.__tpHud.toggle) return window.__tpHud;
+  if (typeof window.createHud === 'function') {
+    window.__tpHud = window.createHud();
+    return window.__tpHud;
+  }
+  console.warn('[HUD] createHud not available yet'); 
+  return null;
+};
+
+window.addEventListener('keydown', (e) => {
+  if (e.altKey && e.shiftKey && e.code === 'KeyH') {
+    const hud = window.ensureHud();
+    hud?.toggle?.();
+  }
+}, { capture: true });
+
+// === OBS robust loader and toggle ===
+async function getObsAdapter(timeoutMs = 4000) {
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeoutMs) {
+    const reg = window.__recorder || window.recorders || {};
+    if (typeof reg.get === 'function') {
+      const a = reg.get('obs');
+      if (a) return a;
+    } else if (reg.adapters?.obs) {
+      return reg.adapters.obs;
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  console.warn('[obs] adapter not ready after wait');
+  return null;
+}
+
+async function bootObsPersistentFromToggle(checked) {
+  const obs = await getObsAdapter();
+  if (!obs) return;
+
+  // Read your settings surface (adjust keys if different)
+  const cfg = {
+    host: (window.settings?.obsHost ?? '127.0.0.1'),
+    port: +(window.settings?.obsPort ?? 4455),
+    password: (window.settings?.obsPass ?? ''),
+    secure: !!window.settings?.obsSecure,
+    persistent: true,
+    reconnect: true
+  };
+
+  if (checked) {
+    try {
+      console.log('[obs] connect persistent →', cfg);
+      await obs.connect(cfg); // must use the persistent client, not the probe
+      console.log('[obs] connected (persistent)');
+    } catch (e) {
+      console.warn('[obs] connect failed', e);
+    }
+  } else {
+    try {
+      console.log('[obs] disconnect (user toggle)');
+      await obs.disconnect?.('user-toggle');
+    } catch (e) {
+      console.warn('[obs] disconnect failed', e);
+    }
+  }
+}
+
+// Wire both checkboxes (settings + main)
+document.querySelectorAll('#enableObs, #settingsEnableObs').forEach(cb => {
+  cb.addEventListener('change', (e) => bootObsPersistentFromToggle(e.target.checked));
+});
+
+// Restore on boot
+(function restoreObsFromStorage() {
+  const enabled = !!(window.localStorage && localStorage.getItem('enableObs') === 'true');
+  const box = document.querySelector('#enableObs, #settingsEnableObs');
+  if (box) box.checked = enabled;
+  bootObsPersistentFromToggle(enabled);
+})();
 // ---- Autoscroll gating (teleprompter_pro.js) ----
 window.__tp_autoscroll_armed = false;
 
