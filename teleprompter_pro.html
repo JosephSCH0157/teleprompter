@@ -23,20 +23,9 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- Robust module loader with double-boot guard and legacy fallback -->
-  <script type="module">
-    if (!window.__TP_BOOTED__) {
-      window.__TP_BOOTED__ = 'esm';
-      import('./index.js').catch(async () => {
-        // ESM failed — fall back to legacy bundle
-        window.__TP_BOOTED__ = 'fallback';
-        const s = document.createElement('script');
-        s.src = './teleprompter_pro.js';
-        s.onload = () => (window.__TP_BOOTED__ = 'legacy-loaded');
-        document.head.appendChild(s);
-      });
-    }
-  </script>
+  <!-- Single module loader: index.js handles all boot/fallback logic -->
+  <link rel="modulepreload" href="./index.js">
+  <script type="module" src="./index.js"></script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
