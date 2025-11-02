@@ -188,7 +188,13 @@
 
     // Assemble
     hud.append(head, body, foot);
-    document.body.appendChild(hud);
+    // Prefer mounting to #hud-root if present, else fallback to body
+    const hudRoot = document.getElementById('hud-root');
+    if (hudRoot) {
+      hudRoot.appendChild(hud);
+    } else {
+      document.body.appendChild(hud);
+    }
 
     // State
     let paused = false;
