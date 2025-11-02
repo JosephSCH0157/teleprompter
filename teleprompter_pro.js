@@ -4601,9 +4601,10 @@ let _toast = function (msg, opts) {
         const tryIdxs = [];
         for (let k = -F.miniSeekIdxSpan; k <= F.miniSeekIdxSpan; k++) tryIdxs.push(bestIdx + k);
         const el = tryIdxs
-          .map((i) =>
-            document.querySelector(`[data-idx="${i}"],[data-token-idx="${i}"],.line[data-i="${i}"]`)
-          )
+          .map((i) => {
+            const selector = '[data-idx="' + i + '"],[data-token-idx="' + i + '"],.line[data-i="' + i + '"]';
+            return document.querySelector(selector);
+          })
           .find(Boolean);
 
         if (el) {
