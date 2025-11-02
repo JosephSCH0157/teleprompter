@@ -4736,7 +4736,7 @@ let _toast = function (msg, opts) {
         const oldState = window.__tpWatchdogState;
         if (newState !== oldState) {
           window.__tpWatchdogState = newState;
-          tpLog('info', `WATCHDOG STATE: ${oldState} → ${newState}`, details);
+          tpLog('info', `WATCHDOG STATE: ${oldState} -> ${newState}`, details);
         }
       }
 
@@ -5300,11 +5300,11 @@ let _toast = function (msg, opts) {
         );
         if (!scriptSlots) return;
         scriptSlots.innerHTML = list
-          .map((s) => `<option value="${s.id}">${s.title}</option>`)
-          .join('');
+        .map(function(s) { return `<option value="${s.id}">${s.title}</option>`; })
+        .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
       } catch {
-        void e;
+  // no-op
       }
     }
 
@@ -5865,7 +5865,7 @@ let _toast = function (msg, opts) {
       const fxName = Q.get('fixture');
       const fxUrl = Q.get('fixtureUrl');
       if ((window.__TP_DEV || Q.has('dev')) && (fxName || fxUrl)) {
-        const url = fxUrl || `./fixtures/${fxName.replace(/[^a-z0-9._-]/gi, '')}.txt`;
+  const url = fxUrl || ('./fixtures/' + fxName.replace(/[^a-z0-9._-]/gi, '') + '.txt');
         const resp = await fetch((window.__TP_ADDV || ((p) => p))(url));
         const txt = await resp.text();
         if (editor) editor.value = txt;
@@ -5873,7 +5873,8 @@ let _toast = function (msg, opts) {
         console.info('[TP-Pro] Loaded fixture:', url);
       }
     } catch {
-      void e;
+  // no-op
+                if (chip) chip.textContent = 'OBS: ' + (txt || '');
     }
     // …keep the rest of your init() as-is…
 
@@ -5909,19 +5910,23 @@ let _toast = function (msg, opts) {
                 try {
                   const via = document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL;
                   const chip = document.getElementById('obsStatus') || document.getElementById('recChip');
-                  if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                  if (chip) chip.textContent = 'OBS: ' + (txt || '');
                   // also mirror status into the settings-level connection chip (obsConnStatus)
                   try {
                     const connChip = document.getElementById('obsConnStatus');
                     if (connChip) {
-                      connChip.textContent = txt ? `OBS: ${txt}` : 'OBS: unknown';
+                      connChip.textContent = txt ? 'OBS: ' + txt : 'OBS: unknown';
+                    connChip.textContent = txt ? 'OBS: ' + txt : 'OBS: unknown';
+                  obsDebugLog('status: ' + (txt || '(empty)') + ' (via ' + via + ')');
+                if (chip) chip.textContent = 'Speech: ' + state;
+                  obsDebugLog('record-state: ' + state);
                       connChip.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
                       if (ok) connChip.classList.add('obs-connected');
                       else if (/offline|error|disconnect/i.test(String(txt || ''))) connChip.classList.add('obs-reconnecting');
                       else connChip.classList.add('idle');
                     }
                   } catch {}
-                  obsDebugLog(`status: ${txt || '(empty)'} (via ${via})`);
+                  obsDebugLog('status: ' + (txt || '(empty)') + ' (via ' + via + ')');
                 } catch {}
                 try {
                   _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
@@ -5930,8 +5935,8 @@ let _toast = function (msg, opts) {
               onRecordState: (state) => {
                 try {
                   const chip = document.getElementById('recChip');
-                  if (chip) chip.textContent = `Speech: ${state}`;
-                  obsDebugLog(`record-state: ${state}`);
+                  if (chip) chip.textContent = 'Speech: ' + state;
+                  obsDebugLog('record-state: ' + state);
                 } catch {}
               },
             });
@@ -6514,9 +6519,9 @@ let _toast = function (msg, opts) {
                               const b =
                                 meta.backoffMs || meta.backoffMs === 0 ? meta.backoffMs : null;
                               if (a !== null && b !== null)
-                                suffix = ` (attempt ${a}; retry ${b}ms)`;
-                              else if (a !== null) suffix = ` (attempt ${a})`;
-                              else if (b !== null) suffix = ` (retry ${b}ms)`;
+                                suffix = ' (attempt ' + a + '; retry ' + b + 'ms)';
+                              else if (a !== null) suffix = ' (attempt ' + a + ')';
+                              else if (b !== null) suffix = ' (retry ' + b + 'ms)';
                             }
                           } catch {
                             void 0;
@@ -6760,12 +6765,12 @@ let _toast = function (msg, opts) {
     wrapColor?.addEventListener('click', () => {
       const c = prompt('Color (name or #hex):', '#ff0');
       if (!c) return;
-      wrapSelection(`[color=${c}]`, '[/color]');
+  wrapSelection('[color=' + c + ']', '[/color]');
     });
     wrapBg?.addEventListener('click', () => {
       const c = prompt('Background (name or #hex):', '#112233');
       if (!c) return;
-      wrapSelection(`[bg=${c}]`, '[/bg]');
+  wrapSelection('[bg=' + c + ']', '[/bg]');
     });
 
     autoTagBtn?.addEventListener('click', () => {
@@ -7232,6 +7237,7 @@ let _toast = function (msg, opts) {
       div.style.cssText =
         'position:fixed;bottom:8px;right:8px;z-index:9999;background:#111c;border:1px solid #444;padding:8px 10px;font:12px system-ui;color:#eee;box-shadow:0 2px 8px #0009;backdrop-filter:blur(4px);max-width:240px;line-height:1.3;border-radius:6px;';
       div.innerHTML = `\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>\n          <label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>\n          <label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>\n        </div>\n        <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">\n          <button data-apply style="flex:1 1 auto;">Apply</button>\n          <button data-save style="flex:1 1 auto;">Save</button>\n        </div>\n        <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">\n          <input data-enable type="checkbox"> Override presets\n        </label>\n        <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>\n        <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>\n      `;
+  div.innerHTML = '\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>\n          <label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>\n          <label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>\n        </div>\n        <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">\n          <button data-apply style="flex:1 1 auto;">Apply</button>\n          <button data-save style="flex:1 1 auto;">Save</button>\n        </div>\n        <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">\n          <input data-enable type="checkbox"> Override presets\n        </label>\n        <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>\n        <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>\n      ';
       document.body.appendChild(div);
       _tunePanelEl = div;
       _tuneInputs = {};
@@ -12085,7 +12091,6 @@ let _toast = function (msg, opts) {
         panel.className = 'hidden';
         panel.style.cssText =
           'position:fixed; right:10px; top:44px; z-index:99999; max-width:420px; background:#0e141b; border:1px solid var(--edge); border-radius:12px; box-shadow:0 8px 28px rgba(0,0,0,.45); padding:10px; color:var(--fg); font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;';
-        panel.innerHTML =
           '<div style="margin:4px 0 6px; opacity:.8">Quick startup checks</div><div id="selfChecksList"></div>';
         document.body.appendChild(panel);
         document.addEventListener('click', (e) => {
@@ -12107,7 +12112,27 @@ let _toast = function (msg, opts) {
 
       bar.onclick = () => {
         panel.classList.toggle('hidden');
-      };
+        div.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+          '<strong style="font-size:12px;">Matcher Tuning</strong>' +
+          '<button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">' +
+          '<label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>' +
+          '<label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>' +
+          '<label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>' +
+          '<label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>' +
+          '<label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>' +
+          '</div>' +
+          '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">' +
+          '<button data-apply style="flex:1 1 auto;">Apply</button>' +
+          '<button data-save style="flex:1 1 auto;">Save</button>' +
+          '</div>' +
+          '<label style="display:flex;align-items:center;gap:4px;margin-top:4px;">' +
+          '<input data-enable type="checkbox"> Override presets' +
+          '</label>' +
+          '<div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>' +
+          '<div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>';
     } catch {
       try {
         console.warn('Self-checks UI failed:', e);
