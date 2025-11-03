@@ -1,0 +1,11 @@
+{
+  "name": "teleprompter-tools",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "e2e": "node teleprompter_e2e.js"
+  },
+  "devDependencies": {
+    "puppeteer": "^20.0.0"
+  }
+}

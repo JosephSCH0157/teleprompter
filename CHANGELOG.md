@@ -15,21 +15,24 @@ Stability and alignment improvements across matching, scrolling, and observabili
 	- Calm Mode: relax jump caps near end of script and increase ease step dynamically to avoid perceived slowdown.
 	- Lost Mode: after jitter spike or sustained low similarity, freeze commits and re-anchor using high‑IDF 3‑gram anchors (excluding stop-words) in a widened local band.
 	- Jitter meter: rolling std-dev of (bestIdx − idx) with temporary threshold elevation (~8s) on spikes.
- 	- Virtual lines: merge short runts into “virtual lines” for ranking/dup gating to reduce jitter on very short lines while preserving original highlighting via index mapping.
+ 	- Virtual lines: merge short runts into "virtual lines" for ranking/dup gating to reduce jitter on very short lines while preserving original highlighting via index mapping.
  	- Coverage-based soft advance: when lingering on the same virtual line and coverage ≥ 0.82 for ~1.8s, allow a small forward hop if the next line meets a modest sim floor (≥ 0.68) to prevent stalls.
+	- **PLL Controller**: Phase-Locked Loop bias controller for hybrid auto-scroll. Automatically adjusts scroll speed based on speech sync position. Features: PID-like feedback (Kp=0.022, Kd=0.0025), state machine (LOCK_SEEK/LOCKED/COAST/LOST), end-game taper (softens bias in last 20%), anchor rate-limiting (1200ms cooldown), forward-only bias at low confidence, pause breathing (faster decay during speech pauses), live readout (Lead/Lag, Bias, State), and telemetry counters.
 
 - Speech
 	- Phrase hints via SpeechGrammarList (JSGF) with small weight (0.4) for domain terms (ban, confiscation, transfer, possession); maxAlternatives increased.
+	- **Pause Breathing**: PLL controller responds to speech pauses (onspeechend/onaudioend) with faster bias decay for natural feel.
 
 - HUD/Debug
 	- Candidate vs commit logs separated; sim histogram and time-between-commits retained; scroll WPS gated to speech and started on first write; quiet filter for noisy tags.
 	- Jitter and Lost Mode events logged; duplicate penalty fields surfaced in candidate logs (includes both original and virtual duplication info); spoken tail and line keys normalized to matcher tokens.
+	- **PLL Logging**: Real-time PLL state, bias percentage, position error, and confidence in dedicated 'pll' filter.
 
 - Scheduling/Fallback
 	- Single-writer scroll scheduler; throttled commit applier and at-bottom guard; fallback nudge backoff; mid-band sim (0.72–0.80) patience (≈300ms) before nudging.
 
 - Versioning
-	- Bump to 1.5.8; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. HUD version label reflects new version.
+	- Bump to 1.6.0; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. PLL controller added to Advanced settings with live readout.
 
 ## v1.5.7 — 2025-09-27
 

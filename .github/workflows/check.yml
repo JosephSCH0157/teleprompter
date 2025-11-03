@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, Types, Smoke, UI Crawl
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore Playwright cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium (+deps)
+        run: npx playwright install chromium --with-deps
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build logic
+        run: npm run build:logic
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Start static server
+        run: |
+          export CI_HOST=127.0.0.1
+          export CI_PORT=5180
+          # start server in background; static_server.js will exit 0 if the port is already in use
+          node tools/static_server.js &
+
+          # wait for server to respond (timeout after ~15s)
+          for i in $(seq 1 15); do
+            if curl -sS "http://${CI_HOST}:${CI_PORT}/?ci=1" > /dev/null 2>&1; then
+              echo "static server is up"
+              break
+            fi
+            echo "waiting for static server..."
+            sleep 1
+          done
+
+      - name: Run smoke (PR - non-strict)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          CI_HOST: 127.0.0.1
+          CI_PORT: 5180
+          SMOKE_CI: "1"
+        run: |
+          set -euo pipefail
+          npm run smoke | tee smoke.log
+
+      - name: Run smoke (push - strict dupBoot)
+        if: ${{ github.event_name == 'push' }}
+        env:
+          SMOKE_STRICT_DUPBOOT: "1"
+          CI_HOST: 127.0.0.1
+          CI_PORT: 5180
+          SMOKE_CI: "1"
+        run: |
+          set -euo pipefail
+          npm run smoke | tee smoke.log
+
+      - name: Extract smoke report
+        if: always()
+        run: |
+          LINE=$(grep -F "[SMOKE-REPORT]" smoke.log || true)
+          echo "REPORT_LINE<<EOF" >> $GITHUB_OUTPUT
+          echo "$LINE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run UI crawl
+        run: node tools/ui_crawl.js
+
+      - name: Validate UI crawl
+        run: node tools/validate_ui_crawl.js
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-artifacts
+          path: |
+            smoke.log
+            tools/ui_crawl_report.json
+
+      - name: Bundle size check (optional)
+        run: |
+          node -e "const fs=require('fs');const p='dist/app.js';if(!fs.existsSync(p)){console.log('No dist/app.js; skipping size check');process.exit(0)};const kb=Math.round(fs.statSync(p).size/1024);if(kb>500){console.error('Bundle too big:',kb,'KB');process.exit(1)}else{console.log('Bundle OK:',kb,'KB')}"

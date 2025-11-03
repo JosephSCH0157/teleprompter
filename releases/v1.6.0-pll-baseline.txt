@@ -1,0 +1,34 @@
+# Teleprompter Pro v1.6.0 - PLL Controller Baseline
+
+## Major Features
+- PLL Controller: Phase-Locked Loop bias controller for hybrid auto-scroll
+- PID-like feedback (Kp=0.022, Kd=0.0025) with state machine (LOCK_SEEK/LOCKED/COAST/LOST)
+- End-game taper, anchor rate-limiting, forward-only bias at low confidence
+- Pause breathing: faster decay during speech pauses for natural feel
+- Live readout (Lead/Lag, Bias, State) and telemetry counters
+
+## Guardrails
+- End-game taper: softens bias in last 20% of script
+- Anchor rate-limit: 1200ms cooldown prevents anchor spam
+- Forward-only bias: no accidental slow-downs at low confidence
+- Pause breathing: responds to onspeechend/onaudioend events
+
+## Production Defaults
+- hybridLock: OFF (power-user toggle)
+- Kp: 0.022, Kd: 0.0025, maxBias: 0.12
+- confMin: 0.60, decayMs: 550
+
+## Files Modified
+- teleprompter_pro.js: PLL controller implementation
+- debug-tools.js: PLL logging and speech event handling
+- teleprompter_pro.html: PLL settings UI
+- VERSION.txt, CHANGELOG.md, MANIFEST.md, README.md: version updates
+
+## Testing Checklist
+- Enable hybrid lock in Settings → Advanced
+- Start speech recognition and auto-scroll
+- Verify smooth speed adjustments based on position
+- Check debug HUD (~) for PLL logs
+- Test pause breathing: speak → pause → bias decays faster
+- Test end-game: near script end, bias is reduced
+- Test anchor rate-limit: rapid anchor attempts are throttled

@@ -18,34 +18,42 @@ echo URL: http://127.0.0.1:5180/
 
 rem Prefer local http-server if installed
 if exist "%ROOT%node_modules\.bin\http-server.cmd" (
-  "%ROOT%node_modules\.bin\http-server.cmd" "%ROOT%" -a 127.0.0.1 -p 5180 -c-1
+  rem Note: use "." instead of "%ROOT%" to avoid trailing backslash escaping the closing quote
+  "%ROOT%node_modules\.bin\http-server.cmd" . -a 127.0.0.1 -p 5180 -c-1
   goto :eof
 )
 
 rem Use npx if available
 where npx >nul 2>nul && (
-  npx http-server "%ROOT%" -a 127.0.0.1 -p 5180 -c-1
+  npx http-server . -a 127.0.0.1 -p 5180 -c-1
   goto :eof
 )
 if exist "%ProgramFiles%\nodejs\npx.cmd" (
-  "%ProgramFiles%\nodejs\npx.cmd" http-server "%ROOT%" -a 127.0.0.1 -p 5180 -c-1
+  "%ProgramFiles%\nodejs\npx.cmd" http-server . -a 127.0.0.1 -p 5180 -c-1
   goto :eof
 )
 if exist "%ProgramFiles(x86)%\nodejs\npx.cmd" (
-  "%ProgramFiles(x86)%\nodejs\npx.cmd" http-server "%ROOT%" -a 127.0.0.1 -p 5180 -c-1
+  "%ProgramFiles(x86)%\nodejs\npx.cmd" http-server . -a 127.0.0.1 -p 5180 -c-1
   goto :eof
 )
 
 rem Fallback: use Python 3 http.server with explicit directory
 where py >nul 2>nul && (
-  py -3 -m http.server 5180 --bind 127.0.0.1 --directory "%ROOT%"
+  py -3 -m http.server 5180 --bind 127.0.0.1 --directory .
   goto :eof
 )
 where python >nul 2>nul && (
-  python -m http.server 5180 --bind 127.0.0.1 --directory "%ROOT%"
+  python -m http.server 5180 --bind 127.0.0.1 --directory .
   goto :eof
 )
 
-echo Could not find Node npx or Python. Please install Node.js or Python 3.
+rem Final fallback: built-in PowerShell static server (no installs needed)
+if exist "%ROOT%ps_static_server.ps1" (
+  echo Falling back to PowerShell static server on http://127.0.0.1:5180/
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%ROOT%ps_static_server.ps1" -Port 5180 -Bind 127.0.0.1 -Root .
+  goto :eof
+)
+
+echo Could not find Node npx, Python, or PowerShell server script. Please install Node.js, Python 3, or add ps_static_server.ps1.
 pause
 endlocal
