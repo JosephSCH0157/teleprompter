@@ -8,7 +8,7 @@ const recorder = {
   async init() { return true; },
   async connect() { return true; },
   async disconnect() { return true; },
-  setEnabled(on) { /* no-op for stub */ },
+  setEnabled(_on) { /* no-op for stub */ },
 };
 
 export function initCompat() {
