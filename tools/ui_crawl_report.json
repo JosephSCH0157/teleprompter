@@ -511,19 +511,19 @@
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
-    },
-    {
       "type": "warning",
       "text": "Self-checks UI failed",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
         "lineNumber": 12042,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -671,6 +671,23 @@
       }
     },
     {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
+        "lineNumber": 185
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[OBS test failed] JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 165,
+        "columnNumber": 26
+      }
+    },
+    {
       "type": "debug",
       "text": "[HUD] end:metrics JSHandle@object",
       "location": {
@@ -732,33 +749,6 @@
         "lineNumber": 30,
         "columnNumber": 17
       }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
     }
   ],
   "notes": [
@@ -772,9 +762,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "9886ee85b000c48c866825a6f01332039893b9ef",
+      "gitSha": "53b189f16fe0b855d7f65177c4070178c5716a36",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-11-03T03:31:00.241Z"
+      "buildTime": "2025-11-03T13:12:23.130Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
