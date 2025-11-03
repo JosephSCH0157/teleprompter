@@ -77,3 +77,18 @@ try {
 // Note: we intentionally do NOT attach this API to `window` here.
 // Consumers should import { toast } from './ui/toasts.js'.
 
+// Auto-create the container early so smoke/UI crawlers can detect it reliably.
+// If body isn't ready yet (script in <head>), defer until DOMContentLoaded.
+(function(){
+  try {
+    if (typeof document === 'undefined') return;
+    if (document.body) {
+      try { initToastContainer(); } catch {}
+    } else {
+      document.addEventListener('DOMContentLoaded', function once(){
+        try { initToastContainer(); } catch {}
+      }, { once: true });
+    }
+  } catch {}
+})();
+
