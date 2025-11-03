@@ -1,3 +1,15 @@
+// Legacy bundle guard: block if module boot already won; mark legacy boot otherwise
+(function(){
+  try {
+    if (window.__tpBooted && window.__tpBooted !== 'legacy') {
+      try { console.warn('[TP-Pro legacy] blocked: module already booted as', window.__tpBooted); } catch {}
+      return;
+    }
+    if (!window.__tpBooted) window.__tpBooted = 'legacy';
+    window.__tpBootCount = (window.__tpBootCount || 0) + 1;
+  } catch {}
+})();
+
 // --- HUD hotkey safety (Alt+Shift+H always opens HUD) ---
 window.addEventListener('keydown', (e) => {
   if (e.altKey && e.shiftKey && e.code === 'KeyH') {

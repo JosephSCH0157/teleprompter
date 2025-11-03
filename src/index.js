@@ -1,10 +1,10 @@
-// --- Double-boot guard (very top of module) ---
-let __SKIP_MODULE_BOOT = false;
-if (window.__TP_DOUBLE_BOOT_GUARD === 'legacy') {
-  console.warn('[src/index] legacy boot already active — skipping module boot');
-  __SKIP_MODULE_BOOT = true;
+// --- Hard dup-boot guard (very top of module) ---
+if (window.__tpBooted) {
+  console.warn('[src/index] duplicate boot blocked; first =', window.__tpBooted);
+  throw new Error('dup-boot');
 }
-window.__TP_DOUBLE_BOOT_GUARD = 'module';
+window.__tpBooted = 'index.module';
+window.__tpBootCount = (window.__tpBootCount || 0) + 1;
 
 // Minimal bootstrap for the new `src/` modular layout.
 // This file intentionally performs a very small set of init actions and
@@ -52,6 +52,18 @@ try {
     releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
   };
 } catch {}
+
+// Feature-level idempotence helper (belt & suspenders)
+function initOnce(name, fn) {
+  try {
+    window.__tpInit = window.__tpInit || {};
+    if (window.__tpInit[name]) return;
+    window.__tpInit[name] = 1;
+    return fn();
+  } catch (e) {
+    try { console.warn(`[init:${name}] failed`, e); } catch {}
+  }
+}
 
 
 // --- Load legacy pieces as modules (no classic script injection) ---
@@ -301,15 +313,15 @@ async function boot() {
       }
     } catch {}
 
-    // Initialize features
-    try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); }
-    try { initTelemetry(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
-  try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
-  try { initScroll(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); }
-    try { initHotkeys(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
+    // Initialize features (idempotent)
+    initOnce('persistence', () => { try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); } });
+    initOnce('telemetry',   () => { try { initTelemetry();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); } });
+    try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
+    initOnce('scroll',      () => { try { initScroll();      try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); } });
+    initOnce('hotkeys',     () => { try { initHotkeys();     try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); } });
 
-      // Install speech start/stop delegator
-  try { installSpeech(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); }
+    // Install speech start/stop delegator
+    initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
 
     // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
     try {
@@ -416,11 +428,7 @@ async function boot() {
 }
 
 // Auto-run boot when loaded as a module, but also export boot for manual invocation.
-if (!__SKIP_MODULE_BOOT) {
-  boot();
-} else {
-  try { console.warn('[src/index] skipping boot due to legacy boot already active'); } catch {}
-}
+boot();
 
 export { boot };
 
