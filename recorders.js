@@ -1,4 +1,8 @@
 // --- Compatibility shim (legacy callers expect a registry) ---
+
+// --- Compatibility recorder surface used by the app ---
+// Provides a small surface with idempotent lifecycle and status events.
+
 export function initCompat() {
   // Create a minimal registry surface the old code expects.
   if (typeof window !== 'undefined') {
@@ -15,9 +19,6 @@ export function initCompat() {
   return typeof window !== 'undefined' ? window.__recorder : { get: () => null };
 }
 
-
-
-// Provide a default export that looks like a registry (for dynamic import paths)
 export default {
   init: initCompat,
   get(name) {
