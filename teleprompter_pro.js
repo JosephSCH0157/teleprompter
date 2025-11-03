@@ -5830,11 +5830,11 @@ let _toast = function (msg, opts) {
               },
             });
           }
-        } catch {
+        } catch (e) {
           console.warn('[TP-Pro] recorder.init() threw', e);
         }
       });
-    } catch {
+    } catch (e) {
       void e;
     }
 
@@ -11218,7 +11218,7 @@ let _toast = function (msg, opts) {
         });
       });
       return true;
-    } catch {
+    } catch (e) {
       console.warn('ASR start failed:', e);
       return false;
     }
@@ -11231,7 +11231,7 @@ let _toast = function (msg, opts) {
       try {
         __recorder?.stop?.();
       } catch {}
-    } catch {
+    } catch (e) {
       console.warn('ASR stop failed:', e);
     }
   }
