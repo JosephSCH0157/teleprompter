@@ -224,7 +224,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../io-anchor.js",
+      "text": "[init] import:../help.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -233,7 +233,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../help.js",
+      "text": "[init] import:../io-anchor.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -619,15 +619,6 @@
       }
     },
     {
-      "type": "log",
-      "text": "[HUD] {\"perf\":{\"r\":3,\"w\":2},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 636,
-        "columnNumber": 30
-      }
-    },
-    {
       "type": "warning",
       "text": "Self-checks UI failed",
       "location": {
@@ -641,6 +632,15 @@
       "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":3,\"w\":2},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 636,
+        "columnNumber": 30
       }
     },
     {
@@ -815,6 +815,15 @@
       }
     },
     {
+      "type": "log",
+      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
+        "lineNumber": 977,
+        "columnNumber": 20
+      }
+    },
+    {
       "type": "info",
       "text": "WATCHDOG STATE: OK -> STALL JSHandle@object",
       "location": {
@@ -887,6 +896,15 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
       "type": "log",
       "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
       "location": {
@@ -906,7 +924,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -925,9 +943,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "161cd234559c58f0c393e6b81054c1272c952caa",
+      "gitSha": "ad5326792c420fb5ff928479dc5de1db27aa980d",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-11-03T13:18:18.243Z"
+      "buildTime": "2025-11-03T13:22:33.284Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

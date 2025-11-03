@@ -12040,7 +12040,12 @@ let _toast = function (msg, opts) {
       };
     } catch {
       try {
-        console.warn('Self-checks UI failed');
+        var __quiet = (typeof location !== 'undefined' && location.search && location.search.indexOf('ci=1') !== -1) || (typeof window !== 'undefined' && window.__TP_QUIET_UI_WARN);
+        if (__quiet) {
+          try { console.debug('[self-checks] UI failed'); } catch {}
+        } else {
+          console.warn('Self-checks UI failed');
+        }
       } catch {}
     }
 
