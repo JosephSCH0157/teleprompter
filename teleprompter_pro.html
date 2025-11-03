@@ -23,9 +23,32 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- Single module loader: index.js handles all boot/fallback logic -->
-  <link rel="modulepreload" href="./index.js">
-  <script type="module" src="./index.js"></script>
+  <!-- One true boot path: module try → legacy fallback; mark which path wins -->
+  <script>
+    (function () {
+      try {
+        if (window.__tpBooted) return; // hard guard if HTML is duplicated
+        window.__tpBootSrc = 'pending';
+      } catch {}
+    }());
+  </script>
+  <script type="module">
+    (async () => {
+      if (window.__tpBooted) return;
+      window.__tpBootSrc = 'module';
+      await import('./src/index.js');
+    })().catch(err => {
+      try { console.warn('[boot] module import failed → fallback', err); } catch {}
+      if (!window.__tpBooted) {
+        window.__tpBootSrc = 'fallback';
+        const s = document.createElement('script');
+        s.src = './teleprompter_pro.js';
+        s.defer = true;
+        s.onload = () => { try { console.log('[boot] legacy loaded'); } catch {} };
+        document.head.appendChild(s);
+      }
+    });
+  </script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
