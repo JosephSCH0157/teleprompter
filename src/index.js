@@ -30,6 +30,8 @@ import '../ui/inline-shim.js';
 // Lightweight toast system (attaches window.toast/initToastContainer)
 import '../ui/toasts.js';
 import './media/display-bridge.js';
+// Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
+import './media/camera.js';
 import * as UI from './ui/dom.js';
 // Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
 import '../ui/typography-bridge.js';
@@ -79,10 +81,10 @@ async function loadLegacyPiecesAsModules() {
   console.log('[src/index] module imports complete');
 }
 
-await loadLegacyPiecesAsModules();
-
 async function boot() {
   try {
+    // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
+    await loadLegacyPiecesAsModules();
     console.log('[src/index] boot()');
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
     // Dev-only parity guard: verifies key UI elements and wiring exist

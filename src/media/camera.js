@@ -118,4 +118,16 @@
       try { applyCamMirror(); } catch {}
     };
   } catch {}
+  // Legacy global fallbacks for older code paths that reference applyCam* functions directly
+  try {
+    if (typeof window.applyCamSizing !== 'function') {
+      window.applyCamSizing = function(){ try { window.__tpCamera?.applyCamSizing?.(); } catch {} };
+    }
+    if (typeof window.applyCamOpacity !== 'function') {
+      window.applyCamOpacity = function(){ try { window.__tpCamera?.applyCamOpacity?.(); } catch {} };
+    }
+    if (typeof window.applyCamMirror !== 'function') {
+      window.applyCamMirror = function(){ try { window.__tpCamera?.applyCamMirror?.(); } catch {} };
+    }
+  } catch {}
 })();
