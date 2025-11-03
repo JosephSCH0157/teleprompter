@@ -169,6 +169,96 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[init] import:../eggs.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../adapters/bridge.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../adapters/obs.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../recorders.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../debug-tools.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../debug-seed.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../io-anchor.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../help.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../scroll-control.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../scroll-helpers.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
       "type": "log",
       "text": "[Main] [TP-TRACE] script-enter",
       "location": {
@@ -403,12 +493,30 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[init] import:../teleprompter_pro.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
       "type": "log",
       "text": "[src/index] module imports complete",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 80,
+        "lineNumber": 82,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] boot:start",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
       }
     },
     {
@@ -416,7 +524,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 87,
+        "lineNumber": 90,
         "columnNumber": 12
       }
     },
@@ -427,6 +535,24 @@
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
         "lineNumber": 607,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] ui:bindStaticDom",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] auto:init",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
       }
     },
     {
@@ -511,19 +637,19 @@
       }
     },
     {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+      }
+    },
+    {
       "type": "warning",
       "text": "Self-checks UI failed",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
         "lineNumber": 12042,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -554,12 +680,30 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[init] feature:persistence",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
       "type": "log",
       "text": "[src/features/telemetry] initTelemetry",
       "location": {
         "url": "http://127.0.0.1:5180/src/features/telemetry.js",
         "lineNumber": 2,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] feature:telemetry",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
       }
     },
     {
@@ -572,6 +716,15 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[init] feature:scroll",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
       "type": "log",
       "text": "[src/features/hotkeys] initHotkeys",
       "location": {
@@ -581,12 +734,57 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[init] feature:hotkeys",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] feature:speech",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] feature:router",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
       "type": "log",
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 403,
+        "lineNumber": 408,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "table",
+      "text": "JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 38,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[dup-init:summary] {\"dups\":[],\"total\":20}",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 39,
+        "columnNumber": 16
       }
     },
     {
@@ -614,15 +812,6 @@
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
         "lineNumber": 9954,
         "columnNumber": 37
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
-        "lineNumber": 977,
-        "columnNumber": 20
       }
     },
     {
@@ -671,23 +860,6 @@
       }
     },
     {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
-        "lineNumber": 185
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[OBS test failed] JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-        "lineNumber": 165,
-        "columnNumber": 26
-      }
-    },
-    {
       "type": "debug",
       "text": "[HUD] end:metrics JSHandle@object",
       "location": {
@@ -703,24 +875,6 @@
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
         "lineNumber": 9954,
         "columnNumber": 37
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     },
     {
@@ -749,6 +903,15 @@
         "lineNumber": 30,
         "columnNumber": 17
       }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
     }
   ],
   "notes": [
@@ -762,9 +925,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "53b189f16fe0b855d7f65177c4070178c5716a36",
+      "gitSha": "161cd234559c58f0c393e6b81054c1272c952caa",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-11-03T13:12:23.130Z"
+      "buildTime": "2025-11-03T13:18:18.243Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

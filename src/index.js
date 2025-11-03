@@ -29,6 +29,7 @@ import '../ui/inline-shim.js';
 // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
 // Lightweight toast system (attaches window.toast/initToastContainer)
 import '../ui/toasts.js';
+import './dev/dup-init-check.js';
 import './media/display-bridge.js';
 // Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
 import './media/camera.js';
@@ -69,6 +70,7 @@ async function loadLegacyPiecesAsModules() {
   await Promise.all(mods.map(async (m) => {
     try {
       await import(m);
+      try { window.__tpRegisterInit && window.__tpRegisterInit('import:'+m); } catch {}
     } catch (err) {
       console.error(`[src/index] Failed to import ${m}:`, err);
       if (window && window.__TP_IMPORT_ERRORS) {
@@ -85,6 +87,7 @@ async function boot() {
   try {
     // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
     await loadLegacyPiecesAsModules();
+    try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
     // Dev-only parity guard: verifies key UI elements and wiring exist
@@ -166,6 +169,7 @@ async function boot() {
       }
     } catch {}
   UI.bindStaticDom();
+  try { window.__tpRegisterInit && window.__tpRegisterInit('ui:bindStaticDom'); } catch {}
   // Choose and expose the active scroll root so legacy/TS controllers agree (main vs display)
   try {
     function getScrollRoot(){
@@ -184,6 +188,7 @@ async function boot() {
   } catch {}
   // Ensure autoscroll engine is initialized before wiring router/UI
   try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
+  try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch {}
 
   // Provide a minimal global scroll controller facade for dev/CI bridges and diagnostics.
   // This delegates to the single authoritative Auto engine to avoid double-ownership.
@@ -296,14 +301,14 @@ async function boot() {
     } catch {}
 
     // Initialize features
-    try { initPersistence(); } catch (e) { console.warn('[src/index] initPersistence failed', e); }
-    try { initTelemetry(); } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
+    try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); }
+    try { initTelemetry(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
   try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
-  try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
-    try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
+  try { initScroll(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); }
+    try { initHotkeys(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
 
       // Install speech start/stop delegator
-      try { installSpeech(); } catch (e) { console.warn('[src/index] installSpeech failed', e); }
+  try { installSpeech(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); }
 
     // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
     try {
@@ -319,7 +324,7 @@ async function boot() {
           try { window.__tpScrollRouterJsActive = true; } catch {}
         }
         // Pass the Auto API to the router so it can drive the engine
-        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter({ auto: Auto }); } catch (e) {
+        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter({ auto: Auto }); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {} } catch (e) {
           console.warn('[src/index] installScrollRouter failed', e);
         }
       } catch (e) { console.warn('[src/index] router import failed', e); }
