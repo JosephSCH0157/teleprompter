@@ -1,8 +1,8 @@
 // --- Double-boot guard (very top of module) ---
+let __SKIP_MODULE_BOOT = false;
 if (window.__TP_DOUBLE_BOOT_GUARD === 'legacy') {
-  console.warn('[src/index] legacy boot already active — aborting module boot');
-  // Ensure we don't run twice.
-  // Optionally: export nothing to keep module valid.
+  console.warn('[src/index] legacy boot already active — skipping module boot');
+  __SKIP_MODULE_BOOT = true;
 }
 window.__TP_DOUBLE_BOOT_GUARD = 'module';
 
@@ -67,7 +67,6 @@ async function loadLegacyPiecesAsModules() {
     '../help.js',
     '../scroll-helpers.js',
     '../scroll-control.js',
-    '../teleprompter_pro.js',
   ];
   await Promise.all(mods.map(async (m) => {
     try {
@@ -417,7 +416,11 @@ async function boot() {
 }
 
 // Auto-run boot when loaded as a module, but also export boot for manual invocation.
-boot();
+if (!__SKIP_MODULE_BOOT) {
+  boot();
+} else {
+  try { console.warn('[src/index] skipping boot due to legacy boot already active'); } catch {}
+}
 
 export { boot };
 
