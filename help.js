@@ -5,7 +5,7 @@
 //  - validateStandardTags(silent=false)
 //  - showCopyDialog(text, title)
 
-export function showCopyDialog(text, title='Validation Results'){
+export function showCopyDialog(text, title = 'Validation Results') {
   let ov = document.getElementById('msgOverlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -24,25 +24,41 @@ export function showCopyDialog(text, title='Validation Results'){
         <textarea id="msgText" readonly style="width:100%;min-height:220px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px"></textarea>
       </div>`;
     document.body.appendChild(ov);
-    ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.add('hidden'); });
-    ov.querySelector('#msgClose').onclick = ()=> ov.classList.add('hidden');
-    window.addEventListener('keydown', e=>{ if(!ov.classList.contains('hidden') && e.key==='Escape') ov.classList.add('hidden'); });
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) ov.classList.add('hidden');
+    });
+    ov.querySelector('#msgClose').onclick = () => ov.classList.add('hidden');
+    window.addEventListener('keydown', (e) => {
+      if (!ov.classList.contains('hidden') && e.key === 'Escape') ov.classList.add('hidden');
+    });
     const copyBtn = ov.querySelector('#msgCopy');
-    copyBtn.onclick = async ()=>{
+    copyBtn.onclick = async () => {
       const ta = ov.querySelector('#msgText');
-      ta.focus(); ta.select();
-      try { await navigator.clipboard.writeText(ta.value); } catch { try{ document.execCommand('copy'); }catch{} }
+      ta.focus();
+      ta.select();
+      try {
+        await navigator.clipboard.writeText(ta.value);
+      } catch {
+        try {
+          document.execCommand('copy');
+        } catch {}
+      }
     };
   }
   ov.querySelector('#msgTitle').textContent = title;
   const ta = ov.querySelector('#msgText');
-  ta.value = String(text||'');
+  ta.value = String(text || '');
   ov.classList.remove('hidden');
-  setTimeout(()=>{ ta.focus(); ta.select(); }, 0);
+  setTimeout(() => {
+    ta.focus();
+    ta.select();
+  }, 0);
 }
 
-export function showValidation(text){
-  try { ensureHelpUI(); } catch {}
+export function showValidation(text) {
+  try {
+    ensureHelpUI();
+  } catch {}
   const overlay = document.getElementById('shortcutsOverlay');
   const sheet = overlay?.querySelector('.sheet') || overlay || document.body;
   let panel = sheet.querySelector('#validatePanel');
@@ -66,31 +82,43 @@ export function showValidation(text){
         const txt = pre?.textContent || '';
         try {
           await navigator.clipboard.writeText(txt);
-          try { (window.setStatus||(()=>{}))('Validation copied ✓'); } catch {}
+          try {
+            (window.setStatus || (() => {}))('Validation copied ✓');
+          } catch {}
         } catch {
           try {
-            const sel = window.getSelection(); const r = document.createRange();
-            r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
+            const sel = window.getSelection();
+            const r = document.createRange();
+            r.selectNodeContents(pre);
+            sel.removeAllRanges();
+            sel.addRange(r);
             document.execCommand('copy');
-            try { (window.setStatus||(()=>{}))('Validation copied ✓'); } catch {}
-          } catch (e) {
-            try { (window.setStatus||(()=>{}))('Copy failed: ' + (e?.message||e)); } catch {}
+            try {
+              (window.setStatus || (() => {}))('Validation copied ✓');
+            } catch {}
+          } catch {
+            try {
+              (window.setStatus || (() => {}))('Copy failed: ' + (e?.message || e));
+            } catch {}
           }
         }
       });
     }
   }
   const pre = panel.querySelector('#validateOut');
-  pre.textContent = (String(text||'').trim()) || 'No issues found.';
+  pre.textContent = String(text || '').trim() || 'No issues found.';
   panel.classList.remove('hidden');
   try {
     pre.focus();
-    const sel = window.getSelection(); const r = document.createRange();
-    r.selectNodeContents(pre); sel.removeAllRanges(); sel.addRange(r);
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNodeContents(pre);
+    sel.removeAllRanges();
+    sel.addRange(r);
   } catch {}
 }
 
-export function validateStandardTags(silent=false) {
+export function validateStandardTags(silent = false) {
   const ta = document.getElementById('editor');
   const t = String(ta?.value || '');
   const problems = [];
@@ -101,14 +129,16 @@ export function validateStandardTags(silent=false) {
 
   // speaker tags must be on their own lines
   if (/\[(?:s1|s2)\]\s*\S/.test(t)) problems.push('Opening [s1]/[s2] must be on its own line.');
-  if (/\S\s*\[\/s[12]\]\s*$/im.test(t)) problems.push('Closing [/s1]/[/s2] must be on its own line.');
+  if (/\S\s*\[\/s[12]\]\s*$/im.test(t))
+    problems.push('Closing [/s1]/[/s2] must be on its own line.');
 
   // notes must not be inside speakers
   if (/\[(s1|s2)\][\s\S]*?\[note\][\s\S]*?\[\/note\][\s\S]*?\[\/\1\]/i.test(t))
     problems.push('[note] blocks must be outside speaker sections.');
 
   // balance using a simple stack (no nesting across different speakers)
-  const re = /\[(\/?)(s1|s2|note)\]/ig; const stack = [];
+  const re = /\[(\/?)(s1|s2|note)\]/gi;
+  const stack = [];
   let m;
   while ((m = re.exec(t))) {
     const [, close, tag] = m;
@@ -120,12 +150,20 @@ export function validateStandardTags(silent=false) {
   }
   if (stack.length) problems.push('Unclosed tag(s): ' + stack.join(', '));
 
-  const msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup conforms to the standard.';
-  if (!silent) { try { showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); } }
+  const msg = problems.length
+    ? 'Markup issues:\n- ' + problems.join('\n- ')
+    : 'Markup conforms to the standard.';
+  if (!silent) {
+    try {
+      showValidation(msg);
+    } catch {
+      showCopyDialog(msg, 'Validator');
+    }
+  }
   return msg;
 }
 
-export function ensureHelpUI(){
+export function ensureHelpUI() {
   // minimal CSS (only if missing)
   if (!document.getElementById('helpStyles')) {
     const css = `
@@ -140,7 +178,10 @@ export function ensureHelpUI(){
       .shortcuts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       .btn-chip{background:#0e141b;border:1px solid var(--edge);padding:8px 10px;border-radius:10px;cursor:pointer}
     `;
-    const st = document.createElement('style'); st.id = 'helpStyles'; st.textContent = css; document.head.appendChild(st);
+    const st = document.createElement('style');
+    st.id = 'helpStyles';
+    st.textContent = css;
+    document.head.appendChild(st);
   }
 
   // ensure Help button exists in the top bar
@@ -148,8 +189,11 @@ export function ensureHelpUI(){
   let helpBtn = document.getElementById('shortcutsBtn');
   if (!helpBtn) {
     helpBtn = Object.assign(document.createElement('button'), {
-      id: 'shortcutsBtn', className: 'chip', textContent: 'Help',
-      ariaHasPopup: 'dialog', ariaExpanded: 'false'
+      id: 'shortcutsBtn',
+      className: 'chip',
+      textContent: 'Help',
+      ariaHasPopup: 'dialog',
+      ariaExpanded: 'false',
     });
     topBarEl && topBarEl.appendChild(helpBtn);
   } else {
@@ -162,9 +206,9 @@ export function ensureHelpUI(){
     overlay = document.createElement('div');
     overlay.id = 'shortcutsOverlay';
     overlay.className = 'overlay hidden';
-    overlay.setAttribute('role','dialog');
-    overlay.setAttribute('aria-modal','true');
-    overlay.setAttribute('aria-labelledby','shortcutsTitle');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'shortcutsTitle');
     overlay.innerHTML = `
       <div class="sheet">
         <header>
@@ -207,7 +251,11 @@ export function ensureHelpUI(){
   }
 
   // If we reused an existing overlay (from HTML), ensure the Tag Guide with Normalize/Validate exists
-  if (overlay && !overlay.querySelector('#normalizeBtn') && !overlay.querySelector('#guideNormalize')){
+  if (
+    overlay &&
+    !overlay.querySelector('#normalizeBtn') &&
+    !overlay.querySelector('#guideNormalize')
+  ) {
     const sheet = overlay.querySelector('.sheet') || overlay;
     const container = document.createElement('div');
     container.innerHTML = `
@@ -226,7 +274,7 @@ export function ensureHelpUI(){
   }
 
   // If missing, append the optional Advanced section (hidden by default)
-  if (overlay && !overlay.querySelector('#helpAdvanced')){
+  if (overlay && !overlay.querySelector('#helpAdvanced')) {
     const sheet = overlay.querySelector('.sheet') || overlay;
     const adv = document.createElement('div');
     adv.innerHTML = `
@@ -246,20 +294,37 @@ export function ensureHelpUI(){
   // --- wire open/close ---
   helpBtn = document.getElementById('shortcutsBtn');
   const closeBtn = overlay.querySelector('#shortcutsClose');
-  function openHelp(){ overlay.classList.remove('hidden'); helpBtn?.setAttribute('aria-expanded','true'); }
-  function closeHelp(){ overlay.classList.add('hidden'); helpBtn?.setAttribute('aria-expanded','false'); }
+  function openHelp() {
+    overlay.classList.remove('hidden');
+    helpBtn?.setAttribute('aria-expanded', 'true');
+  }
+  function closeHelp() {
+    overlay.classList.add('hidden');
+    helpBtn?.setAttribute('aria-expanded', 'false');
+  }
   if (helpBtn) helpBtn.onclick = openHelp;
   if (closeBtn) closeBtn.onclick = closeHelp;
-  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeHelp(); });
-  document.addEventListener('keydown', (e)=>{ if(e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) { e.preventDefault(); openHelp(); } });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeHelp();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '?' && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      openHelp();
+    }
+  });
 
   // --- Advanced: auto-restart speech toggle ---
   try {
     const chk = overlay.querySelector('#optRecAuto');
-    if (chk){
+    if (chk) {
       // reflect current state
       chk.checked = !!(window.recAutoRestart ?? true);
-      chk.addEventListener('change', ()=>{ try { window.recAutoRestart = !!chk.checked; } catch {} });
+      chk.addEventListener('change', () => {
+        try {
+          window.recAutoRestart = !!chk.checked;
+        } catch {}
+      });
     }
   } catch {}
 
@@ -268,7 +333,11 @@ export function ensureHelpUI(){
   if (normalizeBtn) {
     normalizeBtn.onclick = () => {
       if (typeof window.normalizeToStandard === 'function') {
-        try { window.normalizeToStandard(); } catch (e) { alert('Normalize error: ' + e.message); }
+        try {
+          window.normalizeToStandard();
+        } catch {
+          alert('Normalize error: ' + e.message);
+        }
         return;
       }
       // Shared fallback
@@ -282,22 +351,36 @@ export function ensureHelpUI(){
     validateBtn.onclick = () => {
       let msg = '';
       if (typeof window.validateStandardTags === 'function') {
-        try { msg = window.validateStandardTags(true); } catch { msg = 'Validation failed to run.'; }
+        try {
+          msg = window.validateStandardTags(true);
+        } catch {
+          msg = 'Validation failed to run.';
+        }
       } else {
         // fallback: simple counts
         const ta = document.getElementById('editor');
         const t = String(ta?.value || '');
         const count = (re) => (t.match(re) || []).length;
-        const s1 = count(/\[s1\]/gi), e1 = count(/\[\/s1\]/gi);
-        const s2 = count(/\[s2\]/gi), e2 = count(/\[\/s2\]/gi);
-        const sn = count(/\[note\]/gi), en = count(/\[\/note\]/gi);
+        const s1 = count(/\[s1\]/gi),
+          e1 = count(/\[\/s1\]/gi);
+        const s2 = count(/\[s2\]/gi),
+          e2 = count(/\[\/s2\]/gi);
+        const sn = count(/\[note\]/gi),
+          en = count(/\[\/note\]/gi);
         const problems = [];
         if (s1 !== e1) problems.push(`[s1] open ${s1} ≠ close ${e1}`);
         if (s2 !== e2) problems.push(`[s2] open ${s2} ≠ close ${e2}`);
         if (sn !== en) problems.push(`[note] open ${sn} ≠ close ${en}`);
-        msg = problems.length ? ('Markup issues:\n- ' + problems.join('\n- ')) : 'Markup looks consistent.';
+        msg = problems.length
+          ? 'Markup issues:\n- ' + problems.join('\n- ')
+          : 'Markup looks consistent.';
       }
-      try { showValidation(msg); } catch { showCopyDialog(msg, 'Validator'); }
+      try {
+        showValidation(msg);
+      } catch {
+        showCopyDialog(msg, 'Validator');
+      }
     };
   }
 }
+

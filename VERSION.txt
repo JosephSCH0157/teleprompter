@@ -1,4 +1,4 @@
-1.5.8
-ANVIL build: 2025-10-04 00:00
-Baseline: fix/scroll-geometry
-Notes: Virtual lines, soft advance, junk-anchor gate v2, cluster penalty, end-game easing, stall logs
+1.6.2
+ANVIL build: 2025-10-22 00:00
+Baseline: mainframe
+Notes: Per-viewport base speed persistence, mic re-request robustness, UI sanitization and minor stability fixes

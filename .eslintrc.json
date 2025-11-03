@@ -1,0 +1,63 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2021": true
+  },
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "modules": true
+    }
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "prettier"
+  ],
+  "globals": {
+    "HUD": "readonly",
+    "debug": "readonly",
+    "performance": "readonly",
+    "requestAnimationFrame": "readonly",
+    "SpeechRecognition": "writable",
+    "webkitSpeechRecognition": "writable"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "varsIgnorePattern": "^_", "argsIgnorePattern": "^_" }],
+    "no-console": "off",
+    "import/no-unresolved": "off",
+    "no-undef": "error",
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-useless-escape": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "scroll-helpers.js",
+        "scroll-control.js",
+        "io-anchor.js",
+        "help.js",
+        "eggs.js",
+        "recorders.js",
+        "adapters/**/*.js"
+      ],
+      "parserOptions": { "sourceType": "module" }
+    },
+    {
+      "files": ["teleprompter_pro.js"],
+      "rules": {
+        // Large browser IIFE with many window-attached globals
+        "no-undef": "off",
+        "no-unused-vars": ["warn", { "varsIgnorePattern": "^_|^camAwaitingAnswer$|^log$", "argsIgnorePattern": "^_" }]
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "releases/**",
+    "**/*.min.js"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["dom", "es2021"],
+  "allowJs": true,
+  "checkJs": false,
+    "strict": true,
+  "useUnknownInCatchVariables": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.js"],
+  "references": [
+    { "path": "src/logic" }
+  ]
+
+  ,"exclude": ["src/build-logic/**"]
+}
