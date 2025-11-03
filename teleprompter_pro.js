@@ -1,3 +1,15 @@
+// Legacy bundle guard: block if module boot already won; mark legacy boot otherwise
+(function(){
+  try {
+    if (window.__tpBooted && window.__tpBooted !== 'legacy') {
+      try { console.warn('[TP-Pro legacy] blocked: module already booted as', window.__tpBooted); } catch {}
+      return;
+    }
+    if (!window.__tpBooted) window.__tpBooted = 'legacy';
+    window.__tpBootCount = (window.__tpBootCount || 0) + 1;
+  } catch {}
+})();
+
 /* Teleprompter Pro — JS CLEAN (v1.5.8) */
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
