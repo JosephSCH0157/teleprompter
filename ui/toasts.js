@@ -10,7 +10,8 @@ function ensureContainer() {
   c = document.createElement('div');
   c.id = CONTAINER_ID;
   c.className = 'tp-toast-container';
-  document.body.appendChild(c);
+  // Append as early as possible; if body isn't ready, attach to documentElement
+  (document.body || document.documentElement).appendChild(c);
   return c;
 }
 function prune(container) {
@@ -82,13 +83,12 @@ try {
 (function(){
   try {
     if (typeof document === 'undefined') return;
-    if (document.body) {
-      try { initToastContainer(); } catch {}
-    } else {
-      document.addEventListener('DOMContentLoaded', function once(){
-        try { initToastContainer(); } catch {}
-      }, { once: true });
-    }
+    // Create immediately (falls back to documentElement before body exists)
+    try { ensureContainer(); } catch {}
+    // Also ensure after DOM is ready in case earlier attach was skipped by CSP or other loaders
+    document.addEventListener('DOMContentLoaded', function once(){
+      try { ensureContainer(); } catch {}
+    }, { once: true });
   } catch {}
 })();
 
