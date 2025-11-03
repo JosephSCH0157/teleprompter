@@ -16,4 +16,11 @@
   "eslint.useFlatConfig": false,
   "prettier.requireConfig": true,
   "problems.showCurrentInStatus": true
+  ,
+  // Keep all git operations local unless you explicitly choose otherwise in the Terminal.
+  // Prevent auto fetch/sync and any post-commit syncing from VS Code UI.
+  "git.autofetch": false,
+  "git.postCommitCommand": "none",
+  "git.enableSmartCommit": false,
+  "git.confirmSync": true
 }
