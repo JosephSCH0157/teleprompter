@@ -224,7 +224,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../help.js",
+      "text": "[init] import:../io-anchor.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -233,7 +233,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../io-anchor.js",
+      "text": "[init] import:../help.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -506,7 +506,7 @@
       "text": "[src/index] module imports complete",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 82,
+        "lineNumber": 84,
         "columnNumber": 10
       }
     },
@@ -524,7 +524,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 90,
+        "lineNumber": 92,
         "columnNumber": 12
       }
     },
@@ -619,12 +619,21 @@
       }
     },
     {
-      "type": "warning",
-      "text": "Self-checks UI failed",
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":3,\"w\":2},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 636,
+        "columnNumber": 30
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[self-checks] UI failed",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
-        "lineNumber": 12042,
-        "columnNumber": 16
+        "lineNumber": 12044,
+        "columnNumber": 24
       }
     },
     {
@@ -635,21 +644,12 @@
       }
     },
     {
-      "type": "log",
-      "text": "[HUD] {\"perf\":{\"r\":3,\"w\":2},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 636,
-        "columnNumber": 30
-      }
-    },
-    {
-      "type": "warning",
-      "text": "Self-checks UI failed",
+      "type": "debug",
+      "text": "[self-checks] UI failed",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
-        "lineNumber": 12042,
-        "columnNumber": 16
+        "lineNumber": 12044,
+        "columnNumber": 24
       }
     },
     {
@@ -765,7 +765,7 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 408,
+        "lineNumber": 410,
         "columnNumber": 10
       }
     },
@@ -812,15 +812,6 @@
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
         "lineNumber": 9954,
         "columnNumber": 37
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.js",
-        "lineNumber": 977,
-        "columnNumber": 20
       }
     },
     {
@@ -896,21 +887,21 @@
       }
     },
     {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
       "type": "log",
       "text": "[HUD:counts] {\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0}}",
       "location": {
         "url": "http://127.0.0.1:5180/teleprompter_pro.js",
         "lineNumber": 977,
         "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
       }
     },
     {
@@ -943,9 +934,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "ad5326792c420fb5ff928479dc5de1db27aa980d",
+      "gitSha": "4ee12aaa9a29fc468aa9da5c4642b4950fe91918",
       "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-11-03T13:22:33.284Z"
+      "buildTime": "2025-11-03T13:53:57.611Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

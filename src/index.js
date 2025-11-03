@@ -26,6 +26,8 @@ import './state/app-store.js';
 // Ensure inline formatter is present (provides window.formatInlineMarkup)
 import '../ui/format.js';
 import '../ui/inline-shim.js';
+// Legacy wrapSelection handler for toolbar buttons (ensures global exists in dev/CI)
+import '../ui/wrap-shim.js';
 // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
 // Lightweight toast system (attaches window.toast/initToastContainer)
 import '../ui/toasts.js';
