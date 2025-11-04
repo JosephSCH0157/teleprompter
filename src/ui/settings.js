@@ -244,35 +244,40 @@
         });
       }
 
-      // Camera device selector (Settings) — switch/start camera (single source of truth)
+      // --- Camera device selector: Settings ↔ Main mirror + live switching ---
       try {
-        const camSel = q('settingsCamSel');
-        if (camSel && !camSel.dataset.wired) {
-          camSel.dataset.wired = '1';
-          camSel.addEventListener('change', async (ev) => {
-            try {
-              try { ev && ev.stopImmediatePropagation && ev.stopImmediatePropagation(); } catch {}
-              try { ev && ev.preventDefault && ev.preventDefault(); } catch {}
-              const id = camSel.value;
-              try { localStorage.setItem('tp_camera_device_v1', String(id||'')); } catch {}
-              // Capture friendly label for toast feedback
-              const label = (function(){
-                try { const opt = camSel.options[camSel.selectedIndex]; return (opt && (opt.textContent||'').trim()) || 'Camera'; } catch { return 'Camera'; }
-              })();
-              const camApi = window.__tpCamera || {};
-              const camVideo = document.getElementById('camVideo');
-              const isActive = !!(camVideo && camVideo.srcObject);
-              if (isActive && typeof camApi.switchCamera === 'function') {
-                await camApi.switchCamera(id);
-                try { if (window.toast) window.toast('Camera set to ' + label, { type: 'ok' }); } catch {}
-              } else if (typeof camApi.startCamera === 'function') {
-                // Ensure Settings select reflects desired device before starting, since startCamera reads from DOM
-                await camApi.startCamera();
-                try { if (window.toast) window.toast('Camera set to ' + label, { type: 'ok' }); } catch {}
-              }
-            } catch (e) { try { console.warn('[settings] camera switch failed', e); } catch {} }
-          }, { capture: true });
+        const settingsCamSel = document.getElementById('settingsCamSel');
+        const camDeviceSel   = document.getElementById('camDevice');
+
+        function syncCamSelects(val) {
+          try { if (settingsCamSel && settingsCamSel.value !== val) settingsCamSel.value = val; } catch {}
+          try { if (camDeviceSel   && camDeviceSel.value   !== val) camDeviceSel.value   = val; } catch {}
+          try { if (val) localStorage.setItem('tp_camera_device_v1', val); } catch {}
         }
+
+        async function onCamPick(val) {
+          syncCamSelects(val);
+          const active = !!(document.getElementById('camVideo')?.srcObject);
+          if (active) {
+            try { await window.__tpCamera?.switchCamera?.(val); } catch (e) { console.warn('switchCamera (settings) failed', e); }
+          }
+        }
+
+        if (settingsCamSel && !settingsCamSel.dataset.wired) {
+          settingsCamSel.dataset.wired = '1';
+          settingsCamSel.addEventListener('change', () => onCamPick(settingsCamSel.value), { capture: true });
+        }
+
+        if (camDeviceSel && !camDeviceSel.dataset.wired) {
+          camDeviceSel.dataset.wired = '1';
+          camDeviceSel.addEventListener('change', () => onCamPick(camDeviceSel.value), { capture: true });
+        }
+
+        // Hydrate initial pick from storage (if present)
+        try {
+          const saved = localStorage.getItem('tp_camera_device_v1');
+          if (saved) syncCamSelects(saved);
+        } catch {}
       } catch {}
 
       // OBS enabled toggle: central write path

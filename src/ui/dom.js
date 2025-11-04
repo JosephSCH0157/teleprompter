@@ -146,6 +146,7 @@ function wireMic() {
 function wireCamera() {
   const start = $('startCam');
   const stop = $('stopCam');
+  const camSel= $('camDevice');
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
@@ -169,6 +170,13 @@ function wireCamera() {
       try { e.stopImmediatePropagation(); e.preventDefault(); } catch {}
       try { window.__tpCamera?.stopCamera?.(); } catch {}
       try { if (window.toast) window.toast('Camera stopped', { type: 'ok' }); } catch {}
+    }, { capture: true });
+  }
+  if (camSel && !camSel.dataset.captureWired) {
+    camSel.dataset.captureWired = '1';
+    camSel.addEventListener('change', (e) => {
+      try { e.stopPropagation(); e.stopImmediatePropagation?.(); } catch {}
+      try { window.__tpCamera?.switchCamera?.(camSel.value); } catch {}
     }, { capture: true });
   }
   on(size, 'input', () => { try { window.__tpCamera?.applyCamSizing?.(); } catch {} });
