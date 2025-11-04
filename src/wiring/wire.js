@@ -181,13 +181,20 @@ try {
 } catch {}
 
 function _normalizeObsCfg(raw){
+  const urlElA  = document.getElementById('settingsObsUrl') || document.getElementById('obsUrl') || null;
   const hostElA = document.getElementById('settingsOBSHost') || document.getElementById('settingsObsHost');
   const portElA = document.getElementById('settingsOBSPort') || document.getElementById('settingsObsPort');
   const secElA  = document.getElementById('settingsOBSSecure') || document.getElementById('settingsObsSecure');
   const pwElA   = document.getElementById('settingsOBSPassword') || document.getElementById('settingsObsPassword');
-  const host   = (raw?.host || hostElA?.value || '127.0.0.1').trim();
-  const port   = Number(raw?.port ?? portElA?.value ?? 4455) || 4455;
-  const secure = !!(raw?.secure ?? secElA?.checked);
+  // If a full URL is provided in the UI, prefer it
+  let urlStr = (raw?.url || urlElA?.value || '').toString().trim();
+  let parsedUrl = null;
+  if (urlStr) {
+    try { parsedUrl = new URL(urlStr); } catch { parsedUrl = null; }
+  }
+  const host   = (raw?.host || parsedUrl?.hostname || hostElA?.value || '127.0.0.1').trim();
+  const port   = Number(raw?.port ?? (parsedUrl?.port || portElA?.value) ?? 4455) || 4455;
+  const secure = !!(raw?.secure ?? (parsedUrl ? parsedUrl.protocol === 'wss:' : secElA?.checked));
   const password = String(raw?.password ?? pwElA?.value ?? '');
   const proto = secure ? 'wss' : 'ws';
   const url = `${proto}://${host}:${port}`;
@@ -460,12 +467,12 @@ try {
     window.connectWithSecureFallback = async (rawCfg, retryOn = /timeout|network|ECONN/i) => {
       const cfg = getObsCfg(rawCfg);
       let ok = false;
-      try { ok = await connectAndWait(cfg); } catch { ok = false; }
+      try { ok = await connectAndWaitUniversal(cfg); } catch { ok = false; }
       if (ok) return true;
       const errStr = (window.__tpObsLastErr || window.__tpObsConn?.getLastError?.() || '').toString();
       if (!retryOn.test(errStr)) return false;
       const flipped = { ...cfg, secure: !cfg.secure };
-      try { ok = await connectAndWait(flipped); } catch { ok = false; }
+      try { ok = await connectAndWaitUniversal(flipped); } catch { ok = false; }
       return !!ok;
     };
   }
@@ -484,7 +491,7 @@ async function _restoreObsOnBoot(){
 }
 
 export function wireObsPersistentUI(){
-  const box = document.getElementById('settingsEnableObs');
+  const box = document.getElementById('settingsEnableObs') || document.getElementById('enableObs');
   if (!box || box.__obsWired) return;
   box.__obsWired = true;
 
@@ -492,7 +499,7 @@ export function wireObsPersistentUI(){
     if (e.target.checked) {
       await updateObsPillConnecting();
       const cfg = (window.getObsCfg ? window.getObsCfg() : {});
-      const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWait(cfg));
+      const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWaitUniversal(cfg));
       if (ok) {
         // Prefer existing connection target (from universal connect); attach relays if missing
         let tgt = window.__tpObsConn || null;
