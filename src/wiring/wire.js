@@ -507,46 +507,68 @@ async function _restoreObsOnBoot(){
 }
 
 export function wireObsPersistentUI(){
-  const box = document.getElementById('settingsEnableObs') || document.getElementById('enableObs');
-  if (!box || box.__obsWired) return;
-  box.__obsWired = true;
+  if (window.__tpObsPersistentUIWired) return;
+  window.__tpObsPersistentUIWired = true;
 
-  box.addEventListener('change', async (e) => {
-    if (e.target.checked) {
-      await updateObsPillConnecting();
-      const cfg = (window.getObsCfg ? window.getObsCfg() : {});
-      const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWaitUniversal(cfg));
-      if (ok) {
-        // Prefer existing connection target (from universal connect); attach relays if missing
-        let tgt = window.__tpObsConn || null;
-        if (!tgt) tgt = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
-        if (tgt) { try { attachObsRelays(tgt); startObsPing(); } catch {} }
-      }
-      await updateObsPill();
-    } else {
-      try {
-        const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
-        await s?.disconnect?.();
-      } catch {}
-      try { window.__tpObsConnected = false; window.__tpObsLastErr = null; } catch {}
-      await updateObsPill();
+  const OBS_EN_KEY = 'tp_obs_enabled_v1';
+  const getBox = () => document.getElementById('settingsEnableObs') || document.getElementById('enableObs') || null;
+
+  async function doConnectFlow(fromEl){
+    try { ensureObsPill(fromEl, 'OBS: connecting…'); } catch {}
+    await updateObsPillConnecting();
+    const cfg = (window.getObsCfg ? window.getObsCfg() : {});
+    const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWaitUniversal(cfg));
+    if (ok) {
+      let tgt = window.__tpObsConn || null;
+      if (!tgt) tgt = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+      if (tgt) { try { attachObsRelays(tgt); startObsPing(); } catch {} }
     }
-  });
-  // Boot restore with explicit pill updates
-  (async () => {
-    if (box.checked) {
-      await updateObsPillConnecting();
+    await updateObsPill();
+  }
+
+  async function doDisconnectFlow(){
+    try {
+      const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+      await s?.disconnect?.();
+    } catch {}
+    try { window.__tpObsConnected = false; window.__tpObsLastErr = null; } catch {}
+    await updateObsPill();
+  }
+
+  // Delegate change so it works even if Settings mounts later
+  if (!window.__tpObsEnableDelegate) {
+    window.__tpObsEnableDelegate = true;
+    document.addEventListener('change', async (e) => {
       try {
-        const cfg = (window.getObsCfg ? window.getObsCfg() : {});
-        const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWait(cfg));
-        if (ok) {
-          const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
-          if (s) { try { window.__tpObsConn = s; attachObsRelays(s); startObsPing(); } catch {} }
-        }
+        const t = e?.target?.closest?.('#settingsEnableObs,#enableObs');
+        if (!t) return;
+        const on = !!t.checked;
+        try { localStorage.setItem(OBS_EN_KEY, on ? '1' : '0'); } catch {}
+        if (on) await doConnectFlow(t); else await doDisconnectFlow();
       } catch {}
-      await updateObsPill();
-    }
-  })();
+    }, { capture: true });
+  }
+
+  // If checkbox exists now, wire boot-restore using its state; else observe for later
+  const box = getBox();
+  const desiredOn = (() => { try { return localStorage.getItem(OBS_EN_KEY) === '1'; } catch { return false; } })();
+  const runBootRestore = async (el) => {
+    try {
+      const shouldEnable = (el && el.checked) || desiredOn;
+      if (shouldEnable) await doConnectFlow(el || null);
+    } catch {}
+  };
+  if (box) {
+    if (!box.__obsWiredOnce) { box.__obsWiredOnce = true; runBootRestore(box); }
+  } else {
+    try {
+      const mo = new MutationObserver(() => {
+        const b = getBox();
+        if (b && !b.__obsWiredOnce) { b.__obsWiredOnce = true; runBootRestore(b); }
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch {}
+  }
 }
 
 // One-shot health check for dev/smoke convenience
