@@ -241,14 +241,20 @@
             try {
               const id = camSel.value;
               try { localStorage.setItem('tp_camera_device_v1', String(id||'')); } catch {}
+              // Capture friendly label for toast feedback
+              const label = (function(){
+                try { const opt = camSel.options[camSel.selectedIndex]; return (opt && (opt.textContent||'').trim()) || 'Camera'; } catch { return 'Camera'; }
+              })();
               const camApi = window.__tpCamera || {};
               const camVideo = document.getElementById('camVideo');
               const isActive = !!(camVideo && camVideo.srcObject);
               if (isActive && typeof camApi.switchCamera === 'function') {
                 await camApi.switchCamera(id);
+                try { if (window.toast) window.toast('Camera set to ' + label, { type: 'ok' }); } catch {}
               } else if (typeof camApi.startCamera === 'function') {
                 // Ensure Settings select reflects desired device before starting, since startCamera reads from DOM
                 await camApi.startCamera();
+                try { if (window.toast) window.toast('Camera set to ' + label, { type: 'ok' }); } catch {}
               }
             } catch (e) { try { console.warn('[settings] camera switch failed', e); } catch {} }
           });
