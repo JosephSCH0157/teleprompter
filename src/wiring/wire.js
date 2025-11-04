@@ -234,7 +234,7 @@ async function connectAndWait(cfgRaw){
   }
   window.__tpObsConn = s;
   try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {}
-  return s;
+  return true;
 }
 
 function getObsCfg(raw){ return _normalizeObsCfg(raw); }
@@ -250,7 +250,7 @@ async function obsDisconnectPersistent(){
   try { window.__tpObsConnected = false; } catch {}
 }
 
-async function restoreObsOnBoot(){
+async function _restoreObsOnBoot(){
   const box = document.getElementById('settingsEnableObs');
   if (!box?.checked) return;
   try { await obsConnectPersistent(); } catch (e) { console.warn('[obs] restore failed', e); }
@@ -260,9 +260,60 @@ export function wireObsPersistentUI(){
   const box = document.getElementById('settingsEnableObs');
   if (!box || box.__obsWired) return;
   box.__obsWired = true;
-  box.addEventListener('change', (e) => {
-    if (e.target.checked) obsConnectPersistent();
-    else obsDisconnectPersistent();
+  // UI helpers for pill/status
+  async function updateObsPillConnecting(){
+    const el = document.getElementById('obsStatusText');
+    if (el) el.textContent = 'OBS: connecting…';
+  }
+  async function updateObsPill(){
+    const el = document.getElementById('obsStatusText');
+    if (!el) return;
+    const dbg = await (window.__obsDebug ? window.__obsDebug() : Promise.resolve({ connected:false, lastError:null }));
+    el.textContent = dbg.connected ? 'OBS: connected' : `OBS: ${dbg.lastError || 'off'}`;
+  }
+
+  box.addEventListener('change', async (e) => {
+    if (e.target.checked) {
+      await updateObsPillConnecting();
+      // Try normal connect; on timeout/network-like error, flip secure and retry once
+      let cfg = getObsCfg();
+      let ok = false;
+  try { ok = await connectAndWait(cfg); } catch { ok = false; }
+      if (!ok) {
+        const err = (window.__tpObsLastErr || '').toString();
+        if (!err || /timeout|network/i.test(err)) {
+          try {
+            cfg = { ...cfg, secure: !cfg.secure };
+            ok = await connectAndWait(cfg);
+          } catch {}
+        }
+      }
+      await updateObsPill();
+    } else {
+      try { await window.__tpObsConn?.stop?.(); } catch {}
+      try { await obsDisconnectPersistent(); } catch {}
+      try { window.__tpObsConnected = false; } catch {}
+      await updateObsPill();
+    }
   });
-  restoreObsOnBoot();
+  // Boot restore with explicit pill updates
+  (async () => {
+    if (box.checked) {
+      await updateObsPillConnecting();
+      try { await obsConnectPersistent(); } catch {}
+      await updateObsPill();
+    }
+  })();
 }
+
+// One-shot health check for dev/smoke convenience
+try {
+  if (typeof window.__obsHealth !== 'function') {
+    window.__obsHealth = async () => {
+      try { await waitForObsSurface(1000); } catch { return { ok:false, reason:'no-surface' }; }
+      const ok = await connectAndWait(getObsCfg());
+      const dbg = await (window.__obsDebug ? window.__obsDebug() : Promise.resolve({}));
+      return { ok, dbg };
+    };
+  }
+} catch {}
