@@ -122,13 +122,15 @@ export function initSettingsWiring() {
       // Consult unified getters so debug reflects true state
       window.__obsDebug = () => {
         try {
-          const R = getRecorder();
-          const hasAdapter = !!(R && typeof R.get === 'function' && R.get('obs'));
+          const hasRealAdapter = !!(window.__obsAdapter);
           const hasBridge = !!window.__obsBridge;
           const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
-          const connected = !!(s && ((typeof s.isIdentified === 'function' && s.isIdentified()) || s.connected || s.identified));
+          const conn = window.__tpObsConn || null;
+          const byConn = !!(conn && ((typeof conn.isIdentified === 'function' && conn.isIdentified()) || conn.connected === true || conn.identified === true || (conn.ws && conn.ws.readyState === 1)));
+          const bySurf = !!(s && ((typeof s.isIdentified === 'function' && s.isIdentified()) || s.connected === true || s.identified === true || (s.ws && s.ws.readyState === 1)));
+          const connected = !!(window.__tpObsConnected || byConn || bySurf);
           const lastError = window.__tpObsLastErr ?? null;
-          return { hasAdapter, hasBridge, connected, lastError };
+          return { hasAdapter: hasRealAdapter, hasBridge, connected, lastError };
         } catch {
           return { hasAdapter:false, hasBridge:!!window.__obsBridge, connected:false, lastError: window.__tpObsLastErr ?? null };
         }
@@ -159,9 +161,18 @@ function getRecorder() {
 try {
   if (typeof window.getObsSurface !== 'function') {
     window.getObsSurface = function getObsSurface() {
+      // Prefer the real adapter if exposed, then the legacy bridge
+      const a = window.__obsAdapter || null;
+      if (a) return a;
+      if (window.__obsBridge) return window.__obsBridge;
+      // Fall back to registry, but avoid returning the stub surface
       const R = getRecorder();
-      const adapter = R?.get?.('obs');
-      return adapter || window.__obsBridge || null;
+      const cand = R?.get?.('obs') || null;
+      if (cand && !(cand.request || cand.on) && cand.state && cand.setEnabled) {
+        // Looks like the minimal stub; ignore to prevent false surface
+        return null;
+      }
+      return cand;
     };
   }
   if (typeof window.getRecorder !== 'function') {
@@ -186,7 +197,9 @@ function _normalizeObsCfg(raw){
 async function waitForObsSurface(timeout = 4000){
   const t0 = performance.now();
   for (;;) {
-    const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : (window.__recorder?.get?.('obs') || window.__obsBridge || null);
+    let s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : (window.__obsAdapter || window.__obsBridge || window.__recorder?.get?.('obs') || null);
+    // Skip obvious stub (no event/request API, just state/init/connect/disconnect/setEnabled)
+    if (s && !(s.request || s.on) && s.state && s.setEnabled) s = null;
     if (s) return s;
     if (performance.now() - t0 > timeout) return null;
     await _sleep(50);
@@ -481,9 +494,10 @@ export function wireObsPersistentUI(){
       const cfg = (window.getObsCfg ? window.getObsCfg() : {});
       const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWait(cfg));
       if (ok) {
-        // Update conn pointer using unified surface and attach relays/ping
-        const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
-        if (s) { try { window.__tpObsConn = s; attachObsRelays(s); startObsPing(); } catch {} }
+        // Prefer existing connection target (from universal connect); attach relays if missing
+        let tgt = window.__tpObsConn || null;
+        if (!tgt) tgt = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+        if (tgt) { try { attachObsRelays(tgt); startObsPing(); } catch {} }
       }
       await updateObsPill();
     } else {
