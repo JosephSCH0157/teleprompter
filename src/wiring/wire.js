@@ -133,6 +133,38 @@ export function initSettingsWiring() {
         };
       }
     } catch {}
+
+    // Expose wait helpers for DevTools parity: waitForObsSurface/connectAndWait
+    try {
+      if (typeof window.waitForObsSurface !== 'function') {
+        window.waitForObsSurface = async (timeout = 5000) => {
+          const t0 = performance.now();
+          while (performance.now() - t0 < timeout) {
+            try {
+              const reg = window.__recorder;
+              const surface = reg?.get?.('obs');
+              if (surface && typeof surface.connect === 'function') return surface;
+              if (window.__obsBridge && typeof window.__obsBridge.connect === 'function') return window.__obsBridge;
+            } catch {}
+            await new Promise(r => setTimeout(r, 50));
+          }
+          throw new Error('[obs] surface not ready (adapter/bridge missing)');
+        };
+      }
+      if (typeof window.connectAndWait !== 'function') {
+        window.connectAndWait = async (cfg, connectTimeout = 6000) => {
+          const surface = await window.waitForObsSurface();
+          try { if (surface.isConnected && await surface.isConnected()) return surface; } catch {}
+          try { surface.connect(cfg); } catch {}
+          const t0 = performance.now();
+          while (performance.now() - t0 < connectTimeout) {
+            try { if (await surface.isConnected?.()) return surface; } catch {}
+            await new Promise(r => setTimeout(r, 150));
+          }
+          throw new Error('[obs] connect timeout');
+        };
+      }
+    } catch {}
   } catch {}
 }
 
