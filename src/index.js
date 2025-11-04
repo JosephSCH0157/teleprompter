@@ -102,8 +102,14 @@ async function boot() {
     await loadLegacyPiecesAsModules();
     // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
     try {
+      // Ensure HUD installer exists (load fallback if not already present)
+      if (typeof window.__tpInstallHUD !== 'function') {
+        try { await import('../debug-tools.js'); } catch {}
+      }
       if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
         window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+        // Auto-show HUD in dev sessions for visibility
+        try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch {}
       }
       // Expose a tiny ensureHud() poke for dev; prefer full HUD toggle, else fallback
       if (typeof window.ensureHud !== 'function') {
@@ -155,6 +161,22 @@ async function boot() {
           } catch {}
         }, { capture: true });
       }
+      // If HUD is present, mirror speech gates to it for visibility
+      try {
+        const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
+        window.addEventListener('tp:db', (ev) => {
+          try {
+            const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
+            if (db != null) logHud('speech:db', { db });
+          } catch {}
+        });
+        window.addEventListener('tp:vad', (ev) => {
+          try {
+            const speaking = !!(ev && ev.detail && ev.detail.speaking);
+            logHud('speech:vad', { speaking });
+          } catch {}
+        });
+      } catch {}
     } catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');

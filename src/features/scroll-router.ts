@@ -518,6 +518,15 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let enabledNow: boolean = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
   let silenceTimer: number | undefined;
 
+  // Speed tracking to avoid jumps when engine doesn't expose current speed
+  let lastSpeed: number = (() => {
+    try {
+      const s = Number(opts.auto.getState?.().speed);
+      if (Number.isFinite(s) && s > 0) return s;
+    } catch {}
+    try { return Number(localStorage.getItem('tp_auto_speed') || '60') || 60; } catch { return 60; }
+  })();
+
   // Chip helpers
   const chipEl = () => document.getElementById('autoChip');
   function emitAutoState() {
