@@ -125,8 +125,14 @@ export function initSettingsWiring() {
           const hasAdapter = !!(window && window.__tpOBS);
           let connected = false;
           try {
-            const c = window.__tpObsConn;
-            if (c && typeof c.isIdentified === 'function') connected = !!c.isIdentified();
+            // Prefer surface isConnected() if recorder bridge provides it
+            const s = window.__recorder?.get?.('obs');
+            if (s && typeof s.isConnected === 'function') {
+              connected = !!(await s.isConnected());
+            } else {
+              const c = window.__tpObsConn;
+              if (c && typeof c.isIdentified === 'function') connected = !!c.isIdentified();
+            }
           } catch {}
           try { console.table({ hasAdapter, hasBridge, connected }); } catch {}
           return { hasAdapter, hasBridge, connected };
@@ -212,9 +218,18 @@ export default initSettingsWiring;
         if (el.en.checked) {
           // Close any previous connection first
           try { if (window.__tpObsConn && typeof window.__tpObsConn.close === 'function') window.__tpObsConn.close(); } catch {}
-          // Open and retain connection for debug helpers and status
-          const conn = obs.connect(opts);
-          try { window.__tpObsConn = conn; } catch {}
+          // Open and retain connection for debug helpers and status.
+          // Prefer robust path if available.
+          if (typeof window.connectAndWait === 'function') {
+            try {
+              await window.connectAndWait(opts);
+            } catch (e) {
+              console.warn('[obs] connectAndWait failed; falling back to direct connect', e);
+              try { window.__tpObsConn = obs.connect(opts); } catch {}
+            }
+          } else {
+            try { window.__tpObsConn = obs.connect(opts); } catch {}
+          }
           // optional UI nudge
           try { if (typeof obs.pokeStatusTest === 'function') obs.pokeStatusTest(); } catch {}
         } else {
@@ -228,6 +243,8 @@ export default initSettingsWiring;
     }
 
     // Toggle wiring
+    if (el.en.__obsWired) return; // idempotent per element
+    el.en.__obsWired = true;
     el.en.addEventListener('change', applyEnableState, { passive: true });
 
     // If connection details change while enabled, reconnect with new opts
@@ -250,3 +267,26 @@ export default initSettingsWiring;
     console.debug('OBS persistent wiring skipped:', e);
   }
 })();
+
+// Export an explicit wiring hook (idempotent) for callers that prefer manual control
+export function wireObsPersistentUI() {
+  try {
+    const box = document.getElementById('settingsEnableObs');
+    if (!box) return;
+    if (box.__obsWired) return; // already wired by setupPersistentObs
+    // Minimal restore if already enabled
+    if (box.checked && typeof window.connectAndWait === 'function') {
+      const hostEl = document.getElementById('settingsObsHost');
+      const portEl = document.getElementById('settingsObsPort');
+      const secEl  = document.getElementById('settingsObsSecure');
+      const pwEl   = document.getElementById('settingsObsPassword');
+      const opts = {
+        host: (hostEl && hostEl.value || '127.0.0.1').trim(),
+        port: parseInt(portEl && portEl.value || '4455', 10) || 4455,
+        secure: !!(secEl && secEl.checked),
+        password: (pwEl && pwEl.value) || '',
+      };
+      try { window.connectAndWait(opts).catch(() => {}); } catch {}
+    }
+  } catch {}
+}
