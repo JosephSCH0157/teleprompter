@@ -17,7 +17,7 @@ const $id = (id) => { try { return document.getElementById(id); } catch { return
 let IS_HYDRATING = false;
 let HYDRATE_SCHEDULED = false;
 
-// Global capture-phase guard for camera controls to swallow legacy bubble listeners
+// Global guard for camera controls to swallow any stray legacy bubble listeners
 try {
   if (!window.__tpCamGlobalCaptureGuard) {
     window.__tpCamGlobalCaptureGuard = true;
@@ -28,7 +28,7 @@ try {
         e.stopPropagation();
         e.stopImmediatePropagation?.();
       } catch {}
-    }, { capture: true });
+    }, { capture: false });
   }
 } catch {}
 
