@@ -309,6 +309,7 @@ async function _universalObsConnect(surface, rawCfg = {}) {
 function _obsIsConnected(surface) {
   try {
     if (typeof surface.isConnected === 'function') return surface.isConnected();
+    if (typeof surface.isIdentified === 'function') return surface.isIdentified();
     // tolerant flags
     if ('connected' in surface) return !!surface.connected;
     if ('identified' in surface) return !!surface.identified;
@@ -338,12 +339,20 @@ async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
   while (Date.now() - t0 < timeoutMs) {
     // prefer method if present
     const target = (conn && typeof conn === 'object') ? conn : surface;
+    // Attach relays immediately so 'identified' flips pill/flags even if we time out here
+    try {
+      if (!target.__tpObsRelaysAttached) {
+        attachObsRelays(target);
+        target.__tpObsRelaysAttached = true;
+        updateObsPillConnecting();
+      }
+    } catch {}
     const ok = await Promise.resolve(_obsIsConnected(target));
     if (ok) {
       window.__tpObsConn = target;
       window.__tpObsConnected = true;
       window.__tpObsLastErr = null;
-      try { attachObsRelays(target); startObsPing(); } catch {}
+      try { startObsPing(); } catch {}
       return true;
     }
     await new Promise(r => setTimeout(r, pollMs));
@@ -361,13 +370,20 @@ try { if (typeof window.connectAndWaitUniversal !== 'function') window.connectAn
 // Relay OBS events to keep the pill honest across reconnects
 function attachObsRelays(surface){
   try {
+    if (surface.__tpObsRelaysAttached) return;
     const on = surface?.on?.bind(surface);
     if (!on) return;
     on('open',       () => { try { window.__tpObsConnected = false; } catch {} updateObsPillConnecting(); });
-    on('identified', () => { try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {} updateObsPill(); startObsPing(); });
+    on('identified', () => {
+      try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {}
+      updateObsPill();
+      startObsPing();
+      try { window.toast && window.toast('OBS connected'); } catch {}
+    });
     on('close',      () => { try { window.__tpObsConnected = false; window.__tpObsLastErr = 'closed'; } catch {} updateObsPill(); stopObsPing(); });
     on('closed',     () => { try { window.__tpObsConnected = false; window.__tpObsLastErr = 'closed'; } catch {} updateObsPill(); stopObsPing(); });
     on('error',      (e) => { try { window.__tpObsConnected = false; window.__tpObsLastErr = (e && e.message) || 'error'; } catch {} updateObsPill(); });
+    surface.__tpObsRelaysAttached = true;
   } catch {}
 }
 
