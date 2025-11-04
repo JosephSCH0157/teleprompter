@@ -150,12 +150,23 @@
         fill('settingsMicSel', mics);
         fill('micDeviceSel', mics); // keep main panel in sync if present
         fill('settingsCamSel', cams);
-        // Apply persisted camera preference if available
+        // Apply persisted mic/cam preferences if available
         try {
-          const sel = document.getElementById('settingsCamSel');
-          const saved = (function(){ try { return localStorage.getItem('tp_camera_device_v1'); } catch { return null; } })();
-          if (sel && saved && Array.from(sel.options).some(o => o.value === saved)) {
-            sel.value = saved;
+          // Mic preference: prefer app store, else localStorage fallback
+          const micSel = document.getElementById('settingsMicSel');
+          let micSaved = null;
+          try { const S = window.__tpStore; micSaved = (S && typeof S.get === 'function' && S.get('micDevice')) || null; } catch {}
+          if (!micSaved) { try { micSaved = localStorage.getItem('tp_mic_device_v1'); } catch {} }
+          if (micSel && micSaved && Array.from(micSel.options).some(o => o.value === micSaved)) {
+            micSel.value = micSaved;
+          }
+        } catch {}
+        try {
+          // Camera preference from localStorage
+          const camSel = document.getElementById('settingsCamSel');
+          const camSaved = (function(){ try { return localStorage.getItem('tp_camera_device_v1'); } catch { return null; } })();
+          if (camSel && camSaved && Array.from(camSel.options).some(o => o.value === camSaved)) {
+            camSel.value = camSaved;
           }
         } catch {}
         // Update visible current device name in Settings if present
@@ -200,11 +211,12 @@
         }
       } catch {}
 
-      // Wire mic device selector (persist to store when available; mirror main panel select)
+      // Wire mic device selector (persist to store + localStorage; mirror main panel select)
       try {
         const sel = q('settingsMicSel');
         if (sel) sel.addEventListener('change', () => {
           try { if (hasStore) S.set('micDevice', sel.value); } catch {}
+          try { localStorage.setItem('tp_mic_device_v1', String(sel.value||'')); } catch {}
           try { const main = q('micDeviceSel') || q('micDevice'); if (main && main.value !== sel.value) main.value = sel.value; } catch {}
           try { const nameSpan = q('settingsMicDeviceName'); const opt = sel.options[sel.selectedIndex]; if (nameSpan) nameSpan.textContent = opt ? (opt.textContent||'Microphone') : '—'; } catch {}
         });
@@ -221,7 +233,7 @@
       const settingsMicSel = q('settingsMicSel');
       const micDeviceSel = q('micDeviceSel') || q('micDevice') || q('micDeviceSel');
       if (settingsMicSel) {
-        settingsMicSel.addEventListener('change', () => S.set('micDevice', settingsMicSel.value));
+        settingsMicSel.addEventListener('change', () => { try { S.set('micDevice', settingsMicSel.value); } catch {} try { localStorage.setItem('tp_mic_device_v1', String(settingsMicSel.value||'')); } catch {} });
       }
       if (hasStore && typeof S.subscribe === 'function') {
         S.subscribe('micDevice', v => {
