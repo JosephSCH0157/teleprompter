@@ -223,12 +223,15 @@ function attachObsRelays(surface){
 }
 
 // Pill/status helpers (shared)
+function _getObsPillEl(){
+  return document.getElementById('obsStatusText') || document.getElementById('settingsObsStatus') || null;
+}
 async function updateObsPillConnecting(){
-  const el = document.getElementById('obsStatusText');
+  const el = _getObsPillEl();
   if (el) el.textContent = 'OBS: connecting…';
 }
 async function updateObsPill(){
-  const el = document.getElementById('obsStatusText');
+  const el = _getObsPillEl();
   if (!el) return;
   const dbg = await (window.__obsDebug ? window.__obsDebug() : Promise.resolve({ connected:false, lastError:null }));
   el.textContent = dbg.connected ? 'OBS: connected' : `OBS: ${dbg.lastError || 'off'}`;

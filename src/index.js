@@ -105,6 +105,17 @@ async function boot() {
       if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
         window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
       }
+      // Expose a tiny ensureHud() poke for dev to bring it up if needed
+      if (typeof window.ensureHud !== 'function') {
+        window.ensureHud = () => {
+          try {
+            if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
+              window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+            }
+            try { window.__tpHud?.show?.(); } catch {}
+          } catch {}
+        };
+      }
     } catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');
