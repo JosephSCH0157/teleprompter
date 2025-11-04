@@ -248,6 +248,6 @@ export function createOBSAdapter() {
   };
   // Cheap safety line: expose adapter for console debug and unified discovery fallbacks
   try { if (!window.__obsAdapter) window.__obsAdapter = adapter; } catch {}
-  try { window.__recorder = window.__recorder || (typeof requireRecorderSomehow === 'function' ? requireRecorderSomehow() : window.__recorder); } catch {}
+  try { window.__recorder = window.__recorder || (typeof window.requireRecorderSomehow === 'function' ? window.requireRecorderSomehow() : window.__recorder); } catch {}
   return adapter;
 }

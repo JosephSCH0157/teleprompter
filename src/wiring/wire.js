@@ -279,7 +279,8 @@ async function _universalObsConnect(surface, rawCfg = {}) {
   for (const t of tries) {
     try {
       const rv = await t();
-      return rv || surface; // prefer returned connection/emitter when available
+      // Only treat returned value as a connection/emitter if it's an object
+      return (rv && typeof rv === 'object') ? rv : null;
     } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('OBS connect failed');
@@ -316,7 +317,7 @@ async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
   // wait for “really ready”
   while (Date.now() - t0 < timeoutMs) {
     // prefer method if present
-    const target = conn || surface;
+    const target = (conn && typeof conn === 'object') ? conn : surface;
     const ok = await Promise.resolve(_obsIsConnected(target));
     if (ok) {
       window.__tpObsConn = target;
@@ -327,7 +328,7 @@ async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
     }
     await new Promise(r => setTimeout(r, pollMs));
   }
-  window.__tpObsConn = conn || surface;
+  window.__tpObsConn = (conn && typeof conn === 'object') ? conn : surface;
   window.__tpObsConnected = false;
   window.__tpObsLastErr = 'timeout';
   return false;
@@ -408,11 +409,15 @@ async function connectAndWait(cfgRaw){
   let conn = null;
   try {
     if (typeof s.connect === 'function') {
-      conn = s.connect({ url: cfg.url, password: cfg.password, ...cfg });
+      const rv = s.connect({ url: cfg.url, password: cfg.password, ...cfg });
+      conn = (rv && typeof rv === 'object') ? rv : null;
     }
   } catch (e) {
     console.warn('[obs] connect threw, retrying with host/port shape', e);
-    try { conn = s.connect({ host: cfg.host, port: cfg.port, secure: cfg.secure, password: cfg.password }); }
+    try {
+      const rv2 = s.connect({ host: cfg.host, port: cfg.port, secure: cfg.secure, password: cfg.password });
+      conn = (rv2 && typeof rv2 === 'object') ? rv2 : null;
+    }
     catch (e2) { console.warn('[obs] second connect form threw', e2); }
   }
   const target = conn || s;
