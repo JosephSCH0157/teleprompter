@@ -453,12 +453,12 @@ async function boot() {
           const onChange = () => { try { Auto.setSpeed(inp.value); } catch {} };
           inp.addEventListener('input', onChange, { capture: true });
           inp.addEventListener('change', onChange, { capture: true });
-          // Wheel on input adjusts ±1 (Shift: ±5)
+          // Wheel on input adjusts ±0.5 (Shift: ±5)
           inp.addEventListener('wheel', (ev) => {
             try {
               // eslint-disable-next-line no-restricted-syntax
               ev.preventDefault();
-              const step = ev.shiftKey ? 5 : 1;
+              const step = ev.shiftKey ? 5 : 0.5;
               const dir = (ev.deltaY < 0) ? +1 : -1;
               const cur = Number(inp.value || '0') || 0;
               const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 100) / 100));

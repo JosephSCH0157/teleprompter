@@ -422,13 +422,14 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         // ignore when typing/selecting or with modifiers
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || (target as any).isContentEditable) return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
-        const wantUp = e.key === '+' || e.code === 'NumpadAdd' || e.key === 'ArrowUp';
-        const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
+  const wantUp = e.key === '+' || e.code === 'NumpadAdd' || e.key === 'ArrowUp';
+  const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
         if (!wantUp && !wantDown) return;
         e.preventDefault();
         const got = Number(auto?.getState?.().speed);
         const cur = (Number.isFinite(got) && got > 0) ? got : (Number.isFinite(lastSpeed) ? lastSpeed : getStoredSpeed());
-        const next = cur + (wantUp ? 5 : -5);
+  const step = e.shiftKey ? 5 : 0.5;
+  const next = cur + (wantUp ? step : -step);
         auto?.setSpeed?.(next);
         lastSpeed = next;
       } catch {}
