@@ -210,6 +210,102 @@ async function _isObsUp(surface){
   return false;
 }
 
+// --- BEGIN: universal OBS connect helpers ---
+function _buildObsUrl(cfg) {
+  if (cfg?.url) return cfg.url;
+  const host = cfg?.host || '127.0.0.1';
+  const port = Number(cfg?.port ?? 4455);
+  const secure = !!cfg?.secure;
+  return `${secure ? 'wss' : 'ws'}://${host}:${port}`;
+}
+
+async function _callMaybe(fn, ...a) {
+  try { return await fn(...a); } catch (e) { return Promise.reject(e); }
+}
+
+async function _universalObsConnect(surface, rawCfg = {}) {
+  const cfg = {
+    host: rawCfg.host ?? '127.0.0.1',
+    port: rawCfg.port ?? 4455,
+    secure: !!rawCfg.secure,
+    password: rawCfg.password ?? '',
+    url: rawCfg.url || null,
+  };
+  const url = _buildObsUrl(cfg);
+
+  // try common signatures in order
+  const tries = [];
+  if (typeof surface.connect === 'function') {
+    // 1) connect({url,password})
+    tries.push(() => _callMaybe(surface.connect.bind(surface), { url, password: cfg.password, host: cfg.host, port: cfg.port, secure: cfg.secure }));
+    // 2) connect(url, password)
+    tries.push(() => _callMaybe(surface.connect.bind(surface), url, cfg.password));
+    // 3) connect(url)
+    tries.push(() => _callMaybe(surface.connect.bind(surface), url));
+  }
+  if (typeof surface.open === 'function') {
+    // some bridges expose open(...)
+    tries.push(() => _callMaybe(surface.open.bind(surface), url, cfg.password));
+  }
+  if (!tries.length) throw new Error('No connect/open method on OBS surface');
+
+  let lastErr;
+  for (const t of tries) {
+    try { await t(); return true; } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('OBS connect failed');
+}
+
+function _obsIsConnected(surface) {
+  try {
+    if (typeof surface.isConnected === 'function') return surface.isConnected();
+    // tolerant flags
+    if ('connected' in surface) return !!surface.connected;
+    if ('identified' in surface) return !!surface.identified;
+    if (surface.ws && surface.ws.readyState === 1) return true;
+  } catch {}
+  return false;
+}
+
+async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
+  const surface = (window.__recorder?.get?.('obs')) || window.__obsBridge || null;
+  if (!surface) {
+    window.__tpObsConnected = false;
+    window.__tpObsLastErr = 'no-surface';
+    return false;
+  }
+
+  try {
+    await _universalObsConnect(surface, rawCfg);
+  } catch (e) {
+    window.__tpObsConnected = false;
+    window.__tpObsLastErr = (e && e.message) || 'connect-error';
+    return false;
+  }
+
+  const t0 = Date.now();
+  // wait for “really ready”
+  while (Date.now() - t0 < timeoutMs) {
+    // prefer method if present
+    const ok = await Promise.resolve(_obsIsConnected(surface));
+    if (ok) {
+      window.__tpObsConn = surface;
+      window.__tpObsConnected = true;
+      window.__tpObsLastErr = null;
+      return true;
+    }
+    await new Promise(r => setTimeout(r, pollMs));
+  }
+  window.__tpObsConn = surface;
+  window.__tpObsConnected = false;
+  window.__tpObsLastErr = 'timeout';
+  return false;
+}
+
+// expose a single, obvious entrypoint the UI can use
+try { if (typeof window.connectAndWaitUniversal !== 'function') window.connectAndWaitUniversal = connectAndWaitUniversal; } catch {}
+// --- END: universal OBS connect helpers ---
+
 // Relay OBS events to keep the pill honest across reconnects
 function attachObsRelays(surface){
   try {
@@ -344,7 +440,10 @@ export function wireObsPersistentUI(){
   box.addEventListener('change', async (e) => {
     if (e.target.checked) {
       await updateObsPillConnecting();
-  await window.connectWithSecureFallback(getObsCfg());
+      const cfg = (window.getObsCfg ? window.getObsCfg() : {});
+      const ok = await (window.connectAndWaitUniversal ? window.connectAndWaitUniversal(cfg) : connectAndWait(cfg));
+      // Attach relays + ping if we have a live surface
+      if (ok && window.__tpObsConn) { try { attachObsRelays(window.__tpObsConn); startObsPing(); } catch {} }
       await updateObsPill();
     } else {
       try { await window.__tpObsConn?.stop?.(); } catch {}
@@ -357,7 +456,11 @@ export function wireObsPersistentUI(){
   (async () => {
     if (box.checked) {
       await updateObsPillConnecting();
-      try { await window.connectWithSecureFallback(getObsCfg()); } catch {}
+      try {
+        const cfg = (window.getObsCfg ? window.getObsCfg() : {});
+        const ok = await (window.connectAndWaitUniversal ? window.connectAndWaitUniversal(cfg) : connectAndWait(cfg));
+        if (ok && window.__tpObsConn) { try { attachObsRelays(window.__tpObsConn); startObsPing(); } catch {} }
+      } catch {}
       await updateObsPill();
     }
   })();
