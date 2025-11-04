@@ -706,6 +706,53 @@
           updateHybridUsingUI();
         } catch {}
 
+        // --- Calibration modal helpers ---
+        function ensureCalibModal(){
+          let wrap = document.getElementById('tp-calib-overlay');
+          if (!document.getElementById('tp-calib-style')){
+            const st = document.createElement('style');
+            st.id = 'tp-calib-style';
+            st.textContent = `
+  #tp-calib-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999998;display:none;align-items:center;justify-content:center}
+  #tp-calib-panel{background:#0e1722;color:#d6dfeb;border:1px solid #25384d;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);width:min(520px,92vw);padding:20px}
+  #tp-calib-title{font:600 18px/1.3 system-ui,sans-serif;margin:0 0 8px}
+  #tp-calib-instr{opacity:.9;margin:0 0 12px}
+  #tp-calib-count{font:700 56px/1.1 ui-monospace,Menlo,Consolas,monospace;text-align:center;margin:8px 0 4px}
+  #tp-calib-phase{font:500 14px/1.2 system-ui,sans-serif;text-align:center;margin:0 0 12px}
+  #tp-calib-actions{display:flex;gap:8px;justify-content:flex-end}
+  #tp-calib-actions button{background:#16324a;color:#d6dfeb;border:1px solid #25384d;border-radius:8px;padding:8px 12px;cursor:pointer}
+  #tp-calib-actions button[disabled]{opacity:.6;cursor:not-allowed}
+            `;
+            document.head.appendChild(st);
+          }
+          if (!wrap){
+            wrap = document.createElement('div');
+            wrap.id = 'tp-calib-overlay';
+            wrap.innerHTML = `
+  <div id="tp-calib-panel" role="dialog" aria-modal="true" aria-labelledby="tp-calib-title">
+    <h2 id="tp-calib-title">Mic calibration</h2>
+    <p id="tp-calib-instr">We’ll measure room noise, then your speaking level.</p>
+    <div id="tp-calib-count">3</div>
+    <div id="tp-calib-phase">Preparing…</div>
+    <div id="tp-calib-actions">
+      <button id="tp-calib-cancel">Cancel</button>
+      <button id="tp-calib-close" style="display:none">Close</button>
+    </div>
+  </div>`;
+            document.body.appendChild(wrap);
+          }
+          const panel = wrap.querySelector('#tp-calib-panel');
+          const title = wrap.querySelector('#tp-calib-title');
+          const instr = wrap.querySelector('#tp-calib-instr');
+          const count = wrap.querySelector('#tp-calib-count');
+          const phase = wrap.querySelector('#tp-calib-phase');
+          const btnCancel = wrap.querySelector('#tp-calib-cancel');
+          const btnClose = wrap.querySelector('#tp-calib-close');
+          return { wrap, panel, title, instr, count, phase, btnCancel, btnClose };
+        }
+        function showCalibModal(){ try { const {wrap} = ensureCalibModal(); wrap.style.display = 'flex'; } catch {} }
+        function hideCalibModal(){ try { const wrap = document.getElementById('tp-calib-overlay'); if (wrap) wrap.style.display = 'none'; } catch {} }
+
         const measure = (ms) => new Promise((resolve) => {
           const vals = [];
           const onDb = (e) => { try { const db = (e && e.detail && typeof e.detail.db === 'number') ? e.detail.db : NaN; if (Number.isFinite(db)) vals.push(db); } catch {} };
@@ -714,7 +761,7 @@
         });
         const avg = (arr) => { if (!arr || !arr.length) return NaN; return arr.reduce((a,b)=>a+b,0)/arr.length; };
 
-        function startPhase(label, ms){
+        function _startPhase(label, ms){
           try {
             if (!prog) return () => {};
             const t0 = Date.now();
@@ -732,6 +779,31 @@
 
         async function runCalibration(){
           try {
+            const ui = ensureCalibModal();
+            let canceled = false;
+            const setPhase = (label, secs, hint) => {
+              try {
+                if (ui.title) ui.title.textContent = 'Mic calibration';
+                if (ui.instr) ui.instr.textContent = hint || 'Follow the instructions below.';
+                if (ui.phase) ui.phase.textContent = label;
+                if (ui.count) ui.count.textContent = String(Math.max(0, Math.ceil(secs)));
+              } catch {}
+            };
+            const countdown = (msTotal, updateLabel, hint) => {
+              const t0 = Date.now();
+              const tick = () => {
+                const rem = Math.max(0, msTotal - (Date.now() - t0));
+                setPhase(updateLabel, rem/1000, hint);
+                if (!canceled && rem > 0) setTimeout(tick, 200);
+              };
+              tick();
+            };
+            showCalibModal();
+            if (ui.btnClose) ui.btnClose.style.display = 'none';
+            if (ui.btnCancel) {
+              ui.btnCancel.disabled = false;
+              ui.btnCancel.onclick = () => { canceled = true; hideCalibModal(); };
+            }
             // Ensure mic is requested so dB events are flowing
             try { if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') await window.__tpMic.requestMic(); } catch {}
             if (btn) { btn.disabled = true; btn.textContent = 'Calibrating…'; }
@@ -739,15 +811,17 @@
             const atk = Math.max(20, Math.min(500, parseInt(attackInp && attackInp.value || '80', 10) || 80));
             const rel = Math.max(80, Math.min(1000, parseInt(releaseInp && releaseInp.value || '300', 10) || 300));
             // Phase 1: room noise
-            const stop1 = startPhase('Quiet…', 1500);
+            setPhase('Step 1 — Stay quiet', 1.5, 'Please be silent while we measure room noise.');
+            countdown(1500, 'Step 1 — Stay quiet', 'Please be silent while we measure room noise.');
             const noiseVals = await measure(1500);
-            stop1 && stop1();
+            if (canceled) { if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; } return; }
             const noise = avg(noiseVals);
             if (outNoise) outNoise.textContent = Number.isFinite(noise) ? (noise.toFixed(0) + ' dB') : '—';
             // Phase 2: speech
-            const stop2 = startPhase('Speak…', 1800);
+            setPhase('Step 2 — Speak', 1.8, 'Speak clearly at your normal volume.');
+            countdown(1800, 'Step 2 — Speak', 'Speak clearly at your normal volume.');
             const speechVals = await measure(1800);
-            stop2 && stop2();
+            if (canceled) { if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; } return; }
             const speech = avg(speechVals);
             if (outSpeech) outSpeech.textContent = Number.isFinite(speech) ? (speech.toFixed(0) + ' dB') : '—';
             // Derive thresholds
@@ -785,6 +859,13 @@
             if (prog) { prog.textContent = 'Saved'; setTimeout(() => { try { if (prog.textContent === 'Saved') prog.textContent = 'Ready'; } catch {} }, 1500); }
             try { if (window.toast) window.toast('Calibration saved', { type:'ok' }); } catch {}
             updateHybridUsingUI();
+            try {
+              if (ui.phase) ui.phase.textContent = 'Calibration complete';
+              if (ui.instr) ui.instr.textContent = `Noise ${Number.isFinite(noise)?noise.toFixed(0):'—'} dB, Speech ${Number.isFinite(speech)?speech.toFixed(0):'—'} dB`;
+              if (ui.count) ui.count.textContent = '';
+              if (ui.btnCancel) ui.btnCancel.style.display = 'none';
+              if (ui.btnClose) { ui.btnClose.style.display = ''; ui.btnClose.onclick = () => hideCalibModal(); }
+            } catch {}
           } catch {}
         }
         if (btn && !btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', runCalibration); }
@@ -905,7 +986,8 @@
                 setTimeout(() => { try { window.removeEventListener('tp:db', onDb); } catch {} resolve(vals); }, ms);
               });
               const avg = (arr) => { if (!arr || !arr.length) return NaN; return arr.reduce((a,b)=>a+b,0)/arr.length; };
-              function startPhase(label, ms){
+              // legacy in-panel countdown helper (unused after modal flow retained for back-compat)
+              function _startPhase(label, ms){
                 try {
                   if (!prog) return () => {};
                   const t0 = Date.now();
@@ -922,19 +1004,58 @@
               }
               async function runCalibration(){
                 try {
+                  // Reuse modal helpers from the initial wiring block if available
+                  const ensureCalibModal = (window.ensureCalibModal) || (function(){
+                    return function(){
+                      let wrap = document.getElementById('tp-calib-overlay');
+                      const title = wrap?.querySelector('#tp-calib-title');
+                      const instr = wrap?.querySelector('#tp-calib-instr');
+                      const count = wrap?.querySelector('#tp-calib-count');
+                      const phase = wrap?.querySelector('#tp-calib-phase');
+                      const btnCancel = wrap?.querySelector('#tp-calib-cancel');
+                      const btnClose = wrap?.querySelector('#tp-calib-close');
+                      return { wrap, title, instr, count, phase, btnCancel, btnClose };
+                    }
+                  })();
+                  const showCalibModal = (window.showCalibModal) || (function(){ return function(){ const el=document.getElementById('tp-calib-overlay'); if (el) el.style.display='flex'; } })();
+                  const hideCalibModal = (window.hideCalibModal) || (function(){ return function(){ const el=document.getElementById('tp-calib-overlay'); if (el) el.style.display='none'; } })();
+
+                  const ui = ensureCalibModal();
+                  let canceled = false;
+                  const setPhase = (label, secs, hint) => {
+                    try { ui.title && (ui.title.textContent = 'Mic calibration'); } catch {}
+                    try { ui.instr && (ui.instr.textContent = hint || 'Follow the instructions below.'); } catch {}
+                    try { ui.phase && (ui.phase.textContent = label); } catch {}
+                    try { ui.count && (ui.count.textContent = String(Math.max(0, Math.ceil(secs)))); } catch {}
+                  };
+                  const countdown = (msTotal, updateLabel, hint) => {
+                    const t0 = Date.now();
+                    const tick = () => {
+                      const rem = Math.max(0, msTotal - (Date.now() - t0));
+                      setPhase(updateLabel, rem/1000, hint);
+                      if (!canceled && rem > 0) setTimeout(tick, 200);
+                    };
+                    tick();
+                  };
+                  showCalibModal();
+                  if (ui.btnClose) ui.btnClose.style.display = 'none';
+                  if (ui.btnCancel) { ui.btnCancel.disabled = false; ui.btnCancel.onclick = () => { canceled = true; hideCalibModal(); }; }
+
                   try { if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') await window.__tpMic.requestMic(); } catch {}
                   if (btn) { btn.disabled = true; btn.textContent = 'Calibrating…'; }
                   if (prog) { prog.textContent = 'Preparing…'; }
                   const atk = Math.max(20, Math.min(500, parseInt(attackInp && attackInp.value || '80', 10) || 80));
                   const rel = Math.max(80, Math.min(1000, parseInt(releaseInp && releaseInp.value || '300', 10) || 300));
-                  const stop1 = startPhase('Quiet…', 1500);
+                  setPhase('Step 1 — Stay quiet', 1.5, 'Please be silent while we measure room noise.');
+                  countdown(1500, 'Step 1 — Stay quiet', 'Please be silent while we measure room noise.');
                   const noiseVals = await measure(1500);
-                  stop1 && stop1();
+                  if (canceled) { if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; } return; }
                   const noise = avg(noiseVals);
                   if (outNoise) outNoise.textContent = Number.isFinite(noise) ? (noise.toFixed(0) + ' dB') : '—';
-                  const stop2 = startPhase('Speak…', 1800);
+                  setPhase('Step 2 — Speak', 1.8, 'Speak clearly at your normal volume.');
+                  countdown(1800, 'Step 2 — Speak', 'Speak clearly at your normal volume.');
                   const speechVals = await measure(1800);
-                  stop2 && stop2();
+                  if (canceled) { if (btn) { btn.disabled = false; btn.textContent = 'Recalibrate'; } return; }
                   const speech = avg(speechVals);
                   if (outSpeech) outSpeech.textContent = Number.isFinite(speech) ? (speech.toFixed(0) + ' dB') : '—';
                   let ton = -30, toff = -36;
@@ -959,6 +1080,7 @@
                   upsertAsrProfile(asrProf);
                   if (chk && chk.checked) {
                     try { localStorage.setItem(APPLY_KEY, '1'); } catch {}
+                    writeAsrState({ ...(readAsrState()), activeProfileId: id });
                     writeUiPrefs({ hybridUseProfileId: id });
                   } else {
                     try { localStorage.removeItem(APPLY_KEY); } catch {}
@@ -968,6 +1090,13 @@
                   if (prog) { prog.textContent = 'Saved'; setTimeout(() => { try { if (prog.textContent === 'Saved') prog.textContent = 'Ready'; } catch {} }, 1500); }
                   try { if (window.toast) window.toast('Calibration saved', { type:'ok' }); } catch {}
                   updateHybridUsingUI();
+                  try {
+                    if (ui.phase) ui.phase.textContent = 'Calibration complete';
+                    if (ui.instr) ui.instr.textContent = `Noise ${Number.isFinite(noise)?noise.toFixed(0):'—'} dB, Speech ${Number.isFinite(speech)?speech.toFixed(0):'—'} dB`;
+                    if (ui.count) ui.count.textContent = '';
+                    if (ui.btnCancel) ui.btnCancel.style.display = 'none';
+                    if (ui.btnClose) { ui.btnClose.style.display = ''; ui.btnClose.onclick = () => hideCalibModal(); }
+                  } catch {}
                 } catch {}
               }
               btn.dataset.wired = '1';
