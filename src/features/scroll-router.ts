@@ -209,7 +209,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       try {
         const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
         if (btn) {
-          const s = getStoredSpeed();
+          const sRaw = getStoredSpeed();
+          const s = (Math.round(sRaw * 10) / 10).toFixed(1);
           if (!userEnabled) {
             btn.textContent = 'Auto-scroll: Off';
             btn.setAttribute('data-state', 'off');
@@ -404,8 +405,9 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
       if (!btn) return;
       const ds = btn.dataset?.state || '';
-      const s = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : getStoredSpeed();
-      lastSpeed = s;
+      const raw = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : getStoredSpeed();
+      lastSpeed = raw;
+      const s = (Math.round(raw * 10) / 10).toFixed(1);
       if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
       if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
       try { emitAutoState(); } catch {}

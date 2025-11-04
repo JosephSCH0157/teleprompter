@@ -200,7 +200,8 @@
         if (!btn.dataset.state) btn.dataset.state = 'off';
         if (t.matches && t.matches(selAuto)) { btn.dataset.state = (btn.dataset.state === 'on' ? 'off' : 'on'); }
         var isOn = btn.dataset.state === 'on';
-  btn.textContent = isOn ? ('Auto-scroll: On — ' + window.__autoSpeed + ' px/s') : 'Auto-scroll: Off';
+  var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
+  btn.textContent = isOn ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
         try { clearInterval(window.__autoFallbackTimer); } catch {}
         if (isOn) {
           try {
