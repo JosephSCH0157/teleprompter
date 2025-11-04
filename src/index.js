@@ -100,6 +100,12 @@ async function boot() {
   try {
     // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
     await loadLegacyPiecesAsModules();
+    // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
+    try {
+      if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
+        window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+      }
+    } catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
