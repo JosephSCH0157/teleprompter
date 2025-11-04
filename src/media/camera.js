@@ -15,6 +15,23 @@
     } catch { return false; }
   }
 
+  async function findDeviceLabelById(id) {
+    try {
+      if (!id || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return '';
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const d = list.find((x) => x && x.kind === 'videoinput' && x.deviceId === id);
+      return (d && d.label) || '';
+    } catch { return ''; }
+  }
+
+  function activeTrackLabel(stream) {
+    try {
+      const s = stream || (document.getElementById('camVideo')?.srcObject);
+      const tr = s && typeof s.getVideoTracks === 'function' ? s.getVideoTracks()[0] : null;
+      return (tr && tr.label) || '';
+    } catch { return ''; }
+  }
+
   function setCamButtons(active) {
     try {
       const startBtn = document.getElementById('startCam') || document.getElementById('StartCam');
@@ -65,36 +82,17 @@
       // Ensure any previous stream is fully stopped before starting
       if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
       // Prefer Settings selector as single source of truth; fall back to persisted/legacy id if present
-      const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
-      let id = camDeviceSel?.value || undefined;
-      try {
-        if (!id) {
-          const saved = localStorage.getItem('tp_camera_device_v1');
-          if (saved) id = saved;
-        }
-        // NEW: persist + mirror the chosen id so next launches & the other select match
+        const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
+        let id = camDeviceSel?.value || undefined;
+        try { if (!id) { const saved = localStorage.getItem('tp_camera_device_v1'); if (saved) id = saved; } } catch {}
+        let stream = null;
         if (id) {
-          localStorage.setItem('tp_camera_device_v1', id);
-          try {
-            const mainSel = document.getElementById('camDevice');
-            const setSel  = document.getElementById('settingsCamSel');
-            if (mainSel && mainSel.value !== id) mainSel.value = id;
-            if (setSel  && setSel.value  !== id) setSel.value  = id;
-          } catch {}
-        }
-      } catch {}
-      let stream = null;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id } } : true, audio: false });
-  } catch {
-        // Fallback: if exact device fails (e.g., unplugged), try default camera
-        try {
+          // Explicit device requested → do NOT silently fall back to default; surface error instead
+          stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id } }, audio: false });
+        } else {
+          // No explicit device → use default
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        } catch (err2) {
-          console.warn('startCamera failed', err2);
-          throw err2;
         }
-      }
       const camVideo = document.getElementById('camVideo');
       const camWrap = document.getElementById('camWrap');
       if (!camVideo || !camWrap) throw new Error('camera elements missing');
@@ -105,6 +103,24 @@
       camStream = stream;
       setCamButtons(true);
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
+        // Persist + mirror only after successful start
+        try {
+          if (id) {
+            localStorage.setItem('tp_camera_device_v1', id);
+            const mainSel = document.getElementById('camDevice');
+            const setSel  = document.getElementById('settingsCamSel');
+            if (mainSel && mainSel.value !== id) mainSel.value = id;
+            if (setSel  && setSel.value  !== id) setSel.value  = id;
+          }
+        } catch {}
+      // Announce active camera label for visibility
+      try {
+        const label = activeTrackLabel(stream);
+        if (label) {
+          window.toast && window.toast('Camera: ' + label, { type: 'ok' });
+          window.dispatchEvent && window.dispatchEvent(new CustomEvent('tp:camera-active', { detail: { deviceId: id || null, label } }));
+        }
+      } catch {}
       try { if (window.__tpMic) window.__tpMic.populateDevices && window.__tpMic.populateDevices(); } catch {}
       return true;
       } finally { __startingCam = false; }
@@ -138,8 +154,8 @@
           // Retry with only deviceId (drop resolution/frameRate preferences)
           newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false });
         } catch {
-          // Device missing/unavailable; attempt default fallback (will likely select system default)
-          newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          // Do not silently fall back to default for an explicit switch — surface failure
+          throw new Error('Requested camera not available');
         }
       }
       const camVideo = document.getElementById('camVideo');
@@ -148,6 +164,19 @@
       if (camVideo) { camVideo.srcObject = newStream; try { await camVideo.play(); } catch {} }
       if (old) old.getTracks().forEach(t=>t.stop());
       try { window.sendToDisplay && window.sendToDisplay({ type: 'cam-sizing', pct: Math.max(15, Math.min(60, Number(document.getElementById('camSize')?.value) || 28)) }); } catch {}
+      // Announce active camera and compare with selection label (best-effort)
+      try {
+        const activeLabelNow = activeTrackLabel(newStream);
+        const pickedLabel = await findDeviceLabelById(deviceId);
+        if (activeLabelNow) {
+          if (pickedLabel && activeLabelNow && pickedLabel !== activeLabelNow) {
+            window.toast && window.toast(`Camera switched: got "${activeLabelNow}" (selected "${pickedLabel}")`, { type: 'warn' });
+          } else {
+            window.toast && window.toast('Camera: ' + activeLabelNow, { type: 'ok' });
+          }
+          window.dispatchEvent && window.dispatchEvent(new CustomEvent('tp:camera-active', { detail: { deviceId: deviceId || null, label: activeLabelNow } }));
+        }
+      } catch {}
       return true;
     } catch (e) { console.warn('switchCamera failed', e); throw e; }
   }
