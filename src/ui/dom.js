@@ -146,13 +146,11 @@ function wireMic() {
 function wireCamera() {
   const start = $('startCam');
   const stop = $('stopCam');
-  const camSel = $('camDevice');
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
   on(start, 'click', async () => { try { await window.__tpCamera?.startCamera?.(); } catch {} });
   on(stop, 'click', () => { try { window.__tpCamera?.stopCamera?.(); } catch {} });
-  on(camSel, 'change', () => { try { window.__tpCamera?.switchCamera?.(camSel.value); } catch {} });
   on(size, 'input', () => { try { window.__tpCamera?.applyCamSizing?.(); } catch {} });
   on(op, 'input', () => { try { window.__tpCamera?.applyCamOpacity?.(); } catch {} });
   on(mir, 'change', () => { try { window.__tpCamera?.applyCamMirror?.(); } catch {} });
