@@ -149,8 +149,15 @@
         };
         fill('settingsMicSel', mics);
         fill('micDeviceSel', mics); // keep main panel in sync if present
-  fill('settingsCamSel', cams);
-  fill('camDevice', cams); // keep sidebar camera select in sync too
+        fill('settingsCamSel', cams);
+        // Apply persisted camera preference if available
+        try {
+          const sel = document.getElementById('settingsCamSel');
+          const saved = (function(){ try { return localStorage.getItem('tp_camera_device_v1'); } catch { return null; } })();
+          if (sel && saved && Array.from(sel.options).some(o => o.value === saved)) {
+            sel.value = saved;
+          }
+        } catch {}
         // Update visible current device name in Settings if present
         try {
           const sel = document.getElementById('settingsMicSel');
@@ -225,7 +232,7 @@
         });
       }
 
-      // Camera device selector (Settings) — mirror to sidebar and switch/start camera
+      // Camera device selector (Settings) — switch/start camera (single source of truth)
       try {
         const camSel = q('settingsCamSel');
         if (camSel && !camSel.dataset.wired) {
@@ -233,20 +240,14 @@
           camSel.addEventListener('change', async () => {
             try {
               const id = camSel.value;
-              // Mirror to sidebar select and trigger its change handler
-              const side = q('camDevice');
-              if (side && side.value !== id) {
-                side.value = id;
-                try { side.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
-              }
+              try { localStorage.setItem('tp_camera_device_v1', String(id||'')); } catch {}
               const camApi = window.__tpCamera || {};
               const camVideo = document.getElementById('camVideo');
               const isActive = !!(camVideo && camVideo.srcObject);
               if (isActive && typeof camApi.switchCamera === 'function') {
                 await camApi.switchCamera(id);
               } else if (typeof camApi.startCamera === 'function') {
-                // Ensure sidebar reflects desired device before starting, since startCamera reads from DOM
-                if (side && side.value !== id) side.value = id;
+                // Ensure Settings select reflects desired device before starting, since startCamera reads from DOM
                 await camApi.startCamera();
               }
             } catch (e) { try { console.warn('[settings] camera switch failed', e); } catch {} }

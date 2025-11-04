@@ -155,6 +155,7 @@ async function boot() {
             const k = (e.key || '').toLowerCase();
             if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
               e.stopImmediatePropagation();
+              // eslint-disable-next-line no-restricted-syntax
               e.preventDefault();
               window.toggleHud?.();
             }

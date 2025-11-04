@@ -49,8 +49,16 @@
     try {
       // Ensure any previous stream is fully stopped before starting
       if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
-      const camDeviceSel = document.getElementById('camDevice') || document.getElementById('settingsCamSel');
-      const id = camDeviceSel?.value || undefined;
+  // Prefer Settings selector as single source of truth; fall back to legacy sidebar id if present
+  const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
+      let id = camDeviceSel?.value || undefined;
+      // Fallback to persisted preference if selector not set yet
+      try {
+        if (!id) {
+          const saved = localStorage.getItem('tp_camera_device_v1');
+          if (saved) id = saved;
+        }
+      } catch {}
       const stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id } } : true, audio: false });
       const camVideo = document.getElementById('camVideo');
       const camWrap = document.getElementById('camWrap');
