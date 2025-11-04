@@ -90,20 +90,8 @@ function holdCreepStart(pxPerSec = DEFAULTS.step.holdCreep, dir: 1|-1 = 1){
 function holdCreepStop(){ cancelAnimationFrame(creepRaf as number); creepRaf = 0; }
 
 // ---------- HYBRID MODE (VAD gates Auto) ----------
-let speaking = false;
+// Smooth dB gate transitions (attack/release) and let applyGate() decide engine state.
 let gateTimer: number | undefined;
-function setSpeaking(on: boolean, auto: AutoAPI){
-  if (on === speaking) return;
-  speaking = on;
-  if (typeof auto.setEnabled === 'function') auto.setEnabled(on);
-  else auto.toggle(); // best-effort fallback
-}
-function hybridHandleDb(db: number, auto: AutoAPI){
-  const { attackMs, releaseMs, thresholdDb } = DEFAULTS.hybrid;
-  if (gateTimer) clearTimeout(gateTimer);
-  if (db >= thresholdDb) gateTimer = setTimeout(()=> setSpeaking(true, auto), attackMs) as unknown as number;
-  else gateTimer = setTimeout(()=> setSpeaking(false, auto), releaseMs) as unknown as number;
-}
 
 function applyMode(m: Mode){
   state.mode = m;
@@ -164,6 +152,15 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   // Track actual engine state and manage delayed stop when speech falls silent
   let enabledNow: boolean = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
   let silenceTimer: number | undefined;
+
+  // Speed tracking to avoid jumps when engine doesn't expose current speed
+  let lastSpeed: number = (() => {
+    try {
+      const s = Number(opts.auto.getState?.().speed);
+      if (Number.isFinite(s) && s > 0) return s;
+    } catch {}
+    try { return Number(localStorage.getItem('tp_auto_speed') || '60') || 60; } catch { return 60; }
+  })();
 
   // Chip helpers
   const chipEl = () => document.getElementById('autoChip');
@@ -345,10 +342,15 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   try {
     window.addEventListener('tp:db' as any, (e: any)=>{
       const db = (e && e.detail && typeof e.detail.db === 'number') ? e.detail.db : -60;
-      // keep legacy handler as a fallback smoothing on dbGate
-      hybridHandleDb(db, auto);
-      dbGate = (db >= DEFAULTS.hybrid.thresholdDb);
-      applyGate();
+      // Smooth attack/release for dbGate, but do not toggle engine directly here
+      try { if (gateTimer) { clearTimeout(gateTimer as any); gateTimer = undefined; } } catch {}
+      const on = db >= DEFAULTS.hybrid.thresholdDb;
+      const delay = on ? DEFAULTS.hybrid.attackMs : DEFAULTS.hybrid.releaseMs;
+      gateTimer = setTimeout(() => {
+        dbGate = on;
+        gateTimer = undefined;
+        applyGate();
+      }, delay) as unknown as number;
     });
     window.addEventListener('tp:vad' as any, (e: any) => {
       vadGate = !!(e && e.detail && e.detail.speaking);
@@ -362,6 +364,9 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       try {
         const on = !!(e && e.detail && ((e.detail.on !== undefined) ? e.detail.on : e.detail.enabled));
         userEnabled = !!on;
+        if (!userEnabled) { try { if (silenceTimer) { clearTimeout(silenceTimer as any); silenceTimer = undefined; } } catch {}
+          try { if (gateTimer) { clearTimeout(gateTimer as any); gateTimer = undefined; } } catch {}
+        }
         applyGate();
       } catch {}
     });
@@ -376,9 +381,11 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         userEnabled = !userEnabled;
         // When intent flips ON, seed speed so engine warms and label reflects immediately
         if (!was && userEnabled) {
-          try { auto.setSpeed?.(getStoredSpeed()); } catch {}
+          const seed = getStoredSpeed();
+          try { auto.setSpeed?.(seed); } catch {}
           // Additionally, prime the low-level controller with the current speed if available
-          try { (window as any).__scrollCtl?.setSpeed?.(getStoredSpeed()); } catch {}
+          try { (window as any).__scrollCtl?.setSpeed?.(seed); } catch {}
+          lastSpeed = seed;
         }
         applyGate();
       }
@@ -389,12 +396,12 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   if (state.mode === 'hybrid') {
     userEnabled = true;
     // Seed engine speed from storage so ticks use the intended value
-    try { auto.setSpeed?.(getStoredSpeed()); } catch {}
+    try { const seed = getStoredSpeed(); auto.setSpeed?.(seed); lastSpeed = seed; } catch {}
     try {
       const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
       if (btn) {
         btn.dataset.state = 'on';
-        btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
+        btn.textContent = `Auto-scroll: On — ${lastSpeed} px/s`;
       }
     } catch {}
     applyGate();
@@ -411,6 +418,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       if (!btn) return;
       const ds = btn.dataset?.state || '';
       const s = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : getStoredSpeed();
+      lastSpeed = s;
       if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
       if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
       try { emitAutoState(); } catch {}
@@ -431,9 +439,11 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
         if (!wantUp && !wantDown) return;
         e.preventDefault();
-        const cur = Number(auto?.getState?.().speed) || getStoredSpeed();
+        const got = Number(auto?.getState?.().speed);
+        const cur = (Number.isFinite(got) && got > 0) ? got : (Number.isFinite(lastSpeed) ? lastSpeed : getStoredSpeed());
         const next = cur + (wantUp ? 5 : -5);
         auto?.setSpeed?.(next);
+        lastSpeed = next;
       } catch {}
     }, { capture: true });
   } catch {}
