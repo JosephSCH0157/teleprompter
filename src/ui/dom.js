@@ -23,7 +23,7 @@ try {
     window.__tpCamGlobalCaptureGuard = true;
     document.addEventListener('click', (e) => {
       try {
-        const t = e.target?.closest?.('#startCam, #stopCam, #camDevice');
+        const t = e.target?.closest?.('#startCam, #stopCam, #camDevice, #StartCam, #StopCam, #CamDevice');
         if (!t) return;
         e.stopPropagation();
         e.stopImmediatePropagation?.();
@@ -159,9 +159,9 @@ function wireMic() {
 }
 
 function wireCamera() {
-  const start = $('startCam');
-  const stop = $('stopCam');
-  const camSel= $('camDevice');
+  const start = $('startCam') || $('StartCam');
+  const stop = $('stopCam') || $('StopCam');
+  const camSel= $('camDevice') || $('CamDevice');
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
