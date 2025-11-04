@@ -6945,12 +6945,16 @@ let _toast = function (msg, opts) {
         };
       } catch {}
 
-    // Camera
-    startCamBtn?.addEventListener('click', startCamera);
-    stopCamBtn?.addEventListener('click', stopCamera);
-    camDeviceSel?.addEventListener('change', () => {
-      if (camVideo?.srcObject) startCamera();
-    });
+    // Camera (stand down if TS path owns wiring)
+    if (!window.__tpCamWireActive) {
+      startCamBtn?.addEventListener('click', startCamera);
+      stopCamBtn?.addEventListener('click', stopCamera);
+      camDeviceSel?.addEventListener('change', () => {
+        if (!window.__tpCamWireActive && camVideo?.srcObject) startCamera();
+      });
+    } else {
+      try { console.debug('[camera] Legacy camera disabled (SSOT=TS).'); } catch {}
+    }
     camSize?.addEventListener('input', applyCamSizing);
     camOpacity?.addEventListener('input', applyCamOpacity);
     camMirror?.addEventListener('change', applyCamMirror);
@@ -11425,7 +11429,8 @@ let _toast = function (msg, opts) {
    * ────────────────────────────────────────────────────────────── */
   async function startCamera() {
     try {
-      if (window.__tpCamera && typeof window.__tpCamera.startCamera === 'function') {
+      // Short-circuit to modern SSOT when active
+      if (window.__tpCamWireActive && window.__tpCamera?.startCamera) {
         try { return await window.__tpCamera.startCamera(); } catch {}
       }
       // Quick environment/permission diagnostics

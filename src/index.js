@@ -5,6 +5,8 @@ if (window.__tpBooted) {
 }
 window.__tpBooted = 'index.module';
 window.__tpBootCount = (window.__tpBootCount || 0) + 1;
+// Camera SSOT — TS owns the camera stack.
+try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
 
 // --- HUD SSOT (dev) ---
 (() => {

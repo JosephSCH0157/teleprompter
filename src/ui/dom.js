@@ -17,6 +17,21 @@ const $id = (id) => { try { return document.getElementById(id); } catch { return
 let IS_HYDRATING = false;
 let HYDRATE_SCHEDULED = false;
 
+// Global capture-phase guard for camera controls to swallow legacy bubble listeners
+try {
+  if (!window.__tpCamGlobalCaptureGuard) {
+    window.__tpCamGlobalCaptureGuard = true;
+    document.addEventListener('click', (e) => {
+      try {
+        const t = e.target?.closest?.('#startCam, #stopCam, #camDevice');
+        if (!t) return;
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+      } catch {}
+    }, { capture: true });
+  }
+} catch {}
+
 // Wire once per key
 function once(key, fn) {
   try {
