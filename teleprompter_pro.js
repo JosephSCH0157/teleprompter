@@ -150,67 +150,147 @@ window.addEventListener('keydown', (e) => {
   }
 }, { capture: true });
 
-// === OBS robust loader and toggle ===
-async function getObsAdapter(timeoutMs = 4000) {
-  const t0 = performance.now();
-  while (performance.now() - t0 < timeoutMs) {
-    const reg = window.__recorder || window.recorders || {};
-    if (typeof reg.get === 'function') {
-      const a = reg.get('obs');
-      if (a) return a;
-    } else if (reg.adapters?.obs) {
-      return reg.adapters.obs;
-    }
-    await new Promise(r => setTimeout(r, 100));
-  }
-  console.warn('[obs] adapter not ready after wait');
-  return null;
+// --- OBS wiring (robust: adapter-first, bridge-fallback) --------------------
+
+const OBS_KEYS = {
+  enabled: 'obs.enabled',
+  url:     'obs.url',
+  pass:    'obs.pass',
+  secure:  'obs.secure',
+};
+
+function readObsSettingsFromUIorStorage() {
+  const urlEl   = document.getElementById('obsUrl');
+  const passEl  = document.getElementById('obsPass');
+  const secEl   = document.getElementById('obsSecure');
+
+  const ls = (k, d='') => localStorage.getItem(k) ?? d;
+
+  const secure = secEl ? !!secEl.checked : (ls(OBS_KEYS.secure) === '1');
+  const url    = urlEl?.value?.trim() || ls(OBS_KEYS.url, secure ? 'wss://127.0.0.1:4455' : 'ws://127.0.0.1:4455');
+  const password = passEl?.value ?? ls(OBS_KEYS.pass, '');
+
+  return { url, password, secure };
 }
 
-async function bootObsPersistentFromToggle(checked) {
-  const obs = await getObsAdapter();
-  if (!obs) return;
+async function getObsSurface() {
+  // Prefer the new adapter
+  const reg = window.__recorder;
+  const fromAdapter = reg?.get && reg.get('obs');
+  if (fromAdapter && (typeof fromAdapter.connect === 'function')) return fromAdapter;
 
-  // Read your settings surface (adjust keys if different)
-  const cfg = {
-    host: (window.settings?.obsHost ?? '127.0.0.1'),
-    port: +(window.settings?.obsPort ?? 4455),
-    password: (window.settings?.obsPass ?? ''),
-    secure: !!window.settings?.obsSecure,
-    persistent: true,
-    reconnect: true
+  // Fall back to legacy bridge
+  if (window.__obsBridge && typeof window.__obsBridge.connect === 'function') return window.__obsBridge;
+
+  throw new Error('[obs] No OBS surface available (adapter/bridge missing)');
+}
+
+async function obsConnectPersistent() {
+  const surface = await getObsSurface();
+  const cfg = readObsSettingsFromUIorStorage();
+  await surface.connect(cfg);              // adapter/bridge both accept {url,password,secure}
+  updateObsStatusUI('connected');
+}
+
+async function obsDisconnectPersistent() {
+  try {
+    const surface = await getObsSurface();
+    await surface.disconnect?.();
+  } finally {
+    updateObsStatusUI('off');
+  }
+}
+
+function updateObsStatusUI(state) {
+  // Accepts: 'off' | 'connecting' | 'connected' | 'error'
+  const pill = document.getElementById('obsStatusText') || document.querySelector('[data-obs-status]');
+  if (!pill) return;
+  const map = { off: 'Off', connecting: 'Connecting…', connected: 'Connected', error: 'Error' };
+  pill.textContent = map[state] || state;
+  pill.dataset.state = state; // let CSS style it
+}
+
+function syncObsToggles(checked) {
+  const els = [
+    document.getElementById('settingsEnableObs'),
+    document.getElementById('enableObs'),
+    document.querySelector('[data-role="settings-enable-obs"]'),
+    document.querySelector('[data-role="enable-obs"]'),
+  ].filter(Boolean);
+  els.forEach(el => el.checked = !!checked);
+}
+
+function storeObsEnabled(enabled) {
+  localStorage.setItem(OBS_KEYS.enabled, enabled ? '1' : '0');
+}
+
+function readObsEnabled() {
+  return localStorage.getItem(OBS_KEYS.enabled) === '1';
+}
+
+function wireObsToggleEverywhere() {
+  const targets = [
+    document.getElementById('settingsEnableObs'),
+    document.getElementById('enableObs'),
+    document.querySelector('[data-role="settings-enable-obs"]'),
+    document.querySelector('[data-role="enable-obs"]'),
+  ].filter(Boolean);
+
+  const onChange = async (checked) => {
+    storeObsEnabled(checked);
+    updateObsStatusUI(checked ? 'connecting' : 'off');
+    try {
+      if (checked) await obsConnectPersistent();
+      else await obsDisconnectPersistent();
+    } catch (err) {
+      console.warn('[obs] toggle error', err);
+      updateObsStatusUI('error');
+      // keep toggle state persisted; user can flip off/on to retry
+    }
+    syncObsToggles(checked);
   };
 
-  if (checked) {
-    try {
-      console.log('[obs] connect persistent →', cfg);
-      await obs.connect(cfg); // must use the persistent client, not the probe
-      console.log('[obs] connected (persistent)');
-    } catch (e) {
-      console.warn('[obs] connect failed', e);
-    }
-  } else {
-    try {
-      console.log('[obs] disconnect (user toggle)');
-      await obs.disconnect?.('user-toggle');
-    } catch (e) {
-      console.warn('[obs] disconnect failed', e);
-    }
+  // Debounced handler so both checkboxes don’t fight each other
+  let t;
+  const handle = (e) => {
+    clearTimeout(t);
+    const checked = !!e.target.checked;
+    t = setTimeout(() => onChange(checked), 0);
+  };
+
+  targets.forEach(el => el.addEventListener('change', handle));
+
+  // Initial UI sync from storage on first wire
+  const enabled = readObsEnabled();
+  syncObsToggles(enabled);
+  updateObsStatusUI(enabled ? 'connecting' : 'off');
+}
+
+async function restoreObsOnBoot() {
+  if (!readObsEnabled()) {
+    updateObsStatusUI('off');
+    return;
+  }
+  try {
+    updateObsStatusUI('connecting');
+    await obsConnectPersistent();
+  } catch (e) {
+    console.warn('[obs] restore failed', e);
+    updateObsStatusUI('error');
   }
 }
 
-// Wire both checkboxes (settings + main)
-document.querySelectorAll('#enableObs, #settingsEnableObs').forEach(cb => {
-  cb.addEventListener('change', (e) => bootObsPersistentFromToggle(e.target.checked));
-});
+// Small dev helper: window.__obsDebug()
+window.__obsDebug = async () => {
+  let surf, ok=false, hasBridge=!!window.__obsBridge, hasAdapter=!!(window.__recorder?.get?.('obs'));
+  try { surf = await getObsSurface(); ok = await (surf.isConnected?.() ?? false); } catch {}
+  console.table({ hasAdapter, hasBridge, connected: ok });
+};
 
-// Restore on boot
-(function restoreObsFromStorage() {
-  const enabled = !!(window.localStorage && localStorage.getItem('enableObs') === 'true');
-  const box = document.querySelector('#enableObs, #settingsEnableObs');
-  if (box) box.checked = enabled;
-  bootObsPersistentFromToggle(enabled);
-})();
+// After settings are shown/hydrated, wire toggles and restore state
+document.addEventListener('DOMContentLoaded', () => {
+  try { wireObsToggleEverywhere(); restoreObsOnBoot(); } catch {}
+});
 // ---- Autoscroll gating (teleprompter_pro.js) ----
 window.__tp_autoscroll_armed = false;
 
@@ -346,28 +426,7 @@ function readObsSettingsFromUI() {
   return { host, port, password, secure };
 }
 
-// ---- Enable OBS checkbox wiring (teleprompter_pro.js) ----
-const enableObsEl = document.querySelector('#enableObs, #settingsEnableObs'); // whichever exists
-if (enableObsEl) {
-  // initial state from storage
-  const enabled = obsEnabledInStorage();
-  enableObsEl.checked = enabled;
-  if (enabled) queueMicrotask(connectObsPersistently);
-
-  enableObsEl.addEventListener('change', (e) => {
-    const isOn = !!e.target.checked;
-    setObsEnabledInStorage(isOn);
-    if (isOn) connectObsPersistently();
-    else disconnectObsPersistently('user-toggle');
-  });
-}
-
-// graceful shutdown
-window.addEventListener('beforeunload', () => {
-  setObsEnabledInStorage(!!document.querySelector('#enableObs')?.checked);
-  // don't await; fire-and-forget
-  const _ = disconnectObsPersistently('page-unload');
-});
+// (Legacy OBS checkbox wiring removed in favor of Patch B's wireObsToggleEverywhere/restoreObsOnBoot)
 
 // ---- OBS Test Connection button (separate probe) ----
 document.querySelector('#obsTest')?.addEventListener('click', async () => {
