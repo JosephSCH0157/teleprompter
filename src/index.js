@@ -105,15 +105,16 @@ async function boot() {
       if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
         window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
       }
-      // Expose a tiny ensureHud() poke for dev to bring it up if needed
+      // Expose a tiny ensureHud() poke for dev; prefer full HUD toggle, else fallback
       if (typeof window.ensureHud !== 'function') {
         window.ensureHud = () => {
           try {
             if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
               window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
             }
-            try { window.__tpHud?.show?.(); } catch {}
+            if (window.__tpHud?.toggle) { window.__tpHud.toggle(); return; }
           } catch {}
+          try { window.toggleHud?.(); } catch {}
         };
       }
       // HUD safety hook: lightweight overlay + global toggleHotkey
@@ -127,26 +128,27 @@ async function boot() {
               return shown ? void window.__tpHud.hide?.() : void window.__tpHud.show?.();
             }
           } catch {}
-          // Fallback: tiny in-page pill
+          // Fallback: tiny in-page pill (bottom-right, capture-safe)
           try {
             let el = document.getElementById('tp-hud-lite');
             if (!el) {
               el = document.createElement('div');
               el.id = 'tp-hud-lite';
-              el.style.cssText = 'position:fixed;right:12px;top:12px;z-index:99999;background:rgba(0,0,0,.72);color:#fff;padding:8px 10px;border-radius:10px;font:12px/1.35 system-ui;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+              el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:999999;background:#111;color:#0f0;padding:6px 10px;border-radius:8px;border:1px solid #0f0;font:12px/1.2 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4)';
               el.textContent = 'HUD ready';
               document.body.appendChild(el);
             }
-            el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+            el.hidden = !el.hidden;
           } catch {}
         };
       }
       if (!window.__tpHudSafetyHookInstalled) {
         window.__tpHudSafetyHookInstalled = true;
-        document.addEventListener('keydown', (e) => {
+        window.addEventListener('keydown', (e) => {
           try {
             const k = (e.key || '').toLowerCase();
             if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
+              e.stopImmediatePropagation();
               e.preventDefault();
               window.toggleHud?.();
             }
