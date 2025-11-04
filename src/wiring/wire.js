@@ -119,16 +119,20 @@ export function initSettingsWiring() {
 
     // Small dev helper for parity with legacy: window.__obsDebug()
     try {
-      if (typeof window.__obsDebug !== 'function') {
-        window.__obsDebug = async () => {
+      // Consult unified getters so debug reflects true state
+      window.__obsDebug = () => {
+        try {
+          const R = getRecorder();
+          const hasAdapter = !!(R && typeof R.get === 'function' && R.get('obs'));
           const hasBridge = !!window.__obsBridge;
-          const hasAdapter = !!(window && window.__tpOBS);
-          const connected = !!window.__tpObsConnected;
-          const lastError = window.__tpObsLastErr || null;
-          try { console.table({ hasAdapter, hasBridge, connected, lastError }); } catch {}
+          const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+          const connected = !!(s && (s.connected || s.identified));
+          const lastError = window.__tpObsLastErr ?? null;
           return { hasAdapter, hasBridge, connected, lastError };
-        };
-      }
+        } catch {
+          return { hasAdapter:false, hasBridge:!!window.__obsBridge, connected:false, lastError: window.__tpObsLastErr ?? null };
+        }
+      };
     } catch {}
     // Note: OBS connect/wait helpers and getObsCfg are defined below in the module-scoped helpers section
   } catch {}
@@ -441,12 +445,7 @@ try {
 async function obsConnectPersistent(){
   try { return await window.connectWithSecureFallback(getObsCfg()); } catch { return false; }
 }
-async function obsDisconnectPersistent(){
-  const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : (window.__recorder?.get?.('obs') || window.__obsBridge || null);
-  try { await s?.disconnect?.(); } catch {}
-  window.__tpObsConn = null;
-  try { window.__tpObsConnected = false; } catch {}
-}
+// (removed) obsDisconnectPersistent: legacy helper no longer needed; toggle path disconnects via unified surface directly.
 
 async function _restoreObsOnBoot(){
   const box = document.getElementById('settingsEnableObs');
@@ -463,14 +462,19 @@ export function wireObsPersistentUI(){
     if (e.target.checked) {
       await updateObsPillConnecting();
       const cfg = (window.getObsCfg ? window.getObsCfg() : {});
-      const ok = await (window.connectAndWaitUniversal ? window.connectAndWaitUniversal(cfg) : connectAndWait(cfg));
-      // Attach relays + ping if we have a live surface
-      if (ok && window.__tpObsConn) { try { attachObsRelays(window.__tpObsConn); startObsPing(); } catch {} }
+      const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWait(cfg));
+      if (ok) {
+        // Update conn pointer using unified surface and attach relays/ping
+        const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+        if (s) { try { window.__tpObsConn = s; attachObsRelays(s); startObsPing(); } catch {} }
+      }
       await updateObsPill();
     } else {
-      try { await window.__tpObsConn?.stop?.(); } catch {}
-      try { await obsDisconnectPersistent(); } catch {}
-      try { window.__tpObsConnected = false; } catch {}
+      try {
+        const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+        await s?.disconnect?.();
+      } catch {}
+      try { window.__tpObsConnected = false; window.__tpObsLastErr = null; } catch {}
       await updateObsPill();
     }
   });
@@ -480,8 +484,11 @@ export function wireObsPersistentUI(){
       await updateObsPillConnecting();
       try {
         const cfg = (window.getObsCfg ? window.getObsCfg() : {});
-        const ok = await (window.connectAndWaitUniversal ? window.connectAndWaitUniversal(cfg) : connectAndWait(cfg));
-        if (ok && window.__tpObsConn) { try { attachObsRelays(window.__tpObsConn); startObsPing(); } catch {} }
+        const ok = await (window.connectWithSecureFallback ? window.connectWithSecureFallback(cfg) : connectAndWait(cfg));
+        if (ok) {
+          const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
+          if (s) { try { window.__tpObsConn = s; attachObsRelays(s); startObsPing(); } catch {} }
+        }
       } catch {}
       await updateObsPill();
     }
