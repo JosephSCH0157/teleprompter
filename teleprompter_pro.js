@@ -185,10 +185,46 @@ async function getObsSurface() {
   throw new Error('[obs] No OBS surface available (adapter/bridge missing)');
 }
 
+// --- OBS readiness + connect-and-wait ------------------------------------------------
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+async function waitForObsSurface(timeout=5000){
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeout) {
+    try {
+      const reg = window.__recorder;
+      const adapter = reg?.get?.('obs');
+      if (adapter && typeof adapter.connect === 'function') return adapter;
+      if (window.__obsBridge && typeof window.__obsBridge.connect === 'function') return window.__obsBridge;
+    } catch {}
+    await sleep(50);
+  }
+  throw new Error('[obs] surface not ready (adapter/bridge missing)');
+}
+
+async function waitUntil(fn, timeout=5000, step=100){
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeout) {
+    try { if (await fn()) return true; } catch {}
+    await sleep(step);
+  }
+  return false;
+}
+
+async function connectAndWait(cfg, connectTimeout=6000){
+  const surface = await waitForObsSurface();
+  if (surface.isConnected && await surface.isConnected()) return surface;
+  try { surface.connect(cfg); } catch {}
+  const ok = await waitUntil(() => surface.isConnected?.(), connectTimeout, 150);
+  if (!ok) throw new Error('[obs] connect timeout');
+  return surface;
+}
+
 async function obsConnectPersistent() {
-  const surface = await getObsSurface();
+  // Wait for surface and establish a real link, then mark connected
+  updateObsStatusUI('connecting');
   const cfg = readObsSettingsFromUIorStorage();
-  await surface.connect(cfg);              // adapter/bridge both accept {url,password,secure}
+  await connectAndWait(cfg);
   updateObsStatusUI('connected');
 }
 
@@ -273,7 +309,9 @@ async function restoreObsOnBoot() {
   }
   try {
     updateObsStatusUI('connecting');
-    await obsConnectPersistent();
+    const cfg = readObsSettingsFromUIorStorage();
+    await connectAndWait(cfg);
+    updateObsStatusUI('connected');
   } catch (e) {
     console.warn('[obs] restore failed', e);
     updateObsStatusUI('error');
@@ -361,7 +399,7 @@ const __OBS_RECONNECT_BASE = 1000;
 function obsEnabledInStorage() {
   try { return localStorage.getItem('settings.obs.enabled') === '1'; } catch { return false; }
 }
-function setObsEnabledInStorage(v) {
+function _setObsEnabledInStorage(v) {
   try { localStorage.setItem('settings.obs.enabled', v ? '1' : '0'); } catch {}
 }
 
@@ -410,7 +448,7 @@ async function connectObsPersistently() {
 }
 
 
-async function disconnectObsPersistently(reason = 'toggle-off') {
+async function _disconnectObsPersistently(reason = 'toggle-off') {
   clearTimeout(__obsReconnectTimer);
   const obs = await getObsRecorder();
   try { await obs?.disconnect?.({ reason }); } catch {}
