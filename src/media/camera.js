@@ -52,7 +52,22 @@
       // Prefer Settings selector as single source of truth; fall back to persisted/legacy id if present
       const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
       let id = camDeviceSel?.value || undefined;
-      try { if (!id) { const saved = localStorage.getItem('tp_camera_device_v1'); if (saved) id = saved; } } catch {}
+      try {
+        if (!id) {
+          const saved = localStorage.getItem('tp_camera_device_v1');
+          if (saved) id = saved;
+        }
+        // NEW: persist + mirror the chosen id so next launches & the other select match
+        if (id) {
+          localStorage.setItem('tp_camera_device_v1', id);
+          try {
+            const mainSel = document.getElementById('camDevice');
+            const setSel  = document.getElementById('settingsCamSel');
+            if (mainSel && mainSel.value !== id) mainSel.value = id;
+            if (setSel  && setSel.value  !== id) setSel.value  = id;
+          } catch {}
+        }
+      } catch {}
       let stream = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id } } : true, audio: false });
