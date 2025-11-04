@@ -17,8 +17,8 @@
 
   function setCamButtons(active) {
     try {
-      const startBtn = document.getElementById('startCam');
-      const stopBtn = document.getElementById('stopCam');
+      const startBtn = document.getElementById('startCam') || document.getElementById('StartCam');
+      const stopBtn = document.getElementById('stopCam') || document.getElementById('StopCam');
       if (startBtn) startBtn.disabled = !!active;
       if (stopBtn) stopBtn.disabled = !active;
     } catch {}
