@@ -41,7 +41,7 @@ import '../ui/typography-bridge.js';
 // Scripts Save/Load UI (dropdown + buttons wiring)
 import '../ui/scripts-ui.js';
 // OBS wiring: ensure Test button is always handled (claims OBS controls before legacy wiring)
-import './wiring/wire.js';
+import { wireObsPersistentUI } from './wiring/wire.js';
 // Settings overlay and media/OBS wiring (module path)
 import './ui/settings.js';
 
@@ -391,6 +391,9 @@ async function boot() {
         wireSpeedInput();
         setTimeout(wireSpeedInput, 250);
       } catch {}
+
+  // Ensure OBS persistent UI is wired and boot-restore applied (idempotent)
+  try { wireObsPersistentUI && wireObsPersistentUI(); } catch {}
 
       // Stop autoscroll with a short buffer after speech stops to avoid abrupt cutoffs
       try {
