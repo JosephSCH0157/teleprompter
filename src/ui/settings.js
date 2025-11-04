@@ -752,6 +752,12 @@
         }
         function showCalibModal(){ try { const {wrap} = ensureCalibModal(); wrap.style.display = 'flex'; } catch {} }
         function hideCalibModal(){ try { const wrap = document.getElementById('tp-calib-overlay'); if (wrap) wrap.style.display = 'none'; } catch {} }
+        // Expose globally so post-mount wiring can reuse
+        try {
+          window.ensureCalibModal = ensureCalibModal;
+          window.showCalibModal = showCalibModal;
+          window.hideCalibModal = hideCalibModal;
+        } catch {}
 
         const measure = (ms) => new Promise((resolve) => {
           const vals = [];
@@ -1007,17 +1013,51 @@
                   // Reuse modal helpers from the initial wiring block if available
                   const ensureCalibModal = (window.ensureCalibModal) || (function(){
                     return function(){
+                      // Create style if missing
+                      if (!document.getElementById('tp-calib-style')){
+                        const st = document.createElement('style');
+                        st.id = 'tp-calib-style';
+                        st.textContent = `
+  #tp-calib-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999998;display:none;align-items:center;justify-content:center}
+  #tp-calib-panel{background:#0e1722;color:#d6dfeb;border:1px solid #25384d;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);width:min(520px,92vw);padding:20px}
+  #tp-calib-title{font:600 18px/1.3 system-ui,sans-serif;margin:0 0 8px}
+  #tp-calib-instr{opacity:.9;margin:0 0 12px}
+  #tp-calib-count{font:700 56px/1.1 ui-monospace,Menlo,Consolas,monospace;text-align:center;margin:8px 0 4px}
+  #tp-calib-phase{font:500 14px/1.2 system-ui,sans-serif;text-align:center;margin:0 0 12px}
+  #tp-calib-actions{display:flex;gap:8px;justify-content:flex-end}
+  #tp-calib-actions button{background:#16324a;color:#d6dfeb;border:1px solid #25384d;border-radius:8px;padding:8px 12px;cursor:pointer}
+  #tp-calib-actions button[disabled]{opacity:.6;cursor:not-allowed}
+                        `;
+                        document.head.appendChild(st);
+                      }
+                      // Create overlay if missing
                       let wrap = document.getElementById('tp-calib-overlay');
-                      const title = wrap?.querySelector('#tp-calib-title');
-                      const instr = wrap?.querySelector('#tp-calib-instr');
-                      const count = wrap?.querySelector('#tp-calib-count');
-                      const phase = wrap?.querySelector('#tp-calib-phase');
-                      const btnCancel = wrap?.querySelector('#tp-calib-cancel');
-                      const btnClose = wrap?.querySelector('#tp-calib-close');
+                      if (!wrap){
+                        wrap = document.createElement('div');
+                        wrap.id = 'tp-calib-overlay';
+                        wrap.innerHTML = `
+  <div id="tp-calib-panel" role="dialog" aria-modal="true" aria-labelledby="tp-calib-title">
+    <h2 id="tp-calib-title">Mic calibration</h2>
+    <p id="tp-calib-instr">We’ll measure room noise, then your speaking level.</p>
+    <div id="tp-calib-count">3</div>
+    <div id="tp-calib-phase">Preparing…</div>
+    <div id="tp-calib-actions">
+      <button id="tp-calib-cancel">Cancel</button>
+      <button id="tp-calib-close" style="display:none">Close</button>
+    </div>
+  </div>`;
+                        document.body.appendChild(wrap);
+                      }
+                      const title = wrap.querySelector('#tp-calib-title');
+                      const instr = wrap.querySelector('#tp-calib-instr');
+                      const count = wrap.querySelector('#tp-calib-count');
+                      const phase = wrap.querySelector('#tp-calib-phase');
+                      const btnCancel = wrap.querySelector('#tp-calib-cancel');
+                      const btnClose = wrap.querySelector('#tp-calib-close');
                       return { wrap, title, instr, count, phase, btnCancel, btnClose };
                     }
                   })();
-                  const showCalibModal = (window.showCalibModal) || (function(){ return function(){ const el=document.getElementById('tp-calib-overlay'); if (el) el.style.display='flex'; } })();
+                  const showCalibModal = (window.showCalibModal) || (function(){ return function(){ const el=document.getElementById('tp-calib-overlay') || ensureCalibModal().wrap; if (el) el.style.display='flex'; } })();
                   const hideCalibModal = (window.hideCalibModal) || (function(){ return function(){ const el=document.getElementById('tp-calib-overlay'); if (el) el.style.display='none'; } })();
 
                   const ui = ensureCalibModal();
