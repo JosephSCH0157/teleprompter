@@ -140,6 +140,35 @@ export function initSettingsWiring() {
       }
     } catch {}
 
+    // Tiny timers/helpers used by waiters
+    const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const _waitUntil = async (fn, timeout = 6000, step = 120) => {
+      const t0 = performance.now();
+      while (performance.now() - t0 < timeout) {
+        try { if (await fn()) return true; } catch {}
+        await _sleep(step);
+      }
+      return false;
+    };
+
+    // Determine if the OBS surface is "up" across multiple adapter shapes
+    const _isObsUp = async (surface) => {
+      try {
+        if (typeof surface.isConnected === 'function') {
+          const v = await surface.isConnected();
+          if (v === true) return true;
+        }
+      } catch {}
+      try { if (surface.connected === true) return true; } catch {}
+      try { if (typeof surface.isIdentified === 'function' && surface.isIdentified()) return true; } catch {}
+      try { if (surface.identified === true) return true; } catch {}
+      try {
+        const ws = surface.ws || surface.socket || surface._ws;
+        if (ws && ws.readyState === 1) return true;
+      } catch {}
+      return false;
+    };
+
     // Expose wait helpers for DevTools parity: waitForObsSurface/connectAndWait
     try {
       if (typeof window.waitForObsSurface !== 'function') {
@@ -149,10 +178,10 @@ export function initSettingsWiring() {
             try {
               const reg = window.__recorder;
               const surface = reg?.get?.('obs');
-              if (surface && typeof surface.connect === 'function') return surface;
-              if (window.__obsBridge && typeof window.__obsBridge.connect === 'function') return window.__obsBridge;
+              if (surface && (typeof surface.connect === 'function' || surface.connect)) return surface;
+              if (window.__obsBridge && (typeof window.__obsBridge.connect === 'function' || window.__obsBridge.connect)) return window.__obsBridge;
             } catch {}
-            await new Promise(r => setTimeout(r, 50));
+            await _sleep(50);
           }
           throw new Error('[obs] surface not ready (adapter/bridge missing)');
         };
@@ -160,14 +189,28 @@ export function initSettingsWiring() {
       if (typeof window.connectAndWait !== 'function') {
         window.connectAndWait = async (cfg, connectTimeout = 6000) => {
           const surface = await window.waitForObsSurface();
-          try { if (surface.isConnected && await surface.isConnected()) return surface; } catch {}
-          try { surface.connect(cfg); } catch {}
-          const t0 = performance.now();
-          while (performance.now() - t0 < connectTimeout) {
-            try { if (await surface.isConnected?.()) return surface; } catch {}
-            await new Promise(r => setTimeout(r, 150));
-          }
-          throw new Error('[obs] connect timeout');
+          try { surface.connect?.(cfg); } catch (e) { try { console.warn('[obs] connect threw', e); } catch {} }
+          const ok = await _waitUntil(() => _isObsUp(surface), connectTimeout, 150);
+          if (!ok) { try { surface.lastError = 'timeout'; } catch {} throw new Error('[obs] connect timeout'); }
+          try { window.__tpObsConn = surface; } catch {}
+          return surface;
+        };
+      }
+    } catch {}
+
+    // Expose a safe config reader for console diagnostics
+    try {
+      if (typeof window.getObsCfg !== 'function') {
+        window.getObsCfg = () => {
+          const hostEl = document.getElementById('settingsObsHost');
+          const portEl = document.getElementById('settingsObsPort');
+          const secEl  = document.getElementById('settingsObsSecure');
+          const pwEl   = document.getElementById('settingsObsPassword');
+          const host = (hostEl && hostEl.value || '127.0.0.1').trim();
+          const port = parseInt(portEl && portEl.value || '4455', 10) || 4455;
+          const secure = !!(secEl && secEl.checked);
+          const password = (pwEl && pwEl.value) || '';
+          return { host, port, secure, password };
         };
       }
     } catch {}
