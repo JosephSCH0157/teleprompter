@@ -6,6 +6,72 @@ if (window.__tpBooted) {
 window.__tpBooted = 'index.module';
 window.__tpBootCount = (window.__tpBootCount || 0) + 1;
 
+// --- HUD SSOT (dev) ---
+(() => {
+  try {
+    const HUD_FLAG = 'tp_dev_hud_v1';
+    if (window.__tpHudWireActive) return; // already installed
+    window.__tpHudWireActive = true;
+
+    function ensureHudRoot() {
+      try {
+        let r = document.getElementById('hud-root');
+        if (!r) {
+          r = document.createElement('div');
+          r.id = 'hud-root';
+          r.className = 'hud-root hidden';
+          r.setAttribute('aria-hidden', 'true');
+          r.setAttribute('inert', '');
+          document.body.appendChild(r);
+        }
+        return r;
+      } catch { return null; }
+    }
+
+    const root = ensureHudRoot();
+    const api = window.__tpHud = window.__tpHud || {
+      enabled: false,
+      root,
+      setEnabled(on) {
+        try {
+          this.enabled = !!on;
+          if (this.root) {
+            this.root.classList.toggle('hidden', !on);
+            if (on) {
+              this.root.removeAttribute('aria-hidden');
+              this.root.removeAttribute('inert');
+            } else {
+              this.root.setAttribute('aria-hidden', 'true');
+              this.root.setAttribute('inert', '');
+            }
+          }
+          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
+          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
+        } catch {}
+      },
+      log(...args) {
+        try {
+          if (!this.enabled || !this.root) return;
+          const pre = document.createElement('pre');
+          pre.className = 'hud-line';
+          pre.textContent = args.map(a => {
+            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
+          }).join(' ');
+          this.root.appendChild(pre);
+          this.root.scrollTop = this.root.scrollHeight;
+        } catch {}
+      },
+    };
+
+    // Hydrate from storage
+    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
+    // Unify legacy HUD log calls to the SSOT
+    try { if (!window.HUD) window.HUD = api; } catch {}
+    // Announce readiness
+    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
+  } catch {}
+})();
+
 // Minimal bootstrap for the new `src/` modular layout.
 // This file intentionally performs a very small set of init actions and
 // delegates the heavy lifting to the legacy loader until a full migration is done.

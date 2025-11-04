@@ -643,29 +643,44 @@
       // Initial connection attempt after mount
       setTimeout(ensureObsConnection, 0);
 
-      // Dev HUD toggle (advanced)
+      // Dev HUD toggle (advanced) — SSOT wiring to modern HUD
       const devHud = q('settingsDevHud');
       if (devHud && hasStore) devHud.addEventListener('change', () => S.set('devHud', !!devHud.checked));
       if (hasStore && typeof S.subscribe === 'function') {
         S.subscribe('devHud', v => {
           try {
             if (devHud && devHud.checked !== !!v) devHud.checked = !!v;
-            // Show/hide the modern HUD (installed by debug-tools)
+            // Single-source: prefer modern SSOT API if present
+            try { (window.__tpHud?.setEnabled && window.__tpHud.setEnabled(!!v)); } catch {}
+            // Persist also under SSOT key for parity with non-store paths
+            try { localStorage.setItem('tp_dev_hud_v1', v ? '1' : '0'); } catch {}
+            // Back-compat: ensure #hud-root exists and is hidden/shown appropriately
             try {
-              if (v && typeof window.__tpInstallHUD === 'function' && !window.__tpHud) {
-                window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
-              }
-              if (window.__tpHud) {
-                if (v) { try { window.__tpHud.show && window.__tpHud.show(); } catch {} }
-                else { try { window.__tpHud.hide && window.__tpHud.hide(); } catch {} }
-              }
+              let hudRoot = document.getElementById('hud-root');
+              if (!hudRoot) { hudRoot = document.createElement('div'); hudRoot.id = 'hud-root'; hudRoot.className = 'hud-root hidden'; hudRoot.setAttribute('aria-hidden','true'); hudRoot.setAttribute('inert',''); document.body.appendChild(hudRoot); }
+              hudRoot.classList.toggle('hidden', !v);
+              if (v) { hudRoot.removeAttribute('aria-hidden'); hudRoot.removeAttribute('inert'); }
+              else { hudRoot.setAttribute('aria-hidden','true'); hudRoot.setAttribute('inert',''); }
             } catch {}
-            // Back-compat: toggle legacy mount visibility if present
-            const hud = document.getElementById('hud-root');
-            if (hud) hud.style.display = v ? '' : 'none';
           } catch {}
         });
       }
+
+      // Dev HUD checkbox wiring (Settings) — mirrors localStorage + calls SSOT API directly
+      (() => {
+        try {
+          const HUD_FLAG = 'tp_dev_hud_v1';
+          const box = document.getElementById('settingsDevHud');
+          if (!box || box.dataset.hudWired) return;
+          box.dataset.hudWired = '1';
+          try { box.checked = localStorage.getItem(HUD_FLAG) === '1'; } catch {}
+          box.addEventListener('change', () => {
+            const on = !!box.checked;
+            try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
+            try { (window.ensureHud?.() ?? window.__tpHud)?.setEnabled?.(on); } catch {}
+          }, { capture: true });
+        } catch {}
+      })();
 
       // Reset app state
       const resetBtn = q('settingsResetState');

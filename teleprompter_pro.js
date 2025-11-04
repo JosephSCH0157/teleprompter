@@ -10,6 +10,15 @@
   } catch {}
 })();
 
+// Legacy HUD must stand down if modern HUD is active
+try {
+  if (window.__tpHudWireActive) {
+    console.debug('[HUD] Legacy HUD disabled (SSOT=TS).');
+    // Route legacy HUD calls to modern SSOT to avoid double logs
+    if (!window.HUD && window.__tpHud) window.HUD = window.__tpHud;
+  }
+} catch {}
+
 // --- HUD hotkey safety (Alt+Shift+H always opens HUD) ---
 window.addEventListener('keydown', (e) => {
   if (e.altKey && e.shiftKey && e.code === 'KeyH') {
