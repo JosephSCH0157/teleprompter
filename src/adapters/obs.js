@@ -201,7 +201,7 @@ export function connect(urlOrOpts, pass) {
 }
 
 export function createOBSAdapter() {
-  return {
+  const adapter = {
     id: 'obs',
     label: 'OBS (ws)',
     async isAvailable() { return typeof WebSocket !== 'undefined'; },
@@ -246,4 +246,8 @@ export function createOBSAdapter() {
       } catch { return { ok:false }; }
     },
   };
+  // Cheap safety line: expose adapter for console debug and unified discovery fallbacks
+  try { if (!window.__obsAdapter) window.__obsAdapter = adapter; } catch {}
+  try { window.__recorder = window.__recorder || (typeof requireRecorderSomehow === 'function' ? requireRecorderSomehow() : window.__recorder); } catch {}
+  return adapter;
 }
