@@ -116,6 +116,23 @@ export function initSettingsWiring() {
 
     // Expose a tiny introspection hook for sanity checks
     try { window.__tpObsWiringInfo = () => ({ wireActive: !!window.__tpObsWireActive, delegateListeners: __obsDelegateCount, claimedBridge: !!window.__tpObsInlineBridgeActive }); } catch {}
+
+    // Small dev helper for parity with legacy: window.__obsDebug()
+    try {
+      if (typeof window.__obsDebug !== 'function') {
+        window.__obsDebug = async () => {
+          const hasBridge = !!window.__obsBridge;
+          const hasAdapter = !!(window && window.__tpOBS);
+          let connected = false;
+          try {
+            const c = window.__tpObsConn;
+            if (c && typeof c.isIdentified === 'function') connected = !!c.isIdentified();
+          } catch {}
+          try { console.table({ hasAdapter, hasBridge, connected }); } catch {}
+          return { hasAdapter, hasBridge, connected };
+        };
+      }
+    } catch {}
   } catch {}
 }
 
