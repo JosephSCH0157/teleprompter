@@ -29,6 +29,31 @@ try {
         e.stopImmediatePropagation?.();
       } catch {}
     }, { capture: false });
+
+    // Device select safety: handle Settings/Main device changes even if specific wiring didn't attach
+    document.addEventListener('change', async (e) => {
+      try {
+        const el = e.target && e.target.closest && e.target.closest('#settingsCamSel, #camDevice, #CamDevice');
+        if (!el) return;
+        const val = el && 'value' in el ? el.value : '';
+        // Persist + mirror both selects
+        try { if (val) localStorage.setItem('tp_camera_device_v1', String(val)); } catch {}
+        try {
+          const sSel = document.getElementById('settingsCamSel');
+          const mSel = document.getElementById('camDevice') || document.getElementById('CamDevice');
+          if (sSel && sSel !== el && sSel.value !== val) sSel.value = val;
+          if (mSel && mSel !== el && mSel.value !== val) mSel.value = val;
+        } catch {}
+        // Live switch if active
+        try {
+          if (window.__tpCamera && typeof window.__tpCamera.isActive === 'function' && window.__tpCamera.isActive()) {
+            await (window.__tpCamera.switchCamera?.(val));
+          }
+        } catch {}
+        // Stop legacy listeners from reacting
+        try { e.stopPropagation(); e.stopImmediatePropagation?.(); } catch {}
+      } catch {}
+    }, { capture: true });
   }
 } catch {}
 

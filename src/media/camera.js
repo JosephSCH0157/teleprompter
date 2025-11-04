@@ -131,10 +131,16 @@
       if (!deviceId) return;
       let newStream = null;
       try {
+        // Try with reasonable prefs first
         newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
-  } catch {
-        // Device missing/unavailable; attempt default fallback
-        newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch {
+        try {
+          // Retry with only deviceId (drop resolution/frameRate preferences)
+          newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } }, audio: false });
+        } catch {
+          // Device missing/unavailable; attempt default fallback (will likely select system default)
+          newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
       }
       const camVideo = document.getElementById('camVideo');
       const old = camStream;
