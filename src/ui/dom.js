@@ -33,23 +33,36 @@ try {
     // Device select safety: handle Settings/Main device changes even if specific wiring didn't attach
     document.addEventListener('change', async (e) => {
       try {
+        if (window.__tpSettingsCamGuardActive) return; // Settings wiring owns this
         const el = e.target && e.target.closest && e.target.closest('#settingsCamSel, #camDevice, #CamDevice');
         if (!el) return;
         const val = el && 'value' in el ? el.value : '';
-        // Persist + mirror both selects
-        try { if (val) localStorage.setItem('tp_camera_device_v1', String(val)); } catch {}
-        try {
-          const sSel = document.getElementById('settingsCamSel');
-          const mSel = document.getElementById('camDevice') || document.getElementById('CamDevice');
-          if (sSel && sSel !== el && sSel.value !== val) sSel.value = val;
-          if (mSel && mSel !== el && mSel.value !== val) mSel.value = val;
-        } catch {}
-        // Live switch if active
-        try {
-          if (window.__tpCamera && typeof window.__tpCamera.isActive === 'function' && window.__tpCamera.isActive()) {
-            await (window.__tpCamera.switchCamera?.(val));
-          }
-        } catch {}
+        const prev = (function(){ try { return localStorage.getItem('tp_camera_device_v1') || ''; } catch { return ''; } })();
+        let ok = true;
+        // Live switch if active; only persist on success
+        if (window.__tpCamera?.isActive?.()) {
+          try {
+            ok = !!(await window.__tpCamera.switchCamera?.(val));
+          } catch { ok = false; }
+        }
+        if (ok) {
+          try { if (val) localStorage.setItem('tp_camera_device_v1', String(val)); } catch {}
+          try {
+            const sSel = document.getElementById('settingsCamSel');
+            const mSel = document.getElementById('camDevice') || document.getElementById('CamDevice');
+            if (sSel && sSel !== el && sSel.value !== val) sSel.value = val;
+            if (mSel && mSel !== el && mSel.value !== val) mSel.value = val;
+          } catch {}
+        } else {
+          // Revert UI to previously saved id on failure
+          try {
+            const sSel = document.getElementById('settingsCamSel');
+            const mSel = document.getElementById('camDevice') || document.getElementById('CamDevice');
+            if (sSel && prev && sSel.value !== prev) sSel.value = prev;
+            if (mSel && prev && mSel.value !== prev) mSel.value = prev;
+          } catch {}
+          try { window.toast && window.toast('Camera unavailable — selection reverted', { type: 'warn' }); } catch {}
+        }
         // Stop legacy listeners from reacting
         try { e.stopPropagation(); e.stopImmediatePropagation?.(); } catch {}
       } catch {}
