@@ -3,6 +3,17 @@
   let camStream = null;
   let camPC = null;
   let _wantCamRTC = false;
+  // Reentrancy guard for startCamera
+  let __startingCam = false;
+
+  function isCamActive() {
+    try {
+      const v = document.getElementById('camVideo');
+      const s = v && v.srcObject;
+      const tracks = s && typeof s.getTracks === 'function' ? s.getTracks() : [];
+      return !!(tracks && tracks.some(t => t && t.readyState === 'live'));
+    } catch { return false; }
+  }
 
   function setCamButtons(active) {
     try {
@@ -47,6 +58,10 @@
 
   async function startCamera() {
     try {
+      if (__startingCam) return; // prevent double-fire
+      if (isCamActive()) return; // already live
+      __startingCam = true;
+      try {
       // Ensure any previous stream is fully stopped before starting
       if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
       // Prefer Settings selector as single source of truth; fall back to persisted/legacy id if present
@@ -92,6 +107,7 @@
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
       try { if (window.__tpMic) window.__tpMic.populateDevices && window.__tpMic.populateDevices(); } catch {}
       return true;
+      } finally { __startingCam = false; }
     } catch (e) { console.warn('startCamera failed', e); throw e; }
   }
 
@@ -131,6 +147,8 @@
   }
 
   try { window.__tpCamera = window.__tpCamera || {}; window.__tpCamera.startCamera = startCamera; window.__tpCamera.stopCamera = stopCamera; window.__tpCamera.switchCamera = switchCamera; window.__tpCamera.applyCamSizing = applyCamSizing; window.__tpCamera.applyCamOpacity = applyCamOpacity; window.__tpCamera.applyCamMirror = applyCamMirror; } catch {}
+  // Publish activity check
+  try { window.__tpCamera = Object.assign(window.__tpCamera || {}, { isActive: isCamActive }); } catch {}
   // Aliases for simplified API expected by some callers
   try {
     window.__tpCamera = window.__tpCamera || {};

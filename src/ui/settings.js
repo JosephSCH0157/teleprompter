@@ -257,7 +257,7 @@
 
         async function onCamPick(val) {
           syncCamSelects(val);
-          const active = !!(document.getElementById('camVideo')?.srcObject);
+          const active = !!(window.__tpCamera?.isActive?.());
           if (active) {
             try { await window.__tpCamera?.switchCamera?.(val); } catch (e) { console.warn('switchCamera (settings) failed', e); }
           }
