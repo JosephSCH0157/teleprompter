@@ -139,81 +139,7 @@ export function initSettingsWiring() {
         };
       }
     } catch {}
-
-    // Tiny timers/helpers used by waiters
-    const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const _waitUntil = async (fn, timeout = 6000, step = 120) => {
-      const t0 = performance.now();
-      while (performance.now() - t0 < timeout) {
-        try { if (await fn()) return true; } catch {}
-        await _sleep(step);
-      }
-      return false;
-    };
-
-    // Determine if the OBS surface is "up" across multiple adapter shapes
-    const _isObsUp = async (surface) => {
-      try {
-        if (typeof surface.isConnected === 'function') {
-          const v = await surface.isConnected();
-          if (v === true) return true;
-        }
-      } catch {}
-      try { if (surface.connected === true) return true; } catch {}
-      try { if (typeof surface.isIdentified === 'function' && surface.isIdentified()) return true; } catch {}
-      try { if (surface.identified === true) return true; } catch {}
-      try {
-        const ws = surface.ws || surface.socket || surface._ws;
-        if (ws && ws.readyState === 1) return true;
-      } catch {}
-      return false;
-    };
-
-    // Expose wait helpers for DevTools parity: waitForObsSurface/connectAndWait
-    try {
-      if (typeof window.waitForObsSurface !== 'function') {
-        window.waitForObsSurface = async (timeout = 5000) => {
-          const t0 = performance.now();
-          while (performance.now() - t0 < timeout) {
-            try {
-              const reg = window.__recorder;
-              const surface = reg?.get?.('obs');
-              if (surface && (typeof surface.connect === 'function' || surface.connect)) return surface;
-              if (window.__obsBridge && (typeof window.__obsBridge.connect === 'function' || window.__obsBridge.connect)) return window.__obsBridge;
-            } catch {}
-            await _sleep(50);
-          }
-          throw new Error('[obs] surface not ready (adapter/bridge missing)');
-        };
-      }
-      if (typeof window.connectAndWait !== 'function') {
-        window.connectAndWait = async (cfg, connectTimeout = 6000) => {
-          const surface = await window.waitForObsSurface();
-          try { surface.connect?.(cfg); } catch (e) { try { console.warn('[obs] connect threw', e); } catch {} }
-          const ok = await _waitUntil(() => _isObsUp(surface), connectTimeout, 150);
-          if (!ok) { try { surface.lastError = 'timeout'; } catch {} throw new Error('[obs] connect timeout'); }
-          try { window.__tpObsConn = surface; } catch {}
-          return surface;
-        };
-      }
-    } catch {}
-
-    // Expose a safe config reader for console diagnostics
-    try {
-      if (typeof window.getObsCfg !== 'function') {
-        window.getObsCfg = () => {
-          const hostEl = document.getElementById('settingsObsHost');
-          const portEl = document.getElementById('settingsObsPort');
-          const secEl  = document.getElementById('settingsObsSecure');
-          const pwEl   = document.getElementById('settingsObsPassword');
-          const host = (hostEl && hostEl.value || '127.0.0.1').trim();
-          const port = parseInt(portEl && portEl.value || '4455', 10) || 4455;
-          const secure = !!(secEl && secEl.checked);
-          const password = (pwEl && pwEl.value) || '';
-          return { host, port, secure, password };
-        };
-      }
-    } catch {}
+    // Note: OBS connect/wait helpers and getObsCfg are defined below in the module-scoped helpers section
   } catch {}
 }
 
@@ -221,115 +147,121 @@ export function initSettingsWiring() {
 try { initSettingsWiring(); } catch {}
 export default initSettingsWiring;
 
-// --- Persistent OBS Enable wiring ---
-// When the "Enable OBS" checkbox is checked, hold an open websocket until
-// unchecked or the page unloads.
-(function setupPersistentObs() {
-  try {
-    const el = {
-      en:  document.getElementById('settingsEnableObs'),
-      host:document.getElementById('settingsObsHost'),
-      port:document.getElementById('settingsObsPort'),
-      sec: document.getElementById('settingsObsSecure'),
-      pw:  document.getElementById('settingsObsPassword'),
-    };
+// ---------- OBS helpers (module path) ----------
+function _sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-    if (!el.en) return; // Settings panel not mounted in this build
+function _normalizeObsCfg(raw){
+  const hostElA = document.getElementById('settingsOBSHost') || document.getElementById('settingsObsHost');
+  const portElA = document.getElementById('settingsOBSPort') || document.getElementById('settingsObsPort');
+  const secElA  = document.getElementById('settingsOBSSecure') || document.getElementById('settingsObsSecure');
+  const pwElA   = document.getElementById('settingsOBSPassword') || document.getElementById('settingsObsPassword');
+  const host   = (raw?.host || hostElA?.value || '127.0.0.1').trim();
+  const port   = Number(raw?.port ?? portElA?.value ?? 4455) || 4455;
+  const secure = !!(raw?.secure ?? secElA?.checked);
+  const password = String(raw?.password ?? pwElA?.value ?? '');
+  const proto = secure ? 'wss' : 'ws';
+  const url = `${proto}://${host}:${port}`;
+  return { host, port, secure, password, url };
+}
 
-    const readOpts = () => {
-      const host = (el.host && el.host.value || '127.0.0.1').trim();
-      const port = parseInt(el.port && el.port.value || '4455', 10) || 4455;
-      const secure = !!(el.sec && el.sec.checked);
-      const password = (el.pw && el.pw.value) || '';
-      return { host, port, secure, password, reconnect: true };
-    };
-
-    const getAdapter = () => {
-      try { if (window.__tpOBS) return window.__tpOBS; } catch {}
-      try {
-        const A = window.Adapters && window.Adapters.obsAdapter;
-        if (A && typeof A.create === 'function') return A.create();
-      } catch {}
-      return null;
-    };
-
-    async function applyEnableState() {
-      try {
-        const obs = getAdapter();
-        if (!obs) return;
-        const opts = readOpts();
-        if (el.en.checked) {
-          // Close any previous connection first
-          try { if (window.__tpObsConn && typeof window.__tpObsConn.close === 'function') window.__tpObsConn.close(); } catch {}
-          // Open and retain connection for debug helpers and status.
-          // Prefer robust path if available.
-          if (typeof window.connectAndWait === 'function') {
-            try {
-              await window.connectAndWait(opts);
-            } catch (e) {
-              console.warn('[obs] connectAndWait failed; falling back to direct connect', e);
-              try { window.__tpObsConn = obs.connect(opts); } catch {}
-            }
-          } else {
-            try { window.__tpObsConn = obs.connect(opts); } catch {}
-          }
-          // optional UI nudge
-          try { if (typeof obs.pokeStatusTest === 'function') obs.pokeStatusTest(); } catch {}
-        } else {
-          // Close and clear
-          try { if (window.__tpObsConn && typeof window.__tpObsConn.close === 'function') window.__tpObsConn.close(); } catch {}
-          try { window.__tpObsConn = null; } catch {}
-        }
-      } catch (e) {
-        console.warn('OBS enable apply failed:', e);
-      }
-    }
-
-    // Toggle wiring
-    if (el.en.__obsWired) return; // idempotent per element
-    el.en.__obsWired = true;
-    el.en.addEventListener('change', applyEnableState, { passive: true });
-
-    // If connection details change while enabled, reconnect with new opts
-    ;[el.host, el.port, el.sec, el.pw].forEach((input) => {
-      if (!input) return;
-      input.addEventListener('change', () => {
-        if (el.en && el.en.checked) applyEnableState();
-      }, { passive: true });
-    });
-
-    // Close on navigation
-    window.addEventListener('beforeunload', () => {
-      try { if (window.__tpObsConn && typeof window.__tpObsConn.close === 'function') window.__tpObsConn.close(); } catch {}
-      try { window.__tpObsConn = null; } catch {}
-    });
-
-    // Boot: if the toggle is already checked (persisted), connect soon
-    if (el.en.checked) setTimeout(() => { applyEnableState(); }, 0);
-  } catch (e) {
-    console.debug('OBS persistent wiring skipped:', e);
+async function waitForObsSurface(timeout = 5000){
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeout) {
+    const a = window.__recorder?.get?.('obs');
+    if (a && (a.connect || typeof a.connect === 'function')) return a;
+    await _sleep(50);
   }
-})();
+  throw new Error('[obs] surface not ready');
+}
 
-// Export an explicit wiring hook (idempotent) for callers that prefer manual control
-export function wireObsPersistentUI() {
+async function _waitUntil(fn, timeout = 10000, step = 120){
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeout) {
+    try { if (await fn()) return true; } catch {}
+    await _sleep(step);
+  }
+  return false;
+}
+
+function _tapObsEvents(surface){
+  // Create a one-shot latch from any of the common OBS signals
+  const flags = { open:false, ready:false, hello:false, identified:false };
+  const set = k => () => { flags[k] = true; };
+  // Support different emitters
+  const on = surface.on?.bind(surface)
+        || surface.addEventListener?.bind(surface)
+        || ((evt, fn)=>{ try { surface[`on${evt}`] = fn; } catch {} });
+
+  try { on && on('open', set('open')); } catch {}
+  try { on && on('ready', set('ready')); } catch {}
+  try { on && on('hello', set('hello')); } catch {}
+  try { on && on('identified', set('identified')); } catch {}
+  try { on && on('Identified', set('identified')); } catch {}
+  try { on && on('ConnectionReady', set('ready')); } catch {}
+  try { on && on('AuthenticationSuccess', set('identified')); } catch {}
+
+  return {
+    flags,
+    any: () => flags.open || flags.ready || flags.hello || flags.identified
+  };
+}
+
+async function _isObsUp(surface){
+  try { if (typeof surface.isConnected === 'function' && (await surface.isConnected())) return true; } catch {}
+  if (surface.connected === true) return true;
+  try { if (typeof surface.isIdentified === 'function' && surface.isIdentified()) return true; } catch {}
+  if (surface.identified === true) return true;
+  const ws = surface.ws || surface.socket || surface._ws;
+  if (ws && ws.readyState === 1) return true;
+  return false;
+}
+
+async function connectAndWait(cfgRaw){
+  const s = await waitForObsSurface();
+  const cfg = _normalizeObsCfg(cfgRaw);
+  const tap = _tapObsEvents(s);           // watch for events too
+
+  // Try both shapes: url+password AND host/port/secure/password
   try {
-    const box = document.getElementById('settingsEnableObs');
-    if (!box) return;
-    if (box.__obsWired) return; // already wired by setupPersistentObs
-    // Minimal restore if already enabled
-    if (box.checked && typeof window.connectAndWait === 'function') {
-      const hostEl = document.getElementById('settingsObsHost');
-      const portEl = document.getElementById('settingsObsPort');
-      const secEl  = document.getElementById('settingsObsSecure');
-      const pwEl   = document.getElementById('settingsObsPassword');
-      const opts = {
-        host: (hostEl && hostEl.value || '127.0.0.1').trim(),
-        port: parseInt(portEl && portEl.value || '4455', 10) || 4455,
-        secure: !!(secEl && secEl.checked),
-        password: (pwEl && pwEl.value) || '',
-      };
-      try { window.connectAndWait(opts).catch(() => {}); } catch {}
-    }
-  } catch {}
+    if (s.connect.length >= 1) s.connect({ url: cfg.url, password: cfg.password, ...cfg });
+    else s.connect({ url: cfg.url, password: cfg.password, ...cfg });
+  } catch (e) {
+    console.warn('[obs] connect threw, retrying with host/port shape', e);
+    try { s.connect({ host: cfg.host, port: cfg.port, secure: cfg.secure, password: cfg.password }); }
+    catch (e2) { console.warn('[obs] second connect form threw', e2); }
+  }
+
+  const ok = await _waitUntil(async () => (tap.any() || _isObsUp(s)), 10000, 120);
+  if (!ok) { s.lastError = 'timeout'; throw new Error('[obs] connect timeout'); }
+  window.__tpObsConn = s;
+  return s;
+}
+
+function getObsCfg(raw){ return _normalizeObsCfg(raw); }
+
+Object.assign(window, { waitForObsSurface, connectAndWait, getObsCfg });
+
+// ---------- Persistent connect / UI wiring ----------
+async function obsConnectPersistent(){ await connectAndWait(getObsCfg()); }
+async function obsDisconnectPersistent(){
+  const s = window.__recorder?.get?.('obs');
+  try { await s?.disconnect?.(); } catch {}
+  window.__tpObsConn = null;
+}
+
+async function restoreObsOnBoot(){
+  const box = document.getElementById('settingsEnableObs');
+  if (!box?.checked) return;
+  try { await obsConnectPersistent(); } catch (e) { console.warn('[obs] restore failed', e); }
+}
+
+export function wireObsPersistentUI(){
+  const box = document.getElementById('settingsEnableObs');
+  if (!box || box.__obsWired) return;
+  box.__obsWired = true;
+  box.addEventListener('change', (e) => {
+    if (e.target.checked) obsConnectPersistent();
+    else obsDisconnectPersistent();
+  });
+  restoreObsOnBoot();
 }
