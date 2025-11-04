@@ -279,6 +279,8 @@ async function boot() {
   } catch {}
   // Ensure autoscroll engine is initialized before wiring router/UI
   try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
+  // Force engine OFF at boot; app shouldn't scroll until user starts speech sync or manually toggles.
+  try { Auto.setEnabled && Auto.setEnabled(false); } catch {}
   try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch {}
 
   // Provide a minimal global scroll controller facade for dev/CI bridges and diagnostics.
@@ -476,8 +478,10 @@ async function boot() {
       // Stop autoscroll with a short buffer after speech stops to avoid abrupt cutoffs
       try {
         let autoStopTimer = null;
+        let speechActiveLatest = false;
         window.addEventListener('tp:speech-state', (ev) => {
           const isRunning = !!(ev && ev.detail && ev.detail.running);
+          speechActiveLatest = isRunning;
           try {
             if (isRunning) {
               if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
@@ -492,6 +496,15 @@ async function boot() {
             try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
             autoStopTimer = null;
           }, 2500);
+        });
+
+        // Guard: when a new script renders, ensure autoscroll is OFF unless speech is active.
+        window.addEventListener('tp:script-rendered', () => {
+          try {
+            if (!speechActiveLatest) {
+              Auto.setEnabled?.(false);
+            }
+          } catch {}
         });
       } catch {}
     } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }

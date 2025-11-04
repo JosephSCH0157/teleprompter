@@ -45,8 +45,7 @@ export function createOrchestrator(): Orchestrator {
       } catch {}
     });
     await a.start();
-    started = true;
-    try { motor.setEnabled(true); } catch {}
+  started = true;
 
     // Basic restart backoff on ASR errors (once), then fall back to VAD mode
     try {

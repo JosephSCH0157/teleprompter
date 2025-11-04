@@ -114,12 +114,14 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   restoreMode();
   applyMode(state.mode);
 
-  // ASR v2 Orchestrator (minimal integration): start on 'wpm'/'asr', stop otherwise
+  // ASR v2 Orchestrator (minimal integration): only run when mode is 'wpm'/'asr' AND speech is active
   const orch = createOrchestrator();
   let orchRunning = false;
+  // Require global speech sync to be active in any mode for engine to actually run
+  let speechActive = false;
   async function ensureOrchestratorForMode() {
     try {
-      if (state.mode === 'wpm' || state.mode === 'asr') {
+      if ((state.mode === 'wpm' || state.mode === 'asr') && speechActive) {
         if (!orchRunning) {
           await orch.start(createVadEventAdapter()); // use VAD events for speaking; WPM updates when tokens are available
           orch.setMode('assist');
@@ -138,14 +140,13 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let dbGate = false;      // set from tp:db
   let vadGate = false;     // set from tp:vad
   let gatePref = getUiPrefs().hybridGate;
-  // Require global speech sync to be active in any mode for Auto to actually run
-  let speechActive = false;
   try {
     window.addEventListener('tp:speech-state' as any, (e: any) => {
       try {
         const running = !!(e && e.detail && e.detail.running);
         speechActive = running;
         applyGate();
+        void ensureOrchestratorForMode();
       } catch {}
     });
   } catch {}
@@ -392,22 +393,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     }, { capture: true });
   } catch {}
 
-  // Default Hybrid intent to ON at startup; set initial label with stored speed and apply once
-  if (state.mode === 'hybrid') {
-    userEnabled = true;
-    // Seed engine speed from storage so ticks use the intended value
-    try { const seed = getStoredSpeed(); auto.setSpeed?.(seed); lastSpeed = seed; } catch {}
-    try {
-      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
-      if (btn) {
-        btn.dataset.state = 'on';
-        btn.textContent = `Auto-scroll: On — ${lastSpeed} px/s`;
-      }
-    } catch {}
-    applyGate();
-  } else {
-    applyGate();
-  }
+  // At startup, do not enable Auto in any mode; router reflects Off/Manual until speech sync starts or user explicitly toggles.
+  applyGate();
   // If ASR modes selected initially, ensure orchestrator
   if (state.mode === 'wpm' || state.mode === 'asr') ensureOrchestratorForMode();
 
