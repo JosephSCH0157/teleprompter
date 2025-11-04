@@ -116,6 +116,43 @@ async function boot() {
           } catch {}
         };
       }
+      // HUD safety hook: lightweight overlay + global toggleHotkey
+      if (typeof window.toggleHud !== 'function') {
+        window.toggleHud = () => {
+          try {
+            // Prefer full HUD if available
+            if (window.__tpHud && (typeof window.__tpHud.toggle === 'function' || typeof window.__tpHud.show === 'function')) {
+              if (typeof window.__tpHud.toggle === 'function') return void window.__tpHud.toggle();
+              const shown = !!window.__tpHud?.isVisible?.();
+              return shown ? void window.__tpHud.hide?.() : void window.__tpHud.show?.();
+            }
+          } catch {}
+          // Fallback: tiny in-page pill
+          try {
+            let el = document.getElementById('tp-hud-lite');
+            if (!el) {
+              el = document.createElement('div');
+              el.id = 'tp-hud-lite';
+              el.style.cssText = 'position:fixed;right:12px;top:12px;z-index:99999;background:rgba(0,0,0,.72);color:#fff;padding:8px 10px;border-radius:10px;font:12px/1.35 system-ui;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+              el.textContent = 'HUD ready';
+              document.body.appendChild(el);
+            }
+            el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+          } catch {}
+        };
+      }
+      if (!window.__tpHudSafetyHookInstalled) {
+        window.__tpHudSafetyHookInstalled = true;
+        document.addEventListener('keydown', (e) => {
+          try {
+            const k = (e.key || '').toLowerCase();
+            if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
+              e.preventDefault();
+              window.toggleHud?.();
+            }
+          } catch {}
+        }, { capture: true });
+      }
     } catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');
