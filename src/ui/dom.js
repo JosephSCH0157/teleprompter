@@ -149,20 +149,28 @@ function wireCamera() {
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
-  on(start, 'click', async () => {
-    try {
+  if (start && !start.dataset.captureWired) {
+    start.dataset.captureWired = '1';
+    start.addEventListener('click', async (e) => {
+      try { e.stopImmediatePropagation(); e.preventDefault(); } catch {}
       try { if (window.toast) window.toast('Camera starting…'); } catch {}
       // Ensure camera module is loaded if not yet available
       try { if (!window.__tpCamera || typeof window.__tpCamera.startCamera !== 'function') await import('../media/camera.js'); } catch {}
-      await window.__tpCamera?.startCamera?.();
-    } catch {
-      try { if (window.toast) window.toast('Camera start failed'); } catch {}
-    }
-  });
-  on(stop, 'click', () => {
-    try { window.__tpCamera?.stopCamera?.(); } catch {}
-    try { if (window.toast) window.toast('Camera stopped', { type: 'ok' }); } catch {}
-  });
+      try {
+        await window.__tpCamera?.startCamera?.();
+      } catch {
+        try { if (window.toast) window.toast('Camera start failed'); } catch {}
+      }
+    }, { capture: true });
+  }
+  if (stop && !stop.dataset.captureWired) {
+    stop.dataset.captureWired = '1';
+    stop.addEventListener('click', (e) => {
+      try { e.stopImmediatePropagation(); e.preventDefault(); } catch {}
+      try { window.__tpCamera?.stopCamera?.(); } catch {}
+      try { if (window.toast) window.toast('Camera stopped', { type: 'ok' }); } catch {}
+    }, { capture: true });
+  }
   on(size, 'input', () => { try { window.__tpCamera?.applyCamSizing?.(); } catch {} });
   on(op, 'input', () => { try { window.__tpCamera?.applyCamOpacity?.(); } catch {} });
   on(mir, 'change', () => { try { window.__tpCamera?.applyCamMirror?.(); } catch {} });
