@@ -49,28 +49,35 @@
     try {
       // Ensure any previous stream is fully stopped before starting
       if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
-  // Prefer Settings selector as single source of truth; fall back to legacy sidebar id if present
-  const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
+      // Prefer Settings selector as single source of truth; fall back to persisted/legacy id if present
+      const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
       let id = camDeviceSel?.value || undefined;
-      // Fallback to persisted preference if selector not set yet
+      try { if (!id) { const saved = localStorage.getItem('tp_camera_device_v1'); if (saved) id = saved; } } catch {}
+      let stream = null;
       try {
-        if (!id) {
-          const saved = localStorage.getItem('tp_camera_device_v1');
-          if (saved) id = saved;
+        stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id } } : true, audio: false });
+  } catch {
+        // Fallback: if exact device fails (e.g., unplugged), try default camera
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } catch (err2) {
+          console.warn('startCamera failed', err2);
+          throw err2;
         }
-      } catch {}
-      const stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id } } : true, audio: false });
+      }
       const camVideo = document.getElementById('camVideo');
       const camWrap = document.getElementById('camWrap');
-      if (!camVideo || !camWrap) return;
+      if (!camVideo || !camWrap) throw new Error('camera elements missing');
       camVideo.muted = true; camVideo.autoplay = true; camVideo.playsInline = true; camVideo.controls = false;
       camVideo.srcObject = stream;
+      try { await camVideo.play(); } catch {}
       camWrap.style.display = 'block';
       camStream = stream;
       setCamButtons(true);
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
       try { if (window.__tpMic) window.__tpMic.populateDevices && window.__tpMic.populateDevices(); } catch {}
-    } catch (e) { console.warn('startCamera failed', e); }
+      return true;
+    } catch (e) { console.warn('startCamera failed', e); throw e; }
   }
 
   function stopCamera() {
@@ -91,13 +98,20 @@
   async function switchCamera(deviceId) {
     try {
       if (!deviceId) return;
-      const newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
+      let newStream = null;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
+  } catch {
+        // Device missing/unavailable; attempt default fallback
+        newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       const camVideo = document.getElementById('camVideo');
       const old = camStream;
       camStream = newStream;
-      if (camVideo) camVideo.srcObject = newStream;
+      if (camVideo) { camVideo.srcObject = newStream; try { await camVideo.play(); } catch {} }
       if (old) old.getTracks().forEach(t=>t.stop());
       try { window.sendToDisplay && window.sendToDisplay({ type: 'cam-sizing', pct: Math.max(15, Math.min(60, Number(document.getElementById('camSize')?.value) || 28)) }); } catch {}
+      return true;
     } catch (e) { console.warn('switchCamera failed', e); throw e; }
   }
 
