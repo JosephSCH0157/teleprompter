@@ -32,6 +32,15 @@
     } catch { return ''; }
   }
 
+  async function findObsVirtualCameraId() {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return '';
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const hit = list.find((d) => d && d.kind === 'videoinput' && /obs.*virtual|virtual\s*camera/i.test(String(d.label||'')));
+      return (hit && hit.deviceId) || '';
+    } catch { return ''; }
+  }
+
   function setCamButtons(active) {
     try {
       const startBtn = document.getElementById('startCam') || document.getElementById('StartCam');
@@ -93,6 +102,7 @@
         } catch {}
         let stream = null;
         let fellBackFromSaved = false;
+        let fellBackFromSelected = false;
         if (id) {
           try {
             // Explicit device requested
@@ -105,6 +115,33 @@
               try { localStorage.removeItem('tp_camera_device_v1'); } catch {}
               try { const sSel = document.getElementById('settingsCamSel'); const mSel = document.getElementById('camDevice'); if (sSel) sSel.value = ''; if (mSel) mSel.value = ''; } catch {}
               try { window.toast && window.toast('Saved camera unavailable — using default', { type: 'warn' }); } catch {}
+            } else if (err && (err.name === 'NotReadableError' || err.name === 'TrackStartError')) {
+              // Selected device is busy/in use — allow fallback to default so user can proceed
+              try {
+                // Prefer OBS Virtual Camera if present
+                const obsId = await findObsVirtualCameraId();
+                if (obsId) {
+                  try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: obsId } }, audio: false });
+                    // Treat this as an intentional switch we can persist
+                    id = obsId;
+                    fellBackFromSelected = false;
+                    try { window.toast && window.toast('Selected camera busy — switched to OBS Virtual Camera', { type: 'warn' }); } catch {}
+                  } catch {
+                    // If OBS VC acquisition fails, fall back to default
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    fellBackFromSelected = true;
+                    try { window.toast && window.toast('Selected camera busy — using default', { type: 'warn' }); } catch {}
+                  }
+                } else {
+                  stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  fellBackFromSelected = true;
+                  try { window.toast && window.toast('Selected camera busy — using default', { type: 'warn' }); } catch {}
+                }
+              } catch {
+                // Re-throw original error if even default fails
+                throw err;
+              }
             } else {
               throw err;
             }
@@ -125,7 +162,7 @@
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
         // Persist + mirror only after successful start
         try {
-          if (id && !fellBackFromSaved) {
+          if (id && !fellBackFromSaved && !fellBackFromSelected) {
             localStorage.setItem('tp_camera_device_v1', id);
             const mainSel = document.getElementById('camDevice');
             const setSel  = document.getElementById('settingsCamSel');
