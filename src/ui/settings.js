@@ -249,8 +249,10 @@
         const camSel = q('settingsCamSel');
         if (camSel && !camSel.dataset.wired) {
           camSel.dataset.wired = '1';
-          camSel.addEventListener('change', async () => {
+          camSel.addEventListener('change', async (ev) => {
             try {
+              try { ev && ev.stopImmediatePropagation && ev.stopImmediatePropagation(); } catch {}
+              try { ev && ev.preventDefault && ev.preventDefault(); } catch {}
               const id = camSel.value;
               try { localStorage.setItem('tp_camera_device_v1', String(id||'')); } catch {}
               // Capture friendly label for toast feedback
@@ -269,7 +271,7 @@
                 try { if (window.toast) window.toast('Camera set to ' + label, { type: 'ok' }); } catch {}
               }
             } catch (e) { try { console.warn('[settings] camera switch failed', e); } catch {} }
-          });
+          }, { capture: true });
         }
       } catch {}
 
