@@ -215,7 +215,16 @@ function wireCamera() {
       } catch (err) {
         try {
           const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : '';
-          if (window.toast) window.toast('Camera start failed' + (msg ? ': ' + msg : ''));
+          let hint = '';
+          try {
+            const name = String(err && err.name || '');
+            if (name === 'NotReadableError' || name === 'TrackStartError') {
+              hint = ' • Another app is using the camera (e.g., OBS). Close it or pick "OBS Virtual Camera" in Settings → Media.';
+            } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+              hint = ' • Grant camera permission to this tab and try again.';
+            }
+          } catch {}
+          if (window.toast) window.toast('Camera start failed' + (msg ? ': ' + msg : '') + hint);
         } catch {}
       }
     }, { capture: true });
