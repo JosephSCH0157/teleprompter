@@ -212,8 +212,11 @@ function wireCamera() {
       try { if (!window.__tpCamera || typeof window.__tpCamera.startCamera !== 'function') await import('../media/camera.js'); } catch {}
       try {
         await window.__tpCamera?.startCamera?.();
-      } catch {
-        try { if (window.toast) window.toast('Camera start failed'); } catch {}
+      } catch (err) {
+        try {
+          const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : '';
+          if (window.toast) window.toast('Camera start failed' + (msg ? ': ' + msg : ''));
+        } catch {}
       }
     }, { capture: true });
   }

@@ -83,12 +83,32 @@
       if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
       // Prefer Settings selector as single source of truth; fall back to persisted/legacy id if present
         const camDeviceSel = document.getElementById('settingsCamSel') || document.getElementById('camDevice');
+        let idSource = 'select';
         let id = camDeviceSel?.value || undefined;
-        try { if (!id) { const saved = localStorage.getItem('tp_camera_device_v1'); if (saved) id = saved; } } catch {}
+        try {
+          if (!id) {
+            const saved = localStorage.getItem('tp_camera_device_v1');
+            if (saved) { id = saved; idSource = 'storage'; }
+          }
+        } catch {}
         let stream = null;
+        let fellBackFromSaved = false;
         if (id) {
-          // Explicit device requested → do NOT silently fall back to default; surface error instead
-          stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id } }, audio: false });
+          try {
+            // Explicit device requested
+            stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id } }, audio: false });
+          } catch (err) {
+            // If the id came from storage (stale) allow a one-time fallback to default device
+            if (idSource === 'storage') {
+              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+              fellBackFromSaved = true;
+              try { localStorage.removeItem('tp_camera_device_v1'); } catch {}
+              try { const sSel = document.getElementById('settingsCamSel'); const mSel = document.getElementById('camDevice'); if (sSel) sSel.value = ''; if (mSel) mSel.value = ''; } catch {}
+              try { window.toast && window.toast('Saved camera unavailable — using default', { type: 'warn' }); } catch {}
+            } else {
+              throw err;
+            }
+          }
         } else {
           // No explicit device → use default
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -105,7 +125,7 @@
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
         // Persist + mirror only after successful start
         try {
-          if (id) {
+          if (id && !fellBackFromSaved) {
             localStorage.setItem('tp_camera_device_v1', id);
             const mainSel = document.getElementById('camDevice');
             const setSel  = document.getElementById('settingsCamSel');
