@@ -82,8 +82,8 @@ export function setEnabled(v) {
   loop();
 }
 
-export function inc() { setSpeed(speed + 1); if (enabled) loop(); }
-export function dec() { setSpeed(speed - 1);  if (enabled) loop(); }
+export function inc() { setSpeed(speed + 0.5); if (enabled) loop(); }
+export function dec() { setSpeed(speed - 0.5);  if (enabled) loop(); }
 export function getState() { return { enabled, speed }; }
 
 let _setSpeedReentrant = false;
