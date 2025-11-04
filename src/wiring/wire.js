@@ -141,6 +141,27 @@ export default initSettingsWiring;
 // ---------- OBS helpers (module path) ----------
 function _sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+// --- unified recorder lookup (module + legacy) ---
+function getRecorder() {
+  const candidates = [
+    window.__recorder,
+    window.recorder,
+    window.recorders,
+  ];
+  for (const r of candidates) if (r && typeof r.get === 'function') return r;
+  return null;
+}
+
+try {
+  if (typeof window.getObsSurface !== 'function') {
+    window.getObsSurface = function getObsSurface() {
+      const R = getRecorder();
+      const adapter = R?.get?.('obs');
+      return adapter || window.__obsBridge || null;
+    };
+  }
+} catch {}
+
 function _normalizeObsCfg(raw){
   const hostElA = document.getElementById('settingsOBSHost') || document.getElementById('settingsObsHost');
   const portElA = document.getElementById('settingsOBSPort') || document.getElementById('settingsObsPort');
@@ -155,17 +176,14 @@ function _normalizeObsCfg(raw){
   return { host, port, secure, password, url };
 }
 
-async function waitForObsSurface(timeout = 5000){
+async function waitForObsSurface(timeout = 4000){
   const t0 = performance.now();
-  while (performance.now() - t0 < timeout) {
-    const a = window.__recorder?.get?.('obs');
-    if (a && (a.connect || typeof a.connect === 'function')) return a;
-    // Clean legacy fallback: bridge surface
-    const b = window.__obsBridge;
-    if (b && (b.connect || typeof b.connect === 'function')) return b;
+  for (;;) {
+    const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : (window.__recorder?.get?.('obs') || window.__obsBridge || null);
+    if (s) return s;
+    if (performance.now() - t0 > timeout) return null;
     await _sleep(50);
   }
-  throw new Error('[obs] surface not ready');
 }
 
 async function _waitUntil(fn, timeout = 10000, step = 120){
@@ -366,7 +384,11 @@ window.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => { try { stopObsPing(); } catch {} });
 
 async function connectAndWait(cfgRaw){
-  const s = await waitForObsSurface();
+  const s = await waitForObsSurface(1000);
+  if (!s) {
+    try { window.__tpObsConnected = false; window.__tpObsLastErr = 'no-surface'; } catch {}
+    return false;
+  }
   const cfg = _normalizeObsCfg(cfgRaw);
   const tap = _tapObsEvents(s);           // watch for events too
 
@@ -420,7 +442,7 @@ async function obsConnectPersistent(){
   try { return await window.connectWithSecureFallback(getObsCfg()); } catch { return false; }
 }
 async function obsDisconnectPersistent(){
-  const s = window.__recorder?.get?.('obs');
+  const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : (window.__recorder?.get?.('obs') || window.__obsBridge || null);
   try { await s?.disconnect?.(); } catch {}
   window.__tpObsConn = null;
   try { window.__tpObsConnected = false; } catch {}
@@ -470,8 +492,10 @@ export function wireObsPersistentUI(){
 try {
   if (typeof window.__obsHealth !== 'function') {
     window.__obsHealth = async () => {
-      try { await waitForObsSurface(1000); } catch { return { ok:false, reason:'no-surface' }; }
-      const ok = await connectAndWait(getObsCfg());
+      const s = await waitForObsSurface(1000);
+      if (!s) return { ok:false, reason:'no-surface' };
+      const cfg = getObsCfg();
+      const ok = await (window.connectAndWaitUniversal ? window.connectAndWaitUniversal(cfg) : connectAndWait(cfg));
       const dbg = await (window.__obsDebug ? window.__obsDebug() : Promise.resolve({}));
       return { ok, dbg };
     };
