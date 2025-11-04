@@ -123,19 +123,10 @@ export function initSettingsWiring() {
         window.__obsDebug = async () => {
           const hasBridge = !!window.__obsBridge;
           const hasAdapter = !!(window && window.__tpOBS);
-          let connected = false;
-          try {
-            // Prefer surface isConnected() if recorder bridge provides it
-            const s = window.__recorder?.get?.('obs');
-            if (s && typeof s.isConnected === 'function') {
-              connected = !!(await s.isConnected());
-            } else {
-              const c = window.__tpObsConn;
-              if (c && typeof c.isIdentified === 'function') connected = !!c.isIdentified();
-            }
-          } catch {}
-          try { console.table({ hasAdapter, hasBridge, connected }); } catch {}
-          return { hasAdapter, hasBridge, connected };
+          const connected = !!window.__tpObsConnected;
+          const lastError = window.__tpObsLastErr || null;
+          try { console.table({ hasAdapter, hasBridge, connected, lastError }); } catch {}
+          return { hasAdapter, hasBridge, connected, lastError };
         };
       }
     } catch {}
@@ -169,6 +160,9 @@ async function waitForObsSurface(timeout = 5000){
   while (performance.now() - t0 < timeout) {
     const a = window.__recorder?.get?.('obs');
     if (a && (a.connect || typeof a.connect === 'function')) return a;
+    // Clean legacy fallback: bridge surface
+    const b = window.__obsBridge;
+    if (b && (b.connect || typeof b.connect === 'function')) return b;
     await _sleep(50);
   }
   throw new Error('[obs] surface not ready');
@@ -232,8 +226,14 @@ async function connectAndWait(cfgRaw){
   }
 
   const ok = await _waitUntil(async () => (tap.any() || _isObsUp(s)), 10000, 120);
-  if (!ok) { s.lastError = 'timeout'; throw new Error('[obs] connect timeout'); }
+  if (!ok) {
+    try { s.lastError = 'timeout'; } catch {}
+    try { window.__tpObsLastErr = 'timeout'; } catch {}
+    try { window.__tpObsConnected = false; } catch {}
+    throw new Error('[obs] connect timeout');
+  }
   window.__tpObsConn = s;
+  try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {}
   return s;
 }
 
@@ -247,6 +247,7 @@ async function obsDisconnectPersistent(){
   const s = window.__recorder?.get?.('obs');
   try { await s?.disconnect?.(); } catch {}
   window.__tpObsConn = null;
+  try { window.__tpObsConnected = false; } catch {}
 }
 
 async function restoreObsOnBoot(){
