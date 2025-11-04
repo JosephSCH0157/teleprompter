@@ -126,7 +126,7 @@ export function initSettingsWiring() {
           const hasAdapter = !!(R && typeof R.get === 'function' && R.get('obs'));
           const hasBridge = !!window.__obsBridge;
           const s = (typeof window.getObsSurface === 'function') ? window.getObsSurface() : null;
-          const connected = !!(s && (s.connected || s.identified));
+          const connected = !!(s && ((typeof s.isIdentified === 'function' && s.isIdentified()) || s.connected || s.identified));
           const lastError = window.__tpObsLastErr ?? null;
           return { hasAdapter, hasBridge, connected, lastError };
         } catch {
@@ -163,6 +163,9 @@ try {
       const adapter = R?.get?.('obs');
       return adapter || window.__obsBridge || null;
     };
+  }
+  if (typeof window.getRecorder !== 'function') {
+    window.getRecorder = getRecorder;
   }
 } catch {}
 
@@ -215,6 +218,7 @@ function _tapObsEvents(surface){
   try { on && on('Identified', set('identified')); } catch {}
   try { on && on('ConnectionReady', set('ready')); } catch {}
   try { on && on('AuthenticationSuccess', set('identified')); } catch {}
+  try { on && on('closed', () => { /* closed event from some adapters */ }); } catch {}
 
   return {
     flags,
@@ -273,7 +277,10 @@ async function _universalObsConnect(surface, rawCfg = {}) {
 
   let lastErr;
   for (const t of tries) {
-    try { await t(); return true; } catch (e) { lastErr = e; }
+    try {
+      const rv = await t();
+      return rv || surface; // prefer returned connection/emitter when available
+    } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('OBS connect failed');
 }
@@ -290,7 +297,7 @@ function _obsIsConnected(surface) {
 }
 
 async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
-  const surface = (window.__recorder?.get?.('obs')) || window.__obsBridge || null;
+  const surface = await waitForObsSurface(1000);
   if (!surface) {
     window.__tpObsConnected = false;
     window.__tpObsLastErr = 'no-surface';
@@ -298,7 +305,7 @@ async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
   }
 
   try {
-    await _universalObsConnect(surface, rawCfg);
+    var conn = await _universalObsConnect(surface, rawCfg);
   } catch (e) {
     window.__tpObsConnected = false;
     window.__tpObsLastErr = (e && e.message) || 'connect-error';
@@ -309,16 +316,18 @@ async function connectAndWaitUniversal(rawCfg, timeoutMs = 6000, pollMs = 100) {
   // wait for “really ready”
   while (Date.now() - t0 < timeoutMs) {
     // prefer method if present
-    const ok = await Promise.resolve(_obsIsConnected(surface));
+    const target = conn || surface;
+    const ok = await Promise.resolve(_obsIsConnected(target));
     if (ok) {
-      window.__tpObsConn = surface;
+      window.__tpObsConn = target;
       window.__tpObsConnected = true;
       window.__tpObsLastErr = null;
+      try { attachObsRelays(target); startObsPing(); } catch {}
       return true;
     }
     await new Promise(r => setTimeout(r, pollMs));
   }
-  window.__tpObsConn = surface;
+  window.__tpObsConn = conn || surface;
   window.__tpObsConnected = false;
   window.__tpObsLastErr = 'timeout';
   return false;
@@ -336,6 +345,7 @@ function attachObsRelays(surface){
     on('open',       () => { try { window.__tpObsConnected = false; } catch {} updateObsPillConnecting(); });
     on('identified', () => { try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {} updateObsPill(); startObsPing(); });
     on('close',      () => { try { window.__tpObsConnected = false; window.__tpObsLastErr = 'closed'; } catch {} updateObsPill(); stopObsPing(); });
+    on('closed',     () => { try { window.__tpObsConnected = false; window.__tpObsLastErr = 'closed'; } catch {} updateObsPill(); stopObsPing(); });
     on('error',      (e) => { try { window.__tpObsConnected = false; window.__tpObsLastErr = (e && e.message) || 'error'; } catch {} updateObsPill(); });
   } catch {}
 }
@@ -394,28 +404,30 @@ async function connectAndWait(cfgRaw){
     return false;
   }
   const cfg = _normalizeObsCfg(cfgRaw);
-  const tap = _tapObsEvents(s);           // watch for events too
-
-  // Try both shapes: url+password AND host/port/secure/password
+  // Try both shapes and capture the returned connection/emitter if any
+  let conn = null;
   try {
-    if (s.connect.length >= 1) s.connect({ url: cfg.url, password: cfg.password, ...cfg });
-    else s.connect({ url: cfg.url, password: cfg.password, ...cfg });
+    if (typeof s.connect === 'function') {
+      conn = s.connect({ url: cfg.url, password: cfg.password, ...cfg });
+    }
   } catch (e) {
     console.warn('[obs] connect threw, retrying with host/port shape', e);
-    try { s.connect({ host: cfg.host, port: cfg.port, secure: cfg.secure, password: cfg.password }); }
+    try { conn = s.connect({ host: cfg.host, port: cfg.port, secure: cfg.secure, password: cfg.password }); }
     catch (e2) { console.warn('[obs] second connect form threw', e2); }
   }
+  const target = conn || s;
+  const tap = _tapObsEvents(target);           // watch for events too
 
-  const ok = await _waitUntil(async () => (tap.any() || _isObsUp(s)), 10000, 120);
+  const ok = await _waitUntil(async () => (tap.any() || _isObsUp(target)), 10000, 120);
   if (!ok) {
-    try { s.lastError = 'timeout'; } catch {}
+    try { target.lastError = 'timeout'; } catch {}
     try { window.__tpObsLastErr = 'timeout'; } catch {}
     try { window.__tpObsConnected = false; } catch {}
     return false;
   }
-  window.__tpObsConn = s;
+  window.__tpObsConn = target;
   try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {}
-  attachObsRelays(s);
+  attachObsRelays(target);
   startObsPing();
   return true;
 }
