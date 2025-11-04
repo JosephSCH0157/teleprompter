@@ -210,6 +210,62 @@ async function _isObsUp(surface){
   return false;
 }
 
+// Relay OBS events to keep the pill honest across reconnects
+function attachObsRelays(surface){
+  try {
+    const on = surface?.on?.bind(surface);
+    if (!on) return;
+    on('open',       () => { try { window.__tpObsConnected = false; } catch {} updateObsPillConnecting(); });
+    on('identified', () => { try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {} updateObsPill(); startObsPing(); });
+    on('close',      () => { try { window.__tpObsConnected = false; window.__tpObsLastErr = 'closed'; } catch {} updateObsPill(); stopObsPing(); });
+    on('error',      (e) => { try { window.__tpObsConnected = false; window.__tpObsLastErr = (e && e.message) || 'error'; } catch {} updateObsPill(); });
+  } catch {}
+}
+
+// Pill/status helpers (shared)
+async function updateObsPillConnecting(){
+  const el = document.getElementById('obsStatusText');
+  if (el) el.textContent = 'OBS: connecting…';
+}
+async function updateObsPill(){
+  const el = document.getElementById('obsStatusText');
+  if (!el) return;
+  const dbg = await (window.__obsDebug ? window.__obsDebug() : Promise.resolve({ connected:false, lastError:null }));
+  el.textContent = dbg.connected ? 'OBS: connected' : `OBS: ${dbg.lastError || 'off'}`;
+}
+
+// Gentle keep-alive ping
+let __obsPingTimer = null;
+async function startObsPing(){
+  try { stopObsPing(); } catch {}
+  __obsPingTimer = setInterval(async () => {
+    try {
+      if (!window.__tpObsConnected) return;
+      const s = window.__tpObsConn;
+      if (!s) return;
+      if (typeof s.request === 'function') {
+        await s.request('GetVersion', {});
+      } else if (typeof s.call === 'function') {
+        await s.call('GetVersion');
+      } else {
+        /* no supported API; skip */
+      }
+    } catch (e) {
+      try { window.__tpObsConnected = false; window.__tpObsLastErr = (e && e.message) || 'ping-failed'; } catch {}
+      updateObsPill();
+    }
+  }, 30000);
+}
+function stopObsPing(){ if (__obsPingTimer) { clearInterval(__obsPingTimer); __obsPingTimer = null; } }
+
+window.addEventListener('visibilitychange', () => {
+  try {
+    if (document.hidden) stopObsPing();
+    else if (window.__tpObsConnected) startObsPing();
+  } catch {}
+});
+window.addEventListener('beforeunload', () => { try { stopObsPing(); } catch {} });
+
 async function connectAndWait(cfgRaw){
   const s = await waitForObsSurface();
   const cfg = _normalizeObsCfg(cfgRaw);
@@ -230,10 +286,12 @@ async function connectAndWait(cfgRaw){
     try { s.lastError = 'timeout'; } catch {}
     try { window.__tpObsLastErr = 'timeout'; } catch {}
     try { window.__tpObsConnected = false; } catch {}
-    throw new Error('[obs] connect timeout');
+    return false;
   }
   window.__tpObsConn = s;
   try { window.__tpObsConnected = true; window.__tpObsLastErr = null; } catch {}
+  attachObsRelays(s);
+  startObsPing();
   return true;
 }
 
@@ -241,8 +299,27 @@ function getObsCfg(raw){ return _normalizeObsCfg(raw); }
 
 Object.assign(window, { waitForObsSurface, connectAndWait, getObsCfg });
 
+// Secure-fallback helper
+try {
+  if (typeof window.connectWithSecureFallback !== 'function') {
+    window.connectWithSecureFallback = async (rawCfg, retryOn = /timeout|network|ECONN/i) => {
+      const cfg = getObsCfg(rawCfg);
+      let ok = false;
+      try { ok = await connectAndWait(cfg); } catch { ok = false; }
+      if (ok) return true;
+      const errStr = (window.__tpObsLastErr || window.__tpObsConn?.getLastError?.() || '').toString();
+      if (!retryOn.test(errStr)) return false;
+      const flipped = { ...cfg, secure: !cfg.secure };
+      try { ok = await connectAndWait(flipped); } catch { ok = false; }
+      return !!ok;
+    };
+  }
+} catch {}
+
 // ---------- Persistent connect / UI wiring ----------
-async function obsConnectPersistent(){ await connectAndWait(getObsCfg()); }
+async function obsConnectPersistent(){
+  try { return await window.connectWithSecureFallback(getObsCfg()); } catch { return false; }
+}
 async function obsDisconnectPersistent(){
   const s = window.__recorder?.get?.('obs');
   try { await s?.disconnect?.(); } catch {}
@@ -260,34 +337,11 @@ export function wireObsPersistentUI(){
   const box = document.getElementById('settingsEnableObs');
   if (!box || box.__obsWired) return;
   box.__obsWired = true;
-  // UI helpers for pill/status
-  async function updateObsPillConnecting(){
-    const el = document.getElementById('obsStatusText');
-    if (el) el.textContent = 'OBS: connecting…';
-  }
-  async function updateObsPill(){
-    const el = document.getElementById('obsStatusText');
-    if (!el) return;
-    const dbg = await (window.__obsDebug ? window.__obsDebug() : Promise.resolve({ connected:false, lastError:null }));
-    el.textContent = dbg.connected ? 'OBS: connected' : `OBS: ${dbg.lastError || 'off'}`;
-  }
 
   box.addEventListener('change', async (e) => {
     if (e.target.checked) {
       await updateObsPillConnecting();
-      // Try normal connect; on timeout/network-like error, flip secure and retry once
-      let cfg = getObsCfg();
-      let ok = false;
-  try { ok = await connectAndWait(cfg); } catch { ok = false; }
-      if (!ok) {
-        const err = (window.__tpObsLastErr || '').toString();
-        if (!err || /timeout|network/i.test(err)) {
-          try {
-            cfg = { ...cfg, secure: !cfg.secure };
-            ok = await connectAndWait(cfg);
-          } catch {}
-        }
-      }
+  await window.connectWithSecureFallback(getObsCfg());
       await updateObsPill();
     } else {
       try { await window.__tpObsConn?.stop?.(); } catch {}
@@ -300,7 +354,7 @@ export function wireObsPersistentUI(){
   (async () => {
     if (box.checked) {
       await updateObsPillConnecting();
-      try { await obsConnectPersistent(); } catch {}
+      try { await window.connectWithSecureFallback(getObsCfg()); } catch {}
       await updateObsPill();
     }
   })();
