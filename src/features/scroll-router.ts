@@ -574,7 +574,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       try {
         const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
         if (btn) {
-          const s = getStoredSpeed();
+          const sRaw = getStoredSpeed();
+          const s = (Math.round(sRaw * 10) / 10).toFixed(1);
           if (!userEnabled) {
             btn.textContent = 'Auto-scroll: Off';
             btn.setAttribute('data-state', 'off');

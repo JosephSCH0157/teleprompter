@@ -114,8 +114,10 @@ export function setSpeed(pxPerSec) {
     const st = btn?.dataset?.state || '';
     // Only adjust when router is managing state, to keep styles in sync
     if (btn && st) {
-      if (st === 'on') btn.textContent = `Auto-scroll: On — ${speed} px/s`;
-      else if (st === 'paused') btn.textContent = `Auto-scroll: Paused — ${speed} px/s`;
+      const s1 = Number.isFinite(speed) ? Number(speed) : 0;
+      const sFmt = (Math.round(s1 * 10) / 10).toFixed(1);
+      if (st === 'on') btn.textContent = `Auto-scroll: On — ${sFmt} px/s`;
+      else if (st === 'paused') btn.textContent = `Auto-scroll: Paused — ${sFmt} px/s`;
     }
   } catch {}
 }

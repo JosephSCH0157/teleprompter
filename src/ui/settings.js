@@ -149,7 +149,8 @@
         };
         fill('settingsMicSel', mics);
         fill('micDeviceSel', mics); // keep main panel in sync if present
-        fill('settingsCamSel', cams);
+  fill('settingsCamSel', cams);
+  fill('camDevice', cams); // keep sidebar camera select in sync too
         // Update visible current device name in Settings if present
         try {
           const sel = document.getElementById('settingsMicSel');
@@ -223,6 +224,35 @@
           } catch {}
         });
       }
+
+      // Camera device selector (Settings) — mirror to sidebar and switch/start camera
+      try {
+        const camSel = q('settingsCamSel');
+        if (camSel && !camSel.dataset.wired) {
+          camSel.dataset.wired = '1';
+          camSel.addEventListener('change', async () => {
+            try {
+              const id = camSel.value;
+              // Mirror to sidebar select and trigger its change handler
+              const side = q('camDevice');
+              if (side && side.value !== id) {
+                side.value = id;
+                try { side.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+              }
+              const camApi = window.__tpCamera || {};
+              const camVideo = document.getElementById('camVideo');
+              const isActive = !!(camVideo && camVideo.srcObject);
+              if (isActive && typeof camApi.switchCamera === 'function') {
+                await camApi.switchCamera(id);
+              } else if (typeof camApi.startCamera === 'function') {
+                // Ensure sidebar reflects desired device before starting, since startCamera reads from DOM
+                if (side && side.value !== id) side.value = id;
+                await camApi.startCamera();
+              }
+            } catch (e) { try { console.warn('[settings] camera switch failed', e); } catch {} }
+          });
+        }
+      } catch {}
 
       // OBS enabled toggle: central write path
       const settingsEnableObs = q('settingsEnableObs');
