@@ -521,6 +521,26 @@ export async function stop() {
   return stopSelected();
 }
 
+// --- Legacy global bridge ---------------------------------------------------
+// Many legacy callers (teleprompter_pro.js) expect window.__recorder to expose
+// start/stop and settings helpers. Provide a thin bridge to the SSOT above.
+try {
+  if (typeof window !== 'undefined') {
+    // Ensure the base shim exists
+    initCompat();
+    const api = window.__recorder;
+    // Attach SSOT methods (idempotent)
+    if (!api.start) api.start = () => startSelected();
+    if (!api.stop) api.stop = () => stopSelected();
+    if (!api.getSettings) api.getSettings = () => getSettings();
+    if (!api.setSettings) api.setSettings = (next) => setSettings(next);
+    if (!api.setSelected) api.setSelected = (ids) => setSelected(ids);
+    if (!api.setMode) api.setMode = (mode) => setMode(mode);
+    // Keep a stable alias under window.recorders too
+    window.recorders = window.recorders || api;
+  }
+} catch {}
+
 /* ------------------------------------------------------------------
  * Minimal inline OBS v5 bridge (safe, idempotent)
  * Exposes: init, setEnabled, reconfigure, test, connect, disconnect, isConnected
