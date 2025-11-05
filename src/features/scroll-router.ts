@@ -150,7 +150,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   }
   function updateWpmUiVisibility() {
     try {
-      const row = document.getElementById('wpmRow');
+      const row = ensureWpmRow();
       if (!row) return;
       const on = state.mode === 'wpm';
       if (on) { row.classList.remove('visually-hidden'); row.setAttribute('aria-hidden','false'); }
@@ -160,6 +160,27 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       if (input) input.value = String(getTargetWpm());
       try { updateWpmPxLabel(); } catch {}
     } catch {}
+  }
+  function ensureWpmRow(): HTMLElement | null {
+    try {
+      let row = document.getElementById('wpmRow') as HTMLElement | null;
+      if (row) return row;
+      // Create on-the-fly if markup missing
+      const autoRow = (document.getElementById('autoToggle') as HTMLElement | null)?.closest('.row') as HTMLElement | null;
+      if (!autoRow || !autoRow.parentElement) return null;
+      row = document.createElement('div');
+      row.id = 'wpmRow';
+      row.className = 'row visually-hidden';
+      row.setAttribute('aria-hidden','true');
+      row.innerHTML = `
+        <label>Target WPM
+          <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
+        </label>
+        <span class="chip" id="wpmPx">≈ — px/s</span>
+      `;
+      autoRow.insertAdjacentElement('afterend', row);
+      return row;
+    } catch { return null; }
   }
   function updateWpmPxLabel(){
     try {
