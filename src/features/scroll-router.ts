@@ -618,17 +618,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   try {
     // Helper: mapping and WPM target persistence
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-    function mapWpmToPxPerSec(wpm: number, doc: Document): number {
-      try {
-        const cs = getComputedStyle(doc.documentElement);
-        const fsPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
-        const lhScale = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
-        const lineHeightPx = fsPx * lhScale;
-        const wpl = parseFloat(localStorage.getItem('tp_wpl_hint') || '8') || 8;
-        const linesPerSec = (wpm / 60) / wpl;
-        return linesPerSec * lineHeightPx;
-      } catch { return (wpm / 60) / 8 * (56 * 1.4); }
-    }
+    // duplicate mapWpmToPxPerSec removed (defined earlier in this module)
     // Initialize WPM UI on first load
     updateWpmUiVisibility();
 

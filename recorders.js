@@ -1082,7 +1082,7 @@ function p95(arr){
   const i = Math.min(a.length-1, Math.floor(a.length*0.95));
   return a[i] || 0;
 }
-function emitRecStats(final=false){
+function emitRecStats(_final=false){
   try {
     const payload = {
       starts: recStats.starts|0,
@@ -1096,7 +1096,7 @@ function emitRecStats(final=false){
       window.dispatchEvent(new CustomEvent('rec:stats', { detail: payload }));
     }
   } catch {}
-  if (final) return;
+  // no further work when final; kept for clarity without early return
 }
 let __recStatsTimer = 0;
 try {

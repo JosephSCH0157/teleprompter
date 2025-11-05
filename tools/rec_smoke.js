@@ -37,7 +37,7 @@ Run with: node tools/rec_smoke.js
     const fakeObs = {
       id: 'obs', label: 'OBS (fake)',
       async isAvailable(){ return true; },
-      async start(){ startCount++; if (startCount === 1) return; /* succeed */ },
+  async start(){ startCount++; if (startCount === 1) { /* first start observed */ } /* succeed */ },
       async stop(){ await new Promise(r=>setTimeout(r, 80)); /* simulate slow stop */ },
     };
     const fakeBridge = {

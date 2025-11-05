@@ -28,7 +28,7 @@ export function installAsrHotkeys() {
   window.addEventListener('keydown', onKey, { passive: false });
 
   // Sync with external state flips
-  speechStore.subscribe(s => {
+  speechStore.subscribe(_s => {
     // If a future orchestrator exposes armed/listening flags, mirror here
   });
 

@@ -167,7 +167,7 @@ function createEngine(name: AsrEngineName): AsrEngine {
   }
 }
 
-function bindEngine(engine: AsrEngine, fn: (e: AsrEvent) => void) {
+function bindEngine(engine: AsrEngine, fn: (_e: AsrEvent) => void) {
   try { engine.on(fn); } catch {}
 }
 

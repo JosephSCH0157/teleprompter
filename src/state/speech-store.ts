@@ -20,7 +20,7 @@ const state: SpeechState = {
   fillerFilter: true,
 };
 
-const subs = new Set<(s: SpeechState) => void>();
+const subs = new Set<(_s: SpeechState) => void>();
 
 export const speechStore = {
   get(): SpeechState { return { ...state }; },
@@ -28,5 +28,5 @@ export const speechStore = {
     Object.assign(state, patch);
     for (const fn of subs) fn({ ...state });
   },
-  subscribe(fn: (s: SpeechState) => void) { subs.add(fn); return () => subs.delete(fn); },
+  subscribe(fn: (_s: SpeechState) => void) { subs.add(fn); return () => subs.delete(fn); },
 };

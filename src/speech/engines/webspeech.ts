@@ -13,7 +13,7 @@ export class WebSpeechEngine implements AsrEngine {
   private recognition: any | null = null;
   private lastPartialAt = 0;
 
-  on(fn: (e: AsrEvent) => void): void { this.emitter.on(fn); }
+  on(cb: (_e: AsrEvent) => void): void { this.emitter.on(cb); }
 
   async start(opts: AsrEngineOptions): Promise<void> {
     const AnyWindow = window as any;

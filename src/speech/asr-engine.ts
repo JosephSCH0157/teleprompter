@@ -18,18 +18,18 @@ export interface AsrEngineOptions {
 
 export interface AsrEngine {
   name: string;
-  start(opts: AsrEngineOptions): Promise<void>;
+  start(_opts: AsrEngineOptions): Promise<void>;
   stop(): Promise<void>;
-  on(ev: (e: AsrEvent) => void): void;
+  on(_cb: (_e: AsrEvent) => void): void;
 }
 
 export type AsrEngineName = 'webspeech' | 'vosk' | 'whisper';
 
 // Lightweight event emitter to keep engines framework-agnostic
 export class Emitter<T> {
-  private ls = new Set<(e: T) => void>();
-  on(fn: (e: T) => void) { this.ls.add(fn); }
-  off(fn: (e: T) => void) { this.ls.delete(fn); }
+  private ls = new Set<(_e: T) => void>();
+  on(fn: (_e: T) => void) { this.ls.add(fn); }
+  off(fn: (_e: T) => void) { this.ls.delete(fn); }
   emit(e: T) { for (const fn of this.ls) fn(e); }
 }
 

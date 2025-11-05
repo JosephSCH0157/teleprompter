@@ -8,7 +8,7 @@ export class AsrTopbar {
   private chip!: HTMLSpanElement;
   private running = false;
 
-  constructor(private mode: AsrMode) {}
+  constructor(private _mode: AsrMode) {}
 
   mount(targetSelector = '#topbarRight, .topbar, header, body') {
     const host = document.querySelector(targetSelector) || document.body;
