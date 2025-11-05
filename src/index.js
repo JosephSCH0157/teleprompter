@@ -479,7 +479,10 @@ async function boot() {
   try { await import('./ui/render.js'); } catch (e) { console.warn('[src/index] render init failed', e); }
 
     // Make camera overlay draggable (top-right by default; drag to reposition; dblclick to reset)
-    try { await import('../ui/cam-draggable.js'); } catch (e) { console.warn('[src/index] cam-draggable init failed', e); }
+    try {
+      const cam = await import('../ui/cam-draggable.js');
+      try { (cam && (cam.initCamDraggable || cam.default?.initCamDraggable))?.(); } catch {}
+    } catch (e) { console.warn('[src/index] cam-draggable init failed', e); }
 
     // Legacy matcher constants for parity (dev only)
     try {
