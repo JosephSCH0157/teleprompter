@@ -11,7 +11,7 @@ export class AsrTopbar {
 
   constructor(private mode: AsrMode) {}
 
-  mount(targetSelector = '.topbar, #topbarRight, header, body') {
+  mount(targetSelector = '#topbarRight, .topbar, header, body') {
     const host = document.querySelector(targetSelector) || document.body;
     const wrap = document.createElement('div');
     wrap.className = 'asr-topbar flex items-center gap-2';

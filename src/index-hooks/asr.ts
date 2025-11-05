@@ -14,7 +14,7 @@ export function initAsrFeature() {
   // Create coordinator and topbar UI
   const mode = new AsrMode();
   const topbar = new AsrTopbar(mode);
-  try { topbar.mount('.topbar, #topbarRight, header, body'); } catch {}
+  try { topbar.mount('#topbarRight, .topbar, header, body'); } catch {}
 
   const start = () => { mode.start?.(); };
   const stop = () => { mode.stop?.(); };
