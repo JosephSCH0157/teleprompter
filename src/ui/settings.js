@@ -645,12 +645,12 @@
         } catch {}
       }
       if (hasStore && typeof S.subscribe === 'function') {
-        S.subscribe('obsEnabled', (v) => { try { if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v; } catch {} ensureObsConnection(); });
+        S.subscribe('obsEnabled', (v) => { try { if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v; } catch {} try { window.__tpObs?.setArmed?.(!!v); } catch {} ensureObsConnection(); });
         S.subscribe('obsHost', ensureObsConnection);
         S.subscribe('obsPassword', ensureObsConnection);
       }
       // Initial connection attempt after mount
-      setTimeout(ensureObsConnection, 0);
+      setTimeout(() => { try { window.__tpObs?.setArmed?.(!!(hasStore && S.get && S.get('obsEnabled'))); } catch {} ensureObsConnection(); }, 0);
 
       // --- Recording adapters picker ---
       (function initRecorderAdaptersUI(){
