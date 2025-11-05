@@ -89,6 +89,48 @@ Run with: node tools/rec_smoke.js
     const st = rec.getRecState?.() || {};
     if (st.state === 'idle') pass('rec: idempotent stop while stopping'); else fail('rec: idempotent stop while stopping', JSON.stringify(st));
 
+    // 7) Start → Stop race: ensure no fallback fires and final is idle
+    // Configure timeouts short to provoke retry/fallback if not canceled
+    rec.setSettings({ mode: 'single', selected: ['obs'], timeouts: { start: 200, stop: 200 } });
+    // Make first obs.start call fail so confirm would normally retry/fallback
+    startCount = 0;
+    const events2 = [];
+    window.addEventListener('rec:state', (e) => events2.push(e.detail));
+    const startP = rec.startSelected();
+    await new Promise(r => setTimeout(r, 100));
+    await rec.stopSelected();
+    await startP.catch(()=>{});
+    const hadBridge = events2.some(ev => ev && ev.adapter === 'bridge' && ev.state === 'recording');
+    const st2 = rec.getRecState?.() || {};
+    if (!hadBridge && st2.state === 'idle') pass('rec: start→stop race cancels fallback');
+    else fail('rec: start→stop race cancels fallback', JSON.stringify({ hadBridge, st2 }));
+
+    // 8) Late OBS after Bridge (handoff off/on)
+    // Build a tiny emitter on __obsBridge to fire recordingStarted
+    const listeners = {};
+    global.window.__obsBridge = global.window.__obsBridge || {};
+    window.__obsBridge.on = (ev, cb) => { (listeners[ev]||(listeners[ev]=[])).push(cb); };
+    window.__obsBridge._emit = (ev) => { (listeners[ev]||[]).forEach(fn=>{ try{ fn(); }catch{} }); };
+    // Prefer no handoff by default
+    rec.setSettings({ preferObsHandoff: false });
+    // Force bridge active
+    await rec.startSelected();
+    // Simulate late OBS recording start
+    window.__obsBridge._emit('recordingStarted');
+    await new Promise(r=>setTimeout(r, 20));
+    const st3 = rec.getRecState?.() || {};
+    if (st3.adapter === 'bridge' && st3.state === 'recording') pass('rec: no mid-run handoff by default');
+    else fail('rec: no mid-run handoff by default', JSON.stringify(st3));
+    // Enable handoff and simulate again
+    await rec.stopSelected();
+    rec.setSettings({ preferObsHandoff: true });
+    await rec.startSelected();
+    window.__obsBridge._emit('recordingStarted');
+    await new Promise(r=>setTimeout(r, 50));
+    const st4 = rec.getRecState?.() || {};
+    if (st4.adapter === 'obs' && st4.state === 'recording') pass('rec: handoff to OBS when enabled');
+    else fail('rec: handoff to OBS when enabled', JSON.stringify(st4));
+
   } catch (e) {
     console.error('rec_smoke error', e);
     fail('setup', String(e && e.message || e));
