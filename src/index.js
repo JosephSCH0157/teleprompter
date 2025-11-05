@@ -138,6 +138,9 @@ function initOnce(name, fn) {
 async function loadLegacyPiecesAsModules() {
   const mods = [
     '../eggs.js',
+    // Ensure OBS bridge is present before recorders.js so the recorder registry
+    // can wrap 'obs' with a StartRecord-capable bridge adapter.
+    '../adapters/obsBridge.js',
     '../adapters/bridge.js',
     '../adapters/obs.js',
     '../recorders.js',
