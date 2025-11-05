@@ -63,6 +63,151 @@ if (typeof window !== 'undefined') {
  * @property {(cfg: any) => void} [configure]  // pass settings in
  */
 
+/* ------------------------------------------------------------------
+ * SSOT Recording API — window.__tpRecording
+ * One call: start()/stop() routes to OBS / Bridge / Premiere
+ * Reads config from either a top-level 'configs' blob or 'tp_rec_settings_v1'.
+ * ------------------------------------------------------------------ */
+(function(){
+      try {
+        if (typeof window === 'undefined') return;
+        const LS = {
+          cfg: 'configs',                 // whole app config blob (optional)
+          recAdapter: 'tp_rec_adapter',   // 'obs' | 'bridge' | 'premiere'
+          autoStart: 'tp_auto_record_on_start_v1',
+          modern: 'tp_rec_settings_v1',   // modern settings blob from registry (has .configs)
+        };
+
+        function getJSON(k, d){
+          try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : (d||{}); } catch { return (d||{}); }
+        }
+        function getCfg(){
+          // Merge top-level configs with modern settings.configs
+          const a = getJSON(LS.cfg, {});
+          const b = getJSON(LS.modern, {});
+          const inner = (b && b.configs) || {};
+          // Top-level may also carry a recording sub-blob
+          const merged = { ...inner, ...a };
+          if (a && a.recording) merged.recording = a.recording;
+          return merged;
+        }
+        function getAdapter(){
+          const cfg = getCfg();
+          try { return (cfg.recording && cfg.recording.adapter) || localStorage.getItem(LS.recAdapter) || 'bridge'; } catch { return 'bridge'; }
+        }
+        function wantsAuto(){ try { return localStorage.getItem(LS.autoStart) === '1'; } catch { return false; } }
+
+        async function httpSend(url, body){
+          if (!url) throw new Error('Missing URL');
+          const res = await fetch(url, {
+            method: body ? 'POST' : 'GET',
+            headers: body ? { 'content-type': 'application/json' } : undefined,
+            body: body ? JSON.stringify(body) : undefined,
+            mode: 'no-cors',
+          });
+          // In no-cors mode, ok may be false even if delivered; consider as best-effort success
+          try { return !!res.ok || true; } catch { return true; }
+        }
+
+        function bridgeCfg(){
+          const cfg = getCfg().bridge || {};
+          return {
+            mode: cfg.mode || 'hotkey',
+            baseUrl: String(cfg.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, ''),
+            startHotkey: cfg.startHotkey || cfg.preset || 'Ctrl+R',
+            stopHotkey: cfg.stopHotkey || '',
+            startUrl: cfg.startUrl || '',
+            stopUrl: cfg.stopUrl || '',
+          };
+        }
+
+        async function bridgeStart(){
+          const b = bridgeCfg();
+          if (b.mode === 'http') {
+            return httpSend(b.startUrl);
+          }
+          const url = b.baseUrl + '/send?keys=' + encodeURIComponent(b.startHotkey);
+          try { return await httpSend(url); }
+          catch { return httpSend(b.baseUrl + '/send', { keys: b.startHotkey }); }
+        }
+        async function bridgeStop(){
+          const b = bridgeCfg();
+          if (b.mode === 'http') {
+            return b.stopUrl ? httpSend(b.stopUrl) : true;
+          }
+          if (!b.stopHotkey) return true;
+          const url = b.baseUrl + '/send?keys=' + encodeURIComponent(b.stopHotkey);
+          try { return await httpSend(url); }
+          catch { return httpSend(b.baseUrl + '/send', { keys: b.stopHotkey }); }
+        }
+
+        async function obsStart(){
+          try {
+            if (window.__obsBridge && typeof window.__obsBridge.start === 'function') {
+              await window.__obsBridge.start();
+              return true;
+            }
+          } catch {}
+          try {
+            if (window.__tpObs && typeof window.__tpObs.ensureRecording === 'function') {
+              return !!(await window.__tpObs.ensureRecording(true));
+            }
+          } catch {}
+          return false;
+        }
+        async function obsStop(){
+          try {
+            if (window.__obsBridge && typeof window.__obsBridge.stop === 'function') {
+              await window.__obsBridge.stop();
+              return true;
+            }
+          } catch {}
+          try {
+            if (window.__tpObs && typeof window.__tpObs.ensureRecording === 'function') {
+              return !!(await window.__tpObs.ensureRecording(false));
+            }
+          } catch {}
+          return false;
+        }
+
+        async function premStart(){
+          // Use the same hotkey bridge pattern as Premiere Hotkey adapter UI
+          const p = getCfg().premiere || {};
+          const base = String(p.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, '');
+          const hk = String(p.startHotkey || 'Ctrl+R');
+          const url = base + '/send?keys=' + encodeURIComponent(hk);
+          try { return await httpSend(url); }
+          catch { return httpSend(base + '/send', { keys: hk }); }
+        }
+        async function premStop(){
+          const p = getCfg().premiere || {};
+          const base = String(p.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, '');
+          const hk = String(p.stopHotkey || '');
+          if (!hk) return true;
+          const url = base + '/send?keys=' + encodeURIComponent(hk);
+          try { return await httpSend(url); }
+          catch { return httpSend(base + '/send', { keys: hk }); }
+        }
+
+        async function start(){
+          const a = getAdapter();
+          try { window.__tpHud?.log?.('[rec]', 'start', a); } catch {}
+          if (a === 'obs') return obsStart();
+          if (a === 'premiere') return premStart();
+          return bridgeStart();
+        }
+        async function stop(){
+          const a = getAdapter();
+          try { window.__tpHud?.log?.('[rec]', 'stop', a); } catch {}
+          if (a === 'obs') return obsStop();
+          if (a === 'premiere') return premStop();
+          return bridgeStop();
+        }
+
+        window.__tpRecording = { start, stop, wantsAuto, getAdapter };
+      } catch {}
+  })();
+
 /** @type {Map<string, RecorderAdapter>} */
 const registry = new Map(); // id -> adapter
 

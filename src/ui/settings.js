@@ -361,6 +361,11 @@
           '    </label>',
           '    <span class="microcopy" style="color:#9fb4c9;font-size:12px">Hotkey mode uses tools/hotkey_bridge.ps1</span>',
           '  </div>',
+          '  <div class="row" style="gap:10px;align-items:center;margin-top:6px">',
+          '    <button id="bridgeTestStart" class="chip btn-chip" type="button">Start (SSOT)</button>',
+          '    <button id="bridgeTestStop" class="chip btn-chip" type="button">Stop (SSOT)</button>',
+          '    <span id="bridgeSSOTMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
+          '  </div>',
           '  <div id="bridgeHttpRow" class="row" style="gap:10px;align-items:center;margin-top:6px">',
           '    <label>Start URL <input id="bridgeStartUrl" type="text" class="select-lg" placeholder="http://127.0.0.1:5723/record/start"/></label>',
           '    <label>Stop URL <input id="bridgeStopUrl" type="text" class="select-lg" placeholder="(optional)"/></label>',
@@ -391,6 +396,7 @@
           '    <label>Stop hotkey <input id="premStopHotkey" type="text" class="select-sm" placeholder="(optional)"/></label>',
           '    <label>Endpoint <input id="premBaseUrl" type="text" class="select-md" placeholder="http://127.0.0.1:5723"/></label>',
           '    <button id="premTestBtn" class="chip btn-chip" type="button">Send test</button>',
+          '    <button id="premiereTest" class="chip btn-chip" type="button">Start (SSOT)</button>',
           '    <span id="premTestMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
           '  </div>',
           '  <div class="settings-small" style="color:#9fb4c9">Requires the Hotkey Bridge (tools/hotkey_bridge.ps1) to be running.</div>',
@@ -409,12 +415,15 @@
         const httpTestStart = document.getElementById('bridgeHttpTestStart');
         const httpTestStop = document.getElementById('bridgeHttpTestStop');
         const httpMsg = document.getElementById('bridgeHttpMsg');
-        const presetSel = document.getElementById('bridgePreset');
+  const presetSel = document.getElementById('bridgePreset');
         const startHotkeyInp = document.getElementById('bridgeStartHotkey');
         const stopHotkeyInp = document.getElementById('bridgeStopHotkey');
         const baseUrlInp = document.getElementById('bridgeBaseUrl');
         const hotkeyTestBtn = document.getElementById('bridgeHotkeyTestBtn');
         const hotkeyMsg = document.getElementById('bridgeHotkeyMsg');
+  const bridgeSSOTStart = document.getElementById('bridgeTestStart');
+  const bridgeSSOTStop = document.getElementById('bridgeTestStop');
+  const bridgeSSOTMsg = document.getElementById('bridgeSSOTMsg');
 
         // Initialize values
         if (modeSel) modeSel.value = String(inferBridge.mode || 'http');
@@ -518,11 +527,36 @@
           });
         }
 
+        // Bridge SSOT tests (call central API)
+        bridgeSSOTStart && bridgeSSOTStart.addEventListener('click', async (e) => {
+          try { e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch {}
+          try {
+            if (bridgeSSOTMsg) { bridgeSSOTMsg.textContent = 'Starting…'; bridgeSSOTMsg.style.color = '#9fb4c9'; }
+            const ok = await (window.__tpRecording?.start?.() || Promise.resolve(false));
+            try { window.__tpHud?.log?.('[bridge:test] start →', ok); } catch {}
+            if (bridgeSSOTMsg) { bridgeSSOTMsg.textContent = ok ? 'Started' : 'Failed'; bridgeSSOTMsg.style.color = ok ? '#b7f4c9' : '#ffd6d6'; }
+          } catch {
+            if (bridgeSSOTMsg) { bridgeSSOTMsg.textContent = 'Failed'; bridgeSSOTMsg.style.color = '#ffd6d6'; }
+          }
+        });
+        bridgeSSOTStop && bridgeSSOTStop.addEventListener('click', async (e) => {
+          try { e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch {}
+          try {
+            if (bridgeSSOTMsg) { bridgeSSOTMsg.textContent = 'Stopping…'; bridgeSSOTMsg.style.color = '#9fb4c9'; }
+            const ok = await (window.__tpRecording?.stop?.() || Promise.resolve(false));
+            try { window.__tpHud?.log?.('[bridge:test] stop →', ok); } catch {}
+            if (bridgeSSOTMsg) { bridgeSSOTMsg.textContent = ok ? 'Stopped' : 'Failed'; bridgeSSOTMsg.style.color = ok ? '#b7f4c9' : '#ffd6d6'; }
+          } catch {
+            if (bridgeSSOTMsg) { bridgeSSOTMsg.textContent = 'Failed'; bridgeSSOTMsg.style.color = '#ffd6d6'; }
+          }
+        });
+
         // --- Premiere wiring ---
         const premStartInp = document.getElementById('premStartHotkey');
         const premStopInp = document.getElementById('premStopHotkey');
         const premBaseInp = document.getElementById('premBaseUrl');
-        const premTestBtn = document.getElementById('premTestBtn');
+  const premTestBtn = document.getElementById('premTestBtn');
+  const premSSOTBtn = document.getElementById('premiereTest');
         const premMsg = document.getElementById('premTestMsg');
         if (premStartInp) premStartInp.value = String(premCfg.startHotkey || 'Ctrl+R');
         if (premStopInp) premStopInp.value = String(premCfg.stopHotkey || '');
@@ -552,6 +586,21 @@
               if (premMsg) { premMsg.textContent = 'Sent ' + keys; premMsg.style.color = '#b7f4c9'; }
             } catch {
               if (premMsg) { premMsg.textContent = 'Failed — is bridge running?'; premMsg.style.color = '#ffd6d6'; }
+            }
+          });
+        }
+        if (premSSOTBtn) {
+          premSSOTBtn.addEventListener('click', async (e) => {
+            try { e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch {}
+            const old = (localStorage.getItem('tp_rec_adapter') || 'bridge');
+            try { localStorage.setItem('tp_rec_adapter', 'premiere'); } catch {}
+            try {
+              if (premMsg) { premMsg.textContent = 'Starting…'; premMsg.style.color = '#9fb4c9'; }
+              const ok = await (window.__tpRecording?.start?.() || Promise.resolve(false));
+              try { window.__tpHud?.log?.('[premiere:test] →', ok); } catch {}
+              if (premMsg) { premMsg.textContent = ok ? 'Started' : 'Failed'; premMsg.style.color = ok ? '#b7f4c9' : '#ffd6d6'; }
+            } finally {
+              try { localStorage.setItem('tp_rec_adapter', old); } catch {}
             }
           });
         }

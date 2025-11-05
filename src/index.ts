@@ -46,6 +46,33 @@ try {
 			document.addEventListener('click', onClick, { capture: true });
 		} catch {}
 
+		// Auto-record when the session actually starts (one-shot per page load)
+		try {
+			(function autoRecordOnStart(){
+				const FLAG = 'tp_auto_record_on_start_v1';
+				let fired = false;
+				function wants(){ try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } }
+				async function maybe(){
+					if (fired || !wants()) return;
+					try {
+						if ((window as any).__tpRecording?.getAdapter?.() === 'obs') {
+							// Respect OBS "Off" gating
+							if (!(window as any).__tpObs?.armed?.()) return;
+						}
+						fired = true;
+						await ((window as any).__tpRecording?.start?.() || Promise.resolve());
+					} catch (e) {
+						// allow retry on next event if it fails
+						fired = false;
+						try { console.warn('auto-record failed', e); } catch {}
+					}
+				}
+				['tp:session:start','speech:start','autoscroll:start'].forEach((ev) => {
+					document.addEventListener(ev as any, () => { try { (maybe as any)(); } catch {} }, { capture: true });
+				});
+			})();
+		} catch {}
+
 		// Install the new Scroll Router (Step/Hybrid; WPM/ASR/Rehearsal stubs)
 		try {
 			installScrollRouter({ auto: {
