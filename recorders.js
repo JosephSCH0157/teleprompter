@@ -259,6 +259,9 @@ try {
 function persistSettings() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(settings));
+    // Legacy mirrors so old code paths remain consistent
+    try { localStorage.setItem('tp_record_mode', String(settings.mode || 'multi')); } catch {}
+    try { localStorage.setItem('tp_adapters', JSON.stringify(Array.isArray(settings.selected) ? settings.selected : [])); } catch {}
   } catch {}
 }
 
@@ -329,6 +332,31 @@ async function guarded(fn) {
   }
 }
 
+// ------------------------------------------------------------------
+// Central recording state machine + bus events (single source of truth)
+// States: 'idle' | 'starting' | 'recording' | 'stopping' | 'error'
+// ------------------------------------------------------------------
+let _recState = 'idle';
+let _recDetail = null;
+let _recAdapter = null; // last chosen primary adapter when in single mode
+
+function _emitRecState(state, detail) {
+  try {
+    _recState = state;
+    _recDetail = detail || null;
+    if (typeof window !== 'undefined') {
+      try { window.__recState = { state, adapter: _recAdapter, detail: _recDetail, ts: Date.now() }; } catch {}
+      const payload = { adapter: _recAdapter, state, detail: _recDetail };
+      window.dispatchEvent(new CustomEvent('rec:state', { detail: payload }));
+      try { window.__tpHud?.log?.('[rec:state]', payload); } catch {}
+    }
+  } catch {}
+}
+
+function _isActiveState(s){ return s === 'starting' || s === 'recording'; }
+
+export function getRecState(){ return { state: _recState, adapter: _recAdapter, detail: _recDetail }; }
+
 // Global guard: skip starting any recorders in Rehearsal mode
 function isNoRecordMode() {
   try {
@@ -349,8 +377,17 @@ export async function startSelected() {
       try { window.HUD?.log?.('rehearsal', { skip: 'startSelected (no-record)' }); } catch {}
       return { results: [], started: [] };
     }
+    // Idempotent: already starting/recording → treat as success
+    if (_isActiveState(_recState)) {
+      try { window.__tpHud?.log?.('[rec] already recording'); } catch {}
+      _emitRecState(_recState, { reason: 'idempotent-start' });
+      return { results: [], started: selectedIds() };
+    }
     applyConfigs();
     const ids = selectedIds();
+    // Track primary adapter (first selected in single mode or the first in list)
+    _recAdapter = settings.mode === 'single' ? (ids[0] || null) : (ids[0] || null);
+    _emitRecState('starting');
     const started = [];
     const actions = ids.map((id) => ({ id, a: registry.get(id) }));
     const doStart = async ({ id, a }) => {
@@ -383,6 +420,12 @@ export async function startSelected() {
       const rs = await Promise.all(actions.map(doStart));
       results.push(...rs);
     }
+    if (started.length) {
+      try { window.__tpHud?.log?.('[rec] recording'); } catch {}
+      _emitRecState('recording');
+    } else {
+      _emitRecState('error', { results });
+    }
     return { results, started };
   });
 }
@@ -394,6 +437,13 @@ export async function stopSelected() {
     if (isNoRecordMode()) {
       try { window.HUD?.log?.('rehearsal', { note: 'stopSelected (allowed during no-record)' }); } catch {}
     }
+    // Idempotent: if already idle/stopping, treat as success
+    if (_recState === 'idle' || _recState === 'stopping') {
+      _emitRecState('idle', { reason: 'idempotent-stop' });
+      return { results: [] };
+    }
+  try { window.__tpHud?.log?.('[rec] stop'); } catch {}
+  _emitRecState('stopping');
     const ids = selectedIds();
     const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
     const rs = await Promise.all(
@@ -412,6 +462,7 @@ export async function stopSelected() {
         }
       })
     );
+    _emitRecState('idle');
     return { results: rs };
   });
 }
@@ -532,6 +583,35 @@ try {
     // Attach SSOT methods (idempotent)
     if (!api.start) api.start = () => startSelected();
     if (!api.stop) api.stop = () => stopSelected();
+    // Expose a minimal preflight helper (currently OBS-centric)
+    if (!api.preflight) api.preflight = async (target = 'obs') => {
+      const issues = [];
+      try {
+        if (target === 'obs') {
+          const bridge = window.__obsBridge || null;
+          if (!bridge) issues.push('OBS bridge missing');
+          else {
+            try {
+              const st = await bridge.getRecordStatus();
+              if (!st) issues.push('OBS not responding');
+            } catch { issues.push('OBS GetRecordStatus failed'); }
+            try {
+              if (typeof bridge.getRecordDirectory === 'function') {
+                const dir = await bridge.getRecordDirectory();
+                if (!dir || !dir.recordDirectory) issues.push('Record directory unknown');
+              }
+            } catch { /* optional */ }
+            try {
+              const stats = await bridge.getStats();
+              const bytes = stats?.recording?.freeDiskSpace || stats?.free_disk_space || null;
+              const free = typeof bytes === 'number' ? bytes : (typeof bytes === 'string' && /^\d+$/.test(bytes) ? Number(bytes) : null);
+              if (free != null && free < 2 * 1024 * 1024 * 1024) issues.push('Low disk space (<2 GB)');
+            } catch { /* ignore */ }
+          }
+        }
+      } catch {}
+      return issues;
+    };
     if (!api.getSettings) api.getSettings = () => getSettings();
     if (!api.setSettings) api.setSettings = (next) => setSettings(next);
     if (!api.setSelected) api.setSelected = (ids) => setSelected(ids);

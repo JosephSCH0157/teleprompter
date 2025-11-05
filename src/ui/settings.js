@@ -2,6 +2,17 @@
   // Settings UI centralization: binds overlay and main panel; tolerates no-store mode
   const S = window.__tpStore;
   const hasStore = !!S;
+  let __recBusy = false; // 'starting' or 'recording' → block adapter changes
+
+  // Unified recorder state listener
+  try {
+    window.addEventListener('rec:state', (e) => {
+      try {
+        const s = e && e.detail && e.detail.state;
+        __recBusy = (s === 'starting' || s === 'recording');
+      } catch {}
+    }, { passive: true });
+  } catch {}
 
   function q(id) { return document.getElementById(id); }
 
@@ -290,6 +301,12 @@
           })();
 
           box.addEventListener('change', async () => {
+            // Block changes while recording
+            if (__recBusy) {
+              try { box.checked = !box.checked; } catch {}
+              try { (window.toast || ((m)=>console.debug('[toast]', m)))('Can’t change adapters while recording. Stop first.', { type: 'warn' }); } catch {}
+              return;
+            }
             try {
               const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
               let ids = boxes.filter(b => b.checked).map(b => String(b.dataset.id||''));
@@ -723,7 +740,7 @@
           if (br && !window.__tpSettingsObsBridgeWired) {
             window.__tpSettingsObsBridgeWired = true;
             try { updateObsChip(); } catch {}
-            try { br.on && br.on('connect', () => { try { updateObsChip(); } catch {} try { clearTimeout(window.__tpObsChipFallbackTimer); } catch {} }); } catch {}
+            try { br.on && br.on('connect', () => { try { updateObsChip(); } catch {} try { clearTimeout(window.__tpObsChipFallbackTimer); } catch {} try { (async ()=>{ try { const issues = await (window.__recorder?.preflight?.('obs') || Promise.resolve([])); if (Array.isArray(issues) && issues.length) { (window.toast || ((m)=>console.debug('[toast]', m)))('OBS preflight: ' + issues.join('; '), { type: 'warn' }); } } catch {} })(); } catch {} }); } catch {}
             try { br.on && br.on('disconnect', () => { try { updateObsChip(); } catch {} }); } catch {}
           } else if (!br) {
             // Retry later; stop after a handful of attempts to avoid a long loop
@@ -788,6 +805,11 @@
       if (modeSingle && !modeSingle.dataset.wired){
         modeSingle.dataset.wired = '1';
         modeSingle.addEventListener('change', async () => {
+          if (__recBusy) {
+            try { modeSingle.checked = !modeSingle.checked; } catch {}
+            try { (window.toast || ((m)=>console.debug('[toast]', m)))('Can’t change adapters while recording. Stop first.', { type: 'warn' }); } catch {}
+            return;
+          }
           await __ensureRecordersMod();
           try { __recMod?.setMode?.(modeSingle.checked ? 'single' : 'multi'); } catch {}
           if (modeSingle.checked) {
@@ -940,6 +962,19 @@
             if (mainAutoRec && mainAutoRec.checked !== !!v) mainAutoRec.checked = !!v;
             // Legacy bridge: persist under old key for callers still reading localStorage
             try { localStorage.setItem('tp_auto_record', v ? '1' : '0'); } catch {}
+            // On enable, run a quick OBS preflight and surface early warnings
+            if (v) {
+              try {
+                (async () => {
+                  try {
+                    const issues = await (window.__recorder?.preflight?.('obs') || Promise.resolve([]));
+                    if (Array.isArray(issues) && issues.length) {
+                      (window.toast || ((m)=>console.debug('[toast]', m)))('OBS preflight: ' + issues.join('; '), { type: 'warn' });
+                    }
+                  } catch {}
+                })();
+              } catch {}
+            }
           } catch {}
         });
       }
