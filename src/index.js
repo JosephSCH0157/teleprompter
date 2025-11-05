@@ -539,11 +539,12 @@ async function boot() {
       };
 
       // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
+      // Prefer dev module first so we always run the freshest code in dev
       const candidates = [
-        '/dist/index-hooks/asr.js',
-        '/dist/asr.js',
         // Correct relative path from src/index.js to the dev JS entry
         './index-hooks/asr.js',
+        '/dist/index-hooks/asr.js',
+        '/dist/asr.js',
       ];
 
       let asrEntry = null;
