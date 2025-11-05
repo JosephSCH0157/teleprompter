@@ -89,6 +89,7 @@ let settings = {
     descript: { startHotkey: 'Ctrl+R', via: 'bridge' },
     capcut: { startHotkey: 'Ctrl+R', via: 'companion' },
     winmedia: { startHotkey: 'Ctrl+R', via: 'bridge' },
+    premiere: { startHotkey: 'Ctrl+R', stopHotkey: '', baseUrl: 'http://127.0.0.1:5723' },
   },
   timeouts: { start: 3000, stop: 3000 },
   failPolicy: 'continue',
@@ -310,6 +311,11 @@ export async function initBuiltIns() {
       const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/obs.js'));
       const a = m?.createOBSAdapter?.();
       if (a) adapters.push(a);
+    } catch {}
+    try {
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/hotkey.js'));
+      const aPrem = m?.createHotkeyAdapter?.('premiere', 'Adobe Premiere Pro');
+      if (aPrem) adapters.push(aPrem);
     } catch {}
     try {
       // If obsBridge exists, register a thin adapter that delegates to it. This keeps
