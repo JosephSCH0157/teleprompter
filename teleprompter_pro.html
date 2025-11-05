@@ -256,14 +256,17 @@
 </select>
 <!-- Auto status chip (Hybrid/Auto state) -->
 <span id="autoChip" class="chip" aria-live="polite" aria-atomic="true" title="Auto scroll status">Auto: Manual</span>
-<!-- Present Mode (top bar) -->
-<button class="inl-1 chip" id="presentBtn">Present Mode</button>
-<button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
-<!-- Help/Shortcuts Button -->
-<button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
-<!-- Self-checks chip (clickable) -->
-<span id="selfChecksChip" class="chip chip-muted">Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em></span>
-<!-- Speakers legend -->
+<!-- Right-side controls wrapper (ASR chip mounts here) -->
+<div id="topbarRight" class="inl-1">
+  <!-- ASR chip + button will mount here -->
+  <button class="chip" id="presentBtn">Present Mode</button>
+  <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
+  <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
+  <span id="selfChecksChip" class="chip chip-muted">
+    Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
+  </span>
+  
+</div>
 <div class="legend" id="legend"></div>
 </div>
 <div class="app">
