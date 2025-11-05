@@ -1,6 +1,15 @@
 // Lightweight ASR ride-along (JS build) — mirrors src/index-hooks/asr.ts behavior
 // Uses the Web Speech API directly to avoid TS build requirements in dev.
 
+// Tunables (exported for tests)
+export const LEAP_CONFIRM_SCORE = 0.75;
+export const LEAP_CONFIRM_WINDOW_MS = 600;
+export const LEAP_SIZE = 4;
+export const POST_COMMIT_FREEZE_MS = 250;
+export const DISPLAY_MIN_DR = 0.0015;
+export const NO_COMMIT_HOLD_MS = 1200;
+export const SILENCE_FREEZE_MS = 2500;
+
 export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
   // Ensure the status chip node exists early, but hidden, to avoid layout shifts before it's placed into the top bar
@@ -134,8 +143,52 @@ export function initAsrFeature() {
       this.engine = null; this.state = 'idle'; this.currentIdx = 0; this.rescueCount = 0;
       // De-dup and gating state
       this.lastIdx = -1; this.lastScore = 0; this.lastTs = 0; this.pending = null; this.freezeUntil = 0;
+      // Leap confirmation state
+      this._leapPending = { idx: -1, ts: 0 };
+      // Idle/voice tracking
+      this._lastCommitAt = 0; this._lastVADAt = 0; this._speaking = false;
       this._scrollAnim = null;
       try { mountAsrChip(); } catch {}
+      // VAD listener for gentle idle/silence behavior
+      try {
+        window.addEventListener('tp:vad', (e) => {
+          try {
+            const speaking = !!(e && e.detail && e.detail.speaking);
+            this._speaking = speaking;
+            this._lastVADAt = performance.now();
+            if (!speaking) {
+              // If silence holds for SILENCE_FREEZE_MS, show ready (avoids creep)
+              const due = this._lastVADAt + SILENCE_FREEZE_MS;
+              setTimeout(() => {
+                try {
+                  if (!this._speaking && performance.now() >= due) {
+                    this.setState('ready');
+                  }
+                } catch {}
+              }, SILENCE_FREEZE_MS + 10);
+            }
+          } catch {}
+        });
+      } catch {}
+      // Manual nudge/reset safety: wheel or arrow/home/end/page keys
+      try {
+        const reset = () => {
+          try {
+            this.lastIdx = -1; this.lastScore = 0; this.lastTs = 0; this.pending = null; this._leapPending = { idx: -1, ts: 0 };
+            this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'manual' });
+          } catch {}
+        };
+        let lastReset = 0;
+        const maybeReset = () => { const now = Date.now(); if (now - lastReset > 300) { lastReset = now; reset(); } };
+        window.addEventListener('wheel', maybeReset, { passive: true });
+        window.addEventListener('keydown', (ev) => {
+          try {
+            const k = (ev && (ev.code || ev.key || '')).toString();
+            if (/Arrow|Page|Home|End/.test(k)) maybeReset();
+          } catch {}
+        }, { capture: true });
+        window.addEventListener('tp:manual-nudge', maybeReset);
+      } catch {}
     }
     getState() { return this.state; }
     async start() {
@@ -239,6 +292,18 @@ export function initAsrFeature() {
       this._scrollAnim = { cancel: () => { cancelled = true; } };
       requestAnimationFrame(write);
     }
+    _leapAllowed(delta, idx, score) {
+      try {
+        if (delta < LEAP_SIZE) return true;
+        if ((Number(score) || 0) >= LEAP_CONFIRM_SCORE) { this._leapPending = { idx: -1, ts: 0 }; return true; }
+        const now = performance.now();
+        if (this._leapPending && this._leapPending.idx === idx && (now - this._leapPending.ts) <= LEAP_CONFIRM_WINDOW_MS) {
+          this._leapPending = { idx: -1, ts: 0 }; return true;
+        }
+        this._leapPending = { idx, ts: now };
+        return false;
+      } catch { return true; }
+    }
   tryAdvance(hyp, isFinal, confidence) {
       // Freeze briefly after big jumps to avoid rubber-banding on line starts
       try { if (performance.now() < (this.freezeUntil || 0)) return; } catch {}
@@ -251,16 +316,20 @@ export function initAsrFeature() {
       const thr = Number(localStorage.getItem('tp_asr_threshold') || COVERAGE_THRESHOLD) || COVERAGE_THRESHOLD;
       if (bestIdx >= 0 && bestScore >= thr) {
         const newIdx = idx0 + bestIdx;
-  if (newIdx <= this.currentIdx) return; // only commit when index increases
+        if (newIdx <= this.currentIdx) return; // only commit when index increases
+        const delta = newIdx - this.currentIdx;
+        // Leap confirmation guard
+        if (!this._leapAllowed(delta, newIdx, bestScore)) return;
         if (!this.shouldCommit(newIdx, bestScore)) return;
         if (!this.gateLowConfidence(newIdx, bestScore)) return;
-        const delta = newIdx - this.currentIdx;
         this.currentIdx = newIdx;
         this.scrollToLine(newIdx);
         this.dispatch('asr:advance', { index: newIdx, score: bestScore });
         try { (window.HUD?.log || console.debug)?.('asr:advance', { index: newIdx, score: Number(bestScore).toFixed(2) }); } catch {}
-        // Briefly freeze inputs after big jumps (>=3 lines)
-        try { if (delta >= 3) this.freezeUntil = performance.now() + 500; } catch {}
+        // Micro freeze after commit (applies to all commits, keeps double-fires down)
+        try { this.freezeUntil = performance.now() + POST_COMMIT_FREEZE_MS; } catch {}
+        // Mark commit time for idle-hold logic
+        try { this._lastCommitAt = performance.now(); } catch {}
         // End-of-script courtesy stop
         try {
           const total = this.getAllLineEls().length;
@@ -337,6 +406,15 @@ export function initAsrFeature() {
       speechActive = !!on;
       // Reflect speech activity on the chip even outside pure ASR mode (e.g., Hybrid)
       try { window.dispatchEvent(new CustomEvent('asr:state', { detail: { state: on ? 'listening' : 'idle' } })); } catch {}
+      // Idle-hold: if speaking but no commits for NO_COMMIT_HOLD_MS, keep 'running' (don't show idle)
+      try {
+        if (asrMode && asrMode._speaking) {
+          const due = asrMode._lastCommitAt + NO_COMMIT_HOLD_MS;
+          if (performance.now() > due && asrMode.state === 'running') {
+            // no-op: intentionally keep state 'running'; do not downgrade
+          }
+        }
+      } catch {}
       if (speechActive && wantASR()) void start(); else void stop();
     } catch {}
   });
