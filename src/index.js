@@ -182,6 +182,15 @@ async function boot() {
       );
       if (needHudInstall) {
         window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+        // Ensure HUD mount root is visible (dev stub may have hidden it)
+        try {
+          const r = document.getElementById('hud-root');
+          if (r) {
+            r.classList && r.classList.remove('hidden');
+            r.removeAttribute && r.removeAttribute('aria-hidden');
+            r.removeAttribute && r.removeAttribute('inert');
+          }
+        } catch {}
         // Auto-show HUD in dev sessions for visibility
         try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch {}
       }
