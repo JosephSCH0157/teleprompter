@@ -66,8 +66,7 @@ let __asrHudHandler = null;
             btn.textContent = off ? 'dB:off' : 'dB:on';
           } catch {}
         };
-        btn.addEventListener('click', (e) => {
-          try { e.preventDefault(); } catch {}
+        btn.addEventListener('click', (_e) => {
           try {
             const off = localStorage.getItem('tp_hud_quiet_db') === '1';
             localStorage.setItem('tp_hud_quiet_db', off ? '0' : '1');
