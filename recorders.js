@@ -193,6 +193,7 @@ if (typeof window !== 'undefined') {
           const a = getAdapter();
           try { window.__tpHud?.log?.('[rec]', 'start', a); } catch {}
           if (a === 'obs') return obsStart();
+          if (a === 'descript') return premStart();
           if (a === 'premiere') return premStart();
           return bridgeStart();
         }
@@ -200,6 +201,7 @@ if (typeof window !== 'undefined') {
           const a = getAdapter();
           try { window.__tpHud?.log?.('[rec]', 'stop', a); } catch {}
           if (a === 'obs') return obsStop();
+          if (a === 'descript') return premStop();
           if (a === 'premiere') return premStop();
           return bridgeStop();
         }
