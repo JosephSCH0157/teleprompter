@@ -48,8 +48,17 @@ export class AsrTopbar {
   async toggle() {
     if (this.running) {
       await this.mode.stop();
-    } else {
-      await this.mode.start();
+      return;
     }
+    // Ensure global Speech Sync is running so pre-roll/recorders and gates engage
+    try {
+      const body = document.body as HTMLElement | null;
+      const speechOn = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening'))) || (window as any).speechOn === true;
+      if (!speechOn) {
+        const recBtn = document.getElementById('recBtn') as HTMLButtonElement | null;
+        recBtn?.click();
+      }
+    } catch {}
+    await this.mode.start();
   }
 }

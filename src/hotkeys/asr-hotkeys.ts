@@ -9,6 +9,14 @@ export function installAsrHotkeys() {
     // Alt+L toggles ASR listening; Esc stops
     if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === 'l' || e.key === 'L')) {
       armed = !armed;
+      // If arming ASR and speech sync isn't running, start it (triggers pre-roll/recorders)
+      if (armed) {
+        try {
+          const body = document.body as HTMLElement | null;
+          const speechOn = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening'))) || (window as any).speechOn === true;
+          if (!speechOn) (document.getElementById('recBtn') as HTMLButtonElement | null)?.click();
+        } catch {}
+      }
       window.dispatchEvent(new CustomEvent('asr:toggle', { detail: { armed } }));
       e.preventDefault();
       e.stopPropagation();
