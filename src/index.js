@@ -114,6 +114,7 @@ import { wireObsPersistentUI } from './wiring/wire.js';
 import './ui/settings.js';
 // HUD: minimal ASR stats line (dev only)
 import './hud/asr-stats.js';
+import './hud/rec-stats.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
