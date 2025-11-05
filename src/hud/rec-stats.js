@@ -66,7 +66,7 @@
   } catch {}
 })();
 
-export {};
+export { };
 // Dev-only HUD line for recorder stats (mirrors asr:stats compact line)
 (() => {
   try {
