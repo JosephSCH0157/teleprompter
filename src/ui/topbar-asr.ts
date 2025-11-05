@@ -1,7 +1,7 @@
 // =============================================================
 // File: src/ui/topbar-asr.ts
 // =============================================================
-import { AsrMode } from '../features/asr-mode';
+import type { AsrMode } from '../features/asr-mode';
 import { speechStore } from '../state/speech-store';
 
 export class AsrTopbar {

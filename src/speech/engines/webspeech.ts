@@ -1,7 +1,8 @@
 // =============================================================
 // File: src/speech/engines/webspeech.ts
 // =============================================================
-import { AsrEngine, AsrEngineOptions, AsrEvent, Emitter } from '../asr-engine';
+import type { AsrEngine, AsrEngineOptions, AsrEvent} from '../asr-engine';
+import { Emitter } from '../asr-engine';
 
 /**
  * Web Speech API engine (Chromium/Edge). Falls back gracefully if unsupported.
