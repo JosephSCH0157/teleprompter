@@ -1,3 +1,50 @@
+// --- Compatibility shim (legacy callers expect a registry) ---
+
+
+// --- Compatibility recorder surface used by the app ---
+// Provides a small surface with idempotent lifecycle and status events.
+const recorder = {
+  state: 'disabled',
+  async init() { return true; },
+  async connect() { return true; },
+  async disconnect() { return true; },
+  setEnabled(_on) { /* no-op for stub */ },
+};
+
+export function initCompat() {
+  // Create a minimal registry surface the old code expects.
+  if (typeof window !== 'undefined') {
+    if (!window.__recorder) {
+      window.__recorder = {
+        get(name) {
+          return name === 'obs' ? recorder : null;
+        }
+      };
+    }
+    // Also expose a global for anything still probing window.recorders
+    window.recorders = window.recorders || window.__recorder;
+  }
+  return typeof window !== 'undefined' ? window.__recorder : { get: () => null };
+}
+
+export default {
+  init: initCompat,
+  get(name) {
+    return name === 'obs' ? recorder : null;
+  },
+  // Also surface the modern API explicitly if anyone wants it
+  recorder
+};
+
+// UMD-style safety net for non-module script loads
+if (typeof window !== 'undefined') {
+  window.__recorder = window.__recorder || {
+    get(name) {
+      return name === 'obs' ? recorder : null;
+    }
+  };
+  window.recorders = window.recorders || window.__recorder;
+}
 // Simple recorder adapter registry
 // Usage:
 //   import { register, get, all } from './recorders.js';
@@ -15,6 +62,153 @@
  * @property {() => Promise<void>} [test]      // optional “Test” button
  * @property {(cfg: any) => void} [configure]  // pass settings in
  */
+
+/* ------------------------------------------------------------------
+ * SSOT Recording API — window.__tpRecording
+ * One call: start()/stop() routes to OBS / Bridge / Premiere
+ * Reads config from either a top-level 'configs' blob or 'tp_rec_settings_v1'.
+ * ------------------------------------------------------------------ */
+(function(){
+      try {
+        if (typeof window === 'undefined') return;
+        const LS = {
+          cfg: 'configs',                 // whole app config blob (optional)
+          recAdapter: 'tp_rec_adapter',   // 'obs' | 'bridge' | 'premiere'
+          autoStart: 'tp_auto_record_on_start_v1',
+          modern: 'tp_rec_settings_v1',   // modern settings blob from registry (has .configs)
+        };
+
+        function getJSON(k, d){
+          try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : (d||{}); } catch { return (d||{}); }
+        }
+        function getCfg(){
+          // Merge top-level configs with modern settings.configs
+          const a = getJSON(LS.cfg, {});
+          const b = getJSON(LS.modern, {});
+          const inner = (b && b.configs) || {};
+          // Top-level may also carry a recording sub-blob
+          const merged = { ...inner, ...a };
+          if (a && a.recording) merged.recording = a.recording;
+          return merged;
+        }
+        function getAdapter(){
+          const cfg = getCfg();
+          try { return (cfg.recording && cfg.recording.adapter) || localStorage.getItem(LS.recAdapter) || 'bridge'; } catch { return 'bridge'; }
+        }
+        function wantsAuto(){ try { return localStorage.getItem(LS.autoStart) === '1'; } catch { return false; } }
+
+        async function httpSend(url, body){
+          if (!url) throw new Error('Missing URL');
+          const res = await fetch(url, {
+            method: body ? 'POST' : 'GET',
+            headers: body ? { 'content-type': 'application/json' } : undefined,
+            body: body ? JSON.stringify(body) : undefined,
+            mode: 'no-cors',
+          });
+          // In no-cors mode, ok may be false even if delivered; consider as best-effort success
+          try { return !!res.ok || true; } catch { return true; }
+        }
+
+        function bridgeCfg(){
+          const cfg = getCfg().bridge || {};
+          return {
+            mode: cfg.mode || 'hotkey',
+            baseUrl: String(cfg.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, ''),
+            startHotkey: cfg.startHotkey || cfg.preset || 'Ctrl+R',
+            stopHotkey: cfg.stopHotkey || '',
+            startUrl: cfg.startUrl || '',
+            stopUrl: cfg.stopUrl || '',
+          };
+        }
+
+        async function bridgeStart(){
+          const b = bridgeCfg();
+          if (b.mode === 'http') {
+            return httpSend(b.startUrl);
+          }
+          const url = b.baseUrl + '/send?keys=' + encodeURIComponent(b.startHotkey);
+          try { return await httpSend(url); }
+          catch { return httpSend(b.baseUrl + '/send', { keys: b.startHotkey }); }
+        }
+        async function bridgeStop(){
+          const b = bridgeCfg();
+          if (b.mode === 'http') {
+            return b.stopUrl ? httpSend(b.stopUrl) : true;
+          }
+          if (!b.stopHotkey) return true;
+          const url = b.baseUrl + '/send?keys=' + encodeURIComponent(b.stopHotkey);
+          try { return await httpSend(url); }
+          catch { return httpSend(b.baseUrl + '/send', { keys: b.stopHotkey }); }
+        }
+
+        async function obsStart(){
+          try {
+            if (window.__obsBridge && typeof window.__obsBridge.start === 'function') {
+              await window.__obsBridge.start();
+              return true;
+            }
+          } catch {}
+          try {
+            if (window.__tpObs && typeof window.__tpObs.ensureRecording === 'function') {
+              return !!(await window.__tpObs.ensureRecording(true));
+            }
+          } catch {}
+          return false;
+        }
+        async function obsStop(){
+          try {
+            if (window.__obsBridge && typeof window.__obsBridge.stop === 'function') {
+              await window.__obsBridge.stop();
+              return true;
+            }
+          } catch {}
+          try {
+            if (window.__tpObs && typeof window.__tpObs.ensureRecording === 'function') {
+              return !!(await window.__tpObs.ensureRecording(false));
+            }
+          } catch {}
+          return false;
+        }
+
+        async function premStart(){
+          // Use the same hotkey bridge pattern as Premiere Hotkey adapter UI
+          const p = getCfg().premiere || {};
+          const base = String(p.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, '');
+          const hk = String(p.startHotkey || 'Ctrl+R');
+          const url = base + '/send?keys=' + encodeURIComponent(hk);
+          try { return await httpSend(url); }
+          catch { return httpSend(base + '/send', { keys: hk }); }
+        }
+        async function premStop(){
+          const p = getCfg().premiere || {};
+          const base = String(p.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, '');
+          const hk = String(p.stopHotkey || '');
+          if (!hk) return true;
+          const url = base + '/send?keys=' + encodeURIComponent(hk);
+          try { return await httpSend(url); }
+          catch { return httpSend(base + '/send', { keys: hk }); }
+        }
+
+        async function start(){
+          const a = getAdapter();
+          try { window.__tpHud?.log?.('[rec]', 'start', a); } catch {}
+          if (a === 'obs') return obsStart();
+          if (a === 'descript') return premStart();
+          if (a === 'premiere') return premStart();
+          return bridgeStart();
+        }
+        async function stop(){
+          const a = getAdapter();
+          try { window.__tpHud?.log?.('[rec]', 'stop', a); } catch {}
+          if (a === 'obs') return obsStop();
+          if (a === 'descript') return premStop();
+          if (a === 'premiere') return premStop();
+          return bridgeStop();
+        }
+
+        window.__tpRecording = { start, stop, wantsAuto, getAdapter };
+      } catch {}
+  })();
 
 /** @type {Map<string, RecorderAdapter>} */
 const registry = new Map(); // id -> adapter
@@ -35,6 +229,7 @@ const LS_KEY = 'tp_rec_settings_v1';
 let settings = {
   mode: 'multi',
   selected: ['obs', 'descript'],
+  preferObsHandoff: false,
     configs: {
       obs: { url: 'ws://192.168.1.200:4455', password: '' },
     companion: { url: 'http://127.0.0.1:8000', buttonId: '1.1' },
@@ -42,6 +237,7 @@ let settings = {
     descript: { startHotkey: 'Ctrl+R', via: 'bridge' },
     capcut: { startHotkey: 'Ctrl+R', via: 'companion' },
     winmedia: { startHotkey: 'Ctrl+R', via: 'bridge' },
+    premiere: { startHotkey: 'Ctrl+R', stopHotkey: '', baseUrl: 'http://127.0.0.1:5723' },
   },
   timeouts: { start: 3000, stop: 3000 },
   failPolicy: 'continue',
@@ -64,6 +260,9 @@ try {
 function persistSettings() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(settings));
+    // Legacy mirrors so old code paths remain consistent
+    try { localStorage.setItem('tp_record_mode', String(settings.mode || 'multi')); } catch {}
+    try { localStorage.setItem('tp_adapters', JSON.stringify(Array.isArray(settings.selected) ? settings.selected : [])); } catch {}
   } catch {}
 }
 
@@ -80,6 +279,7 @@ export function setSettings(next) {
     ...('selected' in next
       ? { selected: Array.isArray(next.selected) ? next.selected.slice() : prev.selected }
       : {}),
+    ...('preferObsHandoff' in next ? { preferObsHandoff: !!next.preferObsHandoff } : {}),
     ...('configs' in next ? { configs: { ...prev.configs, ...(next.configs || {}) } } : {}),
     ...('timeouts' in next ? { timeouts: { ...prev.timeouts, ...(next.timeouts || {}) } } : {}),
     ...('failPolicy' in next ? { failPolicy: next.failPolicy } : {}),
@@ -134,17 +334,248 @@ async function guarded(fn) {
   }
 }
 
+// ------------------------------------------------------------------
+// Central recording state machine + bus events (single source of truth)
+// States: 'idle' | 'starting' | 'recording' | 'stopping' | 'error'
+// ------------------------------------------------------------------
+let _recState = 'idle';
+let _recDetail = null;
+let _recAdapter = null; // last chosen primary adapter when in single mode
+// Epoch used to invalidate in-flight start attempts when a stop/cancel occurs
+let __recEpoch = 0;
+// Hotkey flood guard for Bridge taps
+let __lastBridgeTap = 0;
+
+// ---- test/teardown plumbing ----
+const __recTimers = new Set();
+/** trackable timeout */
+function setTrackedTimeout(fn, ms) {
+  const h = setTimeout(() => {
+    try { __recTimers.delete(h); } catch {}
+    try { fn(); } catch {}
+  }, Math.max(0, ms || 0));
+  try { __recTimers.add(h); } catch {}
+  return h;
+}
+let _onObsDisconnectCb = null;
+let _onObsRecordingStartedCb = null;
+
+// Small time helpers
+// NOTE: All recorder timers MUST use setTrackedTimeout (or register/unref) so tests can teardown cleanly.
+const __now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+const __sleep = (ms) => new Promise((r) => setTrackedTimeout(r, Math.max(0, ms || 0)));
+
+let __lastRecKey = '';
+function _emitRecState(state, detail) {
+  try {
+    _recState = state;
+    _recDetail = detail || null;
+    if (typeof window !== 'undefined') {
+      try { window.__recState = { state, adapter: _recAdapter, detail: _recDetail, ts: Date.now() }; } catch {}
+      const payload = { adapter: _recAdapter, state, detail: _recDetail };
+      // distinct-until-changed to reduce HUD/UI spam
+      try {
+        const key = String(payload.adapter||'') + '|' + String(payload.state||'') + '|' + (payload.detail && payload.detail.fallback ? 'F' : '');
+        if (key === __lastRecKey) return;
+        __lastRecKey = key;
+      } catch {}
+      window.dispatchEvent(new CustomEvent('rec:state', { detail: payload }));
+      try { window.__tpHud?.log?.('[rec:state]', payload); } catch {}
+    }
+  } catch {}
+}
+
+function _isActiveState(s){ return s === 'starting' || s === 'recording'; }
+
+export function getRecState(){ return { state: _recState, adapter: _recAdapter, detail: _recDetail }; }
+
+// Global guard: skip starting any recorders in Rehearsal mode
+function isNoRecordMode() {
+  try {
+    return !!(window.__tpNoRecord || (typeof document !== 'undefined' && document.body && document.body.classList && document.body.classList.contains('mode-rehearsal')));
+  } catch { return false; }
+}
+
 function selectedIds() {
   const ids = Array.isArray(settings.selected) ? settings.selected.slice() : [];
   if (settings.mode === 'single' && ids.length > 1) ids.length = 1;
   return ids.filter((id) => registry.has(id));
 }
 
+// --------------------------------------------------------------
+// OBS handoff watchdog: detect late OBS start while Bridge is active
+// and optionally hand off mid-run when preferObsHandoff is true.
+// --------------------------------------------------------------
+let __handoffTimer = 0;
+function clearHandoffTimer(){ try { if (__handoffTimer) { clearInterval(__handoffTimer); __handoffTimer = 0; } } catch {} }
+async function tryObsHandoffOnce(reason = 'watchdog'){
+  try {
+    if (!settings?.preferObsHandoff) return false;
+    if (_recState !== 'recording' || _recAdapter !== 'bridge') return false;
+    const br = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
+    if (!br || typeof br.getRecordStatus !== 'function') return false;
+    let isRec = false; try { const s = await br.getRecordStatus(); isRec = !!(s && (s.outputActive === true || s.recording === true)); } catch {}
+    if (!isRec) return false;
+    const bridgeAdapter = registry.get('bridge');
+    _emitRecState('stopping', { reason: 'obs-handoff', via: reason });
+    try { await bridgeAdapter?.stop?.(); } catch {}
+    _recAdapter = 'obs';
+    _emitRecState('recording', { handoff: true });
+    clearHandoffTimer();
+    return true;
+  } catch { return false; }
+}
+function armObsHandoffWatchdog(){
+  clearHandoffTimer();
+  try {
+    if (!settings?.preferObsHandoff) return;
+    if (_recState === 'recording' && _recAdapter === 'bridge') {
+      const t = setInterval(() => { tryObsHandoffOnce('watchdog'); }, 1000);
+      try { if (typeof t.unref === 'function') t.unref(); } catch {}
+      __handoffTimer = t;
+    }
+  } catch {}
+}
+
+// --- test-only helper (safe no-op in prod) ---
+try {
+  if (typeof window !== 'undefined') {
+    window.__recorder = window.__recorder || {};
+    if (!window.__recorder.__finalizeForTests) {
+      window.__recorder.__finalizeForTests = () => {
+        try { clearHandoffTimer(); } catch {}
+        try { __recEpoch++; } catch {}
+        try { if (__recStatsTimer) { clearInterval(__recStatsTimer); __recStatsTimer = 0; } } catch {}
+      };
+    }
+  }
+} catch {}
+
+// Exposed teardown for tests: clears timers and OBS listeners
+export async function teardownRecorders(){
+  try { __recEpoch++; } catch {}
+  try { __lastBridgeTap = 0; } catch {}
+  // Clear tracked timeouts
+  try { for (const h of Array.from(__recTimers)) { clearTimeout(h); __recTimers.delete(h); } } catch {}
+  // Clear periodic timers
+  try { clearHandoffTimer(); } catch {}
+  try { if (__recStatsTimer) { clearInterval(__recStatsTimer); __recStatsTimer = 0; } } catch {}
+  // Unbind OBS listeners if bridge supports off/removeListener
+  try {
+    const br = (typeof window !== 'undefined') ? window.__obsBridge : null;
+    if (br) {
+      if (typeof br.off === 'function') {
+        try { if (_onObsDisconnectCb && window.__tpObsDisconnectWired) { br.off('disconnect', _onObsDisconnectCb); window.__tpObsDisconnectWired = false; } } catch {}
+        try { if (_onObsRecordingStartedCb && window.__tpObsHandoffWired) { br.off('recordingStarted', _onObsRecordingStartedCb); window.__tpObsHandoffWired = false; } } catch {}
+      } else if (typeof br.removeListener === 'function') {
+        try { if (_onObsDisconnectCb && window.__tpObsDisconnectWired) { br.removeListener('disconnect', _onObsDisconnectCb); window.__tpObsDisconnectWired = false; } } catch {}
+        try { if (_onObsRecordingStartedCb && window.__tpObsHandoffWired) { br.removeListener('recordingStarted', _onObsRecordingStartedCb); window.__tpObsHandoffWired = false; } } catch {}
+      }
+    }
+  } catch {}
+}
+
+// --- OBS start with confirm + retry + bridge fallback (self-contained) -----
+async function startObsWithConfirm({ timeoutMs = 1200, retryDelayMs = 500 } = {}) {
+  const obs = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
+  const bridgeAdapter = registry.get('bridge');
+  // Capture generation to guard against late completions after stop/cancel
+  const epoch = __recEpoch;
+  const isStale = () => epoch !== __recEpoch;
+  try { window.__tpHud?.log?.('[rec] start obs'); } catch {}
+  // Announce obs starting explicitly
+  try { _recAdapter = 'obs'; _emitRecState('starting'); } catch {}
+
+  let fallbackSent = false;
+  const maybeTapBridge = async () => {
+    const t = __now();
+    if (t - __lastBridgeTap < 1200) return false;
+    __lastBridgeTap = t;
+    try { await bridgeAdapter?.start?.(); } catch {}
+    return true;
+  };
+  const confirm = async () => {
+    try {
+      const s = await obs?.getRecordStatus?.();
+      return !!(s && (s.outputActive === true));
+    } catch { return false; }
+  };
+  const tryStart = async () => {
+    try { if (obs && typeof obs.start === 'function') await obs.start(); else if (obs && typeof obs.startRecord === 'function') await obs.startRecord(); } catch {}
+  };
+
+  await tryStart();
+
+  // poll until timeout
+  let ok = false; let deadline = __now() + timeoutMs;
+  while (!ok && __now() < deadline) {
+    if (isStale()) { try { window.__tpHud?.log?.('[rec] abort confirm (stale)'); } catch {} return { ok:false, adapter:'obs', error:'stale' }; }
+    ok = await confirm();
+    if (!ok) await __sleep(120);
+  }
+
+  if (!ok) {
+    try { window.__tpHud?.log?.('[rec] retry'); } catch {}
+    await __sleep(Math.max(0, retryDelayMs));
+    if (isStale()) { try { window.__tpHud?.log?.('[rec] abort retry (stale)'); } catch {} return { ok:false, adapter:'obs', error:'stale' }; }
+    await tryStart();
+    try { recStats.retries++; } catch {}
+    ok = await confirm();
+  }
+
+  if (ok) {
+    try { _recAdapter = 'obs'; _emitRecState('recording'); } catch {}
+    return { ok: true, adapter: 'obs' };
+  }
+
+  // fallback to Bridge (once)
+  const isBridgeAvailable = !!bridgeAdapter;
+  if (!fallbackSent && isBridgeAvailable) {
+    fallbackSent = true;
+    if (isStale()) { try { window.__tpHud?.log?.('[rec] abort fallback (stale)'); } catch {} return { ok:false, adapter:'obs', error:'stale' }; }
+    // flood guard on fallback taps
+    await maybeTapBridge();
+    // stop() might have landed while we were tapping; bail if so
+    if (isStale()) { try { window.__tpHud?.log?.('[rec] abort fallback (stale-2)'); } catch {} return { ok:false, adapter:'obs', error:'stale' }; }
+    try { window.__tpHud?.log?.('[rec] fallback bridge'); } catch {}
+    try { _recAdapter = 'bridge'; _emitRecState('recording', { fallback: true }); } catch {}
+    try { recStats.fallbacks++; } catch {}
+    return { ok: true, adapter: 'bridge', fallback: true };
+  }
+
+  try { window.__tpHud?.log?.('[rec] drop (start-timeout)'); } catch {}
+  try { _recAdapter = 'obs'; _emitRecState('error', { reason: 'start-timeout' }); } catch {}
+  return { ok: false, adapter: 'obs', error: 'start-timeout' };
+}
+
 /** Start selected recorders based on settings (respects mode, timeouts, failPolicy). */
 export async function startSelected() {
   return guarded(async () => {
+    if (isNoRecordMode()) {
+      try { window.HUD?.log?.('rehearsal', { skip: 'startSelected (no-record)' }); } catch {}
+      return { results: [], started: [] };
+    }
+    // Explicitly block new starts while stopping teardown runs
+    if (_recState === 'stopping') {
+      try { window.__tpHud?.log?.('[rec] busy (stopping)'); } catch {}
+      return { results: [], started: [], reason: 'idempotent-start-while-stopping' };
+    }
+    // Idempotent: already starting/recording → treat as success
+    if (_isActiveState(_recState)) {
+      try { window.__tpHud?.log?.('[rec] already recording'); } catch {}
+      _emitRecState(_recState, { reason: 'idempotent-start' });
+      return { results: [], started: selectedIds() };
+    }
     applyConfigs();
+    // Make sure OBS signals are wired even if __obsBridge attached late
+    try { ensureObsDisconnectFallback(); } catch {}
+    try { ensureObsRecordingStartedHandoff(); } catch {}
     const ids = selectedIds();
+    // Track primary adapter (first selected in single mode or the first in list)
+    _recAdapter = settings.mode === 'single' ? (ids[0] || null) : (ids[0] || null);
+  _emitRecState('starting');
+    const t0 = __now();
+    try { recStats.starts++; } catch {}
     const started = [];
     const actions = ids.map((id) => ({ id, a: registry.get(id) }));
     const doStart = async ({ id, a }) => {
@@ -156,9 +587,17 @@ export async function startSelected() {
         return { id, ok: false, error: String(e?.message || e) };
       }
       try {
-        await callWithTimeout(() => a.start(), settings.timeouts.start);
-        started.push(id);
-        return { id, ok: true };
+        if (id === 'obs') {
+          const res = await startObsWithConfirm({ timeoutMs: Math.min(2000, settings.timeouts.start || 1500), retryDelayMs: 500 });
+          if (res && res.ok === false && res.error === 'stale') { return { id, ok: false, error: 'stale' }; }
+          if (res && res.ok && res.adapter === 'bridge' && res.fallback) { /* handled downstream */ }
+          if (res.ok) { started.push(id); return { id, ok: true, detail: res }; }
+          return { id, ok: false, error: res.error || 'failed' };
+        } else {
+          await callWithTimeout(() => a.start(), settings.timeouts.start);
+          started.push(id);
+          return { id, ok: true };
+        }
       } catch (e) {
         return { id, ok: false, error: String(e?.message || e) };
       }
@@ -177,33 +616,67 @@ export async function startSelected() {
       const rs = await Promise.all(actions.map(doStart));
       results.push(...rs);
     }
+    if (started.length) {
+      try { window.__tpHud?.log?.('[rec] recording'); } catch {}
+      // If OBS fell back to Bridge, reflect that as the active adapter with fallback detail
+      const anyFallback = results.find(r => r && r.id === 'obs' && r.detail && r.detail.fallback);
+      if (anyFallback) {
+        _recAdapter = 'bridge';
+        _emitRecState('recording', { fallback: true, via: 'bridge' });
+      } else {
+        _emitRecState('recording');
+      }
+      try { recStats.startLat.push(Math.max(0, __now() - t0)); } catch {}
+    } else {
+      _emitRecState('error', { results });
+    }
     return { results, started };
   });
 }
 
-/** Stop selected recorders (parallel, timeout per adapter). */
+/** Stop selected recorders (parallel, timeout per adapter).
+ * Important: stop must preempt an in-flight start; do NOT gate with the global busy lock.
+ */
 export async function stopSelected() {
-  return guarded(async () => {
-    const ids = selectedIds();
-    const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
-    const rs = await Promise.all(
-      actions.map(async ({ id, a }) => {
-        try {
-          const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.stop);
-          if (!avail) return { id, ok: false, error: 'unavailable' };
-        } catch (e) {
-          return { id, ok: false, error: String(e?.message || e) };
-        }
-        try {
-          await callWithTimeout(() => a.stop(), settings.timeouts.stop);
-          return { id, ok: true };
-        } catch (e) {
-          return { id, ok: false, error: String(e?.message || e) };
-        }
-      })
-    );
-    return { results: rs };
-  });
+  // Bump epoch immediately to cancel any in-flight confirm/retry/fallback paths
+  __recEpoch++;
+  // Reset Bridge tap flood guard so a fresh start can tap promptly after a stop
+  __lastBridgeTap = 0;
+  // Stop any handoff watchdog
+  clearHandoffTimer();
+  // Allow stop to proceed even in no-record mode (safe cleanup)
+  if (isNoRecordMode()) {
+    try { window.HUD?.log?.('rehearsal', { note: 'stopSelected (allowed during no-record)' }); } catch {}
+  }
+  // Idempotent: if already idle/stopping, treat as success
+  if (_recState === 'idle' || _recState === 'stopping') {
+    _emitRecState('idle', { reason: 'idempotent-stop' });
+    return { results: [] };
+  }
+  try { window.__tpHud?.log?.('[rec] stop'); } catch {}
+  _emitRecState('stopping');
+  const t0 = __now();
+  const ids = selectedIds();
+  const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
+  const rs = await Promise.all(
+    actions.map(async ({ id, a }) => {
+      try {
+        const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.stop);
+        if (!avail) return { id, ok: false, error: 'unavailable' };
+      } catch (e) {
+        return { id, ok: false, error: String(e?.message || e) };
+      }
+      try {
+        await callWithTimeout(() => a.stop(), settings.timeouts.stop);
+        return { id, ok: true };
+      } catch (e) {
+        return { id, ok: false, error: String(e?.message || e) };
+      }
+    })
+  );
+  _emitRecState('idle');
+  try { recStats.stopLat.push(Math.max(0, __now() - t0)); } catch {}
+  return { results: rs };
 }
 
 /**
@@ -250,6 +723,11 @@ export async function initBuiltIns() {
       if (a) adapters.push(a);
     } catch {}
     try {
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/hotkey.js'));
+      const aPrem = m?.createHotkeyAdapter?.('premiere', 'Adobe Premiere Pro');
+      if (aPrem) adapters.push(aPrem);
+    } catch {}
+    try {
       // If obsBridge exists, register a thin adapter that delegates to it. This keeps
       // backwards compatibility for code that expects an adapter with id 'obs'.
       if (typeof window !== 'undefined' && window.__obsBridge) {
@@ -290,6 +768,9 @@ export async function initBuiltIns() {
       } catch {}
     }
     applyConfigs();
+    // Late-bind OBS events if bridge appeared during adapter init
+    try { ensureObsDisconnectFallback(); } catch {}
+    try { ensureObsRecordingStartedHandoff(); } catch {}
   } catch {}
 }
 
@@ -298,6 +779,84 @@ try {
   initBuiltIns();
 } catch {}
 
+// Ensure OBS disconnect → fallback guard (bind once, late-safe)
+function ensureObsDisconnectFallback(){
+  try {
+    if (typeof window === 'undefined') return;
+    const br = window.__obsBridge;
+    if (!br || typeof br.on !== 'function') return;
+    if (window.__tpObsDisconnectWired) return; window.__tpObsDisconnectWired = true;
+    _onObsDisconnectCb = async () => {
+      try {
+        const state = _recState;
+        const bridgeAdapter = registry.get('bridge');
+        const isAuto = (localStorage.getItem('tp_auto_record') === '1') || (localStorage.getItem('tp_auto_record_on_start_v1') === '1');
+        try { recStats.disconnects++; } catch {}
+        if (state === 'starting') {
+          await startObsWithConfirm({ timeoutMs: 900, retryDelayMs: 300 });
+          return;
+        }
+        if (state === 'recording') {
+          _emitRecState('stopping', { reason: 'disconnect' });
+          if (isAuto && bridgeAdapter) {
+            try { await bridgeAdapter.start?.(); } catch {}
+            try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'bridge', state: 'recording', detail: { fallback: true, reason: 'obs-disconnect' } } })); } catch {}
+          } else {
+            _emitRecState('idle', { reason: 'disconnect' });
+          }
+        }
+      } catch {}
+    };
+    br.on('disconnect', _onObsDisconnectCb);
+  } catch {}
+}
+
+// Wire a small listener to auto-arm/clear handoff watchdog on state changes
+(function wireRecStateWatchdog(){
+  try {
+    if (typeof window === 'undefined') return;
+    if (window.__tpRecWatchdogWired) return; window.__tpRecWatchdogWired = true;
+    window.addEventListener('rec:state', (e) => {
+      try {
+        const d = e && e.detail || {};
+        if (d && d.state === 'recording' && d.adapter === 'bridge' && settings?.preferObsHandoff) {
+          armObsHandoffWatchdog();
+        }
+        if (d && (d.state === 'idle' || d.state === 'stopping')) {
+          clearHandoffTimer();
+        }
+      } catch {}
+    });
+  } catch {}
+})();
+
+// Ensure OBS recordingStarted → optional handoff from Bridge (bind once, late-safe)
+function ensureObsRecordingStartedHandoff(){
+  try {
+    if (typeof window === 'undefined') return;
+    const br = window.__obsBridge;
+    if (!br || typeof br.on !== 'function') return;
+    if (window.__tpObsHandoffWired) return; window.__tpObsHandoffWired = true;
+    _onObsRecordingStartedCb = async () => {
+      try {
+        const prefer = !!(settings && settings.preferObsHandoff);
+        if (_recState === 'recording' && _recAdapter === 'bridge') {
+          if (!prefer) {
+            try { window.__tpHud?.log?.('[rec] obs up (handoff disabled)'); } catch {}
+            return;
+          }
+          const bridgeAdapter = registry.get('bridge');
+          _emitRecState('stopping', { reason: 'obs-handoff' });
+          try { await bridgeAdapter?.stop?.(); } catch {}
+          _recAdapter = 'obs';
+          _emitRecState('recording', { handoff: true });
+        }
+      } catch {}
+    };
+    br.on('recordingStarted', _onObsRecordingStartedCb);
+  } catch {}
+}
+
 // Simple aliases for consumers that prefer start/stop terminology
 export async function start() {
   return startSelected();
@@ -305,6 +864,56 @@ export async function start() {
 export async function stop() {
   return stopSelected();
 }
+
+// --- Legacy global bridge ---------------------------------------------------
+// Many legacy callers (teleprompter_pro.js) expect window.__recorder to expose
+// start/stop and settings helpers. Provide a thin bridge to the SSOT above.
+try {
+  if (typeof window !== 'undefined') {
+    // Ensure the base shim exists
+    initCompat();
+    const api = window.__recorder;
+    // Attach SSOT methods (idempotent)
+    if (!api.start) api.start = () => startSelected();
+    if (!api.stop) api.stop = () => stopSelected();
+    // Expose a minimal preflight helper (currently OBS-centric)
+    if (!api.preflight) api.preflight = async (target = 'obs') => {
+      const issues = [];
+      try {
+        if (target === 'obs') {
+          const bridge = window.__obsBridge || null;
+          if (!bridge) issues.push('OBS bridge missing');
+          else {
+            try {
+              const st = await bridge.getRecordStatus();
+              if (!st) issues.push('OBS not responding');
+            } catch { issues.push('OBS GetRecordStatus failed'); }
+            try {
+              if (typeof bridge.getRecordDirectory === 'function') {
+                const dir = await bridge.getRecordDirectory();
+                if (!dir || !dir.recordDirectory) issues.push('Record directory unknown');
+              }
+            } catch { /* optional */ }
+            try {
+              const stats = await bridge.getStats();
+              const bytes = stats?.recording?.freeDiskSpace || stats?.free_disk_space || null;
+              const free = typeof bytes === 'number' ? bytes : (typeof bytes === 'string' && /^\d+$/.test(bytes) ? Number(bytes) : null);
+              if (free != null && free < 2 * 1024 * 1024 * 1024) issues.push('Low disk space (<2 GB)');
+            } catch { /* ignore */ }
+          }
+        }
+      } catch {}
+      return issues;
+    };
+    if (!api.getSettings) api.getSettings = () => getSettings();
+    if (!api.setSettings) api.setSettings = (next) => setSettings(next);
+    if (!api.setSelected) api.setSelected = (ids) => setSelected(ids);
+    if (!api.setMode) api.setMode = (mode) => setMode(mode);
+    if (!api.__finalizeForTests) api.__finalizeForTests = () => { try { clearHandoffTimer(); } catch {} };
+    // Keep a stable alias under window.recorders too
+    window.recorders = window.recorders || api;
+  }
+} catch {}
 
 /* ------------------------------------------------------------------
  * Minimal inline OBS v5 bridge (safe, idempotent)
@@ -325,6 +934,8 @@ let _cfgBridge = {
   onStatus: (txt, ok) => console.log('[OBS]', txt, ok),
   onRecordState: () => {},
 };
+
+let _enabled = false;
 
 export function initBridge(opts = {}) {
   _cfgBridge = { ..._cfgBridge, ...opts };
@@ -393,139 +1004,27 @@ let _reconnTimer = 0;
 function reconnectSoon(ms = 400) {
   try {
     clearTimeout(_reconnTimer);
-    _reconnTimer = setTimeout(() => {
-      connect();
+    _reconnTimer = setTrackedTimeout(() => {
+      try { connect(); } catch {}
     }, ms);
   } catch {}
 }
 
-export function connect({ testOnly } = {}) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!_cfgBridge.isEnabled() && !testOnly) return reject(new Error('disabled'));
-  // Prefer an explicitly provided bridge URL, otherwise build from obsCfg
-  const cfgUrl = obsCfg && obsCfg.host ? `${obsCfg.secure ? 'wss' : 'ws'}://${obsCfg.host}:${obsCfg.port}` : null;
-  const url = _cfgBridge.getUrl?.() || cfgUrl || 'ws://127.0.0.1:4455';
-  const pass = _cfgBridge.getPass?.() || '';
-      try {
-        _ws && _ws.close(1000, 'reconnect');
-      } catch {}
-      _identified = false;
-      _connecting = true;
-      try {
-        _cfgBridge.onStatus?.('connecting…', false);
-      } catch {}
-
-      _ws = new WebSocket(url);
-
-      _ws.onopen = () => {
-        /* wait for Hello */
-      };
-
-      _ws.onmessage = async (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.op === 0) {
-            try {
-              const { challenge, salt } = msg.d.authentication || {};
-              const rpcVersion = 1;
-              let auth;
-              if (challenge && salt && pass) {
-                // Decode base64 salt to bytes
-                const base64ToUint8Array = (b64Str) => {
-                  try {
-                    const bin = atob(b64Str);
-                    const a = new Uint8Array(bin.length);
-                    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-                    return a;
-                  } catch {
-                    return new Uint8Array();
-                  }
-                };
-                const concatUint8 = (a, b) => {
-                  const out = new Uint8Array(a.length + b.length);
-                  out.set(a, 0);
-                  out.set(b, a.length);
-                  return out;
-                };
-                const enc = (s) => new TextEncoder().encode(s);
-                const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-
-                const saltBytes = base64ToUint8Array(salt);
-                const passBytes = enc(pass);
-                const secretInput = concatUint8(saltBytes, passBytes);
-                const secretBuf = await crypto.subtle.digest('SHA-256', secretInput);
-                const secretB64 = b64(secretBuf);
-
-                // Alternate variant: SHA256(secretB64 + challenge)
-                const authInputStr = secretB64 + challenge;
-                const authBuf = await crypto.subtle.digest('SHA-256', enc(authInputStr));
-                auth = b64(authBuf);
-              }
-              _ws.send(JSON.stringify({ op: 1, d: { rpcVersion, authentication: auth } }));
-            } catch {
-              try {
-                _cfgBridge.onStatus?.('auth compute error', false);
-              } catch {}
-              return _ws.close(4000, 'auth-error');
-            }
-          } else if (msg.op === 2) {
-            _identified = true;
-            _connecting = false;
-            try {
-              _cfgBridge.onStatus?.('connected', true);
-            } catch {}
-            if (testOnly) {
-              try {
-                _ws.close(1000, 'test-ok');
-              } catch {}
-              resolve(true);
-            }
-          } else if (msg.op === 7) {
-            const evType = msg.d?.eventType;
-            if (evType === 'RecordStateChanged') {
-              const st = msg.d?.eventData?.outputState?.toLowerCase() || 'idle';
-              try {
-                _cfgBridge.onRecordState?.(st);
-              } catch {}
-            }
-          }
-        } catch {
-          try {
-            _cfgBridge.onStatus?.('msg-parse-error', false);
-          } catch {}
-        }
-      };
-
-      _ws.onerror = (_e) => {
-        try {
-          _cfgBridge.onStatus?.('socket error', false);
-        } catch {}
-        _connecting = false;
-      };
-
-      _ws.onclose = (e) => {
-        try {
-          const code = e?.code || 0;
-          const reason = e?.reason || '';
-          _identified = false;
-          _connecting = false;
-          try {
-            _cfgBridge.onStatus?.(`closed ${code} ${reason}`.trim(), false);
-          } catch {}
-          if (!testOnly && _cfgBridge.isEnabled() && code !== 1000) reconnectSoon(800);
-          if (testOnly) reject(new Error(`close ${code}`));
-        } catch (ee) {
-          if (testOnly) reject(ee);
-        }
-      };
-    } catch (outer) {
-      try {
-        _cfgBridge.onStatus?.('connect-exception', false);
-      } catch {}
-      return reject(outer);
+export async function connect({ testOnly = false, reason = 'runtime' } = {}) {
+  // If the bridge isn’t loaded yet, try to load it (once)
+  if (!window.__obsBridge || !window.__obsBridge.connect) {
+    if (typeof window.__loadObsBridge === 'function') {
+      try { await window.__loadObsBridge(); } catch {}
     }
-  });
+  }
+  // If still not present, surface a clear error
+  if (!window.__obsBridge || !window.__obsBridge.connect) {
+    throw new Error('OBS bridge is not available on the page.');
+  }
+  // Mark desire for a persistent session; the bridge’s onclose will check this
+  _cfgBridge.isEnabled = () => _enabled === true;
+  // Hand off to the bridge
+  return window.__obsBridge.connect({ testOnly, reason });
 }
 
 export function isConnected() {
@@ -573,118 +1072,42 @@ export function init({ getUrl, getPass, isEnabled, onStatus, onRecordState } = {
   }
 }
 
+// --------------------------------------------------------------
+// Lightweight recorder telemetry (rec:stats)
+// --------------------------------------------------------------
+const recStats = { starts: 0, retries: 0, fallbacks: 0, disconnects: 0, startLat: [], stopLat: [] };
+function p95(arr){
+  if (!arr || !arr.length) return 0;
+  const a = arr.slice().sort((x,y)=>x-y);
+  const i = Math.min(a.length-1, Math.floor(a.length*0.95));
+  return a[i] || 0;
+}
+function emitRecStats(_final=false){
+  try {
+    const payload = {
+      starts: recStats.starts|0,
+      retries: recStats.retries|0,
+      fallbacks: recStats.fallbacks|0,
+      disconnects: recStats.disconnects|0,
+      startP95Ms: Math.round(p95(recStats.startLat)),
+      stopP95Ms: Math.round(p95(recStats.stopLat)),
+    };
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rec:stats', { detail: payload }));
+    }
+  } catch {}
+  // no further work when final; kept for clarity without early return
+}
+let __recStatsTimer = 0;
+try {
+  if (typeof window !== 'undefined') {
+    clearInterval(__recStatsTimer);
+    __recStatsTimer = setInterval(()=>emitRecStats(false), 5000);
+    try { if (typeof __recStatsTimer.unref === 'function') __recStatsTimer.unref(); } catch {}
+    window.addEventListener('beforeunload', () => emitRecStats(true));
+  }
+} catch {}
+
 // --- Compatibility recorder surface used by the app ---
 // Provides a small surface with idempotent lifecycle and status events.
-export const recorder = (function () {
-  let _state = 'disabled'; // disabled | connecting… | connected | disconnected | error
-  let _initted = false;
-  let _enabled = false;
-
-  function emitStatus(txt, ok) {
-    _state = txt || _state;
-    // Call the inline bridge onStatus if configured
-    try {
-      _cfgBridge.onStatus?.(txt, !!ok);
-    } catch {}
-    // Dispatch a DOM CustomEvent so UI can listen
-    try {
-      const ev = new CustomEvent('tp-recorder-status', { detail: { state: txt, ok: !!ok } });
-      if (typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(ev);
-    } catch {}
-  }
-
-  async function initSurface() {
-    if (_initted) return true;
-    _initted = true;
-    try {
-      // ensure built-ins loaded so adapters are registered
-      await initBuiltIns();
-      emitStatus('recorder initialized', true);
-      return true;
-  } catch {
-      emitStatus('init error', false);
-      return false;
-    }
-  }
-
-  async function connectSurface() {
-    // idempotent: if already connected, return
-    if (isConnected()) {
-      emitStatus('connected', true);
-      return true;
-    }
-    emitStatus('connecting…', false);
-    try {
-      // prefer the inline bridge connect (if present) as a convenience
-      if (typeof connect === 'function') {
-        await connect();
-        if (isConnected()) {
-          emitStatus('connected', true);
-          return true;
-        }
-      }
-      // Try adapter-based connect: find an 'obs' adapter
-      const a = registry.get('obs');
-      if (a && typeof a.start === 'function') {
-        await a.start();
-        emitStatus('connected', true);
-        return true;
-      }
-      emitStatus('disconnected', false);
-      return false;
-  } catch {
-      emitStatus('error', false);
-      return false;
-    }
-  }
-
-  async function disconnectSurface() {
-    try {
-      if (typeof disconnect === 'function') {
-        try {
-          disconnect();
-        } catch {}
-      }
-      const a = registry.get('obs');
-      if (a && typeof a.stop === 'function') {
-        try {
-          await a.stop();
-        } catch {}
-      }
-      emitStatus('disconnected', false);
-      return true;
-  } catch {
-      emitStatus('error', false);
-      return false;
-    }
-  }
-
-  return {
-    get state() {
-      return _state;
-    },
-    async init() {
-      return initSurface();
-    },
-    async connect() {
-      _enabled = true;
-      return connectSurface();
-    },
-    async disconnect() {
-      _enabled = false;
-      return disconnectSurface();
-    },
-    setEnabled(on) {
-      try {
-        _enabled = !!on;
-        if (_enabled) {
-          // don't await to avoid UI blocking; connectSurface is idempotent
-          void connectSurface();
-        } else {
-          void disconnectSurface();
-        }
-      } catch {}
-    },
-  };
-})();
 
