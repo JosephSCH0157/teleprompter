@@ -300,6 +300,15 @@ async function boot() {
     try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
 
+    // Default: mute HUD dB breadcrumbs in dev unless explicitly enabled
+    try {
+      if (window.__TP_DEV) {
+        const k = 'tp_hud_quiet_db';
+        const has = localStorage.getItem(k);
+        if (has == null) localStorage.setItem(k, '1');
+      }
+    } catch {}
+
     // Pre-seed a wider default script column if user hasn't set one yet
     try {
       const KEY = 'tp_typography_v1';
