@@ -1,0 +1,176 @@
+// Lightweight ASR ride-along (JS build) — mirrors src/index-hooks/asr.ts behavior
+// Uses the Web Speech API directly to avoid TS build requirements in dev.
+
+export function initAsrFeature() {
+  // Simple text normalizer (aligns with TS normalizeText/stripFillers basics)
+  const normalize = (s) => {
+    try { return String(s || '').toLowerCase().replace(/[^a-z0-9\s']/g, ' ').replace(/\s+/g, ' ').trim(); } catch { return ''; }
+  };
+  const COVERAGE_THRESHOLD = 0.45; // conservative default; TS uses store threshold but we keep simple here
+
+  class WebSpeechEngine {
+    constructor() {
+      const SR = (window.SpeechRecognition || window.webkitSpeechRecognition);
+      if (!SR) throw new Error('Web Speech API not available');
+      this.SR = SR; this.rec = null; this.listeners = new Set(); this.running = false;
+    }
+    on(fn) { try { this.listeners.add(fn); } catch {} }
+    off(fn) { try { this.listeners.delete(fn); } catch {} }
+    emit(ev) { try { this.listeners.forEach(fn => { try { fn(ev); } catch {} }); } catch {} }
+    async start(opts) {
+      if (this.running) return;
+      const rec = new this.SR();
+      this.rec = rec; this.running = true;
+      rec.lang = (opts && opts.lang) || 'en-US';
+      rec.interimResults = !!(opts && opts.interim !== false);
+      rec.continuous = true;
+      rec.onstart = () => { this.emit({ type: 'ready' }); this.emit({ type: 'listening' }); };
+      rec.onerror = (e) => { this.emit({ type: 'error', code: e?.error || 'error', message: e?.message || 'speech error' }); };
+      rec.onend = () => { this.running = false; this.emit({ type: 'stopped' }); };
+      rec.onresult = (e) => {
+        try {
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const res = e.results[i];
+            const txt = String(res[0]?.transcript || '');
+            const conf = Number(res[0]?.confidence || (res.isFinal ? 1 : 0.5));
+            this.emit({ type: res.isFinal ? 'final' : 'partial', text: txt, confidence: conf });
+          }
+        } catch {}
+      };
+      try { rec.start(); } catch (err) { this.emit({ type: 'error', code: 'start', message: String(err && err.message || err) }); }
+    }
+    async stop() { try { if (this.rec) this.rec.stop(); } catch {} finally { this.running = false; this.emit({ type: 'stopped' }); } }
+  }
+
+  class AsrMode {
+    constructor(opts) {
+      this.opts = Object.assign({ rootSelector: '#scriptRoot, #script, body', lineSelector: '.line, p', markerOffsetPx: 140, windowSize: 6 }, opts || {});
+      this.engine = null; this.state = 'idle'; this.currentIdx = 0; this.rescueCount = 0;
+    }
+    getState() { return this.state; }
+    async start() {
+      if (this.state !== 'idle') return;
+      this.engine = new WebSpeechEngine();
+      this.engine.on((e) => this.onEngineEvent(e));
+      this.setState('ready');
+      await this.engine.start({ lang: 'en-US', interim: true });
+    }
+    async stop() {
+      try { await this.engine?.stop?.(); } catch {}
+      this.setState('idle');
+      this.dispatch('asr:state', { state: this.state });
+    }
+    onEngineEvent(e) {
+      if (e.type === 'ready') this.setState('ready');
+      if (e.type === 'listening') this.setState('listening');
+      if (e.type === 'partial' || e.type === 'final') {
+        if (this.state !== 'running') this.setState('running');
+        const text = normalize(e.text);
+        this.tryAdvance(text, e.type === 'final', Number(e.confidence || (e.type === 'final' ? 1 : 0.5)));
+      }
+      if (e.type === 'error') { this.setState('error'); this.dispatch('asr:error', { code: e.code, message: e.message }); }
+      if (e.type === 'stopped') { this.setState('idle'); }
+    }
+    setState(s) { this.state = s; this.dispatch('asr:state', { state: s }); }
+    dispatch(name, detail) { try { window.dispatchEvent(new CustomEvent(name, { detail })); } catch {} }
+    getAllLineEls() {
+      const root = document.querySelector(this.opts.rootSelector) || document.body;
+      const list = Array.from(root.querySelectorAll(this.opts.lineSelector));
+      return list.length ? list : Array.from(document.querySelectorAll('.line, p'));
+    }
+    getWindow() {
+      const els = this.getAllLineEls();
+      const start = Math.max(0, Math.min(this.currentIdx, Math.max(0, els.length - 1)));
+      const end = Math.max(start, Math.min(els.length, start + this.opts.windowSize));
+      const texts = els.slice(start, end).map(el => normalize(el.textContent || ''));
+      return { lines: texts, idx0: start };
+    }
+    tryAdvance(hyp, isFinal, confidence) {
+      const { lines, idx0 } = this.getWindow();
+      let bestIdx = -1, bestScore = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const score = coverageScore(lines[i], hyp) * (confidence || 1);
+        if (score > bestScore) { bestScore = score; bestIdx = i; }
+      }
+      const thr = Number(localStorage.getItem('tp_asr_threshold') || COVERAGE_THRESHOLD) || COVERAGE_THRESHOLD;
+      if (bestIdx >= 0 && bestScore >= thr) {
+        const newIdx = idx0 + bestIdx;
+        if (newIdx >= this.currentIdx) {
+          this.currentIdx = newIdx; this.scrollToLine(newIdx); this.dispatch('asr:advance', { index: newIdx, score: bestScore });
+        }
+      } else if (isFinal) {
+        this.rescueCount++;
+        if (this.rescueCount <= 2) {
+          this.currentIdx = Math.min(this.currentIdx + 1, this.getAllLineEls().length - 1);
+          this.scrollToLine(this.currentIdx);
+          this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'weak-final' });
+        }
+      }
+    }
+    scrollToLine(idx) {
+      const els = this.getAllLineEls();
+      const target = els[idx]; if (!target) return;
+      // Skip during pre-roll
+      try {
+        const ov = document.getElementById('countOverlay');
+        if (ov) { const cs = getComputedStyle(ov); const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !ov.classList.contains('hidden'); if (visible) return; }
+      } catch {}
+      const scroller = findScroller(target); const marker = this.opts.markerOffsetPx;
+      const top = elementTopRelativeTo(target, scroller) - marker;
+      requestAnimationFrame(() => {
+        try {
+          if (scroller === document.scrollingElement || scroller === document.body) window.scrollTo({ top, behavior: 'smooth' });
+          else scroller.scrollTo({ top, behavior: 'smooth' });
+        } catch {}
+      });
+    }
+  }
+
+  // Small helpers for scrolling/coverage
+  function coverageScore(line, hyp) {
+    try {
+      const A = new Set(String(line || '').split(' ').filter(Boolean));
+      const B = new Set(String(hyp || '').split(' ').filter(Boolean));
+      if (A.size === 0) return 0; let inter = 0; for (const w of A) if (B.has(w)) inter++; return inter / A.size;
+    } catch { return 0; }
+  }
+  function findScroller(el) {
+    let node = el?.parentElement;
+    while (node) { try { const st = getComputedStyle(node); if (/(auto|scroll)/.test(st.overflowY || '')) return node; } catch {} node = node.parentElement; }
+    return document.scrollingElement || document.body;
+  }
+  function elementTopRelativeTo(el, scroller) {
+    const r1 = el.getBoundingClientRect();
+    const isWin = (scroller === document.scrollingElement || scroller === document.body);
+    const r2 = isWin ? { top: 0 } : scroller.getBoundingClientRect();
+    const scrollTop = isWin ? window.pageYOffset : scroller.scrollTop;
+    return r1.top - r2.top + scrollTop;
+  }
+
+  // Coordinator: follow Speech Sync and Mode changes; interlock auto-scroll
+  let asrMode = null; let speechActive = false; let asrActive = false; let autoHeld = false;
+  const wantASR = () => { try { return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr'; } catch { return false; } };
+  const holdAuto = () => { if (autoHeld) return; autoHeld = true; try { window.__tpAuto?.set?.(false); window.dispatchEvent(new CustomEvent('autoscroll:disable', { detail: 'asr' })); } catch {} };
+  const releaseAuto = () => { if (!autoHeld) return; autoHeld = false; try { window.__tpAuto?.set?.(true); window.dispatchEvent(new CustomEvent('autoscroll:enable', { detail: 'asr' })); } catch {} };
+  const ensureMode = async () => { if (!asrMode) asrMode = new AsrMode({}); return asrMode; };
+  const start = async () => { if (asrActive) return; try { const m = await ensureMode(); holdAuto(); await m.start(); asrActive = true; } catch (err) { asrActive = false; releaseAuto(); try { console.warn('[ASR] start failed', err); } catch {} } };
+  const stop  = async () => { if (!asrActive) return; try { await asrMode?.stop?.(); } finally { asrActive = false; releaseAuto(); } };
+
+  window.addEventListener('tp:speech-state', (ev) => {
+    try {
+      const d = ev?.detail || {}; const on = (d.running === true) || (typeof d.state === 'string' && (d.state === 'active' || d.state === 'running'));
+      speechActive = !!on; if (speechActive && wantASR()) void start(); else void stop();
+    } catch {}
+  });
+  document.addEventListener('change', (ev) => { try { if (ev?.target?.id !== 'scrollMode') return; if (!speechActive) return; wantASR() ? void start() : void stop(); } catch {} });
+  window.addEventListener('asr:toggle', (e) => { const armed = !!(e?.detail?.armed); armed ? void start() : void stop(); });
+  window.addEventListener('asr:stop', () => { void stop(); });
+
+  // Late-load reconcile
+  try {
+    const body = document.body; speechActive = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening'))) || (window.speechOn === true);
+    if (speechActive && wantASR()) void start();
+  } catch {}
+}
+
+export default initAsrFeature;

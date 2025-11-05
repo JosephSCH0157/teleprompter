@@ -542,7 +542,8 @@ async function boot() {
       const candidates = [
         '/dist/index-hooks/asr.js',
         '/dist/asr.js',
-        './src/index-hooks/asr.js',
+        // Correct relative path from src/index.js to the dev JS entry
+        './index-hooks/asr.js',
       ];
 
       let asrEntry = null;
