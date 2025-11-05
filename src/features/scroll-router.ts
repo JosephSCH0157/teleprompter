@@ -185,10 +185,11 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       try { document.dispatchEvent(new CustomEvent('tp:autoState', { detail: payload })); } catch {}
     } catch {}
   }
-  function setAutoChip(state: 'on' | 'paused' | 'manual', detail?: string) {
+  function setAutoChip(state: 'on' | 'paused' | 'manual', detail?: string, suffix?: string) {
     const el = chipEl();
     if (!el) return;
-    el.textContent = `Auto: ${state === 'on' ? 'On' : state === 'paused' ? 'Paused' : 'Manual'}`;
+    const base = `Auto: ${state === 'on' ? 'On' : state === 'paused' ? 'Paused' : 'Manual'}`;
+    el.textContent = suffix ? `${base} — ${suffix}` : base;
     el.classList.remove('on','paused','manual');
     el.classList.add(state);
     el.setAttribute('data-state', state);
@@ -207,7 +208,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       if (typeof auto.setEnabled === 'function') auto.setEnabled(want);
       enabledNow = want;
       const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'} • Speech:${speechActive ? '1' : '0'}`;
-      setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
+  setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
       try {
         const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
         if (btn) {
@@ -288,12 +289,14 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   const detail = `Mode: Hybrid • Pref: ${gatePref} • User: ${userEnabled ? 'On' : 'Off'} • Speech:${speechActive?'1':'0'} • dB:${dbGate?'1':'0'} • VAD:${vadGate?'1':'0'}`;
     // UI reflects the actual engine state (enabledNow), not the instantaneous gate desire
-    setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
+  const pausedDueToGate = userEnabled && speechActive && !enabledNow && !isHybridBypass() && !computeGateWanted();
+  setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail, pausedDueToGate ? 'waiting for speech' : undefined);
     // Reflect user intent on the main Auto button label with speed and paused state
     try {
       const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
       if (btn) {
         const s = getStoredSpeed();
+        const pausedDueToGate2 = userEnabled && speechActive && !enabledNow && !isHybridBypass() && !computeGateWanted();
         if (!userEnabled) {
           btn.textContent = 'Auto-scroll: Off';
           btn.setAttribute('data-state', 'off');
@@ -301,7 +304,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
           btn.textContent = `Auto-scroll: On — ${s} px/s`;
           btn.setAttribute('data-state', 'on');
         } else {
-          btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
+          btn.textContent = `Auto-scroll: Paused — ${s} px/s${pausedDueToGate2 ? ' (waiting for speech)' : ''}`;
           btn.setAttribute('data-state', 'paused');
         }
         btn.setAttribute('aria-pressed', String(!!userEnabled));
