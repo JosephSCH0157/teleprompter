@@ -21,12 +21,16 @@
       if (!rootEl) return;
       if (rootEl.dataset.mounted === '1') return; // idempotent
       const html = [
-        '<div data-tab-content="general">',
+  '<div data-tab-content="general">',
         '  <h4>General</h4>',
         '  <div class="row">',
         '    <label>Font size <input id="settingsFontSize" type="number" min="16" max="96" step="2" class="select-md"/></label>',
         '    <label>Line height <input id="settingsLineHeight" type="number" min="1.1" max="2" step="0.05" class="select-md"/></label>',
         '  </div>',
+  '  <div class="row">',
+  '    <label>Target WPM <input id="settingsWpmTarget" type="number" min="60" max="260" step="5" class="select-md" placeholder="150"/></label>',
+  '    <span id="settingsWpmPx" class="microcopy" style="margin-left:6px;color:#9fb4c9;font-size:12px">≈ — px/s</span>',
+  '  </div>',
         '  <div class="row">',
         '    <label>Max line width (ch – Main)<input id="settingsMaxChMain" type="number" min="40" max="140" step="1" class="select-md" placeholder="95"/></label>',
         '    <label>Max line width (ch – Display)<input id="settingsMaxChDisplay" type="number" min="40" max="140" step="1" class="select-md" placeholder="95"/></label>',
@@ -956,10 +960,46 @@
         } else {
         const fsS = q('settingsFontSize');
         const lhS = q('settingsLineHeight');
+        const wpmT = q('settingsWpmTarget');
+        const wpmPx = q('settingsWpmPx');
         const maxChMain = q('settingsMaxChMain');
         const maxChDisp = q('settingsMaxChDisplay');
         const fsMain = q('fontSize');
         const lhMain = q('lineHeight');
+        const mapWpmToPxPerSec = (wpm)=>{
+          try {
+            const cs = getComputedStyle(document.documentElement);
+            const fsPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+            const lhScale = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+            const lineHeightPx = fsPx * lhScale;
+            const wpl = parseFloat(localStorage.getItem('tp_wpl_hint') || '8') || 8;
+            const linesPerSec = (wpm / 60) / wpl;
+            return linesPerSec * lineHeightPx;
+          } catch { return (wpm / 60) / 8 * (56 * 1.4); }
+        };
+        const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+        const getTargetWpm = ()=>{ try { return Number(localStorage.getItem('tp_wpm_target')||'150')||150; } catch { return 150; } };
+        const setTargetWpm = (w)=>{ try { localStorage.setItem('tp_wpm_target', String(clamp(Math.round(w||0),60,260))); } catch {} };
+        const updateWpmPx = ()=>{
+          try { const s = (Math.round(mapWpmToPxPerSec(getTargetWpm())*10)/10).toFixed(1); if (wpmPx) wpmPx.textContent = '≈ ' + s + ' px/s'; } catch {}
+        };
+        // Seed WPM target value
+        try { if (wpmT) wpmT.value = String(getTargetWpm()); } catch {}
+        updateWpmPx();
+        if (wpmT && !wpmT.dataset.wired) {
+          wpmT.dataset.wired = '1';
+          wpmT.addEventListener('input', () => {
+            try {
+              const n = Number(wpmT.value);
+              if (!Number.isFinite(n)) return;
+              setTargetWpm(n);
+              updateWpmPx();
+              // Mirror to main sidebar input and trigger its handler so WPM mode applies immediately
+              const side = document.getElementById('wpmTarget');
+              if (side) { side.value = String(clamp(Math.round(n),60,260)); side.dispatchEvent(new Event('input', { bubbles: true })); }
+            } catch {}
+          });
+        }
         const setRootMaxCh = (val) => {
           try {
             const n = Math.max(40, Math.min(140, Number(val)));
@@ -999,6 +1039,7 @@
               if (fsS && fsS.value) root.style.setProperty('--tp-font-size', String(fsS.value) + 'px');
               if (lhS && lhS.value) root.style.setProperty('--tp-line-height', String(lhS.value));
               try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+              try { updateWpmPx(); } catch {}
               // persist per-display (main) under shared store so reload restores
               const KEY = 'tp_typography_v1';
               const raw = localStorage.getItem(KEY);

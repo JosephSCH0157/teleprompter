@@ -562,9 +562,20 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (detail) el.title = detail;
   }
 
-  const getStoredSpeed = (): number => {
+  // Per-mode speed persistence (fallback to global)
+  const speedKey = (m: Mode) => `tp_speed_${m}`;
+  const getStoredSpeedForMode = (m: Mode): number => {
+    try {
+      const v = Number(localStorage.getItem(speedKey(m)) || '');
+      if (Number.isFinite(v) && v > 0) return v;
+    } catch {}
     try { return Number(localStorage.getItem('tp_auto_speed') || '60') || 60; } catch { return 60; }
   };
+  const setStoredSpeedForMode = (m: Mode, v: number) => {
+    try { localStorage.setItem(speedKey(m), String(v)); } catch {}
+    try { localStorage.setItem('tp_auto_speed', String(v)); } catch {}
+  };
+  const getStoredSpeed = (): number => getStoredSpeedForMode(state.mode);
 
   function applyGate() {
     if (state.mode !== 'hybrid') {
