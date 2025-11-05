@@ -551,7 +551,17 @@ async function boot() {
       ];
 
       let asrEntry = null;
-      for (const c of candidates) { if (await headOk(c)) { asrEntry = c; break; } }
+      for (const c of candidates) {
+        // Resolve module-relative specs for probing so fetch doesn't use document base
+        let probeUrl = c;
+        try {
+          if (c.startsWith('./')) {
+            const u = new URL(c, import.meta.url);
+            probeUrl = u.href; // absolute URL to this module
+          }
+        } catch {}
+        if (await headOk(probeUrl)) { asrEntry = c.startsWith('./') ? probeUrl : c; break; }
+      }
 
       // Dev-friendly fallback: if HEAD probes fail (server may not support HEAD), attempt a single import of the dev path.
       if (!asrEntry) {
