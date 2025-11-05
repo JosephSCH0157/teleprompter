@@ -112,6 +112,8 @@ import '../ui/scripts-ui.js';
 import { wireObsPersistentUI } from './wiring/wire.js';
 // Settings overlay and media/OBS wiring (module path)
 import './ui/settings.js';
+// HUD: minimal ASR stats line (dev only)
+import './hud/asr-stats.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
