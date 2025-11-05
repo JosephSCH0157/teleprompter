@@ -504,15 +504,24 @@ async function boot() {
     // Install speech start/stop delegator
     initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
 
-    // Try to install ASR feature (TS build in /dist preferred; falls back to src if available)
+    // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {
       let asrMod = null;
-      try { asrMod = await import('/dist/index-hooks/asr.js'); } catch {}
-      if (!asrMod) {
+      const probe = async (url) => {
+        try { const r = await fetch(url, { method: 'HEAD' }); return r && r.ok; } catch { return false; }
+      };
+      if (await probe('/dist/index-hooks/asr.js')) {
+        try { asrMod = await import('/dist/index-hooks/asr.js'); } catch {}
+      } else if (await probe('/src/index-hooks/asr.js')) {
         try { asrMod = await import('./index-hooks/asr.js'); } catch {}
       }
-      try { asrMod && typeof asrMod.initAsrFeature === 'function' && asrMod.initAsrFeature(); } catch (e) { console.warn('[src/index] initAsrFeature failed', e); }
-    } catch (e) { console.warn('[src/index] ASR module import failed', e); }
+      if (asrMod && typeof asrMod.initAsrFeature === 'function') {
+        try { asrMod.initAsrFeature(); } catch (e) { console.warn('[src/index] initAsrFeature failed', e); }
+      } else {
+        // ASR feature not built yet — safe to skip in dev
+        try { console.info('[src/index] ASR not available (no dist/src module)'); } catch {}
+      }
+    } catch (e) { console.warn('[src/index] ASR module probe/import failed', e); }
 
     // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
     try {
