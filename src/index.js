@@ -249,10 +249,26 @@ async function boot() {
       // If HUD is present, mirror speech gates to it for visibility
       try {
         const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
+        // Quiet dB meter: sample infrequently and only on meaningful change
+        const __dbState = { lastAt: 0, lastVal: null };
         window.addEventListener('tp:db', (ev) => {
           try {
             const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
-            if (db != null) logHud('speech:db', { db });
+            if (db == null) return;
+            // Respect explicit opt-out via storage or global quiet flag
+            try {
+              const off = localStorage.getItem('tp_hud_quiet_db') === '1';
+              if (off || window.__TP_QUIET) return;
+            } catch {}
+            const now = performance.now();
+            const dt = now - (__dbState.lastAt || 0);
+            const dv = Math.abs((__dbState.lastVal ?? db) - db);
+            const MIN_DT = 1500;   // ms between updates
+            const MIN_DV = 3;      // dB change threshold
+            if (dt >= MIN_DT || dv >= MIN_DV) {
+              __dbState.lastAt = now; __dbState.lastVal = db;
+              logHud('speech:db', { db });
+            }
           } catch {}
         });
         window.addEventListener('tp:vad', (ev) => {
