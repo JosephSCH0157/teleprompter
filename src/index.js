@@ -539,8 +539,11 @@ async function boot() {
       // We still delegate clicks for speed +/- and mic buttons.
       document.addEventListener('click', (e) => {
         const t = e && e.target;
-        try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
-        try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
+        // If the new TS Scroll Router is active, it owns auto +/- and intent controls
+        try { if (window.__tpScrollRouterTsActive) { /* delegate to TS router */ } else {
+          try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
+          try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
+        } } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
       }, { capture: true });

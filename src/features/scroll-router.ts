@@ -590,8 +590,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
           if (btn) { btn.textContent = 'Auto-scroll: Off — ASR mode'; btn.setAttribute('data-state','off'); btn.setAttribute('aria-pressed','false'); }
         } catch {}
         try { emitAutoState(); } catch {}
+        try { setAsrBadgeVisible(true); } catch {}
         return;
       }
+      try { setAsrBadgeVisible(false); } catch {}
       // Outside Hybrid, require speech sync to be active and user intent On
       if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
       const want = !!userEnabled && !!speechActive;
