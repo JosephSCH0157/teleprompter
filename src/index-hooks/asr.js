@@ -5,7 +5,9 @@ export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
   // Ensure the status chip node exists early, but hidden, to avoid layout shifts before it's placed into the top bar
   try {
-    if (!document.getElementById('asrChip')) {
+    // If the scroll router already inserted the ASR speed badge, don't create a duplicate chip yet
+    const existingBadge = document.getElementById('asrSpeedBadge');
+    if (!existingBadge && !document.getElementById('asrChip')) {
       const s = document.createElement('span');
       s.id = 'asrChip'; s.className = 'chip'; s.textContent = 'ASR: off';
       s.style.display = 'none';
@@ -21,12 +23,14 @@ export function initAsrFeature() {
   // Mount a small status chip in the top bar to reflect ASR state
   const mountAsrChip = () => {
     try {
-      let chip = document.getElementById('asrChip');
+      // Prefer reusing the router's ASR badge if it exists to avoid redundancy
+      let chip = document.getElementById('asrChip') || document.getElementById('asrSpeedBadge');
       if (!chip) {
         chip = document.createElement('span');
         chip.id = 'asrChip'; chip.className = 'chip'; chip.textContent = 'ASR: off'; chip.style.display='none';
         document.body.appendChild(chip);
       }
+      try { chip.textContent = 'ASR: off'; } catch {}
       chip.setAttribute('aria-live','polite');
       chip.setAttribute('aria-atomic','true');
       // Update on state changes
@@ -36,6 +40,11 @@ export function initAsrFeature() {
       });
       // Move chip into top bar when available (append as last child to reduce clutter)
       const attach = () => {
+        // If we are reusing the ASR speed badge, it's already mounted in the right place
+        if (chip && chip.id === 'asrSpeedBadge' && chip.isConnected) {
+          try { chip.style.display = ''; } catch {}
+          return true;
+        }
         const host = document.querySelector('#topbarRight');
         if (host && host.isConnected) {
           try { host.appendChild(chip); chip.style.display = ''; return true; } catch {}
@@ -238,7 +247,10 @@ export function initAsrFeature() {
   window.addEventListener('tp:speech-state', (ev) => {
     try {
       const d = ev?.detail || {}; const on = (d.running === true) || (typeof d.state === 'string' && (d.state === 'active' || d.state === 'running'));
-      speechActive = !!on; if (speechActive && wantASR()) void start(); else void stop();
+      speechActive = !!on;
+      // Reflect speech activity on the chip even outside pure ASR mode (e.g., Hybrid)
+      try { window.dispatchEvent(new CustomEvent('asr:state', { detail: { state: on ? 'listening' : 'idle' } })); } catch {}
+      if (speechActive && wantASR()) void start(); else void stop();
     } catch {}
   });
   document.addEventListener('change', (ev) => { try { if (ev?.target?.id !== 'scrollMode') return; if (!speechActive) return; wantASR() ? void start() : void stop(); } catch {} });
