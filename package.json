@@ -9,6 +9,8 @@
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
     "build:logic": "tsc -b src/logic",
   "build:router": "npx esbuild src/features/scroll-router.ts --bundle --format=esm --outfile=dist/features/scroll-router.js",
+    "build:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js",
+    "watch:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js --watch",
     "typecheck": "npm run build:logic && tsc -p tsconfig.json --noEmit",
     "smoke": "node tools/static_server.js & node tools/smoke_test.js --calm --timeout=120000",
     "lint:ts": "eslint \"**/*.{ts,tsx}\"",
