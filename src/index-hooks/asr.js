@@ -3,11 +3,15 @@
 
 export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
-  // Ensure the status chip is present as early as possible
-  try { (function(){ try { const el = document.getElementById('asrChip'); if (!el) { /* attempt mount into topbar */
-    const host = document.querySelector('#topbarRight, .topbar, header, body') || document.body;
-    const chip = document.createElement('span'); chip.id = 'asrChip'; chip.className = 'chip'; chip.textContent = 'ASR: off'; host.insertBefore(chip, host.firstChild);
-  } } catch {} })(); } catch {}
+  // Ensure the status chip node exists early, but hidden, to avoid layout shifts before it's placed into the top bar
+  try {
+    if (!document.getElementById('asrChip')) {
+      const s = document.createElement('span');
+      s.id = 'asrChip'; s.className = 'chip'; s.textContent = 'ASR: off';
+      s.style.display = 'none';
+      document.body.appendChild(s);
+    }
+  } catch {}
   // Simple text normalizer (aligns with TS normalizeText/stripFillers basics)
   const normalize = (s) => {
     try { return String(s || '').toLowerCase().replace(/[^a-z0-9\s']/g, ' ').replace(/\s+/g, ' ').trim(); } catch { return ''; }
@@ -17,32 +21,32 @@ export function initAsrFeature() {
   // Mount a small status chip in the top bar to reflect ASR state
   const mountAsrChip = () => {
     try {
-      if (document.getElementById('asrChip')) return document.getElementById('asrChip');
-      const chip = document.createElement('span');
-      chip.id = 'asrChip';
-      chip.className = 'chip';
-      chip.textContent = 'ASR: off';
-      // Insert now (best-effort), then move it into #topbarRight when it appears
-      const initialHost = document.body;
-      initialHost.insertBefore(chip, initialHost.firstChild);
+      let chip = document.getElementById('asrChip');
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.id = 'asrChip'; chip.className = 'chip'; chip.textContent = 'ASR: off'; chip.style.display='none';
+        document.body.appendChild(chip);
+      }
+      chip.setAttribute('aria-live','polite');
+      chip.setAttribute('aria-atomic','true');
       // Update on state changes
       const map = { idle: 'off', ready: 'ready', listening: 'listening', running: 'listening', error: 'error' };
       window.addEventListener('asr:state', (e) => {
         try { const st = e?.detail?.state; chip.textContent = 'ASR: ' + (map[st] || st || 'off'); } catch {}
       });
-      // Move chip into top bar when available
-      try {
-        const mo = new MutationObserver(() => {
-          const host = document.querySelector('#topbarRight');
-          if (host && host.isConnected && chip.parentElement !== host) {
-            try { host.insertBefore(chip, host.firstChild); } catch {}
-          }
-        });
+      // Move chip into top bar when available (append as last child to reduce clutter)
+      const attach = () => {
+        const host = document.querySelector('#topbarRight');
+        if (host && host.isConnected) {
+          try { host.appendChild(chip); chip.style.display = ''; return true; } catch {}
+        }
+        return false;
+      };
+      if (!attach()) {
+        let tries = 0; const t = setInterval(() => { tries++; if (attach() || tries > 20) clearInterval(t); }, 150);
+        const mo = new MutationObserver(() => { if (attach()) { try { mo.disconnect(); } catch {} } });
         mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
-        // Attempt immediate placement too
-        const hostNow = document.querySelector('#topbarRight');
-        if (hostNow) { try { hostNow.insertBefore(chip, hostNow.firstChild); } catch {} }
-      } catch {}
+      }
       return chip;
     } catch {}
     return null;
