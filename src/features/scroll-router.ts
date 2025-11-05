@@ -114,6 +114,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   restoreMode();
   applyMode(state.mode);
 
+  // (Initial seeding moved below after variables are declared)
+
   // ASR v2 Orchestrator (minimal integration): only run when mode is 'wpm'/'asr' AND speech is active
   const orch = createOrchestrator();
   let orchRunning = false;
@@ -394,7 +396,23 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     }, { capture: true });
   } catch {}
 
-  // At startup, do not enable Auto in any mode; router reflects Off/Manual until speech sync starts or user explicitly toggles.
+  // Seed initial speech/intent state if speech was started before router mounted
+  try {
+    const body = document.body as HTMLElement | null;
+    const wasListening = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening')));
+    const speechOnFlag = (window as any).speechOn === true;
+    if (wasListening || speechOnFlag) {
+      speechActive = true;
+      // Assume user's intent is ON if they already started speech sync
+      userEnabled = true;
+      // Warm engine with current speed so UI label is correct immediately
+      const seed = getStoredSpeed();
+      try { auto.setSpeed?.(seed); } catch {}
+      try { (window as any).__scrollCtl?.setSpeed?.(seed); } catch {}
+    }
+  } catch {}
+
+  // At startup, reflect initial state (including seeding above)
   applyGate();
   // If ASR modes selected initially, ensure orchestrator
   if (state.mode === 'wpm' || state.mode === 'asr') ensureOrchestratorForMode();
