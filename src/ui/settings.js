@@ -938,6 +938,8 @@
           try {
             if (settingsAutoRec && settingsAutoRec.checked !== !!v) settingsAutoRec.checked = !!v;
             if (mainAutoRec && mainAutoRec.checked !== !!v) mainAutoRec.checked = !!v;
+            // Legacy bridge: persist under old key for callers still reading localStorage
+            try { localStorage.setItem('tp_auto_record', v ? '1' : '0'); } catch {}
           } catch {}
         });
       }
