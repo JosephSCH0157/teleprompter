@@ -149,12 +149,21 @@ export function installSpeech() {
     async function doAutoRecordStart() {
       try {
         const auto = S?.get?.('autoRecord');
-        const obsEnabled = S?.get?.('obsEnabled');
-        if (auto && obsEnabled) {
+        // Do not gate on obsEnabled here: start whatever recorders are selected/available.
+        if (auto) {
           const mod = await import('/recorders.js');
-          await mod.startSelected();
+          const res = await mod.startSelected();
+          try { (HUD?.log || console.debug)?.('recorders:start', res); } catch {}
+          // Optional UX: if nothing started, surface a gentle hint
+          try {
+            if (res && Array.isArray(res.results) && !res.results.some(r => r && r.ok)) {
+              window.toast?.('Auto‑record was enabled but no recorder started (check OBS/Bridge settings)', { type: 'warn' });
+            }
+          } catch {}
         }
-      } catch {}
+      } catch (e) {
+        try { (HUD?.log || console.warn)?.('recorders:error', String(e?.message || e)); } catch {}
+      }
     }
     async function doAutoRecordStop() {
       try {
