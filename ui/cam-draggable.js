@@ -97,9 +97,11 @@ export function initCamDraggable() {
     } catch {}
   }
 
-  el.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('pointermove', onPointerMove);
-  window.addEventListener('pointerup', onPointerUp);
+  el.addEventListener('pointerdown', onPointerDown, { capture: true });
+  // With pointer capture, move/up events are delivered to the element
+  el.addEventListener('pointermove', onPointerMove);
+  el.addEventListener('pointerup', onPointerUp);
+  el.addEventListener('pointercancel', onPointerUp);
   el.addEventListener('dblclick', onDblClick);
 }
 
