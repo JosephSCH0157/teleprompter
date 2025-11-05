@@ -27,9 +27,12 @@ import { getTypography, onTypography, setTypography } from './settings/typograph
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
+import { initAsrFeature } from './index-hooks/asr';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
+			// Initialize ASR feature (settings card, hotkeys, topbar UI)
+			try { initAsrFeature(); } catch {}
 			// OBS Settings wiring (inline bridge-backed "Test connect")
 			try { initObsUI(); } catch {}
 		// Ensure autoscroll engine is initialized
