@@ -1,5 +1,6 @@
 // Dev-only ASR stats HUD line. Renders a compact status inside #hud-root.
 // Shows commits, avg score, p95 gap, tween avg, and suppressed counters.
+let __asrHudHandler = null;
 (function(){
   try {
     const isDev = (() => {
@@ -95,20 +96,26 @@
       const fmt = (v, n=2) => {
         try { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(n) : String(v); } catch { return String(v); }
       };
-      window.addEventListener('asr:stats', (e) => {
+      __asrHudHandler = (e) => {
         try {
           const d = (e && e.detail) || {};
           const sup = d.suppressed || {};
           const msg = `commits ${d.commits||0} • avg ${fmt(d.avgScore,2)} • p95 ${d.p95GapMs|0}ms • tween ${fmt(d.tweenStepsAvg,1)} • sup d:${sup.dup||0} b:${sup.backwards||0} l:${sup.leap||0} f:${sup.freeze||0}`;
           if (textEl) textEl.textContent = msg;
         } catch {}
-      });
+      };
+      window.addEventListener('asr:stats', __asrHudHandler);
     }
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') install();
     else document.addEventListener('DOMContentLoaded', install);
   } catch {}
 })();
+export function teardownHud(){
+  try { if (__asrHudHandler) window.removeEventListener('asr:stats', __asrHudHandler); } catch {}
+  try { const line = document.getElementById('asrStatsHud'); if (line) line.remove(); } catch {}
+  __asrHudHandler = null;
+}
 
 export { };
 

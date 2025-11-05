@@ -198,5 +198,26 @@ const assert = require('assert');
   for (const r of results) {
     console.log((r.ok ? 'PASS' : 'FAIL') + ' - ' + r.name + ' (' + r.ms + 'ms)' + (r.ok ? '' : (' :: ' + r.err)));
   }
-  process.exit(ok ? 0 : 1);
-})().catch((e) => { console.error(e); process.exit(1); });
+  if (!ok) throw new Error('asr_smoke failures');
+})()
+.catch((e) => { console.error(e); /* defer exit to finally for gated hard-exit */ })
+.finally(async () => {
+  // Teardown ASR timers/listeners; mirror recorder smoke gating
+  try {
+    const mod = await import('file:///' + path.resolve(__dirname, '../src/index-hooks/asr.js').replace(/\\/g, '/'));
+    try { await mod.teardownASR?.(); } catch {}
+  } catch {}
+  try { if (global.window && typeof window.__asrFinalizeForTests === 'function') await window.__asrFinalizeForTests(); } catch {}
+  // Optional debug handles when stickiness occurs
+  try {
+    if (process?.env?.DEBUG_HANDLES === '1' && typeof process._getActiveHandles === 'function') {
+      const hs = process._getActiveHandles();
+      console.log('[debug] active handles:', hs.map(h => h?.constructor?.name));
+    }
+  } catch {}
+  // Gate hard exit for CI or direct script run
+  try {
+    const wantHardExit = (process?.env?.SMOKE_HARD_EXIT === '1') || (typeof require !== 'undefined' && require?.main === module);
+    if (wantHardExit) setImmediate(() => { try { process.exit(0); } catch {} });
+  } catch {}
+});

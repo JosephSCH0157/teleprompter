@@ -11,6 +11,9 @@ export const NO_COMMIT_HOLD_MS = 1200;
 export const SILENCE_FREEZE_MS = 2500;
 export const VAD_PARTIAL_GRACE_MS = 400;
 
+// Internal instance registry for tests/teardown
+const __asrInstances = new Set();
+
 export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
   // Ensure the status chip node exists early, but hidden, to avoid layout shifts before it's placed into the top bar
@@ -156,7 +159,8 @@ export function initAsrFeature() {
       // Telemetry counters
       this._stats = { commits: 0, suppressed: { dup: 0, backwards: 0, leap: 0, freeze: 0 }, scoresSum: 0, gaps: [], tweenStepsSum: 0, tweenStepsN: 0 };
       this._telemetryTimer = null;
-      try { mountAsrChip(); } catch {}
+  try { mountAsrChip(); } catch {}
+  try { __asrInstances.add(this); } catch {}
       // VAD listener for gentle idle/silence behavior
       try {
         window.addEventListener('tp:vad', (e) => {
@@ -248,7 +252,11 @@ export function initAsrFeature() {
         try { (window.HUD?.log || console.debug)?.('asr', { mode: 'bus-follow' }); } catch {}
         // Start periodic telemetry
         try { if (this._telemetryTimer) clearInterval(this._telemetryTimer); } catch {}
-        try { this._telemetryTimer = setInterval(() => this._emitStats(), 5000); } catch {}
+        try {
+          this._telemetryTimer = setInterval(() => this._emitStats(), 5000);
+          // In node/test, make timer non-blocking
+          try { this._telemetryTimer?.unref?.(); } catch {}
+        } catch {}
         return;
       }
       // Fallback: start our own Web Speech recognizer
@@ -256,7 +264,10 @@ export function initAsrFeature() {
       this.engine.on((e) => this.onEngineEvent(e));
       this.setState('ready');
       try { if (this._telemetryTimer) clearInterval(this._telemetryTimer); } catch {}
-      try { this._telemetryTimer = setInterval(() => this._emitStats(), 5000); } catch {}
+      try {
+        this._telemetryTimer = setInterval(() => this._emitStats(), 5000);
+        try { this._telemetryTimer?.unref?.(); } catch {}
+      } catch {}
       await this.engine.start({ lang: 'en-US', interim: true });
     }
     async stop() {
@@ -592,4 +603,20 @@ export function initAsrFeature() {
 }
 
 export default initAsrFeature;
+
+// Test hook: tear down any live ASR instances and clear timers
+export async function teardownASR() {
+  try {
+    for (const inst of Array.from(__asrInstances)) {
+      try { await inst.stop?.(); } catch {}
+      try { inst._emitStats?.(true); } catch {}
+      try { if (inst._telemetryTimer) clearInterval(inst._telemetryTimer); } catch {}
+      try { inst._telemetryTimer?.unref?.(); } catch {}
+    }
+  } catch {}
+  try { __asrInstances.clear?.(); } catch {}
+}
+
+// Also expose a window helper for headless smokes that don't import ESM named exports
+try { if (typeof window !== 'undefined') { window.__asrFinalizeForTests = teardownASR; } } catch {}
 
