@@ -130,6 +130,16 @@ export class AsrMode {
     const target = els[idx];
     if (!target) return;
 
+    // Hold scrolling during pre-roll countdown, if visible
+    try {
+      const ov = document.getElementById('countOverlay') as HTMLElement | null;
+      if (ov) {
+        const cs = getComputedStyle(ov);
+        const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !ov.classList.contains('hidden');
+        if (visible) return;
+      }
+    } catch {}
+
     const scroller = findScroller(target);
     const marker = this.opts.markerOffsetPx;
 

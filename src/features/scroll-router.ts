@@ -115,6 +115,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   applyMode(state.mode);
   // Reflect initial visibility for WPM controls
   try { updateWpmUiVisibility(); } catch {}
+  // Reflect Auto control availability
+  try { updateAutoUiForMode(); } catch {}
 
   // Track actual engine state and manage delayed stop when speech falls silent
   let enabledNow: boolean = false;
@@ -190,6 +192,23 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       const s = (Math.round(pxs * 10) / 10).toFixed(1);
       chip.textContent = `≈ ${s} px/s`;
       chip.title = `Mapped at current layout`;
+    } catch {}
+  }
+
+  // Disable/enable Auto controls depending on mode
+  function updateAutoUiForMode() {
+    try {
+      const asrLocked = state.mode === 'asr';
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+      const inc = document.getElementById('autoInc') as HTMLButtonElement | null;
+      const dec = document.getElementById('autoDec') as HTMLButtonElement | null;
+      const inp = document.getElementById('autoSpeed') as HTMLInputElement | null;
+      [btn, inc, dec, inp].forEach((el: any) => {
+        if (!el) return;
+        el.toggleAttribute?.('disabled', asrLocked);
+        if (asrLocked) el.setAttribute('title', 'Disabled in ASR mode — speed is controlled by ASR');
+        else el.removeAttribute?.('title');
+      });
     } catch {}
   }
 
@@ -293,6 +312,19 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   function applyGate() {
     if (state.mode !== 'hybrid') {
+      // In ASR mode, the speech engine controls pacing; hard-disable Auto engine and UI
+      if (state.mode === 'asr') {
+        try { auto.setEnabled?.(false); } catch {}
+        enabledNow = false;
+        const detailAsr = 'Mode: asr • Auto is disabled — ASR controls speed';
+        setAutoChip('manual', detailAsr, 'ASR controls speed');
+        try {
+          const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+          if (btn) { btn.textContent = 'Auto-scroll: Off — ASR mode'; btn.setAttribute('data-state','off'); btn.setAttribute('aria-pressed','false'); }
+        } catch {}
+        try { emitAutoState(); } catch {}
+        return;
+      }
       // Outside Hybrid, require speech sync to be active and user intent On
       if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
       const want = !!userEnabled && !!speechActive;
@@ -421,6 +453,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   const modeVal = (t as HTMLSelectElement).value as Mode;
   applyMode(modeVal);
         updateWpmUiVisibility();
+  updateAutoUiForMode();
         applyGate();
         ensureOrchestratorForMode();
         // When switching into a non-WPM mode and Auto is desired, apply that mode's stored speed immediately
@@ -604,9 +637,12 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         if (state.mode === 'wpm') {
           const stepWpm = e.shiftKey ? 10 : 5;
           adjustWpmTarget(wantUp ? stepWpm : -stepWpm);
-        } else {
+        } else if (state.mode !== 'asr') {
           const step = e.shiftKey ? 5 : 0.5;
           adjustSpeed(wantUp ? step : -step);
+        } else {
+          // ASR mode: ignore Auto speed hotkeys
+          return;
         }
       } catch {}
     }, { capture: true });
@@ -624,9 +660,12 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         if (state.mode === 'wpm') {
           const stepWpm = (e.shiftKey ? 10 : 5);
           adjustWpmTarget(incBtn ? stepWpm : -stepWpm);
-        } else {
+        } else if (state.mode !== 'asr') {
           const step = (e.shiftKey ? 5 : 0.5);
           adjustSpeed(incBtn ? step : -step);
+        } else {
+          // ASR mode: ignore Auto speed +/-
+          return;
         }
       } catch {}
     }, { capture: true });
