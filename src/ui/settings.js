@@ -719,7 +719,7 @@
           if (br && !window.__tpSettingsObsBridgeWired) {
             window.__tpSettingsObsBridgeWired = true;
             try { updateObsChip(); } catch {}
-            try { br.on && br.on('connect', () => { try { updateObsChip(); } catch {} }); } catch {}
+            try { br.on && br.on('connect', () => { try { updateObsChip(); } catch {} try { clearTimeout(window.__tpObsChipFallbackTimer); } catch {} }); } catch {}
             try { br.on && br.on('disconnect', () => { try { updateObsChip(); } catch {} }); } catch {}
           } else if (!br) {
             // Retry later; stop after a handful of attempts to avoid a long loop
@@ -731,6 +731,54 @@
           }
         } catch {}
       })();
+
+      // Hint status immediately when user toggles OBS: show "(connecting…)" before the socket opens
+      try {
+        if (!window.__tpObsChipHintWired) {
+          window.__tpObsChipHintWired = true;
+          const setHint = (on) => {
+            try {
+              const chip = document.getElementById('rec-adapter-chip-obs');
+              if (!chip) return;
+              if (on) {
+                chip.textContent = '(connecting…)';
+                chip.style.color = '#ffdca8'; // warn color
+                // Start a fallback timer: if not connected within 5s, show unavailable
+                try { clearTimeout(window.__tpObsChipFallbackTimer); } catch {}
+                window.__tpObsChipFallbackTimer = setTimeout(() => {
+                  try {
+                    // Still enabled?
+                    const enabled = (hasStore && S && typeof S.get === 'function')
+                      ? !!S.get('obsEnabled')
+                      : !!(document.getElementById('settingsEnableObs')?.checked || document.getElementById('enableObs')?.checked);
+                    if (!enabled) return;
+                    // If bridge reports connected, skip fallback
+                    try { if (window.__obsBridge && typeof window.__obsBridge.isConnected === 'function' && window.__obsBridge.isConnected()) return; } catch {}
+                    const c = document.getElementById('rec-adapter-chip-obs');
+                    if (c) { c.textContent = '(unavailable)'; c.style.color = '#ffd6d6'; }
+                  } catch {}
+                }, 5000);
+              } else {
+                chip.textContent = '(disabled)';
+                chip.style.color = '#ffd6d6'; // err color
+                try { clearTimeout(window.__tpObsChipFallbackTimer); } catch {}
+              }
+            } catch {}
+          };
+          // Prefer store subscription when available
+          if (hasStore && typeof S?.subscribe === 'function') {
+            try { S.subscribe('obsEnabled', (v) => setHint(!!v)); } catch {}
+          }
+          // Fallback: bind to checkbox changes if store isn’t present
+          try {
+            const onChange = (e) => { try { const on = !!(e?.target?.checked); setHint(on); } catch {} };
+            const a = document.getElementById('settingsEnableObs');
+            const b = document.getElementById('enableObs');
+            if (a && !a.dataset.obsHintWired) { a.dataset.obsHintWired = '1'; a.addEventListener('change', onChange, { capture: true }); }
+            if (b && !b.dataset.obsHintWired) { b.dataset.obsHintWired = '1'; b.addEventListener('change', onChange, { capture: true }); }
+          } catch {}
+        }
+      } catch {}
 
       // Mode toggle wiring (idempotent)
       if (modeSingle && !modeSingle.dataset.wired){
