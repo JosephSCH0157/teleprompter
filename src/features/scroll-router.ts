@@ -437,6 +437,20 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   // Global keybindings for speed tweaks — use the single setter
   try {
+    // Unified helper so clicks and keys behave consistently across modes
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    const adjustSpeed = (delta: number) => {
+      try {
+        const got = Number(auto?.getState?.().speed);
+        const base = (Number.isFinite(got) && got > 0)
+          ? got
+          : (Number.isFinite(lastSpeed) && lastSpeed > 0 ? lastSpeed : getStoredSpeed());
+        const next = clamp(base + delta, 1, 200);
+        auto?.setSpeed?.(next);
+        lastSpeed = next;
+      } catch {}
+    };
+
     document.addEventListener('keydown', (e: KeyboardEvent) => {
       try {
         const target = e.target as HTMLElement | null;
@@ -449,12 +463,23 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
         if (!wantUp && !wantDown) return;
         e.preventDefault();
-        const got = Number(auto?.getState?.().speed);
-        const cur = (Number.isFinite(got) && got > 0) ? got : (Number.isFinite(lastSpeed) ? lastSpeed : getStoredSpeed());
-  const step = e.shiftKey ? 5 : 0.5;
-  const next = cur + (wantUp ? step : -step);
-        auto?.setSpeed?.(next);
-        lastSpeed = next;
+        const step = e.shiftKey ? 5 : 0.5;
+        adjustSpeed(wantUp ? step : -step);
+      } catch {}
+    }, { capture: true });
+
+    // Also handle click on +/- buttons here so behavior is identical in all modes
+    document.addEventListener('click', (e: MouseEvent) => {
+      try {
+        const t = e.target as HTMLElement | null;
+        if (!t) return;
+        const incBtn = t.closest?.('#autoInc');
+        const decBtn = t.closest?.('#autoDec');
+        if (!incBtn && !decBtn) return;
+        e.preventDefault();
+        e.stopImmediatePropagation?.();
+        const step = (e.shiftKey ? 5 : 0.5);
+        adjustSpeed(incBtn ? step : -step);
       } catch {}
     }, { capture: true });
   } catch {}
