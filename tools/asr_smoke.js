@@ -137,6 +137,63 @@ const assert = require('assert');
     assert.strictEqual(shouldCommit(61, 0.75), false); // duplicate 61 suppressed
   });
 
+  // --- Mode flip no-dup listeners --------------------------------------------
+  await recordAsync('Mode flip no-dup (ASR → Hybrid → ASR)', async () => {
+    // Minimal window/document polyfill
+    const listeners = {};
+    global.window = global.window || {};
+    window.addEventListener = (ev, cb) => { (listeners[ev]||(listeners[ev]=[])).push(cb); };
+    window.removeEventListener = (ev, cb) => { const L=listeners[ev]||[]; const i=L.indexOf(cb); if(i>=0) L.splice(i,1); };
+    window.dispatchEvent = (ev) => { const L=listeners[ev.type]||[]; for (const cb of L.slice()) { try { cb(ev); } catch {} } };
+    global.CustomEvent = class CustomEvent { constructor(type, init){ this.type=type; this.detail=init && init.detail; } };
+    // Headless DOM stubs
+    global.document = global.document || {
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => ({ length: 0, forEach(){} }),
+      addEventListener: () => {},
+      documentElement: { classList: { add(){}, remove(){}, contains(){ return false; } } },
+      body: { classList: { contains(){ return false; } } }
+    };
+    global.getComputedStyle = global.getComputedStyle || (() => ({ overflowY: 'visible', display: 'block', visibility: 'visible' }));
+    global.requestAnimationFrame = global.requestAnimationFrame || ((fn) => setTimeout(fn, 0));
+
+    // Import and init the ASR feature (idempotent)
+    const mod = await import('file:///' + p.replace(/\\/g, '/'));
+    if (typeof mod.default === 'function') mod.default();
+
+    const commits = [];
+    const onAdvance = (e) => commits.push(e.detail && (e.detail.index ?? e.detail.idx ?? e.detail));
+    window.addEventListener('asr:advance', onAdvance);
+
+    const tick = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // 1) Start ASR and drive one commit (final only)
+    window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: 'ASR' } }));
+    window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } }));
+    await tick(5);
+    window.dispatchEvent(new CustomEvent('tp:speech-result', { detail: { type: 'partial', index: 52, score: 0.74 } }));
+    window.dispatchEvent(new CustomEvent('tp:speech-result', { detail: { type: 'final',   index: 52, score: 0.90 } }));
+    await tick(20);
+
+    // 2) Flip out and back, then commit second index
+    window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: 'Hybrid' } }));
+    await tick(10);
+    window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: 'ASR' } }));
+    await tick(10);
+    window.dispatchEvent(new CustomEvent('tp:speech-result', { detail: { type: 'partial', index: 53, score: 0.72 } }));
+    window.dispatchEvent(new CustomEvent('tp:speech-result', { detail: { type: 'final',   index: 53, score: 0.88 } }));
+    await tick(30);
+    // a lone duplicate final shouldn't double-commit
+    window.dispatchEvent(new CustomEvent('tp:speech-result', { detail: { type: 'final', index: 53, score: 0.88 } }));
+    await tick(10);
+
+    window.removeEventListener('asr:advance', onAdvance);
+    if (!(commits.length === 2 && commits[0] === 52 && commits[1] === 53)) {
+      throw new Error(`expected 2 commits [52,53], got ${commits.length} [${commits.join(', ')}]`);
+    }
+  });
+
   const ok = results.every(r => r.ok);
   for (const r of results) {
     console.log((r.ok ? 'PASS' : 'FAIL') + ' - ' + r.name + ' (' + r.ms + 'ms)' + (r.ok ? '' : (' :: ' + r.err)));

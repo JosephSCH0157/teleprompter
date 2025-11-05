@@ -107,14 +107,16 @@ export function initAsrFeature() {
   class WebSpeechEngine {
     constructor() {
       const SR = (window.SpeechRecognition || window.webkitSpeechRecognition);
-      if (!SR) throw new Error('Web Speech API not available');
-      this.SR = SR; this.rec = null; this.listeners = new Set(); this.running = false;
+      this.SR = SR || null;
+      this.rec = null; this.listeners = new Set(); this.running = false;
+      this._available = !!SR;
     }
     on(fn) { try { this.listeners.add(fn); } catch {} }
     off(fn) { try { this.listeners.delete(fn); } catch {} }
     emit(ev) { try { this.listeners.forEach(fn => { try { fn(ev); } catch {} }); } catch {} }
     async start(opts) {
       if (this.running) return;
+      if (!this._available) { this.emit({ type: 'ready' }); return; }
       const rec = new this.SR();
       this.rec = rec; this.running = true;
       rec.lang = (opts && opts.lang) || 'en-US';
@@ -198,6 +200,28 @@ export function initAsrFeature() {
           } catch {}
         }, { capture: true });
         window.addEventListener('tp:manual-nudge', maybeReset);
+      } catch {}
+    }
+    // Direct index commit (dev/test). Applies the same gating used by tryAdvance, but skips coverage.
+    commitIndex(newIdx, bestScore = 1) {
+      try {
+        if (typeof newIdx !== 'number' || !isFinite(newIdx)) return;
+        if (newIdx < this.currentIdx) { try { this._stats.suppressed.backwards++; } catch {} return; }
+        const delta = newIdx - this.currentIdx;
+        if (!this._leapAllowed(delta, newIdx, bestScore)) return;
+        if (!this.shouldCommit(newIdx, bestScore)) return;
+        if (!this.gateLowConfidence(newIdx, bestScore)) return;
+        this.currentIdx = newIdx;
+        try { this.scrollToLine(newIdx, bestScore); } catch {}
+        this.dispatch('asr:advance', { index: newIdx, score: bestScore });
+        try { (window.HUD?.log || console.debug)?.('asr:advance(idx)', { index: newIdx, score: Number(bestScore).toFixed(2) }); } catch {}
+        try { this.freezeUntil = performance.now() + POST_COMMIT_FREEZE_MS; } catch {}
+        try {
+          const now = performance.now();
+          if (this._lastCommitAt) { const gap = now - this._lastCommitAt; try { if (isFinite(gap)) this._stats.gaps.push(gap); } catch {} }
+          this._lastCommitAt = now;
+          try { this._stats.commits++; this._stats.scoresSum += (Number(bestScore) || 0); } catch {}
+        } catch {}
       } catch {}
     }
     getState() { return this.state; }
@@ -471,7 +495,14 @@ export function initAsrFeature() {
 
   // Coordinator: follow Speech Sync and Mode changes; interlock auto-scroll
   let asrMode = null; let speechActive = false; let asrActive = false; let autoHeld = false;
-  const wantASR = () => { try { return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr'; } catch { return false; } };
+  // Allow a dev/test override of mode via window.__tpModeOverride or tp:mode events
+  const wantASR = () => {
+    try {
+      const ov = (typeof window.__tpModeOverride === 'string') ? window.__tpModeOverride : null;
+      if (ov) return String(ov).toLowerCase() === 'asr';
+      return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr';
+    } catch { return false; }
+  };
   const setChipVisible = (on) => { try { const c = document.getElementById('asrChip'); if (c) c.style.display = on ? '' : 'none'; } catch {} };
   const setChipState = (state) => { try { window.dispatchEvent(new CustomEvent('asr:state', { detail: { state } })); } catch {} };
   const holdAuto = () => {
@@ -507,6 +538,16 @@ export function initAsrFeature() {
       if (speechActive && wantASR()) void start(); else void stop();
     } catch {}
   });
+  // Dev/test: mode override event (avoids DOM select in headless harness)
+  window.addEventListener('tp:mode', (ev) => {
+    try {
+      const m = (ev && ev.detail && ev.detail.mode) ? String(ev.detail.mode) : '';
+      if (!m) return;
+      try { window.__tpModeOverride = m; } catch {}
+      // If speech is active, apply start/stop based on new mode
+      if (speechActive) { wantASR() ? void start() : void stop(); }
+    } catch {}
+  });
   document.addEventListener('change', (ev) => {
     try {
       if (ev?.target?.id !== 'scrollMode') return;
@@ -526,6 +567,20 @@ export function initAsrFeature() {
   window.addEventListener('asr:toggle', (e) => { const armed = !!(e?.detail?.armed); armed ? void start() : void stop(); });
   window.addEventListener('asr:stop', () => { void stop(); });
 
+  // Dev/test: direct speech-result hook (final-only) to drive commits without full coverage engine
+  // detail: { type: 'partial'|'final', index: number, score?: number }
+  window.addEventListener('tp:speech-result', (ev) => {
+    try {
+      if (!asrMode || !asrActive) return;
+      const d = ev && ev.detail || {};
+      const idx = Number(d.index);
+      if (!isFinite(idx)) return;
+      if (String(d.type || '').toLowerCase() !== 'final') return; // ignore partial in this minimal hook
+      // Commit index using gating; skip scroll in headless environments
+      try { asrMode.commitIndex?.(idx, Number(d.score || 1)); } catch {}
+    } catch {}
+  });
+
   // Late-load reconcile
   try {
     const body = document.body; speechActive = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening'))) || (window.speechOn === true);
@@ -537,3 +592,4 @@ export function initAsrFeature() {
 }
 
 export default initAsrFeature;
+
