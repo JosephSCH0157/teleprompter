@@ -209,6 +209,27 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         if (asrLocked) el.setAttribute('title', 'Disabled in ASR mode — speed is controlled by ASR');
         else el.removeAttribute?.('title');
       });
+      setAsrBadgeVisible(asrLocked);
+    } catch {}
+  }
+
+  function setAsrBadgeVisible(on: boolean) {
+    try {
+      const after = document.getElementById('autoChip') || document.getElementById('scrollChip') || document.querySelector('.topbar');
+      let badge = document.getElementById('asrSpeedBadge') as HTMLElement | null;
+      if (on) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.id = 'asrSpeedBadge';
+          badge.className = 'chip chip-muted';
+          badge.textContent = 'ASR controls speed';
+          if (after && (after as any).after) (after as any).after(badge); else document.body.appendChild(badge);
+        }
+        badge.style.display = '';
+        badge.setAttribute('aria-live','polite');
+      } else if (badge) {
+        badge.style.display = 'none';
+      }
     } catch {}
   }
 
@@ -323,8 +344,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
           if (btn) { btn.textContent = 'Auto-scroll: Off — ASR mode'; btn.setAttribute('data-state','off'); btn.setAttribute('aria-pressed','false'); }
         } catch {}
         try { emitAutoState(); } catch {}
+        try { setAsrBadgeVisible(true); } catch {}
         return;
       }
+      try { setAsrBadgeVisible(false); } catch {}
       // Outside Hybrid, require speech sync to be active and user intent On
       if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
       const want = !!userEnabled && !!speechActive;
