@@ -28,6 +28,22 @@ window.addEventListener('keydown', (e) => {
     try { window.hud?.toggle?.(); } catch {}
   }
 }, { capture: true });
+
+// --- Preroll cancel unwind: ensure recorder stops cleanly if starting ---
+try {
+  const onCancel = async () => {
+    try {
+      // If a start is in-flight, stop and reset the chip
+      const st = (function(){ try { return window.__recState?.state || 'idle'; } catch { return 'idle'; } })();
+      if (st === 'starting') {
+        try { await window.__recorder?.stop?.(); } catch {}
+        try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'obs', state: 'idle', detail: { reason: 'preroll-cancel' } } })); } catch {}
+      }
+    } catch {}
+  };
+  window.addEventListener('tp:preroll:cancel', onCancel);
+  window.addEventListener('preroll:cancel', onCancel);
+} catch {}
 // --- Hybrid speech: graceful fallback on network glitches (no more stalls) ---
 (function wireHybridFallback() {
   const sup = window.speechSup || window.__speechSup || window.SpeechSup || null;

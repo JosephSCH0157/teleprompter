@@ -2,14 +2,14 @@
   // Settings UI centralization: binds overlay and main panel; tolerates no-store mode
   const S = window.__tpStore;
   const hasStore = !!S;
-  let __recBusy = false; // 'starting' or 'recording' → block adapter changes
+  let __recBusy = false; // 'starting' | 'recording' | 'stopping' → block adapter changes
 
   // Unified recorder state listener
   try {
     window.addEventListener('rec:state', (e) => {
       try {
         const s = e && e.detail && e.detail.state;
-        __recBusy = (s === 'starting' || s === 'recording');
+        __recBusy = (s === 'starting' || s === 'recording' || s === 'stopping');
       } catch {}
     }, { passive: true });
   } catch {}
