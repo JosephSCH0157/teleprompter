@@ -249,30 +249,33 @@ async function boot() {
       // If HUD is present, mirror speech gates to it for visibility
       try {
         const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
-        // Quiet dB meter: sample rarely when silent, modestly when speaking, and only on meaningful change
-        const __dbState = { lastAt: 0, lastVal: null };
+        // Throttled dB logger → emits speech:db event and (optionally) HUD log
+        const logDb = (() => {
+          let lastDb = -Infinity, lastTs = 0;
+          return (db) => {
+            try {
+              const now = performance.now();
+              if (!(typeof db === 'number' && isFinite(db))) return;
+              if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
+                lastDb = db; lastTs = now;
+                // Always fire an event for listeners
+                try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
+                // HUD breadcrumb only if not muted
+                try {
+                  const off = localStorage.getItem('tp_hud_quiet_db') === '1';
+                  if (!off && !window.__TP_QUIET) logHud('speech:db', { db });
+                } catch {}
+              }
+            } catch {}
+          };
+        })();
         const __vadState = { speaking: false };
         window.addEventListener('tp:db', (ev) => {
           try {
             const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
             if (db == null) return;
-            // Respect explicit opt-out via storage or global quiet flag
-            try {
-              const off = localStorage.getItem('tp_hud_quiet_db') === '1';
-              if (off || window.__TP_QUIET) return;
-            } catch {}
-            const now = performance.now();
-            const dt = now - (__dbState.lastAt || 0);
-            const dv = Math.abs((__dbState.lastVal ?? db) - db);
-            // Throttle harder when not speaking
-            const MIN_DT_SPEAK = 3000;   // ms between updates while talking
-            const MIN_DT_SILENT = 15000; // ms between updates while silent
-            const MIN_DV = 6;            // dB change threshold to break through throttle
-            const minDt = __vadState.speaking ? MIN_DT_SPEAK : MIN_DT_SILENT;
-            if (dt >= minDt || dv >= MIN_DV) {
-              __dbState.lastAt = now; __dbState.lastVal = db;
-              logHud('speech:db', { db });
-            }
+            // Always send the throttled db event; HUD log is internally muted or throttled
+            logDb(db);
           } catch {}
         });
         window.addEventListener('tp:vad', (ev) => {
