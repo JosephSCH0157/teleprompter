@@ -113,6 +113,52 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   const { auto } = opts;
   restoreMode();
   applyMode(state.mode);
+  // Reflect initial visibility for WPM controls
+  try { updateWpmUiVisibility(); } catch {}
+
+  // Track actual engine state and manage delayed stop when speech falls silent
+  let enabledNow: boolean = false;
+
+  // Helpers shared across handlers
+  function mapWpmToPxPerSec(wpm: number, doc: Document): number {
+    try {
+      const cs = getComputedStyle(doc.documentElement);
+      const fsPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+      const lhScale = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+      const lineHeightPx = fsPx * lhScale;
+      const wpl = parseFloat(localStorage.getItem('tp_wpl_hint') || '8') || 8;
+      const linesPerSec = (wpm / 60) / wpl;
+      return linesPerSec * lineHeightPx;
+    } catch { return (wpm / 60) / 8 * (56 * 1.4); }
+  }
+  function getTargetWpm(): number {
+    try { return Number(localStorage.getItem('tp_wpm_target') || '150') || 150; } catch { return 150; }
+  }
+  function setTargetWpm(wpm: number) {
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    const val = clamp(Math.round(wpm), 60, 260);
+    try { localStorage.setItem('tp_wpm_target', String(val)); } catch {}
+    try {
+      const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
+      if (input) input.value = String(val);
+    } catch {}
+    // If active in WPM mode and enabled, apply immediately
+    if (state.mode === 'wpm' && enabledNow) {
+      try { const pxs = mapWpmToPxPerSec(val, document); auto?.setSpeed?.(pxs); } catch {}
+    }
+  }
+  function updateWpmUiVisibility() {
+    try {
+      const row = document.getElementById('wpmRow');
+      if (!row) return;
+      const on = state.mode === 'wpm';
+      if (on) { row.classList.remove('visually-hidden'); row.setAttribute('aria-hidden','false'); }
+      else { row.classList.add('visually-hidden'); row.setAttribute('aria-hidden','true'); }
+      // Seed input value from storage
+      const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
+      if (input) input.value = String(getTargetWpm());
+    } catch {}
+  }
 
   // (Initial seeding moved below after variables are declared)
 
@@ -123,7 +169,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let speechActive = false;
   async function ensureOrchestratorForMode() {
     try {
-      if ((state.mode === 'wpm' || state.mode === 'asr') && speechActive) {
+      // Only needed for ASR-driven pacing; WPM mode is fixed-target
+      if ((state.mode === 'asr') && speechActive) {
         if (!orchRunning) {
           await orch.start(createVadEventAdapter()); // use VAD events for speaking; WPM updates when tokens are available
           orch.setMode('assist');
@@ -152,8 +199,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       } catch {}
     });
   } catch {}
-  // Track actual engine state and manage delayed stop when speech falls silent
-  let enabledNow: boolean = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
+  // Initialize enabled state from engine
+  enabledNow = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
   let silenceTimer: number | undefined;
 
   // Speed tracking to avoid jumps when engine doesn't expose current speed
@@ -207,6 +254,13 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       const want = !!userEnabled && !!speechActive;
       if (typeof auto.setEnabled === 'function') auto.setEnabled(want);
       enabledNow = want;
+      // In WPM mode, map target WPM to px/s whenever enabled
+      try {
+        if (state.mode === 'wpm' && want) {
+          const pxs = mapWpmToPxPerSec(getTargetWpm(), document);
+          try { auto.setSpeed?.(pxs); lastSpeed = pxs; } catch {}
+        }
+      } catch {}
       const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'} • Speech:${speechActive ? '1' : '0'}`;
   setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
       try {
@@ -322,6 +376,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       if ((t as HTMLSelectElement)?.id === 'scrollMode') {
   const modeVal = (t as HTMLSelectElement).value as Mode;
   applyMode(modeVal);
+        updateWpmUiVisibility();
         applyGate();
         ensureOrchestratorForMode();
       }
@@ -437,8 +492,50 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   // Global keybindings for speed tweaks — use the single setter
   try {
-    // Unified helper so clicks and keys behave consistently across modes
+    // Helper: mapping and WPM target persistence
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    function mapWpmToPxPerSec(wpm: number, doc: Document): number {
+      try {
+        const cs = getComputedStyle(doc.documentElement);
+        const fsPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+        const lhScale = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+        const lineHeightPx = fsPx * lhScale;
+        const wpl = parseFloat(localStorage.getItem('tp_wpl_hint') || '8') || 8;
+        const linesPerSec = (wpm / 60) / wpl;
+        return linesPerSec * lineHeightPx;
+      } catch { return (wpm / 60) / 8 * (56 * 1.4); }
+    }
+    function getTargetWpm(): number {
+      try { return Number(localStorage.getItem('tp_wpm_target') || '150') || 150; } catch { return 150; }
+    }
+    function setTargetWpm(wpm: number) {
+      const val = clamp(Math.round(wpm), 60, 260);
+      try { localStorage.setItem('tp_wpm_target', String(val)); } catch {}
+      try {
+        const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
+        if (input) input.value = String(val);
+      } catch {}
+      // If active in WPM mode and enabled, apply immediately
+      if (state.mode === 'wpm' && enabledNow) {
+        try { const pxs = mapWpmToPxPerSec(val, document); auto?.setSpeed?.(pxs); lastSpeed = pxs; } catch {}
+      }
+    }
+    function updateWpmUiVisibility() {
+      try {
+        const row = document.getElementById('wpmRow');
+        if (!row) return;
+        const on = state.mode === 'wpm';
+        if (on) { row.classList.remove('visually-hidden'); row.setAttribute('aria-hidden','false'); }
+        else { row.classList.add('visually-hidden'); row.setAttribute('aria-hidden','true'); }
+        // Seed input value from storage
+        const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
+        if (input) input.value = String(getTargetWpm());
+      } catch {}
+    }
+    // Initialize UI visibility on first load
+    updateWpmUiVisibility();
+
+    // Unified helpers so clicks and keys behave consistently across modes
     const adjustSpeed = (delta: number) => {
       try {
         const got = Number(auto?.getState?.().speed);
@@ -448,6 +545,12 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         const next = clamp(base + delta, 1, 200);
         auto?.setSpeed?.(next);
         lastSpeed = next;
+      } catch {}
+    };
+    const adjustWpmTarget = (delta: number) => {
+      try {
+        const next = getTargetWpm() + delta;
+        setTargetWpm(next);
       } catch {}
     };
 
@@ -463,8 +566,13 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   const wantDown = e.key === '-' || e.code === 'NumpadSubtract' || e.key === 'ArrowDown';
         if (!wantUp && !wantDown) return;
         e.preventDefault();
-        const step = e.shiftKey ? 5 : 0.5;
-        adjustSpeed(wantUp ? step : -step);
+        if (state.mode === 'wpm') {
+          const stepWpm = e.shiftKey ? 10 : 5;
+          adjustWpmTarget(wantUp ? stepWpm : -stepWpm);
+        } else {
+          const step = e.shiftKey ? 5 : 0.5;
+          adjustSpeed(wantUp ? step : -step);
+        }
       } catch {}
     }, { capture: true });
 
@@ -478,8 +586,24 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         if (!incBtn && !decBtn) return;
         e.preventDefault();
         e.stopImmediatePropagation?.();
-        const step = (e.shiftKey ? 5 : 0.5);
-        adjustSpeed(incBtn ? step : -step);
+        if (state.mode === 'wpm') {
+          const stepWpm = (e.shiftKey ? 10 : 5);
+          adjustWpmTarget(incBtn ? stepWpm : -stepWpm);
+        } else {
+          const step = (e.shiftKey ? 5 : 0.5);
+          adjustSpeed(incBtn ? step : -step);
+        }
+      } catch {}
+    }, { capture: true });
+
+    // WPM Target input change handler
+    document.addEventListener('input', (e: Event) => {
+      try {
+        const t = e.target as HTMLElement | null;
+        if ((t as HTMLInputElement)?.id !== 'wpmTarget') return;
+        const v = Number((t as HTMLInputElement).value);
+        if (!Number.isFinite(v)) return;
+        setTargetWpm(v);
       } catch {}
     }, { capture: true });
   } catch {}
