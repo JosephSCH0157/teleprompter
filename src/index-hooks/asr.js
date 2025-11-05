@@ -9,6 +9,7 @@ export const POST_COMMIT_FREEZE_MS = 250;
 export const DISPLAY_MIN_DR = 0.0015;
 export const NO_COMMIT_HOLD_MS = 1200;
 export const SILENCE_FREEZE_MS = 2500;
+export const VAD_PARTIAL_GRACE_MS = 400;
 
 export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
@@ -146,8 +147,13 @@ export function initAsrFeature() {
       // Leap confirmation state
       this._leapPending = { idx: -1, ts: 0 };
       // Idle/voice tracking
-      this._lastCommitAt = 0; this._lastVADAt = 0; this._speaking = false;
+      this._lastCommitAt = 0; this._lastVADAt = 0; this._lastPartialAt = 0; this._speaking = false;
       this._scrollAnim = null;
+      // Manual nudge tracking
+      this._nudgedAt = 0; this._nudgedAccepted = false;
+      // Telemetry counters
+      this._stats = { commits: 0, suppressed: { dup: 0, backwards: 0, leap: 0, freeze: 0 }, scoresSum: 0, gaps: [], tweenStepsSum: 0, tweenStepsN: 0 };
+      this._telemetryTimer = null;
       try { mountAsrChip(); } catch {}
       // VAD listener for gentle idle/silence behavior
       try {
@@ -161,7 +167,9 @@ export function initAsrFeature() {
               const due = this._lastVADAt + SILENCE_FREEZE_MS;
               setTimeout(() => {
                 try {
-                  if (!this._speaking && performance.now() >= due) {
+                  const now = performance.now();
+                  // Guard against false-silence: if any partial in last VAD_PARTIAL_GRACE_MS, stay running
+                  if (!this._speaking && now >= due && (now - (this._lastPartialAt || 0)) > VAD_PARTIAL_GRACE_MS) {
                     this.setState('ready');
                   }
                 } catch {}
@@ -176,10 +184,12 @@ export function initAsrFeature() {
           try {
             this.lastIdx = -1; this.lastScore = 0; this.lastTs = 0; this.pending = null; this._leapPending = { idx: -1, ts: 0 };
             this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'manual' });
+            try { (window.HUD?.log || console.debug)?.('asr:rescue (manual)'); } catch {}
+            this._nudgedAt = performance.now(); this._nudgedAccepted = false;
           } catch {}
         };
         let lastReset = 0;
-        const maybeReset = () => { const now = Date.now(); if (now - lastReset > 300) { lastReset = now; reset(); } };
+        const maybeReset = () => { const now = performance.now(); if (now - lastReset > 300) { lastReset = now; reset(); } };
         window.addEventListener('wheel', maybeReset, { passive: true });
         window.addEventListener('keydown', (ev) => {
           try {
@@ -198,6 +208,12 @@ export function initAsrFeature() {
       this._bus = bus;
       this._busHandlers = [];
       if (bus && typeof bus.on === 'function') {
+        // Prevent duplicate bindings if start called redundantly during mode flips
+        if (this._bus === bus && this._busHandlers && this._busHandlers.length) {
+          this.setState('listening');
+          this.dispatch('asr:state', { state: 'listening' });
+          return;
+        }
         const onPartial = (p) => { try { this.onEngineEvent({ type: 'partial', text: String(p?.text || ''), confidence: 0.5 }); } catch {} };
         const onFinal   = (p) => { try { this.onEngineEvent({ type: 'final',   text: String(p?.text || ''), confidence: 1.0 }); } catch {} };
         try { bus.on('speech:partial', onPartial); this._busHandlers.push(['speech:partial', onPartial]); } catch {}
@@ -206,12 +222,17 @@ export function initAsrFeature() {
         this.dispatch('asr:state', { state: 'listening' });
         // Announce that we piggybacked on Speech Sync
         try { (window.HUD?.log || console.debug)?.('asr', { mode: 'bus-follow' }); } catch {}
+        // Start periodic telemetry
+        try { if (this._telemetryTimer) clearInterval(this._telemetryTimer); } catch {}
+        try { this._telemetryTimer = setInterval(() => this._emitStats(), 5000); } catch {}
         return;
       }
       // Fallback: start our own Web Speech recognizer
       this.engine = new WebSpeechEngine();
       this.engine.on((e) => this.onEngineEvent(e));
       this.setState('ready');
+      try { if (this._telemetryTimer) clearInterval(this._telemetryTimer); } catch {}
+      try { this._telemetryTimer = setInterval(() => this._emitStats(), 5000); } catch {}
       await this.engine.start({ lang: 'en-US', interim: true });
     }
     async stop() {
@@ -225,6 +246,9 @@ export function initAsrFeature() {
       try { await this.engine?.stop?.(); } catch {}
       this.setState('idle');
       this.dispatch('asr:state', { state: this.state });
+      // Final telemetry flush
+      try { this._emitStats(true); } catch {}
+      try { if (this._telemetryTimer) clearInterval(this._telemetryTimer); } catch {}
     }
     onEngineEvent(e) {
       if (e.type === 'ready') this.setState('ready');
@@ -232,6 +256,7 @@ export function initAsrFeature() {
       if (e.type === 'partial' || e.type === 'final') {
         if (this.state !== 'running') this.setState('running');
         const text = normalize(e.text);
+        if (e.type === 'partial') { try { this._lastPartialAt = performance.now(); } catch {} }
         this.tryAdvance(text, e.type === 'final', Number(e.confidence || (e.type === 'final' ? 1 : 0.5)));
       }
       if (e.type === 'error') { this.setState('error'); this.dispatch('asr:error', { code: e.code, message: e.message }); }
@@ -256,7 +281,12 @@ export function initAsrFeature() {
         const now = performance.now();
         const sameIdx = idx === this.lastIdx;
         const scoreGain = (Number(score) || 0) - (Number(this.lastScore) || 0);
-        if (sameIdx && scoreGain < 0.12 && (now - (this.lastTs || 0)) < 350) return false;
+        // Manual nudge semantics: allow one same-line acceptance after nudge; subsequent same-line requires score gain >= 0.1
+        if (this._nudgedAt && idx === this.currentIdx) {
+          if (!this._nudgedAccepted) { this._nudgedAccepted = true; this.lastIdx = idx; this.lastScore = Number(score) || 0; this.lastTs = now; return true; }
+          if (scoreGain < 0.10) { try { this._stats.suppressed.dup++; } catch {} return false; }
+        }
+        if (sameIdx && scoreGain < 0.12 && (now - (this.lastTs || 0)) < 350) { try { this._stats.suppressed.dup++; } catch {} return false; }
         this.lastIdx = idx; this.lastScore = Number(score) || 0; this.lastTs = now;
         return true;
       } catch { return true; }
@@ -272,14 +302,27 @@ export function initAsrFeature() {
         this.pending = null; return true;
       } catch { return true; }
     }
-    smoothScrollTo(scroller, top, ms = 160) {
+    smoothScrollTo(scroller, top, ms = 160, score = 1) {
       // Discrete stepped tween (reduces scroll spam to ~3-5 writes per commit)
       try { if (this._scrollAnim && this._scrollAnim.cancel) this._scrollAnim.cancel(); } catch {}
       const isWin = (scroller === document.scrollingElement || scroller === document.body);
       const from = isWin ? (window.scrollY || window.pageYOffset || 0) : (scroller.scrollTop || 0);
       const delta = Number(top || 0) - Number(from || 0);
+      // Deadband at target (±0.002 scroll ratio)
+      try {
+        const denom = isWin ? ((document.documentElement?.scrollHeight || 0) - (window.innerHeight || 0)) : ((scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+        if (denom > 0) {
+          const rFrom = from / denom; const rTo = Number(top || 0) / denom;
+          if (Math.abs(rTo - rFrom) < 0.002) { try { this._stats.tweenStepsN++; } catch {} return 0; }
+        }
+      } catch {}
       let cancelled = false;
-      const steps = Math.max(3, Math.min(5, Math.round(ms / 50))); // 3-5 steps
+      // Score-aware steps: shaky spans snappy; rock-solid silky
+      let steps = Math.max(3, Math.min(5, Math.round(ms / 50))); // base 3-5
+      const s = Number(score) || 0;
+      if (s >= 0.85) steps = 5;
+      else if (s >= 0.5 && s <= 0.6) steps = Math.min(steps, 3);
+      try { this._stats.tweenStepsSum += steps; this._stats.tweenStepsN++; } catch {}
       let i = 0;
       const write = () => {
         if (cancelled) return;
@@ -291,22 +334,38 @@ export function initAsrFeature() {
       };
       this._scrollAnim = { cancel: () => { cancelled = true; } };
       requestAnimationFrame(write);
+      return steps;
     }
     _leapAllowed(delta, idx, score) {
       try {
         if (delta < LEAP_SIZE) return true;
-        if ((Number(score) || 0) >= LEAP_CONFIRM_SCORE) { this._leapPending = { idx: -1, ts: 0 }; return true; }
+        if ((Number(score) || 0) >= LEAP_CONFIRM_SCORE) { this._leapPending = { idx: -1, ts: 0 }; try { (window.HUD?.log || console.debug)?.('asr:confirm leap \u2713', { d: '+' + delta }); } catch {} return true; }
         const now = performance.now();
-        if (this._leapPending && this._leapPending.idx === idx && (now - this._leapPending.ts) <= LEAP_CONFIRM_WINDOW_MS) {
-          this._leapPending = { idx: -1, ts: 0 }; return true;
+        if (this._leapPending && this._leapPending.idx === idx) {
+          if ((now - this._leapPending.ts) <= LEAP_CONFIRM_WINDOW_MS) {
+            this._leapPending = { idx: -1, ts: 0 }; try { (window.HUD?.log || console.debug)?.('asr:confirm leap \u2713', { d: '+' + delta }); } catch {} return true;
+          } else {
+            try { (window.HUD?.log || console.debug)?.('asr:confirm expired'); } catch {}
+            try { this._stats.suppressed.leap++; } catch {}
+          }
         }
         this._leapPending = { idx, ts: now };
+        try { (window.HUD?.log || console.debug)?.('asr:defer leap', { d: '+' + delta, score: Number(score).toFixed(2) }); } catch {}
+        try { this._stats.suppressed.leap++; } catch {}
         return false;
       } catch { return true; }
     }
   tryAdvance(hyp, isFinal, confidence) {
       // Freeze briefly after big jumps to avoid rubber-banding on line starts
-      try { if (performance.now() < (this.freezeUntil || 0)) return; } catch {}
+      try {
+        const now = performance.now();
+        if (now < (this.freezeUntil || 0)) {
+          const ms = Math.max(0, Math.round((this.freezeUntil || 0) - now));
+          try { this._stats.suppressed.freeze++; } catch {}
+          try { (window.HUD?.log || console.debug)?.('asr:drop freeze', { ms }); } catch {}
+          return;
+        }
+      } catch {}
       const { lines, idx0 } = this.getWindow();
       let bestIdx = -1, bestScore = 0;
       for (let i = 0; i < lines.length; i++) {
@@ -316,20 +375,26 @@ export function initAsrFeature() {
       const thr = Number(localStorage.getItem('tp_asr_threshold') || COVERAGE_THRESHOLD) || COVERAGE_THRESHOLD;
       if (bestIdx >= 0 && bestScore >= thr) {
         const newIdx = idx0 + bestIdx;
-        if (newIdx <= this.currentIdx) return; // only commit when index increases
+        if (newIdx < this.currentIdx) { try { this._stats.suppressed.backwards++; } catch {} return; }
+        if (newIdx === this.currentIdx) { /* allow dedupe logic below to decide */ }
         const delta = newIdx - this.currentIdx;
         // Leap confirmation guard
         if (!this._leapAllowed(delta, newIdx, bestScore)) return;
         if (!this.shouldCommit(newIdx, bestScore)) return;
         if (!this.gateLowConfidence(newIdx, bestScore)) return;
         this.currentIdx = newIdx;
-        this.scrollToLine(newIdx);
+        this.scrollToLine(newIdx, bestScore);
         this.dispatch('asr:advance', { index: newIdx, score: bestScore });
         try { (window.HUD?.log || console.debug)?.('asr:advance', { index: newIdx, score: Number(bestScore).toFixed(2) }); } catch {}
         // Micro freeze after commit (applies to all commits, keeps double-fires down)
         try { this.freezeUntil = performance.now() + POST_COMMIT_FREEZE_MS; } catch {}
         // Mark commit time for idle-hold logic
-        try { this._lastCommitAt = performance.now(); } catch {}
+        try {
+          const now = performance.now();
+          if (this._lastCommitAt) { const gap = now - this._lastCommitAt; try { if (isFinite(gap)) this._stats.gaps.push(gap); } catch {} }
+          this._lastCommitAt = now;
+          try { this._stats.commits++; this._stats.scoresSum += (Number(bestScore) || 0); } catch {}
+        } catch {}
         // End-of-script courtesy stop
         try {
           const total = this.getAllLineEls().length;
@@ -345,7 +410,7 @@ export function initAsrFeature() {
         }
       }
     }
-    scrollToLine(idx) {
+    scrollToLine(idx, score = 1) {
       const els = this.getAllLineEls();
       const target = els[idx]; if (!target) return;
       // Skip during pre-roll
@@ -355,7 +420,31 @@ export function initAsrFeature() {
       } catch {}
       const scroller = findScroller(target); const marker = this.opts.markerOffsetPx;
       const top = elementTopRelativeTo(target, scroller) - marker;
-      try { this.smoothScrollTo(scroller, top, 160); } catch {}
+      try { const steps = this.smoothScrollTo(scroller, top, 160, score); if (typeof steps === 'number') { /* stats updated inside */ } } catch {}
+    }
+    _emitStats(final = false) {
+      try {
+        const commits = this._stats.commits || 0;
+        const avgScore = commits ? (this._stats.scoresSum / commits) : 0;
+        const tweenStepsAvg = (this._stats.tweenStepsN ? (this._stats.tweenStepsSum / this._stats.tweenStepsN) : 0);
+        let p95GapMs = 0;
+        if (this._stats.gaps && this._stats.gaps.length) {
+          const arr = this._stats.gaps.slice().sort((a,b)=>a-b);
+          const idx = Math.min(arr.length - 1, Math.floor(arr.length * 0.95));
+          p95GapMs = arr[idx] || 0;
+        }
+        const payload = {
+          commits,
+          suppressed: Object.assign({ dup:0, backwards:0, leap:0, freeze:0 }, this._stats.suppressed || {}),
+          avgScore: Number(avgScore.toFixed(3)),
+          p95GapMs: Math.round(p95GapMs),
+          tweenStepsAvg: Number(tweenStepsAvg.toFixed(2))
+        };
+        window.dispatchEvent(new CustomEvent('asr:stats', { detail: payload }));
+      } catch {}
+      // Reset counters for next window
+      this._stats = { commits: 0, suppressed: { dup: 0, backwards: 0, leap: 0, freeze: 0 }, scoresSum: 0, gaps: [], tweenStepsSum: 0, tweenStepsN: 0 };
+      if (final) { try { if (this._telemetryTimer) clearInterval(this._telemetryTimer); } catch {} }
     }
   }
 
