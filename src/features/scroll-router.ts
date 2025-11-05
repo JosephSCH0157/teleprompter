@@ -215,7 +215,14 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   function setAsrBadgeVisible(on: boolean) {
     try {
-      const after = document.getElementById('autoChip') || document.getElementById('scrollChip') || document.querySelector('.topbar');
+      // Avoid duplicate messaging: if the Auto chip exists (and carries the suffix), skip the extra badge
+      const hasAutoChip = !!document.getElementById('autoChip');
+      if (hasAutoChip) {
+        const existing = document.getElementById('asrSpeedBadge') as HTMLElement | null;
+        if (existing) existing.style.display = 'none';
+        return;
+      }
+      const after = document.getElementById('scrollChip') || document.querySelector('.topbar');
       let badge = document.getElementById('asrSpeedBadge') as HTMLElement | null;
       if (on) {
         if (!badge) {

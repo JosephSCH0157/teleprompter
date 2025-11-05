@@ -20,8 +20,9 @@ export class AsrTopbar {
     this.chip.className = 'rounded-full px-2 py-1 text-xs font-medium bg-gray-700 text-white';
     this.chip.textContent = 'ASR: off';
 
-    this.btn = document.createElement('button');
-    this.btn.className = 'asr-btn px-3 py-1 rounded-lg border';
+  this.btn = document.createElement('button');
+  // Use app's chip style for visual consistency and visibility on the top bar
+  this.btn.className = 'chip asr-btn';
     this.btn.textContent = 'Start ASR';
     this.btn.addEventListener('click', () => this.toggle());
 
