@@ -50,12 +50,35 @@ export function initAsrFeature() {
     getState() { return this.state; }
     async start() {
       if (this.state !== 'idle') return;
+      // If HUD bus exists (speech-loader routes there), subscribe instead of starting our own SR.
+      const bus = (window.HUD && window.HUD.bus) || (window.__tpHud && window.__tpHud.bus) || null;
+      this._bus = bus;
+      this._busHandlers = [];
+      if (bus && typeof bus.on === 'function') {
+        const onPartial = (p) => { try { this.onEngineEvent({ type: 'partial', text: String(p?.text || ''), confidence: 0.5 }); } catch {} };
+        const onFinal   = (p) => { try { this.onEngineEvent({ type: 'final',   text: String(p?.text || ''), confidence: 1.0 }); } catch {} };
+        try { bus.on('speech:partial', onPartial); this._busHandlers.push(['speech:partial', onPartial]); } catch {}
+        try { bus.on('speech:final',   onFinal);   this._busHandlers.push(['speech:final',   onFinal]);   } catch {}
+        this.setState('listening');
+        this.dispatch('asr:state', { state: 'listening' });
+        // Announce that we piggybacked on Speech Sync
+        try { (window.HUD?.log || console.debug)?.('asr', { mode: 'bus-follow' }); } catch {}
+        return;
+      }
+      // Fallback: start our own Web Speech recognizer
       this.engine = new WebSpeechEngine();
       this.engine.on((e) => this.onEngineEvent(e));
       this.setState('ready');
       await this.engine.start({ lang: 'en-US', interim: true });
     }
     async stop() {
+      // Unsubscribe from HUD bus if we used it
+      try {
+        if (this._bus && this._busHandlers && typeof this._bus.off === 'function') {
+          for (const [ev, fn] of this._busHandlers) { try { this._bus.off(ev, fn); } catch {} }
+        }
+      } catch {}
+      this._bus = null; this._busHandlers = [];
       try { await this.engine?.stop?.(); } catch {}
       this.setState('idle');
       this.dispatch('asr:state', { state: this.state });
@@ -71,7 +94,7 @@ export function initAsrFeature() {
       if (e.type === 'error') { this.setState('error'); this.dispatch('asr:error', { code: e.code, message: e.message }); }
       if (e.type === 'stopped') { this.setState('idle'); }
     }
-    setState(s) { this.state = s; this.dispatch('asr:state', { state: s }); }
+  setState(s) { this.state = s; this.dispatch('asr:state', { state: s }); try { (window.HUD?.log || console.debug)?.('asr:state', s); } catch {} }
     dispatch(name, detail) { try { window.dispatchEvent(new CustomEvent(name, { detail })); } catch {} }
     getAllLineEls() {
       const root = document.querySelector(this.opts.rootSelector) || document.body;
@@ -85,7 +108,7 @@ export function initAsrFeature() {
       const texts = els.slice(start, end).map(el => normalize(el.textContent || ''));
       return { lines: texts, idx0: start };
     }
-    tryAdvance(hyp, isFinal, confidence) {
+  tryAdvance(hyp, isFinal, confidence) {
       const { lines, idx0 } = this.getWindow();
       let bestIdx = -1, bestScore = 0;
       for (let i = 0; i < lines.length; i++) {
@@ -97,6 +120,7 @@ export function initAsrFeature() {
         const newIdx = idx0 + bestIdx;
         if (newIdx >= this.currentIdx) {
           this.currentIdx = newIdx; this.scrollToLine(newIdx); this.dispatch('asr:advance', { index: newIdx, score: bestScore });
+          try { (window.HUD?.log || console.debug)?.('asr:advance', { index: newIdx, score: Number(bestScore).toFixed(2) }); } catch {}
         }
       } else if (isFinal) {
         this.rescueCount++;
@@ -104,6 +128,7 @@ export function initAsrFeature() {
           this.currentIdx = Math.min(this.currentIdx + 1, this.getAllLineEls().length - 1);
           this.scrollToLine(this.currentIdx);
           this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'weak-final' });
+          try { (window.HUD?.log || console.debug)?.('asr:rescue', { index: this.currentIdx }); } catch {}
         }
       }
     }
@@ -150,8 +175,16 @@ export function initAsrFeature() {
   // Coordinator: follow Speech Sync and Mode changes; interlock auto-scroll
   let asrMode = null; let speechActive = false; let asrActive = false; let autoHeld = false;
   const wantASR = () => { try { return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr'; } catch { return false; } };
-  const holdAuto = () => { if (autoHeld) return; autoHeld = true; try { window.__tpAuto?.set?.(false); window.dispatchEvent(new CustomEvent('autoscroll:disable', { detail: 'asr' })); } catch {} };
-  const releaseAuto = () => { if (!autoHeld) return; autoHeld = false; try { window.__tpAuto?.set?.(true); window.dispatchEvent(new CustomEvent('autoscroll:enable', { detail: 'asr' })); } catch {} };
+  const holdAuto = () => {
+    if (autoHeld) return; autoHeld = true;
+    try { (window.__tpAuto || window.__scrollCtl || {}).set?.(false); } catch {}
+    try { window.dispatchEvent(new CustomEvent('autoscroll:disable', { detail: 'asr' })); } catch {}
+  };
+  const releaseAuto = () => {
+    if (!autoHeld) return; autoHeld = false;
+    try { (window.__tpAuto || window.__scrollCtl || {}).set?.(true); } catch {}
+    try { window.dispatchEvent(new CustomEvent('autoscroll:enable', { detail: 'asr' })); } catch {}
+  };
   const ensureMode = async () => { if (!asrMode) asrMode = new AsrMode({}); return asrMode; };
   const start = async () => { if (asrActive) return; try { const m = await ensureMode(); holdAuto(); await m.start(); asrActive = true; } catch (err) { asrActive = false; releaseAuto(); try { console.warn('[ASR] start failed', err); } catch {} } };
   const stop  = async () => { if (!asrActive) return; try { await asrMode?.stop?.(); } finally { asrActive = false; releaseAuto(); } };

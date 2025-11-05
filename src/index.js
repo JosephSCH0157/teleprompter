@@ -549,8 +549,17 @@ async function boot() {
       let asrEntry = null;
       for (const c of candidates) { if (await headOk(c)) { asrEntry = c; break; } }
 
+      // Dev-friendly fallback: if HEAD probes fail (server may not support HEAD), attempt a single import of the dev path.
       if (!asrEntry) {
-        try { console.info('[ASR] no module found, skipping init'); } catch {}
+        try {
+          const fallback = './index-hooks/asr.js';
+          const mod = await import(fallback);
+          const init = (mod && (mod.initAsrFeature || mod.default));
+          if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch {} }
+          else { try { console.warn('[ASR] fallback missing initAsrFeature', fallback); } catch {} }
+        } catch {
+          try { console.info('[ASR] no module found, skipping init'); } catch {}
+        }
       } else {
         try {
           const mod = await import(asrEntry);
