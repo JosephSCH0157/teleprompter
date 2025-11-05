@@ -253,6 +253,7 @@
           text.textContent = k.label;
           item.appendChild(box); item.appendChild(text);
           const chip = __statusChip('checking…', 'warn');
+          chip.id = 'rec-adapter-chip-' + k.id;
           item.appendChild(chip);
           listEl.appendChild(item);
 
@@ -298,6 +299,63 @@
         }
       }
 
+      // Live chip updater for OBS when WebSocket connects/disconnects
+      async function updateObsChip(){
+        try {
+          const chip = document.getElementById('rec-adapter-chip-obs');
+          if (!chip) return;
+          // Prefer bridge connected state if present
+          const bridge = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
+          if (bridge && typeof bridge.isConnected === 'function') {
+            const conn = !!bridge.isConnected();
+            chip.textContent = conn ? '(connected)' : '(unavailable)';
+            chip.style.color = conn ? '#b7f4c9' : '#ffd6d6';
+            // If disconnected, fall back to adapter.isAvailable() probe for a softer status
+            if (!conn) {
+              await __ensureRecordersMod();
+              const a = __recMod?.get?.('obs');
+              if (a && typeof a.isAvailable === 'function') {
+                try {
+                  const ok = await a.isAvailable();
+                  chip.textContent = ok ? '(available)' : '(unavailable)';
+                  chip.style.color = ok ? '#b7f4c9' : '#ffd6d6';
+                } catch {}
+              }
+            }
+            return;
+          }
+          // No bridge yet: do a regular availability probe
+          await __ensureRecordersMod();
+          const a = __recMod?.get?.('obs');
+          if (a && typeof a.isAvailable === 'function') {
+            const ok = await a.isAvailable();
+            chip.textContent = ok ? '(available)' : '(unavailable)';
+            chip.style.color = ok ? '#b7f4c9' : '#ffd6d6';
+          }
+        } catch {}
+      }
+
+      // Attach bridge listeners once available; retry a few times if not yet on window
+      (function ensureObsBridgeListeners(){
+        try {
+          if (typeof window === 'undefined') return;
+          const br = window.__obsBridge;
+          if (br && !window.__tpSettingsObsBridgeWired) {
+            window.__tpSettingsObsBridgeWired = true;
+            try { updateObsChip(); } catch {}
+            try { br.on && br.on('connect', () => { try { updateObsChip(); } catch {} }); } catch {}
+            try { br.on && br.on('disconnect', () => { try { updateObsChip(); } catch {} }); } catch {}
+          } else if (!br) {
+            // Retry later; stop after a handful of attempts to avoid a long loop
+            let attempts = (window.__tpSettingsObsBridgeWireAttempts||0);
+            if (attempts < 10) {
+              window.__tpSettingsObsBridgeWireAttempts = attempts + 1;
+              setTimeout(ensureObsBridgeListeners, 800);
+            }
+          }
+        } catch {}
+      })();
+
       // Mode toggle wiring (idempotent)
       if (modeSingle && !modeSingle.dataset.wired){
         modeSingle.dataset.wired = '1';
@@ -324,6 +382,8 @@
 
       // Initial render
       render();
+      // Also refresh OBS chip once shortly after, in case the socket connects post-render
+      setTimeout(() => { try { updateObsChip(); } catch {} }, 1000);
     } catch {}
   }
 
