@@ -504,6 +504,16 @@ async function boot() {
     // Install speech start/stop delegator
     initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
 
+    // Try to install ASR feature (TS build in /dist preferred; falls back to src if available)
+    try {
+      let asrMod = null;
+      try { asrMod = await import('/dist/index-hooks/asr.js'); } catch {}
+      if (!asrMod) {
+        try { asrMod = await import('./index-hooks/asr.js'); } catch {}
+      }
+      try { asrMod && typeof asrMod.initAsrFeature === 'function' && asrMod.initAsrFeature(); } catch (e) { console.warn('[src/index] initAsrFeature failed', e); }
+    } catch (e) { console.warn('[src/index] ASR module import failed', e); }
+
     // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
     try {
       // Prefer the compiled TS router when available; fall back to JS router
