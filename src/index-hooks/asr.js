@@ -132,6 +132,9 @@ export function initAsrFeature() {
     constructor(opts) {
       this.opts = Object.assign({ rootSelector: '#scriptRoot, #script, body', lineSelector: '.line, p', markerOffsetPx: 140, windowSize: 6 }, opts || {});
       this.engine = null; this.state = 'idle'; this.currentIdx = 0; this.rescueCount = 0;
+      // De-dup and gating state
+      this.lastIdx = -1; this.lastScore = 0; this.lastTs = 0; this.pending = null; this.freezeUntil = 0;
+      this._scrollAnim = null;
       try { mountAsrChip(); } catch {}
     }
     getState() { return this.state; }
@@ -195,7 +198,46 @@ export function initAsrFeature() {
       const texts = els.slice(start, end).map(el => normalize(el.textContent || ''));
       return { lines: texts, idx0: start };
     }
+    shouldCommit(idx, score) {
+      try {
+        const now = performance.now();
+        const sameIdx = idx === this.lastIdx;
+        const scoreGain = (Number(score) || 0) - (Number(this.lastScore) || 0);
+        if (sameIdx && scoreGain < 0.12 && (now - (this.lastTs || 0)) < 350) return false;
+        this.lastIdx = idx; this.lastScore = Number(score) || 0; this.lastTs = now;
+        return true;
+      } catch { return true; }
+    }
+    gateLowConfidence(idx, score) {
+      try {
+        const now = performance.now();
+        const LOW = 0.55, WINDOW = 1200;
+        const s = Number(score) || 0;
+        if (s >= LOW) { this.pending = null; return true; }
+        const p = this.pending;
+        if (!p || p.idx !== idx || (now - p.ts) > WINDOW) { this.pending = { idx, score: s, ts: now }; return false; }
+        this.pending = null; return true;
+      } catch { return true; }
+    }
+    smoothScrollTo(scroller, top, ms = 160) {
+      try { if (this._scrollAnim && this._scrollAnim.cancel) this._scrollAnim.cancel(); } catch {}
+      const isWin = (scroller === document.scrollingElement || scroller === document.body);
+      const from = isWin ? (window.scrollY || window.pageYOffset || 0) : (scroller.scrollTop || 0);
+      const delta = Number(top || 0) - Number(from || 0);
+      let cancelled = false; const start = performance.now();
+      const step = (t) => {
+        if (cancelled) return;
+        const k = Math.min(1, (t - start) / ms);
+        const y = from + delta * (k < 0 ? 0 : k);
+        try { if (isWin) window.scrollTo(0, y); else scroller.scrollTo({ top: y }); } catch {}
+        if (k < 1) requestAnimationFrame(step);
+      };
+      this._scrollAnim = { cancel: () => { cancelled = true; } };
+      requestAnimationFrame(step);
+    }
   tryAdvance(hyp, isFinal, confidence) {
+      // Freeze briefly after big jumps to avoid rubber-banding on line starts
+      try { if (performance.now() < (this.freezeUntil || 0)) return; } catch {}
       const { lines, idx0 } = this.getWindow();
       let bestIdx = -1, bestScore = 0;
       for (let i = 0; i < lines.length; i++) {
@@ -205,10 +247,21 @@ export function initAsrFeature() {
       const thr = Number(localStorage.getItem('tp_asr_threshold') || COVERAGE_THRESHOLD) || COVERAGE_THRESHOLD;
       if (bestIdx >= 0 && bestScore >= thr) {
         const newIdx = idx0 + bestIdx;
-        if (newIdx >= this.currentIdx) {
-          this.currentIdx = newIdx; this.scrollToLine(newIdx); this.dispatch('asr:advance', { index: newIdx, score: bestScore });
-          try { (window.HUD?.log || console.debug)?.('asr:advance', { index: newIdx, score: Number(bestScore).toFixed(2) }); } catch {}
-        }
+        if (newIdx < this.currentIdx) return; // never go backward
+        if (!this.shouldCommit(newIdx, bestScore)) return;
+        if (!this.gateLowConfidence(newIdx, bestScore)) return;
+        const delta = newIdx - this.currentIdx;
+        this.currentIdx = newIdx;
+        this.scrollToLine(newIdx);
+        this.dispatch('asr:advance', { index: newIdx, score: bestScore });
+        try { (window.HUD?.log || console.debug)?.('asr:advance', { index: newIdx, score: Number(bestScore).toFixed(2) }); } catch {}
+        // Briefly freeze inputs after big jumps (>=3 lines)
+        try { if (delta >= 3) this.freezeUntil = performance.now() + 500; } catch {}
+        // End-of-script courtesy stop
+        try {
+          const total = this.getAllLineEls().length;
+          if (newIdx >= total - 1) { try { window.dispatchEvent(new CustomEvent('asr:stop')); } catch {} }
+        } catch {}
       } else if (isFinal) {
         this.rescueCount++;
         if (this.rescueCount <= 2) {
@@ -229,12 +282,7 @@ export function initAsrFeature() {
       } catch {}
       const scroller = findScroller(target); const marker = this.opts.markerOffsetPx;
       const top = elementTopRelativeTo(target, scroller) - marker;
-      requestAnimationFrame(() => {
-        try {
-          if (scroller === document.scrollingElement || scroller === document.body) window.scrollTo({ top, behavior: 'smooth' });
-          else scroller.scrollTo({ top, behavior: 'smooth' });
-        } catch {}
-      });
+      try { this.smoothScrollTo(scroller, top, 160); } catch {}
     }
   }
 
