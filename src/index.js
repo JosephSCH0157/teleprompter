@@ -249,8 +249,9 @@ async function boot() {
       // If HUD is present, mirror speech gates to it for visibility
       try {
         const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
-        // Quiet dB meter: sample infrequently and only on meaningful change
+        // Quiet dB meter: sample rarely when silent, modestly when speaking, and only on meaningful change
         const __dbState = { lastAt: 0, lastVal: null };
+        const __vadState = { speaking: false };
         window.addEventListener('tp:db', (ev) => {
           try {
             const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
@@ -263,9 +264,12 @@ async function boot() {
             const now = performance.now();
             const dt = now - (__dbState.lastAt || 0);
             const dv = Math.abs((__dbState.lastVal ?? db) - db);
-            const MIN_DT = 1500;   // ms between updates
-            const MIN_DV = 3;      // dB change threshold
-            if (dt >= MIN_DT || dv >= MIN_DV) {
+            // Throttle harder when not speaking
+            const MIN_DT_SPEAK = 3000;   // ms between updates while talking
+            const MIN_DT_SILENT = 15000; // ms between updates while silent
+            const MIN_DV = 6;            // dB change threshold to break through throttle
+            const minDt = __vadState.speaking ? MIN_DT_SPEAK : MIN_DT_SILENT;
+            if (dt >= minDt || dv >= MIN_DV) {
               __dbState.lastAt = now; __dbState.lastVal = db;
               logHud('speech:db', { db });
             }
@@ -274,9 +278,19 @@ async function boot() {
         window.addEventListener('tp:vad', (ev) => {
           try {
             const speaking = !!(ev && ev.detail && ev.detail.speaking);
+            __vadState.speaking = speaking;
             logHud('speech:vad', { speaking });
           } catch {}
         });
+        // Small helper to toggle HUD dB logs at runtime (persists in localStorage)
+        try {
+          if (!window.setHudQuietDb) {
+            window.setHudQuietDb = (on) => {
+              try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
+              try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
+            };
+          }
+        } catch {}
       } catch {}
     } catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
