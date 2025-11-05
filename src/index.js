@@ -177,7 +177,10 @@ async function boot() {
       if (typeof window.__tpInstallHUD !== 'function') {
         try { await import('../debug-tools.js'); } catch {}
       }
-      if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
+      const needHudInstall = (typeof window.__tpInstallHUD === 'function') && (
+        !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
+      );
+      if (needHudInstall) {
         window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
         // Auto-show HUD in dev sessions for visibility
         try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch {}
@@ -186,9 +189,10 @@ async function boot() {
       if (typeof window.ensureHud !== 'function') {
         window.ensureHud = () => {
           try {
-            if (!window.__tpHud && typeof window.__tpInstallHUD === 'function') {
-              window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
-            }
+            const need = (typeof window.__tpInstallHUD === 'function') && (
+              !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
+            );
+            if (need) { window.__tpHud = window.__tpInstallHUD({ hotkey: '~' }); }
             if (window.__tpHud?.toggle) { window.__tpHud.toggle(); return; }
           } catch {}
           try { window.toggleHud?.(); } catch {}
