@@ -100,6 +100,7 @@
     '    <button id="recAdaptersRefresh" class="chip btn-chip" type="button">Refresh status</button>',
     '    <span id="recAdaptersHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Pick which integrations to trigger when Auto‑record is on.</span>',
     '  </div>',
+  '  <div class="settings-subgroup" id="recAdaptersConfig"></div>',
   '  <h4>OBS</h4>',
   '  <div class="row microcopy" style="color:#9fb4c9;font-size:12px">OBS is optional — speech sync does not require OBS.</div>',
   '  <div class="row">',
@@ -299,6 +300,263 @@
         }
       }
 
+      async function renderConfig(){
+        const wrap = document.getElementById('recAdaptersConfig');
+        if (!wrap) return;
+        await __ensureRecordersMod();
+        const st = (await readState()) || {};
+        const premCfg = (st.configs && st.configs.premiere) || { startHotkey:'Ctrl+R', stopHotkey:'', baseUrl:'http://127.0.0.1:5723' };
+        const bridgeCfgRaw = (st.configs && st.configs.bridge) || { startUrl:'http://127.0.0.1:5723/record/start', stopUrl:'' };
+        // Infer bridge mode/base/hotkeys from URLs if not explicitly saved
+        const inferBridge = (() => {
+          const out = { mode: 'http', baseUrl: 'http://127.0.0.1:5723', startHotkey: 'Ctrl+R', stopHotkey: '' };
+          try {
+            const su = String(bridgeCfgRaw.startUrl||'');
+            const bu = su.replace(/\/+$/, '');
+            if (/\/send(?:\?|$)/.test(su)) {
+              out.mode = 'hotkey';
+              try {
+                const u = new URL(su, window.location.href);
+                const b = u.origin + u.pathname.replace(/\/send$/, '');
+                const k = u.searchParams.get('keys') || 'Ctrl+R';
+                out.baseUrl = b.replace(/\/+$/, '');
+                out.startHotkey = k;
+              } catch {}
+            } else {
+              out.mode = 'http';
+              try {
+                const m = bu.match(/^(.*)\/record\/start$/);
+                if (m) out.baseUrl = m[1];
+              } catch {}
+            }
+            if (bridgeCfgRaw.stopUrl) {
+              if (/\/send(?:\?|$)/.test(bridgeCfgRaw.stopUrl||'')) {
+                try {
+                  const u2 = new URL(String(bridgeCfgRaw.stopUrl||''), window.location.href);
+                  out.stopHotkey = u2.searchParams.get('keys') || '';
+                } catch {}
+              }
+            }
+          } catch {}
+          // Prefer explicitly saved fields if present
+          const explicit = {
+            mode: bridgeCfgRaw.mode || out.mode,
+            baseUrl: bridgeCfgRaw.baseUrl || out.baseUrl,
+            startHotkey: bridgeCfgRaw.startHotkey || out.startHotkey,
+            stopHotkey: bridgeCfgRaw.stopHotkey || out.stopHotkey,
+          };
+          return explicit;
+        })();
+
+        // Bridge + Premiere config cards
+        const html = [
+          '<div class="card">',
+          '  <h5 style="margin:6px 0 8px">Bridge</h5>',
+          '  <div class="row" style="gap:10px;align-items:center">',
+          '    <label>Mode',
+          '      <select id="bridgeMode" class="select-sm">',
+          '        <option value="http">HTTP hooks</option>',
+          '        <option value="hotkey">Hotkey bridge</option>',
+          '      </select>',
+          '    </label>',
+          '    <span class="microcopy" style="color:#9fb4c9;font-size:12px">Hotkey mode uses tools/hotkey_bridge.ps1</span>',
+          '  </div>',
+          '  <div id="bridgeHttpRow" class="row" style="gap:10px;align-items:center;margin-top:6px">',
+          '    <label>Start URL <input id="bridgeStartUrl" type="text" class="select-lg" placeholder="http://127.0.0.1:5723/record/start"/></label>',
+          '    <label>Stop URL <input id="bridgeStopUrl" type="text" class="select-lg" placeholder="(optional)"/></label>',
+          '    <button id="bridgeHttpTestStart" class="chip btn-chip" type="button">Test start</button>',
+          '    <button id="bridgeHttpTestStop" class="chip btn-chip" type="button">Test stop</button>',
+          '    <span id="bridgeHttpMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
+          '  </div>',
+          '  <div id="bridgeHotkeyRow" class="row" style="gap:10px;align-items:center;margin-top:6px">',
+          '    <label>Preset',
+          '      <select id="bridgePreset" class="select-sm">',
+          '        <option value="Ctrl+R">Ctrl+R</option>',
+          '        <option value="Win+Alt+R">Win+Alt+R</option>',
+          '        <option value="custom">Custom…</option>',
+          '      </select>',
+          '    </label>',
+          '    <label>Start hotkey <input id="bridgeStartHotkey" type="text" class="select-sm" placeholder="Ctrl+R"/></label>',
+          '    <label>Stop hotkey <input id="bridgeStopHotkey" type="text" class="select-sm" placeholder="(optional)"/></label>',
+          '    <label>Endpoint <input id="bridgeBaseUrl" type="text" class="select-md" placeholder="http://127.0.0.1:5723"/></label>',
+          '    <button id="bridgeHotkeyTestBtn" class="chip btn-chip" type="button">Send test</button>',
+          '    <span id="bridgeHotkeyMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
+          '  </div>',
+          '</div>',
+          '',
+          '<div class="card">',
+          '  <h5 style="margin:6px 0 8px">Adobe Premiere Pro</h5>',
+          '  <div class="row" style="gap:10px;align-items:center">',
+          '    <label>Start hotkey <input id="premStartHotkey" type="text" class="select-sm" placeholder="Ctrl+R"/></label>',
+          '    <label>Stop hotkey <input id="premStopHotkey" type="text" class="select-sm" placeholder="(optional)"/></label>',
+          '    <label>Endpoint <input id="premBaseUrl" type="text" class="select-md" placeholder="http://127.0.0.1:5723"/></label>',
+          '    <button id="premTestBtn" class="chip btn-chip" type="button">Send test</button>',
+          '    <span id="premTestMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
+          '  </div>',
+          '  <div class="settings-small" style="color:#9fb4c9">Requires the Hotkey Bridge (tools/hotkey_bridge.ps1) to be running.</div>',
+          '</div>'
+        ].join('');
+
+        // Render
+        wrap.innerHTML = html;
+
+        // --- Bridge wiring ---
+        const modeSel = document.getElementById('bridgeMode');
+        const httpRow = document.getElementById('bridgeHttpRow');
+        const hotkeyRow = document.getElementById('bridgeHotkeyRow');
+        const startUrlInp = document.getElementById('bridgeStartUrl');
+        const stopUrlInp = document.getElementById('bridgeStopUrl');
+        const httpTestStart = document.getElementById('bridgeHttpTestStart');
+        const httpTestStop = document.getElementById('bridgeHttpTestStop');
+        const httpMsg = document.getElementById('bridgeHttpMsg');
+        const presetSel = document.getElementById('bridgePreset');
+        const startHotkeyInp = document.getElementById('bridgeStartHotkey');
+        const stopHotkeyInp = document.getElementById('bridgeStopHotkey');
+        const baseUrlInp = document.getElementById('bridgeBaseUrl');
+        const hotkeyTestBtn = document.getElementById('bridgeHotkeyTestBtn');
+        const hotkeyMsg = document.getElementById('bridgeHotkeyMsg');
+
+        // Initialize values
+        if (modeSel) modeSel.value = String(inferBridge.mode || 'http');
+        if (startUrlInp) startUrlInp.value = String(bridgeCfgRaw.startUrl || 'http://127.0.0.1:5723/record/start');
+        if (stopUrlInp) stopUrlInp.value = String(bridgeCfgRaw.stopUrl || '');
+        if (baseUrlInp) baseUrlInp.value = String(inferBridge.baseUrl || 'http://127.0.0.1:5723');
+        if (startHotkeyInp) startHotkeyInp.value = String(inferBridge.startHotkey || 'Ctrl+R');
+        if (stopHotkeyInp) stopHotkeyInp.value = String(inferBridge.stopHotkey || '');
+        if (presetSel) {
+          const k = String(inferBridge.startHotkey||'Ctrl+R');
+          presetSel.value = (k === 'Ctrl+R' || k === 'Win+Alt+R') ? k : 'custom';
+        }
+
+        function updateBridgeVisibility(){
+          const mode = modeSel ? modeSel.value : 'http';
+          if (httpRow) httpRow.style.display = mode === 'http' ? '' : 'none';
+          if (hotkeyRow) hotkeyRow.style.display = mode === 'hotkey' ? '' : 'none';
+        }
+        updateBridgeVisibility();
+
+        function saveBridge(){
+          try {
+            const mode = (modeSel && modeSel.value) || 'http';
+            const base = (baseUrlInp && baseUrlInp.value) || 'http://127.0.0.1:5723';
+            const baseClean = base.replace(/\/+$/, '');
+            let startUrl = (startUrlInp && startUrlInp.value) || (baseClean + '/record/start');
+            let stopUrl = (stopUrlInp && stopUrlInp.value) || '';
+            let startHot = (startHotkeyInp && startHotkeyInp.value) || 'Ctrl+R';
+            let stopHot = (stopHotkeyInp && stopHotkeyInp.value) || '';
+            if (mode === 'hotkey') {
+              startUrl = baseClean + '/send?keys=' + encodeURIComponent(startHot);
+              stopUrl = stopHot ? (baseClean + '/send?keys=' + encodeURIComponent(stopHot)) : '';
+            }
+            const next = {
+              mode,
+              baseUrl: baseClean,
+              startHotkey: startHot,
+              stopHotkey: stopHot,
+              startUrl,
+              stopUrl,
+            };
+            __recMod?.setSettings?.({ configs: { bridge: next } });
+          } catch {}
+        }
+
+        // Bridge listeners
+        modeSel && modeSel.addEventListener('change', () => { updateBridgeVisibility(); saveBridge(); });
+        startUrlInp && startUrlInp.addEventListener('input', saveBridge);
+        stopUrlInp && stopUrlInp.addEventListener('input', saveBridge);
+        baseUrlInp && baseUrlInp.addEventListener('input', saveBridge);
+        startHotkeyInp && startHotkeyInp.addEventListener('input', () => {
+          if (presetSel) {
+            const v = String(startHotkeyInp.value||'');
+            presetSel.value = (v === 'Ctrl+R' || v === 'Win+Alt+R') ? v : 'custom';
+          }
+          saveBridge();
+        });
+        stopHotkeyInp && stopHotkeyInp.addEventListener('input', saveBridge);
+        presetSel && presetSel.addEventListener('change', () => {
+          const v = presetSel.value;
+          if (v !== 'custom' && startHotkeyInp) startHotkeyInp.value = v;
+          saveBridge();
+        });
+        if (httpTestStart) {
+          httpTestStart.addEventListener('click', async () => {
+            try {
+              const u = (startUrlInp && startUrlInp.value) || 'http://127.0.0.1:5723/record/start';
+              if (httpMsg) { httpMsg.textContent = 'Sending…'; httpMsg.style.color = '#9fb4c9'; }
+              await fetch(u, { method: 'GET', mode: 'no-cors' });
+              if (httpMsg) { httpMsg.textContent = 'Start ping sent'; httpMsg.style.color = '#b7f4c9'; }
+            } catch {
+              if (httpMsg) { httpMsg.textContent = 'Failed — is endpoint up?'; httpMsg.style.color = '#ffd6d6'; }
+            }
+          });
+        }
+        if (httpTestStop) {
+          httpTestStop.addEventListener('click', async () => {
+            try {
+              const u = (stopUrlInp && stopUrlInp.value) || '';
+              if (!u) { if (httpMsg) { httpMsg.textContent = 'No Stop URL set'; httpMsg.style.color = '#ffdca8'; } return; }
+              if (httpMsg) { httpMsg.textContent = 'Sending…'; httpMsg.style.color = '#9fb4c9'; }
+              await fetch(u, { method: 'GET', mode: 'no-cors' });
+              if (httpMsg) { httpMsg.textContent = 'Stop ping sent'; httpMsg.style.color = '#b7f4c9'; }
+            } catch {
+              if (httpMsg) { httpMsg.textContent = 'Failed — is endpoint up?'; httpMsg.style.color = '#ffd6d6'; }
+            }
+          });
+        }
+        if (hotkeyTestBtn) {
+          hotkeyTestBtn.addEventListener('click', async () => {
+            try {
+              const base = (baseUrlInp && baseUrlInp.value) || 'http://127.0.0.1:5723';
+              const keys = (startHotkeyInp && startHotkeyInp.value) || 'Ctrl+R';
+              const u = base.replace(/\/+$/, '') + '/send?keys=' + encodeURIComponent(keys);
+              if (hotkeyMsg) { hotkeyMsg.textContent = 'Sending…'; hotkeyMsg.style.color = '#9fb4c9'; }
+              await fetch(u, { method: 'GET', mode: 'no-cors' });
+              if (hotkeyMsg) { hotkeyMsg.textContent = 'Sent ' + keys; hotkeyMsg.style.color = '#b7f4c9'; }
+            } catch {
+              if (hotkeyMsg) { hotkeyMsg.textContent = 'Failed — is bridge running?'; hotkeyMsg.style.color = '#ffd6d6'; }
+            }
+          });
+        }
+
+        // --- Premiere wiring ---
+        const premStartInp = document.getElementById('premStartHotkey');
+        const premStopInp = document.getElementById('premStopHotkey');
+        const premBaseInp = document.getElementById('premBaseUrl');
+        const premTestBtn = document.getElementById('premTestBtn');
+        const premMsg = document.getElementById('premTestMsg');
+        if (premStartInp) premStartInp.value = String(premCfg.startHotkey || 'Ctrl+R');
+        if (premStopInp) premStopInp.value = String(premCfg.stopHotkey || '');
+        if (premBaseInp) premBaseInp.value = String(premCfg.baseUrl || 'http://127.0.0.1:5723');
+
+        const savePrem = () => {
+          try {
+            const next = {
+              startHotkey: (premStartInp && premStartInp.value) || 'Ctrl+R',
+              stopHotkey: (premStopInp && premStopInp.value) || '',
+              baseUrl: (premBaseInp && premBaseInp.value) || 'http://127.0.0.1:5723',
+            };
+            __recMod?.setSettings?.({ configs: { premiere: next } });
+          } catch {}
+        };
+        premStartInp && premStartInp.addEventListener('input', savePrem);
+        premStopInp && premStopInp.addEventListener('input', savePrem);
+        premBaseInp && premBaseInp.addEventListener('input', savePrem);
+        if (premTestBtn) {
+          premTestBtn.addEventListener('click', async () => {
+            try {
+              const base = (premBaseInp && premBaseInp.value) || 'http://127.0.0.1:5723';
+              const keys = (premStartInp && premStartInp.value) || 'Ctrl+R';
+              const u = base.replace(/\/+$/, '') + '/send?keys=' + encodeURIComponent(keys);
+              if (premMsg) { premMsg.textContent = 'Sending…'; premMsg.style.color = '#9fb4c9'; }
+              await fetch(u, { method: 'GET', mode: 'no-cors' });
+              if (premMsg) { premMsg.textContent = 'Sent ' + keys; premMsg.style.color = '#b7f4c9'; }
+            } catch {
+              if (premMsg) { premMsg.textContent = 'Failed — is bridge running?'; premMsg.style.color = '#ffd6d6'; }
+            }
+          });
+        }
+      }
+
       // Live chip updater for OBS when WebSocket connects/disconnects
       async function updateObsChip(){
         try {
@@ -382,6 +640,7 @@
 
       // Initial render
       render();
+      renderConfig();
       // Also refresh OBS chip once shortly after, in case the socket connects post-render
       setTimeout(() => { try { updateObsChip(); } catch {} }, 1000);
     } catch {}
