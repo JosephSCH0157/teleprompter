@@ -2,6 +2,7 @@
 // Uses the Web Speech API directly to avoid TS build requirements in dev.
 
 export function initAsrFeature() {
+  try { console.info('[ASR] dev initAsrFeature()'); } catch {}
   // Ensure the status chip is present as early as possible
   try { (function(){ try { const el = document.getElementById('asrChip'); if (!el) { /* attempt mount into topbar */
     const host = document.querySelector('#topbarRight, .topbar, header, body') || document.body;
@@ -17,17 +18,31 @@ export function initAsrFeature() {
   const mountAsrChip = () => {
     try {
       if (document.getElementById('asrChip')) return document.getElementById('asrChip');
-      const host = document.querySelector('#topbarRight, .topbar, header, body') || document.body;
       const chip = document.createElement('span');
       chip.id = 'asrChip';
       chip.className = 'chip';
       chip.textContent = 'ASR: off';
-      host.insertBefore(chip, host.firstChild);
+      // Insert now (best-effort), then move it into #topbarRight when it appears
+      const initialHost = document.body;
+      initialHost.insertBefore(chip, initialHost.firstChild);
       // Update on state changes
       const map = { idle: 'off', ready: 'ready', listening: 'listening', running: 'listening', error: 'error' };
       window.addEventListener('asr:state', (e) => {
         try { const st = e?.detail?.state; chip.textContent = 'ASR: ' + (map[st] || st || 'off'); } catch {}
       });
+      // Move chip into top bar when available
+      try {
+        const mo = new MutationObserver(() => {
+          const host = document.querySelector('#topbarRight');
+          if (host && host.isConnected && chip.parentElement !== host) {
+            try { host.insertBefore(chip, host.firstChild); } catch {}
+          }
+        });
+        mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
+        // Attempt immediate placement too
+        const hostNow = document.querySelector('#topbarRight');
+        if (hostNow) { try { hostNow.insertBefore(chip, hostNow.firstChild); } catch {} }
+      } catch {}
       return chip;
     } catch {}
     return null;
