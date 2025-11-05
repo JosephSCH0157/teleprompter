@@ -91,6 +91,15 @@
         '  <div class="row">',
         '    <label>Pre-roll (sec) <input id="settingsPreroll" type="number" min="0" max="10" step="1" class="select-md"/></label>',
         '  </div>',
+    '  <h4>Recording adapters</h4>',
+    '  <div class="row settings-inline-row" id="recAdaptersRow">',
+    '    <div id="recAdaptersList" class="rec-list" style="display:flex;flex-wrap:wrap;gap:10px"></div>',
+    '  </div>',
+    '  <div class="row settings-inline-row">',
+    '    <label class="tp-check"><input type="checkbox" id="recModeSingle"/> Single mode (one adapter at a time)</label>',
+    '    <button id="recAdaptersRefresh" class="chip btn-chip" type="button">Refresh status</button>',
+    '    <span id="recAdaptersHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Pick which integrations to trigger when Auto‑record is on.</span>',
+    '  </div>',
   '  <h4>OBS</h4>',
   '  <div class="row microcopy" style="color:#9fb4c9;font-size:12px">OBS is optional — speech sync does not require OBS.</div>',
   '  <div class="row">',
@@ -643,7 +652,142 @@
       // Initial connection attempt after mount
       setTimeout(ensureObsConnection, 0);
 
-      // Dev HUD toggle (advanced) — SSOT wiring to modern HUD
+      // --- Recording adapters picker ---
+      (function initRecorderAdaptersUI(){
+        try {
+          const listEl = document.getElementById('recAdaptersList');
+          const refreshBtn = document.getElementById('recAdaptersRefresh');
+          const modeSingle = document.getElementById('recModeSingle');
+          if (!listEl) return;
+
+          // Core render: show checkboxes for requested integrations
+          const KNOWN = [
+            { id: 'obs', label: 'OBS' },
+            { id: 'bridge', label: 'Bridge' },
+            { id: 'descript', label: 'Descript' },
+            { id: 'premiere', label: 'Premiere' },
+            { id: 'rev', label: 'Rev' },
+          ];
+
+          let recMod = null;
+          async function ensureMod(){
+            if (!recMod) {
+              try { recMod = await import('/recorders.js'); } catch {}
+            }
+            return recMod;
+          }
+
+          async function readState(){
+            await ensureMod();
+            try { return recMod?.getSettings?.() || { mode:'multi', selected: [] }; } catch { return { mode:'multi', selected: [] }; }
+          }
+
+          function statusChip(txt, kind){
+            const span = document.createElement('span');
+            span.textContent = txt;
+            span.style.marginLeft = '6px';
+            span.style.opacity = '.9';
+            span.style.fontSize = '12px';
+            span.style.color = kind === 'ok' ? '#b7f4c9' : (kind === 'warn' ? '#ffdca8' : '#ffd6d6');
+            return span;
+          }
+
+          async function render(){
+            const st = await readState();
+            listEl.innerHTML = '';
+            if (modeSingle) modeSingle.checked = (st.mode === 'single');
+            for (const k of KNOWN){
+              const item = document.createElement('label');
+              item.className = 'tp-check';
+              item.style.display = 'inline-flex';
+              item.style.alignItems = 'center';
+              item.style.gap = '6px';
+              const box = document.createElement('input');
+              box.type = 'checkbox';
+              box.dataset.id = k.id;
+              box.checked = Array.isArray(st.selected) && st.selected.includes(k.id);
+              const text = document.createElement('span');
+              text.textContent = k.label;
+              item.appendChild(box); item.appendChild(text);
+              const chip = statusChip('checking…', 'warn');
+              item.appendChild(chip);
+              listEl.appendChild(item);
+
+              // availability probe (best-effort)
+              (async () => {
+                try {
+                  await ensureMod();
+                  const a = recMod?.get?.(k.id);
+                  if (a && typeof a.isAvailable === 'function') {
+                    const ok = await a.isAvailable();
+                    // For OBS, prefer bridge connection signal if present
+                    let kind = ok ? 'ok' : 'err';
+                    let label = ok ? 'available' : 'unavailable';
+                    try {
+                      if (k.id === 'obs' && window.__obsBridge && typeof window.__obsBridge.isConnected === 'function') {
+                        const conn = !!window.__obsBridge.isConnected();
+                        if (conn) { kind = 'ok'; label = 'connected'; }
+                      }
+                    } catch {}
+                    chip.textContent = '(' + label + ')';
+                    chip.style.color = kind === 'ok' ? '#b7f4c9' : '#ffd6d6';
+                  } else {
+                    chip.textContent = '(unavailable)';
+                    chip.style.color = '#ffd6d6';
+                  }
+                } catch {
+                  chip.textContent = '(unavailable)';
+                  chip.style.color = '#ffd6d6';
+                }
+              })();
+
+              box.addEventListener('change', async () => {
+                try {
+                  const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
+                  let ids = boxes.filter(b => b.checked).map(b => String(b.dataset.id||''));
+                  if (modeSingle && modeSingle.checked && ids.length > 1) {
+                    // keep only the one the user just clicked
+                    ids = [ String(box.dataset.id||'') ];
+                    for (const b of boxes) { if (b !== box) b.checked = false; }
+                  }
+                  await ensureMod();
+                  recMod?.setSelected?.(ids);
+                } catch {}
+              }, { capture: true });
+            }
+          }
+
+          // Mode toggle wiring
+          if (modeSingle && !modeSingle.dataset.wired){
+            modeSingle.dataset.wired = '1';
+            modeSingle.addEventListener('change', async () => {
+              await ensureMod();
+              try { recMod?.setMode?.(modeSingle.checked ? 'single' : 'multi'); } catch {}
+              // enforce single selection visually if needed
+              if (modeSingle.checked) {
+                const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
+                const firstChecked = boxes.find(b => b.checked) || null;
+                for (const b of boxes) { if (b !== firstChecked) b.checked = false; }
+                try {
+                  const id = firstChecked ? String(firstChecked.dataset.id||'') : '';
+                  recMod?.setSelected?.(id ? [id] : []);
+                } catch {}
+              }
+            });
+          }
+
+          // Refresh
+          if (refreshBtn && !refreshBtn.dataset.wired){
+            refreshBtn.dataset.wired = '1';
+            refreshBtn.addEventListener('click', render);
+          }
+
+          // Initial render
+          render();
+        } catch {}
+      })();
+
+      // Dev HUD toggle (advanced) — SSOT wiring to modern HUD (single source of truth)
       const devHud = q('settingsDevHud');
       if (devHud && hasStore) devHud.addEventListener('change', () => S.set('devHud', !!devHud.checked));
       if (hasStore && typeof S.subscribe === 'function') {
@@ -666,21 +810,7 @@
         });
       }
 
-      // Dev HUD checkbox wiring (Settings) — mirrors localStorage + calls SSOT API directly
-      (() => {
-        try {
-          const HUD_FLAG = 'tp_dev_hud_v1';
-          const box = document.getElementById('settingsDevHud');
-          if (!box || box.dataset.hudWired) return;
-          box.dataset.hudWired = '1';
-          try { box.checked = localStorage.getItem(HUD_FLAG) === '1'; } catch {}
-          box.addEventListener('change', () => {
-            const on = !!box.checked;
-            try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
-            try { (window.ensureHud?.() ?? window.__tpHud)?.setEnabled?.(on); } catch {}
-          }, { capture: true });
-        } catch {}
-      })();
+      // Removed duplicate fallback HUD wiring block — store-managed block above is the single source of truth.
 
       // Reset app state
       const resetBtn = q('settingsResetState');
