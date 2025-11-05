@@ -5,6 +5,7 @@ import { AsrMode } from '../features/asr-mode';
 import { installAsrHotkeys } from '../hotkeys/asr-hotkeys';
 import { mountAsrSettings } from '../ui/settings-asr';
 import { AsrTopbar } from '../ui/topbar-asr';
+export { AsrMode } from '../features/asr-mode';
 
 export function initAsrFeature() {
   // Wire UI settings
