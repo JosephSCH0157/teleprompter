@@ -5503,6 +5503,26 @@ let _toast = function (msg, opts) {
         void 0;
       }
     };
+    // Single-source recorder status → chip text
+    try {
+      if (!window.__tpRecChipWired) {
+        window.__tpRecChipWired = true;
+        window.addEventListener('rec:state', (e) => {
+          try {
+            const s = e && e.detail && e.detail.state;
+            const d = (e && e.detail && e.detail.detail) || {};
+            if (s === 'starting') return window.setRecChip({ text: 'starting…', tone: 'neutral', busy: true });
+            if (s === 'recording') {
+              if (d && d.fallback) return window.setRecChip({ text: 'fallback (hotkey)', tone: 'warn', busy: false });
+              return window.setRecChip('recording');
+            }
+            if (s === 'stopping') return window.setRecChip({ text: 'stopping…', tone: 'neutral', busy: true });
+            if (s === 'error') return window.setRecChip({ text: 'error', tone: 'error', assertive: true, busy: false });
+            return window.setRecChip('idle');
+          } catch {}
+        }, { passive: true });
+      }
+    } catch {}
     // OBS runtime flags (safe defaults)
     window.__obsConnected = false;
     window.__obsRecArmed = false;
@@ -10936,270 +10956,48 @@ let _toast = function (msg, opts) {
     let n = sec;
     // TP: preroll-controls
     let __prerollStarted = false;
-    // Helper: minimal recording ensure using adapter (GetRecordStatus -> StartRecord)
-    async function ensureRecordingMini() {
-      const bridge =
-        typeof window !== 'undefined' && window.__obsBridge ? window.__obsBridge : null;
-      if (!bridge && !window.__obsConnected && !(window.__recorder && window.__recorder.get))
-        return false;
-      const a = bridge ? null : window.__recorder?.get?.('obs');
-
-      // Guard: if OBS is not enabled in recorder settings or the UI checkbox, skip OBS actions
-      try {
-        const settings = __recorder && __recorder.getSettings ? __recorder.getSettings() : null;
-        const obsEnabledInSettings = settings && Array.isArray(settings.selected) ? settings.selected.indexOf('obs') >= 0 : false;
-        const enableObsUi = !!document.getElementById('enableObs')?.checked;
-        if (!obsEnabledInSettings && !enableObsUi) {
-          // OBS explicitly disabled — do not attempt scene switching or starting the recorder
-          if (window.__TP_DEV) console.debug('[OBS] ensureRecordingMini: OBS disabled by settings/UI — skipping');
-          return false;
-        }
-      } catch {}
-
-      // 1) Disk space check (best-effort)
-      try {
-        if (bridge && typeof bridge.getStats === 'function') {
-          const stats = await bridge.getStats();
-          const free = stats?.recording?.freeDiskSpace || stats?.free_disk_space || null;
-          let freeBytes = null;
-          if (typeof free === 'number') freeBytes = free;
-          else if (typeof free === 'string' && /^\d+$/.test(free)) freeBytes = Number(free);
-          if (freeBytes !== null) {
-            const minBytes = 2 * 1024 * 1024 * 1024; // 2 GB
-            if (freeBytes < minBytes) {
-              _toast('Low disk space on OBS host — recording may fail', { type: 'warn' });
-            }
-          }
-        }
-      } catch {
-        // ignore stats errors
-      }
-
-      // 2) If already recording, skip StartRecord
-      try {
-        const s = bridge
-          ? await bridge.getRecordStatus()
-          : await (a.call ? a.call('GetRecordStatus') : a.getStatus?.());
-        if (s && s.outputActive) {
-          try {
-            window.setRecChip && window.setRecChip('recording');
-          } catch {}
-          return true;
-        }
-      } catch {
-        // ignore GetRecordStatus errors and continue
-      }
-
-      // 3) Scene sanity — SAFE flow
-      // Default behavior: do nothing. If the user has a preferred scene configured,
-      // treat it as optional: validate it exists first and only switch if it differs
-      // from the current program scene and the connection is stable.
-      try {
-        const settings = __recorder.getSettings?.() || {};
-        let preferredScene = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
-        // If no explicit preferred scene, skip any scene changes entirely
-        if (preferredScene) {
-          try {
-            // wait a small quiet window to ensure connection is stable
-            await new Promise((r) => setTimeout(r, 600));
-
-            // helper to read current program scene and scene list from bridge/adapters
-            let currentProgram = null;
-            let scenes = null;
-            try {
-              if (bridge && typeof bridge.getCurrentProgramScene === 'function')
-                currentProgram = await bridge.getCurrentProgramScene();
-              else if (a && a.call) {
-                try {
-                  const r = await a.call('GetCurrentProgramScene');
-                  currentProgram = r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName);
-                } catch {}
-              }
-            } catch {}
-            try {
-              if (bridge && typeof bridge.getSceneList === 'function') scenes = await bridge.getSceneList();
-              else if (a && a.call) {
-                try {
-                  const res = await a.call('GetSceneList');
-                  scenes = res && (res.scenes || res.sceneList || null);
-                } catch {}
-              }
-            } catch {}
-
-            // Normalize scenes names to an array of string names if possible
-            let sceneNames = null;
-            try {
-              if (Array.isArray(scenes)) sceneNames = scenes.map((s) => s && s.sceneName ? s.sceneName : s && s.name ? s.name : s);
-            } catch {}
-            // Dev diagnostic: log discovered scenes and current program
-            try {
-              if (window.__TP_DEV) {
-                try { console.debug('[OBS-SCENE] preferredScene=', preferredScene); } catch {}
-                try { console.debug('[OBS-SCENE] currentProgram=', currentProgram); } catch {}
-                try { console.debug('[OBS-SCENE] sceneNames=', sceneNames); } catch {}
-              }
-            } catch {}
-
-            // Only proceed if preferredScene exists in the scene list (exact match)
-            const exists = Array.isArray(sceneNames) ? sceneNames.indexOf(preferredScene) >= 0 : false;
-            if (!exists) {
-              // Preferred scene not found: do nothing (leave program scene as-is)
-              try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene not found; skipping'); } catch {}
-            } else {
-              // If the preferred scene is already the current program scene, do nothing
-              if (currentProgram && String(currentProgram) === String(preferredScene)) {
-                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene already active; skipping'); } catch {}
-              } else {
-                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene exists and differs; will set when quiet'); } catch {}
-                // Defer actual SetCurrentProgramScene until no transition is active.
-                // We listen for a TransitionEnd-like event or wait a short quiet window of 500ms.
-                const doSet = async () => {
-                  try {
-                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] invoking SetCurrentProgramScene ->', preferredScene); } catch {}
-                    if (bridge && typeof bridge.setCurrentProgramScene === 'function') {
-                      await bridge.setCurrentProgramScene(preferredScene);
-                    } else if (a && a.call) {
-                      await a.call('SetCurrentProgramScene', { sceneName: preferredScene });
-                    } else if (typeof a.setCurrentProgramScene === 'function') {
-                      await a.setCurrentProgramScene(preferredScene);
-                    } else if (window.obsSocket && typeof window.obsSocket.call === 'function') {
-                      await window.obsSocket.call('SetCurrentProgramScene', { sceneName: preferredScene });
-                    }
-                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] SetCurrentProgramScene complete'); } catch {}
-                  } catch {
-                    try { if (window.__TP_DEV) console.error('[OBS-SCENE] SetCurrentProgramScene failed', se); } catch {}
-                  }
-                };
-
-                // Try to detect a transition API; otherwise wait 500ms quiet and set
-                let transitionHandled = false;
-                try {
-                  if (bridge && typeof bridge.on === 'function') {
-                    const off = bridge.on('TransitionEnd', async () => {
-                      if (transitionHandled) return;
-                      transitionHandled = true;
-                      try {
-                        off && off();
-                      } catch {}
-                      await doSet();
-                    });
-                    // fallback: set a timeout in case TransitionEnd never fires
-                    setTimeout(async () => {
-                      if (transitionHandled) return;
-                      transitionHandled = true;
-                      await doSet();
-                    }, 800);
-                  } else {
-                    // no transition API: wait a short quiet window then set
-                    setTimeout(async () => {
-                      await doSet();
-                    }, 600);
-                  }
-                } catch {
-                  try { if (window.__TP_DEV) console.error('[OBS-SCENE] transition detection failed', e); } catch {}
-                }
-              }
-            }
-          } catch {}
-        }
-      } catch {}
-
-      // 4) Start recording (bridge preferred)
-      try {
-        if (bridge) {
-          await bridge.start();
-          try {
-            window.setRecChip('recording');
-            window.__obsLastRecEventAt = Date.now();
-          } catch {}
-          return true;
-        }
-        if (a) {
-          if (typeof a.start === 'function') {
-            await a.start();
-            try {
-              window.setRecChip('recording');
-              window.__obsLastRecEventAt = Date.now();
-            } catch {}
-            return true;
-          }
-          if (a.call) {
-            await a.call('StartRecord');
-            try {
-              window.setRecChip('recording');
-              window.__obsLastRecEventAt = Date.now();
-            } catch {}
-            return true;
-          }
-        }
-      } catch {
-        // start failed
-        return false;
-      }
-
-      return false;
-    }
+    // (ensureRecordingMini removed; registry handles start/stop)
     const show = (v) => {
       countNum.textContent = String(v);
       countOverlay.style.display = 'flex';
       sendToDisplay({ type: 'preroll', show: true, n: v });
       try {
-        if (!__prerollStarted && window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
+        // Fire Auto‑record at T-2s (v <= 2) only, guard idempotently
+        if (!__prerollStarted && v <= 2 && window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
           __prerollStarted = true;
-          try {
-            if (window.__obsRecArmed) return;
-            window.__obsRecArmed = true;
-            (async () => {
-              try {
-                const ok = await ensureRecordingMini();
-                if (!ok) {
-                  _toast("Couldn't start OBS recording", { type: 'error' });
-                  // allow manual retry via top rec chip
-                  try {
-                    const c = document.getElementById('recChip');
-                    if (c) {
-                      c.style.cursor = 'pointer';
-                      c.onclick = async () => {
-                        _toast('Retrying OBS start…');
-                        await ensureRecordingMini();
-                      };
-                    }
-                  } catch {}
-                } else {
-                  // Wait ~1.5s for RecordStateChanged confirmation; show clickable retry on failure
-                  const t0 = Date.now();
-                  const saw = await new Promise((resolve) => {
-                    const id = setInterval(() => {
-                      if (
-                        window.__obsLastRecEventAt &&
-                        Date.now() - window.__obsLastRecEventAt < 1600
-                      ) {
-                        clearInterval(id);
-                        resolve(true);
-                        return;
-                      }
-                      if (Date.now() - t0 > 1500) {
-                        clearInterval(id);
-                        resolve(false);
-                        
-                      }
-                    }, 150);
-                  });
-                  if (!saw) {
-                    _toast("OBS didn't confirm recording — click to retry", {
-                      type: 'error',
-                      onClick: async () => {
-                        _toast('Retrying OBS start…');
-                        try {
-                          await ensureRecordingMini();
-                        } catch {}
-                      },
-                    });
+          let recConfirmed = false;
+          const onRec = (e) => {
+            try { if (e?.detail?.state === 'recording') recConfirmed = true; } catch {}
+          };
+          try { window.addEventListener('rec:state', onRec, { passive: true }); } catch {}
+          // Kick primary start via registry (idempotent handled inside)
+          try { window.__tpHud?.log?.('[rec] start obs'); } catch {}
+          try { window.__recorder?.start?.(); } catch {}
+
+          // Retry once at T-0.5s if still not recording
+          setTimeout(async () => {
+            try {
+              if (recConfirmed) return;
+              try { window.__tpHud?.log?.('[rec] retry'); } catch {}
+              await (window.__recorder?.start?.() || Promise.resolve());
+              // If still not confirmed, fallback to Bridge hotkey (if configured)
+              setTimeout(async () => {
+                try {
+                  if (recConfirmed) return;
+                  const bridge = (window.__recorder && window.__recorder.get) ? window.__recorder.get('bridge') : null;
+                  if (bridge && typeof bridge.start === 'function') {
+                    try { window.__tpHud?.log?.('[rec] fallback bridge'); } catch {}
+                    try { await bridge.start(); } catch {}
+                    // Emit single-source bus update noting fallback
+                    try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'bridge', state: 'recording', detail: { fallback: true } } })); } catch {}
+                    _toast('Recording via Bridge (hotkey)', { type: 'warn' });
                   }
-                }
-              } catch {}
-            })();
-          } catch {}
+                } catch {}
+              }, 300);
+            } catch {}
+          }, Math.max(0, 1500));
+          // Clean listener after countdown ends
+          setTimeout(() => { try { window.removeEventListener('rec:state', onRec); } catch {} }, Math.max(0, (v * 1000) + 2000));
         }
       } catch {}
     };

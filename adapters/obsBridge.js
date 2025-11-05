@@ -240,6 +240,17 @@ const bridge = {
       return null;
     }
   },
+  async getRecordDirectory() {
+    try {
+      await _connectOnce();
+      if (!_obsClient) return null;
+      const res = await _obsClient.call('GetRecordDirectory');
+      return res || null; // { recordDirectory }
+    } catch (e) {
+      _emit('error', e);
+      return null;
+    }
+  },
   async getCurrentProgramScene() {
     try {
       await _connectOnce();
