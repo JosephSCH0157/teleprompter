@@ -479,6 +479,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   onUiPrefs((p) => { gatePref = p.hybridGate; applyGate(); });
 
+  // (Initial seeding moved below after variables are declared)
+
   // ASR v2 Orchestrator (minimal integration): only run when mode is 'wpm'/'asr' AND speech is active
   const orch = createOrchestrator();
   let orchRunning = false;
