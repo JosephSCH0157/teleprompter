@@ -27,7 +27,7 @@ Run with: node tools/rec_smoke.js
       id: 'obs', label: 'OBS (fake)',
       async isAvailable(){ return true; },
       async start(){ startCount++; if (startCount === 1) return; /* succeed */ },
-      async stop(){ /* no-op */ },
+      async stop(){ await new Promise(r=>setTimeout(r, 80)); /* simulate slow stop */ },
     };
     const fakeBridge = {
       id: 'bridge', label: 'Bridge (fake)',
@@ -63,6 +63,31 @@ Run with: node tools/rec_smoke.js
     const rawMode = (typeof localStorage !== 'undefined' && localStorage.getItem && localStorage.getItem('tp_record_mode')) || null;
     const rawSel = (typeof localStorage !== 'undefined' && localStorage.getItem && localStorage.getItem('tp_adapters')) || null;
     if (rawMode && rawSel) pass('rec: legacy mirrors present'); else pass('rec: legacy mirrors present (no LS)');
+
+    // 5) Start-timeout → Bridge fallback
+    // Mock window.__obsBridge so startObsWithConfirm will fail confirm and fallback to bridge
+    global.window.__obsBridge = {
+      async start(){ /* no-op */ },
+      async getRecordStatus(){ return { outputActive: false }; },
+      on(){},
+    };
+    // Ensure bridge adapter exists and isAvailable
+    rec.register({ id:'bridge', label:'Bridge (fake)', async isAvailable(){ return true; }, async start(){}, async stop(){} });
+    // Select OBS so startSelected chooses obs path
+    rec.setSettings({ mode:'single', selected:['obs'] });
+    const events = [];
+    window.addEventListener('rec:state', (e) => events.push(e.detail));
+    await rec.startSelected();
+    const lastEv = events.slice(-1)[0] || {};
+    if (lastEv.adapter === 'bridge' && lastEv.state === 'recording' && lastEv.detail && lastEv.detail.fallback === true) pass('rec: fallback when obs start times out');
+    else fail('rec: fallback when obs start times out', JSON.stringify(lastEv));
+
+    // 6) Idempotent stop while stopping (double stop)
+    const p1 = rec.stopSelected();
+    const p2 = rec.stopSelected();
+    await Promise.all([p1, p2]);
+    const st = rec.getRecState?.() || {};
+    if (st.state === 'idle') pass('rec: idempotent stop while stopping'); else fail('rec: idempotent stop while stopping', JSON.stringify(st));
 
   } catch (e) {
     console.error('rec_smoke error', e);

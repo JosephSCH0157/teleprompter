@@ -340,6 +340,10 @@ let _recState = 'idle';
 let _recDetail = null;
 let _recAdapter = null; // last chosen primary adapter when in single mode
 
+// Small time helpers
+const __now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+const __sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms || 0)));
+
 function _emitRecState(state, detail) {
   try {
     _recState = state;
@@ -368,6 +372,61 @@ function selectedIds() {
   const ids = Array.isArray(settings.selected) ? settings.selected.slice() : [];
   if (settings.mode === 'single' && ids.length > 1) ids.length = 1;
   return ids.filter((id) => registry.has(id));
+}
+
+// --- OBS start with confirm + retry + bridge fallback (self-contained) -----
+async function startObsWithConfirm({ timeoutMs = 1200, retryDelayMs = 500 } = {}) {
+  const obs = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
+  const bridgeAdapter = registry.get('bridge');
+  try { window.__tpHud?.log?.('[rec] start obs'); } catch {}
+  // Announce obs starting explicitly
+  try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'obs', state: 'starting' } })); } catch {}
+
+  let fallbackSent = false;
+  const confirm = async () => {
+    try {
+      const s = await obs?.getRecordStatus?.();
+      return !!(s && (s.outputActive === true));
+    } catch { return false; }
+  };
+  const tryStart = async () => {
+    try { if (obs && typeof obs.start === 'function') await obs.start(); else if (obs && typeof obs.startRecord === 'function') await obs.startRecord(); } catch {}
+  };
+
+  await tryStart();
+
+  // poll until timeout
+  let ok = false; let deadline = __now() + timeoutMs;
+  while (!ok && __now() < deadline) {
+    ok = await confirm();
+    if (!ok) await __sleep(120);
+  }
+
+  if (!ok) {
+    try { window.__tpHud?.log?.('[rec] retry'); } catch {}
+    await __sleep(Math.max(0, retryDelayMs));
+    await tryStart();
+    ok = await confirm();
+  }
+
+  if (ok) {
+    try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'obs', state: 'recording' } })); } catch {}
+    return { ok: true, adapter: 'obs' };
+  }
+
+  // fallback to Bridge (once)
+  const isBridgeAvailable = !!bridgeAdapter;
+  if (!fallbackSent && isBridgeAvailable) {
+    fallbackSent = true;
+    try { await bridgeAdapter.start?.(); } catch {}
+    try { window.__tpHud?.log?.('[rec] fallback bridge'); } catch {}
+    try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'bridge', state: 'recording', detail: { fallback: true } } })); } catch {}
+    return { ok: true, adapter: 'bridge', fallback: true };
+  }
+
+  try { window.__tpHud?.log?.('[rec] drop (start-timeout)'); } catch {}
+  try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'obs', state: 'error', detail: { reason: 'start-timeout' } } })); } catch {}
+  return { ok: false, adapter: 'obs', error: 'start-timeout' };
 }
 
 /** Start selected recorders based on settings (respects mode, timeouts, failPolicy). */
@@ -399,9 +458,15 @@ export async function startSelected() {
         return { id, ok: false, error: String(e?.message || e) };
       }
       try {
-        await callWithTimeout(() => a.start(), settings.timeouts.start);
-        started.push(id);
-        return { id, ok: true };
+        if (id === 'obs') {
+          const res = await startObsWithConfirm({ timeoutMs: Math.min(2000, settings.timeouts.start || 1500), retryDelayMs: 500 });
+          if (res.ok) { started.push(id); return { id, ok: true, detail: res }; }
+          return { id, ok: false, error: res.error || 'failed' };
+        } else {
+          await callWithTimeout(() => a.start(), settings.timeouts.start);
+          started.push(id);
+          return { id, ok: true };
+        }
       } catch (e) {
         return { id, ok: false, error: String(e?.message || e) };
       }
@@ -422,7 +487,14 @@ export async function startSelected() {
     }
     if (started.length) {
       try { window.__tpHud?.log?.('[rec] recording'); } catch {}
-      _emitRecState('recording');
+      // If OBS fell back to Bridge, reflect that as the active adapter with fallback detail
+      const anyFallback = results.find(r => r && r.id === 'obs' && r.detail && r.detail.fallback);
+      if (anyFallback) {
+        _recAdapter = 'bridge';
+        _emitRecState('recording', { fallback: true, via: 'bridge' });
+      } else {
+        _emitRecState('recording');
+      }
     } else {
       _emitRecState('error', { results });
     }
@@ -563,6 +635,38 @@ export async function initBuiltIns() {
 try {
   initBuiltIns();
 } catch {}
+
+// Wire OBS disconnect → fallback guard once
+(function wireObsDisconnectFallback(){
+  try {
+    if (typeof window === 'undefined') return;
+    const br = window.__obsBridge;
+    if (!br) return;
+    if (window.__tpObsDisconnectWired) return;
+    window.__tpObsDisconnectWired = true;
+    br.on && br.on('disconnect', async () => {
+      try {
+        const state = _recState;
+        const bridgeAdapter = registry.get('bridge');
+        const isAuto = (localStorage.getItem('tp_auto_record') === '1') || (localStorage.getItem('tp_auto_record_on_start_v1') === '1');
+        if (state === 'starting') {
+          // treat like a start failure; reuse confirm path which will timeout and then fallback (if configured)
+          await startObsWithConfirm({ timeoutMs: 900, retryDelayMs: 300 });
+          return;
+        }
+        if (state === 'recording') {
+          _emitRecState('stopping', { reason: 'disconnect' });
+          if (isAuto && bridgeAdapter) {
+            try { await bridgeAdapter.start?.(); } catch {}
+            try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'bridge', state: 'recording', detail: { fallback: true, reason: 'obs-disconnect' } } })); } catch {}
+          } else {
+            _emitRecState('idle', { reason: 'disconnect' });
+          }
+        }
+      } catch {}
+    });
+  } catch {}
+})();
 
 // Simple aliases for consumers that prefer start/stop terminology
 export async function start() {
