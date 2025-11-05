@@ -2,8 +2,8 @@
 // File: src/index-hooks/asr.ts
 // =============================================================
 import { AsrMode } from '../features/asr-mode';
-import { mountAsrSettings } from '../ui/settings-asr';
 import { installAsrHotkeys } from '../hotkeys/asr-hotkeys';
+import { mountAsrSettings } from '../ui/settings-asr';
 import { AsrTopbar } from '../ui/topbar-asr';
 
 export function initAsrFeature() {
