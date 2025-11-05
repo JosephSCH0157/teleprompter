@@ -1,7 +1,7 @@
 // =============================================================
 // File: src/speech/engines/webspeech.ts
 // =============================================================
-import type { AsrEngine, AsrEngineOptions, AsrEvent} from '../asr-engine';
+import type { AsrEngine, AsrEngineOptions, AsrEvent } from '../asr-engine';
 import { Emitter } from '../asr-engine';
 
 /**

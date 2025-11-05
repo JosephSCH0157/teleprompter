@@ -1,7 +1,7 @@
 // =============================================================
 // File: src/features/asr-mode.ts
 // =============================================================
-import type { AsrEngine, AsrEngineName, AsrEvent} from '../speech/asr-engine';
+import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { speechStore } from '../state/speech-store';
