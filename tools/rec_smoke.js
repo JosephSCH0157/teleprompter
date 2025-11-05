@@ -136,4 +136,12 @@ Run with: node tools/rec_smoke.js
     console.error('rec_smoke error', e);
     fail('setup', String(e && e.message || e));
   }
-})();
+})().finally(async () => {
+  try {
+    const mod = await import('../recorders.js');
+    try { await mod.teardownRecorders?.(); } catch {}
+  } catch {}
+  try { window.__recorder?.__finalizeForTests?.(); } catch {}
+  // Give any final logs a chance to flush, then hard-exit to avoid stray timers
+  setImmediate(() => { try { process.exit(0); } catch {} });
+});

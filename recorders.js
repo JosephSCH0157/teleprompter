@@ -346,9 +346,23 @@ let __recEpoch = 0;
 // Hotkey flood guard for Bridge taps
 let __lastBridgeTap = 0;
 
+// ---- test/teardown plumbing ----
+const __recTimers = new Set();
+/** trackable timeout */
+function setTrackedTimeout(fn, ms) {
+  const h = setTimeout(() => {
+    try { __recTimers.delete(h); } catch {}
+    try { fn(); } catch {}
+  }, Math.max(0, ms || 0));
+  try { __recTimers.add(h); } catch {}
+  return h;
+}
+let _onObsDisconnectCb = null;
+let _onObsRecordingStartedCb = null;
+
 // Small time helpers
 const __now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
-const __sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms || 0)));
+const __sleep = (ms) => new Promise((r) => setTrackedTimeout(r, Math.max(0, ms || 0)));
 
 let __lastRecKey = '';
 function _emitRecState(state, detail) {
@@ -430,10 +444,35 @@ try {
       window.__recorder.__finalizeForTests = () => {
         try { clearHandoffTimer(); } catch {}
         try { __recEpoch++; } catch {}
+        try { if (__recStatsTimer) { clearInterval(__recStatsTimer); __recStatsTimer = 0; } } catch {}
       };
     }
   }
 } catch {}
+
+// Exposed teardown for tests: clears timers and OBS listeners
+export async function teardownRecorders(){
+  try { __recEpoch++; } catch {}
+  try { __lastBridgeTap = 0; } catch {}
+  // Clear tracked timeouts
+  try { for (const h of Array.from(__recTimers)) { clearTimeout(h); __recTimers.delete(h); } } catch {}
+  // Clear periodic timers
+  try { clearHandoffTimer(); } catch {}
+  try { if (__recStatsTimer) { clearInterval(__recStatsTimer); __recStatsTimer = 0; } } catch {}
+  // Unbind OBS listeners if bridge supports off/removeListener
+  try {
+    const br = (typeof window !== 'undefined') ? window.__obsBridge : null;
+    if (br) {
+      if (typeof br.off === 'function') {
+        try { if (_onObsDisconnectCb && window.__tpObsDisconnectWired) { br.off('disconnect', _onObsDisconnectCb); window.__tpObsDisconnectWired = false; } } catch {}
+        try { if (_onObsRecordingStartedCb && window.__tpObsHandoffWired) { br.off('recordingStarted', _onObsRecordingStartedCb); window.__tpObsHandoffWired = false; } } catch {}
+      } else if (typeof br.removeListener === 'function') {
+        try { if (_onObsDisconnectCb && window.__tpObsDisconnectWired) { br.removeListener('disconnect', _onObsDisconnectCb); window.__tpObsDisconnectWired = false; } } catch {}
+        try { if (_onObsRecordingStartedCb && window.__tpObsHandoffWired) { br.removeListener('recordingStarted', _onObsRecordingStartedCb); window.__tpObsHandoffWired = false; } } catch {}
+      }
+    }
+  } catch {}
+}
 
 // --- OBS start with confirm + retry + bridge fallback (self-contained) -----
 async function startObsWithConfirm({ timeoutMs = 1200, retryDelayMs = 500 } = {}) {
@@ -746,7 +785,7 @@ function ensureObsDisconnectFallback(){
     const br = window.__obsBridge;
     if (!br || typeof br.on !== 'function') return;
     if (window.__tpObsDisconnectWired) return; window.__tpObsDisconnectWired = true;
-    br.on('disconnect', async () => {
+    _onObsDisconnectCb = async () => {
       try {
         const state = _recState;
         const bridgeAdapter = registry.get('bridge');
@@ -766,7 +805,8 @@ function ensureObsDisconnectFallback(){
           }
         }
       } catch {}
-    });
+    };
+    br.on('disconnect', _onObsDisconnectCb);
   } catch {}
 }
 
@@ -796,7 +836,7 @@ function ensureObsRecordingStartedHandoff(){
     const br = window.__obsBridge;
     if (!br || typeof br.on !== 'function') return;
     if (window.__tpObsHandoffWired) return; window.__tpObsHandoffWired = true;
-    br.on('recordingStarted', async () => {
+    _onObsRecordingStartedCb = async () => {
       try {
         const prefer = !!(settings && settings.preferObsHandoff);
         if (_recState === 'recording' && _recAdapter === 'bridge') {
@@ -811,7 +851,8 @@ function ensureObsRecordingStartedHandoff(){
           _emitRecState('recording', { handoff: true });
         }
       } catch {}
-    });
+    };
+    br.on('recordingStarted', _onObsRecordingStartedCb);
   } catch {}
 }
 
@@ -1061,6 +1102,7 @@ try {
   if (typeof window !== 'undefined') {
     clearInterval(__recStatsTimer);
     __recStatsTimer = setInterval(()=>emitRecStats(false), 5000);
+    try { if (typeof __recStatsTimer.unref === 'function') __recStatsTimer.unref(); } catch {}
     window.addEventListener('beforeunload', () => emitRecStats(true));
   }
 } catch {}
