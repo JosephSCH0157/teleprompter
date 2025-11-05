@@ -51,4 +51,5 @@
   } catch {}
 })();
 
-export {};
+export { };
+
