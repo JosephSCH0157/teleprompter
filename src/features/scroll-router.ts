@@ -146,6 +146,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (state.mode === 'wpm' && enabledNow) {
       try { const pxs = mapWpmToPxPerSec(val, document); auto?.setSpeed?.(pxs); } catch {}
     }
+    try { updateWpmPxLabel(); } catch {}
   }
   function updateWpmUiVisibility() {
     try {
@@ -157,6 +158,17 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       // Seed input value from storage
       const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
       if (input) input.value = String(getTargetWpm());
+      try { updateWpmPxLabel(); } catch {}
+    } catch {}
+  }
+  function updateWpmPxLabel(){
+    try {
+      const chip = document.getElementById('wpmPx');
+      if (!chip) return;
+      const pxs = mapWpmToPxPerSec(getTargetWpm(), document);
+      const s = (Math.round(pxs * 10) / 10).toFixed(1);
+      chip.textContent = `≈ ${s} px/s`;
+      chip.title = `Mapped at current layout`;
     } catch {}
   }
 
@@ -243,9 +255,20 @@ export function installScrollRouter(opts: ScrollRouterOpts){
     if (detail) el.title = detail;
   }
 
-  const getStoredSpeed = (): number => {
+  // Per-mode speed persistence (fallback to global)
+  const speedKey = (m: Mode) => `tp_speed_${m}`;
+  const getStoredSpeedForMode = (m: Mode): number => {
+    try {
+      const v = Number(localStorage.getItem(speedKey(m)) || '');
+      if (Number.isFinite(v) && v > 0) return v;
+    } catch {}
     try { return Number(localStorage.getItem('tp_auto_speed') || '60') || 60; } catch { return 60; }
   };
+  const setStoredSpeedForMode = (m: Mode, v: number) => {
+    try { localStorage.setItem(speedKey(m), String(v)); } catch {}
+    try { localStorage.setItem('tp_auto_speed', String(v)); } catch {}
+  };
+  const getStoredSpeed = (): number => getStoredSpeedForMode(state.mode);
 
   function applyGate() {
     if (state.mode !== 'hybrid') {
@@ -379,6 +402,14 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         updateWpmUiVisibility();
         applyGate();
         ensureOrchestratorForMode();
+        // When switching into a non-WPM mode and Auto is desired, apply that mode's stored speed immediately
+        try {
+          if (state.mode !== 'wpm' && userEnabled && speechActive) {
+            const s = getStoredSpeedForMode(state.mode);
+            auto?.setSpeed?.(s);
+            lastSpeed = s;
+          }
+        } catch {}
       }
     }, { capture: true });
     // Screen-reader live announcement on the single control
@@ -418,6 +449,11 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       vadGate = !!(e && e.detail && e.detail.speaking);
       applyGate();
     });
+  } catch {}
+
+  // Update WPM px/s label on typography/layout changes
+  try {
+    window.addEventListener('tp:lineMetricsDirty', () => { try { updateWpmPxLabel(); } catch {} });
   } catch {}
 
   // External user intent control (speech start/stop, automation)
@@ -483,6 +519,10 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       const ds = btn.dataset?.state || '';
       const raw = (e && e.detail && typeof e.detail.speed === 'number') ? e.detail.speed : getStoredSpeed();
       lastSpeed = raw;
+      // Persist per-mode for non-WPM modes
+      try {
+        if (state.mode !== 'wpm') { setStoredSpeedForMode(state.mode as any, raw); }
+      } catch {}
       const s = (Math.round(raw * 10) / 10).toFixed(1);
       if (ds === 'on') btn.textContent = `Auto-scroll: On — ${s} px/s`;
       if (ds === 'paused') btn.textContent = `Auto-scroll: Paused — ${s} px/s`;
@@ -505,34 +545,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         return linesPerSec * lineHeightPx;
       } catch { return (wpm / 60) / 8 * (56 * 1.4); }
     }
-    function getTargetWpm(): number {
-      try { return Number(localStorage.getItem('tp_wpm_target') || '150') || 150; } catch { return 150; }
-    }
-    function setTargetWpm(wpm: number) {
-      const val = clamp(Math.round(wpm), 60, 260);
-      try { localStorage.setItem('tp_wpm_target', String(val)); } catch {}
-      try {
-        const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
-        if (input) input.value = String(val);
-      } catch {}
-      // If active in WPM mode and enabled, apply immediately
-      if (state.mode === 'wpm' && enabledNow) {
-        try { const pxs = mapWpmToPxPerSec(val, document); auto?.setSpeed?.(pxs); lastSpeed = pxs; } catch {}
-      }
-    }
-    function updateWpmUiVisibility() {
-      try {
-        const row = document.getElementById('wpmRow');
-        if (!row) return;
-        const on = state.mode === 'wpm';
-        if (on) { row.classList.remove('visually-hidden'); row.setAttribute('aria-hidden','false'); }
-        else { row.classList.add('visually-hidden'); row.setAttribute('aria-hidden','true'); }
-        // Seed input value from storage
-        const input = document.getElementById('wpmTarget') as HTMLInputElement | null;
-        if (input) input.value = String(getTargetWpm());
-      } catch {}
-    }
-    // Initialize UI visibility on first load
+    // Initialize WPM UI on first load
     updateWpmUiVisibility();
 
     // Unified helpers so clicks and keys behave consistently across modes
@@ -545,6 +558,7 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         const next = clamp(base + delta, 1, 200);
         auto?.setSpeed?.(next);
         lastSpeed = next;
+        try { if (state.mode !== 'wpm') setStoredSpeedForMode(state.mode as any, next); } catch {}
       } catch {}
     };
     const adjustWpmTarget = (delta: number) => {
