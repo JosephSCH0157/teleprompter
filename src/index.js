@@ -506,20 +506,37 @@ async function boot() {
 
     // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {
-      let asrMod = null;
-      const probe = async (url) => {
-        try { const r = await fetch(url, { method: 'HEAD' }); return r && r.ok; } catch { return false; }
+      // Tiny helper: HEAD probe without caching
+      const headOk = async (url) => {
+        try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return !!(r && r.ok); }
+        catch { return false; }
       };
-      if (await probe('/dist/index-hooks/asr.js')) {
-        try { asrMod = await import('/dist/index-hooks/asr.js'); } catch {}
-      } else if (await probe('/src/index-hooks/asr.js')) {
-        try { asrMod = await import('./index-hooks/asr.js'); } catch {}
-      }
-      if (asrMod && typeof asrMod.initAsrFeature === 'function') {
-        try { asrMod.initAsrFeature(); } catch (e) { console.warn('[src/index] initAsrFeature failed', e); }
+
+      // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
+      const candidates = [
+        '/dist/index-hooks/asr.js',
+        '/dist/asr.js',
+        './src/index-hooks/asr.js',
+      ];
+
+      let asrEntry = null;
+      for (const c of candidates) { if (await headOk(c)) { asrEntry = c; break; } }
+
+      if (!asrEntry) {
+        try { console.info('[ASR] no module found, skipping init'); } catch {}
       } else {
-        // ASR feature not built yet — safe to skip in dev
-        try { console.info('[src/index] ASR not available (no dist/src module)'); } catch {}
+        try {
+          const mod = await import(asrEntry);
+          const init = (mod && (mod.initAsrFeature || mod.default));
+          if (typeof init === 'function') {
+            init();
+            try { console.info('[ASR] initialized from', asrEntry); } catch {}
+          } else {
+            try { console.warn('[ASR] module missing initAsrFeature', asrEntry); } catch {}
+          }
+        } catch (e) {
+          console.warn('[ASR] failed to init', asrEntry, e);
+        }
       }
     } catch (e) { console.warn('[src/index] ASR module probe/import failed', e); }
 
