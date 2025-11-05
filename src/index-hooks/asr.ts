@@ -13,32 +13,71 @@ export function initAsrFeature() {
   installAsrHotkeys();
 
   // Create coordinator and topbar UI
-  const mode = new AsrMode();
-  // Optional status-only topbar (no Start/Stop button)
-  try { new AsrTopbar(mode).mount('#topbarRight, .topbar, header, body'); } catch {}
+  let asrMode: AsrMode | null = null;
+  let speechActive = false;
+  let asrActive = false;
+  let autoHeld = false;
 
-  const start = () => { try { if (mode.getState?.() !== 'running' && mode.getState?.() !== 'listening') mode.start?.(); } catch { mode.start?.(); } };
-  const stop = () => { mode.stop?.(); };
-
-  // Wire ASR lifecycle to Speech Sync and mode changes
-  const getMode = (): string => {
-    try { return (document.getElementById('scrollMode') as HTMLSelectElement | null)?.value || ''; } catch { return ''; }
+  const wantASR = (): boolean => {
+    try { return ((document.getElementById('scrollMode') as HTMLSelectElement | null)?.value || '').toLowerCase() === 'asr'; } catch { return false; }
   };
-  const speechOn = (): boolean => {
-    try { return document.body.classList.contains('speech-listening') || (window as any).speechOn === true; } catch { return false; }
+  const holdAuto = () => {
+    if (autoHeld) return;
+    autoHeld = true;
+    try {
+      (window as any).__tpAuto?.set?.(false);
+      window.dispatchEvent(new CustomEvent('autoscroll:disable', { detail: 'asr' }));
+    } catch {}
   };
-  const reconcile = () => { try { (speechOn() && getMode() === 'asr') ? start() : stop(); } catch {} };
+  const releaseAuto = () => {
+    if (!autoHeld) return;
+    autoHeld = false;
+    try {
+      (window as any).__tpAuto?.set?.(true);
+      window.dispatchEvent(new CustomEvent('autoscroll:enable', { detail: 'asr' }));
+    } catch {}
+  };
+  const ensureMode = async (): Promise<AsrMode> => {
+    if (!asrMode) {
+      asrMode = new AsrMode({ rootSelector: '#scriptRoot, #script, body', lineSelector: '.line, p', markerOffsetPx: 140, windowSize: 6 });
+      try { new AsrTopbar(asrMode).mount('#topbarRight, .topbar, header, body'); } catch {}
+    }
+    return asrMode;
+  };
+  const start = async () => {
+    if (asrActive) return;
+    const m = await ensureMode();
+    try { holdAuto(); await m.start(); asrActive = true; }
+    catch (err) { asrActive = false; releaseAuto(); try { console.warn('[ASR] start failed, staying on non-ASR sync', err); } catch {} }
+  };
+  const stop = async () => {
+    if (!asrActive) return;
+    try { await asrMode?.stop?.(); }
+    finally { asrActive = false; releaseAuto(); }
+  };
 
-  window.addEventListener('tp:speech-state', reconcile);
-  document.addEventListener('change', (e: any) => { try { if (e?.target?.id === 'scrollMode') reconcile(); } catch {} });
-
-  // Keep hotkey support for advanced users (optional override)
-  window.addEventListener('asr:toggle', (e: any) => {
-    const armed = !!e?.detail?.armed;
-    armed ? start() : stop();
+  // Speech Sync lifecycle → drive ASR (support both boolean and string states)
+  window.addEventListener('tp:speech-state', (ev: any) => {
+    try {
+      const d = ev?.detail || {};
+      const on = (d.running === true) || (typeof d.state === 'string' && (d.state === 'active' || d.state === 'running'));
+      speechActive = !!on;
+      if (speechActive && wantASR()) void start(); else void stop();
+    } catch {}
   });
-  window.addEventListener('asr:stop', stop);
+  // Mode selector changes while running
+  document.addEventListener('change', (ev: any) => {
+    try { if (ev?.target?.id !== 'scrollMode') return; if (!speechActive) return; wantASR() ? void start() : void stop(); } catch {}
+  });
 
-  // Initial pass (covers case when ASR module loads after speech already started)
-  reconcile();
+  // Hotkey override (optional)
+  window.addEventListener('asr:toggle', (e: any) => { const armed = !!e?.detail?.armed; armed ? void start() : void stop(); });
+  window.addEventListener('asr:stop', () => { void stop(); });
+
+  // Initial reconcile for late loads
+  try {
+    const body = document.body as HTMLElement | null;
+    speechActive = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening'))) || (window as any).speechOn === true;
+    if (speechActive && wantASR()) void start();
+  } catch {}
 }
