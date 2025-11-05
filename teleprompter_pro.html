@@ -286,6 +286,13 @@
   <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
   <button id="autoToggle">Auto-scroll: Off</button>
 </div>
+<div class="row visually-hidden" id="wpmRow" aria-hidden="true">
+  <label>Target WPM
+    <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
+  </label>
+  <span class="chip" id="wpmHint">Shown in WPM mode</span>
+  
+</div>
 <!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
 <select id="micDeviceSel" class="select-md" hidden></select>
  <div class="row" id="sidebarMediaHint">

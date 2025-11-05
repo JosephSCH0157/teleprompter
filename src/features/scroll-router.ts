@@ -488,7 +488,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
   let speechActive = false;
   async function ensureOrchestratorForMode() {
     try {
-      if ((state.mode === 'wpm' || state.mode === 'asr') && speechActive) {
+      // Only needed for ASR-driven pacing; WPM mode is fixed-target
+      if ((state.mode === 'asr') && speechActive) {
         if (!orchRunning) {
           await orch.start(createVadEventAdapter()); // use VAD events for speaking; WPM updates when tokens are available
           orch.setMode('assist');
@@ -517,8 +518,8 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       } catch {}
     });
   } catch {}
-  // Track actual engine state and manage delayed stop when speech falls silent
-  let enabledNow: boolean = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
+  // Initialize enabled state from engine
+  enabledNow = (() => { try { return !!opts.auto.getState?.().enabled; } catch { return false; } })();
   let silenceTimer: number | undefined;
 
   // Speed tracking to avoid jumps when engine doesn't expose current speed
@@ -572,6 +573,13 @@ export function installScrollRouter(opts: ScrollRouterOpts){
       const want = !!userEnabled && !!speechActive;
       if (typeof auto.setEnabled === 'function') auto.setEnabled(want);
       enabledNow = want;
+      // In WPM mode, map target WPM to px/s whenever enabled
+      try {
+        if (state.mode === 'wpm' && want) {
+          const pxs = mapWpmToPxPerSec(getTargetWpm(), document);
+          try { auto.setSpeed?.(pxs); lastSpeed = pxs; } catch {}
+        }
+      } catch {}
       const detail = `Mode: ${state.mode} • User: ${userEnabled ? 'On' : 'Off'} • Speech:${speechActive ? '1' : '0'}`;
   setAutoChip(userEnabled ? (enabledNow ? 'on' : 'paused') : 'manual', detail);
       try {
@@ -838,6 +846,12 @@ export function installScrollRouter(opts: ScrollRouterOpts){
         auto?.setSpeed?.(next);
         lastSpeed = next;
         try { if (state.mode !== 'wpm') setStoredSpeedForMode(state.mode as any, next); } catch {}
+      } catch {}
+    };
+    const adjustWpmTarget = (delta: number) => {
+      try {
+        const next = getTargetWpm() + delta;
+        setTargetWpm(next);
       } catch {}
     };
     const adjustWpmTarget = (delta: number) => {
