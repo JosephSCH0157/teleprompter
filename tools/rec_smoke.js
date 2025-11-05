@@ -136,12 +136,31 @@ Run with: node tools/rec_smoke.js
     console.error('rec_smoke error', e);
     fail('setup', String(e && e.message || e));
   }
+  // 9) Teardown idempotent
+  try {
+    const mod = await import('../recorders.js');
+    try { await mod.teardownRecorders?.(); } catch {}
+    try { await mod.teardownRecorders?.(); } catch {}
+    pass('rec: teardown idempotent');
+  } catch (e) {
+    fail('rec: teardown idempotent', String(e && e.message || e));
+  }
 })().finally(async () => {
   try {
     const mod = await import('../recorders.js');
     try { await mod.teardownRecorders?.(); } catch {}
   } catch {}
   try { window.__recorder?.__finalizeForTests?.(); } catch {}
-  // Give any final logs a chance to flush, then hard-exit to avoid stray timers
-  setImmediate(() => { try { process.exit(0); } catch {} });
+  // Optional: debug handles if a run gets sticky
+  try {
+    if (process?.env?.DEBUG_HANDLES === '1' && typeof process._getActiveHandles === 'function') {
+      const hs = process._getActiveHandles();
+      console.log('[debug] active handles:', hs.map(h => h?.constructor?.name));
+    }
+  } catch {}
+  // Gate hard exit for CI or direct script run; avoid yanking embedded runners
+  try {
+    const wantHardExit = (process?.env?.SMOKE_HARD_EXIT === '1') || (typeof require !== 'undefined' && require?.main === module);
+    if (wantHardExit) setImmediate(() => { try { process.exit(0); } catch {} });
+  } catch {}
 });

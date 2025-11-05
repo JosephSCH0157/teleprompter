@@ -361,6 +361,7 @@ let _onObsDisconnectCb = null;
 let _onObsRecordingStartedCb = null;
 
 // Small time helpers
+// NOTE: All recorder timers MUST use setTrackedTimeout (or register/unref) so tests can teardown cleanly.
 const __now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 const __sleep = (ms) => new Promise((r) => setTrackedTimeout(r, Math.max(0, ms || 0)));
 
@@ -1003,8 +1004,8 @@ let _reconnTimer = 0;
 function reconnectSoon(ms = 400) {
   try {
     clearTimeout(_reconnTimer);
-    _reconnTimer = setTimeout(() => {
-      connect();
+    _reconnTimer = setTrackedTimeout(() => {
+      try { connect(); } catch {}
     }, ms);
   } catch {}
 }
