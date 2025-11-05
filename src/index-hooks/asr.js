@@ -2,11 +2,36 @@
 // Uses the Web Speech API directly to avoid TS build requirements in dev.
 
 export function initAsrFeature() {
+  // Ensure the status chip is present as early as possible
+  try { (function(){ try { const el = document.getElementById('asrChip'); if (!el) { /* attempt mount into topbar */
+    const host = document.querySelector('#topbarRight, .topbar, header, body') || document.body;
+    const chip = document.createElement('span'); chip.id = 'asrChip'; chip.className = 'chip'; chip.textContent = 'ASR: off'; host.insertBefore(chip, host.firstChild);
+  } } catch {} })(); } catch {}
   // Simple text normalizer (aligns with TS normalizeText/stripFillers basics)
   const normalize = (s) => {
     try { return String(s || '').toLowerCase().replace(/[^a-z0-9\s']/g, ' ').replace(/\s+/g, ' ').trim(); } catch { return ''; }
   };
   const COVERAGE_THRESHOLD = 0.45; // conservative default; TS uses store threshold but we keep simple here
+
+  // Mount a small status chip in the top bar to reflect ASR state
+  const mountAsrChip = () => {
+    try {
+      if (document.getElementById('asrChip')) return document.getElementById('asrChip');
+      const host = document.querySelector('#topbarRight, .topbar, header, body') || document.body;
+      const chip = document.createElement('span');
+      chip.id = 'asrChip';
+      chip.className = 'chip';
+      chip.textContent = 'ASR: off';
+      host.insertBefore(chip, host.firstChild);
+      // Update on state changes
+      const map = { idle: 'off', ready: 'ready', listening: 'listening', running: 'listening', error: 'error' };
+      window.addEventListener('asr:state', (e) => {
+        try { const st = e?.detail?.state; chip.textContent = 'ASR: ' + (map[st] || st || 'off'); } catch {}
+      });
+      return chip;
+    } catch {}
+    return null;
+  };
 
   class WebSpeechEngine {
     constructor() {
@@ -46,6 +71,7 @@ export function initAsrFeature() {
     constructor(opts) {
       this.opts = Object.assign({ rootSelector: '#scriptRoot, #script, body', lineSelector: '.line, p', markerOffsetPx: 140, windowSize: 6 }, opts || {});
       this.engine = null; this.state = 'idle'; this.currentIdx = 0; this.rescueCount = 0;
+      try { mountAsrChip(); } catch {}
     }
     getState() { return this.state; }
     async start() {
