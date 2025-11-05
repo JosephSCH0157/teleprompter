@@ -44,6 +44,28 @@ export function initAsrFeature() {
       }
       chip.setAttribute('aria-live','polite');
       chip.setAttribute('aria-atomic','true');
+      // If router later inserts the ASR speed badge, hijack it and replace in-place
+      const hijackBadgeIfPresent = () => {
+        try {
+          const badge = document.getElementById('asrSpeedBadge');
+          if (badge && badge.isConnected) {
+            if (badge === chip) return true; // already hijacked (unlikely since ids differ)
+            const host = badge.parentElement;
+            const repl = chip; // move our chip into badge position
+            try { badge.replaceWith(repl); } catch { try { host.insertBefore(repl, badge); badge.remove(); } catch {} }
+            try { repl.dataset.asrMount = 'badge'; repl.style.display = ''; } catch {}
+            return true;
+          }
+        } catch {}
+        return false;
+      };
+      // Attempt immediate hijack, then observe for late insertion
+      if (!hijackBadgeIfPresent()) {
+        try {
+          const moBadge = new MutationObserver(() => { if (hijackBadgeIfPresent()) { try { moBadge.disconnect(); } catch {} } });
+          moBadge.observe(document.documentElement || document.body, { childList: true, subtree: true });
+        } catch {}
+      }
       // Update on state changes
       const map = { idle: 'off', ready: 'ready', listening: 'listening', running: 'listening', error: 'error' };
       window.addEventListener('asr:state', (e) => {
