@@ -422,6 +422,19 @@ function armObsHandoffWatchdog(){
   } catch {}
 }
 
+// --- test-only helper (safe no-op in prod) ---
+try {
+  if (typeof window !== 'undefined') {
+    window.__recorder = window.__recorder || {};
+    if (!window.__recorder.__finalizeForTests) {
+      window.__recorder.__finalizeForTests = () => {
+        try { clearHandoffTimer(); } catch {}
+        try { __recEpoch++; } catch {}
+      };
+    }
+  }
+} catch {}
+
 // --- OBS start with confirm + retry + bridge fallback (self-contained) -----
 async function startObsWithConfirm({ timeoutMs = 1200, retryDelayMs = 500 } = {}) {
   const obs = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
@@ -482,6 +495,8 @@ async function startObsWithConfirm({ timeoutMs = 1200, retryDelayMs = 500 } = {}
     if (isStale()) { try { window.__tpHud?.log?.('[rec] abort fallback (stale)'); } catch {} return { ok:false, adapter:'obs', error:'stale' }; }
     // flood guard on fallback taps
     await maybeTapBridge();
+    // stop() might have landed while we were tapping; bail if so
+    if (isStale()) { try { window.__tpHud?.log?.('[rec] abort fallback (stale-2)'); } catch {} return { ok:false, adapter:'obs', error:'stale' }; }
     try { window.__tpHud?.log?.('[rec] fallback bridge'); } catch {}
     try { _recAdapter = 'bridge'; _emitRecState('recording', { fallback: true }); } catch {}
     try { recStats.fallbacks++; } catch {}
@@ -512,6 +527,9 @@ export async function startSelected() {
       return { results: [], started: selectedIds() };
     }
     applyConfigs();
+    // Make sure OBS signals are wired even if __obsBridge attached late
+    try { ensureObsDisconnectFallback(); } catch {}
+    try { ensureObsRecordingStartedHandoff(); } catch {}
     const ids = selectedIds();
     // Track primary adapter (first selected in single mode or the first in list)
     _recAdapter = settings.mode === 'single' ? (ids[0] || null) : (ids[0] || null);
@@ -582,6 +600,8 @@ export async function startSelected() {
 export async function stopSelected() {
   // Bump epoch immediately to cancel any in-flight confirm/retry/fallback paths
   __recEpoch++;
+  // Reset Bridge tap flood guard so a fresh start can tap promptly after a stop
+  __lastBridgeTap = 0;
   // Stop any handoff watchdog
   clearHandoffTimer();
   // Allow stop to proceed even in no-record mode (safe cleanup)
@@ -708,6 +728,9 @@ export async function initBuiltIns() {
       } catch {}
     }
     applyConfigs();
+    // Late-bind OBS events if bridge appeared during adapter init
+    try { ensureObsDisconnectFallback(); } catch {}
+    try { ensureObsRecordingStartedHandoff(); } catch {}
   } catch {}
 }
 
@@ -716,22 +739,20 @@ try {
   initBuiltIns();
 } catch {}
 
-// Wire OBS disconnect → fallback guard once
-(function wireObsDisconnectFallback(){
+// Ensure OBS disconnect → fallback guard (bind once, late-safe)
+function ensureObsDisconnectFallback(){
   try {
     if (typeof window === 'undefined') return;
     const br = window.__obsBridge;
-    if (!br) return;
-    if (window.__tpObsDisconnectWired) return;
-    window.__tpObsDisconnectWired = true;
-    br.on && br.on('disconnect', async () => {
+    if (!br || typeof br.on !== 'function') return;
+    if (window.__tpObsDisconnectWired) return; window.__tpObsDisconnectWired = true;
+    br.on('disconnect', async () => {
       try {
         const state = _recState;
         const bridgeAdapter = registry.get('bridge');
         const isAuto = (localStorage.getItem('tp_auto_record') === '1') || (localStorage.getItem('tp_auto_record_on_start_v1') === '1');
         try { recStats.disconnects++; } catch {}
         if (state === 'starting') {
-          // treat like a start failure; reuse confirm path which will timeout and then fallback (if configured)
           await startObsWithConfirm({ timeoutMs: 900, retryDelayMs: 300 });
           return;
         }
@@ -747,7 +768,7 @@ try {
       } catch {}
     });
   } catch {}
-})();
+}
 
 // Wire a small listener to auto-arm/clear handoff watchdog on state changes
 (function wireRecStateWatchdog(){
@@ -768,8 +789,8 @@ try {
   } catch {}
 })();
 
-// Wire OBS recordingStarted → optional handoff from Bridge
-(function wireObsRecordingStartedHandoff(){
+// Ensure OBS recordingStarted → optional handoff from Bridge (bind once, late-safe)
+function ensureObsRecordingStartedHandoff(){
   try {
     if (typeof window === 'undefined') return;
     const br = window.__obsBridge;
@@ -783,7 +804,6 @@ try {
             try { window.__tpHud?.log?.('[rec] obs up (handoff disabled)'); } catch {}
             return;
           }
-          // Perform a best-effort handoff: stop Bridge then mark OBS recording
           const bridgeAdapter = registry.get('bridge');
           _emitRecState('stopping', { reason: 'obs-handoff' });
           try { await bridgeAdapter?.stop?.(); } catch {}
@@ -793,7 +813,7 @@ try {
       } catch {}
     });
   } catch {}
-})();
+}
 
 // Simple aliases for consumers that prefer start/stop terminology
 export async function start() {
