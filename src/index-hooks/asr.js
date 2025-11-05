@@ -218,12 +218,13 @@ export function initAsrFeature() {
   const wantASR = () => { try { return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr'; } catch { return false; } };
   const holdAuto = () => {
     if (autoHeld) return; autoHeld = true;
-    try { (window.__tpAuto || window.__scrollCtl || {}).set?.(false); } catch {}
+    try { window.__scrollCtl?.stop?.(); } catch {}
+    try { (window.__tpAuto || window.Auto || window.__scrollCtl)?.setEnabled?.(false); } catch {}
     try { window.dispatchEvent(new CustomEvent('autoscroll:disable', { detail: 'asr' })); } catch {}
   };
   const releaseAuto = () => {
     if (!autoHeld) return; autoHeld = false;
-    try { (window.__tpAuto || window.__scrollCtl || {}).set?.(true); } catch {}
+    // Do not auto-start on release; user intent or router will decide to re-enable
     try { window.dispatchEvent(new CustomEvent('autoscroll:enable', { detail: 'asr' })); } catch {}
   };
   const ensureMode = async () => { if (!asrMode) asrMode = new AsrMode({}); return asrMode; };
