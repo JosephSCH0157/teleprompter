@@ -229,6 +229,7 @@ const LS_KEY = 'tp_rec_settings_v1';
 let settings = {
   mode: 'multi',
   selected: ['obs', 'descript'],
+  preferObsHandoff: false,
     configs: {
       obs: { url: 'ws://192.168.1.200:4455', password: '' },
     companion: { url: 'http://127.0.0.1:8000', buttonId: '1.1' },
@@ -278,6 +279,7 @@ export function setSettings(next) {
     ...('selected' in next
       ? { selected: Array.isArray(next.selected) ? next.selected.slice() : prev.selected }
       : {}),
+    ...('preferObsHandoff' in next ? { preferObsHandoff: !!next.preferObsHandoff } : {}),
     ...('configs' in next ? { configs: { ...prev.configs, ...(next.configs || {}) } } : {}),
     ...('timeouts' in next ? { timeouts: { ...prev.timeouts, ...(next.timeouts || {}) } } : {}),
     ...('failPolicy' in next ? { failPolicy: next.failPolicy } : {}),
@@ -478,7 +480,7 @@ export async function startSelected() {
     const ids = selectedIds();
     // Track primary adapter (first selected in single mode or the first in list)
     _recAdapter = settings.mode === 'single' ? (ids[0] || null) : (ids[0] || null);
-    _emitRecState('starting');
+  _emitRecState('starting');
     const t0 = __now();
     try { recStats.starts++; } catch {}
     const started = [];
@@ -539,45 +541,45 @@ export async function startSelected() {
   });
 }
 
-/** Stop selected recorders (parallel, timeout per adapter). */
+/** Stop selected recorders (parallel, timeout per adapter).
+ * Important: stop must preempt an in-flight start; do NOT gate with the global busy lock.
+ */
 export async function stopSelected() {
-  return guarded(async () => {
-    // Bump epoch to cancel any in-flight start/confirm cycles
-    __recEpoch++;
-    // Allow stop to proceed even in no-record mode (safe cleanup)
-    if (isNoRecordMode()) {
-      try { window.HUD?.log?.('rehearsal', { note: 'stopSelected (allowed during no-record)' }); } catch {}
-    }
-    // Idempotent: if already idle/stopping, treat as success
-    if (_recState === 'idle' || _recState === 'stopping') {
-      _emitRecState('idle', { reason: 'idempotent-stop' });
-      return { results: [] };
-    }
+  // Bump epoch immediately to cancel any in-flight confirm/retry/fallback paths
+  __recEpoch++;
+  // Allow stop to proceed even in no-record mode (safe cleanup)
+  if (isNoRecordMode()) {
+    try { window.HUD?.log?.('rehearsal', { note: 'stopSelected (allowed during no-record)' }); } catch {}
+  }
+  // Idempotent: if already idle/stopping, treat as success
+  if (_recState === 'idle' || _recState === 'stopping') {
+    _emitRecState('idle', { reason: 'idempotent-stop' });
+    return { results: [] };
+  }
   try { window.__tpHud?.log?.('[rec] stop'); } catch {}
   _emitRecState('stopping');
-    const t0 = __now();
-    const ids = selectedIds();
-    const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
-    const rs = await Promise.all(
-      actions.map(async ({ id, a }) => {
-        try {
-          const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.stop);
-          if (!avail) return { id, ok: false, error: 'unavailable' };
-        } catch (e) {
-          return { id, ok: false, error: String(e?.message || e) };
-        }
-        try {
-          await callWithTimeout(() => a.stop(), settings.timeouts.stop);
-          return { id, ok: true };
-        } catch (e) {
-          return { id, ok: false, error: String(e?.message || e) };
-        }
-      })
-    );
-    _emitRecState('idle');
-    try { recStats.stopLat.push(Math.max(0, __now() - t0)); } catch {}
-    return { results: rs };
-  });
+  const t0 = __now();
+  const ids = selectedIds();
+  const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
+  const rs = await Promise.all(
+    actions.map(async ({ id, a }) => {
+      try {
+        const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.stop);
+        if (!avail) return { id, ok: false, error: 'unavailable' };
+      } catch (e) {
+        return { id, ok: false, error: String(e?.message || e) };
+      }
+      try {
+        await callWithTimeout(() => a.stop(), settings.timeouts.stop);
+        return { id, ok: true };
+      } catch (e) {
+        return { id, ok: false, error: String(e?.message || e) };
+      }
+    })
+  );
+  _emitRecState('idle');
+  try { recStats.stopLat.push(Math.max(0, __now() - t0)); } catch {}
+  return { results: rs };
 }
 
 /**
@@ -690,6 +692,7 @@ try {
         const state = _recState;
         const bridgeAdapter = registry.get('bridge');
         const isAuto = (localStorage.getItem('tp_auto_record') === '1') || (localStorage.getItem('tp_auto_record_on_start_v1') === '1');
+        try { recStats.disconnects++; } catch {}
         if (state === 'starting') {
           // treat like a start failure; reuse confirm path which will timeout and then fallback (if configured)
           await startObsWithConfirm({ timeoutMs: 900, retryDelayMs: 300 });
