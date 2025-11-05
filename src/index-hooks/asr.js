@@ -220,20 +220,24 @@ export function initAsrFeature() {
       } catch { return true; }
     }
     smoothScrollTo(scroller, top, ms = 160) {
+      // Discrete stepped tween (reduces scroll spam to ~3-5 writes per commit)
       try { if (this._scrollAnim && this._scrollAnim.cancel) this._scrollAnim.cancel(); } catch {}
       const isWin = (scroller === document.scrollingElement || scroller === document.body);
       const from = isWin ? (window.scrollY || window.pageYOffset || 0) : (scroller.scrollTop || 0);
       const delta = Number(top || 0) - Number(from || 0);
-      let cancelled = false; const start = performance.now();
-      const step = (t) => {
+      let cancelled = false;
+      const steps = Math.max(3, Math.min(5, Math.round(ms / 50))); // 3-5 steps
+      let i = 0;
+      const write = () => {
         if (cancelled) return;
-        const k = Math.min(1, (t - start) / ms);
-        const y = from + delta * (k < 0 ? 0 : k);
+        i++;
+        const k = i / steps;
+        const y = from + delta * (k < 0 ? 0 : (k > 1 ? 1 : k));
         try { if (isWin) window.scrollTo(0, y); else scroller.scrollTo({ top: y }); } catch {}
-        if (k < 1) requestAnimationFrame(step);
+        if (i < steps) requestAnimationFrame(write);
       };
       this._scrollAnim = { cancel: () => { cancelled = true; } };
-      requestAnimationFrame(step);
+      requestAnimationFrame(write);
     }
   tryAdvance(hyp, isFinal, confidence) {
       // Freeze briefly after big jumps to avoid rubber-banding on line starts
@@ -247,7 +251,7 @@ export function initAsrFeature() {
       const thr = Number(localStorage.getItem('tp_asr_threshold') || COVERAGE_THRESHOLD) || COVERAGE_THRESHOLD;
       if (bestIdx >= 0 && bestScore >= thr) {
         const newIdx = idx0 + bestIdx;
-        if (newIdx < this.currentIdx) return; // never go backward
+  if (newIdx <= this.currentIdx) return; // only commit when index increases
         if (!this.shouldCommit(newIdx, bestScore)) return;
         if (!this.gateLowConfidence(newIdx, bestScore)) return;
         const delta = newIdx - this.currentIdx;
