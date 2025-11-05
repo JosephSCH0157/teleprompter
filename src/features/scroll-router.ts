@@ -579,6 +579,19 @@ export function installScrollRouter(opts: ScrollRouterOpts){
 
   function applyGate() {
     if (state.mode !== 'hybrid') {
+      // In ASR mode, the speech engine controls pacing; hard-disable Auto engine and UI
+      if (state.mode === 'asr') {
+        try { auto.setEnabled?.(false); } catch {}
+        enabledNow = false;
+        const detailAsr = 'Mode: asr • Auto is disabled — ASR controls speed';
+        setAutoChip('manual', detailAsr, 'ASR controls speed');
+        try {
+          const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+          if (btn) { btn.textContent = 'Auto-scroll: Off — ASR mode'; btn.setAttribute('data-state','off'); btn.setAttribute('aria-pressed','false'); }
+        } catch {}
+        try { emitAutoState(); } catch {}
+        return;
+      }
       // Outside Hybrid, require speech sync to be active and user intent On
       if (silenceTimer) { try { clearTimeout(silenceTimer as any); } catch {} silenceTimer = undefined; }
       const want = !!userEnabled && !!speechActive;
