@@ -23,14 +23,25 @@ export function initAsrFeature() {
   // Mount a small status chip in the top bar to reflect ASR state
   const mountAsrChip = () => {
     try {
-      // Prefer reusing the router's ASR badge if it exists to avoid redundancy
-      let chip = document.getElementById('asrChip') || document.getElementById('asrSpeedBadge');
+      // Replace the router's ASR speed badge with the ASR chip (avoid router visibility toggles hiding it)
+      let chip = document.getElementById('asrChip');
+      if (!chip) {
+        const old = document.getElementById('asrSpeedBadge');
+        if (old && old.parentElement) {
+          const repl = document.createElement('span');
+          repl.id = 'asrChip';
+          repl.className = 'chip';
+          repl.textContent = 'ASR: off';
+          try { old.replaceWith(repl); } catch { try { old.parentElement.insertBefore(repl, old); old.remove(); } catch {} }
+          try { repl.dataset.asrMount = 'badge'; } catch {}
+          chip = repl;
+        }
+      }
       if (!chip) {
         chip = document.createElement('span');
         chip.id = 'asrChip'; chip.className = 'chip'; chip.textContent = 'ASR: off'; chip.style.display='none';
         document.body.appendChild(chip);
       }
-      try { chip.textContent = 'ASR: off'; } catch {}
       chip.setAttribute('aria-live','polite');
       chip.setAttribute('aria-atomic','true');
       // Update on state changes
@@ -41,7 +52,7 @@ export function initAsrFeature() {
       // Move chip into top bar when available (append as last child to reduce clutter)
       const attach = () => {
         // If we are reusing the ASR speed badge, it's already mounted in the right place
-        if (chip && chip.id === 'asrSpeedBadge' && chip.isConnected) {
+        if (chip && chip.isConnected && chip.dataset && chip.dataset.asrMount === 'badge') {
           try { chip.style.display = ''; } catch {}
           return true;
         }
@@ -229,6 +240,8 @@ export function initAsrFeature() {
   // Coordinator: follow Speech Sync and Mode changes; interlock auto-scroll
   let asrMode = null; let speechActive = false; let asrActive = false; let autoHeld = false;
   const wantASR = () => { try { return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr'; } catch { return false; } };
+  const setChipVisible = (on) => { try { const c = document.getElementById('asrChip'); if (c) c.style.display = on ? '' : 'none'; } catch {} };
+  const setChipState = (state) => { try { window.dispatchEvent(new CustomEvent('asr:state', { detail: { state } })); } catch {} };
   const holdAuto = () => {
     if (autoHeld) return; autoHeld = true;
     try { window.__scrollCtl?.stop?.(); } catch {}
@@ -253,14 +266,32 @@ export function initAsrFeature() {
       if (speechActive && wantASR()) void start(); else void stop();
     } catch {}
   });
-  document.addEventListener('change', (ev) => { try { if (ev?.target?.id !== 'scrollMode') return; if (!speechActive) return; wantASR() ? void start() : void stop(); } catch {} });
+  document.addEventListener('change', (ev) => {
+    try {
+      if (ev?.target?.id !== 'scrollMode') return;
+      const isAsr = wantASR();
+      if (isAsr) {
+        try { mountAsrChip(); } catch {}
+        setChipVisible(true);
+        setChipState(speechActive ? 'listening' : 'ready');
+      } else {
+        setChipState('idle');
+        setChipVisible(false);
+      }
+      if (!speechActive) return; // Do not start/stop engine when speech is off
+      isAsr ? void start() : void stop();
+    } catch {}
+  });
   window.addEventListener('asr:toggle', (e) => { const armed = !!(e?.detail?.armed); armed ? void start() : void stop(); });
   window.addEventListener('asr:stop', () => { void stop(); });
 
   // Late-load reconcile
   try {
     const body = document.body; speechActive = !!(body && (body.classList.contains('speech-listening') || body.classList.contains('listening'))) || (window.speechOn === true);
-    if (speechActive && wantASR()) void start();
+    const isAsr = wantASR();
+    if (isAsr) { try { mountAsrChip(); } catch {} setChipVisible(true); setChipState(speechActive ? 'listening' : 'ready'); }
+    else { setChipVisible(false); }
+    if (speechActive && isAsr) void start();
   } catch {}
 }
 
