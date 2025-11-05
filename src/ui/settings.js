@@ -191,6 +191,142 @@
     } catch {}
   }
 
+  // --- Recording adapters picker: define once and call after settings DOM exists ---
+  let __recAdaptersInitDone = false;
+  let __recMod = null; // cached recorders module
+  async function __ensureRecordersMod(){
+    if (!__recMod) {
+      try { __recMod = await import('/recorders.js'); } catch {}
+    }
+    return __recMod;
+  }
+  function __statusChip(txt, kind){
+    const span = document.createElement('span');
+    span.textContent = txt;
+    span.style.marginLeft = '6px';
+    span.style.opacity = '.9';
+    span.style.fontSize = '12px';
+    span.style.color = kind === 'ok' ? '#b7f4c9' : (kind === 'warn' ? '#ffdca8' : '#ffd6d6');
+    return span;
+  }
+  async function initRecorderAdaptersUI(){
+    try {
+      const listEl = document.getElementById('recAdaptersList');
+      const refreshBtn = document.getElementById('recAdaptersRefresh');
+      const modeSingle = document.getElementById('recModeSingle');
+      if (!listEl) return; // settings content not mounted yet
+
+      // Prevent double-wiring while still allowing re-render calls
+      if (!listEl.dataset.wired){
+        listEl.dataset.wired = '1';
+        __recAdaptersInitDone = true;
+      }
+
+      const KNOWN = [
+        { id: 'obs', label: 'OBS' },
+        { id: 'bridge', label: 'Bridge' },
+        { id: 'descript', label: 'Descript' },
+        { id: 'premiere', label: 'Premiere' },
+        { id: 'rev', label: 'Rev' },
+      ];
+
+      async function readState(){
+        await __ensureRecordersMod();
+        try { return __recMod?.getSettings?.() || { mode:'multi', selected: [] }; } catch { return { mode:'multi', selected: [] }; }
+      }
+
+      async function render(){
+        const st = await readState();
+        listEl.innerHTML = '';
+        if (modeSingle) modeSingle.checked = (st.mode === 'single');
+        for (const k of KNOWN){
+          const item = document.createElement('label');
+          item.className = 'tp-check';
+          item.style.display = 'inline-flex';
+          item.style.alignItems = 'center';
+          item.style.gap = '6px';
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.dataset.id = k.id;
+          box.checked = Array.isArray(st.selected) && st.selected.includes(k.id);
+          const text = document.createElement('span');
+          text.textContent = k.label;
+          item.appendChild(box); item.appendChild(text);
+          const chip = __statusChip('checking…', 'warn');
+          item.appendChild(chip);
+          listEl.appendChild(item);
+
+          // availability probe (best-effort)
+          (async () => {
+            try {
+              await __ensureRecordersMod();
+              const a = __recMod?.get?.(k.id);
+              if (a && typeof a.isAvailable === 'function') {
+                const ok = await a.isAvailable();
+                let kind = ok ? 'ok' : 'err';
+                let label = ok ? 'available' : 'unavailable';
+                try {
+                  if (k.id === 'obs' && window.__obsBridge && typeof window.__obsBridge.isConnected === 'function') {
+                    const conn = !!window.__obsBridge.isConnected();
+                    if (conn) { kind = 'ok'; label = 'connected'; }
+                  }
+                } catch {}
+                chip.textContent = '(' + label + ')';
+                chip.style.color = kind === 'ok' ? '#b7f4c9' : '#ffd6d6';
+              } else {
+                chip.textContent = '(unavailable)';
+                chip.style.color = '#ffd6d6';
+              }
+            } catch {
+              chip.textContent = '(unavailable)';
+              chip.style.color = '#ffd6d6';
+            }
+          })();
+
+          box.addEventListener('change', async () => {
+            try {
+              const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
+              let ids = boxes.filter(b => b.checked).map(b => String(b.dataset.id||''));
+              if (modeSingle && modeSingle.checked && ids.length > 1) {
+                ids = [ String(box.dataset.id||'') ];
+                for (const b of boxes) { if (b !== box) b.checked = false; }
+              }
+              await __ensureRecordersMod();
+              __recMod?.setSelected?.(ids);
+            } catch {}
+          }, { capture: true });
+        }
+      }
+
+      // Mode toggle wiring (idempotent)
+      if (modeSingle && !modeSingle.dataset.wired){
+        modeSingle.dataset.wired = '1';
+        modeSingle.addEventListener('change', async () => {
+          await __ensureRecordersMod();
+          try { __recMod?.setMode?.(modeSingle.checked ? 'single' : 'multi'); } catch {}
+          if (modeSingle.checked) {
+            const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
+            const firstChecked = boxes.find(b => b.checked) || null;
+            for (const b of boxes) { if (b !== firstChecked) b.checked = false; }
+            try {
+              const id = firstChecked ? String(firstChecked.dataset.id||'') : '';
+              __recMod?.setSelected?.(id ? [id] : []);
+            } catch {}
+          }
+        });
+      }
+
+      // Refresh (idempotent)
+      if (refreshBtn && !refreshBtn.dataset.wired){
+        refreshBtn.dataset.wired = '1';
+        refreshBtn.addEventListener('click', render);
+      }
+
+      // Initial render
+      render();
+    } catch {}
+  }
+
   function init() {
     try {
       // Bind settings tab persistence
@@ -653,139 +789,7 @@
       setTimeout(() => { try { window.__tpObs?.setArmed?.(!!(hasStore && S.get && S.get('obsEnabled'))); } catch {} ensureObsConnection(); }, 0);
 
       // --- Recording adapters picker ---
-      (function initRecorderAdaptersUI(){
-        try {
-          const listEl = document.getElementById('recAdaptersList');
-          const refreshBtn = document.getElementById('recAdaptersRefresh');
-          const modeSingle = document.getElementById('recModeSingle');
-          if (!listEl) return;
-
-          // Core render: show checkboxes for requested integrations
-          const KNOWN = [
-            { id: 'obs', label: 'OBS' },
-            { id: 'bridge', label: 'Bridge' },
-            { id: 'descript', label: 'Descript' },
-            { id: 'premiere', label: 'Premiere' },
-            { id: 'rev', label: 'Rev' },
-          ];
-
-          let recMod = null;
-          async function ensureMod(){
-            if (!recMod) {
-              try { recMod = await import('/recorders.js'); } catch {}
-            }
-            return recMod;
-          }
-
-          async function readState(){
-            await ensureMod();
-            try { return recMod?.getSettings?.() || { mode:'multi', selected: [] }; } catch { return { mode:'multi', selected: [] }; }
-          }
-
-          function statusChip(txt, kind){
-            const span = document.createElement('span');
-            span.textContent = txt;
-            span.style.marginLeft = '6px';
-            span.style.opacity = '.9';
-            span.style.fontSize = '12px';
-            span.style.color = kind === 'ok' ? '#b7f4c9' : (kind === 'warn' ? '#ffdca8' : '#ffd6d6');
-            return span;
-          }
-
-          async function render(){
-            const st = await readState();
-            listEl.innerHTML = '';
-            if (modeSingle) modeSingle.checked = (st.mode === 'single');
-            for (const k of KNOWN){
-              const item = document.createElement('label');
-              item.className = 'tp-check';
-              item.style.display = 'inline-flex';
-              item.style.alignItems = 'center';
-              item.style.gap = '6px';
-              const box = document.createElement('input');
-              box.type = 'checkbox';
-              box.dataset.id = k.id;
-              box.checked = Array.isArray(st.selected) && st.selected.includes(k.id);
-              const text = document.createElement('span');
-              text.textContent = k.label;
-              item.appendChild(box); item.appendChild(text);
-              const chip = statusChip('checking…', 'warn');
-              item.appendChild(chip);
-              listEl.appendChild(item);
-
-              // availability probe (best-effort)
-              (async () => {
-                try {
-                  await ensureMod();
-                  const a = recMod?.get?.(k.id);
-                  if (a && typeof a.isAvailable === 'function') {
-                    const ok = await a.isAvailable();
-                    // For OBS, prefer bridge connection signal if present
-                    let kind = ok ? 'ok' : 'err';
-                    let label = ok ? 'available' : 'unavailable';
-                    try {
-                      if (k.id === 'obs' && window.__obsBridge && typeof window.__obsBridge.isConnected === 'function') {
-                        const conn = !!window.__obsBridge.isConnected();
-                        if (conn) { kind = 'ok'; label = 'connected'; }
-                      }
-                    } catch {}
-                    chip.textContent = '(' + label + ')';
-                    chip.style.color = kind === 'ok' ? '#b7f4c9' : '#ffd6d6';
-                  } else {
-                    chip.textContent = '(unavailable)';
-                    chip.style.color = '#ffd6d6';
-                  }
-                } catch {
-                  chip.textContent = '(unavailable)';
-                  chip.style.color = '#ffd6d6';
-                }
-              })();
-
-              box.addEventListener('change', async () => {
-                try {
-                  const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
-                  let ids = boxes.filter(b => b.checked).map(b => String(b.dataset.id||''));
-                  if (modeSingle && modeSingle.checked && ids.length > 1) {
-                    // keep only the one the user just clicked
-                    ids = [ String(box.dataset.id||'') ];
-                    for (const b of boxes) { if (b !== box) b.checked = false; }
-                  }
-                  await ensureMod();
-                  recMod?.setSelected?.(ids);
-                } catch {}
-              }, { capture: true });
-            }
-          }
-
-          // Mode toggle wiring
-          if (modeSingle && !modeSingle.dataset.wired){
-            modeSingle.dataset.wired = '1';
-            modeSingle.addEventListener('change', async () => {
-              await ensureMod();
-              try { recMod?.setMode?.(modeSingle.checked ? 'single' : 'multi'); } catch {}
-              // enforce single selection visually if needed
-              if (modeSingle.checked) {
-                const boxes = Array.from(listEl.querySelectorAll('input[type="checkbox"][data-id]'));
-                const firstChecked = boxes.find(b => b.checked) || null;
-                for (const b of boxes) { if (b !== firstChecked) b.checked = false; }
-                try {
-                  const id = firstChecked ? String(firstChecked.dataset.id||'') : '';
-                  recMod?.setSelected?.(id ? [id] : []);
-                } catch {}
-              }
-            });
-          }
-
-          // Refresh
-          if (refreshBtn && !refreshBtn.dataset.wired){
-            refreshBtn.dataset.wired = '1';
-            refreshBtn.addEventListener('click', render);
-          }
-
-          // Initial render
-          render();
-        } catch {}
-      })();
+      initRecorderAdaptersUI();
 
       // Dev HUD toggle (advanced) — SSOT wiring to modern HUD (single source of truth)
       const devHud = q('settingsDevHud');
@@ -1109,6 +1113,8 @@
           // After building, ensure tabs show active one
           const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
           showTab(active && active.getAttribute('data-tab') || 'general');
+          // Ensure adapters UI is initialized now that DOM exists
+          initRecorderAdaptersUI();
           // Critical post-mount wiring for controls that require existing DOM
           try {
             // Mic buttons (fallback wiring if delegates not active)
