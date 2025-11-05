@@ -226,7 +226,7 @@
         { id: 'obs', label: 'OBS' },
         { id: 'bridge', label: 'Bridge' },
         { id: 'descript', label: 'Descript' },
-        { id: 'premiere', label: 'Premiere' },
+        { id: 'premiere', label: 'Adobe Premiere Pro' },
         { id: 'rev', label: 'Rev' },
       ];
 
