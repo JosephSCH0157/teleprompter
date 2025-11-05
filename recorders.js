@@ -387,6 +387,41 @@ function selectedIds() {
   return ids.filter((id) => registry.has(id));
 }
 
+// --------------------------------------------------------------
+// OBS handoff watchdog: detect late OBS start while Bridge is active
+// and optionally hand off mid-run when preferObsHandoff is true.
+// --------------------------------------------------------------
+let __handoffTimer = 0;
+function clearHandoffTimer(){ try { if (__handoffTimer) { clearInterval(__handoffTimer); __handoffTimer = 0; } } catch {} }
+async function tryObsHandoffOnce(reason = 'watchdog'){
+  try {
+    if (!settings?.preferObsHandoff) return false;
+    if (_recState !== 'recording' || _recAdapter !== 'bridge') return false;
+    const br = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
+    if (!br || typeof br.getRecordStatus !== 'function') return false;
+    let isRec = false; try { const s = await br.getRecordStatus(); isRec = !!(s && (s.outputActive === true || s.recording === true)); } catch {}
+    if (!isRec) return false;
+    const bridgeAdapter = registry.get('bridge');
+    _emitRecState('stopping', { reason: 'obs-handoff', via: reason });
+    try { await bridgeAdapter?.stop?.(); } catch {}
+    _recAdapter = 'obs';
+    _emitRecState('recording', { handoff: true });
+    clearHandoffTimer();
+    return true;
+  } catch { return false; }
+}
+function armObsHandoffWatchdog(){
+  clearHandoffTimer();
+  try {
+    if (!settings?.preferObsHandoff) return;
+    if (_recState === 'recording' && _recAdapter === 'bridge') {
+      const t = setInterval(() => { tryObsHandoffOnce('watchdog'); }, 1000);
+      try { if (typeof t.unref === 'function') t.unref(); } catch {}
+      __handoffTimer = t;
+    }
+  } catch {}
+}
+
 // --- OBS start with confirm + retry + bridge fallback (self-contained) -----
 async function startObsWithConfirm({ timeoutMs = 1200, retryDelayMs = 500 } = {}) {
   const obs = (typeof window !== 'undefined') ? (window.__obsBridge || null) : null;
@@ -547,6 +582,8 @@ export async function startSelected() {
 export async function stopSelected() {
   // Bump epoch immediately to cancel any in-flight confirm/retry/fallback paths
   __recEpoch++;
+  // Stop any handoff watchdog
+  clearHandoffTimer();
   // Allow stop to proceed even in no-record mode (safe cleanup)
   if (isNoRecordMode()) {
     try { window.HUD?.log?.('rehearsal', { note: 'stopSelected (allowed during no-record)' }); } catch {}
@@ -712,6 +749,25 @@ try {
   } catch {}
 })();
 
+// Wire a small listener to auto-arm/clear handoff watchdog on state changes
+(function wireRecStateWatchdog(){
+  try {
+    if (typeof window === 'undefined') return;
+    if (window.__tpRecWatchdogWired) return; window.__tpRecWatchdogWired = true;
+    window.addEventListener('rec:state', (e) => {
+      try {
+        const d = e && e.detail || {};
+        if (d && d.state === 'recording' && d.adapter === 'bridge' && settings?.preferObsHandoff) {
+          armObsHandoffWatchdog();
+        }
+        if (d && (d.state === 'idle' || d.state === 'stopping')) {
+          clearHandoffTimer();
+        }
+      } catch {}
+    });
+  } catch {}
+})();
+
 // Wire OBS recordingStarted → optional handoff from Bridge
 (function wireObsRecordingStartedHandoff(){
   try {
@@ -791,6 +847,7 @@ try {
     if (!api.setSettings) api.setSettings = (next) => setSettings(next);
     if (!api.setSelected) api.setSelected = (ids) => setSelected(ids);
     if (!api.setMode) api.setMode = (mode) => setMode(mode);
+    if (!api.__finalizeForTests) api.__finalizeForTests = () => { try { clearHandoffTimer(); } catch {} };
     // Keep a stable alias under window.recorders too
     window.recorders = window.recorders || api;
   }
