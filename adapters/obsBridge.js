@@ -10,6 +10,7 @@ let _connected = false;
 let _connecting = false;
 let _cfg = { url: 'ws://127.0.0.1:4455', password: '' };
 let _autoReconnect = true;
+let _reconnectTimer = null;
 let _backoffMs = 1000; // start 1s
 const _backoffMax = 5000;
 const _backoffFactor = 2;
@@ -103,6 +104,10 @@ async function _createClient() {
 }
 
 async function _connectOnce() {
+  // Respect armed gating: never connect if disabled
+  try {
+    if (typeof _armed !== 'undefined' && !_armed) return;
+  } catch {}
   if (_connected || _connecting) return;
   _connecting = true;
   try {
@@ -114,7 +119,7 @@ async function _connectOnce() {
       _emit('disconnect', d);
       _stopKeepAlive();
       try { window.HUD?.warn?.('obs:close', d || { via: 'obs-websocket-js' }); } catch {}
-      if (_autoReconnect) _scheduleReconnect();
+      if (_autoReconnect && (_armed === true)) _scheduleReconnect();
     });
     client.on('ConnectionOpened', () => {
       _connected = true;
@@ -167,9 +172,13 @@ async function _connectOnce() {
 
 function _scheduleReconnect() {
   try {
+    if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+    if (_armed === false) return; // do not schedule when disarmed
     const delay = Math.min(_backoffMs, _backoffMax);
     _backoffMs = Math.min(_backoffMax, Math.max(1000, _backoffMs * _backoffFactor));
-    setTimeout(() => {
+    _reconnectTimer = setTimeout(() => {
+      _reconnectTimer = null;
+      if (_armed === false) return;
       _connectOnce();
     }, delay);
   } catch {}
@@ -285,7 +294,7 @@ const bridge = {
   },
   enableAutoReconnect(v) {
     _autoReconnect = !!v;
-    if (_autoReconnect && !_connected) _scheduleReconnect();
+    if (_autoReconnect && !_connected && _armed !== false) _scheduleReconnect();
   },
 };
 
@@ -299,4 +308,42 @@ try {
 } catch {}
 
 export default bridge;
+
+// ---- Armed gating (respect Settings “OBS Off”) -----------------------------
+let _armed = false;
+try {
+  _armed = (localStorage.getItem('tp_obs_enabled') === '1');
+} catch {}
+
+function armed(){ return !!_armed; }
+function setArmed(on){
+  _armed = !!on;
+  try { localStorage.setItem('tp_obs_enabled', _armed ? '1' : '0'); } catch {}
+  // Tie auto-reconnect to armed
+  _autoReconnect = !!_armed;
+  if (!_armed) {
+    try { if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; } } catch {}
+    try { _stopKeepAlive(); } catch {}
+    try { _obsClient?.disconnect?.(); } catch {}
+    try { if (_obsClient) { _obsClient = null; } } catch {}
+    _connected = false;
+    _connecting = false;
+    _setObsConnChip(false);
+  } else {
+    // best-effort: attempt a connect only when explicitly asked via maybeConnect
+  }
+}
+async function maybeConnect(){
+  if (!_armed) return;
+  if (_connected || _connecting) return;
+  try { await _connectOnce(); }
+  catch { if (_armed && _autoReconnect) _scheduleReconnect(); }
+}
+
+// Expose minimal control surface for Settings
+try {
+  if (typeof window !== 'undefined') {
+    window.__tpObs = Object.assign(window.__tpObs || {}, { setArmed, armed, maybeConnect });
+  }
+} catch {}
 
