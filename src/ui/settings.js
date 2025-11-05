@@ -400,6 +400,19 @@
           '    <span id="premTestMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
           '  </div>',
           '  <div class="settings-small" style="color:#9fb4c9">Requires the Hotkey Bridge (tools/hotkey_bridge.ps1) to be running.</div>',
+          '</div>',
+          '',
+          '<div class="card">',
+          '  <h5 style="margin:6px 0 8px">Descript</h5>',
+          '  <div class="row" style="gap:10px;align-items:center">',
+          '    <label>Start hotkey <input id="descStartHotkey" type="text" class="select-sm" placeholder="Ctrl+R"/></label>',
+          '    <label>Stop hotkey <input id="descStopHotkey" type="text" class="select-sm" placeholder="(optional)"/></label>',
+          '    <label>Endpoint <input id="descBaseUrl" type="text" class="select-md" placeholder="http://127.0.0.1:5723"/></label>',
+          '    <button id="descTestBtn" class="chip btn-chip" type="button">Send test</button>',
+          '    <button id="descriptTest" class="chip btn-chip" type="button">Start (SSOT)</button>',
+          '    <span id="descTestMsg" class="microcopy" style="color:#9fb4c9;font-size:12px"></span>',
+          '  </div>',
+          '  <div class="settings-small" style="color:#9fb4c9">Uses the same Hotkey Bridge. Default Ctrl+R works for Descript’s record toggle.</div>',
           '</div>'
         ].join('');
 
@@ -599,6 +612,62 @@
               const ok = await (window.__tpRecording?.start?.() || Promise.resolve(false));
               try { window.__tpHud?.log?.('[premiere:test] →', ok); } catch {}
               if (premMsg) { premMsg.textContent = ok ? 'Started' : 'Failed'; premMsg.style.color = ok ? '#b7f4c9' : '#ffd6d6'; }
+            } finally {
+              try { localStorage.setItem('tp_rec_adapter', old); } catch {}
+            }
+          });
+        }
+
+        // --- Descript wiring ---
+        const descStartInp = document.getElementById('descStartHotkey');
+        const descStopInp = document.getElementById('descStopHotkey');
+        const descBaseInp = document.getElementById('descBaseUrl');
+        const descTestBtn = document.getElementById('descTestBtn');
+        const descMsg = document.getElementById('descTestMsg');
+        // Defaults for Descript mimic Premiere’s hotkey bridge
+        const dcfg = (st.configs && st.configs.descript) || { startHotkey:'Ctrl+R', stopHotkey:'', baseUrl:'http://127.0.0.1:5723' };
+        if (descStartInp) descStartInp.value = String(dcfg.startHotkey || 'Ctrl+R');
+        if (descStopInp) descStopInp.value = String(dcfg.stopHotkey || '');
+        if (descBaseInp) descBaseInp.value = String(dcfg.baseUrl || 'http://127.0.0.1:5723');
+
+        const saveDesc = () => {
+          try {
+            const next = {
+              startHotkey: (descStartInp && descStartInp.value) || 'Ctrl+R',
+              stopHotkey: (descStopInp && descStopInp.value) || '',
+              baseUrl: (descBaseInp && descBaseInp.value) || 'http://127.0.0.1:5723',
+            };
+            __recMod?.setSettings?.({ configs: { descript: next } });
+          } catch {}
+        };
+        descStartInp && descStartInp.addEventListener('input', saveDesc);
+        descStopInp && descStopInp.addEventListener('input', saveDesc);
+        descBaseInp && descBaseInp.addEventListener('input', saveDesc);
+        if (descTestBtn) {
+          descTestBtn.addEventListener('click', async () => {
+            try {
+              const base = (descBaseInp && descBaseInp.value) || 'http://127.0.0.1:5723';
+              const keys = (descStartInp && descStartInp.value) || 'Ctrl+R';
+              const u = base.replace(/\/+$/, '') + '/send?keys=' + encodeURIComponent(keys);
+              if (descMsg) { descMsg.textContent = 'Sending…'; descMsg.style.color = '#9fb4c9'; }
+              await fetch(u, { method: 'GET', mode: 'no-cors' });
+              if (descMsg) { descMsg.textContent = 'Sent ' + keys; descMsg.style.color = '#b7f4c9'; }
+            } catch {
+              if (descMsg) { descMsg.textContent = 'Failed — is bridge running?'; descMsg.style.color = '#ffd6d6'; }
+            }
+          });
+        }
+        const descSSOTBtn = document.getElementById('descriptTest');
+        if (descSSOTBtn) {
+          descSSOTBtn.addEventListener('click', async (e) => {
+            try { e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch {}
+            const old = (localStorage.getItem('tp_rec_adapter') || 'bridge');
+            try { localStorage.setItem('tp_rec_adapter', 'descript'); } catch {}
+            try {
+              if (descMsg) { descMsg.textContent = 'Starting…'; descMsg.style.color = '#9fb4c9'; }
+              const ok = await (window.__tpRecording?.start?.() || Promise.resolve(false));
+              try { window.__tpHud?.log?.('[descript:test] →', ok); } catch {}
+              if (descMsg) { descMsg.textContent = ok ? 'Started' : 'Failed'; descMsg.style.color = ok ? '#b7f4c9' : '#ffd6d6'; }
             } finally {
               try { localStorage.setItem('tp_rec_adapter', old); } catch {}
             }
