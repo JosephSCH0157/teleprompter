@@ -42,7 +42,7 @@
     },
     {
       "id": "autoToggle",
-      "text": "Auto-scroll: Paused — 60 px/s"
+      "text": "Auto-scroll: Off"
     },
     {
       "id": "startCam",
@@ -125,6 +125,18 @@
     },
     {
       "checkboxIndex": 1
+    },
+    {
+      "checkboxIndex": 2
+    },
+    {
+      "checkboxIndex": 3
+    },
+    {
+      "checkboxIndex": 4
+    },
+    {
+      "checkboxIndex": 5
     }
   ],
   "errors": [],
@@ -167,6 +179,15 @@
     },
     {
       "type": "debug",
+      "text": "[init] import:../adapters/obsBridge.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
       "text": "[init] import:../adapters/obs.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
@@ -194,7 +215,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../debug-seed.js",
+      "text": "[init] import:../io-anchor.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -203,7 +224,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../io-anchor.js",
+      "text": "[init] import:../debug-seed.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -242,7 +263,7 @@
       "text": "[src/index] module imports complete",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 95,
+        "lineNumber": 169,
         "columnNumber": 10
       }
     },
@@ -260,7 +281,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 103,
+        "lineNumber": 302,
         "columnNumber": 12
       }
     },
@@ -269,7 +290,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 607,
+        "lineNumber": 698,
         "columnNumber": 10
       }
     },
@@ -292,11 +313,20 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[HUD] speech:db JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
       "type": "table",
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 757,
+        "lineNumber": 848,
         "columnNumber": 16
       }
     },
@@ -400,6 +430,24 @@
       }
     },
     {
+      "type": "info",
+      "text": "[ASR] dev initAsrFeature()",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/index-hooks/asr.js",
+        "lineNumber": 17,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "info",
+      "text": "[ASR] initialized from http://127.0.0.1:5180/src/index-hooks/asr.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/index.js",
+        "lineNumber": 585,
+        "columnNumber": 26
+      }
+    },
+    {
       "type": "debug",
       "text": "[init] feature:router",
       "location": {
@@ -413,8 +461,24 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 421,
+        "lineNumber": 708,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 640,
+        "columnNumber": 30
+      }
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -428,7 +492,7 @@
     },
     {
       "type": "log",
-      "text": "[dup-init:summary] {\"dups\":[],\"total\":19}",
+      "text": "[dup-init:summary] {\"dups\":[],\"total\":20}",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 39,
@@ -436,16 +500,98 @@
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "type": "debug",
+      "text": "[HUD] speech JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:cam-mirror JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
+        "lineNumber": 185
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[OBS test failed] JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 188,
+        "columnNumber": 26
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
       }
     }
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 30 candidate controls"
+    "Found 31 candidate controls"
   ],
   "meta": {
     "target": {
@@ -454,9 +600,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "fa162f9507045739f6d050e329d947c57b683dfd",
-      "branch": "chore/ts-migration/remove-legacy-matcher-pll",
-      "buildTime": "2025-11-04T02:43:42.294Z"
+      "gitSha": "32059980e8f8a82286557d0d1a7e31f45569e93e",
+      "branch": "main",
+      "buildTime": "2025-11-06T03:49:41.379Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -497,7 +643,7 @@
   },
   "hudProbe": {
     "isDevClass": false,
-    "hasHudChildren": false
+    "hasHudChildren": true
   },
   "lateProbe": {
     "supported": true,
@@ -522,16 +668,16 @@
   },
   "scrollProbe": {
     "hasControls": true,
-    "delta": 76,
-    "label": "Auto-scroll: On — 70 px/s"
+    "delta": 0,
+    "label": "Auto-scroll: Off"
   },
   "autoState": {
     "sawEvent": true,
-    "intentOn": true,
-    "gate": "on",
-    "speed": 80,
-    "label": "Auto-scroll: On — 80 px/s",
-    "chip": "Auto: Paused",
+    "intentOn": false,
+    "gate": "paused",
+    "speed": 30,
+    "label": "Auto-scroll: Off",
+    "chip": "Auto: Paused — waiting for speech",
     "delta": 0
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
