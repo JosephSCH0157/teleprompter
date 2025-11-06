@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UI Crawl Report",
+  "type": "object",
+  "properties": {
+    "clicked": { "type": "array", "items": { "type": "object", "properties": { "id": {"type":"string"}, "text": {"type":["string","null"]} }, "additionalProperties": true } },
+    "errors": { "type": "array" },
+    "console": { "type": "array" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "meta": { "type": "object", "properties": {
+      "target": { "type": "object", "properties": { "host": {"type":"string"}, "port": {"type":"string"}, "url": {"type":"string"} }, "required": ["url"], "additionalProperties": true },
+      "build": { "type": "object", "properties": { "gitSha": {"type":["string","null"]}, "branch": {"type":["string","null"]}, "buildTime": {"type":["string","null"]} }, "additionalProperties": true }
+    }, "additionalProperties": true },
+    "url": { "type": "string" },
+    "ci": { "type": "boolean" },
+    "fileInputs": { "type": "array" },
+    "legendProbe": { "type": "array" },
+    "renderProbe": { "type": "object" },
+    "hudProbe": { "type": "object" },
+    "hotkeysProbe": { "type": "object" },
+    "lateProbe": { "type": "object" },
+    "autoScrollUi": { "type": "object", "properties": { "was": {"type":"string"}, "now": {"type":"string"}, "ok": {"type":"boolean"} }, "additionalProperties": true },
+    "screenshot": { "type": "string" }
+  },
+  "required": ["clicked", "errors", "console", "url"],
+  "additionalProperties": true
+}

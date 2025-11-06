@@ -1,0 +1,81 @@
+name: Smoke CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'teleprompter_pro.html'
+      - 'display.html'
+      - 'src/**'
+      - 'adapters/**'
+      - 'ui/**'
+      - 'recorders.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tools/static_server.js'
+      - 'tools/smoke_test.js'
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Run smoke (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore Playwright cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium (+deps)
+        run: npx playwright install chromium --with-deps
+
+      - name: Start static server
+        env:
+          CI_HOST: 127.0.0.1
+          CI_PORT: 5180
+        run: |
+          node tools/static_server.js &
+          for i in $(seq 1 20); do
+            if curl -sS "http://${CI_HOST}:${CI_PORT}/?ci=1" > /dev/null 2>&1; then
+              echo "static server is up"
+              break
+            fi
+            echo "waiting for static server..."
+            sleep 1
+          done
+
+      - name: Run smoke
+        env:
+          CI_HOST: 127.0.0.1
+          CI_PORT: 5180
+          SMOKE_CI: "1"
+        run: |
+          set -euo pipefail
+          npm run smoke | tee smoke.log
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: |
+            smoke.log

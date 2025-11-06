@@ -188,7 +188,14 @@
 
     // Assemble
     hud.append(head, body, foot);
-    document.body.appendChild(hud);
+    // Prefer mounting to #hud-root if present, else fallback to body
+    const hudRoot = document.getElementById('hud-root');
+    if (hudRoot) {
+      try { hudRoot.style.pointerEvents = 'auto'; } catch {}
+      hudRoot.appendChild(hud);
+    } else {
+      document.body.appendChild(hud);
+    }
 
     // State
     let paused = false;
@@ -196,10 +203,13 @@
     function show() {
       hud.classList.add('open');
       state.open = true;
+      try { if (hudRoot) hudRoot.style.pointerEvents = 'auto'; } catch {}
     }
     function hide() {
       hud.classList.remove('open');
       state.open = false;
+      // Keep pointer events enabled so the toggle button remains clickable if present in the root
+      try { if (hudRoot) hudRoot.style.pointerEvents = 'auto'; } catch {}
     }
 
     function toggle() {
