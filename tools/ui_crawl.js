@@ -371,6 +371,28 @@ const cp = require('child_process');
       out.settingsProbe = probes.settingsProbe;
       out.obsTestProbe = probes.obsTestProbe;
 
+      // Ensure long content before movement-related probes (sample injection above may have shortened it)
+      try {
+        await page.evaluate(async () => {
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          try {
+            const scriptEl = document.querySelector('#script');
+            const lines = scriptEl ? scriptEl.querySelectorAll('.line').length : 0;
+            if (lines < 60) {
+              const parts = [];
+              for (let i=0;i<30;i++) parts.push(`[s1]Line ${i} from S1[/s1]`, `[s2]Line ${i} from S2[/s2]`);
+              const long = parts.join('\n');
+              const ed = document.getElementById('editor');
+              if (ed) { ed.value = long; ed.dispatchEvent(new Event('input', { bubbles: true })); }
+              if (typeof window.renderScript === 'function') window.renderScript(long);
+              await sleep(200);
+            }
+            // Reset scroll position to top to avoid immediate end-stop
+            try { const viewer = document.getElementById('viewer'); if (viewer) viewer.scrollTop = 0; } catch {}
+          } catch {}
+        });
+      } catch {}
+
       // Mini scroll proof: toggle auto, bump speed, confirm movement without OBS/ASR
       try {
         async function scrollProbe(page) {

@@ -42,7 +42,7 @@
     },
     {
       "id": "autoToggle",
-      "text": "Auto-scroll: Off"
+      "text": "Auto-scroll: Paused — 60 px/s"
     },
     {
       "id": "startCam",
@@ -197,7 +197,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../recorders.js",
+      "text": "[init] import:../debug-tools.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -206,7 +206,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../debug-tools.js",
+      "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -448,6 +448,15 @@
       }
     },
     {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 640,
+        "columnNumber": 30
+      }
+    },
+    {
       "type": "debug",
       "text": "[init] feature:router",
       "location": {
@@ -554,6 +563,78 @@
       }
     },
     {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
       "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
       "location": {
@@ -572,7 +653,34 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -591,9 +699,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "9c3ae3c705e7fd67aa3f7ba239592b053383a200",
+      "gitSha": "23e853b293743db507de35a4560a7612eacf20c0",
       "branch": "main",
-      "buildTime": "2025-11-06T12:31:24.549Z"
+      "buildTime": "2025-11-06T13:10:57.075Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -659,17 +767,17 @@
   },
   "scrollProbe": {
     "hasControls": true,
-    "delta": 0,
-    "label": "Auto-scroll: Off"
+    "delta": 41.33333206176758,
+    "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {
     "sawEvent": true,
-    "intentOn": false,
-    "gate": "paused",
-    "speed": 30,
-    "label": "Auto-scroll: Off",
-    "chip": "Auto: Paused — waiting for speech",
-    "delta": 0
+    "intentOn": true,
+    "gate": "on",
+    "speed": 62,
+    "label": "Auto-scroll: On — 62.0 px/s",
+    "chip": "Auto: Paused",
+    "delta": 26
   },
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }

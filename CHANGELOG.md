@@ -60,4 +60,3 @@ Release hygiene and router hardening.
   - Pre-commit guard (`tools/guard_ts_js_shadow.js`) and CI step to block TS/JS shadowing
 - Zero-warning ESLint and green TypeScript types
 - Deterministic smokes stabilized: Save/UI crawl pass in CI; ASR smoke clean locally
-
