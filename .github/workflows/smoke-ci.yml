@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Guard TS/JS shadowing
+        run: node tools/guard_ts_js_shadow.js
+
       - name: Restore Playwright cache
         uses: actions/cache@v4
         with:
