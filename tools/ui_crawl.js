@@ -391,6 +391,7 @@ const cp = require('child_process');
             try { const viewer = document.getElementById('viewer'); if (viewer) viewer.scrollTop = 0; } catch {}
           } catch {}
         });
+        try { out.contentLines = await page.evaluate(() => (document.querySelectorAll('#script .line').length)); } catch { out.contentLines = null; }
       } catch {}
 
       // Mini scroll proof: toggle auto, bump speed, confirm movement without OBS/ASR

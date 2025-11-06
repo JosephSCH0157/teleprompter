@@ -25,6 +25,7 @@ const fileInputs = Array.isArray(report.fileInputs) ? report.fileInputs : [];
 const consoleEntries = Array.isArray(report.console) ? report.console : [];
 const legendProbe = Array.isArray(report.legendProbe) ? report.legendProbe : [];
 const renderProbe = report.renderProbe || {};
+const contentLines = typeof report.contentLines === 'number' ? report.contentLines : null;
 const hudProbe = report.hudProbe || {};
 const _hotkeysProbe = report.hotkeysProbe || {};
 const lateProbe = report.lateProbe || {};
@@ -160,6 +161,11 @@ if (!allOk) {
 }
 // Additional probes validation: ensure legend exists and renderer applies different colors
 try {
+  // Content length guard for movement probes
+  if (contentLines !== null && contentLines < 60) {
+    console.error('FAIL content-lines — expected >= 60 lines for movement probes (got ' + contentLines + ')');
+    allOk = false;
+  }
   if (legendProbe.length < 2) {
     const msg = 'legend — expected 2+ legend items, found ' + legendProbe.length;
     if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
