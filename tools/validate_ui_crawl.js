@@ -127,12 +127,23 @@ for (const ex of expectations) {
   }
 }
 
-// Fail only on real console errors (ignore warnings/logs and benign 'global error hooks' log)
+// Fail only on real console errors (ignore warnings/logs and known benign errors in headless CI)
 const benignLogRegex = /installed\s+global\s+error\s+hooks/i;
+const benignErrorRegexes = [
+  /WebSocket\s+connection\s+to\s+'ws:\/\/[^']*4455\/'\s+failed.*(ERR_CONNECTION_REFUSED|ECONNREFUSED)/i, // OBS not running
+  /The\s+AudioContext\s+was\s+not\s+allowed\s+to\s+start/i, // common headless audio policy
+];
 const isProblemConsole = (e) => {
   if (!e) return false;
-  if (benignLogRegex.test(String(e.text || ''))) return false;
-  return e.type === 'error';
+  const text = String(e.text || '');
+  if (benignLogRegex.test(text)) return false;
+  if (e.type === 'error') {
+    for (const re of benignErrorRegexes) {
+      if (re.test(text)) return false;
+    }
+    return true;
+  }
+  return false;
 };
 const problemEntries = consoleEntries.filter(isProblemConsole);
 if (problemEntries.length) {
