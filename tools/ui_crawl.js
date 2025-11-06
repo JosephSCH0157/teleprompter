@@ -8,6 +8,10 @@ const cp = require('child_process');
   try{
     const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
     const page = await browser.newPage();
+    // Polyfill waitForTimeout for environments where it's missing
+    if (!page.waitForTimeout) {
+      page.waitForTimeout = (ms) => new Promise((resolve) => setTimeout(resolve, typeof ms === 'number' ? ms : 0));
+    }
     // Freeze viewport and DPR for deterministic layout
     try { await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 }); } catch {}
     page.setDefaultTimeout(20000);
