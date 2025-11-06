@@ -170,7 +170,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../adapters/bridge.js",
+      "text": "[init] import:../adapters/obsBridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -179,7 +179,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../adapters/obsBridge.js",
+      "text": "[init] import:../adapters/bridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -215,7 +215,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../io-anchor.js",
+      "text": "[init] import:../debug-seed.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -224,7 +224,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../debug-seed.js",
+      "text": "[init] import:../io-anchor.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -466,15 +466,6 @@
       }
     },
     {
-      "type": "log",
-      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 640,
-        "columnNumber": 30
-      }
-    },
-    {
       "type": "verbose",
       "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
       "location": {
@@ -600,9 +591,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "32059980e8f8a82286557d0d1a7e31f45569e93e",
+      "gitSha": "9c3ae3c705e7fd67aa3f7ba239592b053383a200",
       "branch": "main",
-      "buildTime": "2025-11-06T03:49:41.379Z"
+      "buildTime": "2025-11-06T12:31:24.549Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
