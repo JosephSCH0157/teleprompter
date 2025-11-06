@@ -52,6 +52,8 @@ This snapshot is declared the new baseline.
 
 ## [1.6.4] - 2025-11-06
 
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.6.4
+
 ### Fixed
 
 - UI crawl: enforce ≥60 lines for movement probes; reset viewer position; detect Auto-toggle clicks.

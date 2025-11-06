@@ -226,7 +226,9 @@ try {
       console.error('FAIL auto-state-no-movement — viewport did not move');
       allOk = false;
     } else {
-      console.log('PASS auto-state —', JSON.stringify({ gate: a.gate, speed: a.speed, delta: a.delta }));
+      const summary = { gate: a.gate, speed: a.speed, delta: a.delta };
+      if (a.label) summary.label = a.label;
+      console.log('PASS auto-state —', JSON.stringify(summary));
     }
   } catch (e) {
     console.warn('WARN auto-state validation failed:', String(e && e.message || e));
