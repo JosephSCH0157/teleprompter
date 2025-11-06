@@ -155,6 +155,23 @@ if (problemEntries.length) {
   console.log('PASS console — no failing console entries detected');
 }
 
+// Version badge must match package.json version (if present)
+try {
+  const pkg = require('../package.json');
+  if (report.appVersionText) {
+    if (!String(report.appVersionText).includes(pkg.version)) {
+      console.error(`FAIL version-badge — page shows "${report.appVersionText}" but package.json is "${pkg.version}"`);
+      allOk = false;
+    } else {
+      console.log(`PASS version-badge — ${report.appVersionText}`);
+    }
+  } else {
+    console.warn('WARN version-badge — #appVersion not found in crawl output');
+  }
+} catch (e) {
+  console.warn('WARN version-badge check failed:', String(e && e.message || e));
+}
+
 if (!allOk) {
   console.error('\nOne or more required UI controls or checks failed.');
   process.exit(1);

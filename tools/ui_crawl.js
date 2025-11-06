@@ -571,6 +571,11 @@ const cp = require('child_process');
     } catch (e) {
       out.notes.push('probes failed: ' + String(e && e.message || e));
     }
+    // Capture visible app version badge text if present
+    try {
+      const vtxt = await page.$eval('#appVersion', (el) => (el && el.textContent ? el.textContent : ''));
+      if (vtxt) out.appVersionText = String(vtxt).trim();
+    } catch {}
     // Embed build metadata
     try {
       out.meta.build = {

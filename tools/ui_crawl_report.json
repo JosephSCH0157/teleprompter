@@ -448,15 +448,6 @@
       }
     },
     {
-      "type": "log",
-      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 640,
-        "columnNumber": 30
-      }
-    },
-    {
       "type": "debug",
       "text": "[init] feature:router",
       "location": {
@@ -686,15 +677,6 @@
         "lineNumber": 30,
         "columnNumber": 17
       }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
     }
   ],
   "notes": [
@@ -708,9 +690,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "bd9f7ac857fc31a640b546e49bad3fa7434cde31",
+      "gitSha": "4fd0a3545dc442754c537e25d01f85d7e776af11",
       "branch": "main",
-      "buildTime": "2025-11-06T13:27:16.638Z"
+      "buildTime": "2025-11-06T14:19:58.138Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -755,7 +737,7 @@
   },
   "lateProbe": {
     "supported": true,
-    "approxFps": 57,
+    "approxFps": 60,
     "jitterStd": 0,
     "moved": false
   },
@@ -789,5 +771,6 @@
     "chip": "Auto: Paused",
     "delta": 26
   },
+  "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }
