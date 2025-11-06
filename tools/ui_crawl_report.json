@@ -197,7 +197,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../debug-tools.js",
+      "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -206,7 +206,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../recorders.js",
+      "text": "[init] import:../debug-tools.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -653,7 +653,16 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -699,9 +708,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "23e853b293743db507de35a4560a7612eacf20c0",
+      "gitSha": "bd9f7ac857fc31a640b546e49bad3fa7434cde31",
       "branch": "main",
-      "buildTime": "2025-11-06T13:10:57.075Z"
+      "buildTime": "2025-11-06T13:27:16.638Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -746,7 +755,7 @@
   },
   "lateProbe": {
     "supported": true,
-    "approxFps": 60,
+    "approxFps": 57,
     "jitterStd": 0,
     "moved": false
   },
@@ -765,9 +774,10 @@
     "hasPillAfter": true,
     "btnId": "settingsObsTest"
   },
+  "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 41.33333206176758,
+    "delta": 40.66666793823242,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {
