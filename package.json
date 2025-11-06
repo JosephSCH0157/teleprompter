@@ -30,6 +30,8 @@
     "prepare": "husky",
     "build:speech": "node tools/esbuild-speech.mjs",
     "watch:speech": "node tools/esbuild-speech.mjs --watch"
+  ,
+    "postversion": "node tools/bump_html_version.js && git add teleprompter_pro.html && git commit -m \"chore(html): bump visible version\" || true"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",
