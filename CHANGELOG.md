@@ -49,3 +49,15 @@ Stability baseline after init/boot fixes and camera/display guards.
 - Version: Bump to 1.5.7 and expose `window.APP_VERSION`.
 
 This snapshot is declared the new baseline.
+
+## v1.6.3 — 2025-11-06
+
+Release hygiene and router hardening.
+
+- Rebase hardening and conflict resolution across scroll-router; authoritative runtime remains `src/features/scroll-router.js`.
+- Removed corrupted `src/features/scroll-router.ts`; added guards to prevent reintroduction:
+  - TypeScript exclude and `.gitattributes` merge=ours rule
+  - Pre-commit guard (`tools/guard_ts_js_shadow.js`) and CI step to block TS/JS shadowing
+- Zero-warning ESLint and green TypeScript types
+- Deterministic smokes stabilized: Save/UI crawl pass in CI; ASR smoke clean locally
+
