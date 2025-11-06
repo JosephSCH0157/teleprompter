@@ -50,6 +50,15 @@ Stability baseline after init/boot fixes and camera/display guards.
 
 This snapshot is declared the new baseline.
 
+## [1.6.4] - 2025-11-06
+
+### Fixed
+- UI crawl: enforce ≥60 lines for movement probes; reset viewer position; detect Auto-toggle clicks.
+- Safety bridge: consistent label/data-state updates; start/stop fallback scroller; immediate scroll nudge.
+
+### CI
+- Gate passes reliably headless; OBS ws refusal remains benign WARN.
+
 ## v1.6.3 — 2025-11-06
 
 Release hygiene and router hardening.
