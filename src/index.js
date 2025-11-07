@@ -597,20 +597,52 @@ async function boot() {
     try {
       // Prefer the compiled TS router when available; fall back to JS router
       try {
+        // Robust dynamic import sequence with graceful legacy fallback.
+        async function tryImport(spec, flag) {
+          try {
+            const m = await import(spec);
+            if (m) {
+              try { flag && (window[flag] = true); } catch {}
+              return m;
+            }
+          } catch (err) {
+            try { console.warn('[router] import failed', spec, err && err.message); } catch {}
+          }
+          return null;
+        }
+        const candidates = [
+          { spec: '/dist/features/scroll-router.js', flag: '__tpScrollRouterTsActive' },
+          { spec: './features/scroll-router.js',     flag: '__tpScrollRouterJsActive' }
+        ];
         let mod = null;
-        try {
-          mod = await import('/dist/features/scroll-router.js');
-          try { window.__tpScrollRouterTsActive = true; } catch {}
-        } catch {}
+        for (const c of candidates) {
+          mod = await tryImport(c.spec, c.flag);
+          if (mod) break;
+        }
         if (!mod) {
-          mod = await import('./features/scroll-router.js');
-          try { window.__tpScrollRouterJsActive = true; } catch {}
+          // Final fallback: inject legacy monolith (teleprompter_pro.js) if router modules missing.
+          try {
+            console.warn('[router] all module candidates failed; attempting legacy fallback script');
+            const s = document.createElement('script');
+            s.src = './teleprompter_pro.js';
+            s.defer = true;
+            s.onload = () => { try { console.info('[router] legacy script loaded'); } catch {} };
+            document.head.appendChild(s);
+          } catch {}
+        } else {
+          // Pass the Auto API to the router so it can drive the engine.
+          try {
+            if (typeof mod.installScrollRouter === 'function') {
+              mod.installScrollRouter({ auto: Auto });
+              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {}
+            } else {
+              console.warn('[router] installScrollRouter not found on module');
+            }
+          } catch (e) {
+            console.warn('[src/index] installScrollRouter failed', e);
+          }
         }
-        // Pass the Auto API to the router so it can drive the engine
-        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter({ auto: Auto }); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {} } catch (e) {
-          console.warn('[src/index] installScrollRouter failed', e);
-        }
-      } catch (e) { console.warn('[src/index] router import failed', e); }
+      } catch (e) { console.warn('[src/index] router import sequence failed', e); }
       // Resilient event delegation (works in headless + when nodes re-render)
       let __lastAutoToggleAt = 0;
       const __applyAutoChip = () => {

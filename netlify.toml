@@ -1,6 +1,8 @@
 [build]
   publish = "."
-  command = ""   # no build step
+  # Build the router (dist) so module import '/dist/features/scroll-router.js' resolves in production.
+  # Keep lightweight; add other bundles here if needed later.
+  command = "npm run build:router"  
 
 # Land on the app even if there's no index.html
 [[redirects]]
