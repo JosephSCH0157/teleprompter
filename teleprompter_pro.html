@@ -277,6 +277,7 @@
   <button class="chip" id="presentBtn">Present Mode</button>
   <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
   <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
+  <button id="loadDemoBtn" class="chip" hidden>Load Demo Script</button>
   <span id="selfChecksChip" class="chip chip-muted">
     Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
   </span>
@@ -509,5 +510,35 @@
 
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
 
+  <!-- First-time helper: show a topbar "Load Demo Script" CTA when script is empty -->
+  <script>
+  (function(){
+    try{
+      var btn = document.getElementById('loadDemoBtn');
+      if (!btn) return;
+      var showIfEmpty = function(){
+        try{
+          var scriptEl = document.getElementById('script');
+          var ed = document.getElementById('editor');
+          var hasLines = !!(scriptEl && scriptEl.querySelector('.line'));
+          var hasText = !!(ed && ed.value && ed.value.trim().length > 0);
+          btn.hidden = !!(hasLines || hasText);
+        }catch{}
+      };
+      // Wire click → reuse existing sidebar control
+      btn.addEventListener('click', function(){
+        try{
+          var loadBtn = document.getElementById('loadSample');
+          if (loadBtn && typeof loadBtn.click === 'function') loadBtn.click();
+          setTimeout(showIfEmpty, 150);
+        }catch{}
+      });
+      // Observe initial state and after a short delay post-boot
+      showIfEmpty();
+      setTimeout(showIfEmpty, 600);
+      document.addEventListener('tp:init:done', showIfEmpty, { once: true });
+    }catch{}
+  })();
+  </script>
 </body>
 </html>
