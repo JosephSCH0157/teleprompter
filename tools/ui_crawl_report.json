@@ -13,10 +13,6 @@
       "text": "Help"
     },
     {
-      "id": "loadDemoBtn",
-      "text": "Load Demo Script"
-    },
-    {
       "id": "openDisplayBtn",
       "text": "Open display window"
     },
@@ -132,6 +128,15 @@
     },
     {
       "checkboxIndex": 2
+    },
+    {
+      "checkboxIndex": 3
+    },
+    {
+      "checkboxIndex": 4
+    },
+    {
+      "checkboxIndex": 5
     }
   ],
   "errors": [],
@@ -156,24 +161,6 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../eggs.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../adapters/obsBridge.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
       "text": "[init] import:../adapters/bridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
@@ -192,7 +179,52 @@
     },
     {
       "type": "debug",
+      "text": "[init] import:../adapters/obsBridge.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../eggs.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
       "text": "[init] import:../recorders.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../help.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../io-anchor.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../scroll-control.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -211,33 +243,6 @@
     {
       "type": "debug",
       "text": "[init] import:../debug-seed.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../io-anchor.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../help.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../scroll-control.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -461,6 +466,13 @@
       }
     },
     {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+      }
+    },
+    {
       "type": "table",
       "text": "JSHandle@array",
       "location": {
@@ -476,15 +488,6 @@
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 39,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     },
     {
@@ -551,13 +554,6 @@
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
-    },
-    {
       "type": "debug",
       "text": "[HUD] display:render JSHandle@object",
       "location": {
@@ -604,7 +600,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -684,16 +680,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -703,7 +690,7 @@
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 32 candidate controls"
+    "Found 31 candidate controls"
   ],
   "meta": {
     "target": {
@@ -712,9 +699,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "911dc28740e5b49fea4a14e9e6696fc5c23d4d78",
+      "gitSha": "8b3557530d2599d39b4bfe19e613689517e02b7f",
       "branch": "main",
-      "buildTime": "2025-11-07T02:36:24.867Z"
+      "buildTime": "2025-11-07T13:25:15.351Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -781,7 +768,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 40.66666793823242,
+    "delta": 42,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {
@@ -791,7 +778,7 @@
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: Paused",
-    "delta": 28
+    "delta": 26
   },
   "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"
