@@ -22,6 +22,7 @@ import { startVadAdapter } from './asr/vadAdapter';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installScrollRouter } from './features/scroll-router';
+import { installStepScroll } from './features/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
@@ -86,6 +87,29 @@ try {
 				setSpeed: (Auto as any).setSpeed,
 				getState: (Auto as any).getState,
 			}});
+		} catch {}
+
+		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
+		try {
+			const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
+			// Optional wiring: allow window.setScrollMode('step') to control Step when router is absent
+			if (!(window as any).setScrollMode) {
+				(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'off') => {
+					try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
+					try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
+					if (mode === 'step') step.enable(); else step.disable();
+				};
+			}
+			// If explicitly requested, override router Step with TS module
+			try {
+				if ((window as any).__TP_TS_STEP_OVERRIDE) {
+					// Basic observer: when a custom event selects a mode, reflect into TS step
+					document.addEventListener('tp:selectMode', (e: any) => {
+						const m = e?.detail?.mode as string;
+						if (m === 'step') step.enable(); else step.disable();
+					}, { capture: true });
+				}
+			} catch {}
 		} catch {}
 
 		// Install coalesced Display Sync (hash + optional HTML text) for external display
