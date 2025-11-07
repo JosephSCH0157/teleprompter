@@ -20,7 +20,27 @@ try {
 } catch {}
 
 // --- HUD hotkey safety (Alt+Shift+H always opens HUD) ---
+// Global typing guard helper (single source of truth)
+window.isTyping = window.isTyping || function (el) {
+  try {
+    el = el || document.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'select') return true;
+    if (tag === 'input') {
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      // Inputs that are text-like; allow arrows etc. to work elsewhere
+      const texty = ['text','search','email','url','number','password','tel'];
+      return texty.includes(type) || type === '';
+    }
+    return false;
+  } catch { return false; }
+};
+// Mark events originating while typing so deeper listeners can skip
+window.addEventListener('keydown', (e) => { try { if (window.isTyping()) e.__tpTyping = true; } catch {} }, { capture: true });
 window.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
   if (e.altKey && e.shiftKey && e.code === 'KeyH') {
     e.preventDefault();
     e.stopPropagation();
@@ -169,6 +189,7 @@ window.ensureHud = window.ensureHud || function () {
 };
 
 window.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
   if (e.altKey && e.shiftKey && e.code === 'KeyH') {
     const hud = window.ensureHud();
     hud?.toggle?.();
@@ -387,7 +408,8 @@ function ensureHud() {
 
 // keyboard: Alt+Shift+H toggles HUD
 document.addEventListener('keydown', (e) => {
-  if (e.altKey && e.shiftKey && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
+  if (window.isTyping?.() || e.__tpTyping) return;
+  if (e.altKey && e.shiftKey && (e.code === 'KeyH' || (e.key && e.key.toLowerCase() === 'h'))) {
     ensureHud();
     window.__HUD?.toggle?.();
   }
@@ -4468,9 +4490,8 @@ let _toast = function (msg, opts) {
     });
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
-      const tag = (e.target.tagName || '').toLowerCase();
-      const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
-      if (typing) return; // don't steal keys when user is typing
+      // don't steal keys when user is typing
+      if (window.isTyping?.() || e.__tpTyping) return;
 
       switch (e.key) {
         case ' ': // Space
@@ -6326,6 +6347,7 @@ let _toast = function (msg, opts) {
         if (e.target === settingsOverlay) closeSettings();
       });
       window.addEventListener('keydown', (e) => {
+        if (window.isTyping?.() && e.key !== 'Escape') return; // allow Escape to still close
         if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) closeSettings();
       });
     }
@@ -7339,6 +7361,7 @@ let _toast = function (msg, opts) {
     }
     // Keybinding to toggle panel (dev mode only)
     window.addEventListener('keydown', (e) => {
+      if (window.isTyping?.() || e.__tpTyping) return;
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') {
         if (DEV_MODE) {
           ensureTuningPanel();
@@ -7797,6 +7820,7 @@ let _toast = function (msg, opts) {
 
   // Dump boot trace if user presses Ctrl+Alt+B (debug aid)
   window.addEventListener('keydown', (e) => {
+    if (window.isTyping?.() || e.__tpTyping) return;
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'b') {
       try {
         console.log(
@@ -10746,6 +10770,14 @@ let _toast = function (msg, opts) {
     let __momentaryMult = 1;
     const _onKey = (e) => {
       try {
+        // If user is typing in an input/textarea/contentEditable, don't affect scroll speed
+        if (window.isTyping?.() || e.__tpTyping) {
+          if (__momentaryMult !== 1) {
+            __momentaryMult = 1;
+            try { (window.tp_hud || window.__tpHud)?.('speed:momentary', { n: __momentaryMult }); } catch {}
+          }
+          return;
+        }
         const next = e.shiftKey ? 1.1 : e.altKey ? 0.88 : 1;
         if (next !== __momentaryMult) {
           __momentaryMult = next;
@@ -12017,6 +12049,7 @@ let _toast = function (msg, opts) {
     const konami = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
     let pos = 0;
     window.addEventListener('keydown', (e) => {
+      if (window.isTyping?.() || e.__tpTyping) return; // skip sequence when typing
       const code = e.keyCode || e.which;
       pos = code === konami[pos] ? pos + 1 : 0;
       if (pos === konami.length) {
@@ -12129,6 +12162,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     about.classList.remove('hidden');
   }
   window.addEventListener('keydown', (e) => {
+    if (window.isTyping?.() || e.__tpTyping) return;
     if (e.ctrlKey && e.altKey && e.key?.toLowerCase?.() === 'k') {
       e.preventDefault();
       showAbout();
