@@ -35,6 +35,24 @@ Stability and alignment improvements across matching, scrolling, and observabili
 - Versioning
   - Bump to 1.6.0; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. PLL controller added to Advanced settings with live readout.
 
+## [1.6.5] - 2025-11-08
+
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.6.5
+
+### Fixed
+
+- OBS connection gating: never attempt to connect when disabled in Settings.
+  - Unified armed gating across store and localStorage: prefer `__tpStore.get('obsEnabled')`; fall back to any of `tp_obs_enabled_v2`, `tp_obs_enabled_v1`, or `tp_obs_enabled`.
+  - Persist all keys on toggle for compatibility; tie auto‑reconnect strictly to the armed flag; respect Rehearsal mode.
+  - Exposed `window.__tpObs.{armed,setArmed,maybeConnect}` remains the single control surface.
+- Auto‑record guard: when the selected recorder is OBS and it's disarmed, `doAutoRecordStart()` is a no‑op. Prevents unintended starts when OBS is off.
+- ASR smoke “Mode flip no‑dup” reliability: test‑only `tp:speech-result` path now pre‑positions the index for synthetic large leaps, avoiding false suppressions in the headless harness. Runtime coverage‑based gating is unchanged.
+
+### Tests
+
+- Recording smoke suite remains green (fallback, handoff, idempotency).
+- ASR smoke now passes “Mode flip no‑dup” along with existing gates (leap guard, freeze clamp, etc.).
+
 ## v1.5.7 — 2025-09-27
 
 Stability baseline after init/boot fixes and camera/display guards.
