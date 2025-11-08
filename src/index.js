@@ -82,6 +82,29 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
     try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
     // Unify legacy HUD log calls to the SSOT
     try { if (!window.HUD) window.HUD = api; } catch {}
+    
+    // Listen to new typed transcript and state events
+    try {
+      window.addEventListener('tp:speech:transcript', (e) => {
+        const d = e.detail;
+        if (!d) return;
+        api.log('speech:tx', {
+          partial: d.partial,
+          final: d.final,
+          conf: d.confidence?.toFixed(2),
+          len: d.text?.length ?? 0,
+          idx: d.lineIndex,
+          harness: d.harness,
+        });
+      });
+      
+      window.addEventListener('tp:speech:state', (e) => {
+        const d = e.detail;
+        if (!d) return;
+        api.log('speech:state', { state: d.state, reason: d.reason, harness: d.harness });
+      });
+    } catch {}
+    
     // Announce readiness
     try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
   } catch {}

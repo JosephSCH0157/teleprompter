@@ -5,6 +5,8 @@ import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { speechStore } from '../state/speech-store';
+import { emit } from '../events';
+import type { TranscriptEvent, AsrStateEvent } from '../asr-types';
 
 export type AsrState = 'idle' | 'ready' | 'listening' | 'running' | 'error';
 
@@ -27,6 +29,10 @@ export class AsrMode {
   private tokensPerSec = 0;
   private lastPartialTs = 0;
   private lastPartialTokens = 0;
+  
+  // Transcript event throttling
+  private lastTxAt = 0;
+  private readonly TX_MIN_INTERVAL_MS = 90; // ~10–12 Hz max
 
   constructor(opts?: AsrModeOptions) {
     this.opts = {
@@ -66,6 +72,17 @@ export class AsrMode {
     if (e.type === 'partial' || e.type === 'final') {
       if (this.state !== 'running') this.setState('running');
       const text = this.prepareText(e.text);
+      const isFinal = e.type === 'final';
+      const confidence = e.confidence ?? (isFinal ? 1 : 0.5);
+      
+      // Emit transcript event (throttled for partials)
+      this.emitTranscript({
+        text,
+        confidence,
+        partial: !isFinal,
+        final: isFinal,
+        lineIndex: isFinal ? this.currentIdx : undefined,
+      });
       
       // Feed-forward: track token rate on partials
       if (e.type === 'partial') {
@@ -82,11 +99,12 @@ export class AsrMode {
         this.lastPartialTokens = tokens;
       }
       
-      this.tryAdvance(text, e.type === 'final', e.confidence ?? (e.type === 'final' ? 1 : 0.5));
+      this.tryAdvance(text, isFinal, confidence);
     }
 
     if (e.type === 'error') {
       this.setState('error');
+      this.emitAsrState('error', e.message);
       this.dispatch('asr:error', { code: e.code, message: e.message });
     }
     if (e.type === 'stopped') {
@@ -97,11 +115,44 @@ export class AsrMode {
   private setState(next: AsrState) {
     this.state = next;
     this.dispatch('asr:state', { state: next });
+    this.emitAsrState(next);
   }
 
   private prepareText(s: string): string {
     const st = speechStore.get();
     return st.fillerFilter ? stripFillers(s) : normalizeText(s);
+  }
+  
+  /**
+   * Gate: only emit transcript events in dev OR when explicitly enabled in Settings
+   */
+  private shouldEmitTx(): boolean {
+    try {
+      return localStorage.getItem('tp_dev_mode') === '1' || 
+             localStorage.getItem('tp_hud_prod') === '1' ||
+             (window as any).__TP_DEV === true;
+    } catch {
+      return false;
+    }
+  }
+  
+  /**
+   * Emit transcript event with throttling for partials
+   */
+  private emitTranscript(detail: Omit<TranscriptEvent, 'timestamp'>): void {
+    if (!this.shouldEmitTx()) return;
+    const now = performance.now();
+    if (now - this.lastTxAt < this.TX_MIN_INTERVAL_MS && !detail.final) return; // throttle partials
+    this.lastTxAt = now;
+    emit<TranscriptEvent>('tp:speech:transcript', { ...detail, timestamp: now });
+  }
+  
+  /**
+   * Emit ASR state change event
+   */
+  private emitAsrState(state: AsrStateEvent['state'], reason?: string): void {
+    if (!this.shouldEmitTx()) return;
+    emit<AsrStateEvent>('tp:speech:state', { state, reason, timestamp: performance.now() });
   }
 
   private tryAdvance(hyp: string, isFinal: boolean, confidence: number) {
