@@ -83,12 +83,11 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
     // Unify legacy HUD log calls to the SSOT
     try { if (!window.HUD) window.HUD = api; } catch {}
     
-    // Listen to new typed transcript and state events
+    // Listen to new typed transcript and state events (both captions and legacy speech)
     try {
-      window.addEventListener('tp:speech:transcript', (e) => {
-        const d = e.detail;
+      const logTx = (d) => {
         if (!d) return;
-        api.log('speech:tx', {
+        api.log('captions:tx', {
           partial: d.partial,
           final: d.final,
           conf: d.confidence?.toFixed(2),
@@ -96,13 +95,19 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
           idx: d.lineIndex,
           harness: d.harness,
         });
-      });
-      
-      window.addEventListener('tp:speech:state', (e) => {
-        const d = e.detail;
+      };
+      const logState = (d) => {
         if (!d) return;
-        api.log('speech:state', { state: d.state, reason: d.reason, harness: d.harness });
-      });
+        api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
+      };
+      
+      // Primary captions events
+      window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:captions:state', (e) => logState(e.detail));
+      
+      // Legacy speech events (for backwards compatibility)
+      window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:speech:state', (e) => logState(e.detail));
     } catch {}
     
     // Announce readiness

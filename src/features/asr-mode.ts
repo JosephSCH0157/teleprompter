@@ -144,7 +144,12 @@ export class AsrMode {
     const now = performance.now();
     if (now - this.lastTxAt < this.TX_MIN_INTERVAL_MS && !detail.final) return; // throttle partials
     this.lastTxAt = now;
-    emit<TranscriptEvent>('tp:speech:transcript', { ...detail, timestamp: now });
+    const payload = { ...detail, timestamp: now };
+    
+    // Emit primary captions event
+    emit<TranscriptEvent>('tp:captions:transcript', payload);
+    // Also emit legacy speech event for backwards compatibility
+    emit<TranscriptEvent>('tp:speech:transcript', payload);
   }
   
   /**
@@ -152,7 +157,12 @@ export class AsrMode {
    */
   private emitAsrState(state: AsrStateEvent['state'], reason?: string): void {
     if (!this.shouldEmitTx()) return;
-    emit<AsrStateEvent>('tp:speech:state', { state, reason, timestamp: performance.now() });
+    const payload = { state, reason, timestamp: performance.now() };
+    
+    // Emit primary captions event
+    emit<AsrStateEvent>('tp:captions:state', payload);
+    // Also emit legacy speech event for backwards compatibility
+    emit<AsrStateEvent>('tp:speech:state', payload);
   }
 
   private tryAdvance(hyp: string, isFinal: boolean, confidence: number) {
