@@ -29,6 +29,18 @@
     // Attempt to enable auto-scroll (should stay disabled)
     try { window.Auto?.toggle?.(); } catch {}
     ok(!(window.__tpAuto?.getState?.().enabled), 'auto-scroll kept disabled');
+    // --- ASR cannot start or move scroll while in rehearsal ---
+    try {
+      const viewer = document.getElementById('viewer');
+      const scEl = viewer || document.scrollingElement || document.documentElement || document.body;
+      const startY = scEl.scrollTop|0;
+      try { window.__tpASR?.start?.(); } catch {}
+      setTimeout(()=>{
+        const afterY = scEl.scrollTop|0;
+        ok(afterY === startY, 'ASR did not move scroll');
+        try { if (window.__tpASR && typeof window.__tpASR.isRunning === 'function') ok(!window.__tpASR.isRunning(), 'ASR reports not running under rehearsal'); } catch {}
+      }, 90);
+    } catch {}
     // Display window sync (open a lightweight mock and assert watermark mirror)
     let dispOk = true;
     try {

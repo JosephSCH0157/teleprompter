@@ -1,3 +1,4 @@
+import { broadcastRehearsal } from './rehearsal-bus';
 // src/features/rehearsal.ts
 // Rehearsal Mode: safe practice state with manual scroll only and no recording
 // - Disables OBS/recorders, mic, and camera
@@ -200,14 +201,7 @@ function enable() {
   // Ensure observers are wired regardless of mode
   wireSelectObserversOnce();
   toast('Rehearsal Mode enabled');
-  try { document.dispatchEvent(new CustomEvent('tp:rehearsal:start')); } catch {}
-  // Notify display window(s)
-  try { const bc = new (window as any).BroadcastChannel('tp_rehearsal'); bc.postMessage({ t:'rehearsal', on:true }); try { bc.close?.(); } catch {} } catch {}
-  try {
-    const payload = 'tp:rehearsal:start';
-    const w = (window as any).__tpDisplayWindow || (window as any).tpDisplay?.win || null;
-    if (w && !w.closed) w.postMessage(payload, '*');
-  } catch {}
+  try { broadcastRehearsal(true); } catch {}
 }
 
 function disable() {
@@ -217,14 +211,7 @@ function disable() {
   markUiDisabled(false);
   restorePrev();
   toast('Exited Rehearsal Mode');
-  try { document.dispatchEvent(new CustomEvent('tp:rehearsal:stop')); } catch {}
-  // Notify display window(s)
-  try { const bc = new (window as any).BroadcastChannel('tp_rehearsal'); bc.postMessage({ t:'rehearsal', on:false }); try { bc.close?.(); } catch {} } catch {}
-  try {
-    const payload = 'tp:rehearsal:stop';
-    const w = (window as any).__tpDisplayWindow || (window as any).tpDisplay?.win || null;
-    if (w && !w.closed) w.postMessage(payload, '*');
-  } catch {}
+  try { broadcastRehearsal(false); } catch {}
 }
 
 export function installRehearsal(_store?: Store) {
