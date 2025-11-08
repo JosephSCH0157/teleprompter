@@ -31,9 +31,22 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
     }
 
     const root = ensureHudRoot();
+    
+    // Create a simple event bus for HUD components (compat shim before full bus import)
+    const hudBus = new EventTarget();
     const api = window.__tpHud = window.__tpHud || {
       enabled: false,
       root,
+      bus: {
+        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+        on: (type, fn) => {
+          try {
+            const h = (e) => { try { fn(e.detail); } catch {} };
+            hudBus.addEventListener(type, h);
+            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
+          } catch {}
+        },
+      },
       setEnabled(on) {
         try {
           this.enabled = !!on;

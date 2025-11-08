@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 const LS_KEY = 'tp_hud_speech_notes_v1';
 const PROD_TOGGLE_KEY = 'tp_hud_prod';
 type Note = { text: string; final: boolean; ts: number; sim?: number };
@@ -73,6 +72,23 @@ export function loadHudIfDev(){
     document.getElementById('hudCopy')?.addEventListener('click',copyAll);
     document.getElementById('hudClear')?.addEventListener('click',()=>{ notes=[]; save(); render(notes); });
     document.getElementById('hudClose')?.addEventListener('click',()=>{ try{ el.remove(); }catch{} });
+    // Listen to bus events for speech transcripts (works in all modes)
+    try {
+      const bus = (window as any).HUD?.bus || (window as any).__tpHud?.bus;
+      if (bus && bus.on) {
+        bus.on('speech:partial', (d: any) => {
+          if (!d || !d.text) return;
+          if (statusEl) statusEl.textContent = 'listening';
+          addNote({ text: d.text, final: false, ts: d.t || performance.now(), sim: d.sim });
+        });
+        bus.on('speech:final', (d: any) => {
+          if (!d || !d.text) return;
+          if (statusEl) statusEl.textContent = 'final';
+          addNote({ text: d.text, final: true, ts: d.t || performance.now(), sim: d.sim });
+        });
+      }
+    } catch {}
+    // Fallback: also listen to window events for backwards compat (gated in speech-loader)
     window.addEventListener('tp:speech:transcript',(e:any)=>{ const d=e?.detail as Note; if(!d) return; if(statusEl) statusEl.textContent=d.final?'final':'listening'; addNote(d); });
     render(notes);
   } catch {}

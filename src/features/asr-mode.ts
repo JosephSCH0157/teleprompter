@@ -22,6 +22,11 @@ export class AsrMode {
   private opts: Required<AsrModeOptions>;
   private currentIdx = 0;
   private rescueCount = 0;
+  
+  // ASR feed-forward: track reading speed to lead the target
+  private tokensPerSec = 0;
+  private lastPartialTs = 0;
+  private lastPartialTokens = 0;
 
   constructor(opts?: AsrModeOptions) {
     this.opts = {
@@ -61,6 +66,22 @@ export class AsrMode {
     if (e.type === 'partial' || e.type === 'final') {
       if (this.state !== 'running') this.setState('running');
       const text = this.prepareText(e.text);
+      
+      // Feed-forward: track token rate on partials
+      if (e.type === 'partial') {
+        const now = performance.now();
+        const tokens = text.split(/\s+/).filter(Boolean).length;
+        if (this.lastPartialTs) {
+          const dtSec = (now - this.lastPartialTs) / 1000;
+          if (dtSec > 0 && tokens > this.lastPartialTokens) {
+            const rate = (tokens - this.lastPartialTokens) / dtSec;
+            this.tokensPerSec = 0.8 * this.tokensPerSec + 0.2 * rate;
+          }
+        }
+        this.lastPartialTs = now;
+        this.lastPartialTokens = tokens;
+      }
+      
       this.tryAdvance(text, e.type === 'final', e.confidence ?? (e.type === 'final' ? 1 : 0.5));
     }
 
@@ -95,11 +116,18 @@ export class AsrMode {
     }
 
     if (bestIdx >= 0 && bestScore >= threshold) {
-      const newIdx = idx0 + bestIdx;
+      let newIdx = idx0 + bestIdx;
+      
+      // Feed-forward: lead the target slightly when reading actively
+      const leadLines = this.getReadingLeadLines();
+      if (leadLines > 0) {
+        newIdx = Math.min(newIdx + leadLines, this.getAllLineEls().length - 1);
+      }
+      
       if (newIdx >= this.currentIdx) {
         this.currentIdx = newIdx;
         this.scrollToLine(newIdx);
-        this.dispatch('asr:advance', { index: newIdx, score: bestScore });
+        this.dispatch('asr:advance', { index: newIdx, score: bestScore, lead: leadLines });
       }
     } else if (isFinal) {
       // Rescue attempt on weak finals: nudge by one to keep momentum
@@ -110,6 +138,17 @@ export class AsrMode {
         this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'weak-final' });
       }
     }
+  }
+  
+  /**
+   * Calculate reading lead in lines based on current token rate
+   * @returns Number of lines to lead (0-3)
+   */
+  private getReadingLeadLines(): number {
+    // ~1 line per 8 tokens (tune per your scripts)
+    const linesPerSec = this.tokensPerSec / 8;
+    // Lead ~600ms ahead so scroll "meets you" instead of "chases you"
+    return Math.max(0, Math.min(3, Math.round(linesPerSec * 0.6)));
   }
 
   private getWindow() {

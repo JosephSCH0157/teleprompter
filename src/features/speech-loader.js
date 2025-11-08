@@ -29,28 +29,23 @@ function shouldEmitTranscript() {
 function routeTranscript(text, isFinal) {
   try {
     if (!text) return;
-    // In rehearsal, never steer — emit to HUD only
-    if (inRehearsal()) {
-      try {
-        const payload = { text, final: !!isFinal, t: performance.now() };
-        window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload);
-      } catch {}
-      return;
-    }
+    const payload = { text, final: !!isFinal, t: performance.now() };
+    
+    // Always emit to HUD bus (unconditional for debugging/monitoring)
+    try { window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}
+    
+    // In rehearsal, never steer — only HUD logging
+    if (inRehearsal()) return;
+    
     // Legacy monolith path
     if (typeof window.advanceByTranscript === 'function') {
       try { window.advanceByTranscript(text, !!isFinal); } catch {}
     }
-    // Modern/event-bus path (HUD bus if present)
     
-    try {
-      const payload = { text, final: !!isFinal, t: performance.now() };
-      window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload);
-      if (shouldEmitTranscript()) {
-        window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload }));
-      }
-    } catch {}
-
+    // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
+    if (shouldEmitTranscript()) {
+      try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
+    }
   } catch {}
 }
 
@@ -145,21 +140,17 @@ async function doAutoRecordStart() {
       }
     } catch {}
     if (window.__tpAutoRecord && typeof window.__tpAutoRecord.start === 'function') {
-      return await window.__tpAutoRecord.start();
+      await window.__tpAutoRecord.start();
     }
   } catch {}
-  // graceful no-op fallback
-  return;
 }
 
 async function doAutoRecordStop() {
   try {
     if (window.__tpAutoRecord && typeof window.__tpAutoRecord.stop === 'function') {
-      return await window.__tpAutoRecord.stop();
+      await window.__tpAutoRecord.stop();
     }
   } catch {}
-  // graceful no-op fallback
-  return;
 }
 
 function beginCountdownThen(sec, cb) {

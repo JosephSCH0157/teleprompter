@@ -1,5 +1,4 @@
 // src/features/rehearsal-bus.ts
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type RehearsalEvent = { type: 'rehearsal'; on: boolean; ts: number };
 
 let chan: BroadcastChannel | null = null;
@@ -31,7 +30,7 @@ export function broadcastRehearsal(on: boolean) {
   } catch {}
 }
 
-export function attachRehearsalListeners(handler: (on: boolean) => void) {
+export function attachRehearsalListeners(handler: (_on: boolean) => void) {
   // DOM
   const onStart = () => handler(true);
   const onStop  = () => handler(false);
