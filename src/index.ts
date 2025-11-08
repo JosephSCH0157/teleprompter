@@ -32,6 +32,8 @@ import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
+// Standalone speech notes HUD (ASR/Hybrid only; dev or prod opt-in)
+import './hud/speech-notes-hud.js';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
