@@ -30,6 +30,8 @@ import { getTypography, onTypography, setTypography } from './settings/typograph
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
+// Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
+import './hud/loader';
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {

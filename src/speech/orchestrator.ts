@@ -61,7 +61,13 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
     _cb = cb;
     _rec.start((transcript: string, isFinal: boolean) => {
       // When recognizer provides a transcript, run matcher and emit event
-      matchBatch(transcript, isFinal);
+      const text = transcript || '';
+      matchBatch(text, isFinal);
+      // Broadcast a dev transcript event for HUD / note taking
+      try {
+        const detail = { text, final: !!isFinal, ts: Date.now() };
+        document.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
+      } catch {}
     });
   } catch (err) {
     try { console.warn('[TP] startRecognizer failed', err); } catch {}
