@@ -152,21 +152,45 @@ async function doAutoRecordStop() {
 function beginCountdownThen(sec, cb) {
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
+  // Overlay helpers (local so they don't leak globals if loader is re-imported)
+  function showPreroll(n) {
+    try {
+      const overlay = document.getElementById('countOverlay');
+      const num = document.getElementById('countNum');
+      if (overlay) overlay.style.display = 'flex';
+      if (num) num.textContent = String(n);
+    } catch {}
+  }
+  function hidePreroll() {
+    try {
+      const overlay = document.getElementById('countOverlay');
+      if (overlay) overlay.style.display = 'none';
+    } catch {}
+  }
   return new Promise((resolve) => {
     (async () => {
+      let done = false;
       try {
         const s = Number(sec) || 0;
         if (s <= 0) {
+          hidePreroll();
           try { await cb(); } catch {}
+          done = true;
           return;
         }
         for (let i = s; i > 0; i--) {
+          showPreroll(i);
           try { window.HUD?.bus?.emit('speech:countdown', { remaining: i }); } catch {}
           await new Promise(r => setTimeout(r, 1000));
         }
+        hidePreroll();
         try { await cb(); } catch {}
+        done = true;
       } catch {}
-    })().then(() => resolve()).catch(() => resolve());
+      finally {
+        if (!done) hidePreroll();
+      }
+    })().then(() => resolve()).catch(() => { try { hidePreroll(); } catch {}; resolve(); });
   });
 }
 
