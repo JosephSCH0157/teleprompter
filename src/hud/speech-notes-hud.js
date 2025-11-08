@@ -24,6 +24,25 @@
 
   const LS_KEY = 'tp_hud_speech_notes_v1';
 
+  // Opt-in persistence (default: memory only)
+  function savingEnabled() {
+    try { return localStorage.getItem('tp_hud_save') === '1'; } catch { return false; }
+  }
+
+  // Simple PII redaction before store/export (tunable)
+  function redactPII(s) {
+    if (!s) return s;
+    return String(s)
+      // emails
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[EMAIL]')
+      // phone (US-ish)
+      .replace(/\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/g, '[PHONE]')
+      // SSN
+      .replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]')
+      // credit card (very rough)
+      .replace(/\b(?:\d[ -]*?){13,19}\b/g, '[CARD]');
+  }
+
   // --- Helpers
   function inRehearsal() {
     try { return !!document.body.classList.contains('mode-rehearsal'); } catch { return false; }
@@ -78,7 +97,9 @@
 
   let notes = [];
   try { notes = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { notes = []; }
-  function save(){ try { localStorage.setItem(LS_KEY, JSON.stringify(notes)); } catch {} }
+  // If saving is disabled, start fresh in RAM only
+  if (!savingEnabled()) notes = [];
+  function save(){ if (!savingEnabled()) return; try { localStorage.setItem(LS_KEY, JSON.stringify(notes)); } catch {} }
 
   function render(){
     const finalsOnly = !!(finalsChk && finalsChk.checked);
@@ -98,8 +119,9 @@
   }
 
   function addNote(payload){
-    const text = String(payload?.text || '').trim();
+    let text = String(payload?.text || '').trim();
     if (!text) return;
+    text = redactPII(text);
     const item = { text, final: !!payload.final, ts: Date.now(), sim: payload.sim };
     const last = notes[notes.length - 1];
     if (last && last.final && item.final && last.text === item.text) return; // de-dupe consecutive finals
@@ -110,16 +132,20 @@
   }
 
   function clear(){ notes = []; save(); render(); }
+  function buildExportBody(finalsOnly){
+    return notes
+      .filter(n => finalsOnly ? n.final : true)
+      .map(n => `${new Date(n.ts).toISOString()}\t${n.final?'final':'interim'}\t${(n.sim??'')}\t${redactPII(n.text)}`)
+      .join('\n');
+  }
   function copyAll() {
     const finalsOnly = !!(finalsChk && finalsChk.checked);
-    const body = notes.filter(n => finalsOnly ? n.final : true)
-      .map(n => `${new Date(n.ts).toISOString()}\t${n.final?'final':'interim'}\t${(n.sim??'')}\t${n.text}`).join('\n');
+    const body = buildExportBody(finalsOnly);
     try { navigator.clipboard.writeText(body); } catch {}
   }
   function exportTxt(){
     const finalsOnly = !!(finalsChk && finalsChk.checked);
-    const body = notes.filter(n => finalsOnly ? n.final : true)
-      .map(n => `${new Date(n.ts).toISOString()}\t${n.final?'final':'interim'}\t${(n.sim??'')}\t${n.text}`).join('\n');
+    const body = buildExportBody(finalsOnly);
     const blob = new Blob([body], { type:'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -139,7 +165,8 @@
   function updateStatus(){
     const m = currentMode();
     const on = canCapture();
-    statusEl.textContent = on ? `listening (${m})` : 'idle';
+    const persist = savingEnabled() ? ' · save=ON' : ' · save=OFF';
+    statusEl.textContent = on ? `listening (${m})${persist}` : `idle${persist}`;
   }
 
   window.addEventListener('tp:speech-state', (e)=>{
