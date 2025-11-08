@@ -20,7 +20,7 @@ let prev = {
 let originalClampGuard: ((t: number, max: number) => boolean) | null = null;
 let guardInstalled = false;
 let keyListenerInstalled = false;
-let dropListenerInstalled = false;
+let wiredSelectListeners = false;
 
 function toast(msg: string) {
   try { (window as any).toasts?.show?.(msg); }
@@ -81,13 +81,21 @@ function removeScrollGuard() {
 
 function keyGuard(e: KeyboardEvent) {
   if (!(window as any).__TP_REHEARSAL) return;
-  const k = (e.key||'').toLowerCase();
-  const ctrlMeta = e.ctrlKey || e.metaKey;
-  // Block common recording hotkeys and auto-scroll toggles
-  if ((ctrlMeta && k === 'r') || k === 'f9' || k === ' ') {
+  // Allow typing in inputs/textarea/contentEditable
+  const target = e.target as HTMLElement | null;
+  const tag = (target?.tagName || '').toLowerCase();
+  const isTyping = tag === 'input' || tag === 'textarea' || (target as any)?.isContentEditable;
+  if (isTyping) return;
+  const k = String(e.key || '');
+  const kl = k.toLowerCase();
+  const ctrlMeta = !!(e.ctrlKey || e.metaKey);
+  // Block recording/automation hotkeys and keyboard-driven scrolling
+  const nav = ['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'];
+  if ((ctrlMeta && kl === 'r') || kl === 'f9' || k === ' ' || k === 'Enter' || nav.includes(k)) {
     e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
     if (k === ' ') toast('Auto-scroll disabled in Rehearsal Mode');
-    else toast('Recording is disabled in Rehearsal Mode');
+    else if (nav.includes(k)) toast('Keyboard scroll is disabled in Rehearsal Mode');
+    else toast('Recording/automation is disabled in Rehearsal Mode');
   }
 }
 
@@ -167,6 +175,16 @@ function handleSelectModeEvent(e: any) {
   } catch {}
 }
 
+function wireSelectObserversOnce() {
+  if (wiredSelectListeners) return;
+  wiredSelectListeners = true;
+  try {
+    const sel = document.getElementById('scrollMode');
+    sel?.addEventListener('change', handleDropdownChange, { capture: true });
+  } catch {}
+  try { document.addEventListener('tp:selectMode', handleSelectModeEvent as any, { capture: true }); } catch {}
+}
+
 function enable() {
   if ((window as any).__TP_REHEARSAL) return; // already
   capturePrev();
@@ -180,13 +198,8 @@ function enable() {
     document.addEventListener('keydown', keyGuard, { capture: true });
     keyListenerInstalled = true;
   }
-  if (!dropListenerInstalled) {
-    // Listen for direct select changes
-    const sel = document.getElementById('scrollMode');
-    sel?.addEventListener('change', handleDropdownChange, { capture: true });
-    document.addEventListener('tp:selectMode', handleSelectModeEvent as any, { capture: true });
-    dropListenerInstalled = true;
-  }
+  // Ensure observers are wired regardless of mode
+  wireSelectObserversOnce();
   toast('Rehearsal Mode enabled');
   try { document.dispatchEvent(new CustomEvent('tp:rehearsal:start')); } catch {}
 }
@@ -205,10 +218,26 @@ export function installRehearsal(_store?: Store) {
   // Expose lightweight API
   const api = { enable, disable, isActive: () => !!(window as any).__TP_REHEARSAL };
   try { (window as any).__tpRehearsal = api; } catch {}
+  // Always observe the selector so switching to Rehearsal enables it
+  try { wireSelectObserversOnce(); } catch {}
   // Auto-wire if dropdown already selected at boot
   try {
     const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
     if (sel && sel.value === 'rehearsal') enable();
   } catch {}
   return api;
+}
+
+// Optional: persist/URL bootstrap
+export function resolveInitialRehearsal() {
+  let should = false;
+  try { should = /(?:[?&])rehearsal=1/i.test(location.search); } catch {}
+  try { should = should || localStorage.getItem('tp_rehearsal_v1') === '1'; } catch {}
+  if (should) {
+    try {
+      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+      if (sel) sel.value = 'rehearsal';
+    } catch {}
+    if (!(window as any).__TP_REHEARSAL) enable();
+  }
 }

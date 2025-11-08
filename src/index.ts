@@ -25,6 +25,7 @@ import { installRehearsal } from './features/rehearsal';
 import { installScrollRouter } from './features/scroll-router';
 import { installStepScroll } from './features/step-scroll';
 import { applyTypographyTo } from './features/typography';
+import { resolveInitialRehearsal } from './features/rehearsal';
 import { initAsrFeature } from './index-hooks/asr';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
@@ -94,6 +95,8 @@ try {
 		try {
 			const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
 			const rehearsal = installRehearsal();
+			// Honor URL/localStorage bootstrap for Rehearsal
+			try { resolveInitialRehearsal(); } catch {}
 			// Optional wiring: allow window.setScrollMode('step') to control Step when router is absent
 			if (!(window as any).setScrollMode) {
 				(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
