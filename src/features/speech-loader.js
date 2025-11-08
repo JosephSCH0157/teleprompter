@@ -131,6 +131,19 @@ function setListeningUi(listening) {
 // without risking a ReferenceError if the feature is not present.
 async function doAutoRecordStart() {
   try {
+    // Respect OBS "Off": if primary adapter is OBS and it's disarmed, skip starting
+    try {
+      const a = (window.__tpRecording && typeof window.__tpRecording.getAdapter === 'function')
+        ? String(window.__tpRecording.getAdapter() || '')
+        : '';
+      if (a === 'obs') {
+        const armed = !!(window.__tpObs && typeof window.__tpObs.armed === 'function' ? window.__tpObs.armed() : false);
+        if (!armed) {
+          try { window.__tpHud?.log?.('[auto-record]', 'skip (OBS disabled)'); } catch {}
+          return; // do not attempt to start OBS when disabled
+        }
+      }
+    } catch {}
     if (window.__tpAutoRecord && typeof window.__tpAutoRecord.start === 'function') {
       return await window.__tpAutoRecord.start();
     }
