@@ -17,7 +17,7 @@ function shouldShowHud(){ try { const isDev=(window as any).__TP_DEV || /(?:[?&]
 
 export function loadHudIfDev(){
   try {
-    if(!shouldShowHud()) return;
+    if(!shouldShowHud()) { try { console.info('[HUD] Speech HUD is disabled. Enable with localStorage.setItem(\'tp_hud_prod\',\'1\') or add ?dev=1 to the URL, then reload.'); } catch {} return; }
     if(document.getElementById('tp-dev-hud')) return;
     load();
     const el=document.createElement('div'); el.id='tp-dev-hud';
