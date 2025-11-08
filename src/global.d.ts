@@ -8,6 +8,14 @@ declare global {
     tpMarkInitDone?: (reason?: string) => void;
     tpMarkInitRunning?: () => void;
     __tp_has_script?: boolean;
+    __tpHudNotes?: {
+      addNote(n: { text: string; final: boolean; ts: number; sim?: number }): void;
+      list(): { text: string; final: boolean; ts: number; sim?: number }[];
+      clear(): void;
+      setFilter(mode: 'all' | 'finals'): void;
+      copyAll(): void;
+      exportTxt(): void;
+    };
   }
 }
 
