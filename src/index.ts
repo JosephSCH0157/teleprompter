@@ -21,6 +21,7 @@ import './asr/v2/prompts';
 import { startVadAdapter } from './asr/vadAdapter';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
+import { installRehearsal } from './features/rehearsal';
 import { installScrollRouter } from './features/scroll-router';
 import { installStepScroll } from './features/step-scroll';
 import { applyTypographyTo } from './features/typography';
@@ -92,12 +93,14 @@ try {
 		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
 		try {
 			const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
+			const rehearsal = installRehearsal();
 			// Optional wiring: allow window.setScrollMode('step') to control Step when router is absent
 			if (!(window as any).setScrollMode) {
-				(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'off') => {
+				(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
 					try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
 					try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
-					if (mode === 'step') step.enable(); else step.disable();
+					if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
+					else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
 				};
 			}
 			// If explicitly requested, override router Step with TS module
