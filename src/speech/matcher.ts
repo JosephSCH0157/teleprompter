@@ -18,9 +18,13 @@ export type MatchResult = {
 
 // Minimal similarity helpers (kept pure for unit testing)
 export function normTokens(s: string): string[] {
+  // Align with sanitizeForMatch semantics: strip bracketed cues and normalize punctuation.
   return String(s || '')
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\[[^\]]+]/g, '')      // strip [pause]/[beat]/[note]
+    .replace(/[“”"']/g, '')          // remove quotes
+    .replace(/[—–]/g, '-')            // normalize dashes
+    .replace(/[^\w\s-]/g, ' ')      // drop other punctuation
     .replace(/\s+/g, ' ')
     .trim()
     .split(' ')
@@ -119,6 +123,15 @@ export function matchBatch(
     .slice(0, 3)
     .map(([idx, score]) => ({ idx: Number(idx), score: Number((score as number).toFixed(3)) }));
 
-  const best = top[0] || { idx: Math.max(0, currentIndex), score: 0 };
-  return { bestIdx: best.idx, bestSim: best.score, topScores: top };
+  // Windowed matching band around the currently visible/expected line.
+  // Unless the top candidate is very strong (>= 0.82), prefer a candidate within ±40.
+  const radius = 40;
+  const bandStart = Math.max(0, Math.floor(currentIndex) - radius);
+  const bandEnd = Math.min((vParaIndex ? vParaIndex.length : paraIndex.length) - 1, Math.floor(currentIndex) + radius);
+  let best = top[0] || { idx: Math.max(0, currentIndex), score: 0 };
+  if (best && (best.idx < bandStart || best.idx > bandEnd) && (best.score as number) < 0.82) {
+    const inBand = top.find(t => t.idx >= bandStart && t.idx <= bandEnd);
+    if (inBand) best = inBand;
+  }
+  return { bestIdx: best.idx, bestSim: best.score as number, topScores: top };
 }

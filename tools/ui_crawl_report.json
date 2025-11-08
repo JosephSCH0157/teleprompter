@@ -42,7 +42,7 @@
     },
     {
       "id": "autoToggle",
-      "text": "Auto-scroll: Off"
+      "text": "Auto-scroll: Paused — 60 px/s"
     },
     {
       "id": "startCam",
@@ -128,6 +128,15 @@
     },
     {
       "checkboxIndex": 2
+    },
+    {
+      "checkboxIndex": 3
+    },
+    {
+      "checkboxIndex": 4
+    },
+    {
+      "checkboxIndex": 5
     }
   ],
   "errors": [],
@@ -179,6 +188,15 @@
     },
     {
       "type": "debug",
+      "text": "[init] import:../adapters/obs.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
       "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
@@ -189,15 +207,6 @@
     {
       "type": "debug",
       "text": "[init] import:../debug-tools.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../adapters/obs.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -425,7 +434,7 @@
       "text": "[ASR] dev initAsrFeature()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index-hooks/asr.js",
-        "lineNumber": 17,
+        "lineNumber": 25,
         "columnNumber": 16
       }
     },
@@ -457,6 +466,13 @@
       }
     },
     {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+      }
+    },
+    {
       "type": "table",
       "text": "JSHandle@array",
       "location": {
@@ -472,6 +488,42 @@
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 39,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] speech JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
       }
     },
     {
@@ -502,13 +554,6 @@
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
-    },
-    {
       "type": "debug",
       "text": "[HUD] display:render JSHandle@object",
       "location": {
@@ -519,7 +564,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -564,7 +609,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -628,7 +673,7 @@
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 30 candidate controls"
+    "Found 31 candidate controls"
   ],
   "meta": {
     "target": {
@@ -637,9 +682,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "27a60fde331328ee5b7a4df73ad71d29d5e0107e",
+      "gitSha": "31444a52544b98c10aa807ad674c68808adf44bf",
       "branch": "main",
-      "buildTime": "2025-11-08T14:05:18.847Z"
+      "buildTime": "2025-11-08T15:23:56.474Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -672,7 +717,7 @@
     }
   ],
   "renderProbe": {
-    "lineCount": 3,
+    "lineCount": 2,
     "iHello": 0,
     "iWorld": 1,
     "cHello": "rgb(96, 165, 250)",
@@ -684,7 +729,7 @@
   },
   "lateProbe": {
     "supported": true,
-    "approxFps": 59,
+    "approxFps": 60,
     "jitterStd": 0,
     "moved": false
   },
@@ -706,7 +751,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 40.66666555404663,
+    "delta": 41.33333206176758,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {
@@ -716,7 +761,7 @@
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: Paused",
-    "delta": 25
+    "delta": 26
   },
   "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"

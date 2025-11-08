@@ -586,6 +586,9 @@ html.tp-present .present-exit { display: inline-flex; }
     color:          var(--tp-fg);
 }
 
+/* Ensure per-line nodes preserve intentional spacing and short cues render compactly */
+.line { white-space: pre-wrap; }
+
 /* ASR meter (simple bands + marker) */
 #asrMeter {
         position: relative;
