@@ -609,7 +609,34 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -682,9 +709,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "31444a52544b98c10aa807ad674c68808adf44bf",
+      "gitSha": "4bea24c79ba81e28ea9b6af176a7e65bfff397fb",
       "branch": "main",
-      "buildTime": "2025-11-08T15:23:56.474Z"
+      "buildTime": "2025-11-08T15:32:38.821Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -751,7 +778,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 41.33333206176758,
+    "delta": 42.66666793823242,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {

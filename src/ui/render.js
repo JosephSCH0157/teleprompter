@@ -74,7 +74,12 @@ export function renderScript(text = '') {
       try { div.dataset.lineIdx = String(i); } catch {}
       // Mark cue lines distinctly (optional styling hook)
       if (/^\[(pause|beat)]$/i.test(tag)) {
-        try { div.dataset.cue = tag.replace(/\[|]/g,''); div.classList.add('tp-cue'); } catch {}
+        try {
+          div.dataset.cue = tag.replace(/\[|]/g,'');
+          div.classList.add('tp-cue');
+          div.dataset.silent = '1'; // mark cue lines as silent for ASR skip logic
+          div.setAttribute('data-silent','1');
+        } catch {}
       }
       host.appendChild(div);
     }
