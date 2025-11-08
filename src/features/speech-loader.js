@@ -91,6 +91,19 @@ function setReadyUi() {
   } catch {}
 }
 
+function setUnsupportedUi() {
+  try {
+    const btn = document.getElementById('recBtn');
+    const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
+    if (btn) {
+      btn.disabled = true;
+      btn.title = 'Speech not supported in this browser';
+    }
+    if (chip) chip.textContent = 'Speech: unsupported';
+    try { document.body.classList.remove('speech-ready', 'speech-listening', 'listening'); } catch {}
+  } catch {}
+}
+
 // Update UI when speech is actively listening or stopped
 function setListeningUi(listening) {
   try {
@@ -183,8 +196,19 @@ export function installSpeech() {
       // Optional probe: only if explicitly opted-in; default avoids 404 noise in dev
       const probeOptIn = (() => { try { return localStorage.getItem('tp_probe_speech') === '1' || new URLSearchParams(location.search).get('probe') === '1'; } catch { return false; } })();
       let hasOrchestrator = hasGlobalOrch;
+      if (!hasOrchestrator && !ciGuard && probeOptIn) {
+        try {
+          const res = await fetch('/speech/orchestrator.js', { method: 'HEAD', cache: 'no-store' });
+          hasOrchestrator = !!(res && res.ok);
+        } catch {}
+      }
 
-      // … (keep your probe logic and UI init here)
+      const supported = SRAvail || hasOrchestrator;
+      const canUse = supported || force;
+
+      if (canUse) setReadyUi(); else setUnsupportedUi();
+      // Stash a flag for start path to decide whether to attempt dynamic import (no probe by default)
+      try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
 
       async function startBackend() {
         // Prefer orchestrator if available
