@@ -1,12 +1,12 @@
 // =============================================================
 // File: src/features/asr-mode.ts
 // =============================================================
+import type { AsrStateEvent, TranscriptEvent } from '../asr-types';
+import { emit } from '../events';
 import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { speechStore } from '../state/speech-store';
-import { emit } from '../events';
-import type { TranscriptEvent, AsrStateEvent } from '../asr-types';
 
 export type AsrState = 'idle' | 'ready' | 'listening' | 'running' | 'error';
 
