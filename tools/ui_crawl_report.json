@@ -42,7 +42,7 @@
     },
     {
       "id": "autoToggle",
-      "text": "Auto-scroll: Paused — 60 px/s"
+      "text": "Auto-scroll: Off"
     },
     {
       "id": "startCam",
@@ -128,15 +128,6 @@
     },
     {
       "checkboxIndex": 2
-    },
-    {
-      "checkboxIndex": 3
-    },
-    {
-      "checkboxIndex": 4
-    },
-    {
-      "checkboxIndex": 5
     }
   ],
   "errors": [],
@@ -161,16 +152,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../adapters/bridge.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../adapters/obs.js",
+      "text": "[init] import:../eggs.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -188,7 +170,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../eggs.js",
+      "text": "[init] import:../adapters/bridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -206,7 +188,25 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../help.js",
+      "text": "[init] import:../debug-tools.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../adapters/obs.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../debug-seed.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -224,25 +224,16 @@
     },
     {
       "type": "debug",
+      "text": "[init] import:../help.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
       "text": "[init] import:../scroll-control.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../debug-tools.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../debug-seed.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -461,15 +452,8 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 708,
+        "lineNumber": 740,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -488,42 +472,6 @@
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 39,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] speech JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     },
     {
@@ -554,6 +502,13 @@
       }
     },
     {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+      }
+    },
+    {
       "type": "debug",
       "text": "[HUD] display:render JSHandle@object",
       "location": {
@@ -626,23 +581,6 @@
       }
     },
     {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
-        "lineNumber": 185
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[OBS test failed] JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-        "lineNumber": 188,
-        "columnNumber": 26
-      }
-    },
-    {
       "type": "debug",
       "text": "[HUD] display:scroll JSHandle@object",
       "location": {
@@ -680,7 +618,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
+      "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -690,7 +628,7 @@
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 31 candidate controls"
+    "Found 30 candidate controls"
   ],
   "meta": {
     "target": {
@@ -699,9 +637,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "8b3557530d2599d39b4bfe19e613689517e02b7f",
+      "gitSha": "27a60fde331328ee5b7a4df73ad71d29d5e0107e",
       "branch": "main",
-      "buildTime": "2025-11-07T13:25:15.351Z"
+      "buildTime": "2025-11-08T14:05:18.847Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -746,7 +684,7 @@
   },
   "lateProbe": {
     "supported": true,
-    "approxFps": 60,
+    "approxFps": 59,
     "jitterStd": 0,
     "moved": false
   },
@@ -768,7 +706,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 42,
+    "delta": 40.66666555404663,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {
@@ -778,7 +716,7 @@
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: Paused",
-    "delta": 26
+    "delta": 25
   },
   "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"
