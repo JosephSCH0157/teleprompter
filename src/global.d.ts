@@ -16,6 +16,17 @@ declare global {
       copyAll(): void;
       exportTxt(): void;
     };
+    __tpRehearsal?: {
+      enable?: () => void;
+      disable?: () => void;
+      isActive?: () => boolean;
+      enterRehearsal?: () => void;
+      exitRehearsal?: (withConfirm?: boolean) => boolean | void;
+      isRehearsal?: () => boolean;
+      enableRehearsal?: () => void;
+      disableRehearsal?: () => void;
+      isRehearsalActive?: () => boolean;
+    };
   }
 }
 

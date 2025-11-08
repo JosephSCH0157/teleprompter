@@ -272,3 +272,35 @@ export function bindRehearsalToStore(store: Store, key = 'scrollMode') {
   try { syncRehearsalFromMode(String(store.get(key))); } catch {}
   return () => { try { unsub?.(); } catch {} };
 }
+
+// ---- Alias exports (spec parity) ----
+// Provide enterRehearsal/exitRehearsal/isRehearsal alongside enable/disable/isActive.
+// Avoid circular referencing by defining simple wrappers.
+export function enterRehearsalAlias() { enable(); }
+export function exitRehearsalAlias(withConfirm = true) { if (withConfirm) { if (!confirmExit()) return false; } disable(); return true; }
+export function isRehearsalAlias() { return !!(window as any).__TP_REHEARSAL; }
+
+// Re-export under canonical names expected by spec docs
+export const enterRehearsal = enterRehearsalAlias;
+export const exitRehearsal = exitRehearsalAlias;
+export const isRehearsal = isRehearsalAlias;
+
+// Legacy convenience (mirror of installRehearsal API shape)
+export const enableRehearsal = enable;
+export const disableRehearsal = disable;
+export const isRehearsalActive = () => !!(window as any).__TP_REHEARSAL;
+
+// Merge into global helper
+try {
+  (window as any).__tpRehearsal = Object.assign((window as any).__tpRehearsal || {}, {
+    enable,
+    disable,
+    isActive: () => !!(window as any).__TP_REHEARSAL,
+    enterRehearsal,
+    exitRehearsal,
+    isRehearsal,
+    enableRehearsal,
+    disableRehearsal,
+    isRehearsalActive,
+  });
+} catch {}
