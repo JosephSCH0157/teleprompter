@@ -130,6 +130,8 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepAPI {
   function stepLinesFn(sign: number, count = stepLinesN) {
     const viewer = getViewer();
     if (!viewer) return;
+    // Rehearsal Mode: disable pedal / keyboard driven stepping (wheel only)
+    try { if ((window as any).__TP_REHEARSAL) return; } catch {}
     const anchor = currentAnchor(root);
     const lh = estimateLineHeight(anchor);
     scrollByPx(sign * count * lh);
@@ -138,6 +140,8 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepAPI {
   function stepBlockFn(sign: 1 | -1) {
     const viewer = getViewer();
     if (!viewer) return;
+    // Rehearsal Mode: disable block jumps
+    try { if ((window as any).__TP_REHEARSAL) return; } catch {}
     const markerPct = getMarkerPct(cfg);
     const offset = markerOffsetPx(viewer, markerPct);
     const anchor = currentAnchor(root);
@@ -148,6 +152,8 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepAPI {
 
   const onKey = (e: KeyboardEvent) => {
     if (mode !== 'on') return;
+    // Rehearsal Mode: block all key-driven stepping (already blocked globally, belt & suspenders)
+    try { if ((window as any).__TP_REHEARSAL) return; } catch {}
     // Central typing guard: rely on global helper if present
     try { if ((window as any).isTyping?.() || (e as any).__tpTyping) return; } catch {}
 

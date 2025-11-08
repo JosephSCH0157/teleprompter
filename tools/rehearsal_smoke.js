@@ -9,6 +9,10 @@
   if (!api.isActive?.()) { api.enable?.(); }
   ok(api.isActive?.() === true, 'rehearsal active after enable');
   ok(document.body.classList.contains('is-rehearsal'), 'body class present');
+  // Ensure OBS won't connect (bridge short-circuit)
+  try { if (window.__obsBridge) { window.__obsBridge.configure({}); window.__obsBridge.enableAutoReconnect && window.__obsBridge.enableAutoReconnect(true); } } catch {}
+  try { window.__obsBridge?.start?.(); } catch {}
+  setTimeout(()=>{ try { ok(!(window.__obsConnected), 'obs remains disconnected in rehearsal'); } catch {} }, 50);
   // Watermark check
   const wm = document.getElementById('rehearsalWatermark');
   ok(wm && getComputedStyle(wm).display !== 'none', 'watermark visible');
@@ -25,10 +29,22 @@
     // Attempt to enable auto-scroll (should stay disabled)
     try { window.Auto?.toggle?.(); } catch {}
     ok(!(window.__tpAuto?.getState?.().enabled), 'auto-scroll kept disabled');
-    // Exit (no confirm path) and verify cleanup
-    api.disable?.();
-    ok(!api.isActive?.(), 'rehearsal inactive after disable');
-    ok(!document.body.classList.contains('is-rehearsal'), 'body class removed');
-    console.log('[rehearsal_smoke] PASS');
+    // Display window sync (open a lightweight mock and assert watermark mirror)
+    let dispOk = true;
+    try {
+      const w = window.open('display.html#test','_blank','width=400,height=400');
+      if (w) {
+        setTimeout(()=>{ try { w.postMessage('tp:rehearsal:start','*'); } catch {} }, 30);
+        setTimeout(()=>{ try { const mark = w.document.getElementById('rehearsalDisplayWatermark'); if(!mark) dispOk=false; } catch { dispOk=false; } }, 180);
+      }
+    } catch {}
+    setTimeout(()=>{
+      ok(dispOk, 'display window watermark present');
+      // Exit (no confirm path) and verify cleanup
+      api.disable?.();
+      ok(!api.isActive?.(), 'rehearsal inactive after disable');
+      ok(!document.body.classList.contains('is-rehearsal'), 'body class removed');
+      console.log('[rehearsal_smoke] PASS');
+    }, 250);
   }, 50);
 })();

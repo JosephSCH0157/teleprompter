@@ -403,5 +403,42 @@
                 else if (k === '0'){ e.preventDefault(); dispScale = 1.0; try{ localStorage.setItem('tp_display_font_scale_v1','1'); }catch{} applyScaled(); }
               }
             });
+            // Rehearsal Mode mirror: apply tint + watermark listener
+            try {
+              function applyRehearsalDisplay(active){
+                try {
+                  document.body.classList.toggle('is-rehearsal-display', !!active);
+                  // Soft visual cue distinct from main watermark
+                  if (active) {
+                    if (!document.getElementById('rehearsalDisplayWatermark')){
+                      const w = document.createElement('div');
+                      w.id='rehearsalDisplayWatermark';
+                      w.style.cssText='position:fixed;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:9999;font:700 clamp(20px,6vw,60px)/1 system-ui;color:#fff;opacity:.06;letter-spacing:.15em;text-transform:uppercase;';
+                      w.textContent='REHEARSAL';
+                      document.body.appendChild(w);
+                    }
+                  }
+                } catch {}
+              }
+              // Initial state (if main already set flag before spawn)
+              try { applyRehearsalDisplay(window.opener && window.opener.__TP_REHEARSAL); } catch {}
+              window.addEventListener('message', (ev)=>{
+                try {
+                  if (ev && ev.data === 'tp:rehearsal:start') applyRehearsalDisplay(true);
+                  else if (ev && ev.data === 'tp:rehearsal:stop') applyRehearsalDisplay(false);
+                } catch {}
+              });
+              // BroadcastChannel mirror (in case direct postMessage missed)
+              try {
+                const rchan = new BroadcastChannel('tp_rehearsal');
+                rchan.addEventListener('message', (e)=>{
+                  try {
+                    if (e?.data?.t === 'rehearsal' && typeof e.data.on === 'boolean') {
+                      applyRehearsalDisplay(!!e.data.on);
+                    }
+                  } catch {}
+                });
+              } catch {}
+            } catch {}
           </script>
         </body></html>

@@ -108,6 +108,8 @@ async function _connectOnce() {
   try {
     if (typeof _armed !== 'undefined' && !_armed) return;
   } catch {}
+  // Rehearsal Mode: short-circuit all OBS connections (belt & suspenders)
+  try { if (typeof window !== 'undefined' && window.__TP_REHEARSAL) { return; } } catch {}
   if (_connected || _connecting) return;
   _connecting = true;
   try {

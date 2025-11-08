@@ -92,7 +92,10 @@ const strategies = {
     onParams(p){ Object.assign(params.asr, p||{}); },
   },
   step: (()=>{
-    const onStep = ()=>{ Auto.nudge(params.step.stepPx); };
+    const onStep = ()=>{
+      try { if (window.__TP_REHEARSAL) return; } catch {}
+      Auto.nudge(params.step.stepPx);
+    };
     return { start(){ if (Auto.getState().enabled) Auto.toggle(); unsubscribers.push(on('step', onStep)); }, stop(){ unsubscribers.push(()=>{}); }, onParams(p){ Object.assign(params.step, p||{}); } };
   })(),
   rehearsal: (()=>{
@@ -217,8 +220,11 @@ function installModeUi(){
       } else if (mode==='step'){
         B.innerHTML = `<div class="row">${field('m_step','Step (px)',p.stepPx,'min="20" max="800" step="10"')}</div>`;
       } else if (mode==='rehearsal'){
-        B.innerHTML = `<div class="row"><label>Pause at <input id="m_punct" type="text" class="select-md" value="${p.pausePunct}"/></label></div>
-        <div class="row">${field('m_resume','Resume delay (ms)',p.resumeMs,'min="100" max="5000" step="100"')}</div>`;
+        B.innerHTML = `
+        <div class="row"><label>Pause at <input id="m_punct" type="text" class="select-md" value="${p.pausePunct}"/></label></div>
+        <div class="row">${field('m_resume','Resume delay (ms)',p.resumeMs,'min=\"100\" max=\"5000\" step=\"100\"')}</div>
+        <div class=\"row\" style=\"margin-top:8px;font-size:12px;line-height:1.4;color:#789;\">Wheel scroll only; recording, pedals, auto-scroll and ASR are disabled. Use the dropdown to exit Rehearsal.</div>
+        `;
       } else if (mode==='asr'){
         B.innerHTML = `<div class="row">Alignment uses orchestrator when available. No extra settings.</div>`;
       }
