@@ -192,6 +192,12 @@ function enable() {
   ensureWatermark();
   installScrollGuard();
   setState(true);
+  // Assign a session id for HUD grouping
+  try {
+    const sid = new Date().toISOString().replace(/[:.]/g,'');
+    try { localStorage.setItem('tp_hud_session', sid); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:session:start',{ detail:{ sid } })); } catch {}
+  } catch {}
   stopAllRecordingPaths();
   markUiDisabled(true);
   if (!keyListenerInstalled) {

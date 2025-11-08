@@ -22,13 +22,52 @@ export function loadHudIfDev(){
     load();
     const el=document.createElement('div'); el.id='tp-dev-hud';
     el.style.cssText='position:fixed;right:12px;bottom:12px;max-width:430px;width:min(92vw,430px);font:12px/1.4 system-ui;background:rgba(14,17,22,.88);color:#fff;padding:0;z-index:9999;border-radius:12px;box-shadow:0 8px 24px -4px #000c;backdrop-filter:blur(6px);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,255,255,.08)';
-    el.innerHTML=`<div style="display:flex;align-items:center;gap:.5rem;padding:.6rem .85rem;border-bottom:1px solid rgba(255,255,255,.07)"><strong style="font-weight:600">HUD · Speech</strong><span id="hudStatus" style="opacity:.65;margin-left:auto">idle</span><button id="hudClose" title="Hide HUD" style="all:unset;cursor:pointer;opacity:.6;padding:.25rem .4rem;border-radius:4px;">✕</button></div><div style="display:flex;gap:.75rem;align-items:center;padding:.45rem .85rem;border-bottom:1px solid rgba(255,255,255,.07);flex-wrap:wrap"><label style="display:flex;gap:.35rem;align-items:center;opacity:.85"><input id="hudFilterFinals" type="checkbox"> finals only</label><div style="margin-left:auto;display:flex;gap:.6rem;flex-wrap:wrap"><button id="hudCopy" title="Copy all" style="all:unset;cursor:pointer;opacity:.8">Copy</button><button id="hudExport" title="Export .txt" style="all:unset;cursor:pointer;opacity:.8">Export</button><button id="hudClear" title="Clear" style="all:unset;cursor:pointer;opacity:.8">Clear</button></div></div><div id="hudNotes" style="max-height:240px;overflow:auto;padding:.55rem .85rem"></div><div style="opacity:.45;font-size:10px;padding:.4rem .7rem;border-top:1px solid rgba(255,255,255,.06)">Enable prod HUD: localStorage.setItem('${PROD_TOGGLE_KEY}','1')</div>`;
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:.5rem;padding:.6rem .85rem;border-bottom:1px solid rgba(255,255,255,.07)"><strong style="font-weight:600">HUD · Speech</strong><span id="hudStatus" style="opacity:.65;margin-left:auto">idle</span><span id="hudSpeechStatus" style="opacity:.65;margin-left:.85rem;font-variant-numeric:tabular-nums">session —</span><button id="hudClose" title="Hide HUD" style="all:unset;cursor:pointer;opacity:.6;padding:.25rem .4rem;border-radius:4px;">✕</button></div><div style="display:flex;gap:.75rem;align-items:center;padding:.45rem .85rem;border-bottom:1px solid rgba(255,255,255,.07);flex-wrap:wrap"><label style="display:flex;gap:.35rem;align-items:center;opacity:.85"><input id="hudFilterFinals" type="checkbox"> finals only</label><div style="margin-left:auto;display:flex;gap:.6rem;flex-wrap:wrap"><button id="hudCopy" title="Copy all" style="all:unset;cursor:pointer;opacity:.8">Copy</button><button id="hudExport" title="Export .txt" style="all:unset;cursor:pointer;opacity:.8">Export</button><button id="hudClear" title="Clear" style="all:unset;cursor:pointer;opacity:.8">Clear</button></div></div><div id="hudNotes" style="max-height:240px;overflow:auto;padding:.55rem .85rem"></div><div style="opacity:.45;font-size:10px;padding:.4rem .7rem;border-top:1px solid rgba(255,255,255,.06)">Enable prod HUD: localStorage.setItem('${PROD_TOGGLE_KEY}','1')</div>`;
     document.body.appendChild(el);
     const notesEl=document.getElementById('hudNotes');
-    function render(list:Note[]){ try{ if(!notesEl) return; notesEl.innerHTML=''; }catch{}; const rows=list.filter(n=>filterMode==='all'||n.final); for(const n of rows.slice(-250)){ const row=document.createElement('div'); row.style.cssText='background:#121a22;border:1px solid #2a3b4a;padding:4px 6px;border-radius:5px;font-size:11px;white-space:pre-wrap;margin:0 0 .35rem'; const ts=new Date(n.ts); const hh=String(ts.getHours()).padStart(2,'0'); const mm=String(ts.getMinutes()).padStart(2,'0'); const ss=String(ts.getSeconds()).padStart(2,'0'); const sim=(n.sim!=null)?` ${(n.sim as number).toFixed(2)}`:''; row.textContent=`${n.final?'FINAL':'INT'}${sim} [${hh}:${mm}:${ss}] ${n.text}`; notesEl?.appendChild(row); } try{ (notesEl as any).scrollTop=notesEl?.scrollHeight||0; }catch{} }
+    function render(list:Note[]){
+      try{ if(!notesEl) return; notesEl.innerHTML=''; }catch{};
+      const rows=list.filter(n=>filterMode==='all'||n.final);
+      for(const n of rows.slice(-250)){
+        const row=document.createElement('div');
+        row.style.cssText='background:#121a22;border:1px solid #2a3b4a;padding:4px 6px;border-radius:5px;font-size:11px;white-space:pre-wrap;margin:0 0 .35rem;display:flex;gap:.4rem;align-items:flex-start';
+        const ts=new Date(n.ts);
+        const hh=String(ts.getHours()).padStart(2,'0');
+        const mm=String(ts.getMinutes()).padStart(2,'0');
+        const ss=String(ts.getSeconds()).padStart(2,'0');
+        const sim=(n.sim!=null)?` ${(n.sim as number).toFixed(2)}`:'';
+        const prefix=`${n.final?'FINAL':'INT'}${sim} [${hh}:${mm}:${ss}] `;
+        const tagMatch = /^\s*(bug|todo|idea|q)\s*:\s*/i.exec(n.text);
+        const tag = tagMatch?.[1]?.toLowerCase();
+        const body = n.text.replace(/^\s*(bug|todo|idea|q)\s*:\s*/i,'');
+        // Text content assembled without tag prefix
+        const textSpan = document.createElement('span');
+        textSpan.textContent = `${prefix}${body}`;
+        if (tag) {
+          const badge = document.createElement('span');
+          badge.textContent = tag.toUpperCase();
+          badge.style.cssText = 'display:inline-block;margin-right:.2rem;padding:.1rem .35rem;border-radius:.4rem;font-weight:700;font-size:.8em;opacity:.9;white-space:nowrap;flex:none';
+          const colors: Record<string,string> = { bug:'#ff6b6b', todo:'#ffd166', idea:'#06d6a0', q:'#4dabf7' };
+          (badge.style as any).background = (colors as any)[tag] || 'rgba(255,255,255,.15)';
+          row.appendChild(badge);
+        }
+        row.appendChild(textSpan);
+        notesEl?.appendChild(row);
+      }
+      try{ (notesEl as any).scrollTop=notesEl?.scrollHeight||0; }catch{}
+    }
     function addNote(note:Note){ try{ if(note.final && notes.length && notes[notes.length-1].final && notes[notes.length-1].text===note.text) return; }catch{} notes.push(note); save(); render(notes); }
     (window as any).__tpHudNotes={ addNote:(n:Note)=>addNote(n), list:()=>notes.slice(), clear:()=>{ notes=[]; save(); render(notes); }, setFilter:(m:'all'|'finals')=>{ filterMode=m; const cb=document.getElementById('hudFilterFinals') as HTMLInputElement; if(cb) cb.checked=(m==='finals'); render(notes); }, copyAll, exportTxt };
     const statusEl=document.getElementById('hudStatus');
+    // Show current session id in the top bar and update on session start
+    try {
+      const sess = localStorage.getItem('tp_hud_session') || '—';
+      const sessEl = document.getElementById('hudSpeechStatus');
+      if (sessEl) sessEl.textContent = `session ${sess}`;
+      window.addEventListener('tp:session:start', (e: any) => {
+        try { const sid = e?.detail?.sid || localStorage.getItem('tp_hud_session') || '—'; if (sessEl) sessEl.textContent = `session ${sid}`; } catch {}
+      });
+    } catch {}
     const filterCb=document.getElementById('hudFilterFinals') as HTMLInputElement | null; filterCb?.addEventListener('change',()=>{ filterMode=filterCb.checked?'finals':'all'; render(notes); });
     document.getElementById('hudExport')?.addEventListener('click',exportTxt);
     document.getElementById('hudCopy')?.addEventListener('click',copyAll);
