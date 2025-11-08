@@ -672,6 +672,8 @@ function installScrollRouter(opts) {
   }
   try {
     document.addEventListener("keydown", (e) => {
+      // In Rehearsal Mode, block router key behaviors (wheel-only)
+      try { if (window.__TP_REHEARSAL) return; } catch {}
       // Always support PageUp/PageDown stepping one line for usability and CI probe,
       // even when not in explicit step mode.
       if (e.key === "PageDown") {
@@ -694,6 +696,7 @@ function installScrollRouter(opts) {
       }
     }, { capture: true });
     document.addEventListener("keyup", (e) => {
+      try { if (window.__TP_REHEARSAL) return; } catch {}
       if (state2.mode !== "step") return;
       if (e.key === " ") {
         // eslint-disable-next-line no-restricted-syntax

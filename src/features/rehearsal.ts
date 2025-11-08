@@ -4,12 +4,10 @@
 // - Blocks programmatic scrolling (ASR/WPM/auto) via __tpClampGuard
 // - Adds watermark + subtle tinting
 // - Exit confirmation when switching away via the existing dropdown
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 export type Store = {
-  get: (k: string) => any;
-  set: (k: string, v: any) => void;
-  subscribe?: (k: string, fn: (v: any) => void) => void;
+  get: (_k: string) => any;
+  set: (_k: string, _v: any) => void;
+  subscribe?: (_k: string, _fn: (_v: any) => void) => () => void;
 };
 
 let prev = {
@@ -17,7 +15,7 @@ let prev = {
   autoRecord: false,
 };
 
-let originalClampGuard: ((t: number, max: number) => boolean) | null = null;
+let originalClampGuard: ((_t: number, _max: number) => boolean) | null = null;
 let guardInstalled = false;
 let keyListenerInstalled = false;
 let wiredSelectListeners = false;
@@ -91,7 +89,8 @@ function keyGuard(e: KeyboardEvent) {
   const ctrlMeta = !!(e.ctrlKey || e.metaKey);
   // Block recording/automation hotkeys and keyboard-driven scrolling
   const nav = ['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'];
-  if ((ctrlMeta && kl === 'r') || kl === 'f9' || k === ' ' || k === 'Enter' || nav.includes(k)) {
+  const isPedal = (e.code === 'F13' || e.code === 'F14');
+  if ((ctrlMeta && kl === 'r') || kl === 'f9' || k === ' ' || k === 'Enter' || nav.includes(k) || isPedal) {
     e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
     if (k === ' ') toast('Auto-scroll disabled in Rehearsal Mode');
     else if (nav.includes(k)) toast('Keyboard scroll is disabled in Rehearsal Mode');
@@ -240,4 +239,29 @@ export function resolveInitialRehearsal() {
     } catch {}
     if (!(window as any).__TP_REHEARSAL) enable();
   }
+}
+
+// Keep Rehearsal in sync with an external mode value
+export function syncRehearsalFromMode(mode: string, revert?: (_prevMode: string)=>void) {
+  const wants = String(mode || '').toLowerCase() === 'rehearsal';
+  const on = !!(window as any).__TP_REHEARSAL;
+  if (wants && !on) return enable();
+  if (!wants && on) {
+    if (!confirmExit()) {
+      try { const sel = document.getElementById('scrollMode') as HTMLSelectElement | null; if (sel) sel.value = 'rehearsal'; } catch {}
+      try { revert?.('rehearsal'); } catch {}
+      return;
+    }
+    return disable();
+  }
+}
+
+// Bind to the central store if available
+export function bindRehearsalToStore(store: Store, key = 'scrollMode') {
+  if (!store || typeof store.subscribe !== 'function') return () => {};
+  const unsub = store.subscribe(key, (v: any) => {
+    try { syncRehearsalFromMode(String(v)); } catch {}
+  });
+  try { syncRehearsalFromMode(String(store.get(key))); } catch {}
+  return () => { try { unsub?.(); } catch {} };
 }
