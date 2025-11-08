@@ -32,8 +32,20 @@ import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
-// Standalone speech notes HUD (ASR/Hybrid only; dev or prod opt-in)
-import './hud/speech-notes-hud.js';
+// Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
+try {
+	function injectSpeechNotesHud(){
+		try {
+			if (document.getElementById('tp-speech-notes-hud')) return; // already present
+			const s = document.createElement('script');
+			s.src = './hud/speech-notes-hud.js';
+			s.async = true; // non-blocking
+			document.head.appendChild(s);
+		} catch {}
+	}
+	window.addEventListener('hud:ready', () => { injectSpeechNotesHud(); }, { once: true });
+	if ((window as any).__tpHudWireActive) { injectSpeechNotesHud(); }
+} catch {}
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
