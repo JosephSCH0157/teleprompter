@@ -5914,6 +5914,10 @@ let _toast = function (msg, opts) {
           } catch {}
         }
       );
+      // Expose clamp mode API globally for UI mode router
+      if (__scrollCtl && typeof __scrollCtl.setclampMode === 'function') {
+        window.__tpSetClampMode = (mode) => __scrollCtl.setclampMode(mode);
+      }
     } catch {
       console.warn('scroll-control load failed', e);
     }
