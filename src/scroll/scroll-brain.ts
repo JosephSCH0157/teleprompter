@@ -85,7 +85,7 @@ function applyHybridScroll() {
 
 // --- Public API ---
 export interface ScrollBrain {
-  setMode: (mode: ScrollMode) => void;
+  setMode: (_mode: ScrollMode) => void;
   getMode: () => ScrollMode;
 }
 

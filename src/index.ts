@@ -193,7 +193,7 @@ try {
 		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
 		try {
 			const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
-			const rehearsal = installRehearsal();
+			const _rehearsal = installRehearsal();
 			// Honor URL/localStorage bootstrap for Rehearsal
 			try { resolveInitialRehearsal(); } catch {}
 			// The legacy scroll mode handler is never installed because setScrollMode is already assigned above.
