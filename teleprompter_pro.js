@@ -1293,8 +1293,9 @@ let _toast = function (msg, opts) {
         window.__tpRealCore.__tpWaiter = true;
       } catch {}
     }
-  } catch {}
-  // Install an early stub for core init that queues until the real core is defined
+    } catch (_e) {
+      void 0;
+    }
   try {
     if (typeof window._initCore !== 'function') {
       window._initCore = async function __initCoreStub() {
@@ -2995,6 +2996,8 @@ let _toast = function (msg, opts) {
               addIssue(lineNum, `no matching open tag for [\/${name}]`, 'no-match', { tag: name });
           }
         }
+      } catch (e) {
+        if (window.__TP_DEV) console.warn('[settings] delegator error', e);
       }
     }
     for (const open of stack)
@@ -10936,7 +10939,7 @@ let _toast = function (msg, opts) {
   }
 
   // Resume catch-up controller if speech sync is active — via heuristic gate
-  if (recActive) {
+  if (speechOn) {
     try {
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
