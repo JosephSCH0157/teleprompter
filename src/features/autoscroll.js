@@ -1,6 +1,6 @@
 // src/features/autoscroll.js (authoritative controller)
 let enabled = false;
-let speed = 16;          // px/sec default
+let speed = 21;          // px/sec default
 let raf = 0;
 let viewer = null;
 let autoChip = null;
