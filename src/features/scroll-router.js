@@ -431,6 +431,35 @@ function applyMode(m) {
     if (sel && sel.value !== m) sel.value = m;
   } catch {
   }
+  
+  // Toggle UI controls based on mode
+  try {
+    const autoRow = document.querySelector('.row:has(#autoSpeed)');
+    const wpmRow = document.getElementById('wpmRow');
+    
+    if (m === 'wpm') {
+      // Show WPM controls, hide manual speed controls
+      if (wpmRow) {
+        wpmRow.classList.remove('visually-hidden');
+        wpmRow.removeAttribute('aria-hidden');
+      }
+      if (autoRow) {
+        autoRow.classList.add('visually-hidden');
+        autoRow.setAttribute('aria-hidden', 'true');
+      }
+    } else {
+      // Show manual speed controls, hide WPM controls
+      if (wpmRow) {
+        wpmRow.classList.add('visually-hidden');
+        wpmRow.setAttribute('aria-hidden', 'true');
+      }
+      if (autoRow) {
+        autoRow.classList.remove('visually-hidden');
+        autoRow.removeAttribute('aria-hidden');
+      }
+    }
+  } catch {
+  }
 }
 function installScrollRouter(opts) {
   try {
@@ -442,6 +471,29 @@ function installScrollRouter(opts) {
   applyMode(state2.mode);
   const orch = createOrchestrator();
   let orchRunning = false;
+  let wpmUpdateInterval = null;
+  
+  // Update WPM display periodically when in WPM mode
+  function updateWpmDisplay() {
+    try {
+      if (state2.mode !== 'wpm' || !orchRunning) return;
+      const status = orch.getStatus();
+      const wpmEl = document.getElementById('wpmPx');
+      
+      if (wpmEl && status) {
+        const wpm = status.wpm;
+        const pxs = status.targetPxs;
+        
+        if (wpm != null && isFinite(wpm) && pxs != null && isFinite(pxs)) {
+          wpmEl.textContent = `≈ ${Math.round(wpm)} WPM → ${Math.round(pxs)} px/s`;
+        } else {
+          wpmEl.textContent = '≈ — WPM';
+        }
+      }
+    } catch {
+    }
+  }
+  
   async function ensureOrchestratorForMode() {
     try {
       if (state2.mode === "wpm" || state2.mode === "asr") {
@@ -449,15 +501,40 @@ function installScrollRouter(opts) {
           await orch.start(createVadEventAdapter());
           orch.setMode("assist");
           orchRunning = true;
+          
+          // Start WPM display updates for WPM mode
+          if (state2.mode === "wpm") {
+            if (wpmUpdateInterval) clearInterval(wpmUpdateInterval);
+            wpmUpdateInterval = setInterval(updateWpmDisplay, 200);
+          }
         }
       } else if (orchRunning) {
         await orch.stop();
         orchRunning = false;
+        
+        // Stop WPM display updates
+        if (wpmUpdateInterval) {
+          clearInterval(wpmUpdateInterval);
+          wpmUpdateInterval = null;
+        }
       }
     } catch {
     }
   }
   ensureOrchestratorForMode();
+  
+  // Initialize WPM target input from localStorage
+  try {
+    const wpmTargetInput = document.getElementById('wpmTarget');
+    if (wpmTargetInput) {
+      const stored = localStorage.getItem('tp_baseline_wpm');
+      if (stored) {
+        wpmTargetInput.value = stored;
+      }
+    }
+  } catch {
+  }
+  
   let userEnabled = false;
   let dbGate = false;
   let vadGate = false;
@@ -664,6 +741,16 @@ function installScrollRouter(opts) {
         applyMode(modeVal);
         applyGate();
         ensureOrchestratorForMode();
+      }
+      // Handle WPM target changes
+      if (t?.id === "wpmTarget") {
+        try {
+          const val = Number(t.value);
+          if (isFinite(val) && val > 0) {
+            localStorage.setItem('tp_baseline_wpm', String(val));
+          }
+        } catch {
+        }
       }
     }, { capture: true });
     const modeSel = document.getElementById("scrollMode");
