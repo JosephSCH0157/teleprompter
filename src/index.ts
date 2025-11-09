@@ -32,41 +32,48 @@ function applyUiScrollMode(mode: UiScrollMode) {
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
     | undefined;
+  const auto = (window as any).__tpAuto as { setEnabled?(_v: boolean): void } | undefined;
 
   // Defaults
   let brainMode: BrainMode = 'manual';
   let clampMode: 'follow' | 'backtrack' | 'free' = 'free';
   let asrEnabled = false;
+  let autoEnabled = false;
 
   switch (mode) {
     case 'off':
       brainMode = 'manual';
       clampMode = 'free';
       asrEnabled = false;
+      autoEnabled = false;
       break;
 
     case 'auto':
       brainMode = 'auto';      // pure time-based scroll
       clampMode = 'free';      // ASR anti-jitter not needed
       asrEnabled = false;
+      autoEnabled = true;       // Enable legacy Auto scroll
       break;
 
     case 'asr':
       brainMode = 'hybrid';    // auto + ASR corrections
       clampMode = 'follow';    // monotonic clamp: no back-jogs
       asrEnabled = true;
+      autoEnabled = true;       // Auto runs in background for hybrid
       break;
 
     case 'step':
       brainMode = 'step';      // discrete step moves
       clampMode = 'free';      // clamp doesn't matter here
       asrEnabled = false;
+      autoEnabled = false;
       break;
 
     case 'rehearsal':
       brainMode = 'rehearsal'; // no programmatic scroll
       clampMode = 'free';
       asrEnabled = false;
+      autoEnabled = false;
       break;
   }
 
@@ -74,6 +81,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
   if (brain) brain.setMode(brainMode);
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
+  if (auto && typeof auto.setEnabled === 'function') auto.setEnabled(autoEnabled);
 
   // HUD visibility: show all three layers for debugging
   try {
@@ -83,10 +91,11 @@ function applyUiScrollMode(mode: UiScrollMode) {
       ui: mode, 
       brain: brainMode, 
       clamp: clampMode, 
-      asrEnabled 
+      asrEnabled,
+      autoEnabled
     });
     // Also log to console for quick visibility
-    console.debug(`[Scroll Mode] ${summary} | ASR: ${asrEnabled ? 'on' : 'off'}`);
+    console.debug(`[Scroll Mode] ${summary} | ASR: ${asrEnabled ? 'on' : 'off'} | Auto: ${autoEnabled ? 'on' : 'off'}`);
   } catch {
     // ignore
   }
