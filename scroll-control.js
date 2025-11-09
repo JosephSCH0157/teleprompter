@@ -500,7 +500,7 @@ export default function createScrollController(adapters = {}, telemetry) {
      * Set scroll mode for monotonic clamp behavior
      * @param {'follow' | 'backtrack' | 'free'} newMode
      */
-    setclampMode(newMode) {
+    setClampMode(newMode) {
       clampMode = newMode;
       if (newMode !== 'follow') {
         // When leaving follow mode, capture current ratio so we can resume properly

@@ -29,9 +29,16 @@ function applyUiScrollMode(mode: UiScrollMode) {
 
   const brain = (window as any).__tpScrollBrain as ScrollBrain | undefined;
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
+  // Ensure __tpSetClampMode is defined or provide a fallback
+  if (!(window as any).__tpSetClampMode) {
+	(window as any).__tpSetClampMode = (_m: 'follow' | 'backtrack' | 'free') => {
+	  // Default fallback: log the mode change
+	  try { console.log('Clamp mode set to:', _m); } catch {}
+	};
+  }
   const setClampMode = (window as any).__tpSetClampMode as
-    | ((_m: 'follow' | 'backtrack' | 'free') => void)
-    | undefined;
+	| ((_m: 'follow' | 'backtrack' | 'free') => void)
+	| undefined;
 
   // Defaults
   let brainMode: BrainMode = 'manual';
@@ -189,15 +196,8 @@ try {
 			const rehearsal = installRehearsal();
 			// Honor URL/localStorage bootstrap for Rehearsal
 			try { resolveInitialRehearsal(); } catch {}
-			// Optional wiring: allow window.setScrollMode('step') to control Step when router is absent
-			if (!(window as any).setScrollMode) {
-				(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
-					try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
-					try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
-					if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
-					else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
-				};
-			}
+			// The legacy scroll mode handler is never installed because setScrollMode is already assigned above.
+			// This block is unreachable and has been removed.
 			// If explicitly requested, override router Step with TS module
 			try {
 				if ((window as any).__TP_TS_STEP_OVERRIDE) {
