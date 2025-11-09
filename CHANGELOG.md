@@ -6,8 +6,9 @@
 
 - **UI Scroll Mode Router**: Unified `setScrollMode()` / `getScrollMode()` API coordinates all scroll subsystems
   - Single coordinator function (`applyUiScrollMode`) maps UI modes → internal modes
-  - Routes to: Scroll Brain mode, Clamp mode (anti-jitter), ASR enabled state
+  - Routes to: Scroll Brain mode, Clamp mode (anti-jitter), ASR enabled state, Auto-scroll system
   - Exposed globally: `window.setScrollMode()`, `window.getScrollMode()`, `window.__tpScrollBrain`
+  - Auto-scroll system integration: Timed and ASR modes now properly enable/disable window.\_\_tpAuto
 - **Scroll Brain**: New TypeScript module manages all scroll movement
   - Modes: `'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal'`
   - Single requestAnimationFrame loop for all programmatic scrolling
@@ -27,6 +28,16 @@
   - `ScrollMode` type exported from scroll-brain
   - `UiScrollMode` type for user-facing modes
   - Proper interface contracts for all scroll subsystems
+
+**Bug Fixes**
+
+- **Pre-roll Timing**: Fixed auto-scroll starting during countdown instead of after
+  - Moved `tp:autoIntent` event dispatch from before `beginCountdownThen()` to inside callback
+  - Ensures proper sequence: pause during "3...2...1..." → start scrolling after countdown completes
+- **Speed Input Reactivity**: Fixed speed slider/input not responding in timed mode
+  - Replaced direct element event listeners with document-level event delegation
+  - Speed changes now apply immediately to running auto-scroll via `Auto.setSpeed()`
+  - Handles input, change, and wheel events reliably regardless of DOM timing
 
 ## Unreleased
 
