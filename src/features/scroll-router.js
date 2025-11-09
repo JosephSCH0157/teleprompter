@@ -748,11 +748,57 @@ function installScrollRouter(opts) {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
+            // In WPM mode, immediately update sensitivity to match new target
+            if (state2.mode === 'wpm' && orchRunning) {
+              // Calculate sensitivity multiplier: if user wants 150 WPM but we're detecting 120,
+              // sensitivity should be 150/120 = 1.25 to speed up proportionally
+              try {
+                const status = orch.getStatus();
+                const detectedWpm = status.wpm;
+                if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                  const sensitivity = val / detectedWpm;
+                  orch.setSensitivity(sensitivity);
+                } else {
+                  // No detected WPM yet, just use the target as baseline
+                  orch.setSensitivity(1.0);
+                }
+              } catch {
+              }
+            }
           }
         } catch {
         }
       }
     }, { capture: true });
+    
+    // Also handle input event for real-time WPM target updates
+    document.addEventListener("input", (e) => {
+      const t = e.target;
+      if (t?.id === "wpmTarget") {
+        try {
+          const val = Number(t.value);
+          if (isFinite(val) && val > 0) {
+            localStorage.setItem('tp_baseline_wpm', String(val));
+            // In WPM mode, immediately update sensitivity
+            if (state2.mode === 'wpm' && orchRunning) {
+              try {
+                const status = orch.getStatus();
+                const detectedWpm = status.wpm;
+                if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                  const sensitivity = val / detectedWpm;
+                  orch.setSensitivity(sensitivity);
+                } else {
+                  orch.setSensitivity(1.0);
+                }
+              } catch {
+              }
+            }
+          }
+        } catch {
+        }
+      }
+    }, { capture: true });
+    
     const modeSel = document.getElementById("scrollMode");
     modeSel?.setAttribute("aria-live", "polite");
   } catch {
