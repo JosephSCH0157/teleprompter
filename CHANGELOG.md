@@ -14,6 +14,14 @@
   - Single requestAnimationFrame loop for all programmatic scrolling
   - Clean separation: UI mode (user-facing) vs internal mode (implementation)
 
+- **WPM Mode**: Intelligent auto-scroll based on speech rate
+  - Estimates words per minute from speech recognition tokens
+  - Automatically adjusts scroll speed to match speaking pace
+  - Live WPM display: "≈ {wpm} WPM → {pxs} px/s" updated every 200ms
+  - Target WPM input for baseline speed (persisted to localStorage)
+  - Typography-aware conversion using `mapWpmToPxPerSec()`
+  - UI automatically toggles between manual speed controls and WPM controls
+
 - **Clamp Mode Refactor**: Renamed from `scrollMode` to `clampMode` in scroll-control.js
   - Three modes: `'follow'` (monotonic forward), `'backtrack'` (allow reversal), `'free'` (no constraints)
   - ASR mode automatically enables `'follow'` clamp to prevent back-jogs
