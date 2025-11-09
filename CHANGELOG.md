@@ -8,7 +8,6 @@
   - Single coordinator function (`applyUiScrollMode`) maps UI modes → internal modes
   - Routes to: Scroll Brain mode, Clamp mode (anti-jitter), ASR enabled state
   - Exposed globally: `window.setScrollMode()`, `window.getScrollMode()`, `window.__tpScrollBrain`
-  
 - **Scroll Brain**: New TypeScript module manages all scroll movement
   - Modes: `'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal'`
   - Single requestAnimationFrame loop for all programmatic scrolling
