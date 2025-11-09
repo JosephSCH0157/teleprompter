@@ -163,12 +163,20 @@ function beginCountdownThen(sec, cb) {
       const num = document.getElementById('countNum');
       if (overlay) overlay.style.display = 'flex';
       if (num) num.textContent = String(n);
+      // Send to display window if available
+      if (typeof window.sendToDisplay === 'function') {
+        window.sendToDisplay({ type: 'preroll', show: true, n });
+      }
     } catch {}
   }
   function hidePreroll() {
     try {
       const overlay = document.getElementById('countOverlay');
       if (overlay) overlay.style.display = 'none';
+      // Send to display window if available
+      if (typeof window.sendToDisplay === 'function') {
+        window.sendToDisplay({ type: 'preroll', show: false });
+      }
     } catch {}
   }
   return new Promise((resolve) => {
