@@ -261,10 +261,12 @@ function createOrchestrator() {
     });
     await a.start();
     started = true;
-    try {
-      motor.setEnabled(true);
-    } catch {
-    }
+    // Don't enable motor here - let applyGate() control it based on userEnabled and speechActive
+    // This ensures proper pre-roll and speech lifecycle control
+    // try {
+    //   motor.setEnabled(true);
+    // } catch {
+    // }
     try {
       const onErr = () => {
         if (restarts++ === 0) {
