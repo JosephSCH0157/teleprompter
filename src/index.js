@@ -710,32 +710,42 @@ async function boot() {
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
       }, { capture: true });
 
-      // Unified auto-speed input + wheel handling
+      // Unified auto-speed input + wheel handling (resilient delegation)
       try {
-        const wireSpeedInput = () => {
-          const inp = document.getElementById('autoSpeed');
-          if (!inp) return;
-          // input/change both: keep persisted and labels in sync via Auto.setSpeed
-          const onChange = () => { try { Auto.setSpeed(inp.value); } catch {} };
-          inp.addEventListener('input', onChange, { capture: true });
-          inp.addEventListener('change', onChange, { capture: true });
-          // Wheel on input adjusts ±0.5 (Shift: ±5), rounded to one decimal
-          inp.addEventListener('wheel', (ev) => {
-            try {
-              // eslint-disable-next-line no-restricted-syntax
-              ev.preventDefault();
-              const step = ev.shiftKey ? 5 : 0.5;
-              const dir = (ev.deltaY < 0) ? +1 : -1;
-              const cur = Number(inp.value || '0') || 0;
-              const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 10) / 10));
-              inp.value = String(next);
-              Auto.setSpeed(next);
-            } catch {}
-          }, { passive: false });
-        };
-        // wire now and after small delay in case DOM re-renders
-        wireSpeedInput();
-        setTimeout(wireSpeedInput, 250);
+        // Use event delegation to handle input changes even if DOM is replaced
+        document.addEventListener('input', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id === 'autoSpeed') {
+              Auto.setSpeed(t.value);
+            }
+          } catch {}
+        }, { capture: true });
+
+        document.addEventListener('change', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id === 'autoSpeed') {
+              Auto.setSpeed(t.value);
+            }
+          } catch {}
+        }, { capture: true });
+
+        // Wheel on speed input adjusts ±0.5 (Shift: ±5), rounded to one decimal
+        document.addEventListener('wheel', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id !== 'autoSpeed') return;
+            // eslint-disable-next-line no-restricted-syntax
+            ev.preventDefault();
+            const step = ev.shiftKey ? 5 : 0.5;
+            const dir = (ev.deltaY < 0) ? +1 : -1;
+            const cur = Number(t.value || '0') || 0;
+            const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 10) / 10));
+            t.value = String(next);
+            Auto.setSpeed(next);
+          } catch {}
+        }, { passive: false, capture: true });
       } catch {}
 
   // Ensure OBS persistent UI is wired and boot-restore applied (idempotent)
