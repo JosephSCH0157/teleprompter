@@ -600,7 +600,9 @@ function installScrollRouter(opts) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      const want = !!userEnabled && !!speechActive;
+      // WPM mode: enable when user wants it, don't require speech to be active
+      // Other modes (auto, step, etc): require both user intent and speech active
+      const want = state2.mode === 'wpm' ? !!userEnabled : (!!userEnabled && !!speechActive);
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
@@ -883,17 +885,35 @@ function installScrollRouter(opts) {
     }, { capture: true });
   } catch {
   }
-  if (state2.mode === "hybrid") {
+  if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;
     try {
-      auto.setSpeed?.(getStoredSpeed());
+      // For WPM mode, use baseline WPM to set initial speed
+      if (state2.mode === "wpm") {
+        const baselineWpm = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
+        // Calculate approximate px/s from baseline WPM
+        const cs = getComputedStyle(document.documentElement);
+        const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+        const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+        const lineHeightPx = fsPx * lhScale;
+        const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+        const pxs = (baselineWpm / 60 / wpl) * lineHeightPx;
+        auto.setSpeed?.(pxs);
+      } else {
+        auto.setSpeed?.(getStoredSpeed());
+      }
     } catch {
     }
     try {
       const btn = document.getElementById("autoToggle");
       if (btn) {
         btn.dataset.state = "on";
-        btn.textContent = `Auto-scroll: On \u2014 ${getStoredSpeed()} px/s`;
+        if (state2.mode === "wpm") {
+          const baselineWpm = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
+          btn.textContent = `Auto-scroll: On — ${Math.round(baselineWpm)} WPM`;
+        } else {
+          btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
+        }
       }
     } catch {
     }
