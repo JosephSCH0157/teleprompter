@@ -10,11 +10,30 @@ let _connected = false;
 let _connecting = false;
 let _cfg = { url: 'ws://127.0.0.1:4455', password: '' };
 let _autoReconnect = true;
+let _reconnectTimer = null;
 let _backoffMs = 1000; // start 1s
 const _backoffMax = 5000;
 const _backoffFactor = 2;
 const _listeners = { connect: [], disconnect: [], recordstate: [], error: [] };
 let _lastScene = null;
+let _keepAliveTimer = null;
+function _startKeepAlive() {
+  if (_keepAliveTimer) return;
+  _keepAliveTimer = setInterval(() => {
+    try {
+      if (_obsClient && _connected) {
+        // cheap request OBS will answer quickly
+        _obsClient.call && _obsClient.call('GetVersion').catch(() => {});
+      }
+    } catch {}
+  }, 15000);
+}
+function _stopKeepAlive() {
+  if (_keepAliveTimer) {
+    clearInterval(_keepAliveTimer);
+    _keepAliveTimer = null;
+  }
+}
 
 function _getElem(id) {
   try {
@@ -59,8 +78,22 @@ function _setRecChipRecording(active) {
 
 async function _ensureObsLib() {
   if (typeof window !== 'undefined' && window.OBSWebSocket) return window.OBSWebSocket;
-  const mod = await import('https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm');
-  return mod.default || mod.OBSWebSocket || mod;
+  // Try primary CDN, then a secondary fallback to improve resilience in restricted networks
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm');
+    return mod.default || mod.OBSWebSocket || mod;
+  } catch (e1) {
+    try { void e1; } catch {}
+    try {
+      const mod2 = await import('https://unpkg.com/obs-websocket-js@5.0.4/dist/obs-ws.min.js');
+      // Some UMD builds attach to window; prefer global if present
+      if (typeof window !== 'undefined' && window.OBSWebSocket) return window.OBSWebSocket;
+      return mod2.default || mod2.OBSWebSocket || mod2;
+    } catch (e2) {
+      try { window.HUD?.log?.('obs:error', 'obs-websocket-js load failed'); } catch {}
+      throw e2;
+    }
+  }
 }
 
 async function _createClient() {
@@ -71,23 +104,35 @@ async function _createClient() {
 }
 
 async function _connectOnce() {
+  // Respect armed gating: never connect if disabled
+  try {
+    if (typeof _armed !== 'undefined' && !_armed) return;
+  } catch {}
+  // Rehearsal Mode: short-circuit all OBS connections (belt & suspenders)
+  try { if (typeof window !== 'undefined' && window.__TP_REHEARSAL) { return; } } catch {}
   if (_connected || _connecting) return;
   _connecting = true;
   try {
     const client = await _createClient();
     // wire basic events
-    client.on('ConnectionClosed', () => {
+    client.on('ConnectionClosed', (d) => {
       _connected = false;
       _setObsConnChip(false);
-      _emit('disconnect');
-      if (_autoReconnect) _scheduleReconnect();
+      _emit('disconnect', d);
+      _stopKeepAlive();
+      try { window.HUD?.warn?.('obs:close', d || { via: 'obs-websocket-js' }); } catch {}
+      if (_autoReconnect && (_armed === true)) _scheduleReconnect();
     });
     client.on('ConnectionOpened', () => {
       _connected = true;
       _backoffMs = 1000;
       _setObsConnChip(true);
       _emit('connect');
+      _startKeepAlive();
     });
+    // Extra observability
+    try { client.on('Identified', () => { try { window.HUD?.log?.('obs:identified'); } catch {} }); } catch {}
+    try { client.on('CurrentProgramSceneChanged', (e) => { try { _emit('scene', e); window.HUD?.log?.('obs:scene', e); } catch {} }); } catch {}
     client.on('RecordStateChanged', (ev) => {
       try {
         const active = !!(ev && (ev.outputActive || ev.outputActive === true));
@@ -104,6 +149,11 @@ async function _connectOnce() {
     _connected = true;
     _setObsConnChip(true);
     _emit('connect');
+    try {
+      // Surface version info once connected
+      const ver = await client.call('GetVersion').catch(() => null);
+      if (ver) { try { window.HUD?.log?.('obs:connected', ver); } catch {} }
+    } catch {}
     _connecting = false;
     return true;
   } catch (e) {
@@ -111,6 +161,7 @@ async function _connectOnce() {
     _connected = false;
     _setObsConnChip(false);
     _emit('error', e);
+    try { window.HUD?.log?.('obs:error', String(e && e.message || e)); } catch {}
     try {
       // ensure client cleared to allow fresh attempts
       _obsClient?.disconnect();
@@ -123,9 +174,13 @@ async function _connectOnce() {
 
 function _scheduleReconnect() {
   try {
+    if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+    if (_armed === false) return; // do not schedule when disarmed
     const delay = Math.min(_backoffMs, _backoffMax);
     _backoffMs = Math.min(_backoffMax, Math.max(1000, _backoffMs * _backoffFactor));
-    setTimeout(() => {
+    _reconnectTimer = setTimeout(() => {
+      _reconnectTimer = null;
+      if (_armed === false) return;
       _connectOnce();
     }, delay);
   } catch {}
@@ -187,6 +242,17 @@ const bridge = {
       return null;
     }
   },
+  async getRecordDirectory() {
+    try {
+      await _connectOnce();
+      if (!_obsClient) return null;
+      const res = await _obsClient.call('GetRecordDirectory');
+      return res || null; // { recordDirectory }
+    } catch (e) {
+      _emit('error', e);
+      return null;
+    }
+  },
   async getCurrentProgramScene() {
     try {
       await _connectOnce();
@@ -241,7 +307,7 @@ const bridge = {
   },
   enableAutoReconnect(v) {
     _autoReconnect = !!v;
-    if (_autoReconnect && !_connected) _scheduleReconnect();
+    if (_autoReconnect && !_connected && _armed !== false) _scheduleReconnect();
   },
 };
 
@@ -255,4 +321,75 @@ try {
 } catch {}
 
 export default bridge;
+
+// ---- Armed gating (respect Settings “OBS Off”) -----------------------------
+// Unified gating: prefer store value when available, else fall back to localStorage.
+// Legacy key: tp_obs_enabled (boolean '1'/'0')
+// New mirror key: tp_obs_enabled_v2 (boolean '1'/'0') to allow future migrations without clobbering older sessions.
+let _armed = false;
+try {
+  // If store is present, prefer its obsEnabled value (explicit user intent this session)
+  const S = (typeof window !== 'undefined' ? window.__tpStore : null);
+  if (S && typeof S.get === 'function') {
+    const v = S.get('obsEnabled');
+    if (typeof v === 'boolean') {
+      _armed = v;
+    } else {
+      // Non-boolean (undefined/null) → fall back to persisted localStorage flag(s)
+      _armed = (localStorage.getItem('tp_obs_enabled_v2') === '1')
+        || (localStorage.getItem('tp_obs_enabled_v1') === '1')
+        || (localStorage.getItem('tp_obs_enabled') === '1');
+    }
+  } else {
+    // No store yet (early boot) → fall back to persisted flags
+    _armed = (localStorage.getItem('tp_obs_enabled_v2') === '1')
+      || (localStorage.getItem('tp_obs_enabled_v1') === '1')
+      || (localStorage.getItem('tp_obs_enabled') === '1');
+  }
+} catch {}
+
+// Early subscription (best-effort): if the store loads after this module, reflect changes immediately
+try {
+  const S = (typeof window !== 'undefined' ? window.__tpStore : null);
+  if (S && typeof S.subscribe === 'function') {
+    S.subscribe('obsEnabled', (v) => {
+      try { setArmed(!!v); } catch {}
+    });
+  }
+} catch {}
+
+function armed(){ return !!_armed; }
+function setArmed(on){
+  _armed = !!on;
+  // Persist all known keys for compatibility / migration across wiring paths
+  try { localStorage.setItem('tp_obs_enabled', _armed ? '1' : '0'); } catch {}
+  try { localStorage.setItem('tp_obs_enabled_v1', _armed ? '1' : '0'); } catch {}
+  try { localStorage.setItem('tp_obs_enabled_v2', _armed ? '1' : '0'); } catch {}
+  // Tie auto-reconnect to armed
+  _autoReconnect = !!_armed;
+  if (!_armed) {
+    try { if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; } } catch {}
+    try { _stopKeepAlive(); } catch {}
+    try { _obsClient?.disconnect?.(); } catch {}
+    try { if (_obsClient) { _obsClient = null; } } catch {}
+    _connected = false;
+    _connecting = false;
+    _setObsConnChip(false);
+  } else {
+    // best-effort: attempt a connect only when explicitly asked via maybeConnect
+  }
+}
+async function maybeConnect(){
+  if (!_armed) return;
+  if (_connected || _connecting) return;
+  try { await _connectOnce(); }
+  catch { if (_armed && _autoReconnect) _scheduleReconnect(); }
+}
+
+// Expose minimal control surface for Settings
+try {
+  if (typeof window !== 'undefined') {
+    window.__tpObs = Object.assign(window.__tpObs || {}, { setArmed, armed, maybeConnect });
+  }
+} catch {}
 

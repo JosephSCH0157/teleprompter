@@ -18,5 +18,9 @@
     { "path": "src/logic" }
   ]
 
-  ,"exclude": ["src/build-logic/**"]
+  ,"exclude": [
+    "dist",
+    "src/build-logic/**",
+    "src/features/scroll-router.ts"
+  ]
 }

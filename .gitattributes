@@ -1,0 +1,2 @@
+# Prevent re-introduction of the TypeScript shadow file via merges
+src/features/scroll-router.ts merge=ours

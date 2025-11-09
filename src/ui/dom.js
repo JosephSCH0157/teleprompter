@@ -1,5 +1,8 @@
 // Minimal DOM helpers for the UI layer
 
+// Broadcast channel for cross-window display sync (names/colors)
+let __bc = null; try { __bc = new BroadcastChannel('prompter'); } catch {}
+
 function on(el, ev, fn, opts) {
   try { if (el && typeof el.addEventListener === 'function') el.addEventListener(ev, fn, opts); } catch {}
 }
@@ -11,6 +14,61 @@ function $(id) {
 // --- UI Hydration Contract ---------------------------------------------------
 const UI_WIRED = new Set();
 const $id = (id) => { try { return document.getElementById(id); } catch { return null; } };
+let IS_HYDRATING = false;
+let HYDRATE_SCHEDULED = false;
+
+// Global guard for camera controls to swallow any stray legacy bubble listeners
+try {
+  if (!window.__tpCamGlobalCaptureGuard) {
+    window.__tpCamGlobalCaptureGuard = true;
+    document.addEventListener('click', (e) => {
+      try {
+        const t = e.target?.closest?.('#startCam, #stopCam, #camDevice, #StartCam, #StopCam, #CamDevice');
+        if (!t) return;
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+      } catch {}
+    }, { capture: false });
+
+    // Device select safety: handle Settings/Main device changes even if specific wiring didn't attach
+    document.addEventListener('change', async (e) => {
+      try {
+        if (window.__tpSettingsCamGuardActive) return; // Settings wiring owns this
+        const el = e.target && e.target.closest && e.target.closest('#settingsCamSel, #camDevice, #CamDevice');
+        if (!el) return;
+        const val = el && 'value' in el ? el.value : '';
+        const prev = (function(){ try { return localStorage.getItem('tp_camera_device_v1') || ''; } catch { return ''; } })();
+        let ok = true;
+        // Live switch if active; only persist on success
+        if (window.__tpCamera?.isActive?.()) {
+          try {
+            ok = !!(await window.__tpCamera.switchCamera?.(val));
+          } catch { ok = false; }
+        }
+        if (ok) {
+          try { if (val) localStorage.setItem('tp_camera_device_v1', String(val)); } catch {}
+          try {
+            const sSel = document.getElementById('settingsCamSel');
+            const mSel = document.getElementById('camDevice') || document.getElementById('CamDevice');
+            if (sSel && sSel !== el && sSel.value !== val) sSel.value = val;
+            if (mSel && mSel !== el && mSel.value !== val) mSel.value = val;
+          } catch {}
+        } else {
+          // Revert UI to previously saved id on failure
+          try {
+            const sSel = document.getElementById('settingsCamSel');
+            const mSel = document.getElementById('camDevice') || document.getElementById('CamDevice');
+            if (sSel && prev && sSel.value !== prev) sSel.value = prev;
+            if (mSel && prev && mSel.value !== prev) mSel.value = prev;
+          } catch {}
+          try { window.toast && window.toast('Camera unavailable — selection reverted', { type: 'warn' }); } catch {}
+        }
+        // Stop legacy listeners from reacting
+        try { e.stopPropagation(); e.stopImmediatePropagation?.(); } catch {}
+      } catch {}
+    }, { capture: true });
+  }
+} catch {}
 
 // Wire once per key
 function once(key, fn) {
@@ -28,9 +86,10 @@ function wireDisplayBridge() {
   // Bridge wrappers for legacy global API expected by some helpers/self-checks
   try {
     const disp = (window.__tpDisplay || {});
-    if (disp && !window.openDisplay) window.openDisplay = () => { try { return disp.openDisplay && disp.openDisplay(); } catch {} };
-    if (disp && !window.closeDisplay) window.closeDisplay = () => { try { return disp.closeDisplay && disp.closeDisplay(); } catch {} };
-    if (disp && !window.sendToDisplay) window.sendToDisplay = (p) => { try { return disp.sendToDisplay && disp.sendToDisplay(p); } catch {} };
+    // Always delegate to the bridge to avoid stale no-op stubs
+    if (disp) window.openDisplay = () => { try { return disp.openDisplay && disp.openDisplay(); } catch {} };
+    if (disp) window.closeDisplay = () => { try { return disp.closeDisplay && disp.closeDisplay(); } catch {} };
+    if (disp) window.sendToDisplay = (p) => { try { return disp.sendToDisplay && disp.sendToDisplay(p); } catch {} };
   } catch {}
 
   // Wire message handler once
@@ -49,6 +108,87 @@ function wireDisplayBridge() {
   on(closeBtn, 'click', () => { try { window.closeDisplay && window.closeDisplay(); } catch {} });
 }
 
+// Mirror main window state to display: scroll position, typography, and content
+function wireDisplayMirror() {
+  try {
+    if (document.documentElement.dataset.displayMirrorWired === '1') return;
+    document.documentElement.dataset.displayMirrorWired = '1';
+
+    const viewer = $('viewer');
+    const scriptEl = $('script');
+    // Throttled scroll mirroring (send ratio for resolution independence)
+    let scrollPending = false;
+    const sendScroll = () => {
+      try {
+        if (!viewer || !window.sendToDisplay) return;
+        const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+        const ratio = max > 0 ? (viewer.scrollTop / max) : 0;
+        window.sendToDisplay({ type: 'scroll', ratio });
+      } finally {
+        scrollPending = false;
+      }
+    };
+    if (viewer) {
+      viewer.addEventListener('scroll', () => {
+        if (!scrollPending) {
+          scrollPending = true;
+          requestAnimationFrame(() => {
+            try { sendScroll(); } finally { try { window.dispatchEvent(new Event('tp:anchorChanged')); } catch {} }
+          });
+        }
+      }, { passive: true });
+    }
+
+    // Typography mirroring (font size / line height)
+    const fs = $('fontSize');
+    const lh = $('lineHeight');
+    const sendTypography = () => {
+      try {
+        // Only broadcast when linking is ON
+        let linkOn = false;
+        try {
+          const raw = localStorage.getItem('tp_ui_prefs_v1');
+          const st = raw ? JSON.parse(raw) : {};
+          linkOn = !!st.linkTypography;
+        } catch {}
+        if (!linkOn) return;
+        const fontSize = fs && 'value' in fs ? Number(fs.value) : undefined;
+        const lineHeight = lh && 'value' in lh ? Number(lh.value) : undefined;
+        window.sendToDisplay && window.sendToDisplay({ type: 'typography', fontSize, lineHeight });
+      } catch {}
+    };
+    on(fs, 'input', sendTypography);
+    on(lh, 'input', sendTypography);
+
+  // Initial push only if linking is enabled
+  setTimeout(sendTypography, 0);
+
+    // Content render mirroring: listen for our renderer's event and also observe #script for any DOM changes
+    let renderPending = false;
+    const sendRender = () => {
+      try {
+        const html = document.getElementById('script')?.innerHTML || '';
+        const fontSize = fs && 'value' in fs ? Number(fs.value) : undefined;
+        const lineHeight = lh && 'value' in lh ? Number(lh.value) : undefined;
+        window.sendToDisplay && window.sendToDisplay({ type: 'render', html, fontSize, lineHeight });
+      } finally {
+        renderPending = false;
+      }
+    };
+    document.addEventListener('tp:script-rendered', () => {
+      if (!renderPending) { renderPending = true; requestAnimationFrame(sendRender); }
+    });
+    try {
+      if (scriptEl) {
+        const mo = new MutationObserver(() => {
+          if (!renderPending) { renderPending = true; requestAnimationFrame(sendRender); }
+        });
+        mo.observe(scriptEl, { childList: true, subtree: true });
+      }
+    } catch {}
+  } catch {}
+}
+
 function wireMic() {
   const req = $('micBtn');
   const rel = $('releaseMicBtn');
@@ -57,20 +197,95 @@ function wireMic() {
 }
 
 function wireCamera() {
-  const start = $('startCam');
-  const stop = $('stopCam');
-  const camSel = $('camDevice');
+  const start = $('startCam') || $('StartCam');
+  const stop = $('stopCam') || $('StopCam');
+  const camSel= $('camDevice') || $('CamDevice');
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
-  on(start, 'click', async () => { try { await window.__tpCamera?.startCamera?.(); } catch {} });
-  on(stop, 'click', () => { try { window.__tpCamera?.stopCamera?.(); } catch {} });
-  on(camSel, 'change', () => { try { window.__tpCamera?.switchCamera?.(camSel.value); } catch {} });
+  if (start && !start.dataset.captureWired) {
+    start.dataset.captureWired = '1';
+    start.addEventListener('click', async (e) => {
+      try { e.stopImmediatePropagation(); e.preventDefault(); } catch {}
+      try { if (window.toast) window.toast('Camera starting…'); } catch {}
+      // Ensure camera module is loaded if not yet available
+      try { if (!window.__tpCamera || typeof window.__tpCamera.startCamera !== 'function') await import('../media/camera.js'); } catch {}
+      try {
+        await window.__tpCamera?.startCamera?.();
+      } catch (err) {
+        try {
+          const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : '';
+          let hint = '';
+          try {
+            const name = String(err && err.name || '');
+            if (name === 'NotReadableError' || name === 'TrackStartError') {
+              hint = ' • Another app is using the camera (e.g., OBS). Close it or pick "OBS Virtual Camera" in Settings → Media.';
+            } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+              hint = ' • Grant camera permission to this tab and try again.';
+            }
+          } catch {}
+          if (window.toast) window.toast('Camera start failed' + (msg ? ': ' + msg : '') + hint);
+        } catch {}
+      }
+    }, { capture: true });
+  }
+  if (stop && !stop.dataset.captureWired) {
+    stop.dataset.captureWired = '1';
+    stop.addEventListener('click', (e) => {
+      try { e.stopImmediatePropagation(); e.preventDefault(); } catch {}
+      try { window.__tpCamera?.stopCamera?.(); } catch {}
+      try { if (window.toast) window.toast('Camera stopped', { type: 'ok' }); } catch {}
+    }, { capture: true });
+  }
+  if (camSel && !camSel.dataset.captureWired) {
+    camSel.dataset.captureWired = '1';
+    camSel.addEventListener('change', (e) => {
+      try { e.stopPropagation(); e.stopImmediatePropagation?.(); } catch {}
+      try { window.__tpCamera?.switchCamera?.(camSel.value); } catch {}
+    }, { capture: true });
+  }
   on(size, 'input', () => { try { window.__tpCamera?.applyCamSizing?.(); } catch {} });
   on(op, 'input', () => { try { window.__tpCamera?.applyCamOpacity?.(); } catch {} });
   on(mir, 'change', () => { try { window.__tpCamera?.applyCamMirror?.(); } catch {} });
 }
 
+function wireLoadSample() {
+  try {
+    const btn = $('loadSample');
+    const ed = $('editor');
+    if (!btn || !ed || btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    const sample = [
+      '[s1]',
+      '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
+      'Cras justo odio, dapibus ac facilisis in, egestas eget quam.',
+      '[/s1]',
+      '',
+      '[s2]',
+      '[color=#ffcc00]Vestibulum[/color] [bg=#112233]ante[/bg] ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae;',
+      'Integer posuere erat a ante venenatis dapibus posuere velit aliquet.',
+      '[/s2]',
+      '',
+      '[g1]',
+      'Curabitur [b]non nulla[/b] sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada.',
+      'Maecenas faucibus mollis interdum.',
+      '[/g1]',
+      '',
+      '[g2]',
+      'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. [i]Etiam porta sem malesuada[/i] magna mollis euismod.',
+      '[bg=#003344][color=#a4e8ff]Quisque[/color][/bg] sit amet est a [u]libero[/u] mollis tristique.',
+      '[/g2]',
+    ].join('\n');
+    btn.addEventListener('click', () => {
+      try {
+        if ('value' in ed) ed.value = sample;
+        // re-render via both event and direct call for robustness
+        try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+        try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch {}
+      } catch {}
+    });
+  } catch {}
+}
 function wireUpload() {
   const btn = $('uploadFileBtn');
   const inp = $('uploadFile');
@@ -105,6 +320,51 @@ function wireUpload() {
       try { if (typeof window.setStatus === 'function') window.setStatus('Loaded "' + (f.name||'file') + '"'); } catch {}
     } catch {}
   });
+}
+
+function wireScriptControls() {
+  try {
+    const clearBtn = document.getElementById('clearText');
+    const resetBtn = document.getElementById('resetScriptBtn');
+    const editor = document.getElementById('editor');
+    const title = document.getElementById('scriptTitle');
+
+    if (clearBtn && !clearBtn.dataset.wired) {
+      clearBtn.dataset.wired = '1';
+      clearBtn.addEventListener('click', () => {
+        try {
+          if (editor && 'value' in editor) {
+            editor.value = '';
+            try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+            try { if (typeof window.renderScript === 'function') window.renderScript(''); } catch {}
+          }
+          try { (window.setStatus || (()=>{}))('Cleared'); } catch {}
+        } catch {}
+      });
+    }
+
+    if (resetBtn && !resetBtn.dataset.wired) {
+      resetBtn.dataset.wired = '1';
+      resetBtn.addEventListener('click', () => {
+        try {
+          if (title && 'value' in title) title.value = '';
+          if (editor && 'value' in editor) {
+            editor.value = '';
+            try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+            try { if (typeof window.renderScript === 'function') window.renderScript(''); } catch {}
+          }
+          // Reset scroll position to the top for clarity
+          try {
+            const scroller = document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+            if (scroller) scroller.scrollTop = 0;
+          } catch {}
+          // Refresh scripts dropdown (if exposed by scripts-ui)
+          try { if (typeof window.initScriptsUI === 'function') window.initScriptsUI(); } catch {}
+          try { (window.setStatus || (()=>{}))('Script reset'); } catch {}
+        } catch {}
+      });
+    }
+  } catch {}
 }
 
 function wirePresentMode() {
@@ -208,6 +468,64 @@ function installDbMeter() {
   });
 }
 
+// Tiny OBS status chip: creates #obsChip once and updates on tp:obs events
+function installObsChip() {
+  once('obs-chip', () => {
+    try {
+      const topbar = document.querySelector('.topbar') || document.body;
+      let chip = document.getElementById('obsChip');
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.id = 'obsChip';
+        chip.className = 'chip';
+        // Create structured content: label + optional test icon
+        const label = document.createElement('span');
+        label.className = 'obs-chip-label';
+        label.textContent = 'OBS: disconnected';
+        const icon = document.createElement('i');
+        icon.className = 'obs-test-icon';
+        icon.setAttribute('aria-hidden','true');
+        chip.appendChild(label);
+        chip.appendChild(icon);
+        topbar && topbar.appendChild(chip);
+      }
+      const labelEl = chip.querySelector('.obs-chip-label') || chip;
+      const iconEl = chip.querySelector('.obs-test-icon');
+      let hideTimer = null;
+      const render = ({ status = 'disconnected', recording = false, scene } = {}) => {
+        try {
+          const s = String(status||'disconnected');
+          labelEl.textContent = `OBS: ${s}${recording ? ' • REC' : ''}${scene ? ` • ${scene}` : ''}`;
+          // reset state classes and apply new one(s)
+          const base = ['chip'];
+          if (s === 'identified' || s === 'open') base.push('obs-connected');
+          else if (s === 'connecting') base.push('obs-reconnecting');
+          else if (s === 'error') base.push('obs-error');
+          if (recording) base.push('chip-live');
+          chip.className = base.join(' ');
+        } catch {}
+      };
+      render();
+      window.addEventListener('tp:obs', (e) => { try { render((e && e.detail) || {}); } catch {} });
+      // Show a brief test icon feedback when test completes
+      window.addEventListener('tp:obs-test', (e) => {
+        try {
+          const d = (e && e.detail) || {}; const ok = !!d.ok;
+          if (!iconEl) return;
+          iconEl.textContent = ok ? '✓' : '!';
+          iconEl.classList.remove('ok','error','show');
+          iconEl.classList.add(ok ? 'ok' : 'error');
+          // force reflow for transition
+          void iconEl.offsetWidth;
+          iconEl.classList.add('show');
+          if (hideTimer) clearTimeout(hideTimer);
+          hideTimer = setTimeout(() => { try { iconEl.classList.remove('show'); } catch {} }, 2500);
+        } catch {}
+      });
+    } catch {}
+  });
+}
+
 function wireOverlays() {
   once('overlays', () => {
     try {
@@ -280,6 +598,8 @@ function loadRoles() {
 
 function updateLegend() {
   try {
+    // Mark that legend is being rendered so the MutationObserver can ignore these mutations
+    document.documentElement.dataset.legendRendering = '1';
     const legend = document.getElementById('legend');
     if (!legend) return;
     const ROLES = loadRoles();
@@ -319,7 +639,27 @@ function updateLegend() {
         });
       }
     } catch {}
-  } catch {}
+
+    // Broadcast speaker names/colors to display (s1/s2 only for the legend there)
+    try {
+      const getColor = (role, fallback) => {
+        try { const inp = document.getElementById('color-' + role); const v = (inp && 'value' in inp) ? String(inp.value||'').trim() : ''; return v || fallback; } catch { return fallback; }
+      };
+      const getName = (role, fallback) => {
+        try { const inp = document.getElementById('name-' + role); const v = (inp && 'value' in inp) ? String(inp.value||'').trim() : ''; return v || fallback; } catch { return fallback; }
+      };
+      const s1Color = getColor('s1', ROLES.s1.color);
+      const s2Color = getColor('s2', ROLES.s2.color);
+      const s1Name  = getName('s1', 'S1');
+      const s2Name  = getName('s2', 'S2');
+      if (__bc) {
+        try { __bc.postMessage({ type: 'SPEAKER_COLORS', s1: s1Color, s2: s2Color }); } catch {}
+        try { __bc.postMessage({ type: 'SPEAKER_NAMES', s1Name, s2Name }); } catch {}
+      }
+    } catch {}
+  } finally {
+    try { delete document.documentElement.dataset.legendRendering; } catch {}
+  }
 }
 
 function ensureEmptyBanner() {
@@ -343,10 +683,16 @@ function ensureEmptyBanner() {
 
 // === Master hydrator: run now and whenever DOM changes ===
 function hydrateUI() {
-  wireOverlays();
-  wirePresentMode();
-  updateLegend();
-  ensureEmptyBanner();
+  if (IS_HYDRATING) return;
+  IS_HYDRATING = true;
+  try {
+    wireOverlays();
+    wirePresentMode();
+    updateLegend();
+    ensureEmptyBanner();
+  } finally {
+    IS_HYDRATING = false;
+  }
 }
 
 export function bindStaticDom() {
@@ -358,11 +704,15 @@ export function bindStaticDom() {
 
     // core feature wiring
     wireDisplayBridge();
+  wireDisplayMirror();
     wireMic();
     wireCamera();
     wireUpload();
+    wireScriptControls();
+  wireLoadSample();
     installSpeakerIndex();
     installDbMeter();
+    installObsChip();
   initSelfChecksChip();
     // Speakers section toggle (show/hide panel body)
     try {
@@ -405,14 +755,29 @@ export function bindStaticDom() {
       tryWire('settingsNormalize');
     } catch {}
 
+    // Wire editor input to re-render script
+    try {
+      const ed = document.getElementById('editor');
+      if (ed && !ed.dataset.renderWired) {
+        ed.dataset.renderWired = '1';
+        ed.addEventListener('input', () => {
+          try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch {}
+        });
+      }
+    } catch {}
+
     // initial hydration pass
     hydrateUI();
 
     // keep it healthy: observe DOM changes and rehydrate idempotently
     const mo = new MutationObserver(() => {
       try {
-        if ($id('shortcutsBtn') || $id('settingsBtn') || $id('legend') || $id('script')) {
-          hydrateUI();
+        // Ignore mutations caused by legend rendering to avoid feedback loops
+        if (document.documentElement.dataset.legendRendering === '1') return;
+        if (IS_HYDRATING) return;
+        if (!HYDRATE_SCHEDULED) {
+          HYDRATE_SCHEDULED = true;
+          requestAnimationFrame(() => { try { hydrateUI(); } finally { HYDRATE_SCHEDULED = false; } });
         }
       } catch {}
     });

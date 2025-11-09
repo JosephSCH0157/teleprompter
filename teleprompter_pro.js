@@ -10,6 +10,816 @@
   } catch {}
 })();
 
+// Legacy HUD must stand down if modern HUD is active
+try {
+  if (window.__tpHudWireActive) {
+    console.debug('[HUD] Legacy HUD disabled (SSOT=TS).');
+    // Route legacy HUD calls to modern SSOT to avoid double logs
+    if (!window.HUD && window.__tpHud) window.HUD = window.__tpHud;
+  }
+} catch {}
+
+// --- HUD hotkey safety (Alt+Shift+H always opens HUD) ---
+// Global typing guard helper (single source of truth)
+window.isTyping = window.isTyping || function (el) {
+  try {
+    el = el || document.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'select') return true;
+    if (tag === 'input') {
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      // Inputs that are text-like; allow arrows etc. to work elsewhere
+      const texty = ['text','search','email','url','number','password','tel'];
+      return texty.includes(type) || type === '';
+    }
+    return false;
+  } catch { return false; }
+};
+// Mark events originating while typing so deeper listeners can skip
+window.addEventListener('keydown', (e) => { try { if (window.isTyping()) e.__tpTyping = true; } catch {} }, { capture: true });
+window.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
+  if (e.altKey && e.shiftKey && e.code === 'KeyH') {
+    e.preventDefault();
+    e.stopPropagation();
+    try { ensureHud?.(); } catch {}
+    try { window.hud?.toggle?.(); } catch {}
+  }
+}, { capture: true });
+
+// --- Preroll cancel unwind: ensure recorder stops cleanly if starting ---
+try {
+  const onCancel = async () => {
+    try {
+      // If a start is in-flight, stop and reset the chip
+      const st = (function(){ try { return window.__recState?.state || 'idle'; } catch { return 'idle'; } })();
+      if (st === 'starting') {
+        try { await window.__recorder?.stop?.(); } catch {}
+        try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'obs', state: 'idle', detail: { reason: 'preroll-cancel' } } })); } catch {}
+      }
+    } catch {}
+  };
+  window.addEventListener('tp:preroll:cancel', onCancel);
+  window.addEventListener('preroll:cancel', onCancel);
+} catch {}
+// --- Hybrid speech: graceful fallback on network glitches (no more stalls) ---
+(function wireHybridFallback() {
+  const sup = window.speechSup || window.__speechSup || window.SpeechSup || null;
+  if (!sup || sup.__wiredHybridFallback) return;
+  sup.__wiredHybridFallback = true;
+
+  let lastCruiseSpeed = null;
+
+  // If you already have a WPM pipe, reuse it; otherwise this is harmless.
+  sup.on?.('wpm', (wpm) => {
+    try {
+      // capture a usable fallback speed whenever ASR is alive
+      lastCruiseSpeed = typeof wpmToSpeed === 'function' ? wpmToSpeed(wpm) : (lastCruiseSpeed || 1.0);
+      if (getScrollMode?.() === 'hybrid' && typeof setSpeed === 'function') {
+        setSpeed(lastCruiseSpeed);
+      }
+    } catch {}
+  });
+
+  // Network glitch → fail soft: switch to Cruise, keep rolling
+  sup.on?.('networkError', (err) => {
+    try { hud?.log?.('speech', { networkError: true, err: String(err) }); } catch {}
+    try {
+      if (getScrollMode?.() === 'hybrid') {
+        if (typeof selectScrollMode === 'function') {
+          selectScrollMode('cruise');
+        } else if (window.scrollRouter?.select) {
+          window.scrollRouter.select('cruise');
+        }
+        if (typeof setSpeed === 'function') {
+          setSpeed(lastCruiseSpeed || defaultCruiseSpeed?.() || 1.0);
+        }
+        toast?.('ASR link down — falling back to Cruise (auto-retrying in background)');
+      }
+    } catch {}
+  });
+
+  // Supervisor reports it is retrying (optional HUD breadcrumb)
+  sup.on?.('retry', (n, backoffMs) => {
+    try { hud?.log?.('speech', { retry: n, backoffMs }); } catch {}
+  });
+
+  // Fully recovered → optionally auto-return to Hybrid
+  sup.on?.('recovered', () => {
+    try { hud?.log?.('speech', { recovered: true }); } catch {}
+    try {
+      // only switch back if user didn't manually change modes
+      if (getScrollMode?.() === 'cruise' && (window.__autoReturnToHybrid ?? true)) {
+        if (typeof selectScrollMode === 'function') {
+          selectScrollMode('hybrid');
+        } else if (window.scrollRouter?.select) {
+          window.scrollRouter.select('hybrid');
+        }
+        toast?.('ASR recovered — back to Hybrid');
+      }
+    } catch {}
+  });
+
+  // Fatal → degrade and keep the show moving
+  sup.on?.('fatal', (err) => {
+    try { hud?.log?.('speech', { fatal: true, err: String(err) }); } catch {}
+    try {
+      if (getScrollMode?.() === 'hybrid') {
+        if (typeof selectScrollMode === 'function') {
+          selectScrollMode('cruise');
+        } else if (window.scrollRouter?.select) {
+          window.scrollRouter.select('cruise');
+        }
+        if (typeof setSpeed === 'function') {
+          setSpeed(lastCruiseSpeed || defaultCruiseSpeed?.() || 1.0);
+        }
+        toast?.('ASR failed — staying in Cruise; you can re-arm Hybrid any time');
+      }
+    } catch {}
+  });
+})();
+// ---- OBS persistence + keepalive -------------------------------------------
+async function __getObsRecorder() {
+  if (!window.__recorder || typeof window.__recorder.get !== 'function') {
+    throw new Error('Recorder loader unavailable');
+  }
+  const rec = await window.__recorder.get('obs');
+  if (!rec || !rec.surface) throw new Error('OBS recorder surface missing');
+  return rec;
+}
+
+// cheap wrapper so we always show *something* in the pill
+
+
+
+
+// Mirror Settings <-> Main panel and apply
+
+
+// === EARLY global autoscroll guard ===
+window.__AUTO_ARMED = false;
+window.armAutoscroll = () => { window.__AUTO_ARMED = true; };
+window.disarmAutoscroll = () => { window.__AUTO_ARMED = false; };
+
+// Wrap start() exactly once
+(function wrapAutoscrollStart() {
+  if (!window.autoscroll || window.autoscroll.__wrapped) return;
+  const origStart = window.autoscroll.start.bind(window.autoscroll);
+  window.autoscroll.__wrapped = true;
+  window.autoscroll.start = (...args) => {
+    if (!window.__AUTO_ARMED) {
+      console.warn('[autoscroll] blocked: not armed');
+      return false;
+    }
+    return origStart(...args);
+  };
+})();
+
+// === HUD ensure + hotkey ===
+window.ensureHud = window.ensureHud || function () {
+  if (window.__tpHud && window.__tpHud.toggle) return window.__tpHud;
+  if (typeof window.createHud === 'function') {
+    window.__tpHud = window.createHud();
+    return window.__tpHud;
+  }
+  console.warn('[HUD] createHud not available yet'); 
+  return null;
+};
+
+window.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
+  if (e.altKey && e.shiftKey && e.code === 'KeyH') {
+    const hud = window.ensureHud();
+    hud?.toggle?.();
+  }
+}, { capture: true });
+
+// --- OBS wiring (robust: adapter-first, bridge-fallback) --------------------
+
+const OBS_KEYS = {
+  enabled: 'obs.enabled',
+  url:     'obs.url',
+  pass:    'obs.pass',
+  secure:  'obs.secure',
+};
+
+function readObsSettingsFromUIorStorage() {
+  const urlEl   = document.getElementById('obsUrl');
+  const passEl  = document.getElementById('obsPass');
+  const secEl   = document.getElementById('obsSecure');
+
+  const ls = (k, d='') => localStorage.getItem(k) ?? d;
+
+  const secure = secEl ? !!secEl.checked : (ls(OBS_KEYS.secure) === '1');
+  const url    = urlEl?.value?.trim() || ls(OBS_KEYS.url, secure ? 'wss://127.0.0.1:4455' : 'ws://127.0.0.1:4455');
+  const password = passEl?.value ?? ls(OBS_KEYS.pass, '');
+
+  return { url, password, secure };
+}
+
+async function getObsSurface() {
+  // Prefer the new adapter
+  const reg = window.__recorder;
+  const fromAdapter = reg?.get && reg.get('obs');
+  if (fromAdapter && (typeof fromAdapter.connect === 'function')) return fromAdapter;
+
+  // Fall back to legacy bridge
+  if (window.__obsBridge && typeof window.__obsBridge.connect === 'function') return window.__obsBridge;
+
+  throw new Error('[obs] No OBS surface available (adapter/bridge missing)');
+}
+
+// --- OBS readiness + connect-and-wait ------------------------------------------------
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+async function waitForObsSurface(timeout=5000){
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeout) {
+    try {
+      const reg = window.__recorder;
+      const adapter = reg?.get?.('obs');
+      if (adapter && typeof adapter.connect === 'function') return adapter;
+      if (window.__obsBridge && typeof window.__obsBridge.connect === 'function') return window.__obsBridge;
+    } catch {}
+    await sleep(50);
+  }
+  throw new Error('[obs] surface not ready (adapter/bridge missing)');
+}
+
+async function waitUntil(fn, timeout=5000, step=100){
+  const t0 = performance.now();
+  while (performance.now() - t0 < timeout) {
+    try { if (await fn()) return true; } catch {}
+    await sleep(step);
+  }
+  return false;
+}
+
+async function connectAndWait(cfg, connectTimeout=6000){
+  const surface = await waitForObsSurface();
+  if (surface.isConnected && await surface.isConnected()) return surface;
+  try { surface.connect(cfg); } catch {}
+  const ok = await waitUntil(() => surface.isConnected?.(), connectTimeout, 150);
+  if (!ok) throw new Error('[obs] connect timeout');
+  return surface;
+}
+
+async function obsConnectPersistent() {
+  // Wait for surface and establish a real link, then mark connected
+  updateObsStatusUI('connecting');
+  const cfg = readObsSettingsFromUIorStorage();
+  await connectAndWait(cfg);
+  updateObsStatusUI('connected');
+}
+
+async function obsDisconnectPersistent() {
+  try {
+    const surface = await getObsSurface();
+    await surface.disconnect?.();
+  } finally {
+    updateObsStatusUI('off');
+  }
+}
+
+function updateObsStatusUI(state) {
+  // Accepts: 'off' | 'connecting' | 'connected' | 'error'
+  const pill = document.getElementById('obsStatusText') || document.querySelector('[data-obs-status]');
+  if (!pill) return;
+  const map = { off: 'Off', connecting: 'Connecting…', connected: 'Connected', error: 'Error' };
+  pill.textContent = map[state] || state;
+  pill.dataset.state = state; // let CSS style it
+}
+
+function syncObsToggles(checked) {
+  const els = [
+    document.getElementById('settingsEnableObs'),
+    document.getElementById('enableObs'),
+    document.querySelector('[data-role="settings-enable-obs"]'),
+    document.querySelector('[data-role="enable-obs"]'),
+  ].filter(Boolean);
+  els.forEach(el => el.checked = !!checked);
+}
+
+function storeObsEnabled(enabled) {
+  localStorage.setItem(OBS_KEYS.enabled, enabled ? '1' : '0');
+}
+
+function readObsEnabled() {
+  return localStorage.getItem(OBS_KEYS.enabled) === '1';
+}
+
+function wireObsToggleEverywhere() {
+  const targets = [
+    document.getElementById('settingsEnableObs'),
+    document.getElementById('enableObs'),
+    document.querySelector('[data-role="settings-enable-obs"]'),
+    document.querySelector('[data-role="enable-obs"]'),
+  ].filter(Boolean);
+
+  const onChange = async (checked) => {
+    storeObsEnabled(checked);
+    updateObsStatusUI(checked ? 'connecting' : 'off');
+    try {
+      if (checked) await obsConnectPersistent();
+      else await obsDisconnectPersistent();
+    } catch (err) {
+      console.warn('[obs] toggle error', err);
+      updateObsStatusUI('error');
+      // keep toggle state persisted; user can flip off/on to retry
+    }
+    syncObsToggles(checked);
+  };
+
+  // Debounced handler so both checkboxes don’t fight each other
+  let t;
+  const handle = (e) => {
+    clearTimeout(t);
+    const checked = !!e.target.checked;
+    t = setTimeout(() => onChange(checked), 0);
+  };
+
+  targets.forEach(el => el.addEventListener('change', handle));
+
+  // Initial UI sync from storage on first wire
+  const enabled = readObsEnabled();
+  syncObsToggles(enabled);
+  updateObsStatusUI(enabled ? 'connecting' : 'off');
+}
+
+async function restoreObsOnBoot() {
+  if (!readObsEnabled()) {
+    updateObsStatusUI('off');
+    return;
+  }
+  try {
+    updateObsStatusUI('connecting');
+    const cfg = readObsSettingsFromUIorStorage();
+    await connectAndWait(cfg);
+    updateObsStatusUI('connected');
+  } catch (e) {
+    console.warn('[obs] restore failed', e);
+    updateObsStatusUI('error');
+  }
+}
+
+// Small dev helper: window.__obsDebug()
+window.__obsDebug = async () => {
+  let surf, ok=false, hasBridge=!!window.__obsBridge, hasAdapter=!!(window.__recorder?.get?.('obs'));
+  try { surf = await getObsSurface(); ok = await (surf.isConnected?.() ?? false); } catch {}
+  console.table({ hasAdapter, hasBridge, connected: ok });
+};
+
+// After settings are shown/hydrated, wire toggles and restore state
+document.addEventListener('DOMContentLoaded', () => {
+  try { wireObsToggleEverywhere(); restoreObsOnBoot(); } catch {}
+});
+// ---- Autoscroll gating (teleprompter_pro.js) ----
+window.__tp_autoscroll_armed = false;
+
+
+
+
+// Wrap the real start so it never fires unless armed
+if (window.autoscroll && typeof window.autoscroll.start === 'function') {
+  const __startAutoScroll = window.autoscroll.start.bind(window.autoscroll);
+  window.autoscroll.start = async function (...args) {
+    if (!window.__tp_autoscroll_armed) {
+      console.warn('[autoscroll] blocked: not armed');
+      return;
+    }
+    return __startAutoScroll?.(...args);
+  };
+}
+
+// ---- HUD bring-up guard (teleprompter_pro.js) ----
+function ensureHud() {
+  try {
+    if (!window.__HUD && typeof window.createHud === 'function') {
+      window.__HUD = window.createHud(); // provided by debug-tools.js
+      console.log('[HUD] created');
+    }
+  } catch (e) {
+    console.warn('[HUD] create failed', e);
+  }
+}
+
+
+// keyboard: Alt+Shift+H toggles HUD
+document.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
+  if (e.altKey && e.shiftKey && (e.code === 'KeyH' || (e.key && e.key.toLowerCase() === 'h'))) {
+    ensureHud();
+    window.__HUD?.toggle?.();
+  }
+});
+
+// also try once after DOM is ready:
+document.addEventListener('DOMContentLoaded', () => {
+  // mount, but keep hidden; toggle shows it
+  ensureHud();
+});
+
+// ---- get OBS recorder surface (teleprompter_pro.js) ----
+async function getObsRecorder() {
+  // compatibility: new registry shim from recorders.js (Patch A)
+  if (window.__recorder?.get) return window.__recorder.get('obs');
+
+  // legacy global?
+  if (window.recorders?.get) return window.recorders.get('obs');
+
+  // as a last resort, attempt module load (no-op if already registered)
+  try { await import('./adapters/obs.js'); } catch {}
+  try { await import('./recorders.js'); } catch {}
+
+  return window.__recorder?.get?.('obs') || window.recorders?.get?.('obs') || null;
+}
+
+
+// ---- OBS persistent lifecycle (teleprompter_pro.js) ----
+let __obsReconnectTimer = null;
+let __obsReconnectTries = 0;
+const __OBS_RECONNECT_MAX = 30000; // cap at 30s
+const __OBS_RECONNECT_BASE = 1000;
+
+function obsEnabledInStorage() {
+  try { return localStorage.getItem('settings.obs.enabled') === '1'; } catch { return false; }
+}
+function _setObsEnabledInStorage(v) {
+  try { localStorage.setItem('settings.obs.enabled', v ? '1' : '0'); } catch {}
+}
+
+function obsStatusChip(text, kind = 'muted') {
+  // adapt to your badge API if needed
+  try { window.hud?.obs?.setStatus?.(text, kind); } catch {}
+  const el = document.querySelector('#obsStatusText');
+  if (el) { el.textContent = text; el.dataset.kind = kind; }
+}
+
+function scheduleObsReconnect() {
+  clearTimeout(__obsReconnectTimer);
+  if (!obsEnabledInStorage()) return;
+  const ms = Math.min(__OBS_RECONNECT_MAX, __OBS_RECONNECT_BASE * Math.pow(2, __obsReconnectTries++));
+  __obsReconnectTimer = setTimeout(connectObsPersistently, ms);
+}
+
+async function connectObsPersistently() {
+  const obs = await getObsRecorder();
+  if (!obs) { obsStatusChip('Recorder missing', 'error'); return; }
+
+  try {
+    const cfg = readObsSettingsFromUI(); // implement to pull host/port/secure/password, see below
+    obsStatusChip('Connecting…', 'info');
+    await obs.connect(cfg);   // <-- persistent connect
+    __obsReconnectTries = 0;
+    obsStatusChip('Connected', 'ok');
+
+    // Wire once (idempotent if your adapter guards)
+    obs.off?.('disconnected', scheduleObsReconnect);
+    obs.on?.('disconnected', () => {
+      obsStatusChip('Disconnected', 'warn');
+      scheduleObsReconnect();
+    });
+    obs.off?.('error', scheduleObsReconnect);
+    obs.on?.('error', (e) => {
+      console.warn('[OBS] error', e);
+      obsStatusChip('Error', 'error');
+      scheduleObsReconnect();
+    });
+  } catch (e) {
+    console.warn('[OBS] connect failed', e);
+    obsStatusChip('Connect failed', 'error');
+    scheduleObsReconnect();
+  }
+}
+
+
+async function _disconnectObsPersistently(reason = 'toggle-off') {
+  clearTimeout(__obsReconnectTimer);
+  const obs = await getObsRecorder();
+  try { await obs?.disconnect?.({ reason }); } catch {}
+  obsStatusChip('Disabled', 'muted');
+}
+
+// UI settings reader (very small helper you can adapt to your actual IDs):
+function readObsSettingsFromUI() {
+  const host = (document.querySelector('#obsUrl')?.value || 'localhost').trim();
+  const port = parseInt(document.querySelector('#obsPort')?.value || '4455', 10);
+  const password = document.querySelector('#obsPass')?.value || '';
+  const secure = !!document.querySelector('#obsSecure')?.checked;
+  return { host, port, password, secure };
+}
+
+// (Legacy OBS checkbox wiring removed in favor of Patch B's wireObsToggleEverywhere/restoreObsOnBoot)
+
+// ---- OBS Test Connection button (separate probe) ----
+document.querySelector('#obsTest')?.addEventListener('click', async () => {
+  const obs = await getObsRecorder();
+  if (!obs) return obsStatusChip('Recorder missing', 'error');
+
+  try {
+    const cfg = readObsSettingsFromUI();
+    obsStatusChip('Testing…', 'info');
+    await obs.test?.(cfg);   // your adapter’s short-lived probe
+    obsStatusChip('Test OK', 'ok');
+  } catch (e) {
+    console.warn('[OBS] test failed', e);
+    obsStatusChip('Test failed', 'error');
+  }
+});
+//
+// OBS wiring (robust loader + persistent toggle + once-only test)
+//
+
+(function OBS_WIRING() {
+  const ns = (window.__TP = window.__TP || {});
+  let stickyReconnectTimer = null;
+
+  // ---- tiny utils
+  const $ = (s) => document.querySelector(s);
+  const on = (el, ev, fn) => el && el.addEventListener(ev, fn, { passive: true });
+
+  // Call first method that exists (for adapter/bridge surface differences)
+  const callFirst = (obj, names, ...args) => {
+    for (const n of names) {
+      if (obj && typeof obj[n] === 'function') return obj[n](...args);
+    }
+    throw new Error('OBS adapter method missing: ' + names.join('|'));
+  };
+
+  // ---- recorder/adapter loader (robust)
+  async function getRecorder() {
+    if (window.__recorder) return window.__recorder;
+    // try normal then nocache fallback
+    let mod;
+    try { mod = await import('./recorders.js'); }
+    catch { mod = await import(`./recorders.js?nocache=${Date.now()}`); }
+    // Patch A exposed default + compat shim; prefer explicit export, then default
+    const rec = mod.recorder || mod.default || mod;
+    window.__recorder = rec;
+    return rec;
+  }
+
+  async function getObsAdapter() {
+    const rec = await getRecorder();
+    const obs = rec.get && rec.get('obs');
+    if (!obs) throw new Error('OBS adapter not registered');
+    return obs;
+  }
+
+  // ---- config reader (tolerant: UI ➜ localStorage ➜ defaults)
+  function readObsCfg() {
+    // Use your existing IDs if present; otherwise fall back to LS.
+    const url = ($('#obsUrl')?.value || localStorage.getItem('obs.url') || 'localhost').trim();
+    const port = parseInt($('#obsPort')?.value ?? localStorage.getItem('obs.port') ?? 4455, 10);
+    const password = $('#obsPass')?.value ?? localStorage.getItem('obs.pass') ?? '';
+    const secure = $('#obsSecure')?.checked ?? (localStorage.getItem('obs.secure') === '1');
+    const autoReconnect = $('#obsReconnect')?.checked ?? true;
+    return { url, port, password, secure, autoReconnect };
+  }
+
+  // ---- status chip
+  function setObsStatus(status, detail) {
+    // status: 'disconnected' | 'connecting' | 'connected' | 'error'
+    ns.__obsStatus = { status, detail, ts: Date.now() };
+    const pill = $('#obsStatusText') || $('#obsStatusChip');
+    if (!pill) return;
+    pill.dataset.status = status;
+    pill.textContent = (
+      status === 'connected' ? 'OBS: Connected' :
+      status === 'connecting' ? 'OBS: Connecting…' :
+      status === 'error' ? `OBS: Error${detail ? ` (${String(detail).slice(0,64)})` : ''}` :
+      'OBS: Disconnected'
+    );
+  }
+
+  // ---- sticky connect (persistent while enabled)
+  async function stickyConnect() {
+    clearTimeout(stickyReconnectTimer);
+    try {
+      const obs = await getObsAdapter();
+      const cfg = readObsCfg();
+
+      // Configure surface first (name differences tolerated)
+      if (obs.configureSurface || obs.configure) {
+        callFirst(obs, ['configureSurface', 'configure'], cfg);
+      } else if (obs.setConfig) {
+        obs.setConfig(cfg);
+      }
+
+      setObsStatus('connecting');
+      // Persistent connect (not once)
+      await callFirst(obs, ['connectSurface', 'connect', 'open', 'start'], { persistent: true });
+
+      // hook status events if available
+      if (typeof obs.on === 'function') {
+        obs.on('status', (s) => {
+          // expect s = { connected, connecting, error, reason }
+          if (s?.error) setObsStatus('error', s.reason || s.error);
+          else if (s?.connected) setObsStatus('connected');
+          else if (s?.connecting) setObsStatus('connecting');
+          else setObsStatus('disconnected');
+        });
+        obs.on('open', () => setObsStatus('connected'));
+        obs.on('close', (ev) => {
+          setObsStatus('disconnected', ev && ev.reason);
+          // auto-reconnect while sticky is on
+          if (isObsEnabled()) {
+            clearTimeout(stickyReconnectTimer);
+            stickyReconnectTimer = setTimeout(() => stickyConnect(), 1500);
+          }
+        });
+        obs.on('error', (e) => setObsStatus('error', e && (e.message || e.type || e)));
+      } else {
+        // fallback poll if no events
+        const poll = async () => {
+          try {
+            const st = await (obs.getStatus?.() ?? {});
+            if (st.connected) setObsStatus('connected'); else setObsStatus('disconnected');
+          } catch (e) { setObsStatus('error', e && e.message); }
+          if (isObsEnabled()) stickyReconnectTimer = setTimeout(poll, 2000);
+        };
+        poll();
+      }
+    } catch (e) {
+      setObsStatus('error', e && e.message);
+      // retry gently if still enabled
+      if (isObsEnabled()) {
+        clearTimeout(stickyReconnectTimer);
+        stickyReconnectTimer = setTimeout(() => stickyConnect(), 2500);
+      }
+    }
+  }
+
+  async function stickyDisconnect() {
+    clearTimeout(stickyReconnectTimer);
+    try {
+      const obs = await getObsAdapter();
+      await callFirst(obs, ['disconnectSurface', 'disconnect', 'close', 'stop']);
+    } catch {}
+    setObsStatus('disconnected');
+  }
+
+  // ---- one-shot test connect (never persistent)
+  async function testConnection() {
+    try {
+      const obs = await getObsAdapter();
+      const cfg = readObsCfg();
+      if (obs.configureSurface || obs.configure) {
+        callFirst(obs, ['configureSurface', 'configure'], cfg);
+      } else if (obs.setConfig) {
+        obs.setConfig(cfg);
+      }
+      setObsStatus('connecting');
+      await callFirst(obs, ['connectSurface', 'connect', 'open', 'start'], { once: true });
+      setObsStatus('connected');
+      // let it close on its own or give it a gentle close after a short delay
+      setTimeout(async () => {
+        try { await callFirst(obs, ['disconnectSurface', 'disconnect', 'close', 'stop']); }
+        catch {}
+        if (!isObsEnabled()) setObsStatus('disconnected');
+      }, 800);
+    } catch (e) {
+      setObsStatus('error', e && e.message);
+    }
+  }
+
+  // ---- toggle wiring
+  function isObsEnabled() {
+    return ($('#enableObs')?.checked ?? $('#settingsEnableObs')?.checked) === true;
+  }
+
+  function wireObsToggle() {
+    const settingsToggle = $('#settingsEnableObs');
+    const mainToggle = $('#enableObs');
+    const testBtn = $('#obsTest') || $('#btnObsTest');
+
+    // mirror both directions (whichever exists)
+    const mirror = (from, to) => from && to && on(from, 'change', () => { to.checked = from.checked; });
+
+    mirror(settingsToggle, mainToggle);
+    mirror(mainToggle, settingsToggle);
+
+    const handle = async () => {
+      const enabled = isObsEnabled();
+      localStorage.setItem('obs.enabled', enabled ? '1' : '0');
+      if (enabled) {
+        await stickyConnect();
+      } else {
+        await stickyDisconnect();
+      }
+    };
+
+    on(settingsToggle, 'change', handle);
+    on(mainToggle, 'change', handle);
+    if (testBtn) on(testBtn, 'click', (e) => { e.preventDefault(); testConnection(); });
+
+    // boot state
+    const bootEnabled = (localStorage.getItem('obs.enabled') === '1');
+    if (settingsToggle) settingsToggle.checked = bootEnabled;
+    if (mainToggle) mainToggle.checked = bootEnabled;
+
+    // hydrate status on boot
+    if (bootEnabled) stickyConnect(); else setObsStatus('disconnected');
+
+    // close politely on unload
+    window.addEventListener('beforeunload', () => {
+      if (isObsEnabled()) { try { navigator.sendBeacon?.('/telemetry/obs-close'); } catch {} }
+      // Let the browser drop the WS; we also try to call disconnect quickly:
+      try { void stickyDisconnect(); } catch {}
+    });
+  }
+
+  // expose a minimal debug surface
+  ns.obsUI = {
+    connect: stickyConnect,
+    disconnect: stickyDisconnect,
+    test: testConnection,
+    status: () => ns.__obsStatus
+  };
+
+  // run when DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireObsToggle);
+  } else {
+    wireObsToggle();
+  }
+})();
+// --- Speech Supervisor integration ---
+import { SpeechSupervisor } from './src/speech/SpeechSupervisor.js';
+let speech = null;
+function hudSpeech(status) {
+  try { window.__hud?.log?.('speech', status); } catch {}
+  console.debug('[speech]', status);
+}
+function handleSpeechResult(e) {
+  try { window.__scrollRouter?.onSpeechResult?.(e); } catch {}
+}
+// --- Hybrid Speech Supervisor: global instance, robust fallback wiring ---
+function startAutoScroll() {
+  try { window.__scrollRouter?.setAuto?.(true); } catch {}
+  try { window.__scrollRouter?.startAuto?.(); } catch {}
+}
+function stopASR() {
+  try { speech?.stop?.({ manual: true }); } catch {}
+}
+function startASRorVAD() {
+  try { return speech?.start?.(); } catch {}
+}
+window.__speechSup = window.__speechSup || new SpeechSupervisor({
+  lang: document.getElementById('settingsLang')?.value || 'en-US',
+  interim: false,
+  onResult: handleSpeechResult,
+  onStatus: hudSpeech,
+  onFatal() {
+    // drop to Auto-Only so scrolling continues
+    try { stopASR?.(); } catch {}
+    try { startAutoScroll?.(); } catch {}
+    try { document.body.classList.remove('listening'); } catch {}
+    try { _toast('Speech offline — retrying…', { type: 'warn' }); } catch {}
+  },
+  onRetry() {
+    try { startASRorVAD?.().catch(() => {}); } catch {}
+  }
+});
+speech = window.__speechSup;
+
+// ASR event hooks (simulate asr.on):
+if (speech && typeof speech.on === 'function') {
+  speech.on('error', (e) => {
+    if (e?.name === 'network' || e?.type === 'network' || e === 'network') {
+      speech.bumpNetworkError?.();
+    }
+    startAutoScroll?.();
+  });
+  speech.on('stop', () => {
+    if (speech.inCooldown?.()) {
+      // don’t treat as user stop; keep auto motor running
+      return;
+    }
+    // ... normal stop handling (manual pause, button state, etc.)
+  });
+}
+
+// Wire up start/stop buttons for speech/Hybrid
+document.getElementById('btnStartSpeech')?.addEventListener('click', async () => {
+  ensureSpeech().start();
+  try { window.__scrollRouter?.setListening?.(true); } catch {}
+});
+document.getElementById('btnStopSpeech')?.addEventListener('click', async () => {
+  if (speech) await speech.stop({ manual: true });
+  try { window.__scrollRouter?.setListening?.(false); } catch {}
+});
+
+// Page lifecycle: stop on unload, resume if desired on pageshow
+window.addEventListener('beforeunload', () => {
+  if (speech) speech.stop({ manual: false });
+});
+window.addEventListener('pageshow', () => {
+  // Optionally auto-resume if a toggle is set
+  // if (shouldAutoResume) ensureSpeech().start();
+});
 /* Teleprompter Pro — JS CLEAN (v1.5.8) */
 
 // Module-aware toast proxy: prefer the module export, then fall back to window._toast, then to a minimal console fallback.
@@ -40,7 +850,6 @@ let _toast = function (msg, opts) {
   try {
     // dev flag early so we can silence noisy warnings in production
             const __dev = (function(){ try { const Q=new URLSearchParams(location.search); return Q.has('dev') || localStorage.getItem('tp_dev_mode')==='1'; } catch { return false; } })();
-            const saveBaseSpeed = window.saveBaseSpeed; // Ensure saveBaseSpeed is defined
     // idle flag — don't start heavy subsystems until a script exists
     if (typeof window.__tp_has_script === 'undefined') window.__tp_has_script = false;
     if (window.__TP_ALREADY_BOOTED__) {
@@ -176,32 +985,58 @@ let _toast = function (msg, opts) {
     try {
       window.APP_VERSION = '1.6.2';
     } catch {}
-    window.__tpBootPush = (m) => {
+  window.__tpBootPush = (m) => {
+    try {
+      const rec = { t: Date.now(), m };
+      window.__TP_BOOT_TRACE.push(rec);
       try {
-        const rec = { t: Date.now(), m };
-        window.__TP_BOOT_TRACE.push(rec);
-        try {
-          console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
-        } catch {
-          console.log('[TP-TRACE]', rec.m);
-        }
+        console.log(`[${TP_CTX}] [TP-TRACE]`, rec.m);
       } catch {
-        try {
-          console.warn('[TP-TRACE-FAIL]', err);
-        } catch {}
-        // Long-running low-cost poll: keep checking every 5s so that
-        // bridge/recorder instances created later than the initial poll
-        // will still update the status chip. This is intentionally light.
-        try {
-          setInterval(() => {
-            try {
-              if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
-              updateStatus();
-            } catch {}
-          }, 5000);
-        } catch {}
+        console.log('[TP-TRACE]', rec.m);
       }
-    };
+      return;
+    } catch (err) {
+      // Perform async/cleanup work inside an async IIFE so 'await' is not used at top-level
+      (async () => {
+        try {
+          // Try to gracefully disconnect any surface if available (support both sync and promise APIs)
+          if (typeof rec !== 'undefined' && rec && rec.surface && typeof rec.surface.disconnectSurface === 'function') {
+            try {
+              const res = rec.surface.disconnectSurface();
+              if (res && typeof res.then === 'function') {
+                await res;
+              }
+            } catch {}
+          }
+        } catch {}
+        try { clearInterval(window.__obsKeepAlive); } catch {}
+        try {
+          if (typeof rec !== 'undefined' && rec && rec.surface && typeof rec.surface.disconnectSurface === 'function') {
+            try { rec.surface.disconnectSurface(); } catch {}
+          }
+        } catch {}
+        try { window.autoscroll?.stop?.(); } catch {}
+        try { await import('./adapters/obs.js'); } catch {}
+        try { await import('./recorders.js'); } catch {}
+      })().catch(() => { /* swallow async cleanup errors */ });
+
+      try {
+        console.warn('[TP-TRACE-FAIL]', err);
+      } catch {}
+
+      // Long-running low-cost poll: keep checking every 5s so that
+      // bridge/recorder instances created later than the initial poll
+      // will still update the status chip. This is intentionally light.
+      try {
+        setInterval(() => {
+          try {
+            if (typeof window.__TP_DEV !== 'undefined' && window.__TP_DEV) console.debug('[OBS] long-poll tick');
+            updateStatus();
+          } catch {}
+        }, 5000);
+      } catch {}
+    }
+  };
     // Ensure handshake log exists early so the Debug Dump can read it even before adapters run
     try {
       window.__obsHandshakeLog = window.__obsHandshakeLog || [];
@@ -219,6 +1054,7 @@ let _toast = function (msg, opts) {
     }
     return null;
   }
+  try { void $id; } catch {}
   // Late-init timer handle: used to avoid scheduling fallback when init starts later
   let _lateInitTimer = null;
     window.addEventListener('DOMContentLoaded', () => {
@@ -1086,7 +1922,7 @@ let _toast = function (msg, opts) {
   // Dynamic wiring helper must exist before buildSettingsContent uses it
   // (Removed duplicate wireSettingsDynamic definition; primary is declared near top.)
 
-  function buildSettingsContent() {
+  function _buildSettingsContent() {
     const body = document.getElementById('settingsBody');
     if (!body) return;
     // Idempotency guard: if cards already exist, treat as already-built and sync values.
@@ -1668,10 +2504,10 @@ let _toast = function (msg, opts) {
       if (mainEnable) {
         mainEnable.checked = !!obsEnable.checked;
         mainEnable.dispatchEvent(new Event('change', { bubbles: true }));
-        return;
+        // continue below to ensure persistent connect/disconnect
       }
 
-      // If main toggle not present, update recorder settings directly
+      // Always update recorder settings
       try {
         if (__recorder?.getSettings && __recorder?.setSettings) {
           const s = __recorder.getSettings();
@@ -1681,6 +2517,35 @@ let _toast = function (msg, opts) {
         }
         _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
       } catch {}
+
+      // Persistent connect/disconnect
+      try {
+        // Prefer the bridge if present, else the adapter
+        let bridge = window.__obsBridge;
+        if (!bridge && typeof ensureObsBridge === 'function') bridge = await ensureObsBridge();
+        if (bridge && typeof bridge.isConnected === 'function') {
+          if (obsEnable.checked) {
+            if (!bridge.isConnected()) {
+              try { await bridge.start?.(); } catch {}
+            }
+          } else {
+            if (bridge.isConnected()) {
+              try { await bridge.stop?.(); } catch {}
+            }
+          }
+        } else if (window.__recorder && typeof window.__recorder.get === 'function') {
+          const obsAdapter = window.__recorder.get('obs');
+          if (obsAdapter) {
+            if (obsEnable.checked) {
+              if (typeof obsAdapter.connect === 'function') await obsAdapter.connect();
+            } else {
+              if (typeof obsAdapter.disconnect === 'function') await obsAdapter.disconnect();
+            }
+          }
+        }
+      } catch (err) {
+        try { window.HUD?.warn?.('obs:persistent_connect_fail', String(err && err.message || err)); } catch {}
+      }
     });
     // Mirror URL
     obsUrlS?.addEventListener('change', () => {
@@ -1828,6 +2693,9 @@ let _toast = function (msg, opts) {
 
     async function wireObsToggle() {
       try {
+        // Double-wiring guard: ensure settings toggle is wired only once
+        if (window.__tpObsToggleWired) return;
+        window.__tpObsToggleWired = true;
         // If a centralized store exists, let it drive OBS toggle wiring to avoid duplicate bindings
         if (window.__tpStore) {
           const s = window.__tpStore;
@@ -1859,24 +2727,8 @@ let _toast = function (msg, opts) {
           const on = !!e.currentTarget.checked;
           setObsEnabled(on);
           try {
-            // prefer recorder adapter
-            const recModule = await loadRecorder();
-            const rec = recModule && typeof recModule.get === 'function' ? recModule.get('obs') : null;
-            if (on) {
-              // init may be safe/no-op if already initialized
-              try {
-                await (rec?.init?.() ?? Promise.resolve());
-              } catch {}
-              try {
-                await (rec?.connect?.() ?? Promise.resolve());
-              } catch {}
-              updateBadge('connecting…');
-            } else {
-              try {
-                await (rec?.disconnect?.() ?? Promise.resolve());
-              } catch {}
-              updateBadge('disabled');
-            }
+            await obsApplyEnabled(on);
+            updateBadge(on ? 'connecting…' : 'disabled');
           } catch (err) {
             console.warn('[OBS] toggle error', err);
             updateBadge('error');
@@ -2293,80 +3145,128 @@ let _toast = function (msg, opts) {
   let __anchorObs = null; // set after io-anchor.js loads
   let __scrollCtl = null; // set after scroll-control.js loads
   // Small helper: add version/cache-buster if provided by the host (kept local)
-  const addV = (p) => (window.__TP_ADDV ? window.__TP_ADDV(p) : p);
-  // Recorder lazy loader
+
+  // --- Unified robust OBS loader/toggle helper ---
   let __rec = null;
-  async function loadRecorder() {
-    if (__rec) return __rec;
-    try {
-      const addV = window.__TP_ADDV || ((p) => p);
-      const m = await import(addV('./recorders.js'));
-      try {
-        const modKeys = m && typeof m === 'object' ? Object.keys(m) : [];
-        const defaultKeys = m && m.default && typeof m.default === 'object' ? Object.keys(m.default) : [];
-        console.debug('[TP-Pro] recorder module keys:', modKeys.length, modKeys, defaultKeys.length, defaultKeys);
-      } catch {
-        try { console.debug('[TP-Pro] recorder module keys: <uninspectable module>'); } catch {}
-      }
-      __rec = m;
-      if (!__rec || typeof __rec.init !== 'function') {
-        console.warn('[TP-Pro] recorders.js loaded but no init() export found');
-      }
-      return __rec;
-    } catch (e) {
-      console.error('[TP-Pro] Failed to import recorders.js', e);
-      return null;
-    }
-  }
-
-  // Lazy-load the OBS bridge module on-demand. Returns window.__obsBridge when available.
   let __obsBridgeLoaded = null;
-  async function ensureObsBridge() {
-    try {
-      if (typeof window !== 'undefined' && window.__obsBridge) return window.__obsBridge;
-      if (__obsBridgeLoaded) return __obsBridgeLoaded;
-      const path = addV('./adapters/obsBridge.js');
-      await import(path);
-      __obsBridgeLoaded = typeof window !== 'undefined' ? window.__obsBridge || null : null;
-      return __obsBridgeLoaded;
-    } catch (err) {
-      try { console.warn('[TP-Pro] ensureObsBridge failed', err); } catch {}
-      return null;
-    }
-  }
-
-  // Note: camera recorder is lazy-loaded via loadRecorder(); DOCX/mammoth is handled by
-  // ui/upload.js and exposed via window.ensureMammoth/_ensureMammoth later in this file.
-  // ==================================================
-  // OBS adapter helper: ensure adapter availability + wrapper
-  // ==================================================
   let __obsAdapterWrapper = null;
-  async function ensureObsAdapter({ timeoutMs = 5000, pollInterval = 200 } = {}) {
-    try {
-      if (__obsAdapterWrapper) return __obsAdapterWrapper;
+  // Always load bridge first, then recorder, then adapter
+  async function robustLoadObs({ timeoutMs = 5000, pollInterval = 200 } = {}) {
+    // Load bridge (idempotent)
+    if (!__obsBridgeLoaded) {
+      try {
+        const addV = window.__TP_ADDV || ((p) => p);
+        const path = addV('./adapters/obsBridge.js');
+        await import(path);
+        __obsBridgeLoaded = typeof window !== 'undefined' ? window.__obsBridge || null : null;
+      } catch (err) {
+        try { console.warn('[TP-Pro] robustLoadObs: bridge load failed', err); } catch {}
+        __obsBridgeLoaded = null;
+      }
+    }
+    // Load recorder (idempotent)
+    if (!__rec) {
+      try {
+        const addV = window.__TP_ADDV || ((p) => p);
+        const m = await import(addV('./recorders.js'));
+        __rec = m;
+        if (!__rec || typeof __rec.init !== 'function') {
+          console.warn('[TP-Pro] recorders.js loaded but no init() export found');
+        }
+      } catch (e) {
+        console.error('[TP-Pro] Failed to import recorders.js', e);
+        __rec = null;
+      }
+    }
+    // Load adapter (idempotent, poll for registry)
+    if (!__obsAdapterWrapper) {
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         try {
-          const reg = await loadRecorder();
-          if (reg && typeof reg.get === 'function') {
-            const a = reg.get('obs');
+          if (__rec && typeof __rec.get === 'function') {
+            const a = __rec.get('obs');
             if (a) {
-              // Wrap once and return
               __obsAdapterWrapper = wrapObsAdapter(a);
-              return __obsAdapterWrapper;
+              break;
             }
           }
-        } catch {
-          void e;
-        }
-        // brief pause
+        } catch {}
         await new Promise((res) => setTimeout(res, pollInterval));
       }
-      return null;
-    } catch {
-      void e;
-      return null;
     }
+    return { bridge: __obsBridgeLoaded, recorder: __rec, adapter: __obsAdapterWrapper };
+  }
+
+  // --- Unified toggle wiring for both header and Settings ---
+  function wireUnifiedObsToggles() {
+    // Header toggle
+    const enableObsChk = document.getElementById('enableObs');
+    // Settings toggle
+    const settingsEnableObs = document.getElementById('settingsEnableObs');
+    if (!enableObsChk && !settingsEnableObs) return;
+    // Helper to sync both toggles
+    function syncToggles(val) {
+      if (enableObsChk) enableObsChk.checked = !!val;
+      if (settingsEnableObs) settingsEnableObs.checked = !!val;
+    }
+    // Main handler for toggle changes
+    async function onToggleChange(e) {
+      const checked = e?.target?.checked ?? enableObsChk?.checked ?? settingsEnableObs?.checked;
+      syncToggles(checked);
+      const { bridge, adapter } = await robustLoadObs();
+      // Prefer bridge if available
+      if (bridge && typeof bridge.isConnected === 'function') {
+        try {
+          if (checked) {
+            if (!bridge.isConnected()) await bridge.start?.();
+          } else {
+            if (bridge.isConnected()) await bridge.stop?.();
+          }
+        } catch (err) {
+          window.HUD?.warn?.('obs:toggle_bridge_fail', String(err && err.message || err));
+        }
+      } else if (adapter) {
+        try {
+          if (checked) await adapter.connect?.();
+          else await adapter.disconnect?.();
+        } catch (err) {
+          window.HUD?.warn?.('obs:toggle_adapter_fail', String(err && err.message || err));
+        }
+      }
+    }
+    // Wire both toggles
+    if (enableObsChk && !enableObsChk.__unifiedWired) {
+      enableObsChk.addEventListener('change', onToggleChange);
+      enableObsChk.__unifiedWired = true;
+    }
+    if (settingsEnableObs && !settingsEnableObs.__unifiedWired) {
+      settingsEnableObs.addEventListener('change', onToggleChange);
+      settingsEnableObs.__unifiedWired = true;
+    }
+  }
+
+  // --- Page-lifecycle cleanup for OBS bridge/recorder ---
+  function wireObsCleanup() {
+    window.addEventListener('beforeunload', async () => {
+      try {
+        const { bridge, adapter } = await robustLoadObs({ timeoutMs: 1000 });
+        if (bridge && typeof bridge.stop === 'function') await bridge.stop();
+        if (adapter && typeof adapter.disconnect === 'function') await adapter.disconnect();
+      } catch {}
+    });
+  }
+
+  // --- Patch entry: call these after DOM is ready ---
+  function applyUnifiedObsLoaderPatch() {
+    wireUnifiedObsToggles();
+    wireObsCleanup();
+  }
+
+  // --- Call patch after DOMContentLoaded ---
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyUnifiedObsLoaderPatch, { once: true });
+  } else {
+    applyUnifiedObsLoaderPatch();
   }
 
   function appendObsLogLine(msg) {
@@ -2494,6 +3394,10 @@ let _toast = function (msg, opts) {
     localStorage.setItem('hybridLock', on ? '1' : '0');
     // Only here do we wire speed biasing:
     // e.g., ScrollIntegrator.setBiasSupplier(on ? () => PLL.biasPct : null);
+    try {
+      // HUD heartbeat: surface Hybrid engage/disengage
+      window.HUD?.log?.('hybrid', { on: !!on });
+    } catch {}
   }
   function isHybrid() {
     return HYBRID_ON;
@@ -3085,66 +3989,29 @@ let _toast = function (msg, opts) {
   // Hydrate OBS fields from persistent store (do this early, before settings sync)
   function hydrateObsFieldsFromStore() {
     try {
-      const loadObsCreds = function () {
-        try {
-          const url = localStorage.getItem('tp_obs_url') || '';
-          // Do not load passwords from storage; keep them in-memory only
-          const pass = '';
-          const remember = localStorage.getItem('tp_obs_remember') === '1';
-          return { url, pass, remember };
-        } catch {
-          return { url: '', pass: '', remember: false };
+      (async () => {
+        const mainEnable = document.getElementById('enableObs');
+        if (mainEnable) {
+          mainEnable.checked = !!obsEnable.checked;
+          mainEnable.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      };
-  const { url, remember } = loadObsCreds();
-  const urlMain = document.getElementById('obsUrl');
-  const urlSet = document.getElementById('settingsObsUrl');
-      const chkMain = document.getElementById('rememberObs');
-      const chkSet = document.getElementById('settingsObsRemember');
-
-      // If no stored URL, prefer the DEFAULT_OBS_URL for hydration (prevents 127.0.0.1 fallback)
-      const hydratedUrl = (url && url.trim()) || DEFAULT_OBS_URL;
-      if (hydratedUrl && urlMain && !urlMain.value) urlMain.value = hydratedUrl;
-      if (url && urlSet && !urlSet.value) urlSet.value = url;
-  // Passwords are intentionally not hydrated from storage
-
-  if (chkMain) chkMain.checked = !!remember;
-  if (chkSet) chkSet.checked = !!remember;
-    } catch {
-      void e;
-    }
-  }
-
-  // Simple on-page debug panel for OBS events (only shown when __TP_DEV)
-  function ensureObsDebugPanel() {
-    try {
-      if (!window.__TP_DEV) return null;
-      let p = document.getElementById('obsDebugPanel');
-      if (p) return p;
-      p = document.createElement('div');
-      p.id = 'obsDebugPanel';
-      p.style.position = 'fixed';
-      p.style.right = '12px';
-      p.style.bottom = '12px';
-      p.style.width = '320px';
-      p.style.maxHeight = '40vh';
-      p.style.overflow = 'auto';
-      p.style.background = 'rgba(10,12,15,0.95)';
-      p.style.color = '#cfe';
-      p.style.fontSize = '12px';
-      p.style.border = '1px solid #334';
-      p.style.padding = '8px';
-      p.style.zIndex = '99999';
-      p.style.borderRadius = '8px';
-      p.innerHTML =
-        '<div style="font-weight:bold;margin-bottom:6px">OBS Debug</div><div id="obsDebugMsgs"></div><div style="margin-top:6px;text-align:right"><button id="obsDebugDump">Dump handshake</button> <button id="obsDebugClear">Clear</button></div>';
-      document.body.appendChild(p);
-      const clearBtn = document.getElementById('obsDebugClear');
-      clearBtn?.addEventListener('click', () => {
-        const msgs = document.getElementById('obsDebugMsgs');
-        if (msgs) msgs.innerHTML = '';
-      });
-      const dumpBtn = document.getElementById('obsDebugDump');
+        // Always update recorder settings
+        try {
+          if (__recorder?.getSettings && __recorder?.setSettings) {
+            const s = __recorder.getSettings();
+            let sel = (s.selected || []).filter((id) => id !== 'obs');
+            if (obsEnable.checked) sel.push('obs');
+            __recorder.setSettings({ selected: sel });
+          }
+          _toast(obsEnable.checked ? 'OBS: enabled' : 'OBS: disabled', { type: 'ok' });
+        } catch {}
+        // Use unified OBS enable/disable logic
+        try {
+          await obsApplyEnabled(!!obsEnable.checked);
+        } catch (err) {
+          try { window.HUD?.warn?.('obs:persistent_connect_fail', String(err && err.message || err)); } catch {}
+        }
+      })();
       dumpBtn?.addEventListener('click', () => {
         try {
           const msgs = document.getElementById('obsDebugMsgs');
@@ -3306,6 +4173,7 @@ let _toast = function (msg, opts) {
     } else {
       helpBtn.textContent = 'Help';
     }
+  // For downstream code that expects a 'btn' variable
 
     // --- ensure overlay exists ---
     let overlay = document.getElementById('shortcutsOverlay');
@@ -3418,7 +4286,8 @@ let _toast = function (msg, opts) {
     // --- Validate tags quickly ---
     const validateBtn = overlay.querySelector('#validateBtn');
     if (validateBtn) {
-      const _showValidation = (text) => {
+      try {
+        const _showValidation = (text) => {
         const sheet = overlay.querySelector('.sheet') || overlay;
         let panel = sheet.querySelector('#validatePanel');
         if (!panel) {
@@ -3483,90 +4352,25 @@ let _toast = function (msg, opts) {
       validateBtn.onclick = () => {
         let msg;
         try {
-            msg = window.validateStandardTags
-              ? window.validateStandardTags(true)
-              : 'Validator missing.';
-          } catch (_e) {
-            msg = 'Validation error: ' + (_e?.message || _e);
-          }
+          msg = window.validateStandardTags
+            ? window.validateStandardTags(true)
+            : 'Validator missing.';
+        } catch (_e) {
+          msg = 'Validation error: ' + (_e?.message || _e);
+        }
         try {
-          window.showValidation(msg);
+          // Prefer the outer helper if available, otherwise fall back to global helpers
+          if (typeof _showValidation === 'function') {
+            _showValidation(msg);
+          } else if (typeof window.showValidation === 'function') {
+            window.showValidation(msg);
+          } else {
+            showCopyDialog(msg, 'Validator');
+          }
         } catch {
-          showCopyDialog(msg, 'Validator');
+          try { showCopyDialog(msg, 'Validator'); } catch {}
         }
       };
-      const modal = document.getElementById('shortcutsOverlay');
-      const title = document.getElementById('shortcutsTitle');
-      const _close = document.getElementById('shortcutsClose');
-      if (!modal) return;
-
-      // Rename button + title
-      if (btn) {
-        btn.textContent = 'Help';
-        btn.setAttribute('aria-label', 'Help and shortcuts');
-      }
-      if (title) {
-        title.textContent = 'Help';
-      }
-
-      // Find the sheet body
-      const sheet = modal.querySelector('.sheet');
-      if (!sheet) return;
-
-      // Prevent duplicate insertion
-      if (sheet.querySelector('#tagGuide')) return;
-
-      const guide = document.createElement('div');
-      guide.id = 'tagGuide';
-      guide.innerHTML = `
-      <hr class="hr" />
-      <details open>
-        <summary><strong>Script Tag Guide</strong></summary>
-        <div class="tag-guide">
-          <p class="dim">Official tags for podcast scripts — consistent and scroll‑ready.</p>
-          <h4>Speaker Tags</h4>
-          <ul>
-            <li><code>[s1] ... [/s1]</code> → Joe</li>
-            <li><code>[s2] ... [/s2]</code> → Brad</li>
-          </ul>
-          <p><em>Always close the tag. Never add <code>: Name</code> after the tag.</em></p>
-
-          <h4>Notes / Cues</h4>
-          <ul>
-            <li><code>[note] ... [/note]</code> — stage direction, tone, pacing, delivery, music cues, etc.</li>
-            <li><strong>Notes must be on their own line</strong> (not inside speaker tags).</li>
-          </ul>
-
-          <h4>Inline Styles</h4>
-          <ul>
-            <li>No inline color, italics, or extra formatting.</li>
-            <li>If emphasis is needed, describe it in a <code>[note]</code> block instead.</li>
-          </ul>
-
-          <h4>Rules</h4>
-          <ul>
-            <li>Every spoken paragraph starts with <code>[s1]</code> or <code>[s2]</code>.</li>
-            <li>Every note uses <code>[note]...[/note]</code> on its own paragraph.</li>
-            <li>No duplicate or stray tags.</li>
-            <li>Keep scripts human‑readable and teleprompter‑friendly.</li>
-          </ul>
-
-          <div class="row" style="margin-top:.6rem">
-            <button id="guideNormalize" class="btn-chip">Normalize current script</button>
-            <button id="guideValidate" class="btn-chip">Validate</button>
-          </div>
-        </div>
-      </details>
-    `;
-
-      // Insert guide after the shortcuts grid
-      const grid = sheet.querySelector('.shortcuts-grid');
-      if (grid && grid.parentElement) {
-        grid.parentElement.appendChild(guide);
-      } else {
-        sheet.appendChild(guide);
-      }
-
       // Wire quick actions (reuse existing functions if present)
       document.getElementById('guideNormalize')?.addEventListener('click', () => {
         try {
@@ -3582,7 +4386,7 @@ let _toast = function (msg, opts) {
             if (typeof renderScript === 'function') renderScript(out);
             setStatus && setStatus('Normalized.');
           }
-        } catch (err) {
+        } catch {
           void 0;
         }
       });
@@ -3604,8 +4408,9 @@ let _toast = function (msg, opts) {
           console.error(err);
         }
       });
-    } catch (_err) {
-      console.error('Help injection failed', _err);
+      } catch (_err) {
+        console.error('Help injection failed', _err);
+      }
     }
   }
 
@@ -3688,14 +4493,13 @@ let _toast = function (msg, opts) {
     });
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
-      const tag = (e.target.tagName || '').toLowerCase();
-      const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
-      if (typing) return; // don't steal keys when user is typing
+      // don't steal keys when user is typing
+      if (window.isTyping?.() || e.__tpTyping) return;
 
       switch (e.key) {
         case ' ': // Space
           e.preventDefault();
-          if (autoTimer) stopAutoScroll();
+          if (autoTimer) coastToStop();
           else startAutoScroll();
           break;
         case 'ArrowUp':
@@ -3727,6 +4531,64 @@ let _toast = function (msg, opts) {
           break;
       }
     });
+
+    // Mouse wheel font-size adjustment (Ctrl/Cmd + Wheel). Hold Alt to target external display (no-op here).
+    try {
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      window.addEventListener('wheel', (e) => {
+        try {
+          if (!(e.ctrlKey || e.metaKey)) return; // only on intent
+          const tag = (e.target && e.target.tagName || '').toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+          e.preventDefault();
+          const root = document.documentElement;
+          const cs = getComputedStyle(root);
+          const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+          const step = 2;
+          const next = clamp(curPx + (e.deltaY < 0 ? step : -step), 18, 120);
+          root.style.setProperty('--tp-font-size', next + 'px');
+          try { localStorage.setItem('tp_font_size_v1', String(next)); } catch {}
+        } catch {}
+      }, { passive: false });
+    } catch {}
+
+    // Shift + Wheel over viewer to adjust font size without Ctrl/Cmd
+    try {
+      const clamp2 = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const viewer = document.getElementById('viewer');
+      if (viewer) {
+        viewer.addEventListener('wheel', (e) => {
+          try {
+            if (!e.shiftKey || e.ctrlKey || e.metaKey) return; // require Shift only
+            const tag = (e.target && e.target.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+            e.preventDefault();
+            const root = document.documentElement;
+            const cs = getComputedStyle(root);
+            const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+            const step = 2;
+            const next = clamp2(curPx + (e.deltaY < 0 ? step : -step), 18, 120);
+            root.style.setProperty('--tp-font-size', next + 'px');
+            try { localStorage.setItem('tp_font_size_v1', String(next)); } catch {}
+          } catch {}
+        }, { passive: false });
+      }
+    } catch {}
+
+    // Auto-recompute scroll step after typography changes
+    try {
+      window.addEventListener('tp:lineMetricsDirty', () => {
+        try {
+          const root = document.documentElement;
+          const cs = getComputedStyle(root);
+          const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+          const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+          const pxPerLine = fs * lh;
+          const stepPx = Math.round(pxPerLine * 7);
+          try { window.__tpAuto && window.__tpAuto.setStepPx && window.__tpAuto.setStepPx(stepPx); } catch {}
+        } catch {}
+      });
+    } catch {}
 
     // ===== Progressive Fallback Nudge =====
     (function () {
@@ -3796,9 +4658,10 @@ let _toast = function (msg, opts) {
         const tryIdxs = [];
         for (let k = -F.miniSeekIdxSpan; k <= F.miniSeekIdxSpan; k++) tryIdxs.push(bestIdx + k);
         const el = tryIdxs
-          .map((i) =>
-            document.querySelector(`[data-idx="${i}"],[data-token-idx="${i}"],.line[data-i="${i}"]`)
-          )
+          .map((i) => {
+            const selector = '[data-idx="' + i + '"],[data-token-idx="' + i + '"],.line[data-i="' + i + '"]';
+            return document.querySelector(selector);
+          })
           .find(Boolean);
 
         if (el) {
@@ -3920,7 +4783,7 @@ let _toast = function (msg, opts) {
         const oldState = window.__tpWatchdogState;
         if (newState !== oldState) {
           window.__tpWatchdogState = newState;
-          tpLog('info', `WATCHDOG STATE: ${oldState} → ${newState}`, details);
+          tpLog('info', `WATCHDOG STATE: ${oldState} -> ${newState}`, details);
         }
       }
 
@@ -4484,11 +5347,11 @@ let _toast = function (msg, opts) {
         );
         if (!scriptSlots) return;
         scriptSlots.innerHTML = list
-          .map((s) => `<option value="${s.id}">${s.title}</option>`)
-          .join('');
+        .map(function(s) { return `<option value="${s.id}">${s.title}</option>`; })
+        .join('');
         if (currentScriptId) scriptSlots.value = currentScriptId;
       } catch {
-        void e;
+  // no-op
       }
     }
 
@@ -4680,6 +5543,26 @@ let _toast = function (msg, opts) {
         void 0;
       }
     };
+    // Single-source recorder status → chip text
+    try {
+      if (!window.__tpRecChipWired) {
+        window.__tpRecChipWired = true;
+        window.addEventListener('rec:state', (e) => {
+          try {
+            const s = e && e.detail && e.detail.state;
+            const d = (e && e.detail && e.detail.detail) || {};
+            if (s === 'starting') return window.setRecChip({ text: 'starting…', tone: 'neutral', busy: true });
+            if (s === 'recording') {
+              if (d && d.fallback) return window.setRecChip({ text: 'fallback (hotkey)', tone: 'warn', busy: false });
+              return window.setRecChip('recording');
+            }
+            if (s === 'stopping') return window.setRecChip({ text: 'stopping…', tone: 'neutral', busy: true });
+            if (s === 'error') return window.setRecChip({ text: 'error', tone: 'error', assertive: true, busy: false });
+            return window.setRecChip('idle');
+          } catch {}
+        }, { passive: true });
+      }
+    } catch {}
     // OBS runtime flags (safe defaults)
     window.__obsConnected = false;
     window.__obsRecArmed = false;
@@ -5019,14 +5902,25 @@ let _toast = function (msg, opts) {
     }
     try {
       const scMod = await import((window.__TP_ADDV || ((p) => p))('./scroll-control.js'));
-      __scrollCtl = new scMod.default({
-        getViewerTop: () => viewer.scrollTop,
-        requestScroll: (top) => {
-          viewer.scrollTop = top;
+      __scrollCtl = new scMod.default(
+        {
+          getViewerTop: () => viewer.scrollTop,
+          requestScroll: (top) => {
+            viewer.scrollTop = top;
+          },
+          getViewportHeight: () => viewer.clientHeight,
+          getViewerElement: () => viewer,
         },
-        getViewportHeight: () => viewer.clientHeight,
-        getViewerElement: () => viewer,
-      });
+        (tag, data) => {
+          try {
+            window.HUD?.log?.('display:' + String(tag || ''), data);
+          } catch {}
+        }
+      );
+      // Expose clamp mode API globally for UI mode router
+      if (__scrollCtl && typeof __scrollCtl.setclampMode === 'function') {
+        window.__tpSetClampMode = (mode) => __scrollCtl.setclampMode(mode);
+      }
     } catch {
       console.warn('scroll-control load failed', e);
     }
@@ -5042,7 +5936,7 @@ let _toast = function (msg, opts) {
       const fxName = Q.get('fixture');
       const fxUrl = Q.get('fixtureUrl');
       if ((window.__TP_DEV || Q.has('dev')) && (fxName || fxUrl)) {
-        const url = fxUrl || `./fixtures/${fxName.replace(/[^a-z0-9._-]/gi, '')}.txt`;
+  const url = fxUrl || ('./fixtures/' + fxName.replace(/[^a-z0-9._-]/gi, '') + '.txt');
         const resp = await fetch((window.__TP_ADDV || ((p) => p))(url));
         const txt = await resp.text();
         if (editor) editor.value = txt;
@@ -5050,7 +5944,8 @@ let _toast = function (msg, opts) {
         console.info('[TP-Pro] Loaded fixture:', url);
       }
     } catch {
-      void e;
+  // no-op
+                if (chip) chip.textContent = 'OBS: ' + (txt || '');
     }
     // …keep the rest of your init() as-is…
 
@@ -5086,19 +5981,23 @@ let _toast = function (msg, opts) {
                 try {
                   const via = document.getElementById('obsUrl')?.value || DEFAULT_OBS_URL;
                   const chip = document.getElementById('obsStatus') || document.getElementById('recChip');
-                  if (chip) chip.textContent = `OBS: ${txt || ''}`;
+                  if (chip) chip.textContent = 'OBS: ' + (txt || '');
                   // also mirror status into the settings-level connection chip (obsConnStatus)
                   try {
                     const connChip = document.getElementById('obsConnStatus');
                     if (connChip) {
-                      connChip.textContent = txt ? `OBS: ${txt}` : 'OBS: unknown';
+                      connChip.textContent = txt ? 'OBS: ' + txt : 'OBS: unknown';
+                    connChip.textContent = txt ? 'OBS: ' + txt : 'OBS: unknown';
+                  obsDebugLog('status: ' + (txt || '(empty)') + ' (via ' + via + ')');
+                if (chip) chip.textContent = 'Speech: ' + state;
+                  obsDebugLog('record-state: ' + state);
                       connChip.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
                       if (ok) connChip.classList.add('obs-connected');
                       else if (/offline|error|disconnect/i.test(String(txt || ''))) connChip.classList.add('obs-reconnecting');
                       else connChip.classList.add('idle');
                     }
                   } catch {}
-                  obsDebugLog(`status: ${txt || '(empty)'} (via ${via})`);
+                  obsDebugLog('status: ' + (txt || '(empty)') + ' (via ' + via + ')');
                 } catch {}
                 try {
                   _toast && _toast(txt, { type: ok ? 'ok' : 'error' });
@@ -5107,17 +6006,17 @@ let _toast = function (msg, opts) {
               onRecordState: (state) => {
                 try {
                   const chip = document.getElementById('recChip');
-                  if (chip) chip.textContent = `Speech: ${state}`;
-                  obsDebugLog(`record-state: ${state}`);
+                  if (chip) chip.textContent = 'Speech: ' + state;
+                  obsDebugLog('record-state: ' + state);
                 } catch {}
               },
             });
           }
-        } catch {
+        } catch (e) {
           console.warn('[TP-Pro] recorder.init() threw', e);
         }
       });
-    } catch {
+    } catch (e) {
       void e;
     }
 
@@ -5125,7 +6024,7 @@ let _toast = function (msg, opts) {
     lineHeightInput.addEventListener('input', applyTypography);
 
     autoToggle.addEventListener('click', () => {
-      if (autoTimer) return stopAutoScroll();
+      if (autoTimer) return coastToStop();
       if (!parseFloat(autoSpeed.value)) {
         autoSpeed.value = localStorage.getItem('autoPxSpeed') || '25';
       }
@@ -5136,12 +6035,22 @@ let _toast = function (msg, opts) {
       const v = parseFloat(autoSpeed.value) || 0;
       localStorage.setItem('autoPxSpeed', String(v));
       if (!autoTimer) {
-        autoToggle.textContent = v > 0 ? `Auto-scroll: ${v}px/s` : 'Auto-scroll: Off';
+        // When stopped, reflect clear OFF state regardless of value
+        autoToggle.textContent = 'Auto-scroll: Off';
       }
     });
 
     // OBS enable toggle wiring (after recorder module possibly loaded)
     if (enableObsChk) {
+        // Double-wiring guard and SSOT marker for JS bridge
+        try {
+          if (window.__tpObsWireActive) {
+            try { window.HUD?.warn?.('obs:doublewire'); } catch {}
+          } else {
+            window.__tpObsWireActive = true;
+            window.__tpObsSSOT = 'js';
+          }
+        } catch {}
       const applyFromSettings = () => {
         try {
           if (!__recorder?.getSettings) return;
@@ -5183,6 +6092,14 @@ let _toast = function (msg, opts) {
                   password: obsPassInput?.value || s.configs?.obs?.password || '',
                 });
                 window.__obsBridge.enableAutoReconnect(!!recEl?.checked);
+                // Attach one-time event taps for visibility
+                if (!window.__tpObsEventsWired) {
+                  window.__tpObsEventsWired = true;
+                  try { window.__obsBridge.on('connect', () => { try { window.HUD?.log?.('obs:connect'); } catch {} }); } catch {}
+                  try { window.__obsBridge.on('disconnect', (d) => { try { window.HUD?.warn?.('obs:disconnect', d); } catch {} }); } catch {}
+                  try { window.__obsBridge.on('recordstate', (on) => { try { window.HUD?.log?.('obs:recordstate', { on }); } catch {} }); } catch {}
+                  try { window.__obsBridge.on('error', (e) => { try { window.HUD?.warn?.('obs:error', String(e && e.message || e)); } catch {} }); } catch {}
+                }
               } catch {}
             }
           } catch {}
@@ -5437,6 +6354,7 @@ let _toast = function (msg, opts) {
         if (e.target === settingsOverlay) closeSettings();
       });
       window.addEventListener('keydown', (e) => {
+        if (window.isTyping?.() && e.key !== 'Escape') return; // allow Escape to still close
         if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) closeSettings();
       });
     }
@@ -5673,9 +6591,9 @@ let _toast = function (msg, opts) {
                               const b =
                                 meta.backoffMs || meta.backoffMs === 0 ? meta.backoffMs : null;
                               if (a !== null && b !== null)
-                                suffix = ` (attempt ${a}; retry ${b}ms)`;
-                              else if (a !== null) suffix = ` (attempt ${a})`;
-                              else if (b !== null) suffix = ` (retry ${b}ms)`;
+                                suffix = ' (attempt ' + a + '; retry ' + b + 'ms)';
+                              else if (a !== null) suffix = ' (attempt ' + a + ')';
+                              else if (b !== null) suffix = ' (retry ' + b + 'ms)';
                             }
                           } catch {
                             void 0;
@@ -5751,8 +6669,28 @@ let _toast = function (msg, opts) {
     resetBtn.addEventListener('click', resetTimer);
 
     loadSample.addEventListener('click', () => {
-      editor.value =
-        'Welcome to [b]Teleprompter Pro[/b].\n\nUse [s1]roles[/s1], [note]notes[/note], and colors like [color=#ff0]this[/color].';
+      const sample = [
+        '[s1]',
+        '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
+        'Cras justo odio, dapibus ac facilisis in, egestas eget quam.',
+        '[/s1]',
+        '',
+        '[s2]',
+        '[color=#ffcc00]Vestibulum[/color] [bg=#112233]ante[/bg] ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae;',
+        'Integer posuere erat a ante venenatis dapibus posuere velit aliquet.',
+        '[/s2]',
+        '',
+        '[g1]',
+        'Curabitur [b]non nulla[/b] sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada.',
+        'Maecenas faucibus mollis interdum.',
+        '[/g1]',
+        '',
+        '[g2]',
+        'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. [i]Etiam porta sem malesuada[/i] magna mollis euismod.',
+        '[bg=#003344][color=#a4e8ff]Quisque[/color][/bg] sit amet est a [u]libero[/u] mollis tristique.',
+        '[/g2]',
+      ].join('\n');
+      editor.value = sample;
       renderScript(editor.value);
     });
     clearText.addEventListener('click', () => {
@@ -5899,12 +6837,12 @@ let _toast = function (msg, opts) {
     wrapColor?.addEventListener('click', () => {
       const c = prompt('Color (name or #hex):', '#ff0');
       if (!c) return;
-      wrapSelection(`[color=${c}]`, '[/color]');
+  wrapSelection('[color=' + c + ']', '[/color]');
     });
     wrapBg?.addEventListener('click', () => {
       const c = prompt('Background (name or #hex):', '#112233');
       if (!c) return;
-      wrapSelection(`[bg=${c}]`, '[/bg]');
+  wrapSelection('[bg=' + c + ']', '[/bg]');
     });
 
     autoTagBtn?.addEventListener('click', () => {
@@ -6072,12 +7010,16 @@ let _toast = function (msg, opts) {
         };
       } catch {}
 
-    // Camera
-    startCamBtn?.addEventListener('click', startCamera);
-    stopCamBtn?.addEventListener('click', stopCamera);
-    camDeviceSel?.addEventListener('change', () => {
-      if (camVideo?.srcObject) startCamera();
-    });
+    // Camera (stand down if TS path owns wiring)
+    if (!window.__tpCamWireActive) {
+      startCamBtn?.addEventListener('click', startCamera);
+      stopCamBtn?.addEventListener('click', stopCamera);
+      camDeviceSel?.addEventListener('change', () => {
+        if (!window.__tpCamWireActive && camVideo?.srcObject) startCamera();
+      });
+    } else {
+      try { console.debug('[camera] Legacy camera disabled (SSOT=TS).'); } catch {}
+    }
     camSize?.addEventListener('input', applyCamSizing);
     camOpacity?.addEventListener('input', applyCamOpacity);
     camMirror?.addEventListener('change', applyCamMirror);
@@ -6370,7 +7312,7 @@ let _toast = function (msg, opts) {
       div.id = 'tuningPanel';
       div.style.cssText =
         'position:fixed;bottom:8px;right:8px;z-index:9999;background:#111c;border:1px solid #444;padding:8px 10px;font:12px system-ui;color:#eee;box-shadow:0 2px 8px #0009;backdrop-filter:blur(4px);max-width:240px;line-height:1.3;border-radius:6px;';
-      div.innerHTML = `\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:contents;">SIM<th style="display:none"></th><input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Win+<input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000"></label>\n          <label style="display:contents;">Win-<input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200"></label>\n          <label style="display:contents;">Strict<input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1"></label>\n          <label style="display:contents;">Jump<input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120"></label>\n        </div>\n        <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">\n          <button data-apply style="flex:1 1 auto;">Apply</button>\n          <button data-save style="flex:1 1 auto;">Save</button>\n        </div>\n        <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">\n          <input data-enable type="checkbox"> Override presets\n        </label>\n        <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>\n        <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>\n      `;
+      div.innerHTML = '\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">\n          <strong style="font-size:12px;">Matcher Tuning</strong>\n          <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>\n        </div>\n        <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;">\n          <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">\n            <span>SIM</span>\n            <input data-k=\"SIM_THRESHOLD\" type=\"number\" step=\"0.01\" min=\"0\" max=\"1\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Win+</span>\n            <input data-k=\"MATCH_WINDOW_AHEAD\" type=\"number\" step=\"10\" min=\"10\" max=\"1000\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Win-</span>\n            <input data-k=\"MATCH_WINDOW_BACK\" type=\"number\" step=\"1\" min=\"0\" max=\"200\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Strict</span>\n            <input data-k=\"STRICT_FORWARD_SIM\" type=\"number\" step=\"0.01\" min=\"0\" max=\"1\">\n          </label>\n          <label style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;\">\n            <span>Jump</span>\n            <input data-k=\"MAX_JUMP_AHEAD_WORDS\" type=\"number\" step=\"1\" min=\"1\" max=\"120\">\n          </label>\n        </div>\n        <div style=\"margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;\">\n          <button data-apply style=\"flex:1 1 auto;\">Apply</button>\n          <button data-save style=\"flex:1 1 auto;\">Save</button>\n        </div>\n        <label style=\"display:flex;align-items:center;gap:4px;margin-top:4px;\">\n          <input data-enable type=\"checkbox\"> Override presets\n        </label>\n        <div data-tune-status style=\"font-size:11px;color:#8ec;margin-top:2px;height:14px;\"></div>\n        <div style=\"font-size:10px;color:#999;margin-top:4px;\">Ctrl+Alt+T to re-open</div>\n      ';
       document.body.appendChild(div);
       _tunePanelEl = div;
       _tuneInputs = {};
@@ -6426,6 +7368,7 @@ let _toast = function (msg, opts) {
     }
     // Keybinding to toggle panel (dev mode only)
     window.addEventListener('keydown', (e) => {
+      if (window.isTyping?.() || e.__tpTyping) return;
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') {
         if (DEV_MODE) {
           ensureTuningPanel();
@@ -6884,6 +7827,7 @@ let _toast = function (msg, opts) {
 
   // Dump boot trace if user presses Ctrl+Alt+B (debug aid)
   window.addEventListener('keydown', (e) => {
+    if (window.isTyping?.() || e.__tpTyping) return;
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'b') {
       try {
         console.log(
@@ -8625,7 +9569,9 @@ let _toast = function (msg, opts) {
       currentEl.classList.add('current');
     } catch {}
 
-    const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
+  const desiredTop = targetPara.el.offsetTop - markerTop(); // let scheduler clamp
+  // Feed desired target into the scroll controller so the motor tracks speech alignment
+  try { __scrollCtl?.updateMatch?.({ nextTop: desiredTop }); } catch {}
 
     // Marker distance clamping: |y(active) - y(marker)| ≤ L_max (1.2 viewport lines)
     const L_MAX = 1.2 * (viewer.clientHeight || 800); // 1.2 viewport lines
@@ -8868,7 +9814,10 @@ let _toast = function (msg, opts) {
       if (window.__tp_rs_inflight) return;
       window.__tp_rs_inflight = true;
     } catch {}
-    const t = String(text || '');
+    let t = String(text || '');
+    try {
+      if (typeof window.stripNoteBlocks === 'function') t = window.stripNoteBlocks(t);
+    } catch {}
 
     // Tokenize for speech sync (strip tags so only spoken words are matched)
     scriptWords = normTokens(stripTagsForTokens(text));
@@ -8876,11 +9825,11 @@ let _toast = function (msg, opts) {
     // Build paragraphs; preserve single \n as <br>
     // First, split on double newlines into blocks, then further split any block
     // that contains note divs so note blocks always stand alone.
-    const blocks = t.split(/\n{2,}/);
+  const blocks = t.split(/\n{2,}/);
     const outParts = [];
     for (const b of blocks) {
       // Convert inline markup first so notes become <div class="note"> blocks
-      const html = formatInlineMarkup(b).replace(/\n/g, '<br>');
+  const html = (typeof window.applyInlineTags === 'function' ? window.applyInlineTags(b) : formatInlineMarkup(b)).replace(/\n/g, '<br>');
       // If there are one or more note divs inside, split them out to standalone entries
       if (/<div class=\"note\"[\s\S]*?<\/div>/i.test(html)) {
         const pieces = html.split(/(?=<div class=\"note")|(?<=<\/div>)/i).filter(Boolean);
@@ -9728,8 +10677,11 @@ let _toast = function (msg, opts) {
     }
     localStorage.setItem('autoPxSpeed', String(pxSpeed));
 
-    autoToggle.textContent = `Auto-scroll: ${pxSpeed}px/s`;
-    autoToggle.classList.add('active');
+  autoToggle.dataset.state = 'on';
+  autoToggle.textContent = `Auto-scroll: On — ${pxSpeed} px/s`;
+  autoToggle.classList.add('active');
+  // seed central scroll controller if present
+  try { if (window.__scrollCtl?.setSpeed) window.__scrollCtl.setSpeed(pxSpeed); } catch {}
 
     // Snap the nearest readable line to the marker immediately to avoid
     // initial overshoot/undershoot oscillation. Also ensure the end spacer
@@ -9825,6 +10777,14 @@ let _toast = function (msg, opts) {
     let __momentaryMult = 1;
     const _onKey = (e) => {
       try {
+        // If user is typing in an input/textarea/contentEditable, don't affect scroll speed
+        if (window.isTyping?.() || e.__tpTyping) {
+          if (__momentaryMult !== 1) {
+            __momentaryMult = 1;
+            try { (window.tp_hud || window.__tpHud)?.('speed:momentary', { n: __momentaryMult }); } catch {}
+          }
+          return;
+        }
         const next = e.shiftKey ? 1.1 : e.altKey ? 0.88 : 1;
         if (next !== __momentaryMult) {
           __momentaryMult = next;
@@ -9931,8 +10891,51 @@ let _toast = function (msg, opts) {
     } catch {}
     try { window.__tpGov = null; } catch {}
     try { if (!speechOn) window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
-    autoToggle.classList.remove('active');
-    autoToggle.textContent = 'Auto-scroll: Off';
+  autoToggle.classList.remove('active');
+  autoToggle.dataset.state = 'off';
+  autoToggle.textContent = 'Auto-scroll: Off';
+  }
+
+  // Smooth deceleration helper: coast current auto speed to 0 over N ms, then stop
+  function coastToStop() {
+    try {
+      if (!autoTimer) {
+        // already stopped
+        return stopAutoScroll();
+      }
+      const ms = Math.max(0, Number(localStorage.getItem('tp_stop_coast_ms')) || 1500);
+      if (!ms) return stopAutoScroll();
+
+      let start = null;
+      const initial = Math.max(0, Number(autoSpeed?.value) || 0);
+      if (initial <= 0) return stopAutoScroll();
+
+      // Cancel any prior coast loop
+      try { if (window.__tpCoastRAF) cancelAnimationFrame(window.__tpCoastRAF); } catch {}
+
+      const step = (t) => {
+        if (!start) start = t;
+        const el = t - start;
+        const p = Math.min(1, el / ms);
+        const v = Math.max(0, initial * (1 - p));
+        try {
+          // Prefer centralized setter when present to keep labels in sync
+          if (typeof window.__setAutoSpeed === 'function') window.__setAutoSpeed(v, 'coast');
+          else autoSpeed.value = String(v.toFixed(1));
+          if (autoTimer) autoToggle.textContent = `Auto-scroll: On — ${Math.round(v)} px/s`;
+        } catch {}
+        if (p < 1 && autoTimer) {
+          window.__tpCoastRAF = requestAnimationFrame(step);
+        } else {
+          try { if (typeof window.__setAutoSpeed === 'function') window.__setAutoSpeed(0, 'coast-end'); } catch {}
+          stopAutoScroll();
+        }
+      };
+      window.__tpCoastRAF = requestAnimationFrame(step);
+    } catch {
+      // fallback to immediate stop
+      stopAutoScroll();
+    }
   }
 
   // Resume catch-up controller if speech sync is active — via heuristic gate
@@ -9964,9 +10967,18 @@ let _toast = function (msg, opts) {
   function tweakSpeed(delta) {
     onUserAutoNudge(); // Gate soft-advance during manual speed adjustments
     let v = Number(autoSpeed.value) || 0;
-    v = Math.max(0, Math.min(300, v + delta));
-    autoSpeed.value = String(v);
-    if (autoTimer) autoToggle.textContent = `Auto-scroll: On (${v}px/s)`;
+    v = v + delta;
+    try {
+      // Route through centralized setter so engine/label stay in sync
+      if (typeof window.__setAutoSpeed === 'function') {
+        window.__setAutoSpeed(v, 'tweak');
+      } else {
+        // Fallback: clamp and reflect locally if setter not available
+        v = Math.max(0, Math.min(300, v));
+        autoSpeed.value = String(v);
+        if (autoTimer) autoToggle.textContent = `Auto-scroll: On — ${v} px/s`;
+      }
+    } catch {}
   }
 
   function startTimer() {
@@ -9999,270 +11011,48 @@ let _toast = function (msg, opts) {
     let n = sec;
     // TP: preroll-controls
     let __prerollStarted = false;
-    // Helper: minimal recording ensure using adapter (GetRecordStatus -> StartRecord)
-    async function ensureRecordingMini() {
-      const bridge =
-        typeof window !== 'undefined' && window.__obsBridge ? window.__obsBridge : null;
-      if (!bridge && !window.__obsConnected && !(window.__recorder && window.__recorder.get))
-        return false;
-      const a = bridge ? null : window.__recorder?.get?.('obs');
-
-      // Guard: if OBS is not enabled in recorder settings or the UI checkbox, skip OBS actions
-      try {
-        const settings = __recorder && __recorder.getSettings ? __recorder.getSettings() : null;
-        const obsEnabledInSettings = settings && Array.isArray(settings.selected) ? settings.selected.indexOf('obs') >= 0 : false;
-        const enableObsUi = !!document.getElementById('enableObs')?.checked;
-        if (!obsEnabledInSettings && !enableObsUi) {
-          // OBS explicitly disabled — do not attempt scene switching or starting the recorder
-          if (window.__TP_DEV) console.debug('[OBS] ensureRecordingMini: OBS disabled by settings/UI — skipping');
-          return false;
-        }
-      } catch {}
-
-      // 1) Disk space check (best-effort)
-      try {
-        if (bridge && typeof bridge.getStats === 'function') {
-          const stats = await bridge.getStats();
-          const free = stats?.recording?.freeDiskSpace || stats?.free_disk_space || null;
-          let freeBytes = null;
-          if (typeof free === 'number') freeBytes = free;
-          else if (typeof free === 'string' && /^\d+$/.test(free)) freeBytes = Number(free);
-          if (freeBytes !== null) {
-            const minBytes = 2 * 1024 * 1024 * 1024; // 2 GB
-            if (freeBytes < minBytes) {
-              _toast('Low disk space on OBS host — recording may fail', { type: 'warn' });
-            }
-          }
-        }
-      } catch {
-        // ignore stats errors
-      }
-
-      // 2) If already recording, skip StartRecord
-      try {
-        const s = bridge
-          ? await bridge.getRecordStatus()
-          : await (a.call ? a.call('GetRecordStatus') : a.getStatus?.());
-        if (s && s.outputActive) {
-          try {
-            window.setRecChip && window.setRecChip('recording');
-          } catch {}
-          return true;
-        }
-      } catch {
-        // ignore GetRecordStatus errors and continue
-      }
-
-      // 3) Scene sanity — SAFE flow
-      // Default behavior: do nothing. If the user has a preferred scene configured,
-      // treat it as optional: validate it exists first and only switch if it differs
-      // from the current program scene and the connection is stable.
-      try {
-        const settings = __recorder.getSettings?.() || {};
-        let preferredScene = settings.configs?.obs?.scene || localStorage.getItem('tp_obs_scene') || '';
-        // If no explicit preferred scene, skip any scene changes entirely
-        if (preferredScene) {
-          try {
-            // wait a small quiet window to ensure connection is stable
-            await new Promise((r) => setTimeout(r, 600));
-
-            // helper to read current program scene and scene list from bridge/adapters
-            let currentProgram = null;
-            let scenes = null;
-            try {
-              if (bridge && typeof bridge.getCurrentProgramScene === 'function')
-                currentProgram = await bridge.getCurrentProgramScene();
-              else if (a && a.call) {
-                try {
-                  const r = await a.call('GetCurrentProgramScene');
-                  currentProgram = r && (r.currentProgramScene || r.currentProgramSceneName || r.sceneName);
-                } catch {}
-              }
-            } catch {}
-            try {
-              if (bridge && typeof bridge.getSceneList === 'function') scenes = await bridge.getSceneList();
-              else if (a && a.call) {
-                try {
-                  const res = await a.call('GetSceneList');
-                  scenes = res && (res.scenes || res.sceneList || null);
-                } catch {}
-              }
-            } catch {}
-
-            // Normalize scenes names to an array of string names if possible
-            let sceneNames = null;
-            try {
-              if (Array.isArray(scenes)) sceneNames = scenes.map((s) => s && s.sceneName ? s.sceneName : s && s.name ? s.name : s);
-            } catch {}
-            // Dev diagnostic: log discovered scenes and current program
-            try {
-              if (window.__TP_DEV) {
-                try { console.debug('[OBS-SCENE] preferredScene=', preferredScene); } catch {}
-                try { console.debug('[OBS-SCENE] currentProgram=', currentProgram); } catch {}
-                try { console.debug('[OBS-SCENE] sceneNames=', sceneNames); } catch {}
-              }
-            } catch {}
-
-            // Only proceed if preferredScene exists in the scene list (exact match)
-            const exists = Array.isArray(sceneNames) ? sceneNames.indexOf(preferredScene) >= 0 : false;
-            if (!exists) {
-              // Preferred scene not found: do nothing (leave program scene as-is)
-              try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene not found; skipping'); } catch {}
-            } else {
-              // If the preferred scene is already the current program scene, do nothing
-              if (currentProgram && String(currentProgram) === String(preferredScene)) {
-                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene already active; skipping'); } catch {}
-              } else {
-                try { if (window.__TP_DEV) console.debug('[OBS-SCENE] preferred scene exists and differs; will set when quiet'); } catch {}
-                // Defer actual SetCurrentProgramScene until no transition is active.
-                // We listen for a TransitionEnd-like event or wait a short quiet window of 500ms.
-                const doSet = async () => {
-                  try {
-                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] invoking SetCurrentProgramScene ->', preferredScene); } catch {}
-                    if (bridge && typeof bridge.setCurrentProgramScene === 'function') {
-                      await bridge.setCurrentProgramScene(preferredScene);
-                    } else if (a && a.call) {
-                      await a.call('SetCurrentProgramScene', { sceneName: preferredScene });
-                    } else if (typeof a.setCurrentProgramScene === 'function') {
-                      await a.setCurrentProgramScene(preferredScene);
-                    } else if (window.obsSocket && typeof window.obsSocket.call === 'function') {
-                      await window.obsSocket.call('SetCurrentProgramScene', { sceneName: preferredScene });
-                    }
-                    try { if (window.__TP_DEV) console.debug('[OBS-SCENE] SetCurrentProgramScene complete'); } catch {}
-                  } catch {
-                    try { if (window.__TP_DEV) console.error('[OBS-SCENE] SetCurrentProgramScene failed', se); } catch {}
-                  }
-                };
-
-                // Try to detect a transition API; otherwise wait 500ms quiet and set
-                let transitionHandled = false;
-                try {
-                  if (bridge && typeof bridge.on === 'function') {
-                    const off = bridge.on('TransitionEnd', async () => {
-                      if (transitionHandled) return;
-                      transitionHandled = true;
-                      try {
-                        off && off();
-                      } catch {}
-                      await doSet();
-                    });
-                    // fallback: set a timeout in case TransitionEnd never fires
-                    setTimeout(async () => {
-                      if (transitionHandled) return;
-                      transitionHandled = true;
-                      await doSet();
-                    }, 800);
-                  } else {
-                    // no transition API: wait a short quiet window then set
-                    setTimeout(async () => {
-                      await doSet();
-                    }, 600);
-                  }
-                } catch {
-                  try { if (window.__TP_DEV) console.error('[OBS-SCENE] transition detection failed', e); } catch {}
-                }
-              }
-            }
-          } catch {}
-        }
-      } catch {}
-
-      // 4) Start recording (bridge preferred)
-      try {
-        if (bridge) {
-          await bridge.start();
-          try {
-            window.setRecChip('recording');
-            window.__obsLastRecEventAt = Date.now();
-          } catch {}
-          return true;
-        }
-        if (a) {
-          if (typeof a.start === 'function') {
-            await a.start();
-            try {
-              window.setRecChip('recording');
-              window.__obsLastRecEventAt = Date.now();
-            } catch {}
-            return true;
-          }
-          if (a.call) {
-            await a.call('StartRecord');
-            try {
-              window.setRecChip('recording');
-              window.__obsLastRecEventAt = Date.now();
-            } catch {}
-            return true;
-          }
-        }
-      } catch {
-        // start failed
-        return false;
-      }
-
-      return false;
-    }
+    // (ensureRecordingMini removed; registry handles start/stop)
     const show = (v) => {
       countNum.textContent = String(v);
       countOverlay.style.display = 'flex';
       sendToDisplay({ type: 'preroll', show: true, n: v });
       try {
-        if (!__prerollStarted && window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
+        // Fire Auto‑record at T-2s (v <= 2) only, guard idempotently
+        if (!__prerollStarted && v <= 2 && window.getAutoRecordEnabled && window.getAutoRecordEnabled()) {
           __prerollStarted = true;
-          try {
-            if (window.__obsRecArmed) return;
-            window.__obsRecArmed = true;
-            (async () => {
-              try {
-                const ok = await ensureRecordingMini();
-                if (!ok) {
-                  _toast("Couldn't start OBS recording", { type: 'error' });
-                  // allow manual retry via top rec chip
-                  try {
-                    const c = document.getElementById('recChip');
-                    if (c) {
-                      c.style.cursor = 'pointer';
-                      c.onclick = async () => {
-                        _toast('Retrying OBS start…');
-                        await ensureRecordingMini();
-                      };
-                    }
-                  } catch {}
-                } else {
-                  // Wait ~1.5s for RecordStateChanged confirmation; show clickable retry on failure
-                  const t0 = Date.now();
-                  const saw = await new Promise((resolve) => {
-                    const id = setInterval(() => {
-                      if (
-                        window.__obsLastRecEventAt &&
-                        Date.now() - window.__obsLastRecEventAt < 1600
-                      ) {
-                        clearInterval(id);
-                        resolve(true);
-                        return;
-                      }
-                      if (Date.now() - t0 > 1500) {
-                        clearInterval(id);
-                        resolve(false);
-                        
-                      }
-                    }, 150);
-                  });
-                  if (!saw) {
-                    _toast("OBS didn't confirm recording — click to retry", {
-                      type: 'error',
-                      onClick: async () => {
-                        _toast('Retrying OBS start…');
-                        try {
-                          await ensureRecordingMini();
-                        } catch {}
-                      },
-                    });
+          let recConfirmed = false;
+          const onRec = (e) => {
+            try { if (e?.detail?.state === 'recording') recConfirmed = true; } catch {}
+          };
+          try { window.addEventListener('rec:state', onRec, { passive: true }); } catch {}
+          // Kick primary start via registry (idempotent handled inside)
+          try { window.__tpHud?.log?.('[rec] start obs'); } catch {}
+          try { window.__recorder?.start?.(); } catch {}
+
+          // Retry once at T-0.5s if still not recording
+          setTimeout(async () => {
+            try {
+              if (recConfirmed) return;
+              try { window.__tpHud?.log?.('[rec] retry'); } catch {}
+              await (window.__recorder?.start?.() || Promise.resolve());
+              // If still not confirmed, fallback to Bridge hotkey (if configured)
+              setTimeout(async () => {
+                try {
+                  if (recConfirmed) return;
+                  const bridge = (window.__recorder && window.__recorder.get) ? window.__recorder.get('bridge') : null;
+                  if (bridge && typeof bridge.start === 'function') {
+                    try { window.__tpHud?.log?.('[rec] fallback bridge'); } catch {}
+                    try { await bridge.start(); } catch {}
+                    // Emit single-source bus update noting fallback
+                    try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'bridge', state: 'recording', detail: { fallback: true } } })); } catch {}
+                    _toast('Recording via Bridge (hotkey)', { type: 'warn' });
                   }
-                }
-              } catch {}
-            })();
-          } catch {}
+                } catch {}
+              }, 300);
+            } catch {}
+          }, Math.max(0, 1500));
+          // Clean listener after countdown ends
+          setTimeout(() => { try { window.removeEventListener('rec:state', onRec); } catch {} }, Math.max(0, (v * 1000) + 2000));
         }
       } catch {}
     };
@@ -10323,10 +11113,10 @@ let _toast = function (msg, opts) {
         // optional: initial snap-to-nearest line, forward-only
         snapToViewportAnchor();
       } else {
-        setHybrid(false);
+  setHybrid(false);
         stopASRorVAD();
         PLL.tune({ maxBias: 0 }); // neutralize bias quickly
-        stopAutoScroll();
+  coastToStop();
 
         driver = 'auto';
         try {
@@ -10357,7 +11147,7 @@ let _toast = function (msg, opts) {
       setHybrid(false);
       stopASRorVAD();
       PLL.tune({ maxBias: 0 });
-      stopAutoScroll();
+  coastToStop();
       startAutoScroll(); // fallback to auto-only
       mode = 'AUTO_ONLY';
       driver = 'auto';
@@ -10403,7 +11193,7 @@ let _toast = function (msg, opts) {
         });
       });
       return true;
-    } catch {
+    } catch (e) {
       console.warn('ASR start failed:', e);
       return false;
     }
@@ -10416,7 +11206,7 @@ let _toast = function (msg, opts) {
       try {
         __recorder?.stop?.();
       } catch {}
-    } catch {
+    } catch (e) {
       console.warn('ASR stop failed:', e);
     }
   }
@@ -10492,9 +11282,20 @@ let _toast = function (msg, opts) {
    * ────────────────────────────────────────────────────────────── */
   async function startCamera() {
     try {
-      if (window.__tpCamera && typeof window.__tpCamera.startCamera === 'function') {
+      // Short-circuit to modern SSOT when active
+      if (window.__tpCamWireActive && window.__tpCamera?.startCamera) {
         try { return await window.__tpCamera.startCamera(); } catch {}
       }
+      // Quick environment/permission diagnostics
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus && setStatus('Camera API not available in this browser');
+          try { window.HUD?.warn?.('cam:error', { reason: 'no_gum' }); } catch {}
+        } else if (!window.isSecureContext && !/^localhost$|^127\.0\.0\.1$/.test(location.hostname || '')) {
+          setStatus && setStatus('Camera requires HTTPS or localhost');
+          try { window.HUD?.warn?.('cam:error', { reason: 'insecure_context' }); } catch {}
+        }
+      } catch {}
       const id = camDeviceSel?.value || undefined;
       const stream = await navigator.mediaDevices.getUserMedia({
         video: id ? { deviceId: { exact: id } } : true,
@@ -10521,11 +11322,13 @@ let _toast = function (msg, opts) {
         // Autoplay might be blocked (iOS). Provide a simple tap-to-start fallback.
         warn('Camera autoplay blocked, waiting for user gesture', err);
         setStatus('Tap the video to start the camera');
+        try { window.HUD?.log?.('cam:autoplay_block'); } catch {}
         const onTap = async () => {
           try {
             await camVideo.play();
             setStatus('');
             camVideo.removeEventListener('click', onTap);
+            try { window.HUD?.log?.('cam:tap_play'); } catch {}
           } catch {}
         };
         camVideo.addEventListener('click', onTap, { once: true });
@@ -10537,6 +11340,7 @@ let _toast = function (msg, opts) {
       applyCamOpacity();
       applyCamMirror();
       camStream = stream;
+      try { window.HUD?.log?.('cam:start', { tracks: (stream?.getVideoTracks?.()||[]).length|0 }); } catch {}
       wantCamRTC = true;
       // Kick off WebRTC mirroring if display is open/ready
       try {
@@ -10545,6 +11349,20 @@ let _toast = function (msg, opts) {
       populateDevices();
     } catch (e) {
       warn('startCamera failed', e);
+      try {
+        const name = (e && (e.name || e.code)) || 'Error';
+        let msg = 'Camera failed: ' + (e && (e.message || String(e)));
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          msg = 'Camera permission denied — allow access and try again';
+        } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+          msg = 'No matching camera device — pick a different device';
+        } else if (!window.isSecureContext && !/^localhost$|^127\.0\.0\.1$/.test(location.hostname || '')) {
+          msg = 'Insecure context — use HTTPS or localhost to access camera';
+        }
+        setStatus && setStatus(msg);
+        try { _toast && _toast(msg, { type: 'error' }); } catch {}
+        try { window.HUD?.warn?.('cam:error', { e: (e && (e.name||e.code)) || 'unknown' }); } catch {}
+      } catch {}
     }
   }
   function watchCamTracks(stream) {
@@ -11137,7 +11955,6 @@ let _toast = function (msg, opts) {
         panel.className = 'hidden';
         panel.style.cssText =
           'position:fixed; right:10px; top:44px; z-index:99999; max-width:420px; background:#0e141b; border:1px solid var(--edge); border-radius:12px; box-shadow:0 8px 28px rgba(0,0,0,.45); padding:10px; color:var(--fg); font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;';
-        panel.innerHTML =
           '<div style="margin:4px 0 6px; opacity:.8">Quick startup checks</div><div id="selfChecksList"></div>';
         document.body.appendChild(panel);
         document.addEventListener('click', (e) => {
@@ -11159,6 +11976,43 @@ let _toast = function (msg, opts) {
 
       bar.onclick = () => {
         panel.classList.toggle('hidden');
+        panel.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <strong style="font-size:12px;">Matcher Tuning</strong>
+            <button data-close style="background:none;border:0;color:#ccc;cursor:pointer;font-size:14px;">✕</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 60px;gap:8px;">
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>SIM</span>
+              <input data-k="SIM_THRESHOLD" type="number" step="0.01" min="0" max="1">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Win+</span>
+              <input data-k="MATCH_WINDOW_AHEAD" type="number" step="10" min="10" max="1000">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Win-</span>
+              <input data-k="MATCH_WINDOW_BACK" type="number" step="1" min="0" max="200">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Strict</span>
+              <input data-k="STRICT_FORWARD_SIM" type="number" step="0.01" min="0" max="1">
+            </label>
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span>Jump</span>
+              <input data-k="MAX_JUMP_AHEAD_WORDS" type="number" step="1" min="1" max="120">
+            </label>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
+            <button data-apply style="flex:1 1 auto;">Apply</button>
+            <button data-save style="flex:1 1 auto;">Save</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+            <input data-enable type="checkbox"> Override presets
+          </label>
+          <div data-tune-status style="font-size:11px;color:#8ec;margin-top:2px;height:14px;"></div>
+          <div style="font-size:10px;color:#999;margin-top:4px;">Ctrl+Alt+T to re-open</div>
+        `;
       };
     } catch {
       try {
@@ -11202,6 +12056,7 @@ let _toast = function (msg, opts) {
     const konami = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
     let pos = 0;
     window.addEventListener('keydown', (e) => {
+      if (window.isTyping?.() || e.__tpTyping) return; // skip sequence when typing
       const code = e.keyCode || e.which;
       pos = code === konami[pos] ? pos + 1 : 0;
       if (pos === konami.length) {
@@ -11314,6 +12169,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     about.classList.remove('hidden');
   }
   window.addEventListener('keydown', (e) => {
+    if (window.isTyping?.() || e.__tpTyping) return;
     if (e.ctrlKey && e.altKey && e.key?.toLowerCase?.() === 'k') {
       e.preventDefault();
       showAbout();
@@ -11323,7 +12179,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
 
   // ── Auto-scroll fine control (micro + coarse) ─────────────────────────
   (function setupAutoSpeedControls() {
-    const AUTO_MIN = 0,
+    const AUTO_MIN = 5,
       AUTO_MAX = 300,
       STEP_FINE = 1,
       STEP_COARSE = 5;

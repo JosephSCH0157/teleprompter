@@ -1,59 +1,503 @@
+// --- Hard dup-boot guard (very top of module) ---
+if (window.__tpBooted) {
+  console.warn('[src/index] duplicate boot blocked; first =', window.__tpBooted);
+  throw new Error('dup-boot');
+}
+window.__tpBooted = 'index.module';
+window.__tpBootCount = (window.__tpBootCount || 0) + 1;
+// Camera SSOT — TS owns the camera stack.
+try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
+
+// --- HUD SSOT (dev) ---
+(() => {
+  try {
+    const HUD_FLAG = 'tp_dev_hud_v1';
+    if (window.__tpHudWireActive) return; // already installed
+    window.__tpHudWireActive = true;
+
+    function ensureHudRoot() {
+      try {
+        let r = document.getElementById('hud-root');
+        if (!r) {
+          r = document.createElement('div');
+          r.id = 'hud-root';
+          r.className = 'hud-root hidden';
+          r.setAttribute('aria-hidden', 'true');
+          r.setAttribute('inert', '');
+          document.body.appendChild(r);
+        }
+        return r;
+      } catch { return null; }
+    }
+
+    const root = ensureHudRoot();
+    
+    // Create a simple event bus for HUD components (compat shim before full bus import)
+    const hudBus = new EventTarget();
+    const api = window.__tpHud = window.__tpHud || {
+      enabled: false,
+      root,
+      bus: {
+        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+        on: (type, fn) => {
+          try {
+            const h = (e) => { try { fn(e.detail); } catch {} };
+            hudBus.addEventListener(type, h);
+            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
+          } catch {}
+        },
+      },
+      setEnabled(on) {
+        try {
+          this.enabled = !!on;
+          if (this.root) {
+            this.root.classList.toggle('hidden', !on);
+            if (on) {
+              this.root.removeAttribute('aria-hidden');
+              this.root.removeAttribute('inert');
+            } else {
+              this.root.setAttribute('aria-hidden', 'true');
+              this.root.setAttribute('inert', '');
+            }
+          }
+          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
+          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
+        } catch {}
+      },
+      log(...args) {
+        try {
+          if (!this.enabled || !this.root) return;
+          const pre = document.createElement('pre');
+          pre.className = 'hud-line';
+          pre.textContent = args.map(a => {
+            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
+          }).join(' ');
+          this.root.appendChild(pre);
+          this.root.scrollTop = this.root.scrollHeight;
+        } catch {}
+      },
+    };
+
+    // Hydrate from storage
+    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
+    // Unify legacy HUD log calls to the SSOT
+    try { if (!window.HUD) window.HUD = api; } catch {}
+    
+    // Listen to new typed transcript and state events (both captions and legacy speech)
+    try {
+      const logTx = (d) => {
+        if (!d) return;
+        api.log('captions:tx', {
+          partial: d.partial,
+          final: d.final,
+          conf: d.confidence?.toFixed(2),
+          len: d.text?.length ?? 0,
+          idx: d.lineIndex,
+          harness: d.harness,
+        });
+      };
+      const logState = (d) => {
+        if (!d) return;
+        api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
+      };
+      
+      // Primary captions events
+      window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:captions:state', (e) => logState(e.detail));
+      
+      // Legacy speech events (for backwards compatibility)
+      window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:speech:state', (e) => logState(e.detail));
+    } catch {}
+    
+    // Announce readiness
+    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
+  } catch {}
+})();
+
 // Minimal bootstrap for the new `src/` modular layout.
 // This file intentionally performs a very small set of init actions and
 // delegates the heavy lifting to the legacy loader until a full migration is done.
 
 import * as Adapters from './adapters/index.js';
+// Provide legacy-compatible app store for settings/state persistence (exposes window.__tpStore)
+import * as Mic from './adapters/mic.js';
+import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
-import { initAutoScroll } from './features/autoscroll.js';
+import * as Auto from './features/autoscroll.js';
+import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
+import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
-import { initToasts } from './features/toasts.js';
+import './state/app-store.js';
+// Ensure inline formatter is present (provides window.formatInlineMarkup)
+import '../ui/format.js';
+import '../ui/inline-shim.js';
+// Legacy wrapSelection handler for toolbar buttons (ensures global exists in dev/CI)
+import '../ui/wrap-shim.js';
+// Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
+// Lightweight toast system (attaches window.toast/initToastContainer)
+import '../ui/toasts.js';
+import './dev/dup-init-check.js';
+import './media/display-bridge.js';
+// Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
+import './media/camera.js';
 import * as UI from './ui/dom.js';
+// Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
+import '../ui/typography-bridge.js';
+// Scripts Save/Load UI (dropdown + buttons wiring)
+import '../ui/scripts-ui.js';
+// OBS wiring: ensure Test button is always handled (claims OBS controls before legacy wiring)
+import { wireObsPersistentUI } from './wiring/wire.js';
+// Settings overlay and media/OBS wiring (module path)
+import './ui/settings.js';
+// HUD: minimal ASR stats line (dev only)
+import './hud/asr-stats.js';
+import './hud/rec-stats.js';
 
-// Dev-only helpers and safety stubs: keep out of prod bundle
+// Single-source mic adapter facade for legacy callers
 try {
-  if (window?.__TP_BOOT_INFO?.isDev) {
-  // Load debug helper dynamically in dev
-    import('../debug-tools.js').catch(() => {});
-  // Load legacy self-checks (provides window.runSelfChecks)
-  import('../ui/selfChecks.js').catch(() => {});
-    // Install safe no-op shims so early UI clicks never throw before adapters/media load
-    // Display bridge (both shapes)
-    window.__tpDisplay = window.__tpDisplay || {
-      openDisplay: function(){}, closeDisplay: function(){}, sendToDisplay: function(){}, handleMessage: function(){}
-    };
-    if (!window.openDisplay) window.openDisplay = function(){};
-    if (!window.closeDisplay) window.closeDisplay = function(){};
-    if (!window.sendToDisplay) window.sendToDisplay = function(){};
-    // Mic
-    window.__tpMic = window.__tpMic || { requestMic: async function(){}, releaseMic: function(){} };
-    // Camera: include both alias sets so any caller shape is safe
-    window.__tpCamera = window.__tpCamera || {};
-    window.__tpCamera.start = window.__tpCamera.start || (async function(){});
-    window.__tpCamera.stop = window.__tpCamera.stop || (function(){});
-    window.__tpCamera.setDevice = window.__tpCamera.setDevice || (function(){});
-    window.__tpCamera.setSize = window.__tpCamera.setSize || (function(){});
-    window.__tpCamera.setOpacity = window.__tpCamera.setOpacity || (function(){});
-    window.__tpCamera.setMirror = window.__tpCamera.setMirror || (function(){});
-    window.__tpCamera.startCamera = window.__tpCamera.startCamera || (async function(){});
-    window.__tpCamera.stopCamera = window.__tpCamera.stopCamera || (function(){});
-    window.__tpCamera.switchCamera = window.__tpCamera.switchCamera || (function(){});
-    window.__tpCamera.applyCamSizing = window.__tpCamera.applyCamSizing || (function(){});
-    window.__tpCamera.applyCamOpacity = window.__tpCamera.applyCamOpacity || (function(){});
-    window.__tpCamera.applyCamMirror = window.__tpCamera.applyCamMirror || (function(){});
-  }
+  window.__tpMic = {
+    requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
+    releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
+  };
 } catch {}
+
+// Feature-level idempotence helper (belt & suspenders)
+function initOnce(name, fn) {
+  try {
+    window.__tpInit = window.__tpInit || {};
+    if (window.__tpInit[name]) return;
+    window.__tpInit[name] = 1;
+    return fn();
+  } catch (e) {
+    try { console.warn(`[init:${name}] failed`, e); } catch {}
+  }
+}
+
+
+// --- Load legacy pieces as modules (no classic script injection) ---
+async function loadLegacyPiecesAsModules() {
+  const mods = [
+    '../eggs.js',
+    // Ensure OBS bridge is present before recorders.js so the recorder registry
+    // can wrap 'obs' with a StartRecord-capable bridge adapter.
+    '../adapters/obsBridge.js',
+    '../adapters/bridge.js',
+    '../adapters/obs.js',
+    '../recorders.js',
+    '../debug-tools.js',
+    '../debug-seed.js',
+    '../io-anchor.js',
+    '../help.js',
+    '../scroll-helpers.js',
+    '../scroll-control.js',
+  ];
+  await Promise.all(mods.map(async (m) => {
+    try {
+      await import(m);
+      try { window.__tpRegisterInit && window.__tpRegisterInit('import:'+m); } catch {}
+    } catch (err) {
+      console.error(`[src/index] Failed to import ${m}:`, err);
+      if (window && window.__TP_IMPORT_ERRORS) {
+        window.__TP_IMPORT_ERRORS.push({ mod: m, error: String(err && err.message || err) });
+      } else if (window) {
+        window.__TP_IMPORT_ERRORS = [{ mod: m, error: String(err && err.message || err) }];
+      }
+    }
+  }));
+  console.log('[src/index] module imports complete');
+}
 
 async function boot() {
   try {
+    // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
+    await loadLegacyPiecesAsModules();
+    // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
+    try {
+      // Ensure HUD installer exists (load fallback if not already present)
+      if (typeof window.__tpInstallHUD !== 'function') {
+        try { await import('../debug-tools.js'); } catch {}
+      }
+      const needHudInstall = (typeof window.__tpInstallHUD === 'function') && (
+        !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
+      );
+      if (needHudInstall) {
+        window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
+        // Ensure HUD mount root is visible (dev stub may have hidden it)
+        try {
+          const r = document.getElementById('hud-root');
+          if (r) {
+            r.classList && r.classList.remove('hidden');
+            r.removeAttribute && r.removeAttribute('aria-hidden');
+            r.removeAttribute && r.removeAttribute('inert');
+          }
+        } catch {}
+        // Auto-show HUD in dev sessions for visibility
+        try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch {}
+      }
+      // Expose a tiny ensureHud() poke for dev; prefer full HUD toggle, else fallback
+      if (typeof window.ensureHud !== 'function') {
+        window.ensureHud = () => {
+          try {
+            const need = (typeof window.__tpInstallHUD === 'function') && (
+              !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
+            );
+            if (need) { window.__tpHud = window.__tpInstallHUD({ hotkey: '~' }); }
+            if (window.__tpHud?.toggle) { window.__tpHud.toggle(); return; }
+          } catch {}
+          try { window.toggleHud?.(); } catch {}
+        };
+      }
+      // HUD safety hook: lightweight overlay + global toggleHotkey
+      if (typeof window.toggleHud !== 'function') {
+        window.toggleHud = () => {
+          try {
+            // Prefer full HUD if available
+            if (window.__tpHud && (typeof window.__tpHud.toggle === 'function' || typeof window.__tpHud.show === 'function')) {
+              if (typeof window.__tpHud.toggle === 'function') return void window.__tpHud.toggle();
+              const shown = !!window.__tpHud?.isVisible?.();
+              return shown ? void window.__tpHud.hide?.() : void window.__tpHud.show?.();
+            }
+          } catch {}
+          // Fallback: tiny in-page pill (bottom-right, capture-safe)
+          try {
+            let el = document.getElementById('tp-hud-lite');
+            if (!el) {
+              el = document.createElement('div');
+              el.id = 'tp-hud-lite';
+              el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:999999;background:#111;color:#0f0;padding:6px 10px;border-radius:8px;border:1px solid #0f0;font:12px/1.2 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4)';
+              el.textContent = 'HUD ready';
+              document.body.appendChild(el);
+            }
+            el.hidden = !el.hidden;
+          } catch {}
+        };
+      }
+      if (!window.__tpHudSafetyHookInstalled) {
+        window.__tpHudSafetyHookInstalled = true;
+        window.addEventListener('keydown', (e) => {
+          try {
+            const k = (e.key || '').toLowerCase();
+            if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
+              e.stopImmediatePropagation();
+              // eslint-disable-next-line no-restricted-syntax
+              e.preventDefault();
+              window.toggleHud?.();
+            }
+          } catch {}
+        }, { capture: true });
+      }
+      // If HUD is present, mirror speech gates to it for visibility
+      try {
+        const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
+        // Throttled dB logger → emits speech:db event and (optionally) HUD log
+        const logDb = (() => {
+          let lastDb = -Infinity, lastTs = 0;
+          return (db) => {
+            try {
+              const now = performance.now();
+              if (!(typeof db === 'number' && isFinite(db))) return;
+              if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
+                lastDb = db; lastTs = now;
+                // Always fire an event for listeners
+                try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
+                // HUD breadcrumb only if not muted
+                try {
+                  const off = localStorage.getItem('tp_hud_quiet_db') === '1';
+                  if (!off && !window.__TP_QUIET) logHud('speech:db', { db });
+                } catch {}
+              }
+            } catch {}
+          };
+        })();
+        const __vadState = { speaking: false };
+        window.addEventListener('tp:db', (ev) => {
+          try {
+            const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
+            if (db == null) return;
+            // Always send the throttled db event; HUD log is internally muted or throttled
+            logDb(db);
+          } catch {}
+        });
+        window.addEventListener('tp:vad', (ev) => {
+          try {
+            const speaking = !!(ev && ev.detail && ev.detail.speaking);
+            __vadState.speaking = speaking;
+            logHud('speech:vad', { speaking });
+          } catch {}
+        });
+        // Small helper to toggle HUD dB logs at runtime (persists in localStorage)
+        try {
+          if (!window.setHudQuietDb) {
+            window.setHudQuietDb = (on) => {
+              try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
+              try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
+            };
+          }
+        } catch {}
+      } catch {}
+    } catch {}
+    try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
     // Dev-only parity guard: verifies key UI elements and wiring exist
     try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
     await Core.init();
-    UI.bindStaticDom();
+
+    // Default: mute HUD dB breadcrumbs in dev unless explicitly enabled
+    try {
+      if (window.__TP_DEV) {
+        const k = 'tp_hud_quiet_db';
+        const has = localStorage.getItem(k);
+        if (has == null) localStorage.setItem(k, '1');
+      }
+    } catch {}
+
+    // Pre-seed a wider default script column if user hasn't set one yet
+    try {
+      const KEY = 'tp_typography_v1';
+      let st; try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { st = {}; }
+      const existing = st && st.main && st.main.maxLineWidthCh;
+      if (!(typeof existing === 'number' && isFinite(existing))) {
+        document.documentElement.style.setProperty('--tp-maxch', '95');
+        st.main = { ...(st.main || {}), maxLineWidthCh: 95 };
+        try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {}
+        try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+        // Best-effort broadcast to display so it aligns if already open
+        try {
+          const payload = { kind: 'tp:typography', source: 'main', display: 'display', t: { maxLineWidthCh: 95 } };
+          try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
+          try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
+        } catch {}
+      }
+    } catch {}
+
+    // One-time migration: tp_vad_profile_v1 -> tp_asr_profiles_v1 (unified ASR store)
+    try {
+      const MIG_FLAG = 'tp_asr_profiles_v1_migrated';
+      const OLD_KEY = 'tp_vad_profile_v1';
+      const NEW_KEY = 'tp_asr_profiles_v1';
+      if (!localStorage.getItem(MIG_FLAG)) {
+        const raw = localStorage.getItem(OLD_KEY);
+        if (raw) {
+          try {
+            const p = JSON.parse(raw) || {};
+            const now = Date.now();
+            const deviceId = String((window.__tpStore && window.__tpStore.get && window.__tpStore.get('micDevice')) || '') || '';
+            const id = `vad::${deviceId || 'unknown'}`;
+            const unified = {
+              id,
+              label: p.label || 'VAD Cal',
+              capture: {
+                deviceId,
+                sampleRateHz: p.sr || 48000,
+                channelCount: 1,
+                echoCancellation: !!p.aec,
+                noiseSuppression: !!p.ns,
+                autoGainControl: !!p.agc,
+              },
+              cal: {
+                noiseRmsDbfs: Number(p.noise || p.noiseDb || -50),
+                noisePeakDbfs: Number(p.noisePeak || (p.noiseDb != null ? p.noiseDb + 6 : -44)),
+                speechRmsDbfs: Number(p.speech || p.speechDb || -20),
+                speechPeakDbfs: Number(p.speechPeak || (p.speechDb != null ? p.speechDb + 6 : -14)),
+                snrDb: Number((p.speech || p.speechDb || -20) - (p.noise || p.noiseDb || -50)),
+              },
+              vad: {
+                tonDb: Number(p.tonDb != null ? p.tonDb : -28),
+                toffDb: Number(p.toffDb != null ? p.toffDb : -34),
+                attackMs: Number(p.attackMs != null ? p.attackMs : 80),
+                releaseMs: Number(p.releaseMs != null ? p.releaseMs : 300),
+              },
+              filters: {},
+              createdAt: now,
+              updatedAt: now,
+            };
+            // Upsert into unified store (localStorage)
+            let asrState;
+            try { asrState = JSON.parse(localStorage.getItem(NEW_KEY) || '{}') || {}; } catch { asrState = {}; }
+            asrState.profiles = asrState.profiles || {};
+            asrState.profiles[unified.id] = unified;
+            if (!asrState.activeProfileId) asrState.activeProfileId = unified.id;
+            try { localStorage.setItem(NEW_KEY, JSON.stringify(asrState)); } catch {}
+            // Cleanup old key and mark migrated
+            try { localStorage.removeItem(OLD_KEY); } catch {}
+            try { localStorage.setItem(MIG_FLAG, '1'); } catch {}
+          } catch {}
+        }
+      }
+    } catch {}
+  UI.bindStaticDom();
+  try { window.__tpRegisterInit && window.__tpRegisterInit('ui:bindStaticDom'); } catch {}
+  // Choose and expose the active scroll root so legacy/TS controllers agree (main vs display)
+  try {
+    function getScrollRoot(){
+      try {
+        const disp = (window && window.__tpDisplayViewerEl) || null;
+        if (disp && disp.isConnected) return disp;
+      } catch {}
+      try {
+        const inPage = document.getElementById('viewer') || document.querySelector('[data-role="viewer"]');
+        return inPage || (document.scrollingElement || document.documentElement);
+      } catch {}
+      return document.documentElement;
+    }
+    const root = getScrollRoot();
+    try { window.__tpScrollRoot = root; } catch {}
+  } catch {}
+  // Ensure autoscroll engine is initialized before wiring router/UI
+  try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
+  // Force engine OFF at boot; app shouldn't scroll until user starts speech sync or manually toggles.
+  try { Auto.setEnabled && Auto.setEnabled(false); } catch {}
+  try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch {}
+
+  // Provide a minimal global scroll controller facade for dev/CI bridges and diagnostics.
+  // This delegates to the single authoritative Auto engine to avoid double-ownership.
+  try {
+    if (!window.__scrollCtl) {
+      window.__scrollCtl = {
+        start: () => { try { Auto.setEnabled(true); } catch {} },
+        stop: () => { try { Auto.setEnabled(false); } catch {} },
+        setSpeed: (s) => { try { Auto.setSpeed(s); } catch {} },
+        isActive: () => {
+          try { const st = (typeof Auto.getState === 'function') ? Auto.getState() : null; return !!(st && st.enabled); } catch { return false; }
+        },
+      };
+    }
+  } catch {}
+
+  // Centralized Settings mic button delegation (capture so we win races) — bind once
+  try {
+    if (!window.__tpSettingsDelegatesActive) {
+      window.__tpSettingsDelegatesActive = true;
+      const clickSel = [
+        '#settingsRequestMicBtn',
+        '[data-action="settings-request-mic"]',
+        '#settingsReleaseMicBtn',
+        '[data-action="settings-release-mic"]',
+      ].join(',');
+      document.addEventListener('click', (ev) => {
+        try {
+          const el = ev.target?.closest?.(clickSel);
+          if (!el) return;
+          // eslint-disable-next-line no-restricted-syntax
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          if (el.matches('#settingsRequestMicBtn,[data-action="settings-request-mic"]')) {
+            try { Mic.requestMic?.(); } catch {}
+          } else if (el.matches('#settingsReleaseMicBtn,[data-action="settings-release-mic"]')) {
+            try { Mic.releaseMic?.(); } catch {}
+          }
+        } catch {}
+      }, true);
+    }
+  } catch {}
+
+  // Party-mode eggs (UI + bus triggers)
+  try { Eggs.install({ bus }); } catch {}
 
     // Easter eggs (party mode on dB meter, Konami theme, etc.)
     try {
@@ -75,6 +519,15 @@ async function boot() {
     // Upload handler: expose window._uploadFromFile for Upload button; supports .docx via mammoth
     try { await import('../ui/upload.js'); } catch (e) { console.warn('[src/index] upload handler init failed', e); }
 
+  // Minimal script renderer for module boot path
+  try { await import('./ui/render.js'); } catch (e) { console.warn('[src/index] render init failed', e); }
+
+    // Make camera overlay draggable (top-right by default; drag to reposition; dblclick to reset)
+    try {
+      const cam = await import('../ui/cam-draggable.js');
+      try { (cam && (cam.initCamDraggable || cam.default?.initCamDraggable))?.(); } catch {}
+    } catch (e) { console.warn('[src/index] cam-draggable init failed', e); }
+
     // Legacy matcher constants for parity (dev only)
     try {
       if (window?.__TP_BOOT_INFO?.isDev) {
@@ -90,31 +543,253 @@ async function boot() {
     try { await (Adapters.obsAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] obsAdapter.init failed', e); }
     try { await (Adapters.recorderAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] recorderAdapter.init failed', e); }
 
-    // Initialize features
-    try { initPersistence(); } catch (e) { console.warn('[src/index] initPersistence failed', e); }
-    try { initTelemetry(); } catch (e) { console.warn('[src/index] initTelemetry failed', e); }
-    try { initToasts(); } catch (e) { console.warn('[src/index] initToasts failed', e); }
-    try { initScroll(); } catch (e) { console.warn('[src/index] initScroll failed', e); }
-    try { initHotkeys(); } catch (e) { console.warn('[src/index] initHotkeys failed', e); }
-
-    // Wire Auto-scroll controls (independent of speech/mic)
+    // Expose OBS/Recorder adapter instances to the global so non-module settings code can connect
     try {
-      // pick a real scrollable element in priority: #viewer -> #script -> page
-      const getScroller = () => {
-        const v = document.getElementById('viewer');
-        if (v && v.scrollHeight > v.clientHeight + 1) return v;
-        const scr = document.getElementById('script');
-        if (scr && scr.scrollHeight > scr.clientHeight + 1) return scr;
-        return document.scrollingElement || document.documentElement;
+      // Expose app bus for QA hooks and integrations
+      window.__tpBus = bus;
+      if (!window.__tpOBS && Adapters.obsAdapter?.create) {
+        window.__tpOBS = Adapters.obsAdapter.create();
+      }
+      // Bridge mic adapter to legacy-global shape for Settings overlay and other consumers
+      try {
+        if (
+          Mic && (typeof Mic.requestMic === 'function' || typeof Mic.releaseMic === 'function') &&
+          (!window.__tpMic || typeof window.__tpMic.requestMic !== 'function' || typeof window.__tpMic.releaseMic !== 'function')
+        ) {
+          window.__tpMic = {
+            requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
+            releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
+          };
+        }
+      } catch {}
+      if (!window.__tpRecorder && Adapters.recorderAdapter?.create) {
+        window.__tpRecorder = Adapters.recorderAdapter.create();
+      }
+    } catch {}
+
+    // Initialize features (idempotent)
+    initOnce('persistence', () => { try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); } });
+    initOnce('telemetry',   () => { try { initTelemetry();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); } });
+    try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
+    initOnce('scroll',      () => { try { initScroll();      try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); } });
+    initOnce('hotkeys',     () => { try { initHotkeys();     try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); } });
+
+    // Install speech start/stop delegator
+    initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
+
+    // Try to install ASR feature (probe before import to avoid noisy 404s)
+    try {
+      // Tiny helper: HEAD probe without caching
+      const headOk = async (url) => {
+        try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return !!(r && r.ok); }
+        catch { return false; }
       };
 
-      const autoToggle = document.getElementById('autoToggle');
-      const autoSpeed = /** @type {HTMLInputElement|null} */ (document.getElementById('autoSpeed'));
-      const auto = initAutoScroll(getScroller);
-      auto.bindUI(autoToggle, autoSpeed);
-    } catch (e) { console.warn('[src/index] initAutoScroll failed', e); }
+      // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
+      // Prefer dev module first so we always run the freshest code in dev
+      const candidates = [
+        // Correct relative path from src/index.js to the dev JS entry
+        './index-hooks/asr.js',
+        '/dist/index-hooks/asr.js',
+        '/dist/asr.js',
+      ];
 
-    console.log('[src/index] boot completed');
+      let asrEntry = null;
+      for (const c of candidates) {
+        // Resolve module-relative specs for probing so fetch doesn't use document base
+        let probeUrl = c;
+        try {
+          if (c.startsWith('./')) {
+            const u = new URL(c, import.meta.url);
+            probeUrl = u.href; // absolute URL to this module
+          }
+        } catch {}
+        if (await headOk(probeUrl)) { asrEntry = c.startsWith('./') ? probeUrl : c; break; }
+      }
+
+      // Dev-friendly fallback: if HEAD probes fail (server may not support HEAD), attempt a single import of the dev path.
+      if (!asrEntry) {
+        try {
+          const fallback = './index-hooks/asr.js';
+          const mod = await import(fallback);
+          const init = (mod && (mod.initAsrFeature || mod.default));
+          if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch {} }
+          else { try { console.warn('[ASR] fallback missing initAsrFeature', fallback); } catch {} }
+        } catch {
+          try { console.info('[ASR] no module found, skipping init'); } catch {}
+        }
+      } else {
+        try {
+          const mod = await import(asrEntry);
+          const init = (mod && (mod.initAsrFeature || mod.default));
+          if (typeof init === 'function') {
+            init();
+            try { console.info('[ASR] initialized from', asrEntry); } catch {}
+          } else {
+            try { console.warn('[ASR] module missing initAsrFeature', asrEntry); } catch {}
+          }
+        } catch (e) {
+          console.warn('[ASR] failed to init', asrEntry, e);
+        }
+      }
+    } catch (e) { console.warn('[src/index] ASR module probe/import failed', e); }
+
+    // Wire Auto-scroll controls and install new Scroll Router (Step/Hybrid)
+    try {
+      // Prefer the compiled TS router when available; fall back to JS router
+      try {
+        // Robust dynamic import sequence with graceful legacy fallback.
+        async function tryImport(spec, flag) {
+          try {
+            const m = await import(spec);
+            if (m) {
+              try { flag && (window[flag] = true); } catch {}
+              return m;
+            }
+          } catch (err) {
+            try { console.warn('[router] import failed', spec, err && err.message); } catch {}
+          }
+          return null;
+        }
+        const candidates = [
+          { spec: '/dist/features/scroll-router.js', flag: '__tpScrollRouterTsActive' },
+          { spec: './features/scroll-router.js',     flag: '__tpScrollRouterJsActive' }
+        ];
+        let mod = null;
+        for (const c of candidates) {
+          mod = await tryImport(c.spec, c.flag);
+          if (mod) break;
+        }
+        if (!mod) {
+          // Final fallback: inject legacy monolith (teleprompter_pro.js) if router modules missing.
+          try {
+            console.warn('[router] all module candidates failed; attempting legacy fallback script');
+            const s = document.createElement('script');
+            s.src = './teleprompter_pro.js';
+            s.defer = true;
+            s.onload = () => { try { console.info('[router] legacy script loaded'); } catch {} };
+            document.head.appendChild(s);
+          } catch {}
+        } else {
+          // Pass the Auto API to the router so it can drive the engine.
+          try {
+            if (typeof mod.installScrollRouter === 'function') {
+              mod.installScrollRouter({ auto: Auto });
+              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {}
+            } else {
+              console.warn('[router] installScrollRouter not found on module');
+            }
+          } catch (e) {
+            console.warn('[src/index] installScrollRouter failed', e);
+          }
+        }
+      } catch (e) { console.warn('[src/index] router import sequence failed', e); }
+      // Resilient event delegation (works in headless + when nodes re-render)
+      let __lastAutoToggleAt = 0;
+      const __applyAutoChip = () => {
+        try {
+          const st = (Auto && typeof Auto.getState === 'function') ? Auto.getState() : null;
+          const chip = document.getElementById('autoChip');
+          if (chip && st) {
+            chip.textContent = st.enabled ? 'Auto: On' : 'Auto: Manual';
+            chip.setAttribute('aria-live','polite');
+            chip.setAttribute('aria-atomic','true');
+          }
+        } catch {}
+      };
+      // Let the Scroll Router own #autoToggle behavior to avoid double-ownership.
+      // We still delegate clicks for speed +/- and mic buttons.
+      document.addEventListener('click', (e) => {
+        const t = e && e.target;
+        // If the new TS Scroll Router is active, it owns auto +/- and intent controls
+        try { if (window.__tpScrollRouterTsActive) { /* delegate to TS router */ } else {
+          try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
+          try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
+        } } catch {}
+        try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
+        try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
+      }, { capture: true });
+
+      // Unified auto-speed input + wheel handling (resilient delegation)
+      try {
+        // Use event delegation to handle input changes even if DOM is replaced
+        document.addEventListener('input', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id === 'autoSpeed') {
+              Auto.setSpeed(t.value);
+            }
+          } catch {}
+        }, { capture: true });
+
+        document.addEventListener('change', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id === 'autoSpeed') {
+              Auto.setSpeed(t.value);
+            }
+          } catch {}
+        }, { capture: true });
+
+        // Wheel on speed input adjusts ±0.5 (Shift: ±5), rounded to one decimal
+        document.addEventListener('wheel', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id !== 'autoSpeed') return;
+            // eslint-disable-next-line no-restricted-syntax
+            ev.preventDefault();
+            const step = ev.shiftKey ? 5 : 0.5;
+            const dir = (ev.deltaY < 0) ? +1 : -1;
+            const cur = Number(t.value || '0') || 0;
+            const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 10) / 10));
+            t.value = String(next);
+            Auto.setSpeed(next);
+          } catch {}
+        }, { passive: false, capture: true });
+      } catch {}
+
+  // Ensure OBS persistent UI is wired and boot-restore applied (idempotent)
+  try { wireObsPersistentUI && wireObsPersistentUI(); } catch {}
+
+      // Stop autoscroll with a short buffer after speech stops to avoid abrupt cutoffs
+      try {
+        let autoStopTimer = null;
+        let speechActiveLatest = false;
+        window.addEventListener('tp:speech-state', (ev) => {
+          const isRunning = !!(ev && ev.detail && ev.detail.running);
+          speechActiveLatest = isRunning;
+          try {
+            if (isRunning) {
+              if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
+              return;
+            }
+          } catch {}
+          // Delay stop by 2.5s to allow natural sentence tails
+          if (autoStopTimer) { try { clearTimeout(autoStopTimer); } catch {} }
+          autoStopTimer = setTimeout(() => {
+            try { window.__scrollCtl?.stop?.(); } catch {}
+            try { Auto.setEnabled(false); } catch {}
+            try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+            autoStopTimer = null;
+          }, 2500);
+        });
+
+        // Guard: when a new script renders, ensure autoscroll is OFF unless speech is active.
+        window.addEventListener('tp:script-rendered', () => {
+          try {
+            if (!speechActiveLatest) {
+              Auto.setEnabled?.(false);
+            }
+          } catch {}
+        });
+      } catch {}
+    } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }
+
+    // Typography bridge is installed via './ui/typography-bridge.js'
+
+  // Mark init as complete for headless checks/smoke tests
+  try { window.__tp_init_done = true; } catch {}
+  console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);

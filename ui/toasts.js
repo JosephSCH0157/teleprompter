@@ -10,7 +10,8 @@ function ensureContainer() {
   c = document.createElement('div');
   c.id = CONTAINER_ID;
   c.className = 'tp-toast-container';
-  document.body.appendChild(c);
+  // Append as early as possible; if body isn't ready, attach to documentElement
+  (document.body || document.documentElement).appendChild(c);
   return c;
 }
 function prune(container) {
@@ -27,7 +28,17 @@ function toast(msg, opts) {
     prune(container);
     const t = document.createElement('div');
     t.className = 'tp-toast show ' + (opts && opts.type ? String(opts.type) : '');
-    t.textContent = String(msg || '');
+    // message + optional action button
+    const txt = document.createElement('span');
+    txt.textContent = String(msg || '');
+    t.appendChild(txt);
+    if (opts && typeof opts.action === 'function') {
+      const btn = document.createElement('button');
+      btn.textContent = String(opts.actionLabel || 'Open');
+      btn.className = 'tp-toast-action';
+      btn.addEventListener('click', (ev) => { ev.stopPropagation(); try { opts.action(); } catch {} t.classList.remove('show'); setTimeout(() => t.remove(), 120); });
+      t.appendChild(btn);
+    }
     t.addEventListener('click', () => {
       t.classList.remove('show');
       setTimeout(() => t.remove(), 120);
@@ -66,4 +77,18 @@ try {
 
 // Note: we intentionally do NOT attach this API to `window` here.
 // Consumers should import { toast } from './ui/toasts.js'.
+
+// Auto-create the container early so smoke/UI crawlers can detect it reliably.
+// If body isn't ready yet (script in <head>), defer until DOMContentLoaded.
+(function(){
+  try {
+    if (typeof document === 'undefined') return;
+    // Create immediately (falls back to documentElement before body exists)
+    try { ensureContainer(); } catch {}
+    // Also ensure after DOM is ready in case earlier attach was skipped by CSP or other loaders
+    document.addEventListener('DOMContentLoaded', function once(){
+      try { ensureContainer(); } catch {}
+    }, { once: true });
+  } catch {}
+})();
 

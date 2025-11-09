@@ -1,4 +1,6 @@
-# Teleprompter Pro (v1.6.2)
+# Teleprompter Pro (v1.6.4)
+
+![Anvil v1.6.4](https://img.shields.io/badge/Anvil-v1.6.4-blue)
 
 This is a browser-based teleprompter with display mirroring, speech sync, camera overlay, and convenient editing helpers.
 

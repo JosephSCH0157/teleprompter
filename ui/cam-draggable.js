@@ -97,17 +97,23 @@ export function initCamDraggable() {
     } catch {}
   }
 
-  el.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('pointermove', onPointerMove);
-  window.addEventListener('pointerup', onPointerUp);
+  el.addEventListener('pointerdown', onPointerDown, { capture: true });
+  // With pointer capture, move/up events are delivered to the element
+  el.addEventListener('pointermove', onPointerMove);
+  el.addEventListener('pointerup', onPointerUp);
+  el.addEventListener('pointercancel', onPointerUp);
   el.addEventListener('dblclick', onDblClick);
 }
 
-// auto-init when module is loaded (safe no-op if element not present yet)
-document.addEventListener('DOMContentLoaded', function () {
-  try {
+// auto-init when module is loaded; if DOM already ready, run immediately
+try {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      try { initCamDraggable(); } catch {}
+    });
+  } else {
     initCamDraggable();
-  } catch {}
-});
+  }
+} catch {}
 
 export default { initCamDraggable };

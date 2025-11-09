@@ -42,6 +42,22 @@ async function main() {
   const proc = globalThis['process'];
   const strictEnv = (proc && proc.env && (proc.env.PRECOMMIT_STRICT === '1' || proc.env.PRECOMMIT_STRICT === 'true')) || false;
   try {
+    // 0) Guard against JS/TS shadowing (blocks commit unless PRECOMMIT_ALLOW_SHADOW is set)
+    try {
+      if (spawnSync && _require) {
+        const r = _require;
+        const execPath = (globalThis['process'] && globalThis['process'].execPath) || 'node';
+        const ok = run(execPath, [r.resolve('../tools/guard_ts_js_shadow.js')]);
+        if (!ok) {
+          console.error('[precommit-safe] shadow guard failed');
+          if (proc && typeof proc.exit === 'function') proc.exit(1);
+          return 1;
+        }
+      }
+    } catch (e) {
+      console.warn('[precommit-safe] guard failed to run', e && e.message);
+    }
+
     // 1) Try lint-staged (prefer the locally installed binary)
     if (hasBin('lint-staged')) {
       try {
