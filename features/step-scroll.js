@@ -161,18 +161,22 @@ export function installStepScroll(cfg = {}) {
         const isPedalUp = enableF && (e.code === 'F13');
         const isPedalDown = enableF && (e.code === 'F14');
         if (key === 'ArrowUp' || isPedalUp) {
+            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
             e.preventDefault();
             e.shiftKey ? stepBlockFn(-1) : stepLinesFn(-1);
         }
         else if (key === 'ArrowDown' || isPedalDown) {
+            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
             e.preventDefault();
             e.shiftKey ? stepBlockFn(+1) : stepLinesFn(+1);
         }
         else if (key === 'PageUp') {
+            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
             e.preventDefault();
             stepLinesFn(-1, pageLinesN);
         }
         else if (key === 'PageDown') {
+            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
             e.preventDefault();
             stepLinesFn(+1, pageLinesN);
         }

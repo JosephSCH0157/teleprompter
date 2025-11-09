@@ -170,6 +170,7 @@ export function initObsUI() {
             const testBtn = (t && t.closest('#settingsObsTest,#obsTest,[data-action="obs-test"]')) || null;
             if (testBtn) {
                 try {
+                    // eslint-disable-next-line no-restricted-syntax -- prevent form submission/navigation on test button
                     e.preventDefault();
                     e.stopImmediatePropagation();
                 }

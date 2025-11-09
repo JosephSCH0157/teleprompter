@@ -19,6 +19,7 @@ export function installAsrHotkeys() {
                 catch { }
             }
             window.dispatchEvent(new CustomEvent('asr:toggle', { detail: { armed } }));
+            // eslint-disable-next-line no-restricted-syntax -- prevent F9 default browser behavior
             e.preventDefault();
             e.stopPropagation();
         }

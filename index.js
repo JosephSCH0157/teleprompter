@@ -361,6 +361,7 @@ try {
                 try {
                     if (!(e.ctrlKey || e.metaKey))
                         return; // only when user intends zoom-like behavior
+                    // eslint-disable-next-line no-restricted-syntax -- prevent browser zoom, we adjust font size
                     e.preventDefault();
                     const targetDisplay = e.altKey ? 'display' : 'main';
                     const cur = getTypography(targetDisplay).fontSizePx;
@@ -384,6 +385,7 @@ try {
                     try {
                         if (!e.shiftKey || e.ctrlKey || e.metaKey)
                             return; // only Shift, not Ctrl/Cmd
+                        // eslint-disable-next-line no-restricted-syntax -- prevent horizontal scroll, we adjust font size
                         e.preventDefault();
                         const cur = getTypography('main').fontSizePx;
                         const step = 2;

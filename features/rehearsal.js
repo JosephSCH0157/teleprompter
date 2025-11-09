@@ -93,6 +93,7 @@ function keyGuard(e) {
     const nav = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
     const isPedal = (e.code === 'F13' || e.code === 'F14');
     if ((ctrlMeta && kl === 'r') || kl === 'f9' || k === ' ' || k === 'Enter' || nav.includes(k) || isPedal) {
+        // eslint-disable-next-line no-restricted-syntax -- prevent scroll/navigation in rehearsal mode
         e.preventDefault();
         e.stopImmediatePropagation();
         e.stopPropagation();
@@ -194,6 +195,7 @@ function handleDropdownChange(e) {
         if (window.__TP_REHEARSAL && val !== 'rehearsal') {
             if (!confirmExit()) {
                 sel.value = 'rehearsal';
+                // eslint-disable-next-line no-restricted-syntax -- prevent mode change when user cancels exit
                 e?.preventDefault();
                 return;
             }
@@ -212,6 +214,7 @@ function handleSelectModeEvent(e) {
             enable();
         else if (window.__TP_REHEARSAL && m && m !== 'rehearsal') {
             if (!confirmExit()) {
+                // eslint-disable-next-line no-restricted-syntax -- prevent mode change when user cancels exit
                 e.preventDefault?.();
                 return;
             }
