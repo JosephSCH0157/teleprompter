@@ -600,9 +600,8 @@ function installScrollRouter(opts) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      // WPM mode: enable when user wants it, don't require speech to be active
-      // Other modes (auto, step, etc): require both user intent and speech active
-      const want = state2.mode === 'wpm' ? !!userEnabled : (!!userEnabled && !!speechActive);
+      // All non-hybrid modes require both user intent AND speech to be active
+      const want = !!userEnabled && !!speechActive;
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
@@ -750,19 +749,32 @@ function installScrollRouter(opts) {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
-            // In WPM mode, immediately update sensitivity to match new target
-            if (state2.mode === 'wpm' && orchRunning) {
-              // Calculate sensitivity multiplier: if user wants 150 WPM but we're detecting 120,
-              // sensitivity should be 150/120 = 1.25 to speed up proportionally
+            // In WPM mode, immediately update scroll speed based on new target WPM
+            if (state2.mode === 'wpm') {
               try {
-                const status = orch.getStatus();
-                const detectedWpm = status.wpm;
-                if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                  const sensitivity = val / detectedWpm;
-                  orch.setSensitivity(sensitivity);
-                } else {
-                  // No detected WPM yet, just use the target as baseline
-                  orch.setSensitivity(1.0);
+                // Calculate px/s from target WPM using typography settings
+                const cs = getComputedStyle(document.documentElement);
+                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+                const lineHeightPx = fsPx * lhScale;
+                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+                const pxs = (val / 60 / wpl) * lineHeightPx;
+                
+                // Update auto-scroll speed directly
+                if (typeof auto.setSpeed === 'function') {
+                  auto.setSpeed(pxs);
+                }
+                
+                // Also update orchestrator sensitivity if running
+                if (orchRunning) {
+                  const status = orch.getStatus();
+                  const detectedWpm = status.wpm;
+                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                    const sensitivity = val / detectedWpm;
+                    orch.setSensitivity(sensitivity);
+                  } else {
+                    orch.setSensitivity(1.0);
+                  }
                 }
               } catch {
               }
@@ -781,16 +793,32 @@ function installScrollRouter(opts) {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
-            // In WPM mode, immediately update sensitivity
-            if (state2.mode === 'wpm' && orchRunning) {
+            // In WPM mode, immediately update scroll speed
+            if (state2.mode === 'wpm') {
               try {
-                const status = orch.getStatus();
-                const detectedWpm = status.wpm;
-                if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                  const sensitivity = val / detectedWpm;
-                  orch.setSensitivity(sensitivity);
-                } else {
-                  orch.setSensitivity(1.0);
+                // Calculate px/s from target WPM
+                const cs = getComputedStyle(document.documentElement);
+                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+                const lineHeightPx = fsPx * lhScale;
+                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+                const pxs = (val / 60 / wpl) * lineHeightPx;
+                
+                // Update auto-scroll speed directly
+                if (typeof auto.setSpeed === 'function') {
+                  auto.setSpeed(pxs);
+                }
+                
+                // Also update orchestrator sensitivity if running
+                if (orchRunning) {
+                  const status = orch.getStatus();
+                  const detectedWpm = status.wpm;
+                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                    const sensitivity = val / detectedWpm;
+                    orch.setSensitivity(sensitivity);
+                  } else {
+                    orch.setSensitivity(1.0);
+                  }
                 }
               } catch {
               }
