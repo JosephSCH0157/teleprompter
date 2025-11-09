@@ -1,5 +1,34 @@
 # Teleprompter Pro — Changelog
 
+## v1.6.0-scroll-router (2025-11-09)
+
+**Scroll Architecture Refactor**
+
+- **UI Scroll Mode Router**: Unified `setScrollMode()` / `getScrollMode()` API coordinates all scroll subsystems
+  - Single coordinator function (`applyUiScrollMode`) maps UI modes → internal modes
+  - Routes to: Scroll Brain mode, Clamp mode (anti-jitter), ASR enabled state
+  - Exposed globally: `window.setScrollMode()`, `window.getScrollMode()`, `window.__tpScrollBrain`
+  
+- **Scroll Brain**: New TypeScript module manages all scroll movement
+  - Modes: `'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal'`
+  - Single requestAnimationFrame loop for all programmatic scrolling
+  - Clean separation: UI mode (user-facing) vs internal mode (implementation)
+
+- **Clamp Mode Refactor**: Renamed from `scrollMode` to `clampMode` in scroll-control.js
+  - Three modes: `'follow'` (monotonic forward), `'backtrack'` (allow reversal), `'free'` (no constraints)
+  - ASR mode automatically enables `'follow'` clamp to prevent back-jogs
+  - Exposed via `window.__tpSetClampMode()` for router coordination
+
+- **ASR Integration**: Simplified control via `setEnabled(boolean)` method
+  - ASR instance exposed as `window.__tpAsrMode`
+  - Router automatically starts/stops ASR based on UI mode selection
+  - Clean lifecycle: UI mode `'asr'` → hybrid brain + follow clamp + ASR on
+
+- **Type Safety**: Full TypeScript support for scroll modes and event system
+  - `ScrollMode` type exported from scroll-brain
+  - `UiScrollMode` type for user-facing modes
+  - Proper interface contracts for all scroll subsystems
+
 ## Unreleased
 
 Stability and alignment improvements across matching, scrolling, and observability.
