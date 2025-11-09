@@ -316,12 +316,13 @@ export function installSpeech() {
           try { window.speechOn = true; } catch {}
           setListeningUi(true);
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
-          // Ensure Hybrid router intent flips ON when speech starts
-          try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+          // NOTE: Do NOT start auto-scroll yet - wait for countdown to finish
           try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
           const S = window.__tpStore;
           const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
           await beginCountdownThen(sec, async () => {
+            // NOW start auto-scroll after countdown completes
+            try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
             await startBackend();
             // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
             try { await doAutoRecordStart(); } catch {}
