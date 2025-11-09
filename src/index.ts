@@ -13,6 +13,83 @@ import './vendor/mammoth';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
 import './ui/settings/asrWizard';
 
+// === UI Scroll Mode Router ===
+import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
+import { createScrollBrain } from './scroll/scroll-brain';
+
+type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
+
+// Create and expose the scroll brain globally
+const scrollBrain = createScrollBrain();
+(window as any).__tpScrollBrain = scrollBrain;
+
+function applyUiScrollMode(mode: UiScrollMode) {
+  // Store the UI mode somewhere global so existing JS can still read it
+  (window as any).__tpUiScrollMode = mode;
+
+  const brain = (window as any).__tpScrollBrain as ScrollBrain | undefined;
+  const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
+  const setClampMode = (window as any).__tpSetClampMode as
+    | ((_m: 'follow' | 'backtrack' | 'free') => void)
+    | undefined;
+
+  // Defaults
+  let brainMode: BrainMode = 'manual';
+  let clampMode: 'follow' | 'backtrack' | 'free' = 'free';
+  let asrEnabled = false;
+
+  switch (mode) {
+    case 'off':
+      brainMode = 'manual';
+      clampMode = 'free';
+      asrEnabled = false;
+      break;
+
+    case 'auto':
+      brainMode = 'auto';      // pure time-based scroll
+      clampMode = 'free';      // ASR anti-jitter not needed
+      asrEnabled = false;
+      break;
+
+    case 'asr':
+      brainMode = 'hybrid';    // auto + ASR corrections
+      clampMode = 'follow';    // monotonic clamp: no back-jogs
+      asrEnabled = true;
+      break;
+
+    case 'step':
+      brainMode = 'step';      // discrete step moves
+      clampMode = 'free';      // clamp doesn't matter here
+      asrEnabled = false;
+      break;
+
+    case 'rehearsal':
+      brainMode = 'rehearsal'; // no programmatic scroll
+      clampMode = 'free';
+      asrEnabled = false;
+      break;
+  }
+
+  // Apply decisions
+  if (brain) brain.setMode(brainMode);
+  if (setClampMode) setClampMode(clampMode);
+  if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
+
+  // Optional: inform HUD
+  try {
+    (window as any).HUD?.log?.('scroll:uiMode', { mode, brainMode, clampMode, asrEnabled });
+  } catch {
+    // ignore
+  }
+}
+
+// Expose this function as the global router for existing JS
+(window as any).setScrollMode = applyUiScrollMode;
+(window as any).getScrollMode = () =>
+  ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
+
+// === End UI Scroll Mode Router ===
+
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
 

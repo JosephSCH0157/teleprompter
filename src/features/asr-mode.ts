@@ -45,6 +45,14 @@ export class AsrMode {
 
   getState() { return this.state; }
 
+  async setEnabled(enabled: boolean): Promise<void> {
+    if (enabled) {
+      if (this.state === 'idle') await this.start();
+    } else {
+      if (this.state !== 'idle') await this.stop();
+    }
+  }
+
   async start(): Promise<void> {
     const s = speechStore.get();
   this.engine = createEngine(s.engine);

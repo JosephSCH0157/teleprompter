@@ -28,7 +28,7 @@ export default function createScrollController(adapters = {}, telemetry) {
   let lastTargetTop = 0;
   
   // --- Anti-jitter: monotonic forward clamp, surge catch-up ---
-  let scrollMode = 'follow'; // 'follow' | 'backtrack' | 'free'
+  let clampMode = 'follow'; // 'follow' | 'backtrack' | 'free'
   let lastRatio = 0; // last written scroll ratio for monotonic clamp
   let prevErr = 0; // previous error for surge detection
   let prevErrTs = 0; // timestamp for surge dt calculation
@@ -500,8 +500,8 @@ export default function createScrollController(adapters = {}, telemetry) {
      * Set scroll mode for monotonic clamp behavior
      * @param {'follow' | 'backtrack' | 'free'} newMode
      */
-    setScrollMode(newMode) {
-      scrollMode = newMode;
+    setclampMode(newMode) {
+      clampMode = newMode;
       if (newMode !== 'follow') {
         // When leaving follow mode, capture current ratio so we can resume properly
         const viewerEl = A.getViewerElement();
@@ -518,7 +518,7 @@ export default function createScrollController(adapters = {}, telemetry) {
      */
     writeScrollRatio(nextRatio) {
       let ratio = nextRatio;
-      if (scrollMode === 'follow' && ratio < lastRatio) {
+      if (clampMode === 'follow' && ratio < lastRatio) {
         // Clamp forward during follow to avoid back-jogs
         ratio = lastRatio;
         log('scroll', { tag: 'clamped', lastRatio, requestedRatio: nextRatio });

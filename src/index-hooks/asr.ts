@@ -40,6 +40,8 @@ export function initAsrFeature() {
   const ensureMode = async (): Promise<AsrMode> => {
     if (!asrMode) {
       asrMode = new AsrMode({ rootSelector: '#scriptRoot, #script, body', lineSelector: '.line, p', markerOffsetPx: 140, windowSize: 6 });
+      // Expose globally for UI mode router
+      (window as any).__tpAsrMode = asrMode;
       try { new AsrTopbar(asrMode).mount('#topbarRight, .topbar, header, body'); } catch {}
     }
     return asrMode;
