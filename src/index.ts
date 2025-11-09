@@ -75,9 +75,18 @@ function applyUiScrollMode(mode: UiScrollMode) {
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
 
-  // Optional: inform HUD
+  // HUD visibility: show all three layers for debugging
   try {
-    (window as any).HUD?.log?.('scroll:uiMode', { mode, brainMode, clampMode, asrEnabled });
+    const summary = `UI: ${mode} | Brain: ${brainMode} | Clamp: ${clampMode}`;
+    (window as any).HUD?.log?.('scroll:mode', { 
+      summary,
+      ui: mode, 
+      brain: brainMode, 
+      clamp: clampMode, 
+      asrEnabled 
+    });
+    // Also log to console for quick visibility
+    console.debug(`[Scroll Mode] ${summary} | ASR: ${asrEnabled ? 'on' : 'off'}`);
   } catch {
     // ignore
   }
