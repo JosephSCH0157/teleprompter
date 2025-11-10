@@ -5,6 +5,15 @@ import { speechStore } from '../state/speech-store';
 export function installAsrHotkeys() {
     let armed = false;
     const onKey = (e) => {
+        // Early return if another handler already processed this
+        if (e.defaultPrevented)
+            return;
+        // Don't steal keys from inputs
+        try {
+            if (window.isTyping?.() || e.__tpTyping)
+                return;
+        }
+        catch { }
         // Alt+L toggles ASR listening; Esc stops
         if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === 'l' || e.key === 'L')) {
             armed = !armed;
@@ -19,9 +28,8 @@ export function installAsrHotkeys() {
                 catch { }
             }
             window.dispatchEvent(new CustomEvent('asr:toggle', { detail: { armed } }));
-            // eslint-disable-next-line no-restricted-syntax -- prevent F9 default browser behavior
+            // eslint-disable-next-line no-restricted-syntax -- Intentional: block browser default for Alt+L hotkey
             e.preventDefault();
-            e.stopPropagation();
         }
         else if (e.key === 'Escape') {
             armed = false;

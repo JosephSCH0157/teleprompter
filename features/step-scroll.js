@@ -147,6 +147,12 @@ export function installStepScroll(cfg = {}) {
                 return;
         }
         catch { }
+        // Early return if another handler already processed this
+        if (e.defaultPrevented)
+            return;
+        // Ignore key repeats for discrete stepping
+        if (e.repeat)
+            return;
         // Do not fight auto-scroll / catch-up if they are active
         try {
             window.__scrollCtl?.stopAutoCatchup?.();
@@ -161,22 +167,22 @@ export function installStepScroll(cfg = {}) {
         const isPedalUp = enableF && (e.code === 'F13');
         const isPedalDown = enableF && (e.code === 'F14');
         if (key === 'ArrowUp' || isPedalUp) {
-            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
+            // eslint-disable-next-line no-restricted-syntax -- Intentional: block browser scroll, we handle step movement
             e.preventDefault();
             e.shiftKey ? stepBlockFn(-1) : stepLinesFn(-1);
         }
         else if (key === 'ArrowDown' || isPedalDown) {
-            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
+            // eslint-disable-next-line no-restricted-syntax -- Intentional: block browser scroll, we handle step movement
             e.preventDefault();
             e.shiftKey ? stepBlockFn(+1) : stepLinesFn(+1);
         }
         else if (key === 'PageUp') {
-            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
+            // eslint-disable-next-line no-restricted-syntax -- Intentional: block browser scroll, we handle step movement
             e.preventDefault();
             stepLinesFn(-1, pageLinesN);
         }
         else if (key === 'PageDown') {
-            // eslint-disable-next-line no-restricted-syntax -- prevent default scroll, we handle step movement
+            // eslint-disable-next-line no-restricted-syntax -- Intentional: block browser scroll, we handle step movement
             e.preventDefault();
             stepLinesFn(+1, pageLinesN);
         }

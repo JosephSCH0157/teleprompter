@@ -357,11 +357,12 @@ try {
                 throw new Error('skip-ts-wheel');
             }
             const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+            // passive:false required because we preventDefault to block browser zoom
             window.addEventListener('wheel', (e) => {
                 try {
                     if (!(e.ctrlKey || e.metaKey))
                         return; // only when user intends zoom-like behavior
-                    // eslint-disable-next-line no-restricted-syntax -- prevent browser zoom, we adjust font size
+                    // eslint-disable-next-line no-restricted-syntax -- Intentional: block browser zoom, we handle font sizing
                     e.preventDefault();
                     const targetDisplay = e.altKey ? 'display' : 'main';
                     const cur = getTypography(targetDisplay).fontSizePx;
@@ -381,11 +382,12 @@ try {
             const clamp2 = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
             const viewer = document.getElementById('viewer');
             if (viewer) {
+                // passive:false required because we preventDefault to block horizontal scroll
                 viewer.addEventListener('wheel', (e) => {
                     try {
                         if (!e.shiftKey || e.ctrlKey || e.metaKey)
                             return; // only Shift, not Ctrl/Cmd
-                        // eslint-disable-next-line no-restricted-syntax -- prevent horizontal scroll, we adjust font size
+                        // eslint-disable-next-line no-restricted-syntax -- Intentional: block horizontal scroll, we handle font sizing
                         e.preventDefault();
                         const cur = getTypography('main').fontSizePx;
                         const step = 2;

@@ -169,8 +169,9 @@ export function initObsUI() {
             catch { } };
             const testBtn = (t && t.closest('#settingsObsTest,#obsTest,[data-action="obs-test"]')) || null;
             if (testBtn) {
+                // Button has type="button" in markup, but ensure preventDefault for robustness
                 try {
-                    // eslint-disable-next-line no-restricted-syntax -- prevent form submission/navigation on test button
+                    // eslint-disable-next-line no-restricted-syntax -- Intentional: prevent form submission on test button click
                     e.preventDefault();
                     e.stopImmediatePropagation();
                 }
