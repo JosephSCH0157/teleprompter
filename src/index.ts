@@ -1,7 +1,12 @@
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
+// Dev-only console noise filter (before heavy async features spin up)
+import installConsoleNoiseFilter from './features/console-noise-filter';
 
 import { bootstrap } from './boot/boot';
+
+// Arm the dev-only noise filter early
+try { installConsoleNoiseFilter({ debug: false }); } catch {}
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
