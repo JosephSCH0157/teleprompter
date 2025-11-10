@@ -597,6 +597,8 @@ function installScrollRouter(opts) {
     }
   };
   function applyGate() {
+    console.log('[applyGate] Called:', { mode: state2.mode, userEnabled, speechActive });
+    try { window.HUD?.log?.('scroll-router', `applyGate: mode=${state2.mode} user=${userEnabled} speech=${speechActive}`); } catch {}
     if (state2.mode !== "hybrid") {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
@@ -604,6 +606,8 @@ function installScrollRouter(opts) {
       }
       // All non-hybrid modes require both user intent AND speech to be active
       const want = !!userEnabled && !!speechActive;
+      console.log('[applyGate] Non-hybrid mode - want:', want, 'calling Auto.setEnabled');
+      try { window.HUD?.log?.('scroll-router', `applyGate non-hybrid: want=${want} calling Auto.setEnabled`); } catch {}
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
