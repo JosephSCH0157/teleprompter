@@ -4,319 +4,175 @@
   "console": [
     {
       "type": "log",
-      "text": "[TP-TRACE] script-enter",
+      "text": "Live reload enabled.",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
+        "url": "http://127.0.0.1:8080/teleprompter_pro.html",
+        "lineNumber": 536,
+        "columnNumber": 11
+      }
+    },
+    {
+      "type": "log",
+      "text": "[obs.state] wire init (claim bridge) ",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/wiring/wire.js",
+        "lineNumber": 6,
         "columnNumber": 16
       }
     },
     {
       "type": "log",
-      "text": "[TP-BOOT 93325] entered main IIFE",
+      "text": "[obs.ui] delegate installed JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 101,
-        "columnNumber": 4
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-BOOT 93325] installed global error hooks",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 133,
-        "columnNumber": 4
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-boot-block",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
+        "url": "http://127.0.0.1:8080/src/wiring/wire.js",
+        "lineNumber": 6,
         "columnNumber": 16
       }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] window-init-proxy-installed",
+      "text": "[src/index] module imports complete",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] minimal-boot",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] post-minimalBoot",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-zero-time-init-attempt-scheduled",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling-early",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] init-scheduling-early-exited",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-zoom-guard",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-wireNormalizeButton",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-buildSettingsContent-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-syncSettingsValues-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-setupSettingsTabs-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-fallbackNormalize-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-normalizeToStandard-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-validateStandardTags-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] after-ensureHelpUI-def",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-Pro] _initCore end",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 5858,
+        "url": "http://127.0.0.1:8080/src/index.js",
+        "lineNumber": 169,
         "columnNumber": 10
       }
     },
     {
       "type": "log",
-      "text": "[TP-TRACE] after-_initCore-def",
+      "text": "[src/index] boot()",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] pre-init-scheduling",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] init-scheduling-exited",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] late-init-fallback-scheduled",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] early-init-invoking",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-Pro] init() wrapper start",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 9182,
+        "url": "http://127.0.0.1:8080/src/index.js",
+        "lineNumber": 302,
         "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[TP-Pro] _initCore start",
+      "text": "[src/ui/dom] bindStaticDom",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 3217,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] early-init-fallback",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
+        "url": "http://127.0.0.1:8080/src/ui/dom.js",
+        "lineNumber": 698,
+        "columnNumber": 10
       }
     },
     {
       "type": "debug",
-      "text": "[TP-Pro] recorder module keys: JSHandle@array ",
+      "text": "[HUD] speech:db JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 1873,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-Pro] _initCore mid (core UI wired)",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 4578,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-Pro] init() wrapper end (success)",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 9185,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] perf:reflow-risk JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js?v=dev-20251007",
+        "url": "http://127.0.0.1:8080/debug-tools.js",
         "lineNumber": 30,
         "columnNumber": 17
       }
     },
     {
+      "type": "table",
+      "text": "JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/ui/dom.js",
+        "lineNumber": 848,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js",
+        "lineNumber": 640,
+        "columnNumber": 30
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/adapters/obs] init",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/adapters/obs.js",
+        "lineNumber": 3,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/adapters/recorder] init",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/adapters/recorder.js",
+        "lineNumber": 3,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/features/persistence] initPersistence",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/features/persistence.js",
+        "lineNumber": 2,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/features/telemetry] initTelemetry",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/features/telemetry.js",
+        "lineNumber": 2,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/features/scroll] initScroll",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/features/scroll.js",
+        "lineNumber": 2,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/features/hotkeys] initHotkeys",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/features/hotkeys.js",
+        "lineNumber": 2,
+        "columnNumber": 10
+      }
+    },
+    {
       "type": "info",
-      "text": "WATCHDOG STATE: OK → STALL JSHandle@object",
+      "text": "[ASR] dev initAsrFeature()",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 3500,
-        "columnNumber": 47
-      }
-    },
-    {
-      "type": "log",
-      "text": "[TP-TRACE] dom-content-loaded",
-      "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
+        "url": "http://127.0.0.1:8080/src/index-hooks/asr.js",
+        "lineNumber": 17,
         "columnNumber": 16
       }
     },
     {
-      "type": "log",
-      "text": "[TP-TRACE] rs:complete",
+      "type": "info",
+      "text": "[ASR] initialized from http://127.0.0.1:8080/src/index-hooks/asr.js",
       "location": {
-        "url": "http://127.0.0.1:8080/teleprompter_pro.js?v=dev-20251007",
-        "lineNumber": 89,
-        "columnNumber": 16
+        "url": "http://127.0.0.1:8080/src/index.js",
+        "lineNumber": 585,
+        "columnNumber": 26
+      }
+    },
+    {
+      "type": "log",
+      "text": "[src/index] boot completed",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/index.js",
+        "lineNumber": 708,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:render JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
       }
     }
   ],
-  "saved": "[{\"id\":\"90c0f3fd-5322-444e-a4b8-fff5aa85c525\",\"title\":\"CI-test-mgxvd8yd\",\"content\":\"Test script content q21liqj7r19\",\"created\":\"2025-10-19T15:36:37.551Z\",\"updated\":\"2025-10-19T15:36:37.552Z\"},{\"id\":\"20993928-4291-48ee-b8d0-580cbc853075\",\"title\":\"CI-test-mgxvd8yd\",\"content\":\"Test script content q21liqj7r19\",\"created\":\"2025-10-19T15:36:37.552Z\",\"updated\":\"2025-10-19T15:36:37.552Z\"}]"
+  "saved": "[{\"id\":\"f095d600-ec71-4897-b8fa-aba62154272b\",\"title\":\"CI-test-mhngnstq\",\"content\":\"Test script content wyqgp3iq34a\",\"created\":\"2025-11-06T13:26:56.218Z\",\"updated\":\"2025-11-06T13:26:56.219Z\"}]"
 }

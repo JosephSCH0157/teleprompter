@@ -11,6 +11,35 @@ export interface MatchEvent {
 let _rec: Recognizer | null = null;
 let _cb: ((_evt: MatchEvent) => void) | null = null;
 
+// Lightweight cosine similarity for HUD transcript enrichment (dev only usage)
+function simCosine(a: string, b: string): number {
+  try {
+    const tok = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/).filter(Boolean);
+    const A = tok(a), B = tok(b);
+    if (!A.length || !B.length) return 0;
+    const tf = (arr: string[]) => arr.reduce((m, w) => (m.set(w, (m.get(w) || 0) + 1), m), new Map<string, number>());
+    const TA = tf(A), TB = tf(B);
+    let dot = 0; let na = 0; let nb = 0;
+    for (const [w, v] of TA) { na += v*v; if (TB.has(w)) dot += v * (TB.get(w) || 0); }
+    for (const v of TB.values()) nb += v*v;
+    const denom = Math.sqrt(na) * Math.sqrt(nb);
+    return denom ? dot / denom : 0;
+  } catch { return 0; }
+}
+
+function getExpectedLineText(): string | undefined {
+  try { return (window as any).__tpScript?.currentExpectedText?.(); } catch { return undefined; }
+}
+
+function dispatchTranscript(text: string, final: boolean) {
+  try {
+    const expected = getExpectedLineText();
+    const sim = expected ? simCosine(text, expected) : undefined;
+    const detail = { text, final, ts: Date.now(), sim };
+    window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
+  } catch {}
+}
+
 function _getRuntimeScriptState() {
   // runtime stores these globals (legacy). Use safe access and sensible defaults.
   const w: any = window as any;
@@ -60,8 +89,9 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
     _rec = createRecognizer(opts as any);
     _cb = cb;
     _rec.start((transcript: string, isFinal: boolean) => {
-      // When recognizer provides a transcript, run matcher and emit event
-      matchBatch(transcript, isFinal);
+      const text = transcript || '';
+      matchBatch(text, isFinal);
+      dispatchTranscript(text, isFinal);
     });
   } catch (err) {
     try { console.warn('[TP] startRecognizer failed', err); } catch {}

@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Anvil v1.6.4</title>
+  <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="theme-color" content="#0b0f19" />
+  <meta name="color-scheme" content="dark light" />
+
+  <!-- Canonical helps SEO (avoid /index.html vs /) -->
+  <link rel="canonical" href="https://example.com/teleprompter/" />
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" href="/favicon.png">
+
+  <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
+  <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
+  <!-- If you serve fonts or CDN assets, add preconnects for those origins, too -->
+
+  <!-- Load CSS in a simple, reliable way -->
+  <link rel="stylesheet" href="teleprompter_pro.css">
+
+  <!-- One true boot path: module try → legacy fallback; mark which path wins -->
+  <script>
+    (function () {
+      try {
+        if (window.__tpBooted) return; // hard guard if HTML is duplicated
+        window.__tpBootSrc = 'pending';
+      } catch {}
+    }());
+  </script>
+  <script type="module">
+    (async () => {
+      if (window.__tpBooted) return;
+      window.__tpBootSrc = 'module';
+      await import('./src/index.js');
+    })().catch(err => {
+      try { console.warn('[boot] module import failed → fallback', err); } catch {}
+      if (!window.__tpBooted) {
+        window.__tpBootSrc = 'fallback';
+        const s = document.createElement('script');
+        s.src = './teleprompter_pro.js';
+        s.defer = true;
+        s.onload = () => { try { console.log('[boot] legacy loaded'); } catch {} };
+        document.head.appendChild(s);
+      }
+    });
+  </script>
+
+  <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
+  <script>
+    (function(){
+      try {
+        var Q=new URLSearchParams(location.search);
+        var DEV = Q.has('dev') || (function(){try{return localStorage.getItem('tp_dev_mode')==='1'}catch(e){return false}})() || (location.hash||'').indexOf('dev')!==-1;
+        if (DEV) document.documentElement.classList.add('tp-dev');
+        window.__TP_DEV = DEV;
+      } catch {}
+    })();
+  </script>
+
+  <!-- Safe requestScroll polyfill (kept) -->
+  <script>
+    (function(){
+      try {
+        if (!window.requestScroll) {
+          window.requestScroll = function(arg){
+            try {
+              var top = (typeof arg==='object')?Number(arg&&arg.top):Number(arg);
+              if (!isFinite(top)) top = 0;
+              var behavior = (typeof arg==='object'&&arg&&arg.behavior)?String(arg.behavior):'smooth';
+              if (typeof window.scrollTo==='function') window.scrollTo({top,behavior});
+              else (document.scrollingElement||document.documentElement||document.body).scrollTop = top;
+            } catch {}
+          };
+        }
+      } catch {}
+    })();
+  </script>
+
+  <!-- Third-party: mammoth will be loaded lazily by ui/upload.js when needed -->
+
+  <!-- (helpers loaded from modules in dev via src/index.js) -->
+
+  
+  
+
+  <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
+  <script src="ui-sanitize.js"></script>
+
+  <!-- Single loader above; no additional booters here. -->
+
+  <!-- Module runtime controls the page; legacy direct scripts removed to avoid double wiring -->
+
+  <!-- Inline critical CSS (small, ~2KB): topbar, chips, basic app grid and first-screen editor/viewer -->
+  <style>
+    :root{--bg:#0b0f19;--fg:#e6eef8;--muted:#9fb4c9;--chip-bg:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+    .topbar{display:flex;align-items:center;gap:8px;padding:8px 12px;height:48px;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
+    .topbar strong{font-weight:600;margin-right:6px}
+    .chip{display:inline-block;padding:4px 8px;border-radius:8px;background:var(--chip-bg);color:var(--fg);font-size:13px}
+    .inl-1{margin-left:auto}
+    .app{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;box-sizing:border-box}
+    .panel{background:transparent;color:var(--muted);max-height:calc(100vh - 92px);overflow:auto}
+    .viewer{background:transparent;padding:6px;min-height:calc(100vh - 92px);overflow:auto}
+    textarea#editor{width:100%;height:36vh;min-height:160px;background:#07101a;color:var(--fg);border:1px solid rgba(255,255,255,0.03);padding:10px;box-sizing:border-box;font:inherit}
+    .script .line{padding:6px 0;color:var(--fg)}
+    #dbMeterTop{width:86px;height:12px;background:linear-gradient(90deg,#18364a,#0b2a3a);border-radius:6px;margin-left:6px}
+    button.chip{border:0;background:transparent;color:var(--fg);cursor:pointer}
+    @media (max-width:900px){.app{grid-template-columns:1fr;}.topbar{height:56px;padding:10px}}
+    /* Extra tiny critical rules to stabilize first-paint for HUD and overlays */
+    #hud-root{position:fixed;right:12px;top:12px;z-index:2147483630;pointer-events:none;min-width:140px}
+    .overlay{display:none}
+    .overlay.hidden{display:none}
+    .overlay .sheet{background:#07101a;color:var(--fg);border-radius:8px;padding:10px}
+    button,select,input{font:inherit}
+    /* Present mode: hide left panel and expand viewer */
+    html.tp-present .panel{display:none !important}
+    html.tp-present .app{grid-template-columns:1fr !important}
+    /* Ensure toast container is visible to test harness (non-zero box) */
+    #tp_toast_container{position:fixed;right:12px;top:12px;z-index:2147483630;pointer-events:none;min-width:1px;min-height:1px}
+  </style>
+
+  <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
+
+  <!-- Build badge (dev only) -->
+  <style>
+    #anvil-build-label{display:none;position:fixed;left:8px;bottom:6px;padding:4px 8px;font:12px/1.2 system-ui,sans-serif;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;z-index:2147483647;pointer-events:none}
+    html.tp-dev #anvil-build-label{display:block}
+    @media print{#anvil-build-label{display:none}}
+    @media (max-width:420px){#anvil-build-label{font-size:11px;padding:3px 6px}}
+  </style>
+
+  <!-- (Optional, prod) Tight CSP once everything is settled
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://unpkg.com; connect-src 'self' http://192.168.1.200:4455 ws://192.168.1.200:4455;"/>
+  -->
+</head>
+
+<body>
+<!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
+<div id="tp_toast_container" class="tp-toast-container"></div>
+<!-- Safety bridge: guarantees OBS Test pill + basic Auto-scroll movement in CI/dev only -->
+<script>
+(function(){
+  try {
+    // Enable only for CI/dev: query/hash (?ci=1 or #ci or ?dev=1) or localStorage.tp_ci==='1'
+    var url = String(location && location.href || '');
+    var devOn = /(\?|#)(.*\bci=1\b|dev=1\b)/i.test(url) || (function(){try{return localStorage.getItem('tp_ci')==='1'}catch(e){return false}})();
+    if (!devOn) return; // fully disabled in prod sessions
+
+    if (window.__TP_SAFETY_BRIDGE) return; window.__TP_SAFETY_BRIDGE = '1.0';
+    var q = function(s){ return document.querySelector(s); };
+    var selTest = '#settingsObsTest,#obsTest,[data-action="obs-test"]';
+    var selAuto = '#autoToggle,[data-action="auto-toggle"]';
+    var selInc  = '#autoInc,[data-action="auto-inc"]';
+    var selDec  = '#autoDec,[data-action="auto-dec"]';
+
+    function ensurePill(btn){
+      var pill = q('#obsStatusText,#obsStatus');
+      if (!pill) { pill = document.createElement('span'); pill.id = 'obsStatusText'; pill.style.marginLeft = '8px'; btn.after(pill); }
+      return pill;
+    }
+    function getViewer(){ return q('#viewer,[data-role="viewer"]') || document.scrollingElement || document.documentElement; }
+
+  async function handler(e){
+      try {
+        var t = e && e.target && (e.target.closest ? e.target.closest(selTest+','+selAuto+','+selInc+','+selDec) : null);
+        if (!t) return;
+        // OBS Test connection
+        if (t.matches && t.matches(selTest)) {
+          if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
+          var pill = ensurePill(t); pill.textContent = 'testing…';
+          try {
+            var url  = (q('#settingsObsUrl,#obsUrl') && q('#settingsObsUrl,#obsUrl').value && q('#settingsObsUrl,#obsUrl').value.trim()) || 'ws://127.0.0.1:4455';
+            var pass = (q('#settingsObsPassword,#obsPassword') && q('#settingsObsPassword,#obsPassword').value) || '';
+            if (typeof window.__obsTestConnect === 'function') {
+              var res = await window.__obsTestConnect(url, pass);
+              var ver = (res && (res.version||res.obsWebSocketVersion||res.obsVersion)) || null;
+              pill.textContent = ver ? ('connected ('+ver+')') : 'connected';
+            } else {
+              pill.textContent = 'failed: probe not loaded';
+            }
+          } catch (err) {
+            pill.textContent = 'failed: ' + (err && (err.message||String(err)));
+            try { console.warn('[OBS test failed]', err); } catch {}
+          }
+          return;
+        }
+        // Auto toggle / speed fallback
+        var btn = q(selAuto); if (!btn) return;
+        if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
+        var step = (e.shiftKey ? 5 : 0.5);
+        var isInc = !!(t.matches && t.matches(selInc));
+        var isDec = !!(t.matches && t.matches(selDec));
+        var isToggle = !!(t.matches && t.matches(selAuto));
+        if (!isInc && !isDec && !isToggle) return;
+        // Initialize defaults
+        if (typeof window.__autoSpeed !== 'number' || !(window.__autoSpeed > 0)) window.__autoSpeed = 60;
+        if (!btn.dataset.state) btn.dataset.state = 'off';
+        // Apply action
+        if (isInc) {
+          window.__autoSpeed = Math.max(5, window.__autoSpeed + step);
+        } else if (isDec) {
+          window.__autoSpeed = Math.max(5, window.__autoSpeed - step);
+        } else if (isToggle) {
+          btn.dataset.state = (btn.dataset.state === 'on' ? 'off' : 'on');
+        }
+        var isOn = btn.dataset.state === 'on';
+        var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
+        btn.textContent = isOn ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
+        // Stop any previous fallback when toggling or when turning Off via speed buttons
+        try { clearInterval(window.__autoFallbackTimer); } catch {}
+        window.__autoFallbackTimer = null;
+        if (isOn) {
+          try {
+            if (window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function') { window.__scrollCtl.setSpeed(window.__autoSpeed); }
+            if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') { window.__scrollCtl.start(); }
+          } catch {}
+          if (!(window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function')) {
+            var viewer = getViewer();
+            // Immediate nudge to make movement detectable in short probes
+            try { viewer.scrollTop += Math.max(1, window.__autoSpeed / 5); } catch {}
+            window.__autoFallbackTimer = setInterval(function(){
+              try {
+                // If the real engine becomes available, switch to it and stop fallback
+                if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') {
+                  try { clearInterval(window.__autoFallbackTimer); } catch {}
+                  window.__autoFallbackTimer = null;
+                  try { window.__scrollCtl.setSpeed(window.__autoSpeed); } catch {}
+                  try { window.__scrollCtl.start(); } catch {}
+                  return;
+                }
+                viewer.scrollTop += window.__autoSpeed / 10;
+              } catch {}
+            }, 100);
+          }
+        }
+      } catch {}
+    }
+    document.addEventListener('click', handler, true);
+    document.addEventListener('click', handler, false);
+  } catch {}
+})();
+</script>
+<div class="topbar">
+<strong>Teleprompter_Pro</strong>
+<span id="appVersion" class="version-badge" aria-label="App version">v1.6.4</span>
+<span class="chip" id="saveChip">Draft: —</span>
+<span class="chip" id="permChip">Mic: unknown</span>
+<span class="chip" id="displayChip">Display: closed</span>
+<span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+<span class="chip" id="scrollChip">Scroll: idle</span>
+<span class="chip" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
+<span class="chip" id="camRtcChip">CamRTC: idle</span>
+<span class="chip" id="speakerIndexChip">Speakers: —</span>
+<!-- dB Meter (top bar mini) -->
+<div id="dbMeterTop" title="Input level"></div>
+<!-- Mode selector (compact) -->
+<label for="scrollMode" class="topbar-label">Mode</label>
+<select id="scrollMode" aria-label="Scroll Mode">
+  <option value="timed">Timed</option>
+  <option value="wpm">WPM</option>
+  <option value="hybrid" selected>Hybrid</option>
+  <option value="asr">ASR</option>
+  <option value="step">Step</option>
+  <option value="rehearsal">Rehearsal</option>
+</select>
+<!-- Auto status chip (Hybrid/Auto state) -->
+<span id="autoChip" class="chip" aria-live="polite" aria-atomic="true" title="Auto scroll status">Auto: Manual</span>
+<!-- Right-side controls wrapper (ASR chip mounts here) -->
+<div id="topbarRight" class="inl-1">
+  <!-- ASR chip + button will mount here -->
+  <button class="chip" id="presentBtn">Present Mode</button>
+  <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
+  <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
+  <button id="loadDemoBtn" class="chip" hidden>Load Demo Script</button>
+  <span id="selfChecksChip" class="chip chip-muted">
+    Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
+  </span>
+  
+</div>
+<div class="legend" id="legend"></div>
+</div>
+<div class="app">
+<aside class="panel">
+<h2>Controls</h2>
+<div class="row">
+<button id="openDisplayBtn">Open display window</button>
+<button disabled="" id="closeDisplayBtn">Close display window</button>
+</div>
+<div class="row">
+<button id="micBtn">Request mic</button>
+<button id="releaseMicBtn">Release mic</button>
+<button disabled="" id="recBtn" class="btn-primary btn-start">Start speech sync</button>
+</div>
+<div class="row">
+  <label>Auto-scroll (px/s)
+    <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
+  </label>
+  <button id="autoDec" class="chip" title="–1 (Shift: –5)">–</button>
+  <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
+  <button id="autoToggle">Auto-scroll: Off</button>
+</div>
+<div class="row visually-hidden" id="wpmRow" aria-hidden="true">
+  <label>Target WPM
+    <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
+  </label>
+  <span class="chip" id="wpmPx">≈ — px/s</span>
+  
+</div>
+<!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
+<select id="micDeviceSel" class="select-md" hidden></select>
+ <div class="row" id="sidebarMediaHint">
+   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings ▶ Recording/Media</span>
+ </div>
+<!-- OBS controls & Mic device selector moved into Settings overlay -->
+<h2 class="select-md" >Camera</h2>
+<div class="row">
+<button id="startCam">Start camera</button>
+<button disabled="" id="stopCam">Stop camera</button>
+</div>
+<div class="row">
+<label>Size (%) <input id="camSize" max="60" min="15" step="1" type="number" value="28"/></label>
+<label>Opacity <input id="camOpacity" max="100" min="20" step="5" type="number" value="100"/></label>
+<label><input checked="" id="camMirror" type="checkbox"/> Mirror</label>
+<button id="camPiP">Picture-in-Picture</button>
+</div>
+<div class="row visually-hidden" id="typographyRow" aria-hidden="true">
+<label>Font size <input id="fontSize" max="96" min="16" step="2" type="number" value="48"/></label>
+<label>Line height <input id="lineHeight" max="2" min="1.1" step="0.05" type="number" value="1.35"/></label>
+</div>
+<div class="row">
+  <button id="catchUpBtn" title="Jump the script to the current line">Catch Up</button>
+  <span class="chip">(Instantly centers the active line)</span>
+  </div>
+<div class="row">
+<label>Pre-roll (sec)
+          <input id="preroll" max="10" min="0" step="1" type="number" value="3"/>
+</label>
+</div>
+<div class="row">
+  <label>Match aggressiveness
+    <select id="matchAggro" class="select-md">
+      <option value="1">Conservative</option>
+      <option value="2" selected>Normal</option>
+      <option value="3">Aggressive</option>
+      <option value="4">Aggressive live-read</option>
+    </select>
+  </label>
+</div>
+<div class="row">
+  <label>Motion smoothness
+    <select id="motionSmooth" class="select-md">
+      <option value="stable">Stable</option>
+      <option value="balanced" selected>Balanced</option>
+      <option value="responsive">Responsive</option>
+    </select>
+  </label>
+</div>
+<div class="row">
+<button id="resetBtn">Reset timer</button>
+<div class="timer" id="timer">00:00.0</div>
+</div>
+<div class="row">
+<button id="loadSample">Load sample text</button>
+<button id="normalizeTopBtn">Normalize</button>
+<button id="clearText">Clear</button>
+</div>
+<h2 class="section-title">
+  Speakers
+  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody">Hide</button>
+</h2>
+
+<div id="speakersBody">
+  <div class="row">
+    <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
+    <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
+    <button id="wrap-s1">Wrap ➜ S1</button>
+  </div>
+  <div class="row">
+    <label>Name <input id="name-s2" type="text" placeholder="Speaker 2"></label>
+    <label>Color <input id="color-s2" type="color" value="#facc15"></label>
+    <button id="wrap-s2">Wrap ➜ S2</button>
+  </div>
+  <div class="row">
+    <label>Name <input id="name-g1" type="text" placeholder="Guest 1"></label>
+    <label>Color <input id="color-g1" type="color" value="#34d399"></label>
+    <button id="wrap-g1">Wrap ➜ G1</button>
+  </div>
+  <div class="row">
+    <label>Name <input id="name-g2" type="text" placeholder="Guest 2"></label>
+    <label>Color <input id="color-g2" type="color" value="#f472b6"></label>
+    <button id="wrap-g2">Wrap ➜ G2</button>
+  </div>
+
+  <div class="row toolbar">
+    <button id="wrap-bold"><b>B</b></button>
+    <button id="wrap-italic"><i>I</i></button>
+    <button id="wrap-underline"><span class="u">U</span></button>
+    <button id="wrap-note">Note</button>
+    <button id="wrap-color">Color…</button>
+    <button id="wrap-bg">BG…</button>
+    <button id="autoTagBtn">Smart Tag</button>
+    <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
+  </div>
+</div>
+<div class="row">
+<label>Format
+  <select id="downloadFormat" class="select-sm">
+    <option value="txt" selected>.txt</option>
+    <option value="md">.md</option>
+    <option value="rtf">.rtf</option>
+    <option value="text">.text</option>
+    <option value="docx" disabled>.docx (soon)</option>
+  </select>
+  </label>
+<button id="downloadFile">Download</button>
+<button id="uploadFileBtn">Upload file</button>
+<input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
+</div>
+<div class="row">
+  <label>Saved Scripts</label>
+  <select id="scriptSlots" class="select-md" aria-label="Saved scripts"></select>
+</div>
+<div class="row">
+  <label>Title <input id="scriptTitle" type="text" placeholder="Untitled"/></label>
+  <button id="scriptSaveBtn">Save</button>
+  <button id="scriptSaveAsBtn">Save As</button>
+  <button id="scriptLoadBtn">Load</button>
+  <button id="scriptDeleteBtn">Delete</button>
+  <button id="scriptRenameBtn">Rename</button>
+</div>
+<div class="row">
+<button id="resetScriptBtn">Reset Script</button>
+</div>
+<p class="status" id="status"></p>
+<h2>Script</h2>
+<textarea id="editor" placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+</aside>
+<main class="viewer" id="viewer">
+<div class="marker"></div>
+<div class="script" id="script">
+  
+</div>
+<div class="camWrap" id="camWrap">
+<video autoplay="" id="camVideo" muted=""></video>
+</div>
+</main>
+</div>
+<!-- Pre-roll overlay (main window) -->
+<div id="countOverlay" class="inl-7">
+<div class="row" >
+<div class="select-md" >Begin speaking in</div>
+<div id="countNum" class="preroll-num" >3</div>
+</div>
+</div>
+<!-- Near the end of <body> -->
+<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+  <div class="sheet">
+    <header>
+      <h3 id="shortcutsTitle">Shortcuts</h3>
+      <button id="shortcutsClose" class="btn-chip">Close</button>
+    </header>
+
+    <div class="shortcuts-grid">
+      <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
+      <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed (±1)</div>
+      <div><strong>Shift + ↑ / ↓</strong></div><div>Adjust by ±5</div>
+      <div><strong>Mouse-wheel on speed field</strong></div><div>±1 (Shift: ±5)</div>
+      <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
+      <div><strong>Shift + ?</strong></div><div>Open Help</div>
+      <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
+    </div>
+    <!-- JS will inject the Tag Guide here, including the Normalize button -->
+  </div>
+</div>
+<!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
+<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="sheet settings-sheet">
+    <header class="sheet-head">
+      <h3 id="settingsTitle" class="settings-title">Settings</h3>
+      <button id="settingsClose" class="btn-chip">Close</button>
+    </header>
+    <div class="settings-tabs" id="settingsTabs">
+      <button class="settings-tab active" data-tab="general">General</button>
+      <button class="settings-tab" data-tab="media">Media</button>
+      <button class="settings-tab" data-tab="recording">Recording</button>
+      <button class="settings-tab" data-tab="advanced">Advanced</button>
+    </div>
+    <div id="settingsBody" class="settings-body"></div>
+    <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
+  </div>
+</div>
+<!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
+
+<!-- Build label -->
+<div id="anvil-build-label">
+  ANVIL build 2025-10-15 00:00 • baseline: mainframe • HUD wired
+</div>
+
+<!-- HUD mount -->
+<div id="hud-root" data-role="hud-root"></div>
+
+  <!-- Present Mode exit button (visible only in Present Mode) -->
+  <button id="presentExitBtn" class="present-exit" type="button">Exit Present (Esc)</button>
+
+  <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
+
+  <!-- First-time helper: show a topbar "Load Demo Script" CTA when script is empty -->
+  <script>
+  (function(){
+    try{
+      var btn = document.getElementById('loadDemoBtn');
+      if (!btn) return;
+      var showIfEmpty = function(){
+        try{
+          var scriptEl = document.getElementById('script');
+          var ed = document.getElementById('editor');
+          var hasLines = !!(scriptEl && scriptEl.querySelector('.line'));
+          var hasText = !!(ed && ed.value && ed.value.trim().length > 0);
+          btn.hidden = !!(hasLines || hasText);
+        }catch{}
+      };
+      // Wire click → reuse existing sidebar control
+      btn.addEventListener('click', function(){
+        try{
+          var loadBtn = document.getElementById('loadSample');
+          if (loadBtn && typeof loadBtn.click === 'function') loadBtn.click();
+          setTimeout(showIfEmpty, 150);
+        }catch{}
+      });
+      // Observe initial state and after a short delay post-boot
+      showIfEmpty();
+      setTimeout(showIfEmpty, 600);
+      document.addEventListener('tp:init:done', showIfEmpty, { once: true });
+    }catch{}
+  })();
+  </script>
+</body>
+</html>

@@ -5,8 +5,10 @@
   });
 </script>
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Display</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Display</title>
+  <script type="module" src="typography-bridge.js"></script>
   <style>
           :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#2ea8ff;--s2-color:#ff6b6b}
           html,body{height:100%}
@@ -40,6 +42,25 @@
           #mirrorCamWrap{position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;z-index:1200;}
           #mirrorCamVideo{width:100%;max-width:100%;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;display:block;}
           #mirrorCamLoading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px system-ui;color:#9ba7b2;background:rgba(0,0,0,.55);border:1px solid var(--edge);border-radius:12px;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);}
+          /* === Typography vars and application (Pack A) === */
+          :root{ --tp-font-size:56px; --tp-line-height:1.4; }
+          #viewer .script .line,
+          #viewer .script p,
+          #wrap   .script .line,
+          #wrap   .script p{
+            font-size: var(--tp-font-size, 56px) !important;
+            line-height: var(--tp-line-height, 1.4) !important;
+          }
+          /* Responsive script column (main #viewer and display #wrap) */
+          #viewer .script,
+          #wrap   .script {
+            margin-inline: auto;
+            padding-inline: max(16px, 3vw);
+            max-width: min(
+              calc(var(--tp-maxch, 95) * 1ch),
+              calc(100vw - 2 * max(16px, 3vw))
+            );
+          }
         </style></head>
         <body>
           <header id="displayTopbar">
@@ -62,6 +83,20 @@
           </div>
           <div id="preRoll"><div class="card"><div class="hint">Begin speaking in</div><div class="num" id="preRollNum">3</div></div></div>
           <script>
+            // Expose our scroll root to the opener so main can target the right viewer
+            try {
+              const setOpenerRoot = () => {
+                try {
+                  if (window.opener && !window.opener.closed) {
+                    const wrap = document.getElementById('wrap');
+                    if (wrap) window.opener.__tpDisplayViewerEl = wrap;
+                  }
+                } catch {}
+              };
+              document.addEventListener('DOMContentLoaded', setOpenerRoot);
+              // Also try again after a small delay to catch late-mount
+              setTimeout(setOpenerRoot, 250);
+            } catch {}
             const scriptEl = document.getElementById('script');
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
@@ -82,9 +117,17 @@
                 }
               };
             }
-            // TP: zoom-guard (display)
+            // TP: zoom-guard (display) + in-app Ctrl/Cmd + Wheel zoom
             try {
-              window.addEventListener('wheel', (e)=>{ if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false });
+              window.addEventListener('wheel', (e)=>{
+                try {
+                  if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    const step = 0.05;
+                    nudgeScale(e.deltaY < 0 ? +step : -step);
+                  }
+                } catch {}
+              }, { passive: false });
               window.addEventListener('keydown', (e)=>{
                 if (e.ctrlKey || e.metaKey) {
                   const k = (e.key||'');
@@ -154,7 +197,7 @@
               const delta = targetTop - currentTop;
 
               // Hysteresis: ignore tiny corrections
-              if (Math.abs(delta) < 6) {
+              if (Math.abs(delta) < 2) {
                 logScrollCommand(targetTop, currentTop, delta, 'N/A', 'tiny');
                 return;
               }
@@ -180,8 +223,84 @@
               }
             }
 
+            // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
+            try {
+              const chan = new BroadcastChannel('tp_display');
+              chan.addEventListener('message', (e) => {
+                try {
+                  const msg = e?.data || {};
+                  // Lightweight mirror/diagnostic channel
+                  if (msg && msg.t === 'display:ping') {
+                    try { chan.postMessage({ t: 'display:pong' }); } catch {}
+                    return;
+                  }
+                  if (msg && msg.t === 'scrollTop') {
+                    try {
+                      const top = Math.max(0, Number(msg.v) | 0);
+                      requestAnimationFrame(() => {
+                        try { wrap.scrollTo({ top, behavior: 'auto' }); } catch {}
+                        if (msg.ask) {
+                          try { chan.postMessage({ t: 'display:applied', v: wrap.scrollTop | 0 }); } catch {}
+                        }
+                      });
+                    } catch {}
+                    return;
+                  }
+                  if (msg && msg.kind === 'tp:script' && msg.source === 'main') {
+                    try { window.__lastDisplayHash = msg.textHash || ''; } catch {}
+                    if (typeof msg.text === 'string') {
+                      scriptEl.innerHTML = msg.text;
+                      applyScaled();
+                      applyBottomPad();
+                    }
+                    if (typeof msg.anchorRatio === 'number' && isFinite(msg.anchorRatio)) {
+                      const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                      wrap.scrollTop = Math.round(Math.max(0, Math.min(1, msg.anchorRatio)) * max);
+                    }
+                  } else if (msg && msg.kind === 'tp:typography' && msg.source === 'main' && msg.display === 'display') {
+                    // Apply CSS variables directly from payload
+                    try {
+                      const s = document.documentElement.style;
+                      const x = msg.t || {};
+                      if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
+                      if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
+                      if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
+                      if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
+                      if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
+                      if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
+                      if (x.color) s.setProperty('--tp-fg', x.color);
+                      if (x.background) s.setProperty('--tp-bg', x.background);
+                      if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
+                      if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                      // Also update our base metrics so applyScaled reflects the new values
+                      if (x.fontSizePx != null || x.lineHeight != null) {
+                        applyBase(x.fontSizePx, x.lineHeight);
+                      }
+                    } catch {}
+                    // reflow helpers
+                    applyScaled();
+                    applyBottomPad();
+                  }
+                } catch {}
+              });
+            } catch {}
+
             window.addEventListener('message', ev => {
               const d = ev.data||{};
+              // New display-sync snapshot via postMessage fallback
+              if (d && d.kind === 'tp:script' && d.source === 'main') {
+                try { window.__lastDisplayHash = d.textHash || ''; } catch {}
+                if (typeof d.text === 'string') {
+                  scriptEl.innerHTML = d.text;
+                  applyScaled();
+                  applyBottomPad();
+                }
+                if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
+                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                  wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
+                }
+                return; // handled
+              }
               // WebRTC camera offer/candidate handling
               if (!window.__camPC && (d.type === 'cam-offer')) {
                 try {
@@ -204,6 +323,29 @@
               }
               if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
               if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
+              if (d && d.kind === 'tp:typography' && d.source === 'main' && d.display === 'display') {
+                try {
+                  const s = document.documentElement.style;
+                  const x = d.t || {};
+                  if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
+                  if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
+                  if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
+                  if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
+                  if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
+                  if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
+                  if (x.color) s.setProperty('--tp-fg', x.color);
+                  if (x.background) s.setProperty('--tp-bg', x.background);
+                  if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
+                  if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                  // Sync our base metrics for inline sizing
+                  if (x.fontSizePx != null || x.lineHeight != null) {
+                    applyBase(x.fontSizePx, x.lineHeight);
+                  }
+                } catch {}
+                applyScaled();
+                applyBottomPad();
+                return;
+              }
               if(d.type==='scroll'){
                 // Guard against out-of-order scrolls using seq/ts if present
                 try{
@@ -261,5 +403,42 @@
                 else if (k === '0'){ e.preventDefault(); dispScale = 1.0; try{ localStorage.setItem('tp_display_font_scale_v1','1'); }catch{} applyScaled(); }
               }
             });
+            // Rehearsal Mode mirror: apply tint + watermark listener
+            try {
+              function applyRehearsalDisplay(active){
+                try {
+                  document.body.classList.toggle('is-rehearsal-display', !!active);
+                  // Soft visual cue distinct from main watermark
+                  if (active) {
+                    if (!document.getElementById('rehearsalDisplayWatermark')){
+                      const w = document.createElement('div');
+                      w.id='rehearsalDisplayWatermark';
+                      w.style.cssText='position:fixed;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:9999;font:700 clamp(20px,6vw,60px)/1 system-ui;color:#fff;opacity:.06;letter-spacing:.15em;text-transform:uppercase;';
+                      w.textContent='REHEARSAL';
+                      document.body.appendChild(w);
+                    }
+                  }
+                } catch {}
+              }
+              // Initial state (if main already set flag before spawn)
+              try { applyRehearsalDisplay(window.opener && window.opener.__TP_REHEARSAL); } catch {}
+              window.addEventListener('message', (ev)=>{
+                try {
+                  if (ev && ev.data === 'tp:rehearsal:start') applyRehearsalDisplay(true);
+                  else if (ev && ev.data === 'tp:rehearsal:stop') applyRehearsalDisplay(false);
+                } catch {}
+              });
+              // BroadcastChannel mirror (in case direct postMessage missed)
+              try {
+                const rchan = new BroadcastChannel('tp_rehearsal');
+                rchan.addEventListener('message', (e)=>{
+                  try {
+                    if (e?.data?.t === 'rehearsal' && typeof e.data.on === 'boolean') {
+                      applyRehearsalDisplay(!!e.data.on);
+                    }
+                  } catch {}
+                });
+              } catch {}
+            } catch {}
           </script>
         </body></html>
