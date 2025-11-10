@@ -604,11 +604,46 @@ function installScrollRouter(opts) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      // All non-hybrid modes require both user intent AND speech to be active
-      const want = !!userEnabled && !!speechActive;
-      console.log('[applyGate] Non-hybrid mode - want:', want, 'calling Auto.setEnabled');
-      try { window.HUD?.log?.('scroll-router', `applyGate non-hybrid: want=${want} calling Auto.setEnabled`); } catch {}
-      if (typeof auto.setEnabled === "function") auto.setEnabled(want);
+      // --- gate inputs ---
+      const mode = state2.mode;
+      const hasScript = (typeof window.__tpHasScript === 'boolean')
+        ? window.__tpHasScript
+        : ((window.Auto && window.Auto.state && typeof window.Auto.state.hasScript === 'boolean')
+            ? !!window.Auto.state.hasScript
+            : true); // default to true if signal isn't wired yet
+
+      let want = false;
+      switch (mode) {
+        case 'hybrid':
+          // needs user toggle + live speech + script present (won't hit here, defensive)
+          want = userEnabled && speechActive && hasScript;
+          break;
+        case 'wpm':
+        case 'asr':
+          // timer-driven or ASR-paced: respect user toggle + script present
+          want = userEnabled && hasScript;
+          break;
+        case 'step':
+        case 'rehearsal':
+          // manual modes
+          want = false;
+          break;
+        default:
+          want = !!userEnabled && hasScript;
+          break;
+      }
+
+      // Only flip if it changes
+      try {
+        const was = !!window.Auto?.isEnabled?.();
+        if (was !== want) {
+          window.Auto?.setEnabled?.(want);
+        }
+      } catch {}
+
+      // Optional: richer debug
+      try { window.HUD?.log?.('router:gate', { mode, userEnabled, speechActive, hasScript, want }); } catch {}
+
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
@@ -997,6 +1032,6 @@ function installScrollRouter(opts) {
   }
 }
 export {
-    installScrollRouter
+  installScrollRouter
 };
 
