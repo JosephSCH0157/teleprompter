@@ -153,7 +153,7 @@ function handleDropdownChange(e?: Event) {
     const val = sel.value;
     if ((window as any).__TP_REHEARSAL && val !== 'rehearsal') {
       if (!confirmExit()) {
-        sel.value = 'rehearsal';
+        try { (window as any).__tpMode?.set?.('rehearsal'); } catch {}
         e?.preventDefault();
         return;
       }
@@ -240,11 +240,7 @@ export function resolveInitialRehearsal() {
   try { should = /(?:[?&])rehearsal=1/i.test(location.search); } catch {}
   try { should = should || localStorage.getItem('tp_rehearsal_v1') === '1'; } catch {}
   if (should) {
-    try {
-      try { (window as any).__tpMode?.set?.('rehearsal'); } catch {}
-      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      if (sel) sel.value = 'rehearsal';
-    } catch {}
+  try { (window as any).__tpMode?.set?.('rehearsal'); } catch {}
     if (!(window as any).__TP_REHEARSAL) enable();
   }
 }
@@ -256,7 +252,7 @@ export function syncRehearsalFromMode(mode: string, revert?: (_prevMode: string)
   if (wants && !on) return enable();
   if (!wants && on) {
     if (!confirmExit()) {
-      try { const sel = document.getElementById('scrollMode') as HTMLSelectElement | null; if (sel) sel.value = 'rehearsal'; } catch {}
+      try { (window as any).__tpMode?.set?.('rehearsal'); } catch {}
       try { revert?.('rehearsal'); } catch {}
       return;
     }

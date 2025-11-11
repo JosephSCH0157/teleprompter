@@ -20,6 +20,26 @@ try {
   (window as any).__TP_TS_HUD_BOOT = true;
 } catch {}
 
+// Dev-only guardrail: warn on non-SSOT tp:mode emits
+try {
+  const devOn = (() => { try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
+  if (devOn && !(window as any).__tpModeGuardInstalled) {
+    (window as any).__tpModeGuardInstalled = true;
+    const origDispatch = window.dispatchEvent.bind(window);
+    window.dispatchEvent = function(evt: Event) {
+      try {
+        if ((evt as any)?.type === 'tp:mode') {
+          const d = (evt as any)?.detail || {};
+          if (!d || !d.ssot) {
+            console.warn('[SSOT] Non-SSOT tp:mode emit detected', d);
+          }
+        }
+      } catch {}
+      return origDispatch(evt);
+    };
+  }
+} catch {}
+
 async function boot(){
   try {
     // Delegate to existing JS boot for legacy pieces (router boot skipped via flag)
@@ -195,36 +215,8 @@ async function boot(){
   try { initHotkeys();       try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { try { console.warn('[entry.ts] initHotkeys failed', e); } catch {} }
   try { installSpeech();     try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:speech'); } catch {} } catch (e) { try { console.warn('[entry.ts] installSpeech failed', e); } catch {} }
 
-  // Layer shared helpers (idempotent)
-    // Persist scroll mode across reloads using a cookie
-    try {
-      const cookieKey = 'tp_scroll_mode';
-      const getCookie = (name: string): string | null => {
-        try {
-          const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
-          return m ? decodeURIComponent(m[1]) : null;
-        } catch { return null; }
-      };
-      const setCookie = (name: string, value: string, days = 365) => {
-        try {
-          const maxAge = days * 24 * 60 * 60;
-          document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; samesite=lax`;
-        } catch {}
-      };
-      // Apply persisted mode before installing mode row sync and emitting events
-      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      const saved = getCookie(cookieKey);
-      if (sel && saved) {
-        const exists = Array.from(sel.options || []).some(o => (o as HTMLOptionElement).value === saved);
-        if (exists) sel.value = saved;
-      }
-      // Attach a one-time writer on change
-      if (sel && !(window as any).__tpModeCookieWriter) {
-        (window as any).__tpModeCookieWriter = true;
-        sel.addEventListener('change', () => { try { setCookie(cookieKey, sel.value); } catch {} }, { capture: true });
-      }
-    } catch {}
-    // Hydrate unified mode state (SSOT) before helpers
+    // Layer shared helpers (idempotent)
+    // Hydrate unified mode state (SSOT) before helpers; SSOT persists internally
     try {
       const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
       initModeState({ defaultMode: 'manual', select: sel });
@@ -232,7 +224,7 @@ async function boot(){
     } catch {}
     try { installModeRowsSync(); } catch {}
     try { installAutoToggleSync(Auto); } catch {}
-    // Helper-friendly event emitters (tp:mode, tp:autoState) so smoke can observe under TS boot
+    // Helper-friendly event emitters (tp:autoState) so smoke can observe under TS boot
     try {
       // Auto state emitter (reads from Auto feature)
       function __emitAutoState(){
@@ -241,18 +233,8 @@ async function boot(){
           if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st }));
         } catch {}
       }
-      function __emitCurrentMode(){ try { window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: getMode() } })); } catch {} }
-      // Wire mode emitter once
-      // Replace legacy direct DOM emitter: subscribe to unified mode-state
-      try {
-        if (!(window as any).__tpUnifiedModeListener) {
-          (window as any).__tpUnifiedModeListener = true;
-          onMode(() => { try { __emitCurrentMode(); } catch {} });
-        }
-      } catch {}
       // Seed initial auto state
     __emitAutoState();
-    __emitCurrentMode();
       // Re-emit when autoscroll engine starts/stops or ticks
       try { document.addEventListener('autoscroll:start', __emitAutoState, { capture: true }); } catch {}
       try { document.addEventListener('autoscroll:stop', __emitAutoState,  { capture: true }); } catch {}
@@ -262,24 +244,6 @@ async function boot(){
         document.addEventListener('input', (ev) => { try { if ((ev?.target as any)?.id === 'autoSpeed') __emitAutoState(); } catch {} }, { capture: true });
         document.addEventListener('change', (ev) => { try { if ((ev?.target as any)?.id === 'autoSpeed') __emitAutoState(); } catch {} }, { capture: true });
       } catch {}
-      // Defensive delayed re-emits so late observers (like smoke harness) still see at least one event
-      try {
-        [250, 750, 1500].forEach(ms => setTimeout(() => { try { __emitAutoState(); } catch {} try {
-          const mode = getMode(); window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode, reemit:true, at: Date.now() } }));
-        } catch {} }, ms));
-      } catch {}
-      // Mode sweep: emit each available mode once for observers (test harness) to confirm coverage
-      try {
-        if (!(window as any).__tpModeSweepDone) {
-          (window as any).__tpModeSweepDone = true;
-          const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-          const modes = sel ? Array.from(sel.options || []).map(o => (o as HTMLOptionElement).value).filter(Boolean) : [getMode()];
-          modes.forEach((m, i) => setTimeout(() => { try { window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: m, sweep:true, idx:i } })); } catch {} }, 100 + i * 60));
-          if (!modes.includes('auto') && modes.includes('hybrid')) {
-            setTimeout(() => { try { window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: 'auto', aliasOf: 'hybrid', compat:true } })); } catch {} }, 100 + modes.length * 60 + 40);
-          }
-        }
-      } catch {}
 
       // Handshake for smoke harness: re-emit signals when requested
       try {
@@ -287,15 +251,6 @@ async function boot(){
           (window as any).__tpSmokeTapInstalled = true;
           window.addEventListener('tp:smoke:tap', () => {
             try { __emitAutoState(); } catch {}
-            try { __emitCurrentMode(); } catch {}
-            try {
-              const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-              const modes = sel ? Array.from(sel.options || []).map(o => (o as HTMLOptionElement).value).filter(Boolean) : [getMode()];
-              modes.forEach((m, i) => setTimeout(() => { try { window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: m, sweep:true, tap:true, idx:i } })); } catch {} }, 10 + i * 40));
-              if (!modes.includes('auto') && modes.includes('hybrid')) {
-                setTimeout(() => { try { window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode: 'auto', aliasOf: 'hybrid', compat:true, tap:true } })); } catch {} }, 10 + modes.length * 40 + 20);
-              }
-            } catch {}
           });
         }
       } catch {}

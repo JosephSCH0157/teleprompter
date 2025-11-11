@@ -48,7 +48,10 @@
     try { return !!document.body.classList.contains('mode-rehearsal'); } catch { return false; }
   }
   function currentMode() {
-    try { return (window.__tpStore?.get?.('mode') ?? window.__tpScrollMode ?? '').toString().toLowerCase(); } catch { return ''; }
+    try {
+      const m = window.__tpMode?.getMode?.() || window.__tpMode?.get?.();
+      return String(m || '').toLowerCase();
+    } catch { return ''; }
   }
   function micActive() {
     try { return !!window.__tpMic?.isOpen?.(); } catch {}
