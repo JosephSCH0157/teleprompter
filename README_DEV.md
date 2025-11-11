@@ -73,9 +73,11 @@ The application uses a Single Source of Truth (SSOT) for scroll mode.
 Authoritative API (from `core/mode-state.ts`):
 
 ```
+
 getMode(): ScrollMode
 setMode(mode: ScrollMode): void
 onMode(cb: (mode: ScrollMode) => void): () => void
+
 ```
 
 Rules:
