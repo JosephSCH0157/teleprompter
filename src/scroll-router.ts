@@ -8,7 +8,7 @@
 import type { WpmMotor } from './features/wpm';
 import { createWpmScroller } from './features/wpm';
 // SSOT mode integration
-import { getMode as ssotGetMode, onMode as ssotOnMode } from './core/mode-state';
+import { getMode } from './core/mode-state';
 
 // ---------- Types ----------
 
@@ -59,15 +59,10 @@ function isDev(): boolean {
 
 // ---------- Mode + Gate state ----------
 
-// Legacy mirror of mode; now seeded from SSOT and kept in sync.
-let currentMode: ScrollMode = ((): ScrollMode => {
-  try { return ssotGetMode() as ScrollMode; } catch { return 'manual'; }
-})();
-// Subscribe to SSOT changes to keep legacy reads coherent.
-let offModeSync: (() => void) | undefined;
-try {
-  offModeSync = ssotOnMode?.((m) => { currentMode = m as ScrollMode; });
-} catch {}
+// Local accessor for current mode from SSOT
+function __mode(): ScrollMode {
+  try { return getMode() as ScrollMode; } catch { return 'manual'; }
+}
 let _userIntent = false;   // auto toggle (reserved)
 let _speechGate = false;   // speech engine (reserved)
 let lastGateOpen = false;
@@ -358,7 +353,7 @@ function startWpmChip(_startWpm: number) {
     setWpmChip(`${prefix}${wpmSetting} WPM • ${Math.round(pxs)} px/s • ~${lps.toFixed(2)} lps`, 'ok');
 
     // stall hint when px/s is near zero while we think we're running
-    if (pxs < 1 && isAutoOn() && currentMode === 'wpm') notifyStall();
+  if (pxs < 1 && isAutoOn() && __mode() === 'wpm') notifyStall();
   }, interval);
 }
 
@@ -430,7 +425,7 @@ function userPause(ms = 1500) {
   setWpmChip('Paused', 'muted');
   clearTimeout(userPauseTimer);
   userPauseTimer = window.setTimeout(() => {
-    if (currentMode === 'wpm' && isAutoOn()) {
+  if (__mode() === 'wpm' && isAutoOn()) {
       showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
     } else {
       setWpmChip('Paused', 'muted');
@@ -440,7 +435,7 @@ function userPause(ms = 1500) {
 
 // Selection-aware pause
 document.addEventListener('selectionchange', () => {
-  if (currentMode !== 'wpm' || !wpm.isRunning()) return;
+  if (__mode() !== 'wpm' || !wpm.isRunning()) return;
   const sel = document.getSelection?.();
   if (!sel || sel.type !== 'Range' || !sel.toString().trim()) return;
   const viewer = getViewer();
@@ -452,7 +447,7 @@ document.addEventListener('selectionchange', () => {
   setWpmChip('Paused (select)', 'muted');
   clearTimeout(selPauseTimer);
   selPauseTimer = window.setTimeout(() => {
-    if (currentMode === 'wpm' && isAutoOn()) {
+  if (__mode() === 'wpm' && isAutoOn()) {
       showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
     }
   }, 2000);
@@ -462,15 +457,15 @@ document.addEventListener('selectionchange', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (wpm.isRunning()) { wpm.stop(); setWpmChip('Paused (background)', 'muted'); }
-  } else if (currentMode === 'wpm' && isAutoOn()) {
+  } else if (__mode() === 'wpm' && isAutoOn()) {
     showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
   }
 }, { passive: true });
 
 // Manual touch pause only in WPM mode
-getViewer()?.addEventListener('wheel', () => { if (currentMode === 'wpm') userPause(); }, { passive: true });
+getViewer()?.addEventListener('wheel', () => { if (__mode() === 'wpm') userPause(); }, { passive: true });
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (currentMode !== 'wpm') return;
+  if (__mode() !== 'wpm') return;
   const keys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
   if (keys.includes(e.key)) userPause();
 }, { passive: true });
@@ -493,7 +488,6 @@ function logGate(mode: ScrollMode, user: boolean, speech: boolean, open: boolean
 }
 
 export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
-  currentMode = mode;
   _userIntent = user;
   _speechGate = speech;
   const open = computeOpen(mode, user, speech);
@@ -599,9 +593,8 @@ export function initScrollRouter() {
   try { window.dispatchEvent(new CustomEvent('tp:router:init')); } catch {}
 }
 
-// Optional public dispose to release SSOT subscription & observers if hot-reloading.
+// Optional public dispose to release observers if hot-reloading.
 export function disposeScrollRouter() {
-  try { offModeSync && offModeSync(); } catch {}
   try { if (wpm.isRunning()) wpm.stop(); } catch {}
   stopWpmChip();
   detachViewerObservers();

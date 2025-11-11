@@ -238,6 +238,43 @@ async function main() {
     console.warn('[e2e] ui-invariants: WARN', String(e && e.message || e));
   }
 
+  // Run SSOT smoke probes: persistence + select-binding sanity
+  try {
+    await page.evaluate(() => {
+      (function () {
+        try {
+          if (!window.__tpMode) return;
+          const HUD = (window.HUD || { log: console.log });
+          const before = window.__tpMode.getMode?.();
+          window.__tpMode.setMode?.('rehearsal');
+          HUD.log('mode:persist:flip', { to: 'rehearsal' });
+          const now = window.__tpMode.getMode?.();
+          HUD.log('mode:persist:check', { before, now, ok: now === 'rehearsal' });
+          // restore
+          if (before) window.__tpMode.setMode?.(before);
+        } catch {}
+      })();
+    });
+  } catch (e) { console.warn('[e2e] probe: mode-persist error', e?.message || e); }
+
+  try {
+    await page.evaluate(() => {
+      (function () {
+        try {
+          if (!window.__tpMode) return;
+          const sel = document.getElementById('scrollMode');
+          if (!sel) return;
+          const HUD = (window.HUD || { log: console.log });
+          const target = sel.querySelector('option[value="auto"]') ? 'auto' : 'manual';
+          sel.value = target;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          const now = window.__tpMode.getMode?.();
+          HUD.log('mode:select:change', { target, now, ok: now === target });
+        } catch {}
+      })();
+    });
+  } catch (e) { console.warn('[e2e] probe: mode-select error', e?.message || e); }
+
   // Wait for the recorder module to be present in the page (runner-side wait)
   try {
     await page.waitForFunction(
