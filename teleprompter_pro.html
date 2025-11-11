@@ -36,7 +36,8 @@
     (async () => {
       if (window.__tpBooted) return;
       window.__tpBootSrc = 'module';
-      await import('./src/index.js');
+      // Prefer unified TS build output
+      await import('./dist/entry.js');
     })().catch(err => {
       try { console.warn('[boot] module import failed → fallback', err); } catch {}
       if (!window.__tpBooted) {
