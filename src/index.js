@@ -172,8 +172,10 @@ import './ui/settings.js';
 import './hud/asr-stats.js';
 import './hud/rec-stats.js';
 // Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
-// (Replaced by TypeScript modules: script-folder-browser.ts & settings/advanced-folder.ts)
-// Legacy JS prototypes disabled to avoid double-init.
+// Folder-backed Scripts loader (JS prototypes kept for JS boot path)
+import './features/script-folder-browser.js';
+// Settings Advanced: folder mapping controls (JS path)
+import './features/settings-advanced-folder.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
