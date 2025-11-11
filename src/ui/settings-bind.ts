@@ -1,5 +1,5 @@
 // src/ui/settings-bind.ts
-import { getSettings, patchSettings, onSettings } from '../core/settings-state';
+import { getSettings, onSettings, patchSettings } from '../core/settings-state';
 import type { Settings } from '../core/settings-types';
 
 /** Declarative binder: elements with data-setting="key" stay in sync with SSOT.
