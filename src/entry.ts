@@ -5,10 +5,17 @@ import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import './boot/compat-ids';
 import { installModeRowsSync } from './boot/uiModeSync.js';
 import * as Auto from './features/autoscroll.js';
+import { initHotkeys } from './features/hotkeys.js';
+import { initPersistence } from './features/persistence.js';
+import { initScroll } from './features/scroll.js';
+import { installSpeech } from './features/speech-loader.js';
+import { initTelemetry } from './features/telemetry.js';
+import * as UI from './ui/dom.js';
 // Signal JS path to skip its internal router and ASR boot logic
 try {
   (window as any).__TP_TS_ROUTER_BOOT = true;
   (window as any).__TP_TS_ASR_BOOT = true;
+  (window as any).__TP_TS_CORE_BOOT = true;
 } catch {}
 
 async function boot(){
@@ -103,7 +110,15 @@ async function boot(){
       try { console.warn('[entry.ts] ASR init failed', e); } catch {}
     }
 
-    // Layer shared helpers (idempotent)
+  // Core UI and feature boot now live in TS entry (index.js will skip these when __TP_TS_CORE_BOOT is true)
+  try { UI.bindStaticDom(); } catch {}
+  try { initPersistence();   try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { try { console.warn('[entry.ts] initPersistence failed', e); } catch {} }
+  try { initTelemetry();     try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { try { console.warn('[entry.ts] initTelemetry failed', e); } catch {} }
+  try { initScroll();        try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { try { console.warn('[entry.ts] initScroll failed', e); } catch {} }
+  try { initHotkeys();       try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { try { console.warn('[entry.ts] initHotkeys failed', e); } catch {} }
+  try { installSpeech();     try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:speech'); } catch {} } catch (e) { try { console.warn('[entry.ts] installSpeech failed', e); } catch {} }
+
+  // Layer shared helpers (idempotent)
     try { installModeRowsSync(); } catch {}
     try { installAutoToggleSync(Auto); } catch {}
     // Helper-friendly event emitters (tp:mode, tp:autoState) so smoke can observe under TS boot

@@ -430,8 +430,12 @@ async function boot() {
         }
       }
     } catch {}
-  UI.bindStaticDom();
-  try { window.__tpRegisterInit && window.__tpRegisterInit('ui:bindStaticDom'); } catch {}
+  if (!window.__TP_TS_CORE_BOOT) {
+    UI.bindStaticDom();
+    try { window.__tpRegisterInit && window.__tpRegisterInit('ui:bindStaticDom'); } catch {}
+  } else {
+    try { console.info('[src/index] skip UI.bindStaticDom (TS core boot)'); } catch {}
+  }
   // Choose and expose the active scroll root so legacy/TS controllers agree (main vs display)
   try {
     function getScrollRoot(){
@@ -449,10 +453,16 @@ async function boot() {
     try { window.__tpScrollRoot = root; } catch {}
   } catch {}
   // Ensure autoscroll engine is initialized before wiring router/UI
-  try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
-  // Force engine OFF at boot; app shouldn't scroll until user starts speech sync or manually toggles.
-  try { Auto.setEnabled && Auto.setEnabled(false); } catch {}
-  try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch {}
+  try {
+    if (!window.__TP_TS_CORE_BOOT) {
+      Auto.initAutoScroll && Auto.initAutoScroll();
+      // Force engine OFF at boot; app shouldn't scroll until user starts speech sync or manually toggles.
+      Auto.setEnabled && Auto.setEnabled(false);
+      try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch {}
+    } else {
+      try { console.info('[src/index] skip Auto.init (TS core boot)'); } catch {}
+    }
+  } catch {}
 
   // Provide a minimal global scroll controller facade for dev/CI bridges and diagnostics.
   // This delegates to the single authoritative Auto engine to avoid double-ownership.
@@ -567,15 +577,18 @@ async function boot() {
       }
     } catch {}
 
-    // Initialize features (idempotent)
-    initOnce('persistence', () => { try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); } });
-    initOnce('telemetry',   () => { try { initTelemetry();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); } });
-    try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
-    initOnce('scroll',      () => { try { initScroll();      try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); } });
-    initOnce('hotkeys',     () => { try { initHotkeys();     try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); } });
-
-    // Install speech start/stop delegator
-    initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
+    // Initialize features (idempotent) — skip if TS entry owns core
+    if (!window.__TP_TS_CORE_BOOT) {
+      initOnce('persistence', () => { try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); } });
+      initOnce('telemetry',   () => { try { initTelemetry();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); } });
+      try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
+      initOnce('scroll',      () => { try { initScroll();      try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); } });
+      initOnce('hotkeys',     () => { try { initHotkeys();     try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); } });
+      // Install speech start/stop delegator
+      initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
+    } else {
+      try { console.info('[src/index] skip core feature init (TS core boot)'); } catch {}
+    }
 
     // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {
