@@ -14,9 +14,9 @@ try { installConsoleNoiseFilter({ debug: false }); } catch {}
 bootstrap().catch(() => {});
 
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
-import './vendor/mammoth';
-import { readPrefsCookie, writePrefsCookie } from './utils/cookies';
 import type { PrefsV1 } from './utils/cookies';
+import { readPrefsCookie, writePrefsCookie } from './utils/cookies';
+import './vendor/mammoth';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
 import './ui/settings/asrWizard';
 
