@@ -170,6 +170,39 @@ try {
 		} catch {}
 		// Expose cookie helpers globally for legacy JS
 		try { (window as any).readPrefsCookie = readPrefsCookie; (window as any).writePrefsCookie = writePrefsCookie; } catch {}
+
+			// Settings bindings (hydrate + persist)
+			try {
+				function initPrefsBindings(){
+					const theme = document.getElementById('themeSelect') as HTMLSelectElement | null;
+					const hc    = document.getElementById('chkHighContrast') as HTMLInputElement | null;
+					const scale = document.getElementById('fontScaleRange') as HTMLInputElement | null;
+
+					const p = readPrefsCookie();
+					if (theme) theme.value = (p.theme as any) ?? 'system';
+					if (hc)    hc.checked  = !!p.highContrast;
+					if (scale) scale.value = String(p.fontScale ?? 1);
+
+					theme?.addEventListener('change', () => writePrefsCookie({ theme: theme.value as any }));
+					hc?.addEventListener('change', () => writePrefsCookie({ highContrast: hc.checked ? 1 : 0 }));
+					scale?.addEventListener('input',  () => writePrefsCookie({ fontScale: parseFloat(scale.value) }));
+				}
+				initPrefsBindings();
+			} catch {}
+
+			// Cross-tab sync for theme/contrast/scale via BroadcastChannel
+			try {
+				const chan = new BroadcastChannel('anvil_prefs');
+				chan.onmessage = (ev) => {
+					try { if (!ev || ev.data !== 'prefs:update') return; } catch { return; }
+					try {
+						const p = readPrefsCookie();
+						document.documentElement.dataset.theme = p.theme || 'system';
+						document.documentElement.classList.toggle('hc', !!p.highContrast);
+						document.documentElement.style.setProperty('--tp-font-scale', String(p.fontScale || 1));
+					} catch {}
+				};
+			} catch {}
 		// Folder mapping + scripts dropdown (TS path)
 		const onLoadIntoEditor = (text: string, title?: string) => {
 			try { (window as any).setEditorContent?.(text); } catch {}

@@ -60,4 +60,6 @@ export function writePrefsCookie(updates: Partial<PrefsV1>) {
   const exp = new Date(Date.now() + ONE_YEAR).toUTCString();
   const secure = location.protocol === 'https:' ? ' Secure;' : '';
   document.cookie = `${COOKIE}=${v}; Expires=${exp}; SameSite=Lax; Path=/;${secure}`;
+  // Cross-tab notify
+  try { new BroadcastChannel(COOKIE).postMessage('prefs:update'); } catch {}
 }

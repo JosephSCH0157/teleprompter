@@ -31,6 +31,11 @@ export function initScriptFolderBrowser(onLoad: OnLoad) {
     const count = state.entries.length;
     sel.innerHTML = `<option value="">— Select file (${count}) —</option>` +
       state.entries.map((e, i) => `<option value="${i}" ${e.name===last?'selected':''}>${e.name}</option>`).join('');
+    // Ensure selection is applied even if selected attr is ignored by some browsers during rapid DOM updates
+    if (last) {
+      const idx = state.entries.findIndex((e) => e.name === last);
+      if (idx >= 0) sel.value = String(idx);
+    }
     state.hadDir = true;
   };
 

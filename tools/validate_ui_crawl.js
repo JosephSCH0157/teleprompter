@@ -178,6 +178,18 @@ if (!allOk) {
   console.error('\nOne or more required UI controls or checks failed.');
   process.exit(1);
 }
+// Prefs cookie smoke: after boot, cookie should exist (written on boot by index.ts)
+try {
+  const hasCookie = /(?:^|;\s*)anvil_prefs=/.test(String(report && report.cookies || ''));
+  if (typeof report.cookies === 'string') {
+    if (!hasCookie) { console.error('FAIL prefs-cookie — prefs cookie should exist after boot'); allOk = false; }
+    else { console.log('PASS prefs-cookie — cookie present'); }
+  } else {
+    // Fallback: try a simple hint from console logs
+    const hinted = consoleEntries.some((e) => /anvil_prefs/.test(String(e && e.text || '')));
+    if (!hinted) console.warn('WARN prefs-cookie — report.cookies not captured; consider adding it to crawl');
+  }
+} catch {}
 // Additional probes validation: ensure legend exists and renderer applies different colors
 try {
   // Content length guard for movement probes

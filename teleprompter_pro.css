@@ -109,6 +109,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 
         :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; 
+            /* Prefs defaults */
+            --tp-font-scale: 1;
             /* Typography tokens (runtime-updated via CSS variables) */
             --tp-font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
             --tp-font-size: 56px;
