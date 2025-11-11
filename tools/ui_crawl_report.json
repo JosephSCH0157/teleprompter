@@ -161,6 +161,15 @@
     },
     {
       "type": "debug",
+      "text": "[init] import:../adapters/bridge.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
       "text": "[init] import:../eggs.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
@@ -179,34 +188,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../adapters/bridge.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
       "text": "[init] import:../adapters/obs.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../debug-tools.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -233,6 +215,15 @@
     },
     {
       "type": "debug",
+      "text": "[init] import:../debug-tools.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
       "text": "[init] import:../help.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
@@ -243,6 +234,15 @@
     {
       "type": "debug",
       "text": "[init] import:../scroll-control.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -645,7 +645,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -654,7 +654,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -680,7 +680,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -689,7 +689,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -698,7 +698,70 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -717,9 +780,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "619e34db6d37da35cf4cb673b2d70ed63f3b98c7",
+      "gitSha": "ae74f239a9be23edd54db5ed64d6228d51a78e5a",
       "branch": "scroll-fix-clean",
-      "buildTime": "2025-11-11T03:09:05.995Z"
+      "buildTime": "2025-11-11T03:52:34.481Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -789,13 +852,26 @@
     "delta": 40,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
+  "wpmChipProbe": {
+    "hasChip": true,
+    "changed": false,
+    "includesTokens": true,
+    "text0": "Reduced • 90 WPM • 16 px/s • ~0.2 lps",
+    "text1": "Reduced • 90 WPM • 16 px/s • ~0.2 lps",
+    "samples": [
+      "Reduced • 90 WPM • 16 px/s • ~0.2 lps",
+      "Reduced • 90 WPM • 16 px/s • ~0.2 lps",
+      "Reduced • 90 WPM • 16 px/s • ~0.2 lps",
+      "Reduced • 90 WPM • 16 px/s • ~0.2 lps"
+    ]
+  },
   "autoState": {
     "sawEvent": true,
     "intentOn": true,
     "gate": "on",
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
-    "chip": "Auto: Paused",
+    "chip": "Auto: On",
     "delta": 26
   },
   "appVersionText": "v1.6.4",

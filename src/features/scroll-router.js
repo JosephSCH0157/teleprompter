@@ -488,6 +488,35 @@ function installScrollRouter(opts) {
   // --- Chip mount & control ------------------------------------
   // Live chip showing WPM • px/s while motor runs
   let wpmChipTimer = 0;
+  // Track background pause intent for visibility change handling
+  let wpmBgPaused = false;
+  // Prefers-reduced-motion query (cap rate and annotate chip)
+  const prmQuery = (function(){ try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)'); } catch { return null; } })();
+  function isReducedMotion(){ try { return !!(prmQuery && prmQuery.matches); } catch { return false; } }
+  function onPrmChange(){
+    try {
+      if (state2.mode !== 'wpm') return;
+      // Cap WPM target when reduced motion is preferred
+      const cap = (()=>{ try { return Number(localStorage.getItem('tp_prm_wpm_cap')||'90')||90; } catch { return 90; } })();
+      if (wpmSetting > cap) {
+        wpmSetting = cap;
+        if (wpm.isRunning()) { try { wpm.setRateWpm(wpmSetting); } catch {} }
+      }
+    } catch {}
+  }
+  try { prmQuery && prmQuery.addEventListener && prmQuery.addEventListener('change', onPrmChange); } catch {}
+
+  function sampleLineHeightPx(){
+    try {
+      const v = getViewerEl(); if (!v) return 28;
+      const el = v.querySelector('[data-line], .line, p, span');
+      const h = el && el.getBoundingClientRect ? (el.getBoundingClientRect().height||0) : 0;
+      return Math.max(12, Math.min(96, h||28));
+    } catch { return 28; }
+  }
+  function viewerScrollable(){
+    try { const v = getViewerEl(); if (!v) return false; return (v.scrollHeight - v.clientHeight) > 8; } catch { return false; }
+  }
   function ensureWpmChip() {
     let el = document.getElementById('wpmChip');
     if (el) return el;
@@ -620,10 +649,17 @@ function installScrollRouter(opts) {
           }
         } catch {}
         const pxs = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
-        setWpmChip(`${wpmSetting} WPM • ${fmt(pxs)} px/s`, 'ok');
+        const lh = sampleLineHeightPx();
+        const lps = lh > 0 ? (pxs / lh) : 0;
+        const approx = (n)=> (Math.round(n*10)/10).toFixed(1);
+        const prefix = isReducedMotion() ? 'Reduced • ' : '';
+        setWpmChip(`${prefix}${wpmSetting} WPM • ${fmt(pxs)} px/s • ~${approx(lps)} lps`, 'ok');
       }, 250);
       const pxs0 = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
-      setWpmChip(`${currentWpm} WPM • ${Math.round(pxs0)} px/s`, 'ok');
+      const lh0 = sampleLineHeightPx();
+      const lps0 = lh0 > 0 ? (pxs0 / lh0) : 0;
+      const prefix0 = isReducedMotion() ? 'Reduced • ' : '';
+      setWpmChip(`${prefix0}${currentWpm} WPM • ${Math.round(pxs0)} px/s • ~${(Math.round(lps0*10)/10).toFixed(1)} lps`, 'ok');
     } catch {}
   }
   function stopWpmChip() {
@@ -665,6 +701,33 @@ function installScrollRouter(opts) {
       el.classList.add('tp-chip--fade');
     } catch {}
   }
+  // Background pause/resume on tab visibility
+  try {
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (state2.mode !== 'wpm') return;
+        if (document.visibilityState === 'hidden') {
+          if (wpm.isRunning()) {
+            wpm.stop();
+            stopWpmChip();
+            setWpmChip('Paused (background)', 'muted');
+            fadeOutWpmChip(2000);
+            wpmBgPaused = true;
+            window.HUD?.log?.('wpm:pause', { reason: 'background' });
+          }
+        } else if (document.visibilityState === 'visible') {
+          if (wpmBgPaused && isAutoOn()) {
+            // Respect reduced motion cap on resume
+            onPrmChange();
+            wpm.start(wpmSetting);
+            startWpmChip(wpmSetting);
+            showWpmChip();
+          }
+          wpmBgPaused = false;
+        }
+      } catch {}
+    });
+  } catch {}
 
   // Manual touch pause: brief stop on wheel/scroll keys, auto-resume if still in WPM with auto intent on
   let userPauseTimer = 0;
@@ -865,9 +928,18 @@ function installScrollRouter(opts) {
         } catch {}
         try {
           if (want && !wpmOpen) {
-            wpm.start(wpmSetting);
-            startWpmChip(wpmSetting);
-            showWpmChip();
+            // Guard: if nothing to scroll, do not start motor
+            if (!viewerScrollable()) {
+              setWpmChip('Nothing to scroll', 'muted');
+              showWpmChip();
+              fadeOutWpmChip(1800);
+            } else {
+              // Respect reduced motion
+              onPrmChange();
+              wpm.start(wpmSetting);
+              startWpmChip(wpmSetting);
+              showWpmChip();
+            }
             // Attach observers on viewer for recalibration
             try { attachViewerObservers(getViewerEl(), wpm, () => wpmSetting); } catch {}
           } else if (!want && wpmOpen) {
@@ -1051,8 +1123,13 @@ function installScrollRouter(opts) {
         try {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
-            localStorage.setItem('tp_baseline_wpm', String(val));
-            wpmSetting = val;
+            let next = val;
+            if (isReducedMotion()) {
+              const cap = (()=>{ try { return Number(localStorage.getItem('tp_prm_wpm_cap')||'90')||90; } catch { return 90; } })();
+              next = Math.min(next, cap);
+            }
+            localStorage.setItem('tp_baseline_wpm', String(next));
+            wpmSetting = next;
             // In WPM mode, immediately update scroll speed based on new target WPM
             if (state2.mode === 'wpm' && wpm.isRunning()) { try { wpm.setRateWpm(val); } catch {} }
           }
@@ -1068,9 +1145,14 @@ function installScrollRouter(opts) {
         try {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
-            localStorage.setItem('tp_baseline_wpm', String(val));
+            let next = val;
+            if (isReducedMotion()) {
+              const cap = (()=>{ try { return Number(localStorage.getItem('tp_prm_wpm_cap')||'90')||90; } catch { return 90; } })();
+              next = Math.min(next, cap);
+            }
+            localStorage.setItem('tp_baseline_wpm', String(next));
             // In WPM mode, immediately update scroll speed
-            wpmSetting = val;
+            wpmSetting = next;
             if (state2.mode === 'wpm' && wpm.isRunning()) { try { wpm.setRateWpm(val); } catch {} }
           }
         } catch {

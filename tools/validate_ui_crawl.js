@@ -32,6 +32,7 @@ const lateProbe = report.lateProbe || {};
 const settingsProbe = report.settingsProbe || {};
 const obsTestProbe = report.obsTestProbe || {};
 const scrollProbe = report.scrollProbe || {};
+const wpmChipProbe = report.wpmChipProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
 const meta = report.meta || {};
 // CI detection retained for potential future use; currently not used in validation rules
@@ -330,6 +331,30 @@ try {
     }
   } catch (e) {
     console.warn('WARN scroll-probe validation failed:', String(e && e.message || e));
+  }
+  // WPM chip assertions (presence + dynamic update + token content)
+  try {
+    if (!wpmChipProbe || !wpmChipProbe.hasChip) {
+      console.error('FAIL wpm-chip-missing — WPM chip not found in WPM mode');
+      allOk = false;
+    } else {
+      console.log('PASS wpm-chip-present — initial="' + String(wpmChipProbe.text0||'').slice(0,60) + '"');
+      if (!wpmChipProbe.includesTokens) {
+        console.error('FAIL wpm-chip-content — expected WPM and px/s tokens');
+        allOk = false;
+      } else {
+        console.log('PASS wpm-chip-content');
+      }
+      if (!wpmChipProbe.changed) {
+        const msg = 'wpm-chip-dynamic — chip text did not update over sampling window';
+        if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; }
+        else { console.warn('WARN ' + msg); }
+      } else {
+        console.log('PASS wpm-chip-dynamic — changed');
+      }
+    }
+  } catch (e) {
+    console.warn('WARN wpm-chip validation failed:', String(e && e.message || e));
   }
 } catch (e) {
   console.warn('WARN probes evaluation failed:', String(e && e.message || e));

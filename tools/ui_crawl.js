@@ -454,6 +454,67 @@ const cp = require('child_process');
       } catch (e) {
         out.scrollProbe = { err: String(e && e.message || e) };
       }
+      // WPM chip probe: switch to WPM mode and verify chip presence and live update
+      try {
+        const chipProbe = await (async function(page){
+          return await page.evaluate(async () => {
+            const sleep = (ms) => new Promise(r=>setTimeout(r, ms));
+            try {
+              // Ensure long content and top position (done earlier, but defensively re-assert)
+              try { const v = document.getElementById('viewer'); if (v) v.scrollTop = 0; } catch {}
+              const modeSel = document.getElementById('scrollMode');
+              if (modeSel && modeSel.value !== 'wpm') {
+                modeSel.value = 'wpm';
+                modeSel.dispatchEvent(new Event('change', { bubbles:true }));
+                await sleep(150);
+              }
+              // Ensure auto is ON
+              const btn = document.getElementById('autoToggle');
+              if (btn) {
+                const txt = (btn.textContent||'').toLowerCase();
+                const isOn = txt.includes('on') || (btn.getAttribute('data-state')||'') === 'on';
+                if (!isOn) { btn.click(); await sleep(100); }
+              }
+              // Set a deterministic WPM target
+              const wpmTarget = document.getElementById('wpmTarget');
+              if (wpmTarget) {
+                wpmTarget.value = '120';
+                wpmTarget.dispatchEvent(new Event('input', { bubbles:true }));
+                await sleep(50);
+              }
+              // Wait for chip mount
+              await sleep(200);
+              const chip = document.getElementById('wpmChip');
+              // If reduced motion capped initial WPM, attempt a larger jump and then a smaller one
+              const prmCap = (function(){ try { return Number(localStorage.getItem('tp_prm_wpm_cap')||'0')||0; } catch { return 0; } })();
+              const text0 = chip && chip.textContent ? chip.textContent.trim() : '';
+              // Capture a baseline sample set over time
+              const samples = [];
+              for (let i=0;i<4;i++) { await sleep(250); samples.push(chip && chip.textContent ? chip.textContent.trim() : ''); }
+              // Nudge WPM target to force update even under reduced motion
+              const wpmT = document.getElementById('wpmTarget');
+              if (wpmT) {
+                const base = Number(wpmT.value)||120;
+                let next = base + (prmCap && base >= prmCap ? -15 : 25);
+                if (prmCap && next > prmCap) next = prmCap - 5; // force visible change
+                if (next < 30) next = 30;
+                wpmT.value = String(next);
+                wpmT.dispatchEvent(new Event('input', { bubbles:true }));
+              }
+              await sleep(400);
+              const text1 = chip && chip.textContent ? chip.textContent.trim() : '';
+              const changed = (text0 && text1 && text0 !== text1) || samples.some(s => s && s !== text0);
+              const includesTokens = !!(text1 && /WPM/.test(text1) && /px\/s/.test(text1));
+              return { hasChip: !!chip, changed, includesTokens, text0, text1, samples };
+            } catch (e) {
+              return { hasChip:false, changed:false, err:String(e && e.message || e) };
+            }
+          });
+        })(page);
+        out.wpmChipProbe = chipProbe;
+      } catch (e) {
+        out.wpmChipProbe = { err: String(e && e.message || e) };
+      }
       // Remove Hybrid bypass flag after probe
       try { await page.evaluate(() => localStorage.removeItem('tp_hybrid_bypass')); } catch {}
 
