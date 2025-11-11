@@ -20,19 +20,33 @@ export function initAdvancedFolderControls() {
   if (chooseBtn) chooseBtn.style.display = supported ? '' : 'none';
   if (unsupported) unsupported.style.display = supported ? 'none' : '';
 
+  let hadDir = false;
   const refreshLabel = async () => {
     const dir = await getPersistedFolder();
     if (labelEl) labelEl.textContent = dir ? (dir as any).name : 'None';
     if (forgetBtn) forgetBtn.disabled = !dir;
+    // One-time toast when previously mapped folder becomes unavailable
+    try {
+      if (!dir && hadDir) { (window as any).HUD?.toast?.('Mapped folder not available. Check permissions or device.'); }
+      hadDir = !!dir;
+    } catch {}
   };
 
   if (chooseBtn && !chooseBtn.dataset.wired) {
     chooseBtn.dataset.wired = '1';
-    chooseBtn.addEventListener('click', async () => { await setScriptsFolderFromPicker(); await refreshLabel(); });
+    chooseBtn.addEventListener('click', async () => {
+      try { await setScriptsFolderFromPicker(); }
+      catch (e) { try { console.error(e); } catch {}; try { (window as any).HUD?.toast?.('Could not access folder.'); } catch {} }
+      await refreshLabel();
+    });
   }
   if (forgetBtn && !forgetBtn.dataset.wired) {
     forgetBtn.dataset.wired = '1';
-    forgetBtn.addEventListener('click', async () => { await forgetPersistedFolder(); await refreshLabel(); });
+    forgetBtn.addEventListener('click', async () => {
+      try { await forgetPersistedFolder(); }
+      catch (e) { try { console.error(e); } catch {}; try { (window as any).HUD?.toast?.('Could not forget folder.'); } catch {} }
+      await refreshLabel();
+    });
   }
 
   addEventListener(EVT_FOLDER_CHANGED, refreshLabel as any);

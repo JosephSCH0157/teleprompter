@@ -59,7 +59,8 @@ export async function readScriptFile(entry: ScriptEntry): Promise<string> {
     const { value } = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
     return String(value || '');
   }
-  return await file.text();
+  const text = await file.text();
+  return entry.ext === 'rtf' ? rtfToText(text) : text;
 }
 
 // ----------------- helpers -----------------
@@ -103,4 +104,16 @@ async function ensureRead(handle: FileSystemHandle): Promise<boolean> {
 declare global {
   // eslint-disable-next-line no-var
   var mammoth: { extractRawText(x:{arrayBuffer:ArrayBuffer}): Promise<{value:string}> } | undefined;
+}
+
+// Minimal, "good enough" RTF → text stripper
+function rtfToText(rtf: string): string {
+  try {
+    const decoded = rtf.replace(/\\'([0-9a-f]{2})/gi, (_: string, h: string) => String.fromCharCode(parseInt(h, 16)));
+    return decoded
+      .replace(/\\[a-z]+-?\d*(?:\s|)/gi, '') // control words like \par, \fs24, \b0
+      .replace(/[{}]/g, '')                     // groups
+      .replace(/\r\n?/g, '\n')                // normalize EOL
+      .trim();
+  } catch { return rtf; }
 }

@@ -121,6 +121,10 @@
       "text": "Color…"
     },
     {
+      "id": "refreshFolderBtn",
+      "text": "Refresh"
+    },
+    {
       "checkboxIndex": 0
     },
     {
@@ -170,7 +174,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../adapters/obsBridge.js",
+      "text": "[init] import:../adapters/bridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -179,7 +183,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../adapters/bridge.js",
+      "text": "[init] import:../adapters/obsBridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -263,7 +267,7 @@
       "text": "[src/index] module imports complete",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 228,
+        "lineNumber": 230,
         "columnNumber": 10
       }
     },
@@ -281,7 +285,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 361,
+        "lineNumber": 363,
         "columnNumber": 12
       }
     },
@@ -328,6 +332,15 @@
         "url": "http://127.0.0.1:5180/src/ui/dom.js",
         "lineNumber": 848,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 640,
+        "columnNumber": 30
       }
     },
     {
@@ -443,7 +456,7 @@
       "text": "[ASR] initialized from http://127.0.0.1:5180/src/index-hooks/asr.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 644,
+        "lineNumber": 646,
         "columnNumber": 26
       }
     },
@@ -470,7 +483,7 @@
       "text": "[gate] orchestrator initialized",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 720,
+        "lineNumber": 722,
         "columnNumber": 28
       }
     },
@@ -479,7 +492,7 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 855,
+        "lineNumber": 857,
         "columnNumber": 10
       }
     },
@@ -743,7 +756,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -771,7 +784,7 @@
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 31 candidate controls"
+    "Found 32 candidate controls"
   ],
   "meta": {
     "target": {
@@ -780,9 +793,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "361544ddd8a58632c77b4479c5af1743cbfe0627",
+      "gitSha": "bed350d8dc6b060d7139f216b57b66a6b0377ab2",
       "branch": "scroll-fix-clean",
-      "buildTime": "2025-11-11T13:47:59.393Z"
+      "buildTime": "2025-11-11T14:19:18.892Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -880,7 +893,7 @@
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: On",
-    "delta": 25
+    "delta": 26
   },
   "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"
