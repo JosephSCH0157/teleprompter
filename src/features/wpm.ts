@@ -5,9 +5,9 @@
 // Provides gentle ramping to new targets to avoid jerk and exposes hooks for dynamic typography changes.
 
 type GetViewer = () => HTMLElement | null;
-type LogFn = (tag: string, data?: any) => void;
+type LogFn = (_tag: string, _data?: unknown) => void;
 
-export function createWpmScroller(getViewer: GetViewer, log: LogFn = () => {}) {
+export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: string, _data?: any) => {}) {
   let raf = 0;
   let running = false;
   let last = 0;

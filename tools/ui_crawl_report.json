@@ -197,7 +197,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../recorders.js",
+      "text": "[init] import:../debug-tools.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -206,7 +206,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../debug-tools.js",
+      "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -263,7 +263,7 @@
       "text": "[src/index] module imports complete",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 169,
+        "lineNumber": 225,
         "columnNumber": 10
       }
     },
@@ -281,7 +281,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 302,
+        "lineNumber": 358,
         "columnNumber": 12
       }
     },
@@ -443,7 +443,7 @@
       "text": "[ASR] initialized from http://127.0.0.1:5180/src/index-hooks/asr.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 585,
+        "lineNumber": 641,
         "columnNumber": 26
       }
     },
@@ -461,8 +461,17 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 740,
+        "lineNumber": 806,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 640,
+        "columnNumber": 30
       }
     },
     {
@@ -492,7 +501,34 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] speech JSHandle@object",
+      "text": "[HUD] scroll-router:applyGate JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:preroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:preroll JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] display:preroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -564,15 +600,6 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
       "text": "[HUD] display:scroll JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
@@ -635,39 +662,20 @@
       }
     },
     {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
       "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
+        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
+        "lineNumber": 185
       }
     },
     {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
+      "type": "warning",
+      "text": "[OBS test failed] JSHandle@error",
       "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 188,
+        "columnNumber": 26
       }
     },
     {
@@ -709,9 +717,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "4bea24c79ba81e28ea9b6af176a7e65bfff397fb",
-      "branch": "main",
-      "buildTime": "2025-11-08T15:32:38.821Z"
+      "gitSha": "619e34db6d37da35cf4cb673b2d70ed63f3b98c7",
+      "branch": "scroll-fix-clean",
+      "buildTime": "2025-11-11T03:09:05.995Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -778,7 +786,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 42.66666793823242,
+    "delta": 40,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {

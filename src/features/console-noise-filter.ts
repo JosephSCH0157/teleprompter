@@ -23,8 +23,8 @@ function isDev(): boolean {
 function getTextReason(r: unknown): string {
   if (!r) return '';
   try {
-    // Normalize common Error/Promise shapes
-    const anyR: any = r as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Normalize common Error/Promise shapes without using any
+    const anyR = r as { message?: unknown; toString?: () => unknown };
     return String(anyR?.message ?? anyR?.toString?.() ?? r);
   } catch {
     return String(r);
@@ -49,7 +49,6 @@ export function installConsoleNoiseFilter(opts: NoiseFilterOpts = {}): void {
       try {
         const text = getTextReason(evt.reason);
         if (text && isNoise(text)) {
-          evt.preventDefault?.();
           if (debugEcho) console.debug('[silenced]', text);
           // @ts-expect-error HUD dynamic presence
           window.HUD?.log?.(hudTag, { type: 'unhandledrejection', text });
@@ -60,7 +59,7 @@ export function installConsoleNoiseFilter(opts: NoiseFilterOpts = {}): void {
     // Error events (less common for the extension case, but cheap to annotate)
     window.addEventListener('error', (evt: ErrorEvent) => {
       try {
-        const text = getTextReason((evt.error || evt.message) as any);
+        const text = getTextReason((evt.error || evt.message) as unknown);
         if (text && isNoise(text)) {
           if (debugEcho) console.debug('[silenced:error]', text);
           // @ts-expect-error HUD dynamic presence

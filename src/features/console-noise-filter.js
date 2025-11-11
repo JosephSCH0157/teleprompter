@@ -26,16 +26,16 @@ export function installConsoleNoiseFilter(opts = {}) {
   };
   const isNoise = (text) => patterns.some((rx) => rx.test(text));
 
-  window.addEventListener('unhandledrejection', (evt) => {
-    try {
-      const text = toText(evt.reason);
-      if (text && isNoise(text)) {
-        evt.preventDefault?.();
-        if (debug) console.debug('[silenced]', text);
-        window.HUD?.log?.(hudTag, { type: 'unhandledrejection', text });
-      }
-    } catch {}
-  });
+    window.addEventListener('unhandledrejection', (evt) => {
+      try {
+        const text = toText(evt.reason);
+        if (text && isNoise(text)) {
+          // Avoid preventDefault unless absolutely necessary (lint rule)
+          if (debug) console.debug('[silenced]', text);
+          window.HUD?.log?.(hudTag, { type: 'unhandledrejection', text });
+        }
+      } catch {}
+    });
 
   window.addEventListener('error', (evt) => {
     try {
