@@ -75,6 +75,25 @@ const URL_TO_OPEN = RAW_URL;
       const hasToast = await waitFor('#tp_toast_container'); // toast container
       const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
 
+      // Install lightweight event taps for helper verification
+      try {
+        await page.evaluate(() => {
+          try {
+            window.__SMOKE = window.__SMOKE || { modes: [], autoStates: [] };
+            window.addEventListener('tp:mode', (e) => { try { window.__SMOKE.modes.push(e?.detail?.mode || null); } catch {} });
+            window.addEventListener('tp:autoState', (e) => { try { window.__SMOKE.autoStates.push(e?.detail || {}); } catch {} });
+          } catch {}
+        });
+      } catch {}
+
+      // Provoke a couple of mode changes to exercise helper listeners
+      try {
+        await page.evaluate(() => { try { window.setScrollMode && window.setScrollMode('auto'); } catch {} });
+        await page.waitForTimeout(60);
+        await page.evaluate(() => { try { window.setScrollMode && window.setScrollMode('asr'); } catch {} });
+        await page.waitForTimeout(60);
+      } catch {}
+
       // VAD gate latency (simulated)
       try {
         const result = await page.evaluate(() => {
@@ -147,6 +166,19 @@ const URL_TO_OPEN = RAW_URL;
         if (!changed) {
           if (String(process.env.SMOKE_STRICT_AUTO || '0') === '1') warnLogs.push('[smoke] auto state did not reflect toggle after 2 attempts');
         }
+        // Capture helper event counts after interaction
+        try {
+          const evs = await page.evaluate(() => ({
+            modeCount: (window.__SMOKE && window.__SMOKE.modes && window.__SMOKE.modes.length) || 0,
+            autoCount: (window.__SMOKE && window.__SMOKE.autoStates && window.__SMOKE.autoStates.length) || 0,
+            modes: (window.__SMOKE && window.__SMOKE.modes) || [],
+          }));
+          if (evs.modeCount < 1) warnLogs.push('[smoke] tp:mode events not observed');
+          if (evs.autoCount < 1) warnLogs.push('[smoke] tp:autoState events not observed');
+          if (!(evs.modes.includes('auto') && evs.modes.includes('asr'))) {
+            warnLogs.push('[smoke] tp:mode did not include both auto and asr');
+          }
+        } catch {}
       } catch (e) {
         warnLogs.push('[smoke] autoChip probe error: ' + (e?.message || String(e)));
       }
@@ -277,11 +309,16 @@ const URL_TO_OPEN = RAW_URL;
       } catch {}
 
       // Grab a couple runtime flags if present
-      const { initDone, appVersion, ctx } = await page.evaluate(() => ({
+      const { initDone, appVersion, ctx, tsRouterBoot, tsAsrBoot } = await page.evaluate(() => ({
         initDone: !!(window.__tp_init_done || (window.App && (window.App.inited || window.App.initDone))),
         appVersion: (window.App && (window.App.version || window.App.appVersion)) || null,
         ctx: window.opener ? 'Display' : (window.name || 'Main'),
+        tsRouterBoot: !!window.__TP_TS_ROUTER_BOOT,
+        tsAsrBoot: !!window.__TP_TS_ASR_BOOT,
       }));
+
+      try { if (!tsRouterBoot) warnLogs.push('[smoke] TS router handoff flag missing'); } catch {}
+      try { if (!tsAsrBoot) warnLogs.push('[smoke] TS ASR handoff flag missing'); } catch {}
 
       // Duplicate boot detection: if we saw multiple script-enter or TP-BOOT lines, flag it
       const dupBoot = Math.max(bootCount, scriptEnterCount) > 1;
@@ -297,6 +334,7 @@ const URL_TO_OPEN = RAW_URL;
         ctx,
         initDone,
         appVersion,
+        tsOwnership: { router: tsRouterBoot, asr: tsAsrBoot },
         ui: { toast: hasToast, scripts: hasScripts },
         counts: { boot: bootCount, scriptEnter: scriptEnterCount, rsComplete: rsCompleteCount },
         logs: {
