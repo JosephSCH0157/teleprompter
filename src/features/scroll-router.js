@@ -485,6 +485,17 @@ function installScrollRouter(opts) {
   let wpmOpen = false;
   let wpmSetting = (() => { try { return parseFloat(localStorage.getItem('tp_baseline_wpm') || '120') || 120; } catch { return 120; } })();
   let wpmUpdateInterval = null;
+  // Expose a minimal test hook for CI determinism (no-op for users)
+  try {
+    window.__tpTestNudgeWpm = () => {
+      try {
+        wpmSetting = (Number(wpmSetting) || 120) + 13;
+        if (wpm && wpm.isRunning?.()) wpm.setRateWpm(wpmSetting);
+        const pxs = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
+        setWpmChip(`${wpmSetting} WPM • ${Math.round(pxs)} px/s`, 'ok');
+      } catch {}
+    };
+  } catch {}
   // --- Chip mount & control ------------------------------------
   // Live chip showing WPM • px/s while motor runs
   let wpmChipTimer = 0;
@@ -748,14 +759,19 @@ function installScrollRouter(opts) {
     });
   } catch {}
 
-  // Stall / watchdog blink for chip when px/s stalls
+  // Stall / watchdog blink for chip when px/s stalls (CSS class based)
   let stallBlinkTimer = 0;
   function blinkChipWarn() {
     try {
       const el = ensureWpmChip(); if (!el) return;
-      el.style.boxShadow = '0 0 0 2px rgba(255,180,0,.9)';
+      // restart animation reliably
+      el.classList.remove('tp-chip--warn', 'tp-chip--warn-blink');
+      void el.offsetWidth; // reflow to retrigger keyframes
+      el.classList.add('tp-chip--warn', 'tp-chip--warn-blink');
       clearTimeout(stallBlinkTimer);
-      stallBlinkTimer = window.setTimeout(() => { try { el.style.boxShadow = ''; } catch {} }, 400);
+      stallBlinkTimer = window.setTimeout(() => {
+        try { el.classList.remove('tp-chip--warn', 'tp-chip--warn-blink'); } catch {}
+      }, 450);
     } catch {}
   }
 

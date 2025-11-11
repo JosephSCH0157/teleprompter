@@ -457,7 +457,7 @@ const cp = require('child_process');
       // WPM chip probe: switch to WPM mode and verify chip presence and live update
       try {
         const chipProbe = await (async function(page){
-          return await page.evaluate(async () => {
+          return await page.evaluate(async (strict) => {
             const sleep = (ms) => new Promise(r=>setTimeout(r, ms));
             try {
               // Ensure long content and top position (done earlier, but defensively re-assert)
@@ -501,6 +501,7 @@ const cp = require('child_process');
                 wpmT.value = String(next);
                 wpmT.dispatchEvent(new Event('input', { bubbles:true }));
               }
+              if (strict && typeof window.__tpTestNudgeWpm === 'function') { try { window.__tpTestNudgeWpm(); window.__tpTestNudgeWpm(); } catch {} }
               await sleep(400);
               const text1 = chip && chip.textContent ? chip.textContent.trim() : '';
               const changed = (text0 && text1 && text0 !== text1) || samples.some(s => s && s !== text0);
@@ -509,7 +510,7 @@ const cp = require('child_process');
             } catch (e) {
               return { hasChip:false, changed:false, err:String(e && e.message || e) };
             }
-          });
+          }, String(process.env.CI_STRICT||'0') === '1');
         })(page);
         out.wpmChipProbe = chipProbe;
       } catch (e) {

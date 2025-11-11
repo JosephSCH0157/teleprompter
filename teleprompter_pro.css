@@ -682,3 +682,14 @@ html.tp-present .present-exit { display: inline-flex; }
 .tp-chip--drag{ cursor:grabbing; opacity:.9; }
 .tp-chip--fade{ transition: opacity .25s ease; }
 .tp-chip--hidden{ opacity:0; pointer-events:none; }
+
+/* --- WPM chip warning blink (stall hint) --- */
+.tp-chip--warn { box-shadow: 0 0 0 2px rgba(255, 180, 0, .9); }
+@keyframes tp-chip-blink { 
+    0% { box-shadow: 0 0 0 2px rgba(255, 180, 0, .9); }
+    100% { box-shadow: none; }
+}
+.tp-chip--warn-blink { animation: tp-chip-blink .4s ease-out 1; }
+@media (prefers-reduced-motion: reduce) {
+    .tp-chip--warn-blink { animation: none; }
+}

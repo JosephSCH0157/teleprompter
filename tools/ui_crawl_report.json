@@ -170,15 +170,6 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../eggs.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
       "text": "[init] import:../adapters/obsBridge.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
@@ -189,6 +180,15 @@
     {
       "type": "debug",
       "text": "[init] import:../adapters/obs.js",
+      "location": {
+        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
+        "lineNumber": 27,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[init] import:../debug-tools.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -215,7 +215,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../debug-tools.js",
+      "text": "[init] import:../recorders.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -242,7 +242,7 @@
     },
     {
       "type": "debug",
-      "text": "[init] import:../recorders.js",
+      "text": "[init] import:../eggs.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
         "lineNumber": 27,
@@ -698,43 +698,7 @@
     },
     {
       "type": "debug",
-      "text": "[HUD] wpm:wpm:tick JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] wpm:wpm:tick JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] wpm:wpm:tick JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] wpm:wpm:tick JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "text": "[HUD] scroll:viewer JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/debug-tools.js",
         "lineNumber": 30,
@@ -767,6 +731,51 @@
         "lineNumber": 30,
         "columnNumber": 17
       }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] wpm:wpm:tick JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
+      }
     }
   ],
   "notes": [
@@ -780,9 +789,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "ae74f239a9be23edd54db5ed64d6228d51a78e5a",
+      "gitSha": "94aac324cd6c54ad263c079224b4bb0b837ac3a6",
       "branch": "scroll-fix-clean",
-      "buildTime": "2025-11-11T03:52:34.481Z"
+      "buildTime": "2025-11-11T04:29:14.796Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -849,7 +858,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 40,
+    "delta": 41.33333206176758,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "wpmChipProbe": {
@@ -872,7 +881,7 @@
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: On",
-    "delta": 26
+    "delta": 25
   },
   "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"
