@@ -1,13 +1,25 @@
 // src/features/wpm.ts
 // Tiny WPM motor for constant-rate scrolling independent of speech.
-
 // Upgraded WPM motor with smoothed rate transitions, DOM/font recalibration, and px/s introspection.
 // Provides gentle ramping to new targets to avoid jerk and exposes hooks for dynamic typography changes.
+// Strongly typed surface (WpmMotor) for IDE help across router/features.
+
+export interface WpmMotor {
+  start(_wpm: number): void;
+  stop(): void;
+  setRateWpm(_wpm: number): void;
+  setWordsPerLineHint(_n: number): void;
+  recalcFromDom(_currentWpm: number): void;
+  getPxPerSec(): number;
+  isRunning(): boolean;
+  didEnd(): boolean;
+  setStallThreshold(_sec: number): void;
+}
 
 type GetViewer = () => HTMLElement | null;
 type LogFn = (_tag: string, _data?: unknown) => void;
 
-export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: string, _data?: any) => {}) {
+export function createWpmScroller(getViewer: GetViewer, log: LogFn = () => {}): WpmMotor {
   let raf = 0;
   let running = false;
   let last = 0;
@@ -40,8 +52,8 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     return Math.max(0, value);
   }
 
-  function setRateWpm(wpm: number) {
-    targetPxPerSec = computePxPerSecFor(wpm);
+  function setRateWpm(nextWpm: number) {
+    targetPxPerSec = computePxPerSecFor(nextWpm);
   }
 
   function setWordsPerLineHint(n: number) {
@@ -106,11 +118,11 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     const e = ended; ended = false; return e;
   }
 
-  function setStallThreshold(sec: number) {
-    if (Number.isFinite(sec) && sec > 0 && sec < 5) stallThreshold = sec;
+  function setStallThreshold(seconds: number) {
+    if (Number.isFinite(seconds) && seconds > 0 && seconds < 5) stallThreshold = seconds;
   }
 
-  return {
+  const api: WpmMotor = {
     start,
     stop,
     setRateWpm,
@@ -120,7 +132,8 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     isRunning: () => running,
     didEnd,
     setStallThreshold,
-  } as const;
+  };
+  return api;
 }
 
 export default createWpmScroller;

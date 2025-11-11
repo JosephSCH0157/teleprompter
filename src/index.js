@@ -789,6 +789,24 @@ async function boot() {
 
       // Stop autoscroll with a short buffer after speech stops to avoid abrupt cutoffs
       try {
+        // Gate HUD (dev): tiny pill showing mode/user/speech; hidden unless dev
+        (function installGateHud(){
+          try {
+            const isDev = !!(window.__TP_DEV || /[?&]dev=1/.test(location.search) || localStorage.getItem('tp_hud_prod') === '1');
+            if (!isDev) return;
+            if (document.getElementById('tp-gate-pill')) return;
+            const el = document.createElement('div');
+            el.id = 'tp-gate-pill';
+            el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:999999;background:#0f172a;color:#cbd5e1;border:1px solid #1e293b;border-radius:999px;padding:6px 10px;font:12px/1.2 system-ui,sans-serif;opacity:.9;user-select:none;pointer-events:none';
+            el.textContent = 'gate —';
+            document.body.appendChild(el);
+            const upd = (d) => {
+              try { const { mode, user, speech, open } = d || {}; el.textContent = `gate ${open?'✓':'•'}  ${mode||'-'}  U:${user?1:0} S:${speech?1:0}`; } catch {}
+            };
+            window.addEventListener('tp:gate', (e) => upd(e && (e.detail||{})), { passive: true });
+          } catch {}
+        })();
+
         let autoStopTimer = null;
         let speechActiveLatest = false;
         window.addEventListener('tp:speech-state', (ev) => {

@@ -6,6 +6,7 @@
  */
 
 import { createWpmScroller } from './features/wpm';
+import type { WpmMotor } from './features/wpm';
 
 // ---------- Types ----------
 
@@ -67,7 +68,7 @@ const PRM = window.matchMedia
 
 // ---------- WPM Motor ----------
 
-const wpm = createWpmScroller(getViewer, (t, d) => log(`wpm:${t}`, d));
+const wpm: WpmMotor = createWpmScroller(getViewer, (t, d) => log(`wpm:${t}`, d));
 
 // ---------- Chip UI ----------
 
@@ -163,7 +164,12 @@ function saveWpmChipPosition(el: HTMLElement) {
   try { lsSet(CHIP_POS_KEY, JSON.stringify(pos)); } catch {}
 }
 
-function snapChipToEdge(el: HTMLElement, threshold = 24) {
+function readMagnetThreshold(): number {
+  const raw = Number(lsGet('tp_chip_magnet_px'));
+  return Number.isFinite(raw) && raw > 0 ? Math.max(4, Math.min(120, raw)) : 24;
+}
+
+function snapChipToEdge(el: HTMLElement, threshold = readMagnetThreshold()) {
   const r = el.getBoundingClientRect();
   const leftGap  = r.left;
   const rightGap = window.innerWidth  - r.right;
@@ -227,7 +233,7 @@ function enableWpmChipDrag(el: HTMLElement) {
   window.addEventListener('pointerup', () => {
     if (!dragging) return;
     dragging = false; el.classList.remove('tp-chip--drag');
-    snapChipToEdge(el, 24);
+    snapChipToEdge(el, readMagnetThreshold());
     saveWpmChipPosition(el);
     log('wpm:chip:drag:end');
   }, { passive: true });
@@ -431,6 +437,12 @@ export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
   const open = computeOpen(mode, user, speech);
   logGate(mode, user, speech, open);
 
+  // Broadcast gate state for HUD or listeners
+  try {
+    const detail = { mode, user, speech, open } as GateState;
+    window.dispatchEvent(new CustomEvent('tp:gate', { detail }));
+  } catch {}
+
   // WPM transitions
   if (mode === 'wpm') {
     if (open && !lastGateOpen) {
@@ -498,4 +510,7 @@ export function initScrollRouter() {
   };
   // initial chip mount (non-intrusive)
   ensureWpmChip();
+
+  // Seed PRM cap and magnet threshold labels if any UI is listening
+  try { window.dispatchEvent(new CustomEvent('tp:router:init')); } catch {}
 }

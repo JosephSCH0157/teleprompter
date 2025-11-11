@@ -136,10 +136,19 @@
   '  </div>',
         '</div>',
         '',
-        '<div data-tab-content="advanced" style="display:none">',
+    '<div data-tab-content="advanced" style="display:none">',
         '  <h4>Advanced</h4>',
         '  <div class="row">',
         '    <label><input type="checkbox" id="settingsDevHud"/> Enable HUD (dev only)</label>',
+  '  </div>',
+  '  <div class="card" style="margin-top:10px">',
+  '    <h5 style="margin:6px 0 8px">Scrolling diagnostics</h5>',
+  '    <div class="row">',
+  '      <label>Stall threshold (sec) <input id="settingsStallDt" type="number" min="0.1" max="3" step="0.05" class="select-sm" placeholder="0.33"/></label>',
+  '      <label>PRM WPM cap <input id="settingsPrmCap" type="number" min="20" max="200" step="5" class="select-sm" placeholder="90"/></label>',
+  '      <label>Chip magnet (px) <input id="settingsChipMagnet" type="number" min="4" max="120" step="2" class="select-sm" placeholder="24"/></label>',
+  '    </div>',
+  '    <div class="settings-small">Values persist to localStorage and take effect immediately when possible.</div>',
   '  </div>',
   '  <div class="row">',
   '    <label><input type="checkbox" id="settingsHudProd"/> Show Transcript HUD in production</label>',
@@ -1390,6 +1399,40 @@
           try { alert('Transcript HUD production setting updated. Reload to apply.'); } catch {}
         }, { capture: true });
       }
+
+      // Scrolling diagnostics settings wiring
+      try {
+        const stallDt = q('settingsStallDt');
+        const prmCap  = q('settingsPrmCap');
+        const chipMag = q('settingsChipMagnet');
+        // hydrate values from storage
+        try { if (stallDt) stallDt.value = String(localStorage.getItem('tp_wpm_stall_dt') || ''); } catch {}
+        try { if (prmCap)  prmCap.value  = String(localStorage.getItem('tp_prm_wpm_cap') || ''); } catch {}
+        try { if (chipMag) chipMag.value = String(localStorage.getItem('tp_chip_magnet_px') || ''); } catch {}
+        const dispatchLineDirty = () => { try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {} };
+        stallDt && stallDt.addEventListener('input', () => {
+          try {
+            const n = Number(stallDt.value);
+            if (Number.isFinite(n)) localStorage.setItem('tp_wpm_stall_dt', String(n)); else localStorage.removeItem('tp_wpm_stall_dt');
+            // live-apply if WPM running via router’s motor setter
+            try { window.__tpTestNudgeWpm && window.__tpTestNudgeWpm(); } catch {}
+          } catch {}
+        });
+        prmCap && prmCap.addEventListener('input', () => {
+          try {
+            const n = Number(prmCap.value);
+            if (Number.isFinite(n)) localStorage.setItem('tp_prm_wpm_cap', String(n)); else localStorage.removeItem('tp_prm_wpm_cap');
+            // Upon PRM or next start, router will cap. Force a chip refresh if running.
+            dispatchLineDirty();
+          } catch {}
+        });
+        chipMag && chipMag.addEventListener('input', () => {
+          try {
+            const n = Number(chipMag.value);
+            if (Number.isFinite(n)) localStorage.setItem('tp_chip_magnet_px', String(n)); else localStorage.removeItem('tp_chip_magnet_px');
+          } catch {}
+        });
+      } catch {}
 
       // Removed duplicate fallback HUD wiring block — store-managed block above is the single source of truth.
 
