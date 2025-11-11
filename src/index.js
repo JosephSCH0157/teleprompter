@@ -500,25 +500,8 @@ try {
             if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st }));
           } catch {}
         }
-        // Mode emitter (legacy only): if SSOT is present, skip external emits
-        (function __wireModeEmitter(){
-          try {
-            if (window.__tpMode) return; // SSOT owns tp:mode
-            const sel = document.getElementById('scrollMode');
-            if (!sel) return;
-            if (!window.__tpModeEmitterInstalled) {
-              window.__tpModeEmitterInstalled = true;
-              sel.addEventListener('change', () => {
-                try {
-                  const mode = sel && sel.value;
-                  window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode } }));
-                } catch {}
-              }, { capture: true });
-            }
-            // Seed one event with current selection (legacy only)
-            try { const mode = sel && sel.value; window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode } })); } catch {}
-          } catch {}
-        })();
+        // Legacy mode emitter fully retired under SSOT; kept as stub for safety
+        // (no-op: SSOT now sole tp:mode source)
         // Seed auto state once helpers are installed
         __emitAutoState();
         // Keep label current on engine start/stop

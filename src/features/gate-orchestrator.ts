@@ -2,7 +2,7 @@
  * Normalizes UI + ASR events → applyGate(mode, user, speech)
  */
 import { getMode, onMode } from '../core/mode-state';
-import type { ScrollMode } from '../scroll-router';
+import type { ScrollMode } from '../core/mode-types';
 import { applyGate } from '../scroll-router';
 
 type GateBits = { mode: ScrollMode; user: boolean; speech: boolean };

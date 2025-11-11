@@ -1,4 +1,4 @@
-import type { ScrollMode } from '../scroll-router';
+import type { ScrollMode } from './mode-types';
 
 type Listener = (mode: ScrollMode) => void;
 
@@ -147,4 +147,23 @@ try {
     set: (v: string) => { try { setMode(v as ScrollMode); } catch {} },
     on: (fn: (m: string) => void) => onMode((m) => fn(m)),
   };
+} catch {}
+
+// Cross-window synchronization via BroadcastChannel (if available)
+try {
+  const BC = (window as any).BroadcastChannel as (new (name: string) => { postMessage: (d: any)=>void; onmessage: ((e: MessageEvent)=>void) | null });
+  const ch = BC ? new BC('tp-mode') : null;
+  if (ch) {
+    // Broadcast local changes
+    try { onMode((m) => { try { ch.postMessage({ m }); } catch {} }); } catch {}
+    // Apply remote changes
+    try {
+      ch.onmessage = (e: MessageEvent) => {
+        try {
+          const m = (e && (e as any).data && (e as any).data.m) as ScrollMode | undefined;
+          if (m && m !== getMode()) setMode(m as ScrollMode);
+        } catch {}
+      };
+    } catch {}
+  }
 } catch {}

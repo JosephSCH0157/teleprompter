@@ -65,4 +65,47 @@ npm run dev
 
 ```powershell
 npm run smoke
+
+## Mode SSOT Contract
+
+The application uses a Single Source of Truth (SSOT) for scroll mode.
+
+Authoritative API (from `core/mode-state.ts`):
+
+```
+getMode(): ScrollMode
+setMode(mode: ScrollMode): void
+onMode(cb: (mode: ScrollMode) => void): () => void
+```
+
+Rules:
+
+1. Only call `setMode()` to change the mode. Do not mutate selects or cookies directly.
+2. Do not dispatch your own `tp:mode` events — the SSOT does this and includes `{ ssot:true }` in the detail payload.
+3. Do not write `tp_scroll_mode` to `localStorage` or cookies outside `core/mode-state.ts`.
+4. Prefer importing the union type from `core/mode-types.ts` for consistency.
+5. For cross‑window sync (presenter/display), a `BroadcastChannel('tp-mode')` bridge rebroadcasts mode changes automatically.
+
+Diagnostics:
+
+- `document.documentElement.dataset.scrollMode` always reflects the current mode.
+- Enable dev guardrail to warn on rogue emits: `localStorage.setItem('tp_dev_mode','1')` → reload.
+
+Adding a new mode:
+
+1. Extend `ScrollMode` in `core/mode-types.ts`.
+2. Update any UI filters or pills (e.g. the dropdown options).
+3. Add handling in router/gate logic if the new mode affects automation.
+4. Avoid adding persistence code — SSOT handles it.
+
+Removing a mode:
+
+1. Remove it from `ScrollMode` union.
+2. Delete related UI option(s). The SSOT will ignore persisted stale values and fall back to the default.
+
+Smoke probes:
+
+- Persistence flip check (`mode:persist:check`) ensures SSOT hydration.
+- Select binding check (`mode:select:change`) ensures dropdown changes route through SSOT.
+
 ```

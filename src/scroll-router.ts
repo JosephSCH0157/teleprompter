@@ -9,10 +9,11 @@ import type { WpmMotor } from './features/wpm';
 import { createWpmScroller } from './features/wpm';
 // SSOT mode integration
 import { getMode } from './core/mode-state';
+import type { ScrollMode } from './core/mode-types';
 
 // ---------- Types ----------
 
-export type ScrollMode = 'manual' | 'step' | 'wpm' | 'asr' | 'hybrid';
+// ScrollMode now sourced from core/mode-types
 
 export interface GateState {
   mode: ScrollMode;
@@ -59,10 +60,8 @@ function isDev(): boolean {
 
 // ---------- Mode + Gate state ----------
 
-// Local accessor for current mode from SSOT
-function __mode(): ScrollMode {
-  try { return getMode() as ScrollMode; } catch { return 'manual'; }
-}
+// Access current mode straight from SSOT
+const __getMode = () => { try { return getMode() as ScrollMode; } catch { return 'manual'; } };
 let _userIntent = false;   // auto toggle (reserved)
 let _speechGate = false;   // speech engine (reserved)
 let lastGateOpen = false;
@@ -353,7 +352,7 @@ function startWpmChip(_startWpm: number) {
     setWpmChip(`${prefix}${wpmSetting} WPM • ${Math.round(pxs)} px/s • ~${lps.toFixed(2)} lps`, 'ok');
 
     // stall hint when px/s is near zero while we think we're running
-  if (pxs < 1 && isAutoOn() && __mode() === 'wpm') notifyStall();
+  if (pxs < 1 && isAutoOn() && __getMode() === 'wpm') notifyStall();
   }, interval);
 }
 
@@ -425,7 +424,7 @@ function userPause(ms = 1500) {
   setWpmChip('Paused', 'muted');
   clearTimeout(userPauseTimer);
   userPauseTimer = window.setTimeout(() => {
-  if (__mode() === 'wpm' && isAutoOn()) {
+  if (__getMode() === 'wpm' && isAutoOn()) {
       showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
     } else {
       setWpmChip('Paused', 'muted');
@@ -435,7 +434,7 @@ function userPause(ms = 1500) {
 
 // Selection-aware pause
 document.addEventListener('selectionchange', () => {
-  if (__mode() !== 'wpm' || !wpm.isRunning()) return;
+  if (__getMode() !== 'wpm' || !wpm.isRunning()) return;
   const sel = document.getSelection?.();
   if (!sel || sel.type !== 'Range' || !sel.toString().trim()) return;
   const viewer = getViewer();
@@ -447,7 +446,7 @@ document.addEventListener('selectionchange', () => {
   setWpmChip('Paused (select)', 'muted');
   clearTimeout(selPauseTimer);
   selPauseTimer = window.setTimeout(() => {
-  if (__mode() === 'wpm' && isAutoOn()) {
+  if (__getMode() === 'wpm' && isAutoOn()) {
       showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
     }
   }, 2000);
@@ -457,15 +456,15 @@ document.addEventListener('selectionchange', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (wpm.isRunning()) { wpm.stop(); setWpmChip('Paused (background)', 'muted'); }
-  } else if (__mode() === 'wpm' && isAutoOn()) {
+  } else if (__getMode() === 'wpm' && isAutoOn()) {
     showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
   }
 }, { passive: true });
 
 // Manual touch pause only in WPM mode
-getViewer()?.addEventListener('wheel', () => { if (__mode() === 'wpm') userPause(); }, { passive: true });
+getViewer()?.addEventListener('wheel', () => { if (__getMode() === 'wpm') userPause(); }, { passive: true });
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (__mode() !== 'wpm') return;
+  if (__getMode() !== 'wpm') return;
   const keys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
   if (keys.includes(e.key)) userPause();
 }, { passive: true });
