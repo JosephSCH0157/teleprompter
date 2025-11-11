@@ -661,6 +661,10 @@ async function boot() {
     try {
       // Prefer the compiled TS router when available; fall back to JS router
       try {
+        // Allow TS entry to take ownership of router boot
+        if (window.__TP_TS_ROUTER_BOOT) {
+          try { console.info('[router] JS path: skipping router boot (TS entry handling)'); } catch {}
+        } else {
         // Robust dynamic import sequence with graceful legacy fallback.
         async function tryImport(spec, flag) {
           try {
@@ -726,6 +730,7 @@ async function boot() {
               try { console.info('[gate] orchestrator initialized'); } catch {}
             }
           } catch (e) { try { console.warn('[src/index] gate orchestrator init failed', e); } catch {} }
+        }
         }
       } catch (e) { console.warn('[src/index] router import sequence failed', e); }
       // Use shared helpers (idempotent) instead of inline duplication
