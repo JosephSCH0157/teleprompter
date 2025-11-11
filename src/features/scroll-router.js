@@ -496,30 +496,33 @@ function installScrollRouter(opts) {
       if (autoPill && autoPill.parentElement) {
         el = document.createElement('span');
         el.id = 'wpmChip';
-        el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
+        el.className = 'tp-chip tp-chip--wpm tp-chip--ok tp-chip--fade';
         el.textContent = '—';
         try { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); } catch {}
         autoPill.parentElement.insertBefore(el, autoPill.nextSibling);
+        try { hydrateWpmChipPosition(el, true); enableWpmChipDrag(el); } catch {}
         return el;
       }
       const host = document.querySelector('#modePills, #statusBar, #controlBar, #topBar');
       if (host) {
         el = document.createElement('span');
         el.id = 'wpmChip';
-        el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
+        el.className = 'tp-chip tp-chip--wpm tp-chip--ok tp-chip--fade';
         el.textContent = '—';
         try { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); } catch {}
         host.appendChild(el);
+        try { hydrateWpmChipPosition(el, true); enableWpmChipDrag(el); } catch {}
         return el;
       }
     } catch {}
     el = document.createElement('div');
     el.id = 'wpmChip';
-    el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
+    el.className = 'tp-chip tp-chip--wpm tp-chip--ok tp-chip--fade';
     el.textContent = '—';
     try { Object.assign(el.style, { position:'fixed', top:'12px', right:'12px', zIndex:'1000' }); } catch {}
     try { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); } catch {}
     document.body.appendChild(el);
+    try { hydrateWpmChipPosition(el, false); enableWpmChipDrag(el); } catch {}
     return el;
   }
   function setWpmChip(text, state /* 'ok' | 'muted' | 'end' */) {
@@ -529,6 +532,78 @@ function installScrollRouter(opts) {
       el.classList.remove('tp-chip--ok','tp-chip--muted','tp-chip--end');
       el.classList.add(state ? `tp-chip--${state}` : 'tp-chip--ok');
     } catch {}
+  }
+
+  // ---- Position persistence (no preventDefault needed) ----
+  const CHIP_POS_KEY = 'tp_wpm_chip_pos';
+  function hydrateWpmChipPosition(el, allowFloat) {
+    try {
+      const raw = localStorage.getItem(CHIP_POS_KEY);
+      if (!raw) return;
+      const pos = JSON.parse(raw);
+      // If saved, force float so it appears exactly where the user left it
+      if (allowFloat && el.parentElement !== document.body) {
+        const r = el.getBoundingClientRect();
+        document.body.appendChild(el);
+        Object.assign(el.style, { position: 'fixed', top: `${r.top}px`, left: `${r.left}px`, right: '', zIndex: '1000' });
+      }
+      if (pos && typeof pos.top === 'number') el.style.top = `${pos.top}px`;
+      if (typeof pos.left === 'number') {
+        el.style.left = `${pos.left}px`;
+        el.style.right = '';
+      } else if (typeof pos.right === 'number') {
+        el.style.right = `${pos.right}px`;
+        el.style.left = '';
+      }
+    } catch {}
+  }
+  function saveWpmChipPosition(el) {
+    const rect = el.getBoundingClientRect();
+    const fromRight = Math.max(0, window.innerWidth - rect.right);
+    const pos = (fromRight < rect.left)
+      ? { top: Math.max(0, rect.top), right: fromRight }
+      : { top: Math.max(0, rect.top), left: Math.max(0, rect.left) };
+    try { localStorage.setItem(CHIP_POS_KEY, JSON.stringify(pos)); } catch {}
+  }
+  function enableWpmChipDrag(el) {
+    let dragging = false;
+    let ox = 0, oy = 0;
+    const toFloatIfNeeded = () => {
+      if (el.parentElement !== document.body) {
+        const r = el.getBoundingClientRect();
+        document.body.appendChild(el);
+        Object.assign(el.style, { position: 'fixed', top: `${r.top}px`, left: `${r.left}px`, right: '', zIndex: '1000' });
+      }
+    };
+    el.addEventListener('pointerdown', (ev) => {
+      try {
+        dragging = true;
+        toFloatIfNeeded();
+        el.classList.add('tp-chip--drag');
+        const rect = el.getBoundingClientRect();
+        ox = ev.clientX - (parseFloat(el.style.left || '0') || rect.left);
+        oy = ev.clientY - (parseFloat(el.style.top || '0') || rect.top);
+        window.HUD?.log?.('wpm:chip:drag:start');
+      } catch {}
+    }, { passive: true });
+    window.addEventListener('pointermove', (ev) => {
+      if (!dragging) return;
+      try {
+        const x = Math.max(0, Math.min(window.innerWidth - 24, ev.clientX - ox));
+        const y = Math.max(0, Math.min(window.innerHeight - 24, ev.clientY - oy));
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+      } catch {}
+    }, { passive: true });
+    window.addEventListener('pointerup', () => {
+      if (!dragging) return;
+      try {
+        dragging = false;
+        el.classList.remove('tp-chip--drag');
+        saveWpmChipPosition(el);
+        window.HUD?.log?.('wpm:chip:drag:end');
+      } catch {}
+    }, { passive: true });
   }
   function startWpmChip(currentWpm) {
     stopWpmChip();
@@ -579,6 +654,7 @@ function installScrollRouter(opts) {
       const el = document.getElementById('wpmChip');
       if (!el) return;
       el.classList.add('tp-chip--fade');
+      el.classList.remove('tp-chip--hidden');
       setTimeout(()=> el.classList.add('tp-chip--hidden'), delay);
     } catch {}
   }

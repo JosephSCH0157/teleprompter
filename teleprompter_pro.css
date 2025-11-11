@@ -677,5 +677,8 @@ html.tp-present .present-exit { display: inline-flex; }
 .tp-chip--ok{background:rgba(16,128,64,.65)}
 .tp-chip--end{background:rgba(128,16,16,.7)}
 /* Fade behavior */
-.tp-chip--fade{transition:opacity .25s ease}
-.tp-chip--hidden{opacity:0;pointer-events:none}
+/* Chip polish: fade + drag */
+.tp-chip{ user-select:none; touch-action:none; cursor:grab; }
+.tp-chip--drag{ cursor:grabbing; opacity:.9; }
+.tp-chip--fade{ transition: opacity .25s ease; }
+.tp-chip--hidden{ opacity:0; pointer-events:none; }
