@@ -33,6 +33,7 @@ const settingsProbe = report.settingsProbe || {};
 const obsTestProbe = report.obsTestProbe || {};
 const scrollProbe = report.scrollProbe || {};
 const wpmChipProbe = report.wpmChipProbe || {};
+const viewerSwapProbe = report.viewerSwapProbe || {};
 const reportUrl = typeof report.url === 'string' ? report.url : '';
 const meta = report.meta || {};
 // CI detection retained for potential future use; currently not used in validation rules
@@ -355,6 +356,23 @@ try {
     }
   } catch (e) {
     console.warn('WARN wpm-chip validation failed:', String(e && e.message || e));
+  }
+  // Viewer swap probe assertions
+  try {
+    if (!viewerSwapProbe || !viewerSwapProbe.fired) {
+      console.error('FAIL viewer-swap-event — tp:viewer:reattach not observed after replacement');
+      allOk = false;
+    } else {
+      console.log('PASS viewer-swap-event — count=', viewerSwapProbe.count);
+    }
+    if (!viewerSwapProbe || !viewerSwapProbe.continuedTick) {
+      const msg = 'viewer-swap-chip — WPM chip did not tick/change post-swap';
+      if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
+    } else {
+      console.log('PASS viewer-swap-chip — pre="' + String(viewerSwapProbe.preText||'').slice(0,40) + '" post="' + String(viewerSwapProbe.postText||'').slice(0,40) + '"');
+    }
+  } catch (e) {
+    console.warn('WARN viewer-swap validation failed:', String(e && e.message || e));
   }
 } catch (e) {
   console.warn('WARN probes evaluation failed:', String(e && e.message || e));

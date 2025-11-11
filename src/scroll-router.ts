@@ -208,6 +208,7 @@ function snapChipToEdge(el: HTMLElement, threshold = readMagnetThreshold()) {
 
 function enableWpmChipDrag(el: HTMLElement) {
   let dragging = false, ox = 0, oy = 0;
+  let activePointerId: number | null = null;
 
   const toFloatIfNeeded = () => {
     if (el.parentElement !== document.body) {
@@ -228,6 +229,8 @@ function enableWpmChipDrag(el: HTMLElement) {
     dragging = true; toFloatIfNeeded(); el.classList.add('tp-chip--drag');
     const rect = el.getBoundingClientRect();
     ox = ev.clientX - rect.left; oy = ev.clientY - rect.top;
+    activePointerId = ev.pointerId || null;
+    try { if (typeof el.setPointerCapture === 'function' && ev.pointerId != null) el.setPointerCapture(ev.pointerId); } catch {}
     log('wpm:chip:drag:start');
   }, { passive: true });
 
@@ -238,9 +241,15 @@ function enableWpmChipDrag(el: HTMLElement) {
     el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.right = '';
   }, { passive: true });
 
-  window.addEventListener('pointerup', () => {
+  window.addEventListener('pointerup', (ev: PointerEvent) => {
     if (!dragging) return;
     dragging = false; el.classList.remove('tp-chip--drag');
+    try {
+      if (activePointerId != null && typeof el.releasePointerCapture === 'function') {
+        el.releasePointerCapture(activePointerId);
+      }
+    } catch {}
+    activePointerId = null;
     snapChipToEdge(el, readMagnetThreshold());
     saveWpmChipPosition(el);
     log('wpm:chip:drag:end');
