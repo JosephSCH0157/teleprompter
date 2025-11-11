@@ -1,9 +1,9 @@
 // Unified TypeScript entry (scaffold). This will eventually replace index.js + index.ts dual boot.
 // For now it imports shared helpers and performs a minimal subset of the existing boot.
 
+import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import './boot/compat-ids';
 import { installModeRowsSync } from './boot/uiModeSync.js';
-import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import * as Auto from './features/autoscroll.js';
 
 async function boot(){
