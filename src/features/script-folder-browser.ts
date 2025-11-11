@@ -1,5 +1,5 @@
 // src/features/script-folder-browser.ts
-import { getPersistedFolder, listScripts, readScriptFile, ScriptEntry, EVT_FOLDER_CHANGED } from '../adapters/folder-mapper';
+import { EVT_FOLDER_CHANGED, getPersistedFolder, listScripts, readScriptFile, ScriptEntry } from '../adapters/folder-mapper';
 import { readPrefsCookie, writePrefsCookie } from '../utils/cookies';
 
 type OnLoad = (text: string, title?: string) => void;

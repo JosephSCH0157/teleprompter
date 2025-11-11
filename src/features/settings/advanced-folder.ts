@@ -1,10 +1,10 @@
 // src/features/settings/advanced-folder.ts
 import {
-  fsApiSupported,
-  setScriptsFolderFromPicker,
-  forgetPersistedFolder,
-  getPersistedFolder,
-  EVT_FOLDER_CHANGED,
+    EVT_FOLDER_CHANGED,
+    forgetPersistedFolder,
+    fsApiSupported,
+    getPersistedFolder,
+    setScriptsFolderFromPicker,
 } from '../../adapters/folder-mapper';
 
 export function initAdvancedFolderControls() {
