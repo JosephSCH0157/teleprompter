@@ -3,31 +3,18 @@
  */
 import type { ScrollMode } from '../scroll-router';
 import { applyGate } from '../scroll-router';
+import { getMode, onMode } from '../core/mode-state';
 
 type GateBits = { mode: ScrollMode; user: boolean; speech: boolean };
 
-const state: GateBits = { mode: 'manual', user: false, speech: false };
+const state: GateBits = { mode: getMode(), user: false, speech: false };
 
 function pushGate() {
   applyGate(state.mode, state.user, state.speech);
 }
 
 // --- UI helpers ---
-function readModeFromDOM(): ScrollMode {
-  // 1) pills like: <button class="mode-pill" data-mode="wpm">
-  const pill = document.querySelector<HTMLElement>('.mode-pill.active, [data-mode].active');
-  if (pill?.dataset.mode) return pill.dataset.mode as ScrollMode;
-
-  // 2) radios: <input type="radio" name="scrollMode" value="wpm" checked>
-  const checked = document.querySelector<HTMLInputElement>('input[name="scrollMode"]:checked');
-  if (checked?.value) return checked.value as ScrollMode;
-
-  // 3) select: <select id="modeSelect"><option value="wpm">
-  const sel = document.getElementById('modeSelect') as HTMLSelectElement | null;
-  if (sel?.value) return sel.value as ScrollMode;
-
-  return state.mode;
-}
+// Mode now sourced from unified mode-state; legacy DOM scraping removed.
 
 function readAutoIntentFromDOM(): boolean {
   // Any of: <button id="autoPill" class="on">, <div class="auto-toggle on">, <body class="auto-on">
@@ -37,29 +24,9 @@ function readAutoIntentFromDOM(): boolean {
 }
 
 // --- Bind mode changes ---
-function bindMode() {
-  // pills
-  document.addEventListener('click', (e) => {
-    const el = (e.target as HTMLElement)?.closest?.('[data-mode], .mode-pill') as HTMLElement | null;
-    if (!el) return;
-    const v = (el.dataset.mode || el.getAttribute('data-mode') || el.getAttribute('value')) as ScrollMode | null;
-    if (!v) return;
-    state.mode = v;
-    pushGate();
-  }, { passive: true });
-
-  // radios
-  document.addEventListener('change', (e) => {
-    const el = e.target as HTMLInputElement;
-    if (el?.name === 'scrollMode' && el.checked) {
-      state.mode = el.value as ScrollMode;
-      pushGate();
-    }
-  });
-
-  // select
-  const sel = document.getElementById('modeSelect') as HTMLSelectElement | null;
-  sel?.addEventListener('change', () => { state.mode = sel.value as ScrollMode; pushGate(); });
+function bindMode(){
+  // Subscribe to unified mode-state
+  onMode((m) => { state.mode = m; pushGate(); });
 }
 
 // --- Bind Auto toggle changes ---
@@ -121,8 +88,8 @@ function bindViewerNudges() {
 
 // --- Public init ---
 export function initGateOrchestrator() {
-  // seed state once
-  state.mode = readModeFromDOM();
+  // seed state once using unified mode-state
+  state.mode = getMode();
   state.user = readAutoIntentFromDOM();
   state.speech = false;
 

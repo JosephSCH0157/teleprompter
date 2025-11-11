@@ -43,4 +43,12 @@ export function installModeRowsSync(root = document) {
       mo.observe(panel, { childList: true, subtree: true });
     }
   } catch {}
+
+  // Also react to unified mode events so external setMode() stays reflected
+  try {
+    if (!window.__tpModeRowsEventHook) {
+      window.__tpModeRowsEventHook = true;
+      window.addEventListener('tp:mode', () => { try { syncSidebarModeUI(); } catch {} }, { passive: true });
+    }
+  } catch {}
 }

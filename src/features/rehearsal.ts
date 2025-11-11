@@ -241,6 +241,7 @@ export function resolveInitialRehearsal() {
   try { should = should || localStorage.getItem('tp_rehearsal_v1') === '1'; } catch {}
   if (should) {
     try {
+      try { (window as any).__tpMode?.set?.('rehearsal'); } catch {}
       const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
       if (sel) sel.value = 'rehearsal';
     } catch {}

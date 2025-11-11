@@ -11,6 +11,10 @@ function inRehearsal() {
 
 // Scroll/mic state helpers for gating transcript capture
 function getScrollMode() {
+  try {
+    const m = window.__tpMode?.get?.();
+    if (m) return String(m).toLowerCase();
+  } catch {}
   try { return (window.__tpStore?.get?.('mode') ?? window.__tpScrollMode ?? '').toString().toLowerCase(); } catch { return ''; }
 }
 function micActive() {
