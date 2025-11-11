@@ -139,6 +139,9 @@ import { initAsrFeature } from './index-hooks/asr';
 import { getTypography, onTypography, setTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
+// Shared helpers for sidebar + auto toggle label syncing
+import { installModeRowsSync } from './boot/uiModeSync.js';
+import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import { initObsUI } from './wiring/obs-wiring';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
@@ -299,73 +302,9 @@ try {
 				applyUiScrollMode(uiMode);
 			} catch {}
 
-			// --- Resilient sidebar mode UI sync (independent of legacy router) ---
-			try {
-				function syncSidebarModeUI(){
-					try {
-						const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-						const val = sel?.value || '';
-						const autoRow = document.getElementById('autoRow');
-						const wpmRow  = document.getElementById('wpmRow');
-						const isWpm = val === 'wpm';
-						if (autoRow) {
-							autoRow.classList.toggle('visually-hidden', isWpm);
-							if (isWpm) autoRow.setAttribute('aria-hidden','true'); else autoRow.removeAttribute('aria-hidden');
-						}
-						if (wpmRow) {
-							wpmRow.classList.toggle('visually-hidden', !isWpm);
-							if (isWpm) wpmRow.removeAttribute('aria-hidden'); else wpmRow.setAttribute('aria-hidden','true');
-						}
-					} catch {}
-				}
-				const modeSel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-				modeSel?.addEventListener('change', () => { syncSidebarModeUI(); });
-				// Initial sync after install (in case user cookie restored WPM)
-				syncSidebarModeUI();
-				// Fallback observer: if panel is re-rendered, re-sync rows
-				try {
-					const panel = document.querySelector('aside.panel');
-					if (panel && 'MutationObserver' in window) {
-						const mo = new MutationObserver(() => { syncSidebarModeUI(); });
-						mo.observe(panel, { childList: true, subtree: true });
-					}
-				} catch {}
-
-				// Keep the Auto-toggle button label in sync with router auto state events
-				try {
-					function applyAutoToggleLabelFromState(detail: any){
-						try {
-							const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
-							if (!btn) return;
-							const label = String(detail?.label || '').trim();
-							const gate  = String(detail?.gate || '').trim(); // 'on' | 'paused' | 'manual'
-							if (label) btn.textContent = label;
-							if (gate) {
-								btn.setAttribute('data-state', gate);
-								btn.setAttribute('aria-pressed', String(gate !== 'manual'));
-							}
-						} catch {}
-					}
-					document.addEventListener('tp:autoState' as any, (ev: any) => {
-						try { applyAutoToggleLabelFromState(ev?.detail); } catch {}
-					}, { capture: true });
-					// Seed initial label using Auto.getState if router hasn't emitted yet
-					try {
-						const st = (Auto as any).getState?.();
-						const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
-						if (btn && st) {
-							const enabled = !!st.enabled;
-							const speed = Math.round(Number(st.speed||0));
-							const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-							const mode = sel?.value || '';
-							if (mode === 'wpm') btn.textContent = `Auto-scroll: ${enabled ? 'On' : 'Off'}${enabled ? ` — ${Math.round(Number((window as any).tp_baseline_wpm||120))} WPM` : ''}`;
-							else btn.textContent = `Auto-scroll: ${enabled ? 'On' : 'Off'}${enabled ? ` — ${speed} px/s` : ''}`;
-							btn.setAttribute('data-state', enabled ? 'on' : 'off');
-							btn.setAttribute('aria-pressed', String(enabled));
-						}
-					} catch {}
-				} catch {}
-			} catch {}
+			// --- Resilient sidebar mode UI sync + auto toggle label via shared helpers ---
+			try { installModeRowsSync(); } catch {}
+			try { installAutoToggleSync(Auto as any); } catch {}
 		} catch {}
 
 		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
