@@ -4,8 +4,8 @@ import './boot/compat-ids';
 // Shared UI helpers (idempotent; safe if called twice)
 // JS builds import the JS helpers; TS builds can import the TS versions.
 // If you prefer, mirror these files under ./boot/* (non-src) and import from there.
-import { installModeRowsSync } from './src/boot/uiModeSync.js';
 import { installAutoToggleSync } from './src/boot/autoToggleSync.js';
+import { installModeRowsSync } from './src/boot/uiModeSync.js';
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.

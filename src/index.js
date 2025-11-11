@@ -126,32 +126,32 @@ try {
     import * as Adapters from './adapters/index.js';
     // Provide legacy-compatible app store for settings/state persistence (exposes window.__tpStore)
     import * as Mic from './adapters/mic.js';
-    import { bus } from './core/bus.js';
-    import * as Core from './core/state.js';
-    import * as Auto from './features/autoscroll.js';
+import { bus } from './core/bus.js';
+import * as Core from './core/state.js';
+import * as Auto from './features/autoscroll.js';
     // Shared helpers for sidebar + auto toggle label syncing (migration toward unified TS entry)
     import { installAutoToggleSync } from './boot/autoToggleSync.js';
-    import { installModeRowsSync } from './boot/uiModeSync.js';
-    import * as Eggs from './features/eggs.js';
-    import { initHotkeys } from './features/hotkeys.js';
-    import { initPersistence } from './features/persistence.js';
-    import { initScroll } from './features/scroll.js';
-    import { installSpeech } from './features/speech-loader.js';
-    import { initTelemetry } from './features/telemetry.js';
-    import './state/app-store.js';
+import { installModeRowsSync } from './boot/uiModeSync.js';
+import * as Eggs from './features/eggs.js';
+import { initHotkeys } from './features/hotkeys.js';
+import { initPersistence } from './features/persistence.js';
+import { initScroll } from './features/scroll.js';
+import { installSpeech } from './features/speech-loader.js';
+import { initTelemetry } from './features/telemetry.js';
+import './state/app-store.js';
     // Ensure inline formatter is present (provides window.formatInlineMarkup)
     import '../ui/format.js';
-    import '../ui/inline-shim.js';
+import '../ui/inline-shim.js';
     // Legacy wrapSelection handler for toolbar buttons (ensures global exists in dev/CI)
     import '../ui/wrap-shim.js';
     // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
     // Lightweight toast system (attaches window.toast/initToastContainer)
     import '../ui/toasts.js';
-    import './dev/dup-init-check.js';
-    import './media/display-bridge.js';
+import './dev/dup-init-check.js';
+import './media/display-bridge.js';
     // Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
     import './media/camera.js';
-    import * as UI from './ui/dom.js';
+import * as UI from './ui/dom.js';
     // Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
     import '../ui/typography-bridge.js';
     // Scripts Save/Load UI (dropdown + buttons wiring)
@@ -162,7 +162,7 @@ try {
     import './ui/settings.js';
     // HUD: minimal ASR stats line (dev only)
     import './hud/asr-stats.js';
-    import './hud/rec-stats.js';
+import './hud/rec-stats.js';
     // Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
     // Folder-backed Scripts loader (JS prototypes kept for JS boot path)
     import './features/script-folder-browser.js';
