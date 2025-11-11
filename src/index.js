@@ -725,6 +725,75 @@ async function boot() {
           } catch (e) { try { console.warn('[src/index] gate orchestrator init failed', e); } catch {} }
         }
       } catch (e) { console.warn('[src/index] router import sequence failed', e); }
+      // --- Resilient sidebar mode UI sync and Auto-toggle label updates ---
+      try {
+        function syncSidebarModeUI() {
+          try {
+            const sel = document.getElementById('scrollMode');
+            const val = (sel && sel.value) || '';
+            const autoRow = document.getElementById('autoRow');
+            const wpmRow = document.getElementById('wpmRow');
+            const isWpm = val === 'wpm';
+            if (autoRow) {
+              autoRow.classList.toggle('visually-hidden', isWpm);
+              if (isWpm) autoRow.setAttribute('aria-hidden','true'); else autoRow.removeAttribute('aria-hidden');
+            }
+            if (wpmRow) {
+              wpmRow.classList.toggle('visually-hidden', !isWpm);
+              if (isWpm) wpmRow.removeAttribute('aria-hidden'); else wpmRow.setAttribute('aria-hidden','true');
+            }
+          } catch {}
+        }
+        try {
+          const modeSel = document.getElementById('scrollMode');
+          modeSel && modeSel.addEventListener('change', () => { try { syncSidebarModeUI(); } catch {} });
+          // Initial sync after router install
+          syncSidebarModeUI();
+        } catch {}
+        // Fallback observer: if panel is re-rendered, re-sync rows
+        try {
+          const panel = document.querySelector('aside.panel');
+          if (panel && 'MutationObserver' in window) {
+            const mo = new MutationObserver(() => { try { syncSidebarModeUI(); } catch {} });
+            mo.observe(panel, { childList: true, subtree: true });
+          }
+        } catch {}
+
+        // Keep the Auto-toggle button label in sync with router auto state events
+        try {
+          function applyAutoToggleLabelFromState(detail) {
+            try {
+              const btn = document.getElementById('autoToggle');
+              if (!btn) return;
+              const label = String((detail && detail.label) || '').trim();
+              const gate  = String((detail && detail.gate) || '').trim(); // 'on' | 'paused' | 'manual'
+              if (label) btn.textContent = label;
+              if (gate) {
+                btn.setAttribute('data-state', gate);
+                btn.setAttribute('aria-pressed', String(gate !== 'manual'));
+              }
+            } catch {}
+          }
+          document.addEventListener('tp:autoState', (ev) => {
+            try { applyAutoToggleLabelFromState(ev && ev.detail); } catch {}
+          }, { capture: true });
+          // Seed initial label using Auto.getState if router hasn't emitted yet
+          try {
+            const st = Auto && Auto.getState && Auto.getState();
+            const btn = document.getElementById('autoToggle');
+            if (btn && st) {
+              const enabled = !!st.enabled;
+              const speed = Math.round(Number(st.speed||0));
+              const sel = document.getElementById('scrollMode');
+              const mode = (sel && sel.value) || '';
+              if (mode === 'wpm') btn.textContent = `Auto-scroll: ${enabled ? 'On' : 'Off'}${enabled ? ` — ${Math.round(Number((window.tp_baseline_wpm||120)))} WPM` : ''}`;
+              else btn.textContent = `Auto-scroll: ${enabled ? 'On' : 'Off'}${enabled ? ` — ${speed} px/s` : ''}`;
+              btn.setAttribute('data-state', enabled ? 'on' : 'off');
+              btn.setAttribute('aria-pressed', String(enabled));
+            }
+          } catch {}
+        } catch {}
+      } catch {}
       // Resilient event delegation (works in headless + when nodes re-render)
       let __lastAutoToggleAt = 0;
       const __applyAutoChip = () => {
