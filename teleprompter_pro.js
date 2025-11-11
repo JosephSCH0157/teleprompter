@@ -12343,5 +12343,9 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     try {
       window.__setAutoSpeed = setAutoSpeed;
     } catch {}
+    })();
+  
+    // Close validateStandardTags function and outer IIFE
+    };
   })();
 

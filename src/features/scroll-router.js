@@ -1,3 +1,4 @@
+import { createWpmScroller } from './wpm.ts';
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
   let ready = false;
@@ -473,10 +474,15 @@ function installScrollRouter(opts) {
   applyMode(state2.mode);
   const orch = createOrchestrator();
   let orchRunning = false;
+  // WPM motor: independent of Auto engine and speech lifecycle
+  const getViewerEl = () => document.getElementById('viewer');
+  const wpm = createWpmScroller(getViewerEl, (t, d) => { try { window.HUD?.log?.('wpm:'+t, d); } catch {} });
+  let wpmOpen = false;
+  let wpmSetting = (() => { try { return parseFloat(localStorage.getItem('tp_baseline_wpm') || '120') || 120; } catch { return 120; } })();
   let wpmUpdateInterval = null;
   
-  // Update WPM display periodically when in WPM mode
-  function updateWpmDisplay() {
+  // Update WPM display periodically when in WPM mode (legacy; orchestrator off for WPM). Keep underscored to satisfy lint.
+  function _updateWpmDisplay() {
     try {
       if (state2.mode !== 'wpm' || !orchRunning) return;
       const status = orch.getStatus();
@@ -498,27 +504,19 @@ function installScrollRouter(opts) {
   
   async function ensureOrchestratorForMode() {
     try {
-      if (state2.mode === "wpm" || state2.mode === "asr") {
+      if (state2.mode === "asr") {
         if (!orchRunning) {
           await orch.start(createVadEventAdapter());
           orch.setMode("assist");
           orchRunning = true;
           
-          // Start WPM display updates for WPM mode
-          if (state2.mode === "wpm") {
-            if (wpmUpdateInterval) clearInterval(wpmUpdateInterval);
-            wpmUpdateInterval = setInterval(updateWpmDisplay, 200);
-          }
+          // (WPM motor is independent; no orchestrator required)
         }
       } else if (orchRunning) {
         await orch.stop();
         orchRunning = false;
         
-        // Stop WPM display updates
-        if (wpmUpdateInterval) {
-          clearInterval(wpmUpdateInterval);
-          wpmUpdateInterval = null;
-        }
+        if (wpmUpdateInterval) { clearInterval(wpmUpdateInterval); wpmUpdateInterval = null; }
       }
     } catch {
     }
@@ -599,7 +597,7 @@ function installScrollRouter(opts) {
   function applyGate() {
     console.log('[applyGate] Called:', { mode: state2.mode, userEnabled, speechActive });
     try { window.HUD?.log?.('scroll-router', `applyGate: mode=${state2.mode} user=${userEnabled} speech=${speechActive}`); } catch {}
-    if (state2.mode !== "hybrid") {
+  if (state2.mode !== "hybrid") {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
@@ -633,13 +631,25 @@ function installScrollRouter(opts) {
           break;
       }
 
-      // Only flip if it changes
-      try {
-        const was = !!window.Auto?.isEnabled?.();
-        if (was !== want) {
-          window.Auto?.setEnabled?.(want);
-        }
-      } catch {}
+      // Drive per-mode transitions
+      if (mode === 'wpm') {
+        // WPM ignores speech: start/stop independent motor and ensure Auto is OFF
+        try {
+          const was = !!window.Auto?.isEnabled?.();
+          if (was) window.Auto?.setEnabled?.(false);
+        } catch {}
+        try {
+          if (want && !wpmOpen) { wpm.start(wpmSetting); }
+          else if (!want && wpmOpen) { wpm.stop(); }
+          wpmOpen = want;
+        } catch {}
+      } else {
+        // Only flip Auto if it changes
+        try {
+          const was = !!window.Auto?.isEnabled?.();
+          if (was !== want) window.Auto?.setEnabled?.(want);
+        } catch {}
+      }
 
       // Optional: richer debug
       try { window.HUD?.log?.('router:gate', { mode, userEnabled, speechActive, hasScript, want }); } catch {}
@@ -650,10 +660,17 @@ function installScrollRouter(opts) {
       try {
         const btn = document.getElementById("autoToggle");
         if (btn) {
-          const s = getStoredSpeed();
-          if (!userEnabled) { btn.textContent = "Auto-scroll: Off"; btn.setAttribute("data-state", "off"); }
-          else if (enabledNow) { btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`; btn.setAttribute("data-state", "on"); }
-          else { btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`; btn.setAttribute("data-state", "paused"); }
+          if (!userEnabled) {
+            btn.textContent = "Auto-scroll: Off"; btn.setAttribute("data-state", "off");
+          } else if (enabledNow) {
+            if (mode === 'wpm') btn.textContent = `Auto-scroll: On \u2014 ${Math.round(wpmSetting)} WPM`;
+            else btn.textContent = `Auto-scroll: On \u2014 ${getStoredSpeed()} px/s`;
+            btn.setAttribute("data-state", "on");
+          } else {
+            if (mode === 'wpm') btn.textContent = `Auto-scroll: Paused \u2014 ${Math.round(wpmSetting)} WPM`;
+            else btn.textContent = `Auto-scroll: Paused \u2014 ${getStoredSpeed()} px/s`;
+            btn.setAttribute("data-state", "paused");
+          }
           btn.setAttribute("aria-pressed", String(!!userEnabled));
         }
       } catch {}
@@ -790,36 +807,9 @@ function installScrollRouter(opts) {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
+            wpmSetting = val;
             // In WPM mode, immediately update scroll speed based on new target WPM
-            if (state2.mode === 'wpm') {
-              try {
-                // Calculate px/s from target WPM using typography settings
-                const cs = getComputedStyle(document.documentElement);
-                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
-                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
-                const lineHeightPx = fsPx * lhScale;
-                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-                const pxs = (val / 60 / wpl) * lineHeightPx;
-                
-                // Update auto-scroll speed directly
-                if (typeof auto.setSpeed === 'function') {
-                  auto.setSpeed(pxs);
-                }
-                
-                // Also update orchestrator sensitivity if running
-                if (orchRunning) {
-                  const status = orch.getStatus();
-                  const detectedWpm = status.wpm;
-                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                    const sensitivity = val / detectedWpm;
-                    orch.setSensitivity(sensitivity);
-                  } else {
-                    orch.setSensitivity(1.0);
-                  }
-                }
-              } catch {
-              }
-            }
+            if (state2.mode === 'wpm' && wpm.isRunning()) { try { wpm.setRateWpm(val); } catch {} }
           }
         } catch {
         }
@@ -835,35 +825,8 @@ function installScrollRouter(opts) {
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             // In WPM mode, immediately update scroll speed
-            if (state2.mode === 'wpm') {
-              try {
-                // Calculate px/s from target WPM
-                const cs = getComputedStyle(document.documentElement);
-                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
-                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
-                const lineHeightPx = fsPx * lhScale;
-                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-                const pxs = (val / 60 / wpl) * lineHeightPx;
-                
-                // Update auto-scroll speed directly
-                if (typeof auto.setSpeed === 'function') {
-                  auto.setSpeed(pxs);
-                }
-                
-                // Also update orchestrator sensitivity if running
-                if (orchRunning) {
-                  const status = orch.getStatus();
-                  const detectedWpm = status.wpm;
-                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                    const sensitivity = val / detectedWpm;
-                    orch.setSensitivity(sensitivity);
-                  } else {
-                    orch.setSensitivity(1.0);
-                  }
-                }
-              } catch {
-              }
-            }
+            wpmSetting = val;
+            if (state2.mode === 'wpm' && wpm.isRunning()) { try { wpm.setRateWpm(val); } catch {} }
           }
         } catch {
         }
