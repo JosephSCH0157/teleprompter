@@ -1470,6 +1470,6 @@ function installScrollRouter(opts) {
   }
 }
 export {
-    installScrollRouter
+  installScrollRouter
 };
 
