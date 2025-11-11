@@ -171,6 +171,8 @@ import './ui/settings.js';
 // HUD: minimal ASR stats line (dev only)
 import './hud/asr-stats.js';
 import './hud/rec-stats.js';
+// Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
+import './features/script-folder-browser.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
