@@ -142,6 +142,17 @@
         '    <label><input type="checkbox" id="settingsDevHud"/> Enable HUD (dev only)</label>',
   '  </div>',
   '  <div class="card" style="margin-top:10px">',
+  '    <h5 style="margin:6px 0 8px">Mapped Scripts Folder</h5>',
+  '    <div class="row" style="gap:8px;align-items:center">',
+  '      <button id="btnChooseScriptsFolder" class="chip btn-chip" type="button">Choose folder…</button>',
+  '      <button id="btnForgetScriptsFolder" class="chip btn-chip btn-ghost" type="button">Forget</button>',
+  '      <span class="microcopy" style="color:#9fb4c9;font-size:12px">Current: <strong id="scriptsFolderLabel">None</strong></span>',
+  '    </div>',
+  '    <div id="scriptsFolderUnsupported" class="microcopy" style="display:none;color:#9fb4c9;font-size:12px">',
+  '      Your browser doesn’t support folder access. You can still load files via the Scripts panel.',
+  '    </div>',
+  '  </div>',
+  '  <div class="card" style="margin-top:10px">',
   '    <h5 style="margin:6px 0 8px">Scrolling diagnostics</h5>',
   '    <div class="row">',
   '      <label>Stall threshold (sec) <input id="settingsStallDt" type="number" min="0.1" max="3" step="0.05" class="select-sm" placeholder="0.33"/></label>',
@@ -1730,6 +1741,8 @@
           buildSettingsContent(el);
           // ensure latest devices are shown
           populateDevices();
+          // Wire Advanced → Mapped Scripts Folder controls if available
+          try { window.initAdvancedFolderControls && window.initAdvancedFolderControls(); } catch {}
           // After building, ensure tabs show active one
           const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
           showTab(active && active.getAttribute('data-tab') || 'general');

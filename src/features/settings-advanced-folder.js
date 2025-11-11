@@ -29,3 +29,6 @@ export function initAdvancedFolderControls() {
 
 // Auto-init if panel already in DOM (defensive; boot will also call this)
 try { if (document.readyState !== 'loading') { setTimeout(() => { try { initAdvancedFolderControls(); } catch {} }, 0); } } catch {}
+
+// Expose on window so non-module callers can trigger after dynamic Settings build
+try { window.initAdvancedFolderControls = initAdvancedFolderControls; } catch {}
