@@ -195,6 +195,34 @@ async function boot(){
   try { installSpeech();     try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:speech'); } catch {} } catch (e) { try { console.warn('[entry.ts] installSpeech failed', e); } catch {} }
 
   // Layer shared helpers (idempotent)
+    // Persist scroll mode across reloads using a cookie
+    try {
+      const cookieKey = 'tp_scroll_mode';
+      const getCookie = (name: string): string | null => {
+        try {
+          const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+          return m ? decodeURIComponent(m[1]) : null;
+        } catch { return null; }
+      };
+      const setCookie = (name: string, value: string, days = 365) => {
+        try {
+          const maxAge = days * 24 * 60 * 60;
+          document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; samesite=lax`;
+        } catch {}
+      };
+      // Apply persisted mode before installing mode row sync and emitting events
+      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+      const saved = getCookie(cookieKey);
+      if (sel && saved) {
+        const exists = Array.from(sel.options || []).some(o => (o as HTMLOptionElement).value === saved);
+        if (exists) sel.value = saved;
+      }
+      // Attach a one-time writer on change
+      if (sel && !(window as any).__tpModeCookieWriter) {
+        (window as any).__tpModeCookieWriter = true;
+        sel.addEventListener('change', () => { try { setCookie(cookieKey, sel.value); } catch {} }, { capture: true });
+      }
+    } catch {}
     try { installModeRowsSync(); } catch {}
     try { installAutoToggleSync(Auto); } catch {}
     // Helper-friendly event emitters (tp:mode, tp:autoState) so smoke can observe under TS boot
