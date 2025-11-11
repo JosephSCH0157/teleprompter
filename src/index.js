@@ -10,7 +10,6 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
 
 // Dev console noise filter (JS path). Safe to invoke early; silently no-ops outside dev.
 try {
-  // Prefer module import; if dynamic import fails (older bundler), fall back to any global.
   (async () => {
     try {
       const mod = await import('./features/console-noise-filter.js');
@@ -19,138 +18,107 @@ try {
         return;
       }
     } catch {}
-    // --- Hard dup-boot guard (very top of module) ---
-    if (window.__tpBooted) {
-      console.warn('[src/index] duplicate boot blocked; first =', window.__tpBooted);
-      throw new Error('dup-boot');
-    }
-    window.__tpBooted = 'index.module';
-    window.__tpBootCount = (window.__tpBootCount || 0) + 1;
-    // Camera SSOT — TS owns the camera stack.
-    try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
+    try { window.installConsoleNoiseFilter?.({ debug: false }); } catch {}
+  })();
+} catch {}
 
-    // Dev console noise filter (JS path). Safe to invoke early; silently no-ops outside dev.
-    try {
-      // Prefer module import; if dynamic import fails (older bundler), fall back to any global.
-      (async () => {
+// --- HUD SSOT (dev) ---
+(() => {
+  try {
+    const HUD_FLAG = 'tp_dev_hud_v1';
+    if (window.__tpHudWireActive) return; // already installed
+    window.__tpHudWireActive = true;
+
+    function ensureHudRoot() {
+      try {
+        let r = document.getElementById('hud-root');
+        if (!r) {
+          r = document.createElement('div');
+          r.id = 'hud-root';
+          r.className = 'hud-root hidden';
+          r.setAttribute('aria-hidden', 'true');
+          r.setAttribute('inert', '');
+          document.body.appendChild(r);
+        }
+        return r;
+      } catch { return null; }
+    }
+
+    const root = ensureHudRoot();
+  
+    const hudBus = new EventTarget();
+    const api = window.__tpHud = window.__tpHud || {
+      enabled: false,
+      root,
+      bus: {
+        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+        on: (type, fn) => {
+          try {
+            const h = (e) => { try { fn(e.detail); } catch {} };
+            hudBus.addEventListener(type, h);
+            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
+          } catch {}
+        },
+      },
+      setEnabled(on) {
         try {
-          const mod = await import('./features/console-noise-filter.js');
-          if (mod && typeof mod.installConsoleNoiseFilter === 'function') {
-            mod.installConsoleNoiseFilter({ debug: false });
-            return;
+          this.enabled = !!on;
+          if (this.root) {
+            this.root.classList.toggle('hidden', !on);
+            if (on) {
+              this.root.removeAttribute('aria-hidden');
+              this.root.removeAttribute('inert');
+            } else {
+              this.root.setAttribute('aria-hidden', 'true');
+              this.root.setAttribute('inert', '');
+            }
           }
+          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
+          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
         } catch {}
-        try { window.installConsoleNoiseFilter?.({ debug: false }); } catch {}
-      })();
+      },
+      log(...args) {
+        try {
+          if (!this.enabled || !this.root) return;
+          const pre = document.createElement('pre');
+          pre.className = 'hud-line';
+          pre.textContent = args.map(a => {
+            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
+          }).join(' ');
+          this.root.appendChild(pre);
+          this.root.scrollTop = this.root.scrollHeight;
+        } catch {}
+      },
+    };
+
+    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
+    try { if (!window.HUD) window.HUD = api; } catch {}
+
+    try {
+      const logTx = (d) => {
+        if (!d) return;
+        api.log('captions:tx', {
+          partial: d.partial,
+          final: d.final,
+          conf: d.confidence?.toFixed(2),
+          len: d.text?.length ?? 0,
+          idx: d.lineIndex,
+          harness: d.harness,
+        });
+      };
+      const logState = (d) => {
+        if (!d) return;
+        api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
+      };
+      window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:captions:state', (e) => logState(e.detail));
+      window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:speech:state', (e) => logState(e.detail));
     } catch {}
 
-    // --- HUD SSOT (dev) ---
-    (() => {
-      try {
-        const HUD_FLAG = 'tp_dev_hud_v1';
-        if (window.__tpHudWireActive) return; // already installed
-        window.__tpHudWireActive = true;
-
-        function ensureHudRoot() {
-          try {
-            let r = document.getElementById('hud-root');
-            if (!r) {
-              r = document.createElement('div');
-              r.id = 'hud-root';
-              r.className = 'hud-root hidden';
-              r.setAttribute('aria-hidden', 'true');
-              r.setAttribute('inert', '');
-              document.body.appendChild(r);
-            }
-            return r;
-          } catch { return null; }
-        }
-
-        const root = ensureHudRoot();
-    
-        // Create a simple event bus for HUD components (compat shim before full bus import)
-        const hudBus = new EventTarget();
-        const api = window.__tpHud = window.__tpHud || {
-          enabled: false,
-          root,
-          bus: {
-            emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
-            on: (type, fn) => {
-              try {
-                const h = (e) => { try { fn(e.detail); } catch {} };
-                hudBus.addEventListener(type, h);
-                return () => { try { hudBus.removeEventListener(type, h); } catch {} };
-              } catch {}
-            },
-          },
-          setEnabled(on) {
-            try {
-              this.enabled = !!on;
-              if (this.root) {
-                this.root.classList.toggle('hidden', !on);
-                if (on) {
-                  this.root.removeAttribute('aria-hidden');
-                  this.root.removeAttribute('inert');
-                } else {
-                  this.root.setAttribute('aria-hidden', 'true');
-                  this.root.setAttribute('inert', '');
-                }
-              }
-              try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
-              try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
-            } catch {}
-          },
-          log(...args) {
-            try {
-              if (!this.enabled || !this.root) return;
-              const pre = document.createElement('pre');
-              pre.className = 'hud-line';
-              pre.textContent = args.map(a => {
-                try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
-              }).join(' ');
-              this.root.appendChild(pre);
-              this.root.scrollTop = this.root.scrollHeight;
-            } catch {}
-          },
-        };
-
-        // Hydrate from storage
-        try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
-        // Unify legacy HUD log calls to the SSOT
-        try { if (!window.HUD) window.HUD = api; } catch {}
-    
-        // Listen to new typed transcript and state events (both captions and legacy speech)
-        try {
-          const logTx = (d) => {
-            if (!d) return;
-            api.log('captions:tx', {
-              partial: d.partial,
-              final: d.final,
-              conf: d.confidence?.toFixed(2),
-              len: d.text?.length ?? 0,
-              idx: d.lineIndex,
-              harness: d.harness,
-            });
-          };
-          const logState = (d) => {
-            if (!d) return;
-            api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
-          };
-      
-          // Primary captions events
-          window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
-          window.addEventListener('tp:captions:state', (e) => logState(e.detail));
-      
-          // Legacy speech events (for backwards compatibility)
-          window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
-          window.addEventListener('tp:speech:state', (e) => logState(e.detail));
-        } catch {}
-    
-        // Announce readiness
-        try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
-      } catch {}
-    })();
-
+    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
+  } catch {}
+})();
     // Minimal bootstrap for the new `src/` modular layout.
     // This file intentionally performs a very small set of init actions and
     // delegates the heavy lifting to the legacy loader until a full migration is done.
@@ -200,6 +168,17 @@ try {
     import './features/script-folder-browser.js';
     // Settings Advanced: folder mapping controls (JS path)
     import './features/settings-advanced-folder.js';
+// Feature-level idempotence helper (belt & suspenders)
+function initOnce(name, fn) {
+  try {
+    window.__tpInit = window.__tpInit || {};
+    if (window.__tpInit[name]) return;
+    window.__tpInit[name] = 1;
+    return fn();
+  } catch (e) {
+    try { console.warn(`[init:${name}] failed`, e); } catch {}
+  }
+}
 async function loadLegacyPiecesAsModules() {
   const mods = [
     '../eggs.js',

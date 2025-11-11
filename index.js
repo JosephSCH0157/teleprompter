@@ -1,6 +1,11 @@
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import { bootstrap } from './boot/boot';
 import './boot/compat-ids';
+// Shared UI helpers (idempotent; safe if called twice)
+// JS builds import the JS helpers; TS builds can import the TS versions.
+// If you prefer, mirror these files under ./boot/* (non-src) and import from there.
+import { installModeRowsSync } from './src/boot/uiModeSync.js';
+import { installAutoToggleSync } from './src/boot/autoToggleSync.js';
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
@@ -13,6 +18,7 @@ import './ui/settings/asrWizard';
 // Create and expose the scroll brain globally
 const scrollBrain = createScrollBrain();
 window.__tpScrollBrain = scrollBrain;
+// Helpers may run early; they are idempotent and observe later changes too.
 function applyUiScrollMode(mode) {
     // Store the UI mode somewhere global so existing JS can still read it
     window.__tpUiScrollMode = mode;
@@ -57,6 +63,13 @@ function applyUiScrollMode(mode) {
         setClampMode(clampMode);
     if (asr && typeof asr.setEnabled === 'function')
         asr.setEnabled(asrEnabled);
+
+    // Let helper UIs (and anyone else) know the mode changed.
+    try {
+        const ev = new CustomEvent('tp:mode', { detail: { mode } });
+        window.dispatchEvent(ev);
+    }
+    catch { }
     // HUD visibility: show all three layers for debugging
     try {
         const summary = `UI: ${mode} | Brain: ${brainMode} | Clamp: ${clampMode}`;
@@ -96,6 +109,18 @@ import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
+
+// Small helper to broadcast current auto state to the helper module.
+function __emitAutoState() {
+    try {
+        const s = Auto.getState?.();
+        if (s) {
+            const ev = new CustomEvent('tp:autoState', { detail: s });
+            window.dispatchEvent(ev);
+        }
+    }
+    catch { }
+}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
     function injectSpeechNotesHud() {
@@ -130,6 +155,9 @@ try {
         // Ensure autoscroll engine is initialized
         try {
             Auto.initAutoScroll?.();
+            // Seed helper UI once autoscroll is ready
+            installAutoToggleSync(Auto);
+            __emitAutoState();
         }
         catch { }
         // Wire Auto buttons via resilient delegation (nodes may be re-rendered)
@@ -139,16 +167,19 @@ try {
                 // The Scroll Router manages #autoToggle intent; avoid double-toggling here
                 try {
                     if (t?.closest?.('#autoInc'))
-                        return Auto.inc?.();
+                        { const r = Auto.inc?.(); __emitAutoState(); return r; }
                 }
                 catch { }
                 try {
                     if (t?.closest?.('#autoDec'))
-                        return Auto.dec?.();
+                        { const r = Auto.dec?.(); __emitAutoState(); return r; }
                 }
                 catch { }
             };
             document.addEventListener('click', onClick, { capture: true });
+            // Track start/stop signals to refresh the label readout
+            document.addEventListener('autoscroll:start', __emitAutoState, { capture: true });
+            document.addEventListener('autoscroll:stop', __emitAutoState, { capture: true });
         }
         catch { }
         // Auto-record when the session actually starts (one-shot per page load)
@@ -194,7 +225,9 @@ try {
         catch { }
         // Install the new Scroll Router (Step/Hybrid; WPM/ASR/Rehearsal stubs)
         try {
-            installScrollRouter({ auto: {
+            // Allow a TS entry to take ownership cleanly (no double router boot)
+            if (!window.__TP_TS_ROUTER_BOOT) {
+                installScrollRouter({ auto: {
                     toggle: Auto.toggle,
                     inc: Auto.inc,
                     dec: Auto.dec,
@@ -202,6 +235,7 @@ try {
                     setSpeed: Auto.setSpeed,
                     getState: Auto.getState,
                 } });
+            }
         }
         catch { }
         // Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
@@ -251,6 +285,11 @@ try {
                 }
             }
             catch { }
+        }
+        catch { }
+        // Keep the Auto/WPM rows in sync with current mode (idempotent)
+        try {
+            installModeRowsSync(document);
         }
         catch { }
         // Install coalesced Display Sync (hash + optional HTML text) for external display
