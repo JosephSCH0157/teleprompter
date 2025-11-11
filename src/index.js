@@ -22,104 +22,7 @@ try {
   })();
 } catch {}
 
-// --- HUD SSOT (dev) ---
-(() => {
-  try {
-    if (window.__TP_TS_HUD_BOOT) { try { console.info('[src/index] skip HUD SSOT (TS HUD boot)'); } catch {} return; }
-    const HUD_FLAG = 'tp_dev_hud_v1';
-    if (window.__tpHudWireActive) return; // already installed
-    window.__tpHudWireActive = true;
-
-    function ensureHudRoot() {
-      try {
-        let r = document.getElementById('hud-root');
-        if (!r) {
-          r = document.createElement('div');
-          r.id = 'hud-root';
-          r.className = 'hud-root hidden';
-          r.setAttribute('aria-hidden', 'true');
-          r.setAttribute('inert', '');
-          document.body.appendChild(r);
-        }
-        return r;
-      } catch { return null; }
-    }
-
-    const root = ensureHudRoot();
-  
-    const hudBus = new EventTarget();
-    const api = window.__tpHud = window.__tpHud || {
-      enabled: false,
-      root,
-      bus: {
-        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
-        on: (type, fn) => {
-          try {
-            const h = (e) => { try { fn(e.detail); } catch {} };
-            hudBus.addEventListener(type, h);
-            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
-          } catch {}
-        },
-      },
-      setEnabled(on) {
-        try {
-          this.enabled = !!on;
-          if (this.root) {
-            this.root.classList.toggle('hidden', !on);
-            if (on) {
-              this.root.removeAttribute('aria-hidden');
-              this.root.removeAttribute('inert');
-            } else {
-              this.root.setAttribute('aria-hidden', 'true');
-              this.root.setAttribute('inert', '');
-            }
-          }
-          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
-          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
-        } catch {}
-      },
-      log(...args) {
-        try {
-          if (!this.enabled || !this.root) return;
-          const pre = document.createElement('pre');
-          pre.className = 'hud-line';
-          pre.textContent = args.map(a => {
-            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
-          }).join(' ');
-          this.root.appendChild(pre);
-          this.root.scrollTop = this.root.scrollHeight;
-        } catch {}
-      },
-    };
-
-    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
-    try { if (!window.HUD) window.HUD = api; } catch {}
-
-    try {
-      const logTx = (d) => {
-        if (!d) return;
-        api.log('captions:tx', {
-          partial: d.partial,
-          final: d.final,
-          conf: d.confidence?.toFixed(2),
-          len: d.text?.length ?? 0,
-          idx: d.lineIndex,
-          harness: d.harness,
-        });
-      };
-      const logState = (d) => {
-        if (!d) return;
-        api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
-      };
-      window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
-      window.addEventListener('tp:captions:state', (e) => logState(e.detail));
-      window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
-      window.addEventListener('tp:speech:state', (e) => logState(e.detail));
-    } catch {}
-
-    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
-  } catch {}
-})();
+// HUD is owned by TS entry; legacy JS path pruned.
     // Minimal bootstrap for the new `src/` modular layout.
     // This file intentionally performs a very small set of init actions and
     // delegates the heavy lifting to the legacy loader until a full migration is done.
@@ -139,211 +42,65 @@ import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
-import './state/app-store.js';
-    // Ensure inline formatter is present (provides window.formatInlineMarkup)
-    import '../ui/format.js';
-import '../ui/inline-shim.js';
-    // Legacy wrapSelection handler for toolbar buttons (ensures global exists in dev/CI)
-    import '../ui/wrap-shim.js';
-    // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
-    // Lightweight toast system (attaches window.toast/initToastContainer)
-    import '../ui/toasts.js';
-import './dev/dup-init-check.js';
-import './media/display-bridge.js';
-    // Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
-    import './media/camera.js';
+// Missing imports restored for pruned legacy path
 import * as UI from './ui/dom.js';
-    // Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
-    import '../ui/typography-bridge.js';
-    // Scripts Save/Load UI (dropdown + buttons wiring)
-    import '../ui/scripts-ui.js';
-    // OBS wiring: ensure Test button is always handled (claims OBS controls before legacy wiring)
-    import { wireObsPersistentUI } from './wiring/wire.js';
-    // Settings overlay and media/OBS wiring (module path)
-    import './ui/settings.js';
-    // HUD: minimal ASR stats line (dev only)
-    import './hud/asr-stats.js';
-import './hud/rec-stats.js';
-    // Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
-    // Folder-backed Scripts loader (JS prototypes kept for JS boot path)
-    import './features/script-folder-browser.js';
-    // Settings Advanced: folder mapping controls (JS path)
-    import './features/settings-advanced-folder.js';
-// Feature-level idempotence helper (belt & suspenders)
-function initOnce(name, fn) {
+import { wireObsPersistentUI } from './wiring/wire.js';
+
+// Simple one-shot init guard helper (legacy). Re-created after pruning.
+function initOnce(key, fn){
   try {
-    window.__tpInit = window.__tpInit || {};
-    if (window.__tpInit[name]) return;
-    window.__tpInit[name] = 1;
-    return fn();
-  } catch (e) {
-    try { console.warn(`[init:${name}] failed`, e); } catch {}
-  }
-}
-async function loadLegacyPiecesAsModules() {
-  const mods = [
-    '../eggs.js',
-    // Ensure OBS bridge is present before recorders.js so the recorder registry
-    // can wrap 'obs' with a StartRecord-capable bridge adapter.
-    '../adapters/obsBridge.js',
-    '../adapters/bridge.js',
-    '../adapters/obs.js',
-    '../recorders.js',
-    '../debug-tools.js',
-    '../debug-seed.js',
-    '../io-anchor.js',
-    '../help.js',
-    '../scroll-helpers.js',
-    '../scroll-control.js',
-  ];
-  await Promise.all(mods.map(async (m) => {
-    try {
-      await import(m);
-      try { window.__tpRegisterInit && window.__tpRegisterInit('import:'+m); } catch {}
-    } catch (err) {
-      console.error(`[src/index] Failed to import ${m}:`, err);
-      if (window && window.__TP_IMPORT_ERRORS) {
-        window.__TP_IMPORT_ERRORS.push({ mod: m, error: String(err && err.message || err) });
-      } else if (window) {
-        window.__TP_IMPORT_ERRORS = [{ mod: m, error: String(err && err.message || err) }];
-      }
-    }
-  }));
-  console.log('[src/index] module imports complete');
+    window.__tpInitOnce = window.__tpInitOnce || {};
+    if (window.__tpInitOnce[key]) return;
+    window.__tpInitOnce[key] = Date.now();
+    try { fn && fn(); } catch {}
+  } catch {}
 }
 
-async function boot() {
+// Boot function (restored after pruning). Encapsulates legacy JS path initialization.
+// Wrap the retained initialization logic in a try/catch so we can emit a boot failed trace on errors.
+async function boot(){
   try {
-    // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
-    await loadLegacyPiecesAsModules();
-    // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
-    try {
-      if (window.__TP_TS_HUD_BOOT) { try { console.info('[src/index] skip HUD installer/toggle (TS HUD boot)'); } catch {} }
-      else {
-      // Ensure HUD installer exists (load fallback if not already present)
-      if (typeof window.__tpInstallHUD !== 'function') {
-        try { await import('../debug-tools.js'); } catch {}
-      }
-      const needHudInstall = (typeof window.__tpInstallHUD === 'function') && (
-        !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
-      );
-      if (needHudInstall) {
-        window.__tpHud = window.__tpInstallHUD({ hotkey: '~' });
-        // Ensure HUD mount root is visible (dev stub may have hidden it)
-        try {
-          const r = document.getElementById('hud-root');
-          if (r) {
-            r.classList && r.classList.remove('hidden');
-            r.removeAttribute && r.removeAttribute('aria-hidden');
-            r.removeAttribute && r.removeAttribute('inert');
-          }
-        } catch {}
-        // Auto-show HUD in dev sessions for visibility
-        try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch {}
-      }
-      // Expose a tiny ensureHud() poke for dev; prefer full HUD toggle, else fallback
-      if (typeof window.ensureHud !== 'function') {
-        window.ensureHud = () => {
-          try {
-            const need = (typeof window.__tpInstallHUD === 'function') && (
-              !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
-            );
-            if (need) { window.__tpHud = window.__tpInstallHUD({ hotkey: '~' }); }
-            if (window.__tpHud?.toggle) { window.__tpHud.toggle(); return; }
-          } catch {}
-          try { window.toggleHud?.(); } catch {}
-        };
-      }
-      // HUD safety hook: lightweight overlay + global toggleHotkey
-      if (typeof window.toggleHud !== 'function') {
-        window.toggleHud = () => {
-          try {
-            // Prefer full HUD if available
-            if (window.__tpHud && (typeof window.__tpHud.toggle === 'function' || typeof window.__tpHud.show === 'function')) {
-              if (typeof window.__tpHud.toggle === 'function') return void window.__tpHud.toggle();
-              const shown = !!window.__tpHud?.isVisible?.();
-              return shown ? void window.__tpHud.hide?.() : void window.__tpHud.show?.();
-            }
-          } catch {}
-          // Fallback: tiny in-page pill (bottom-right, capture-safe)
-          try {
-            let el = document.getElementById('tp-hud-lite');
-            if (!el) {
-              el = document.createElement('div');
-              el.id = 'tp-hud-lite';
-              el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:999999;background:#111;color:#0f0;padding:6px 10px;border-radius:8px;border:1px solid #0f0;font:12px/1.2 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4)';
-              el.textContent = 'HUD ready';
-              document.body.appendChild(el);
-            }
-            el.hidden = !el.hidden;
-          } catch {}
-        };
-      }
-      if (!window.__tpHudSafetyHookInstalled) {
-        window.__tpHudSafetyHookInstalled = true;
-        window.addEventListener('keydown', (e) => {
-          try {
-            const k = (e.key || '').toLowerCase();
-            if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
-              e.stopImmediatePropagation();
-              // eslint-disable-next-line no-restricted-syntax
-              e.preventDefault();
-              window.toggleHud?.();
-            }
-          } catch {}
-        }, { capture: true });
-      }
-      }
-      // If HUD is present, mirror speech gates to it for visibility (skip only if TS HUD explicitly opts-out)
+
+// Retained: speech dB/VAD mirroring for legacy consumers (HUD now TS-owned)
+try {
+  const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
+  const logDb = (() => {
+    let lastDb = -Infinity, lastTs = 0;
+    return (db) => {
       try {
-        const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
-        // Throttled dB logger → emits speech:db event and (optionally) HUD log
-        const logDb = (() => {
-          let lastDb = -Infinity, lastTs = 0;
-          return (db) => {
-            try {
-              const now = performance.now();
-              if (!(typeof db === 'number' && isFinite(db))) return;
-              if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
-                lastDb = db; lastTs = now;
-                // Always fire an event for listeners
-                try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
-                // HUD breadcrumb only if not muted
-                try {
-                  const off = localStorage.getItem('tp_hud_quiet_db') === '1';
-                  if (!off && !window.__TP_QUIET) logHud('speech:db', { db });
-                } catch {}
-              }
-            } catch {}
-          };
-        })();
-        const __vadState = { speaking: false };
-        window.addEventListener('tp:db', (ev) => {
+        const now = performance.now();
+        if (!(typeof db === 'number' && isFinite(db))) return;
+        if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
+          lastDb = db; lastTs = now;
+          try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
           try {
-            const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
-            if (db == null) return;
-            // Always send the throttled db event; HUD log is internally muted or throttled
-            logDb(db);
+            const off = localStorage.getItem('tp_hud_quiet_db') === '1';
+            if (!off && !window.__TP_QUIET) logHud('speech:db', { db });
           } catch {}
-        });
-        window.addEventListener('tp:vad', (ev) => {
-          try {
-            const speaking = !!(ev && ev.detail && ev.detail.speaking);
-            __vadState.speaking = speaking;
-            logHud('speech:vad', { speaking });
-          } catch {}
-        });
-        // Small helper to toggle HUD dB logs at runtime (persists in localStorage)
-        try {
-          if (!window.setHudQuietDb) {
-            window.setHudQuietDb = (on) => {
-              try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
-              try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
-            };
-          }
-        } catch {}
-  } catch {}
+        }
+      } catch {}
+    };
+  })();
+  window.addEventListener('tp:db', (ev) => {
+    try {
+      const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
+      if (db == null) return;
+      logDb(db);
     } catch {}
+  });
+  window.addEventListener('tp:vad', (ev) => {
+    try {
+      const speaking = !!(ev && ev.detail && ev.detail.speaking);
+      logHud('speech:vad', { speaking });
+    } catch {}
+  });
+  if (!window.setHudQuietDb) {
+    window.setHudQuietDb = (on) => {
+      try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
+      try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
+    };
+  }
+} catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
@@ -446,7 +203,7 @@ async function boot() {
       try {
         const disp = (window && window.__tpDisplayViewerEl) || null;
         if (disp && disp.isConnected) return disp;
-      } catch {}
+  } catch {}
       try {
         const inPage = document.getElementById('viewer') || document.querySelector('[data-role="viewer"]');
         return inPage || (document.scrollingElement || document.documentElement);
@@ -905,7 +662,7 @@ async function boot() {
     }
   } catch {}
   console.log('[src/index] boot completed');
-    try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
+  try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch {}

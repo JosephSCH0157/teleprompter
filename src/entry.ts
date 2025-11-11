@@ -294,6 +294,184 @@ async function boot(){
   } catch (e) {
     try { console.error('[entry.ts] boot failed', e); } catch {}
   }
+
+          // HUD toggles + safety hotkey + dB/VAD mirroring (parity with legacy JS path)
+          try {
+            // Global helpers
+            if (!(window as any).ensureHud) {
+              (window as any).ensureHud = () => {
+                try {
+                  const hud: any = (window as any).__tpHud;
+                  if (hud && typeof hud.toggle === 'function') { hud.toggle(); return; }
+                } catch {}
+                try { (window as any).toggleHud?.(); } catch {}
+              };
+            }
+            if (!(window as any).toggleHud) {
+              (window as any).toggleHud = () => {
+                try {
+                  const hud: any = (window as any).__tpHud;
+                  if (hud && (typeof hud.toggle === 'function' || typeof hud.show === 'function')) {
+                    if (typeof hud.toggle === 'function') return void hud.toggle();
+                    const shown = !!(hud.isVisible?.());
+                    return shown ? void hud.hide?.() : void hud.show?.();
+                  }
+                } catch {}
+                // Tiny fallback pill if no HUD implementation is present
+                try {
+                  let el = document.getElementById('tp-hud-lite') as HTMLElement | null;
+                  if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'tp-hud-lite';
+                    el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:999999;background:#111;color:#0f0;padding:6px 10px;border-radius:8px;border:1px solid #0f0;font:12px/1.2 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4)';
+                    el.textContent = 'HUD ready';
+                    document.body.appendChild(el);
+                  }
+                  el.hidden = !el.hidden;
+                } catch {}
+              };
+            }
+            if (!(window as any).__tpHudSafetyHookInstalled) {
+              (window as any).__tpHudSafetyHookInstalled = true;
+              window.addEventListener('keydown', (e: any) => {
+                try {
+                  const k = (e.key || '').toLowerCase();
+                  if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    (window as any).toggleHud?.();
+                  }
+                } catch {}
+              }, { capture: true });
+            }
+            // dB/VAD mirroring + event bridge
+            const logHud = (tag: string, payload?: any) => { try { ((window as any).HUD?.log || (window as any).__tpHud?.log)?.(tag, payload); } catch {} };
+            const logDb = (() => {
+              let lastDb = -Infinity, lastTs = 0;
+              return (db: number) => {
+                try {
+                  const now = performance.now();
+                  if (!(typeof db === 'number' && isFinite(db))) return;
+                  if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
+                    lastDb = db; lastTs = now;
+                    try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
+                    try {
+                      const off = localStorage.getItem('tp_hud_quiet_db') === '1';
+                      if (!off && !(window as any).__TP_QUIET) logHud('speech:db', { db });
+                    } catch {}
+                  }
+                } catch {}
+              };
+            })();
+            window.addEventListener('tp:db', (ev: any) => {
+              try {
+                const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
+                if (db == null) return;
+                logDb(db);
+              } catch {}
+            });
+            window.addEventListener('tp:vad', (ev: any) => {
+              try {
+                const speaking = !!(ev && ev.detail && ev.detail.speaking);
+                logHud('speech:vad', { speaking });
+              } catch {}
+            });
+            if (!(window as any).setHudQuietDb) {
+              (window as any).setHudQuietDb = (on: boolean) => {
+                try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
+                try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
+              };
+            }
+          } catch {}
+  // HUD toggles + safety hotkey + dB/VAD mirroring (parity with legacy JS path)
+  try {
+    // Global helpers
+    if (!(window as any).ensureHud) {
+      (window as any).ensureHud = () => {
+        try {
+          const hud: any = (window as any).__tpHud;
+          if (hud && typeof hud.toggle === 'function') { hud.toggle(); return; }
+        } catch {}
+        try { (window as any).toggleHud?.(); } catch {}
+      };
+    }
+    if (!(window as any).toggleHud) {
+      (window as any).toggleHud = () => {
+        try {
+          const hud: any = (window as any).__tpHud;
+          if (hud && (typeof hud.toggle === 'function' || typeof hud.show === 'function')) {
+            if (typeof hud.toggle === 'function') return void hud.toggle();
+            const shown = !!(hud.isVisible?.());
+            return shown ? void hud.hide?.() : void hud.show?.();
+          }
+        } catch {}
+        // Tiny fallback pill if no HUD implementation is present
+        try {
+          let el = document.getElementById('tp-hud-lite') as HTMLElement | null;
+          if (!el) {
+            el = document.createElement('div');
+            el.id = 'tp-hud-lite';
+            el.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:999999;background:#111;color:#0f0;padding:6px 10px;border-radius:8px;border:1px solid #0f0;font:12px/1.2 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4)';
+            el.textContent = 'HUD ready';
+            document.body.appendChild(el);
+          }
+          (el as any).hidden = !(el as any).hidden;
+        } catch {}
+      };
+    }
+    if (!(window as any).__tpHudSafetyHookInstalled) {
+      (window as any).__tpHudSafetyHookInstalled = true;
+      window.addEventListener('keydown', (e: any) => {
+        try {
+          const k = (e.key || '').toLowerCase();
+          if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            (window as any).toggleHud?.();
+          }
+        } catch {}
+      }, { capture: true });
+    }
+    // dB/VAD mirroring + event bridge
+    const logHud = (tag: string, payload?: any) => { try { ((window as any).HUD?.log || (window as any).__tpHud?.log)?.(tag, payload); } catch {} };
+    const logDb = (() => {
+      let lastDb = -Infinity, lastTs = 0;
+      return (db: number) => {
+        try {
+          const now = performance.now();
+          if (!(typeof db === 'number' && isFinite(db))) return;
+          if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
+            lastDb = db; lastTs = now;
+            try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
+            try {
+              const off = localStorage.getItem('tp_hud_quiet_db') === '1';
+              if (!off && !(window as any).__TP_QUIET) logHud('speech:db', { db });
+            } catch {}
+          }
+        } catch {}
+      };
+    })();
+    window.addEventListener('tp:db', (ev: any) => {
+      try {
+        const db = (ev && ev.detail && typeof ev.detail.db === 'number') ? ev.detail.db : null;
+        if (db == null) return;
+        logDb(db);
+      } catch {}
+    });
+    window.addEventListener('tp:vad', (ev: any) => {
+      try {
+        const speaking = !!(ev && ev.detail && ev.detail.speaking);
+        logHud('speech:vad', { speaking });
+      } catch {}
+    });
+    if (!(window as any).setHudQuietDb) {
+      (window as any).setHudQuietDb = (on: boolean) => {
+        try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
+        try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
+      };
+    }
+  } catch {}
+
 }
 
 boot();
