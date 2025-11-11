@@ -667,8 +667,12 @@ async function boot() {
           return null;
         }
         const candidates = [
-          { spec: '/dist/features/scroll-router.js', flag: '__tpScrollRouterTsActive' },
-          { spec: './features/scroll-router.js',     flag: '__tpScrollRouterJsActive' }
+          // New TS build output first
+          { spec: '/dist/scroll-router.js', flag: '__tpScrollRouterTsActive' },
+          // Legacy bundled feature path (previous location)
+          { spec: '/dist/features/scroll-router.js', flag: '__tpScrollRouterLegacyDist' },
+          // Source fallback (JS version) for dev environments
+          { spec: './features/scroll-router.js', flag: '__tpScrollRouterJsActive' }
         ];
         let mod = null;
         for (const c of candidates) {
@@ -686,16 +690,20 @@ async function boot() {
             document.head.appendChild(s);
           } catch {}
         } else {
-          // Pass the Auto API to the router so it can drive the engine.
+          // Pass control to the router module. Prefer new TS API, fall back to legacy installer.
           try {
-            if (typeof mod.installScrollRouter === 'function') {
+            if (typeof mod.initScrollRouter === 'function') {
+              mod.initScrollRouter();
+              try { window.__tpScrollRouterTsActive = true; } catch {}
+              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {}
+            } else if (typeof mod.installScrollRouter === 'function') {
               mod.installScrollRouter({ auto: Auto });
               try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {}
             } else {
-              console.warn('[router] installScrollRouter not found on module');
+              console.warn('[router] no recognized init API on module');
             }
           } catch (e) {
-            console.warn('[src/index] installScrollRouter failed', e);
+            console.warn('[src/index] router init failed', e);
           }
         }
       } catch (e) { console.warn('[src/index] router import sequence failed', e); }
