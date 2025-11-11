@@ -30,9 +30,7 @@ export async function getPersistedFolder(): Promise<FileSystemDirectoryHandle | 
   try {
     const db = await openDB();
     const dir = (await db.get(STORE, KEY)) as FileSystemDirectoryHandle | undefined;
-    if (!dir) return null;
-    const ok = await ensureRead(dir as unknown as FileSystemHandle);
-    return ok ? dir : null;
+    return dir || null;
   } catch { return null; }
 }
 

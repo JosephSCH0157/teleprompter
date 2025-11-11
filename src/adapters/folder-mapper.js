@@ -33,9 +33,7 @@ export async function getPersistedFolder() {
   try {
     const db = await openDB();
     const dir = await db.get(STORE, KEY);
-    if (!dir) return null;
-    const ok = await ensureRead(dir);
-    return ok ? dir : null;
+    return dir || null;
   } catch { return null; }
 }
 
@@ -99,7 +97,7 @@ async function ensureMammoth() {
   });
 }
 
-async function ensureRead(handle) {
+async function _ensureRead(handle) {
   try {
     const q = await (handle.queryPermission?.({ mode: 'read' }));
     if (q === 'granted') return true;
