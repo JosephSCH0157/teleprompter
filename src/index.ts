@@ -330,6 +330,41 @@ try {
 						mo.observe(panel, { childList: true, subtree: true });
 					}
 				} catch {}
+
+				// Keep the Auto-toggle button label in sync with router auto state events
+				try {
+					function applyAutoToggleLabelFromState(detail: any){
+						try {
+							const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+							if (!btn) return;
+							const label = String(detail?.label || '').trim();
+							const gate  = String(detail?.gate || '').trim(); // 'on' | 'paused' | 'manual'
+							if (label) btn.textContent = label;
+							if (gate) {
+								btn.setAttribute('data-state', gate);
+								btn.setAttribute('aria-pressed', String(gate !== 'manual'));
+							}
+						} catch {}
+					}
+					document.addEventListener('tp:autoState' as any, (ev: any) => {
+						try { applyAutoToggleLabelFromState(ev?.detail); } catch {}
+					}, { capture: true });
+					// Seed initial label using Auto.getState if router hasn't emitted yet
+					try {
+						const st = (Auto as any).getState?.();
+						const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+						if (btn && st) {
+							const enabled = !!st.enabled;
+							const speed = Math.round(Number(st.speed||0));
+							const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+							const mode = sel?.value || '';
+							if (mode === 'wpm') btn.textContent = `Auto-scroll: ${enabled ? 'On' : 'Off'}${enabled ? ` — ${Math.round(Number((window as any).tp_baseline_wpm||120))} WPM` : ''}`;
+							else btn.textContent = `Auto-scroll: ${enabled ? 'On' : 'Off'}${enabled ? ` — ${speed} px/s` : ''}`;
+							btn.setAttribute('data-state', enabled ? 'on' : 'off');
+							btn.setAttribute('aria-pressed', String(enabled));
+						}
+					} catch {}
+				} catch {}
 			} catch {}
 		} catch {}
 
