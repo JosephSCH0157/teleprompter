@@ -669,3 +669,10 @@ html.tp-present .present-exit { display: inline-flex; }
         calc(100vw - 2 * max(16px, 3vw))
     );
 }
+
+/* Tiny status pill for WPM */
+.tp-chip{display:inline-flex;gap:.4rem;align-items:center;font:500 12px/1.2 system-ui;padding:.28rem .5rem;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;backdrop-filter:saturate(1.2) blur(4px);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.tp-chip--wpm{white-space:nowrap}
+.tp-chip--muted{opacity:.5}
+.tp-chip--ok{background:rgba(16,128,64,.65)}
+.tp-chip--end{background:rgba(128,16,16,.7)}

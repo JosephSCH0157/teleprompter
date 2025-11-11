@@ -71,7 +71,10 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = () => {}) {
       const next = Math.min(max, sc.scrollTop + pxPerSec * dt);
       sc.scrollTop = next;
       try { log('wpm:tick', { dt, pxPerSec, top: next, max }); } catch {}
-      if (next >= max) stop();
+      if (next >= max) {
+        try { (window as any).__tpWpmEnded = true; } catch {}
+        stop();
+      }
     }
     raf = requestAnimationFrame(loop);
   }

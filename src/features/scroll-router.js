@@ -485,12 +485,46 @@ function installScrollRouter(opts) {
   let wpmOpen = false;
   let wpmSetting = (() => { try { return parseFloat(localStorage.getItem('tp_baseline_wpm') || '120') || 120; } catch { return 120; } })();
   let wpmUpdateInterval = null;
+  // --- Chip mount & control ------------------------------------
   // Live chip showing WPM • px/s while motor runs
   let wpmChipTimer = 0;
-  function setWpmChip(text) {
+  function ensureWpmChip() {
+    let el = document.getElementById('wpmChip');
+    if (el) return el;
     try {
-      const el = document.getElementById('wpmChip');
-      if (el) el.textContent = text;
+      const autoPill = document.querySelector('#autoPill, .auto-pill, [data-pill="auto"]');
+      if (autoPill && autoPill.parentElement) {
+        el = document.createElement('span');
+        el.id = 'wpmChip';
+        el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
+        el.textContent = '—';
+        autoPill.parentElement.insertBefore(el, autoPill.nextSibling);
+        return el;
+      }
+      const host = document.querySelector('#modePills, #statusBar, #controlBar, #topBar');
+      if (host) {
+        el = document.createElement('span');
+        el.id = 'wpmChip';
+        el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
+        el.textContent = '—';
+        host.appendChild(el);
+        return el;
+      }
+    } catch {}
+    el = document.createElement('div');
+    el.id = 'wpmChip';
+    el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
+    el.textContent = '—';
+    try { Object.assign(el.style, { position:'fixed', top:'12px', right:'12px', zIndex:'1000' }); } catch {}
+    document.body.appendChild(el);
+    return el;
+  }
+  function setWpmChip(text, state /* 'ok' | 'muted' | 'end' */) {
+    try {
+      const el = ensureWpmChip();
+      el.textContent = text;
+      el.classList.remove('tp-chip--ok','tp-chip--muted','tp-chip--end');
+      el.classList.add(state ? `tp-chip--${state}` : 'tp-chip--ok');
     } catch {}
   }
   function startWpmChip(currentWpm) {
@@ -498,11 +532,18 @@ function installScrollRouter(opts) {
     const fmt = (n) => Math.round(n).toString();
     try {
       wpmChipTimer = window.setInterval(() => {
+        // Detect end-of-script without waiting for gate transition
+        if (window.__tpWpmEnded) {
+          setWpmChip('End of script', 'end');
+          window.__tpWpmEnded = false;
+          stopWpmChip();
+          return;
+        }
         const pxs = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
-        setWpmChip(`${wpmSetting} WPM • ${fmt(pxs)} px/s`);
+        setWpmChip(`${wpmSetting} WPM • ${fmt(pxs)} px/s`, 'ok');
       }, 250);
       const pxs0 = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
-      setWpmChip(`${currentWpm} WPM • ${Math.round(pxs0)} px/s`);
+      setWpmChip(`${currentWpm} WPM • ${Math.round(pxs0)} px/s`, 'ok');
     } catch {}
   }
   function stopWpmChip() {
@@ -514,6 +555,12 @@ function installScrollRouter(opts) {
 
   // Manual touch pause: brief stop on wheel/scroll keys, auto-resume if still in WPM with auto intent on
   let userPauseTimer = 0;
+  function isAutoOn() {
+    try {
+      if ((window).__tpAutoOn != null) return !!(window).__tpAutoOn;
+      return !!document.querySelector('#autoPill.on, [data-auto="on"], .auto-toggle.on, body.auto-on');
+    } catch { return false; }
+  }
   function userPause(ms = 1500) {
     try {
       if (!wpm.isRunning()) return;
@@ -523,9 +570,11 @@ function installScrollRouter(opts) {
       if (userPauseTimer) clearTimeout(userPauseTimer);
       userPauseTimer = window.setTimeout(() => {
         try {
-          if (state2.mode === 'wpm' && userEnabled) {
+          if (state2.mode === 'wpm' && isAutoOn()) {
             wpm.start(wpmSetting);
             startWpmChip(wpmSetting);
+          } else {
+            setWpmChip('Paused', 'muted');
           }
         } catch {}
       }, ms);
@@ -702,7 +751,18 @@ function installScrollRouter(opts) {
         } catch {}
         try {
           if (want && !wpmOpen) { wpm.start(wpmSetting); startWpmChip(wpmSetting); }
-          else if (!want && wpmOpen) { wpm.stop(); stopWpmChip(); }
+          else if (!want && wpmOpen) {
+            wpm.stop();
+            stopWpmChip();
+            try {
+              if (window.__tpWpmEnded) {
+                setWpmChip('End of script', 'end');
+                window.__tpWpmEnded = false;
+              } else {
+                setWpmChip('Paused', 'muted');
+              }
+            } catch {}
+          }
           wpmOpen = want;
         } catch {}
       } else {
