@@ -12,6 +12,8 @@
     "watch:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js --watch",
   "build:router": "npx esbuild src/scroll-router.ts --bundle --format=esm --sourcemap --outfile=dist/scroll-router.js",
   "watch:router": "npx esbuild src/scroll-router.ts --bundle --format=esm --sourcemap --outfile=dist/scroll-router.js --watch",
+  "build:gate": "npx esbuild src/features/gate-orchestrator.ts --bundle --format=esm --sourcemap --outfile=dist/gate-orchestrator.js",
+  "build:ui": "npm run build:router && npm run build:gate",
     "typecheck": "npm run build:logic && tsc -p tsconfig.json --noEmit",
     "smoke": "node tools/static_server.js & node tools/smoke_test.js --calm --timeout=120000",
     "test:asr-smoke": "node tools/asr_smoke.js",

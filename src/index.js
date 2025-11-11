@@ -705,6 +705,19 @@ async function boot() {
           } catch (e) {
             console.warn('[src/index] router init failed', e);
           }
+          // After router is ready, try to install the Gate Orchestrator (TS bundle)
+          try {
+            const go = await (async () => {
+              try { return await import('/dist/gate-orchestrator.js'); }
+              catch (err) { try { console.warn('[gate] import failed', err && err.message); } catch {} return null; }
+            })();
+            if (go && typeof go.initGateOrchestrator === 'function') {
+              go.initGateOrchestrator();
+              try { window.__tpGateOrchestratorActive = true; } catch {}
+              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:gate-orchestrator'); } catch {}
+              try { console.info('[gate] orchestrator initialized'); } catch {}
+            }
+          } catch (e) { try { console.warn('[src/index] gate orchestrator init failed', e); } catch {} }
         }
       } catch (e) { console.warn('[src/index] router import sequence failed', e); }
       // Resilient event delegation (works in headless + when nodes re-render)

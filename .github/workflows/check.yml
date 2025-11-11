@@ -96,10 +96,12 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Run UI crawl
-        run: node tools/ui_crawl.js
+        run: | 
+          npm run build:ui || true
+          node tools/ui_crawl.js
 
       - name: Validate UI crawl
-        run: node tools/validate_ui_crawl.js
+        run: CI_STRICT=1 node tools/validate_ui_crawl.js
 
       - name: Upload artifacts
         if: always()

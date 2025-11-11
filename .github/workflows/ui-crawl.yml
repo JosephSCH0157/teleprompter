@@ -17,8 +17,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - name: Build (router only is fine)
-        run: npm run build:router || true
+      - name: Build UI bundles (router + gate)
+        run: npm run build:ui || true
       - name: Start static server
         run: node tools/static_server.js & sleep 2
       - name: Crawl (strict)
