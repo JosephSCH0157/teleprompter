@@ -66,6 +66,8 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     // Exponential approach to target; tau ≈ 125ms -> alpha ≈ dt * 8 for small dt
     const alpha = Math.min(1, dt * 8);
     pxPerSec += (targetPxPerSec - pxPerSec) * alpha;
+  // Stall watchdog: log if frame gap is large (browser throttling or heavy GC)
+  try { if (dt > 0.33) { log('wpm:stall', { dt }); } } catch {}
 
     const sc = getViewer();
     if (sc) {

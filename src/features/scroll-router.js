@@ -595,44 +595,59 @@ function installScrollRouter(opts) {
     try { localStorage.setItem(CHIP_POS_KEY, JSON.stringify(pos)); } catch {}
   }
   function enableWpmChipDrag(el) {
-    let dragging = false;
-    let ox = 0, oy = 0;
+    // snap-to-edge helper
+    function snapChipToEdge(el, threshold = 24) {
+      try {
+        const r = el.getBoundingClientRect();
+        const leftGap = r.left;
+        const rightGap = window.innerWidth - r.right;
+        if (Math.min(leftGap, rightGap) <= threshold) {
+          if (leftGap < rightGap) {
+            el.style.left = '12px';
+            el.style.right = '';
+          } else {
+            el.style.right = '12px';
+            el.style.left = '';
+          }
+        }
+        if (r.top <= threshold) el.style.top = '12px';
+      } catch {}
+    }
+
+    let dragging = false, ox = 0, oy = 0;
     const toFloatIfNeeded = () => {
       if (el.parentElement !== document.body) {
         const r = el.getBoundingClientRect();
         document.body.appendChild(el);
-        Object.assign(el.style, { position: 'fixed', top: `${r.top}px`, left: `${r.left}px`, right: '', zIndex: '1000' });
+        Object.assign(el.style, { position:'fixed', top:`${r.top}px`, left:`${r.left}px`, right:'', zIndex:'1000' });
       }
     };
     el.addEventListener('pointerdown', (ev) => {
       try {
-        dragging = true;
-        toFloatIfNeeded();
-        el.classList.add('tp-chip--drag');
+        dragging = true; toFloatIfNeeded(); el.classList.add('tp-chip--drag');
         const rect = el.getBoundingClientRect();
-        ox = ev.clientX - (parseFloat(el.style.left || '0') || rect.left);
-        oy = ev.clientY - (parseFloat(el.style.top || '0') || rect.top);
-        window.HUD?.log?.('wpm:chip:drag:start');
+        ox = ev.clientX - rect.left; oy = ev.clientY - rect.top;
       } catch {}
-    }, { passive: true });
+    }, { passive:true });
+
     window.addEventListener('pointermove', (ev) => {
       if (!dragging) return;
       try {
         const x = Math.max(0, Math.min(window.innerWidth - 24, ev.clientX - ox));
         const y = Math.max(0, Math.min(window.innerHeight - 24, ev.clientY - oy));
-        el.style.left = `${x}px`;
-        el.style.top = `${y}px`;
+        el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.right = '';
       } catch {}
-    }, { passive: true });
+    }, { passive:true });
+
     window.addEventListener('pointerup', () => {
       if (!dragging) return;
       try {
-        dragging = false;
-        el.classList.remove('tp-chip--drag');
+        dragging = false; el.classList.remove('tp-chip--drag');
+        snapChipToEdge(el, 24);
         saveWpmChipPosition(el);
         window.HUD?.log?.('wpm:chip:drag:end');
       } catch {}
-    }, { passive: true });
+    }, { passive:true });
   }
   function startWpmChip(currentWpm) {
     stopWpmChip();
@@ -654,6 +669,10 @@ function installScrollRouter(opts) {
         const approx = (n)=> (Math.round(n*10)/10).toFixed(1);
         const prefix = isReducedMotion() ? 'Reduced • ' : '';
         setWpmChip(`${prefix}${wpmSetting} WPM • ${fmt(pxs)} px/s • ~${approx(lps)} lps`, 'ok');
+        // Stall watchdog visual hint: blink chip if px/s near zero while auto-on
+        try {
+          if ((pxs < 1) && isAutoOn() && state2.mode === 'wpm') blinkChipWarn();
+        } catch {}
       }, 250);
       const pxs0 = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
       const lh0 = sampleLineHeightPx();
@@ -725,6 +744,44 @@ function installScrollRouter(opts) {
           }
           wpmBgPaused = false;
         }
+      } catch {}
+    });
+  } catch {}
+
+  // Stall / watchdog blink for chip when px/s stalls
+  let stallBlinkTimer = 0;
+  function blinkChipWarn() {
+    try {
+      const el = ensureWpmChip(); if (!el) return;
+      el.style.boxShadow = '0 0 0 2px rgba(255,180,0,.9)';
+      clearTimeout(stallBlinkTimer);
+      stallBlinkTimer = window.setTimeout(() => { try { el.style.boxShadow = ''; } catch {} }, 400);
+    } catch {}
+  }
+
+  // Selection-aware pause (user selecting text)
+  let selPauseTimer = 0;
+  function selectionPause(ms = 2000) {
+    try {
+      if (state2.mode !== 'wpm' || !wpm.isRunning()) return;
+      wpm.stop(); stopWpmChip();
+      setWpmChip('Paused (select)', 'muted');
+      clearTimeout(selPauseTimer);
+      selPauseTimer = window.setTimeout(() => {
+        try {
+          if (state2.mode === 'wpm' && isAutoOn()) {
+            showWpmChip(); wpm.start(wpmSetting); startWpmChip(wpmSetting);
+          }
+        } catch {}
+      }, ms);
+    } catch {}
+  }
+  try {
+    document.addEventListener('selectionchange', () => {
+      try {
+        const sel = document.getSelection?.();
+        if (!sel) return;
+        if (sel.type === 'Range' && sel.toString && sel.toString().trim()) selectionPause();
       } catch {}
     });
   } catch {}
