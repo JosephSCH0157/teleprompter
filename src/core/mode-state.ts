@@ -11,6 +11,23 @@ let boundSelect: HTMLSelectElement | null = null;
 // Persistence helpers (cookie + localStorage)
 const COOKIE_KEY = 'tp_scroll_mode';
 const LS_KEY = 'tp_scroll_mode';
+const BCAST_KEY = 'tp_scroll_mode_bcast';
+
+// Normalize external strings into canonical ScrollMode values
+function normalizeMode(x: string | null | undefined): ScrollMode | null {
+  if (!x) return null;
+  const s = String(x).trim().toLowerCase();
+  const map: Record<string, ScrollMode> = {
+    auto: 'wpm',
+    wpm: 'wpm',
+    manual: 'manual',
+    asr: 'asr',
+    hybrid: 'hybrid',
+    rehearsal: 'rehearsal',
+    step: 'step',
+  };
+  return map[s] || null;
+}
 
 function getCookie(name: string): string | null {
   try {
@@ -19,10 +36,18 @@ function getCookie(name: string): string | null {
   } catch { return null; }
 }
 
-function setCookie(name: string, value: string, days = 365) {
+function writeCookie(name: string, val: string, days = 365) {
   try {
-    const maxAge = days * 24 * 60 * 60;
-    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; samesite=lax`;
+    const exp = new Date(Date.now() + days * 864e5).toUTCString();
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = `${name}=${encodeURIComponent(val)}; expires=${exp}; path=/; samesite=lax${secure}`;
+  } catch {}
+}
+
+function pokeStorageBroadcast(m: ScrollMode) {
+  try {
+    localStorage.setItem(BCAST_KEY, JSON.stringify({ m, t: Date.now() }));
+    setTimeout(() => { try { localStorage.removeItem(BCAST_KEY); } catch {} }, 1000);
   } catch {}
 }
 
@@ -31,16 +56,18 @@ function lsSet(k: string, v: string): void { try { localStorage.setItem(k, v); }
 
 // Read initial persisted value (cookie wins; fallback to LS)
 export function hydratePersistedMode(validValues?: string[]): ScrollMode {
-  const saved = getCookie(COOKIE_KEY) || lsGet(LS_KEY);
+  const raw = getCookie(COOKIE_KEY) || lsGet(LS_KEY);
+  const saved = normalizeMode(raw);
   // Validate against provided options if present
   if (saved && (!validValues || validValues.includes(saved))) {
     mode = saved as ScrollMode;
   }
-  // Try DOM select if nothing persisted
+  // Try DOM select if nothing persisted/valid
   if (!saved) {
     try {
       const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      if (sel?.value) mode = sel.value as ScrollMode;
+      const n = normalizeMode(sel?.value);
+      if (n) mode = n;
     } catch {}
   }
   return mode;
@@ -48,11 +75,12 @@ export function hydratePersistedMode(validValues?: string[]): ScrollMode {
 
 export function getMode(): ScrollMode { return mode; }
 
-export function setMode(next: ScrollMode): void {
-  if (!next || next === mode) { emitMode(false); return; }
-  mode = next;
+export function setMode(next: ScrollMode | string): void {
+  const n = normalizeMode(next as any);
+  if (!n || n === mode) { emitMode(false); return; }
+  mode = n;
   // Persist
-  setCookie(COOKIE_KEY, mode);
+  writeCookie(COOKIE_KEY, mode);
   lsSet(LS_KEY, mode);
   // Reflect in DOM select if present
   try {
@@ -80,6 +108,8 @@ function emitMode(dispatchWindowEvent: boolean, why: 'init'|'set' = 'set') {
   // Broadcast for legacy observers/testing
   if (dispatchWindowEvent) {
     try { window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode, why, ssot: true, ts: Date.now() } })); } catch {}
+    // storage-event fallback broadcast
+    try { pokeStorageBroadcast(mode); } catch {}
   }
 }
 
@@ -93,17 +123,19 @@ export function bindModeSelect(selectId = 'scrollMode') {
     boundSelect = sel;
     // Prime select with current mode
     try { if (boundSelect.value !== mode) boundSelect.value = mode; } catch {}
-    sel.addEventListener('change', () => { try { setMode(sel.value as ScrollMode); } catch {} }, { capture: true });
+  sel.addEventListener('change', () => { try { setMode(sel.value as ScrollMode); } catch {} }, { capture: true });
     // Migration shim: detect silent external pokes by polling
     try {
-      if (!(window as any).__tpModeSelectPoll) {
-        (window as any).__tpModeSelectPoll = window.setInterval(() => {
-          try {
-            if (!boundSelect) return;
-            const v = boundSelect.value as ScrollMode;
-            if (v && v !== mode) setMode(v);
-          } catch {}
-        }, 500);
+      if (localStorage.getItem('tp_dev_mode') === '1') {
+        if (!(window as any).__tpModeSelectPoll) {
+          (window as any).__tpModeSelectPoll = window.setInterval(() => {
+            try {
+              if (!boundSelect) return;
+              const v = boundSelect.value as ScrollMode;
+              if (v && v !== mode) setMode(v);
+            } catch {}
+          }, 500);
+        }
       }
     } catch {}
   } catch {}
@@ -118,7 +150,11 @@ export function bindSelect(sel: HTMLSelectElement | null): () => void {
   boundSelect.addEventListener('change', onChange, { passive: true });
   // Poll shim
   let pollId: number | null = null;
-  pollId = window.setInterval(() => { try { if (!boundSelect) return; const v = boundSelect.value as ScrollMode; if (v && v !== mode) setMode(v); } catch {} }, 500);
+  try {
+    if (localStorage.getItem('tp_dev_mode') === '1') {
+      pollId = window.setInterval(() => { try { if (!boundSelect) return; const v = boundSelect.value as ScrollMode; if (v && v !== mode) setMode(v); } catch {} }, 500);
+    }
+  } catch {}
   return () => {
     try { boundSelect?.removeEventListener('change', onChange as any); } catch {}
     if (pollId != null) { try { clearInterval(pollId); } catch {} }
@@ -130,8 +166,8 @@ export function initModeState(opts?: { defaultMode?: ScrollMode; select?: HTMLSe
   if (inited) return;
   inited = true;
   try {
-    const persisted = getCookie(COOKIE_KEY) || lsGet(LS_KEY);
-    const selVal = (opts?.select && opts.select.value) as ScrollMode | undefined;
+    const persisted = normalizeMode(getCookie(COOKIE_KEY) || lsGet(LS_KEY));
+    const selVal = normalizeMode(opts?.select && opts.select.value);
     mode = (persisted || selVal || opts?.defaultMode || 'manual') as ScrollMode;
   } catch {}
   if (opts?.select) { try { bindSelect(opts.select); } catch {} }
@@ -166,4 +202,16 @@ try {
       };
     } catch {}
   }
+} catch {}
+
+// Fallback sync via storage events (fires only in other tabs)
+try {
+  window.addEventListener('storage', (ev: StorageEvent) => {
+    try {
+      if (ev.key !== BCAST_KEY || !ev.newValue) return;
+      const payload = JSON.parse(ev.newValue || '{}');
+      const n = normalizeMode(payload?.m);
+      if (n && n !== getMode()) setMode(n);
+    } catch {}
+  });
 } catch {}
