@@ -55,23 +55,6 @@ function lsGet(k: string): string | null { try { return localStorage.getItem(k);
 function lsSet(k: string, v: string): void { try { localStorage.setItem(k, v); } catch {} }
 
 // Read initial persisted value (cookie wins; fallback to LS)
-export function hydratePersistedMode(validValues?: string[]): ScrollMode {
-  const raw = getCookie(COOKIE_KEY) || lsGet(LS_KEY);
-  const saved = normalizeMode(raw);
-  // Validate against provided options if present
-  if (saved && (!validValues || validValues.includes(saved))) {
-    mode = saved as ScrollMode;
-  }
-  // Try DOM select if nothing persisted/valid
-  if (!saved) {
-    try {
-      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      const n = normalizeMode(sel?.value);
-      if (n) mode = n;
-    } catch {}
-  }
-  return mode;
-}
 
 export function getMode(): ScrollMode { return mode; }
 

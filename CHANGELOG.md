@@ -1,5 +1,32 @@
 # Teleprompter Pro — Changelog
 
+## [1.7.0] - 2025-11-11
+
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.0
+
+### Added
+
+- Single Source of Truth for scroll mode (`src/core/mode-state.ts`) with `getMode`/`setMode`/`onMode`.
+- Cross-window mode sync via BroadcastChannel with storage-event fallback.
+- Dev guardrail warning on non-SSOT `tp:mode` emits.
+
+### Changed
+
+- Centralized persistence (cookie + localStorage), secure cookies on HTTPS.
+- `src/scroll-router.ts` now reads SSOT directly (no local mirror).
+
+### Removed
+
+- Legacy `index.js` `tp:mode` emitter; scattered cookie/LS writers.
+
+### Docs
+
+- “Mode SSOT Contract” in `README_DEV.md`.
+
+### Smoke
+
+- Probes for persistence + select binding.
+
 ## v1.6.0-scroll-router (2025-11-09)
 
 **Scroll Architecture Refactor**
