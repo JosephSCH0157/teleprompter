@@ -49,6 +49,12 @@ const lsSet = (k: string, v: string): void => {
   try { localStorage.setItem(k, v); } catch {}
 };
 
+function isDev(): boolean {
+  try { if (/\bdev=1\b/.test(location.search)) return true; } catch {}
+  try { if ((window as any).__TP_DEV) return true; } catch {}
+  try { return localStorage.getItem('tp_dev_console') === '1'; } catch { return false; }
+}
+
 // ---------- Mode + Gate state ----------
 
 let currentMode: ScrollMode = 'manual';
@@ -368,7 +374,18 @@ function startViewerDomObserver() {
     if (!current) return;
     if (current === observedViewer) return;
     // Viewer replaced → reattach observers
+    const oldViewer = observedViewer;
     attachViewerObservers(current, wpm, () => wpmSetting);
+    // Dev-only breadcrumb + always-fire event for tools/tests
+    try {
+      window.dispatchEvent(new CustomEvent('tp:viewer:reattach', {
+        detail: { oldId: oldViewer?.id, newId: current.id }
+      }));
+    } catch {}
+    if (isDev()) {
+      try { log('viewer:reattach', { from: oldViewer?.id, to: current.id }); } catch {}
+      try { console.info('[router] viewer reattached →', { from: oldViewer?.id, to: current.id }); } catch {}
+    }
   });
   viewerDomObs.observe(document.body, { childList: true, subtree: true });
 }
@@ -407,6 +424,11 @@ document.addEventListener('selectionchange', () => {
   if (currentMode !== 'wpm' || !wpm.isRunning()) return;
   const sel = document.getSelection?.();
   if (!sel || sel.type !== 'Range' || !sel.toString().trim()) return;
+  const viewer = getViewer();
+  const anchor = sel.anchorNode as (Node | null);
+  const focus = sel.focusNode as (Node | null);
+  const inViewer = !!viewer && ((anchor && viewer.contains(anchor)) || (focus && viewer.contains(focus)));
+  if (!inViewer) return;
   wpm.stop(); stopWpmChip();
   setWpmChip('Paused (select)', 'muted');
   clearTimeout(selPauseTimer);
@@ -542,3 +564,13 @@ export function initScrollRouter() {
   // Seed PRM cap and magnet threshold labels if any UI is listening
   try { window.dispatchEvent(new CustomEvent('tp:router:init')); } catch {}
 }
+
+// Best-effort cleanup to avoid stray observers/intervals on unload
+window.addEventListener('beforeunload', () => {
+  try {
+    if (wpm.isRunning()) wpm.stop();
+    stopWpmChip();
+    detachViewerObservers();
+    stopViewerDomObserver();
+  } catch {}
+});
