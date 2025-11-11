@@ -672,6 +672,13 @@ function installScrollRouter(opts) {
       snapChipToEdge(el, 24);
       saveWpmChipPosition(el);
     }, { passive: true });
+
+    // QoL: double-click to reset position to default top-right
+    el.addEventListener('dblclick', () => {
+      try { localStorage.removeItem('tp_wpm_chip_pos'); } catch {}
+      if (el.parentElement !== document.body) document.body.appendChild(el);
+      Object.assign(el.style, { position:'fixed', top:'12px', right:'12px', left:'', zIndex:'1000' });
+    }, { passive: true });
   }
   function startWpmChip(currentWpm) {
     stopWpmChip();

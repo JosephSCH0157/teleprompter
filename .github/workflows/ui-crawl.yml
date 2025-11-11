@@ -1,0 +1,33 @@
+name: UI Crawl (Strict)
+
+on:
+  push:
+    branches: [ main, scroll-fix-clean ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ui-crawl:
+    runs-on: ubuntu-latest
+    env:
+      CI_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Build (router only is fine)
+        run: npm run build:router || true
+      - name: Start static server
+        run: node tools/static_server.js & sleep 2
+      - name: Crawl (strict)
+        run: node tools/ui_crawl.js
+      - name: Validate (strict)
+        run: node tools/validate_ui_crawl.js
+      - name: Upload crawl report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui_crawl_report
+          path: tools/ui_crawl_report.json

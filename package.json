@@ -33,7 +33,10 @@
     "prepare": "husky",
     "build:speech": "node tools/esbuild-speech.mjs",
     "watch:speech": "node tools/esbuild-speech.mjs --watch",
-    "gate:clean": "node tools/gate_clean.js"
+    "gate:clean": "node tools/gate_clean.js",
+    "crawl": "node tools/ui_crawl.js",
+    "validate:crawl": "node tools/validate_ui_crawl.js",
+    "crawl:strict": "CI_STRICT=1 node tools/ui_crawl.js && CI_STRICT=1 node tools/validate_ui_crawl.js"
   ,
     "postversion": "node tools/bump_html_version.js && git add teleprompter_pro.html && git commit -m \"chore(html): bump visible version\" || true"
   },
