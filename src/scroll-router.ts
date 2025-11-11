@@ -75,6 +75,8 @@ const wpm: WpmMotor = createWpmScroller(getViewer, (t, d) => log(`wpm:${t}`, d))
 let wpmChipTimer: number | undefined;
 let resizeObs: ResizeObserver | null = null;
 let stallBlinkTimer: number | undefined;
+let viewerDomObs: MutationObserver | null = null;
+let observedViewer: HTMLElement | null = null;
 
 function ensureWpmChip(): HTMLElement {
   let el = document.getElementById('wpmChip') as HTMLElement | null;
@@ -345,6 +347,7 @@ function stopWpmChip() {
 function attachViewerObservers(viewer: HTMLElement | null, motor = wpm, getWpm = () => wpmSetting) {
   if (!viewer) return;
   detachViewerObservers();
+  observedViewer = viewer;
   resizeObs = new ResizeObserver(() => {
     if (motor.isRunning()) motor.recalcFromDom(getWpm());
   });
@@ -352,8 +355,26 @@ function attachViewerObservers(viewer: HTMLElement | null, motor = wpm, getWpm =
 }
 
 function detachViewerObservers() {
+  observedViewer = null;
   if (resizeObs) { resizeObs.disconnect(); resizeObs = null; }
   stopWpmChip();
+}
+
+function startViewerDomObserver() {
+  if (viewerDomObs) return;
+  viewerDomObs = new MutationObserver(() => {
+    const current = document.getElementById('viewer') as HTMLElement | null;
+    if (!wpm.isRunning()) return;
+    if (!current) return;
+    if (current === observedViewer) return;
+    // Viewer replaced → reattach observers
+    attachViewerObservers(current, wpm, () => wpmSetting);
+  });
+  viewerDomObs.observe(document.body, { childList: true, subtree: true });
+}
+
+function stopViewerDomObserver() {
+  if (viewerDomObs) { viewerDomObs.disconnect(); viewerDomObs = null; }
 }
 
 // ---------- Manual/selection/background pause ----------
@@ -435,6 +456,8 @@ export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
   _userIntent = user;
   _speechGate = speech;
   const open = computeOpen(mode, user, speech);
+  // Capture previous gate state BEFORE logGate potentially mutates it
+  const prevOpen = lastGateOpen;
   logGate(mode, user, speech, open);
 
   // Broadcast gate state for HUD or listeners
@@ -445,7 +468,7 @@ export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
 
   // WPM transitions
   if (mode === 'wpm') {
-    if (open && !lastGateOpen) {
+    if (open && !prevOpen) {
       if (!viewerScrollable()) {
         setWpmChip('Nothing to scroll', 'muted'); fadeOutWpmChip(2000);
         return;
@@ -455,18 +478,20 @@ export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
       const thr = Number.isFinite(raw) && raw > 0 ? raw : 0.33;
       wpm.setStallThreshold?.(thr);
 
-      // PRM policy
+      // PRM policy & start
       applyReducedMotionPolicy();
 
       showWpmChip();
       wpm.start(wpmSetting);
       startWpmChip(wpmSetting);
       attachViewerObservers(getViewer(), wpm, () => wpmSetting);
-    } else if (!open && lastGateOpen) {
+      startViewerDomObserver();
+    } else if (!open && prevOpen) {
       const hitEnd = !!wpm.didEnd?.();
       wpm.stop();
       stopWpmChip();
       detachViewerObservers();
+      stopViewerDomObserver();
       setWpmChip(hitEnd ? 'End of script' : 'Paused', hitEnd ? 'end' : 'muted');
       fadeOutWpmChip(hitEnd ? 2500 : 2000);
     }
@@ -478,6 +503,7 @@ export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
     wpm.stop();
     stopWpmChip();
     detachViewerObservers();
+    stopViewerDomObserver();
   }
 }
 
@@ -498,6 +524,8 @@ function bindWpmTarget() {
 // ---------- Public init (optional) ----------
 
 export function initScrollRouter() {
+  if ((window as any).__tpRouterInit) return;
+  (window as any).__tpRouterInit = true;
   bindWpmTarget();
   // expose CI nudge hook
   (window as any).__tpTestNudgeWpm = () => {
