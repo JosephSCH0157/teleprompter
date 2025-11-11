@@ -25,6 +25,7 @@ try {
 // --- HUD SSOT (dev) ---
 (() => {
   try {
+    if (window.__TP_TS_HUD_BOOT) { try { console.info('[src/index] skip HUD SSOT (TS HUD boot)'); } catch {} return; }
     const HUD_FLAG = 'tp_dev_hud_v1';
     if (window.__tpHudWireActive) return; // already installed
     window.__tpHudWireActive = true;
@@ -217,6 +218,8 @@ async function boot() {
     await loadLegacyPiecesAsModules();
     // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
     try {
+      if (window.__TP_TS_HUD_BOOT) { try { console.info('[src/index] skip HUD installer/toggle (TS HUD boot)'); } catch {} }
+      else {
       // Ensure HUD installer exists (load fallback if not already present)
       if (typeof window.__tpInstallHUD !== 'function') {
         try { await import('../debug-tools.js'); } catch {}
@@ -290,7 +293,8 @@ async function boot() {
           } catch {}
         }, { capture: true });
       }
-      // If HUD is present, mirror speech gates to it for visibility
+      }
+      // If HUD is present, mirror speech gates to it for visibility (skip only if TS HUD explicitly opts-out)
       try {
         const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
         // Throttled dB logger → emits speech:db event and (optionally) HUD log
@@ -338,7 +342,7 @@ async function boot() {
             };
           }
         } catch {}
-      } catch {}
+  } catch {}
     } catch {}
     try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
     console.log('[src/index] boot()');

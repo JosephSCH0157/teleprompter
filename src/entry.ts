@@ -16,12 +16,88 @@ try {
   (window as any).__TP_TS_ROUTER_BOOT = true;
   (window as any).__TP_TS_ASR_BOOT = true;
   (window as any).__TP_TS_CORE_BOOT = true;
+  (window as any).__TP_TS_HUD_BOOT = true;
 } catch {}
 
 async function boot(){
   try {
     // Delegate to existing JS boot for legacy pieces (router boot skipped via flag)
     await import('./index.js');
+    // Minimal HUD SSOT (dev) — moved under TS entry ownership
+    try {
+      if (!(window as any).__tpHudWireActive) {
+        (window as any).__tpHudWireActive = true;
+        const HUD_FLAG = 'tp_dev_hud_v1';
+        const ensureHudRoot = () => {
+          try {
+            let r = document.getElementById('hud-root') as HTMLElement | null;
+            if (!r) {
+              r = document.createElement('div');
+              r.id = 'hud-root';
+              r.className = 'hud-root hidden';
+              r.setAttribute('aria-hidden', 'true');
+              r.setAttribute('inert', '');
+              document.body.appendChild(r);
+            }
+            return r;
+          } catch { return null as any; }
+        };
+        const root = ensureHudRoot();
+        const hudBus = new EventTarget();
+        const api: any = (window as any).__tpHud = (window as any).__tpHud || {
+          enabled: false,
+          root,
+          bus: {
+            emit: (type: string, detail?: any) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+            on: (type: string, fn: (d: any)=>void) => {
+              try {
+                const h = (e: any) => { try { fn(e.detail); } catch {} };
+                hudBus.addEventListener(type, h);
+                return () => { try { hudBus.removeEventListener(type, h); } catch {} };
+              } catch { return () => {}; }
+            },
+          },
+          setEnabled(on: boolean) {
+            try {
+              (this as any).enabled = !!on;
+              if ((this as any).root) {
+                (this as any).root.classList.toggle('hidden', !on);
+                if (on) {
+                  (this as any).root.removeAttribute('aria-hidden');
+                  (this as any).root.removeAttribute('inert');
+                } else {
+                  (this as any).root.setAttribute('aria-hidden','true');
+                  (this as any).root.setAttribute('inert','');
+                }
+              }
+              try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
+              try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
+            } catch {}
+          },
+          log: (...args: any[]) => {
+            try {
+              if (!(api as any).enabled || !(api as any).root) return;
+              const pre = document.createElement('pre');
+              pre.className = 'hud-line';
+              pre.textContent = args.map(a => { try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); } }).join(' ');
+              (api as any).root.appendChild(pre);
+              (api as any).root.scrollTop = (api as any).root.scrollHeight;
+            } catch {}
+          },
+        };
+        try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
+        try { if (!(window as any).HUD) (window as any).HUD = api; } catch {}
+        try {
+          const logTx = (d: any) => { if (!d) return; api.log('captions:tx', { partial: d.partial, final: d.final, conf: d.confidence?.toFixed?.(2), len: d.text?.length ?? 0, idx: d.lineIndex, harness: d.harness }); };
+          const logState = (d: any) => { if (!d) return; api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness }); };
+          window.addEventListener('tp:captions:transcript', (e: any) => logTx(e.detail));
+          window.addEventListener('tp:captions:state', (e: any) => logState(e.detail));
+          window.addEventListener('tp:speech:transcript', (e: any) => logTx(e.detail));
+          window.addEventListener('tp:speech:state', (e: any) => logState(e.detail));
+        } catch {}
+        try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
+      }
+    } catch {}
     // Perform router + gate orchestrator boot here (mirrors logic from index.js)
     try {
       async function tryImport(spec: string, flag?: string){
