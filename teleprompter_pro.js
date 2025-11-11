@@ -10,6 +10,56 @@
   } catch {}
 })();
 
+// Dev-only console noise filter (legacy path). Lightweight inline implementation.
+// Wrap in IIFE to avoid leaking locals; assigns window.installConsoleNoiseFilter for parity.
+(function(){
+  try {
+    if (window.installConsoleNoiseFilter) return; // don't redefine
+    window.installConsoleNoiseFilter = function installConsoleNoiseFilter(opts){
+      opts = opts || {};
+      var hudTag = opts.hudTag || 'noise:filter';
+      var patterns = opts.patterns || [ /listener indicated an asynchronous response.*message channel closed/i ];
+      var debug = !!opts.debug;
+      function isDev(){
+        try {
+          var s = String(location.search||'');
+          var h = String(location.hash||'');
+          var ls = String(localStorage.getItem('tp_dev_mode')||'');
+          return /(?:^|[?&])dev=1\b/.test(s) || /(^|#)dev\b/.test(h) || ls === '1';
+        } catch (e) { return false; }
+      }
+      if (!isDev()) return; // dev only
+      var toText = function(r){ try { return (r && (r.message || (r.toString&&r.toString()) || String(r))) || ''; } catch (e) { return ''; } };
+      var isNoise = function(t){ return patterns.some(function(rx){ return rx.test(t); }); };
+      window.addEventListener('unhandledrejection', function(evt){
+        try {
+          var text = toText(evt.reason);
+          if (text && isNoise(text)) {
+            evt.preventDefault && evt.preventDefault();
+            if (debug) console.debug('[silenced]', text);
+            try { window.HUD && window.HUD.log && window.HUD.log(hudTag, { type:'unhandledrejection', text: text }); } catch (e) {}
+          }
+        } catch (e) {}
+      });
+      window.addEventListener('error', function(evt){
+        try {
+          var text = toText(evt.error || evt.message);
+          if (text && isNoise(text)) {
+            if (debug) console.debug('[silenced:error]', text);
+            try { window.HUD && window.HUD.log && window.HUD.log(hudTag, { type:'error', text: text, src: evt.filename, line: evt.lineno, col: evt.colno }); } catch (e) {}
+          }
+        } catch (e) {}
+      });
+      try {
+        window.HUD && window.HUD.log && window.HUD.log(hudTag, { armed:true, patterns: patterns.map(String) });
+        if (debug) console.debug('[console-noise-filter] armed');
+      } catch (e) {}
+    };
+    // Arm immediately (quiet breadcrumbs by default)
+    try { window.installConsoleNoiseFilter({ debug: false }); } catch (e) {}
+  } catch (e) {}
+})();
+
 // Legacy HUD must stand down if modern HUD is active
 try {
   if (window.__tpHudWireActive) {
@@ -2921,9 +2971,9 @@ let _toast = function (msg, opts) {
     for (let i = 0; i < lines.length; i++) {
       const rawLine = lines[i];
       const lineNum = i + 1;
-      let m;
-      tagRe.lastIndex = 0;
-      while ((m = tagRe.exec(rawLine))) {
+  let m;
+  tagRe.lastIndex = 0;
+    while ((m = tagRe.exec(rawLine))) {
         const closing = !!m[1];
         const nameRaw = m[2];
         const name = nameRaw.toLowerCase();
@@ -2996,9 +3046,7 @@ let _toast = function (msg, opts) {
               addIssue(lineNum, `no matching open tag for [\/${name}]`, 'no-match', { tag: name });
           }
         }
-      } catch (e) {
-        if (window.__TP_DEV) console.warn('[settings] delegator error', e);
-      }
+      // removed legacy catch (was orphaned after refactor)
     }
     for (const open of stack)
       addIssue(open.line, `unclosed [${open.tag}] opened here`, 'unclosed', { tag: open.tag });
@@ -12296,5 +12344,4 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
       window.__setAutoSpeed = setAutoSpeed;
     } catch {}
   })();
-})(); // end main IIFE (restored)
 

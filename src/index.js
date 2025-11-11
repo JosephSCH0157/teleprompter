@@ -8,6 +8,21 @@ window.__tpBootCount = (window.__tpBootCount || 0) + 1;
 // Camera SSOT — TS owns the camera stack.
 try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
 
+// Dev console noise filter (JS path). Safe to invoke early; silently no-ops outside dev.
+try {
+  // Prefer module import; if dynamic import fails (older bundler), fall back to any global.
+  (async () => {
+    try {
+      const mod = await import('./features/console-noise-filter.js');
+      if (mod && typeof mod.installConsoleNoiseFilter === 'function') {
+        mod.installConsoleNoiseFilter({ debug: false });
+        return;
+      }
+    } catch {}
+    try { window.installConsoleNoiseFilter?.({ debug: false }); } catch {}
+  })();
+} catch {}
+
 // --- HUD SSOT (dev) ---
 (() => {
   try {
