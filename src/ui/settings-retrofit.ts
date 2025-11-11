@@ -1,5 +1,5 @@
 // src/ui/settings-retrofit.ts
-import { bindSettingsForm, applyDomEffects } from './settings-bind';
+import { applyDomEffects, bindSettingsForm } from './settings-bind';
 
 const MAP: Record<string, string> = {
   // id → Settings key
