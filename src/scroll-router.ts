@@ -225,23 +225,23 @@ function enableWpmChipDrag(el: HTMLElement) {
     Object.assign(el.style, { position: 'fixed', top: '12px', right: '12px', left: '', zIndex: '1000' });
   }, { passive: true });
 
-  el.addEventListener('pointerdown', (ev: PointerEvent) => {
+  el.addEventListener('pointerdown', (_ev: PointerEvent) => {
     dragging = true; toFloatIfNeeded(); el.classList.add('tp-chip--drag');
     const rect = el.getBoundingClientRect();
-    ox = ev.clientX - rect.left; oy = ev.clientY - rect.top;
-    activePointerId = ev.pointerId || null;
-    try { if (typeof el.setPointerCapture === 'function' && ev.pointerId != null) el.setPointerCapture(ev.pointerId); } catch {}
+    ox = _ev.clientX - rect.left; oy = _ev.clientY - rect.top;
+    activePointerId = _ev.pointerId || null;
+    try { if (typeof el.setPointerCapture === 'function' && _ev.pointerId != null) el.setPointerCapture(_ev.pointerId); } catch {}
     log('wpm:chip:drag:start');
   }, { passive: true });
 
-  window.addEventListener('pointermove', (ev: PointerEvent) => {
+  window.addEventListener('pointermove', (_ev: PointerEvent) => {
     if (!dragging) return;
-    const x = Math.max(0, Math.min(window.innerWidth  - 24, ev.clientX - ox));
-    const y = Math.max(0, Math.min(window.innerHeight - 24, ev.clientY - oy));
+    const x = Math.max(0, Math.min(window.innerWidth  - 24, _ev.clientX - ox));
+    const y = Math.max(0, Math.min(window.innerHeight - 24, _ev.clientY - oy));
     el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.right = '';
   }, { passive: true });
 
-  window.addEventListener('pointerup', (ev: PointerEvent) => {
+  window.addEventListener('pointerup', (_ev: PointerEvent) => {
     if (!dragging) return;
     dragging = false; el.classList.remove('tp-chip--drag');
     try {

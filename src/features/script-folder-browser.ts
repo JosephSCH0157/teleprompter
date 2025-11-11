@@ -1,8 +1,9 @@
 // src/features/script-folder-browser.ts
-import { EVT_FOLDER_CHANGED, getPersistedFolder, listScripts, readScriptFile, ScriptEntry } from '../adapters/folder-mapper';
+import type { ScriptEntry } from '../adapters/folder-mapper';
+import { EVT_FOLDER_CHANGED, getPersistedFolder, listScripts, readScriptFile } from '../adapters/folder-mapper';
 import { readPrefsCookie, writePrefsCookie } from '../utils/cookies';
 
-type OnLoad = (text: string, title?: string) => void;
+type OnLoad = (_text: string, _title?: string) => void;
 
 export function initScriptFolderBrowser(onLoad: OnLoad) {
   try { if ((window as any).__tpScriptFolderBrowserWired) return; } catch {}

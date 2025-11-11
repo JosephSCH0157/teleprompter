@@ -23,16 +23,14 @@ export async function setScriptsFolderFromPicker() {
 
 export async function forgetPersistedFolder() {
   try {
-    const db = await openDB();
-    await db.delete(STORE, KEY);
+    await idbDelete(KEY);
     try { dispatchEvent(new CustomEvent(EVT_FOLDER_CHANGED, { detail: { dirName: null } })); } catch {}
   } catch {}
 }
 
 export async function getPersistedFolder() {
   try {
-    const db = await openDB();
-    const dir = await db.get(STORE, KEY);
+    const dir = await idbGet(KEY);
     return dir || null;
   } catch { return null; }
 }
@@ -41,7 +39,6 @@ export async function listScripts(dir) {
   const out = [];
   try {
     // for-await supported in Chromium; fallback silently otherwise
-    // eslint-disable-next-line no-restricted-syntax
     for await (const [name, handle] of dir.entries()) {
       try {
         if (handle.kind !== 'file') continue;
@@ -61,15 +58,13 @@ export async function readScriptFile(entry) {
   if (entry.ext === 'txt') return String(await file.text());
   await ensureMammoth();
   const arrayBuf = await file.arrayBuffer();
-  // eslint-disable-next-line no-undef
   const { value } = await (window.mammoth).extractRawText({ arrayBuffer: arrayBuf });
   return String(value || '');
 }
 
 // --- helpers ---
 async function persistDirHandle(dir) {
-  const db = await openDB();
-  await db.put(STORE, dir, KEY);
+  await idbPut(KEY, dir);
   try { await (navigator.storage && navigator.storage.persist && navigator.storage.persist()); } catch {}
 }
 
@@ -82,6 +77,45 @@ async function openDB() {
       req.onerror = () => rej(req.error);
     } catch (e) { rej(e); }
   });
+}
+
+function idbPut(key, value){
+  return openDB().then((db) => new Promise((res, rej) => {
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      store.put(value, key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error || new Error('idbPut failed'));
+      tx.onabort = () => rej(tx.error || new Error('idbPut aborted'));
+    } catch (e) { rej(e); }
+  }));
+}
+
+function idbGet(key){
+  return openDB().then((db) => new Promise((res, rej) => {
+    try {
+      const tx = db.transaction(STORE, 'readonly');
+      const store = tx.objectStore(STORE);
+      const req = store.get(key);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error || new Error('idbGet failed'));
+      tx.onerror = () => {/* per-request handled */};
+    } catch (e) { rej(e); }
+  }));
+}
+
+function idbDelete(key){
+  return openDB().then((db) => new Promise((res, rej) => {
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      store.delete(key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error || new Error('idbDelete failed'));
+      tx.onabort = () => rej(tx.error || new Error('idbDelete aborted'));
+    } catch (e) { rej(e); }
+  }));
 }
 
 async function ensureMammoth() {

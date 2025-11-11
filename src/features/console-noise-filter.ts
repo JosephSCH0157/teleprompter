@@ -50,7 +50,7 @@ export function installConsoleNoiseFilter(opts: NoiseFilterOpts = {}): void {
         const text = getTextReason(evt.reason);
         if (text && isNoise(text)) {
           if (debugEcho) console.debug('[silenced]', text);
-          // @ts-expect-error HUD dynamic presence
+          // @ts-ignore HUD dynamic presence (optional dev HUD)
           window.HUD?.log?.(hudTag, { type: 'unhandledrejection', text });
         }
       } catch {}
@@ -62,7 +62,7 @@ export function installConsoleNoiseFilter(opts: NoiseFilterOpts = {}): void {
         const text = getTextReason((evt.error || evt.message) as unknown);
         if (text && isNoise(text)) {
           if (debugEcho) console.debug('[silenced:error]', text);
-          // @ts-expect-error HUD dynamic presence
+          // @ts-ignore HUD dynamic presence (optional dev HUD)
           window.HUD?.log?.(hudTag, { type: 'error', text, src: evt.filename, line: evt.lineno, col: evt.colno });
         }
       } catch {}
@@ -70,7 +70,7 @@ export function installConsoleNoiseFilter(opts: NoiseFilterOpts = {}): void {
 
     // Breadcrumb: announce activation and pattern list
     try {
-      // @ts-expect-error HUD dynamic presence
+  // @ts-ignore HUD dynamic presence (optional dev HUD)
       window.HUD?.log?.(hudTag, { armed: true, patterns: patterns.map((p) => String(p)) });
       if (debugEcho) console.debug('[console-noise-filter] armed');
     } catch {}
