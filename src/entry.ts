@@ -4,7 +4,7 @@
 import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import './boot/compat-ids';
 import { installModeRowsSync } from './boot/uiModeSync.js';
-import { bindSelect, getMode, initModeState, onMode } from './core/mode-state';
+import { bindSelect, initModeState } from './core/mode-state';
 import * as Auto from './features/autoscroll.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
