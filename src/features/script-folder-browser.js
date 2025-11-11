@@ -94,6 +94,7 @@
       const dir = await Adapter.getPersistedFolder();
       state.dir = dir;
       sel.disabled = !dir;
+      try { if (ui.refreshBtn) ui.refreshBtn.disabled = !dir; } catch {}
       if (!dir) {
         const opt = document.createElement('option');
         opt.value = ''; opt.textContent = '— No folder mapped —';
@@ -101,7 +102,10 @@
         return;
       }
       state.entries = await Adapter.listScripts(dir);
-      const head = document.createElement('option'); head.value = ''; head.textContent = '— Select file —'; sel.appendChild(head);
+      const head = document.createElement('option');
+      head.value = '';
+      head.textContent = `— Select file (${state.entries.length}) —`;
+      sel.appendChild(head);
       for (let i = 0; i < state.entries.length; i++) {
         const e = state.entries[i];
         const opt = document.createElement('option'); opt.value = String(i); opt.textContent = e.name; sel.appendChild(opt);
@@ -127,12 +131,8 @@
   try { ui.sel && ui.sel.addEventListener('change', loadSelected); } catch {}
   try {
     // Refresh when Settings maps/forgets a folder
-    (async () => {
-      try {
-        if (!Adapter) Adapter = await import('../adapters/folder-mapper.js');
-        window.addEventListener(Adapter.EVT_FOLDER_CHANGED, refreshList);
-      } catch {}
-    })();
+    // Listen by event name to avoid races with dynamic import
+    window.addEventListener('anvil:scriptsFolderChanged', refreshList);
   } catch {}
 
   // Restore previously chosen folder (if permission remains granted)
