@@ -5,8 +5,11 @@ import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import './boot/compat-ids';
 import { installModeRowsSync } from './boot/uiModeSync.js';
 import * as Auto from './features/autoscroll.js';
-// Signal JS path to skip its internal router boot logic
-try { (window as any).__TP_TS_ROUTER_BOOT = true; } catch {}
+// Signal JS path to skip its internal router and ASR boot logic
+try {
+  (window as any).__TP_TS_ROUTER_BOOT = true;
+  (window as any).__TP_TS_ASR_BOOT = true;
+} catch {}
 
 async function boot(){
   try {
@@ -65,6 +68,40 @@ async function boot(){
         } catch (e){ console.warn('[entry.ts] gate orchestrator init failed', e); }
       }
     } catch (e){ console.warn('[entry.ts] router boot sequence failed', e); }
+
+    // Install ASR feature from TS entry (mirrors JS probe/import with guard)
+    try {
+      const asrSpecs: string[] = [
+        './index-hooks/asr.js',
+        '/dist/index-hooks/asr.js',
+        '/dist/asr.js',
+      ];
+      let asrInitDone = false;
+      for (const spec of asrSpecs) {
+        const dynSpec = spec as any; // avoid static analyzer complaints
+        try {
+          const mod: any = await import(dynSpec);
+          if (mod) {
+            const init = (mod.initAsrFeature || mod.default);
+            if (typeof init === 'function') {
+              try { init(); } catch {}
+              try { (window as any).__tpAsrFeatureActive = true; } catch {}
+              try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:asr'); } catch {}
+              try { console.info('[ASR] initialized from', spec); } catch {}
+              asrInitDone = true;
+              break;
+            }
+          }
+        } catch (e) {
+          try { console.warn('[ASR] import failed', spec, (e as any)?.message || e); } catch {}
+        }
+      }
+      if (!asrInitDone) {
+        try { console.info('[ASR] no module found, skipping init'); } catch {}
+      }
+    } catch (e) {
+      try { console.warn('[entry.ts] ASR init failed', e); } catch {}
+    }
 
     // Layer shared helpers (idempotent)
     try { installModeRowsSync(); } catch {}

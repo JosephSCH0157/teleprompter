@@ -19,189 +19,187 @@ try {
         return;
       }
     } catch {}
-    try { window.installConsoleNoiseFilter?.({ debug: false }); } catch {}
-  })();
-} catch {}
-
-// --- HUD SSOT (dev) ---
-(() => {
-  try {
-    const HUD_FLAG = 'tp_dev_hud_v1';
-    if (window.__tpHudWireActive) return; // already installed
-    window.__tpHudWireActive = true;
-
-    function ensureHudRoot() {
-      try {
-        let r = document.getElementById('hud-root');
-        if (!r) {
-          r = document.createElement('div');
-          r.id = 'hud-root';
-          r.className = 'hud-root hidden';
-          r.setAttribute('aria-hidden', 'true');
-          r.setAttribute('inert', '');
-          document.body.appendChild(r);
-        }
-        return r;
-      } catch { return null; }
+    // --- Hard dup-boot guard (very top of module) ---
+    if (window.__tpBooted) {
+      console.warn('[src/index] duplicate boot blocked; first =', window.__tpBooted);
+      throw new Error('dup-boot');
     }
+    window.__tpBooted = 'index.module';
+    window.__tpBootCount = (window.__tpBootCount || 0) + 1;
+    // Camera SSOT — TS owns the camera stack.
+    try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
 
-    const root = ensureHudRoot();
-    
-    // Create a simple event bus for HUD components (compat shim before full bus import)
-    const hudBus = new EventTarget();
-    const api = window.__tpHud = window.__tpHud || {
-      enabled: false,
-      root,
-      bus: {
-        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
-        on: (type, fn) => {
-          try {
-            const h = (e) => { try { fn(e.detail); } catch {} };
-            hudBus.addEventListener(type, h);
-            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
-          } catch {}
-        },
-      },
-      setEnabled(on) {
-        try {
-          this.enabled = !!on;
-          if (this.root) {
-            this.root.classList.toggle('hidden', !on);
-            if (on) {
-              this.root.removeAttribute('aria-hidden');
-              this.root.removeAttribute('inert');
-            } else {
-              this.root.setAttribute('aria-hidden', 'true');
-              this.root.setAttribute('inert', '');
-            }
-          }
-          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
-          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
-        } catch {}
-      },
-      log(...args) {
-        try {
-          if (!this.enabled || !this.root) return;
-          const pre = document.createElement('pre');
-          pre.className = 'hud-line';
-          pre.textContent = args.map(a => {
-            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
-          }).join(' ');
-          this.root.appendChild(pre);
-          this.root.scrollTop = this.root.scrollHeight;
-        } catch {}
-      },
-    };
-
-    // Hydrate from storage
-    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
-    // Unify legacy HUD log calls to the SSOT
-    try { if (!window.HUD) window.HUD = api; } catch {}
-    
-    // Listen to new typed transcript and state events (both captions and legacy speech)
+    // Dev console noise filter (JS path). Safe to invoke early; silently no-ops outside dev.
     try {
-      const logTx = (d) => {
-        if (!d) return;
-        api.log('captions:tx', {
-          partial: d.partial,
-          final: d.final,
-          conf: d.confidence?.toFixed(2),
-          len: d.text?.length ?? 0,
-          idx: d.lineIndex,
-          harness: d.harness,
-        });
-      };
-      const logState = (d) => {
-        if (!d) return;
-        api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
-      };
-      
-      // Primary captions events
-      window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
-      window.addEventListener('tp:captions:state', (e) => logState(e.detail));
-      
-      // Legacy speech events (for backwards compatibility)
-      window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
-      window.addEventListener('tp:speech:state', (e) => logState(e.detail));
+      // Prefer module import; if dynamic import fails (older bundler), fall back to any global.
+      (async () => {
+        try {
+          const mod = await import('./features/console-noise-filter.js');
+          if (mod && typeof mod.installConsoleNoiseFilter === 'function') {
+            mod.installConsoleNoiseFilter({ debug: false });
+            return;
+          }
+        } catch {}
+        try { window.installConsoleNoiseFilter?.({ debug: false }); } catch {}
+      })();
     } catch {}
+
+    // --- HUD SSOT (dev) ---
+    (() => {
+      try {
+        const HUD_FLAG = 'tp_dev_hud_v1';
+        if (window.__tpHudWireActive) return; // already installed
+        window.__tpHudWireActive = true;
+
+        function ensureHudRoot() {
+          try {
+            let r = document.getElementById('hud-root');
+            if (!r) {
+              r = document.createElement('div');
+              r.id = 'hud-root';
+              r.className = 'hud-root hidden';
+              r.setAttribute('aria-hidden', 'true');
+              r.setAttribute('inert', '');
+              document.body.appendChild(r);
+            }
+            return r;
+          } catch { return null; }
+        }
+
+        const root = ensureHudRoot();
     
-    // Announce readiness
-    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
-  } catch {}
-})();
+        // Create a simple event bus for HUD components (compat shim before full bus import)
+        const hudBus = new EventTarget();
+        const api = window.__tpHud = window.__tpHud || {
+          enabled: false,
+          root,
+          bus: {
+            emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+            on: (type, fn) => {
+              try {
+                const h = (e) => { try { fn(e.detail); } catch {} };
+                hudBus.addEventListener(type, h);
+                return () => { try { hudBus.removeEventListener(type, h); } catch {} };
+              } catch {}
+            },
+          },
+          setEnabled(on) {
+            try {
+              this.enabled = !!on;
+              if (this.root) {
+                this.root.classList.toggle('hidden', !on);
+                if (on) {
+                  this.root.removeAttribute('aria-hidden');
+                  this.root.removeAttribute('inert');
+                } else {
+                  this.root.setAttribute('aria-hidden', 'true');
+                  this.root.setAttribute('inert', '');
+                }
+              }
+              try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
+              try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
+            } catch {}
+          },
+          log(...args) {
+            try {
+              if (!this.enabled || !this.root) return;
+              const pre = document.createElement('pre');
+              pre.className = 'hud-line';
+              pre.textContent = args.map(a => {
+                try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
+              }).join(' ');
+              this.root.appendChild(pre);
+              this.root.scrollTop = this.root.scrollHeight;
+            } catch {}
+          },
+        };
 
-// Minimal bootstrap for the new `src/` modular layout.
-// This file intentionally performs a very small set of init actions and
-// delegates the heavy lifting to the legacy loader until a full migration is done.
+        // Hydrate from storage
+        try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
+        // Unify legacy HUD log calls to the SSOT
+        try { if (!window.HUD) window.HUD = api; } catch {}
+    
+        // Listen to new typed transcript and state events (both captions and legacy speech)
+        try {
+          const logTx = (d) => {
+            if (!d) return;
+            api.log('captions:tx', {
+              partial: d.partial,
+              final: d.final,
+              conf: d.confidence?.toFixed(2),
+              len: d.text?.length ?? 0,
+              idx: d.lineIndex,
+              harness: d.harness,
+            });
+          };
+          const logState = (d) => {
+            if (!d) return;
+            api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
+          };
+      
+          // Primary captions events
+          window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
+          window.addEventListener('tp:captions:state', (e) => logState(e.detail));
+      
+          // Legacy speech events (for backwards compatibility)
+          window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
+          window.addEventListener('tp:speech:state', (e) => logState(e.detail));
+        } catch {}
+    
+        // Announce readiness
+        try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
+      } catch {}
+    })();
 
-import * as Adapters from './adapters/index.js';
-// Provide legacy-compatible app store for settings/state persistence (exposes window.__tpStore)
-import * as Mic from './adapters/mic.js';
-import { bus } from './core/bus.js';
-import * as Core from './core/state.js';
-import * as Auto from './features/autoscroll.js';
-// Shared helpers for sidebar + auto toggle label syncing (migration toward unified TS entry)
-import { installAutoToggleSync } from './boot/autoToggleSync.js';
-import { installModeRowsSync } from './boot/uiModeSync.js';
-import * as Eggs from './features/eggs.js';
-import { initHotkeys } from './features/hotkeys.js';
-import { initPersistence } from './features/persistence.js';
-import { initScroll } from './features/scroll.js';
-import { installSpeech } from './features/speech-loader.js';
-import { initTelemetry } from './features/telemetry.js';
-import './state/app-store.js';
-// Ensure inline formatter is present (provides window.formatInlineMarkup)
-import '../ui/format.js';
-import '../ui/inline-shim.js';
-// Legacy wrapSelection handler for toolbar buttons (ensures global exists in dev/CI)
-import '../ui/wrap-shim.js';
-// Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
-// Lightweight toast system (attaches window.toast/initToastContainer)
-import '../ui/toasts.js';
-import './dev/dup-init-check.js';
-import './media/display-bridge.js';
-// Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
-import './media/camera.js';
-import * as UI from './ui/dom.js';
-// Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
-import '../ui/typography-bridge.js';
-// Scripts Save/Load UI (dropdown + buttons wiring)
-import '../ui/scripts-ui.js';
-// OBS wiring: ensure Test button is always handled (claims OBS controls before legacy wiring)
-import { wireObsPersistentUI } from './wiring/wire.js';
-// Settings overlay and media/OBS wiring (module path)
-import './ui/settings.js';
-// HUD: minimal ASR stats line (dev only)
-import './hud/asr-stats.js';
-import './hud/rec-stats.js';
-// Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
-// Folder-backed Scripts loader (JS prototypes kept for JS boot path)
-import './features/script-folder-browser.js';
-// Settings Advanced: folder mapping controls (JS path)
-import './features/settings-advanced-folder.js';
+    // Minimal bootstrap for the new `src/` modular layout.
+    // This file intentionally performs a very small set of init actions and
+    // delegates the heavy lifting to the legacy loader until a full migration is done.
 
-// Single-source mic adapter facade for legacy callers
-try {
-  window.__tpMic = {
-    requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
-    releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
-  };
-} catch {}
-
-// Feature-level idempotence helper (belt & suspenders)
-function initOnce(name, fn) {
-  try {
-    window.__tpInit = window.__tpInit || {};
-    if (window.__tpInit[name]) return;
-    window.__tpInit[name] = 1;
-    return fn();
-  } catch (e) {
-    try { console.warn(`[init:${name}] failed`, e); } catch {}
-  }
-}
-
-
-// --- Load legacy pieces as modules (no classic script injection) ---
+    import * as Adapters from './adapters/index.js';
+    // Provide legacy-compatible app store for settings/state persistence (exposes window.__tpStore)
+    import * as Mic from './adapters/mic.js';
+    import { bus } from './core/bus.js';
+    import * as Core from './core/state.js';
+    import * as Auto from './features/autoscroll.js';
+    // Shared helpers for sidebar + auto toggle label syncing (migration toward unified TS entry)
+    import { installAutoToggleSync } from './boot/autoToggleSync.js';
+    import { installModeRowsSync } from './boot/uiModeSync.js';
+    import * as Eggs from './features/eggs.js';
+    import { initHotkeys } from './features/hotkeys.js';
+    import { initPersistence } from './features/persistence.js';
+    import { initScroll } from './features/scroll.js';
+    import { installSpeech } from './features/speech-loader.js';
+    import { initTelemetry } from './features/telemetry.js';
+    import './state/app-store.js';
+    // Ensure inline formatter is present (provides window.formatInlineMarkup)
+    import '../ui/format.js';
+    import '../ui/inline-shim.js';
+    // Legacy wrapSelection handler for toolbar buttons (ensures global exists in dev/CI)
+    import '../ui/wrap-shim.js';
+    // Display bridge: provides window.__tpDisplay (open/close/send/handleMessage)
+    // Lightweight toast system (attaches window.toast/initToastContainer)
+    import '../ui/toasts.js';
+    import './dev/dup-init-check.js';
+    import './media/display-bridge.js';
+    // Camera overlay helpers (defines window.__tpCamera and legacy applyCam* shims)
+    import './media/camera.js';
+    import * as UI from './ui/dom.js';
+    // Install typography bridge (CSS vars + wheel zoom guards + Settings bridge)
+    import '../ui/typography-bridge.js';
+    // Scripts Save/Load UI (dropdown + buttons wiring)
+    import '../ui/scripts-ui.js';
+    // OBS wiring: ensure Test button is always handled (claims OBS controls before legacy wiring)
+    import { wireObsPersistentUI } from './wiring/wire.js';
+    // Settings overlay and media/OBS wiring (module path)
+    import './ui/settings.js';
+    // HUD: minimal ASR stats line (dev only)
+    import './hud/asr-stats.js';
+    import './hud/rec-stats.js';
+    // Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
+    // Folder-backed Scripts loader (JS prototypes kept for JS boot path)
+    import './features/script-folder-browser.js';
+    // Settings Advanced: folder mapping controls (JS path)
+    import './features/settings-advanced-folder.js';
 async function loadLegacyPiecesAsModules() {
   const mods = [
     '../eggs.js',
@@ -602,57 +600,61 @@ async function boot() {
 
     // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {
-      // Tiny helper: HEAD probe without caching
-      const headOk = async (url) => {
-        try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return !!(r && r.ok); }
-        catch { return false; }
-      };
-
-      // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
-      // Prefer dev module first so we always run the freshest code in dev
-      const candidates = [
-        // Correct relative path from src/index.js to the dev JS entry
-        './index-hooks/asr.js',
-        '/dist/index-hooks/asr.js',
-        '/dist/asr.js',
-      ];
-
-      let asrEntry = null;
-      for (const c of candidates) {
-        // Resolve module-relative specs for probing so fetch doesn't use document base
-        let probeUrl = c;
-        try {
-          if (c.startsWith('./')) {
-            const u = new URL(c, import.meta.url);
-            probeUrl = u.href; // absolute URL to this module
-          }
-        } catch {}
-        if (await headOk(probeUrl)) { asrEntry = c.startsWith('./') ? probeUrl : c; break; }
-      }
-
-      // Dev-friendly fallback: if HEAD probes fail (server may not support HEAD), attempt a single import of the dev path.
-      if (!asrEntry) {
-        try {
-          const fallback = './index-hooks/asr.js';
-          const mod = await import(fallback);
-          const init = (mod && (mod.initAsrFeature || mod.default));
-          if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch {} }
-          else { try { console.warn('[ASR] fallback missing initAsrFeature', fallback); } catch {} }
-        } catch {
-          try { console.info('[ASR] no module found, skipping init'); } catch {}
-        }
+      if (window.__TP_TS_ASR_BOOT) {
+        try { console.info('[ASR] JS path: skipping ASR boot (TS entry handling)'); } catch {}
       } else {
-        try {
-          const mod = await import(asrEntry);
-          const init = (mod && (mod.initAsrFeature || mod.default));
-          if (typeof init === 'function') {
-            init();
-            try { console.info('[ASR] initialized from', asrEntry); } catch {}
-          } else {
-            try { console.warn('[ASR] module missing initAsrFeature', asrEntry); } catch {}
+        // Tiny helper: HEAD probe without caching
+        const headOk = async (url) => {
+          try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return !!(r && r.ok); }
+          catch { return false; }
+        };
+
+        // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
+        // Prefer dev module first so we always run the freshest code in dev
+        const candidates = [
+          // Correct relative path from src/index.js to the dev JS entry
+          './index-hooks/asr.js',
+          '/dist/index-hooks/asr.js',
+          '/dist/asr.js',
+        ];
+
+        let asrEntry = null;
+        for (const c of candidates) {
+          // Resolve module-relative specs for probing so fetch doesn't use document base
+          let probeUrl = c;
+          try {
+            if (c.startsWith('./')) {
+              const u = new URL(c, import.meta.url);
+              probeUrl = u.href; // absolute URL to this module
+            }
+          } catch {}
+          if (await headOk(probeUrl)) { asrEntry = c.startsWith('./') ? probeUrl : c; break; }
+        }
+
+        // Dev-friendly fallback: if HEAD probes fail (server may not support HEAD), attempt a single import of the dev path.
+        if (!asrEntry) {
+          try {
+            const fallback = './index-hooks/asr.js';
+            const mod = await import(fallback);
+            const init = (mod && (mod.initAsrFeature || mod.default));
+            if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch {} }
+            else { try { console.warn('[ASR] fallback missing initAsrFeature', fallback); } catch {} }
+          } catch {
+            try { console.info('[ASR] no module found, skipping init'); } catch {}
           }
-        } catch (e) {
-          console.warn('[ASR] failed to init', asrEntry, e);
+        } else {
+          try {
+            const mod = await import(asrEntry);
+            const init = (mod && (mod.initAsrFeature || mod.default));
+            if (typeof init === 'function') {
+              init();
+              try { console.info('[ASR] initialized from', asrEntry); } catch {}
+            } else {
+              try { console.warn('[ASR] module missing initAsrFeature', asrEntry); } catch {}
+            }
+          } catch (e) {
+            console.warn('[ASR] failed to init', asrEntry, e);
+          }
         }
       }
     } catch (e) { console.warn('[src/index] ASR module probe/import failed', e); }
