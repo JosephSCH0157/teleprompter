@@ -200,6 +200,13 @@ try {
 						document.documentElement.dataset.theme = p.theme || 'system';
 						document.documentElement.classList.toggle('hc', !!p.highContrast);
 						document.documentElement.style.setProperty('--tp-font-scale', String(p.fontScale || 1));
+						// Reflect into Settings controls if present
+						const theme = document.getElementById('themeSelect') as HTMLSelectElement | null;
+						const hc    = document.getElementById('chkHighContrast') as HTMLInputElement | null;
+						const scale = document.getElementById('fontScaleRange') as HTMLInputElement | null;
+						if (theme) theme.value = (p.theme as any) ?? 'system';
+						if (hc)    hc.checked  = !!p.highContrast;
+						if (scale) scale.value = String(p.fontScale ?? 1);
 					} catch {}
 				};
 			} catch {}
