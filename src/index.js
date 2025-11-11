@@ -173,6 +173,8 @@ import './hud/asr-stats.js';
 import './hud/rec-stats.js';
 // Folder-backed Scripts loader (File System Access API + .docx via Mammoth)
 import './features/script-folder-browser.js';
+// Settings Advanced: folder mapping controls
+import './features/settings-advanced-folder.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
@@ -845,6 +847,13 @@ async function boot() {
 
   // Mark init as complete for headless checks/smoke tests
   try { window.__tp_init_done = true; } catch {}
+  // Initialize mapped folder controls if the Settings panel HTML exists (Advanced tab)
+  try {
+    if (typeof window.initAdvancedFolderControls === 'function') window.initAdvancedFolderControls();
+    else {
+      // Fallback: module export (ESM) may not attach global; attempt dynamic import (already imported above)
+    }
+  } catch {}
   console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
   } catch (err) {
