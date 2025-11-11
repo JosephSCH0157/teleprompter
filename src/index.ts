@@ -39,7 +39,8 @@ function applyUiScrollMode(mode: UiScrollMode) {
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
     | undefined;
-  const auto = (window as any).__tpAuto as { setEnabled?(_v: boolean): void } | undefined;
+	// Prefer runtime window adapter (loose typing)
+	const auto = (window as any).__tpAuto as { setEnabled?(_v:boolean):void } | undefined;
 
   // Defaults
   let brainMode: BrainMode = 'manual';
@@ -88,7 +89,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
   if (brain) brain.setMode(brainMode);
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
-  if (auto && typeof auto.setEnabled === 'function') auto.setEnabled(autoEnabled);
+	try { if (auto && typeof (auto as any).setEnabled === 'function') (auto as any).setEnabled(autoEnabled); } catch {}
 
   // HUD visibility: show all three layers for debugging
   try {
@@ -288,6 +289,15 @@ try {
 				setSpeed: (Auto as any).setSpeed,
 				getState: (Auto as any).getState,
 			}});
+			// After router is installed, re-apply desired mode from cookie so Auto engages
+			try {
+				const desired = (readPrefsCookie().scrollMode as any) || 'hybrid';
+				// If speech is active, do not override manual user intent (router will adapt)
+				try { if ((window as any).__tpSpeechActive) throw new Error('skip-mode-restore-speech'); } catch {}
+				// Map cookie domain into UI modes ('hybrid' uses ASR corrections)
+				const uiMode: UiScrollMode = desired === 'hybrid' ? 'asr' : (desired as UiScrollMode);
+				applyUiScrollMode(uiMode);
+			} catch {}
 		} catch {}
 
 		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
