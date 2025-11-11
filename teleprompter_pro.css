@@ -693,3 +693,19 @@ html.tp-present .present-exit { display: inline-flex; }
 @media (prefers-reduced-motion: reduce) {
     .tp-chip--warn-blink { animation: none; }
 }
+
+/* --- Stall tooltip (reduced-motion fallback) --- */
+.tp-chip-tip {
+    position: fixed;
+    padding: .35rem .6rem;
+    border-radius: 8px;
+    background: rgba(0,0,0,.85);
+    color: #fff;
+    font: 500 12px/1.2 system-ui;
+    z-index: 1001;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity .18s ease, transform .18s ease;
+}
+.tp-chip-tip--show { opacity: 1; transform: translateY(0); }

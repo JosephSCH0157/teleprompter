@@ -21,6 +21,9 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
   // End-of-script flag (consumable via didEnd())
   let ended = false;
 
+  // Configurable stall threshold (seconds)
+  let stallThreshold = 0.33; // seconds; default
+
   function sampleLineHeight(): number {
     const sc = getViewer();
     if (!sc) return 28;
@@ -67,7 +70,7 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     const alpha = Math.min(1, dt * 8);
     pxPerSec += (targetPxPerSec - pxPerSec) * alpha;
   // Stall watchdog: log if frame gap is large (browser throttling or heavy GC)
-  try { if (dt > 0.33) { log('wpm:stall', { dt }); } } catch {}
+  try { if (dt > stallThreshold) { log('wpm:stall', { dt }); } } catch {}
 
     const sc = getViewer();
     if (sc) {
@@ -103,6 +106,10 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     const e = ended; ended = false; return e;
   }
 
+  function setStallThreshold(sec: number) {
+    if (Number.isFinite(sec) && sec > 0 && sec < 5) stallThreshold = sec;
+  }
+
   return {
     start,
     stop,
@@ -112,6 +119,7 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     getPxPerSec,
     isRunning: () => running,
     didEnd,
+    setStallThreshold,
   } as const;
 }
 

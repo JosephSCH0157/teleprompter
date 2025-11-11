@@ -605,60 +605,73 @@ function installScrollRouter(opts) {
       : { top: Math.max(0, rect.top), left: Math.max(0, rect.left) };
     try { localStorage.setItem(CHIP_POS_KEY, JSON.stringify(pos)); } catch {}
   }
-  function enableWpmChipDrag(el) {
-    // snap-to-edge helper
-    function snapChipToEdge(el, threshold = 24) {
-      try {
-        const r = el.getBoundingClientRect();
-        const leftGap = r.left;
-        const rightGap = window.innerWidth - r.right;
-        if (Math.min(leftGap, rightGap) <= threshold) {
-          if (leftGap < rightGap) {
-            el.style.left = '12px';
-            el.style.right = '';
-          } else {
-            el.style.right = '12px';
-            el.style.left = '';
-          }
-        }
-        if (r.top <= threshold) el.style.top = '12px';
-      } catch {}
-    }
+  // Enhanced snap helper and drag behavior for the WPM chip
+  function snapChipToEdge(el, threshold = 24) {
+    try {
+      const r = el.getBoundingClientRect();
+      const leftGap  = r.left;
+      const rightGap = window.innerWidth  - r.right;
+      const topGap   = r.top;
+      const botGap   = window.innerHeight - r.bottom;
 
+      // Snap horizontally to nearest edge
+      if (Math.min(leftGap, rightGap) <= threshold) {
+        if (leftGap < rightGap) { el.style.left = '12px'; el.style.right = ''; }
+        else { el.style.right = '12px'; el.style.left = ''; }
+      }
+
+      // Snap vertically to top/bottom if close
+      if (Math.min(topGap, botGap) <= threshold) {
+        if (topGap < botGap) el.style.top = '12px';
+        else el.style.top = `${Math.max(12, window.innerHeight - r.height - 12)}px`;
+      }
+
+      // Topbar magnet: avoid overlap with pills/status bars
+      const bar = document.querySelector('#modePills, #statusBar, #controlBar, #topBar');
+      if (bar) {
+        const b = bar.getBoundingClientRect();
+        const overlapX = Math.max(0, Math.min(r.right, b.right) - Math.max(r.left, b.left));
+        const overlapY = Math.max(0, Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top));
+        if (overlapX > 6 && overlapY > 6) {
+          el.style.top = `${b.bottom + 8}px`; // push just below bar
+        }
+      }
+    } catch {}
+  }
+
+  function enableWpmChipDrag(el) {
     let dragging = false, ox = 0, oy = 0;
+
     const toFloatIfNeeded = () => {
       if (el.parentElement !== document.body) {
         const r = el.getBoundingClientRect();
         document.body.appendChild(el);
-        Object.assign(el.style, { position:'fixed', top:`${r.top}px`, left:`${r.left}px`, right:'', zIndex:'1000' });
+        Object.assign(el.style, {
+          position: 'fixed', top: `${r.top}px`, left: `${r.left}px`,
+          right: '', zIndex: '1000'
+        });
       }
     };
+
     el.addEventListener('pointerdown', (ev) => {
-      try {
-        dragging = true; toFloatIfNeeded(); el.classList.add('tp-chip--drag');
-        const rect = el.getBoundingClientRect();
-        ox = ev.clientX - rect.left; oy = ev.clientY - rect.top;
-      } catch {}
-    }, { passive:true });
+      dragging = true; toFloatIfNeeded(); el.classList.add('tp-chip--drag');
+      const rect = el.getBoundingClientRect();
+      ox = ev.clientX - rect.left; oy = ev.clientY - rect.top;
+    }, { passive: true });
 
     window.addEventListener('pointermove', (ev) => {
       if (!dragging) return;
-      try {
-        const x = Math.max(0, Math.min(window.innerWidth - 24, ev.clientX - ox));
-        const y = Math.max(0, Math.min(window.innerHeight - 24, ev.clientY - oy));
-        el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.right = '';
-      } catch {}
-    }, { passive:true });
+      const x = Math.max(0, Math.min(window.innerWidth  - 24, ev.clientX - ox));
+      const y = Math.max(0, Math.min(window.innerHeight - 24, ev.clientY - oy));
+      el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.right = '';
+    }, { passive: true });
 
     window.addEventListener('pointerup', () => {
       if (!dragging) return;
-      try {
-        dragging = false; el.classList.remove('tp-chip--drag');
-        snapChipToEdge(el, 24);
-        saveWpmChipPosition(el);
-        window.HUD?.log?.('wpm:chip:drag:end');
-      } catch {}
-    }, { passive:true });
+      dragging = false; el.classList.remove('tp-chip--drag');
+      snapChipToEdge(el, 24);
+      saveWpmChipPosition(el);
+    }, { passive: true });
   }
   function startWpmChip(currentWpm) {
     stopWpmChip();
@@ -682,7 +695,7 @@ function installScrollRouter(opts) {
         setWpmChip(`${prefix}${wpmSetting} WPM • ${fmt(pxs)} px/s • ~${approx(lps)} lps`, 'ok');
         // Stall watchdog visual hint: blink chip if px/s near zero while auto-on
         try {
-          if ((pxs < 1) && isAutoOn() && state2.mode === 'wpm') blinkChipWarn();
+          if ((pxs < 1) && isAutoOn() && state2.mode === 'wpm') notifyStall();
         } catch {}
       }, 250);
       const pxs0 = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
@@ -731,6 +744,31 @@ function installScrollRouter(opts) {
       el.classList.add('tp-chip--fade');
     } catch {}
   }
+  // Tooltip helpers for reduced-motion stall fallback
+  let chipTipTimer;
+  function ensureChipTooltip() {
+    let tip = document.getElementById('wpmChipTip');
+    if (tip) return tip;
+    tip = document.createElement('div');
+    tip.id = 'wpmChipTip';
+    tip.className = 'tp-chip-tip';
+    tip.setAttribute('role', 'status');
+    tip.setAttribute('aria-live', 'polite');
+    document.body.appendChild(tip);
+    return tip;
+  }
+  function showChipTooltip(msg, ms = 1500) {
+    const chip = ensureWpmChip();
+    const tip  = ensureChipTooltip();
+    tip.textContent = msg;
+    const c = chip.getBoundingClientRect();
+    const x = Math.min(window.innerWidth - 12, c.right + 10);
+    const y = Math.max(12, c.top);
+    Object.assign(tip.style, { left: `${x}px`, top: `${y}px` });
+    tip.classList.add('tp-chip-tip--show');
+    clearTimeout(chipTipTimer);
+    chipTipTimer = setTimeout(() => tip.classList.remove('tp-chip-tip--show'), ms);
+  }
   // Background pause/resume on tab visibility
   try {
     document.addEventListener('visibilitychange', () => {
@@ -772,6 +810,18 @@ function installScrollRouter(opts) {
       stallBlinkTimer = window.setTimeout(() => {
         try { el.classList.remove('tp-chip--warn', 'tp-chip--warn-blink'); } catch {}
       }, 450);
+    } catch {}
+  }
+
+  // Stall notifier that prefers tooltip under reduced motion
+  const PRM = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  function notifyStall() {
+    try {
+      if (PRM && PRM.matches) {
+        showChipTooltip('Stall detected (reduced motion)');
+      } else {
+        blinkChipWarn();
+      }
     } catch {}
   }
 
@@ -1001,6 +1051,12 @@ function installScrollRouter(opts) {
         } catch {}
         try {
           if (want && !wpmOpen) {
+            // Persisted stall threshold (seconds), default 0.33
+            try {
+              const raw = Number(localStorage.getItem('tp_wpm_stall_dt'));
+              const thr = Number.isFinite(raw) && raw > 0 ? raw : 0.33;
+              wpm.setStallThreshold?.(thr);
+            } catch {}
             // Guard: if nothing to scroll, do not start motor
             if (!viewerScrollable()) {
               setWpmChip('Nothing to scroll', 'muted');
