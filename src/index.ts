@@ -298,6 +298,39 @@ try {
 				const uiMode: UiScrollMode = desired === 'hybrid' ? 'asr' : (desired as UiScrollMode);
 				applyUiScrollMode(uiMode);
 			} catch {}
+
+			// --- Resilient sidebar mode UI sync (independent of legacy router) ---
+			try {
+				function syncSidebarModeUI(){
+					try {
+						const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+						const val = sel?.value || '';
+						const autoRow = document.getElementById('autoRow');
+						const wpmRow  = document.getElementById('wpmRow');
+						const isWpm = val === 'wpm';
+						if (autoRow) {
+							autoRow.classList.toggle('visually-hidden', isWpm);
+							if (isWpm) autoRow.setAttribute('aria-hidden','true'); else autoRow.removeAttribute('aria-hidden');
+						}
+						if (wpmRow) {
+							wpmRow.classList.toggle('visually-hidden', !isWpm);
+							if (isWpm) wpmRow.removeAttribute('aria-hidden'); else wpmRow.setAttribute('aria-hidden','true');
+						}
+					} catch {}
+				}
+				const modeSel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+				modeSel?.addEventListener('change', () => { syncSidebarModeUI(); });
+				// Initial sync after install (in case user cookie restored WPM)
+				syncSidebarModeUI();
+				// Fallback observer: if panel is re-rendered, re-sync rows
+				try {
+					const panel = document.querySelector('aside.panel');
+					if (panel && 'MutationObserver' in window) {
+						const mo = new MutationObserver(() => { syncSidebarModeUI(); });
+						mo.observe(panel, { childList: true, subtree: true });
+					}
+				} catch {}
+			} catch {}
 		} catch {}
 
 		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
