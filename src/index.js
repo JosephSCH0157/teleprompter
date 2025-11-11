@@ -141,8 +141,8 @@ import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
 import * as Auto from './features/autoscroll.js';
 // Shared helpers for sidebar + auto toggle label syncing (migration toward unified TS entry)
-import { installModeRowsSync } from './boot/uiModeSync.js';
 import { installAutoToggleSync } from './boot/autoToggleSync.js';
+import { installModeRowsSync } from './boot/uiModeSync.js';
 import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
