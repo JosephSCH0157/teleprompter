@@ -168,6 +168,13 @@ function onScriptLoad() {
     } catch {
       console.debug('scripts-ui: trigger render failed');
     }
+    // Record cookie: resume from saved
+    try {
+      const p = (typeof window.readPrefsCookie === 'function' && window.readPrefsCookie()) || {};
+      if (typeof window.writePrefsCookie === 'function') {
+        window.writePrefsCookie({ ...p, lastSource: 'saved', lastFileName: '' });
+      }
+    } catch {}
     toastFn('Script loaded', { type: 'ok' });
   } catch {
     console.debug('onScriptLoad');

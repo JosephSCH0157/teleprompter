@@ -43,8 +43,7 @@ export function initScriptFolderBrowser(onLoad: OnLoad) {
       const text = await readScriptFile(entry);
       onLoad(text, entry.name.replace(/\.(txt|md|rtf|text|docx)$/i, ''));
       const p = readPrefsCookie();
-      p.lastSource = 'folder'; p.lastFileName = entry.name;
-      writePrefsCookie(p);
+      writePrefsCookie({ ...p, lastSource: 'folder', lastFileName: entry.name });
     } catch (e) {
       try { console.error(e); } catch {}
       try { (window as any).HUD?.toast?.('Failed to load file. Check permissions.'); } catch {}

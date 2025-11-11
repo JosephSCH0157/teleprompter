@@ -15,6 +15,8 @@ bootstrap().catch(() => {});
 
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
+import { readPrefsCookie, writePrefsCookie } from './utils/cookies';
+import type { PrefsV1 } from './utils/cookies';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
 import './ui/settings/asrWizard';
 
@@ -101,6 +103,13 @@ function applyUiScrollMode(mode: UiScrollMode) {
     });
     // Also log to console for quick visibility
     console.debug(`[Scroll Mode] ${summary} | ASR: ${asrEnabled ? 'on' : 'off'} | Auto: ${autoEnabled ? 'on' : 'off'}`);
+		// Persist scroll mode (map UI modes to cookie scrollMode domain)
+		try {
+			// Map 'auto' to 'hybrid' (closest semantic), 'off' not persisted (leave previous)
+			const cookieMode: PrefsV1['scrollMode'] = mode === 'auto' ? 'hybrid'
+				: (mode === 'off' ? readPrefsCookie().scrollMode : (mode as any));
+			writePrefsCookie({ scrollMode: cookieMode });
+		} catch {}
   } catch {
     // ignore
   }
@@ -149,6 +158,18 @@ try {
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
+		// Early pre-hydration from cookie (theme, contrast, font scale)
+		try {
+			const prefs = readPrefsCookie();
+			// theme
+			try { document.documentElement.dataset.theme = prefs.theme || 'system'; } catch {}
+			// high contrast
+			try { if (prefs.highContrast) document.documentElement.classList.add('hc'); } catch {}
+			// font scale variable (consumer can multiply into font-size pipeline)
+			try { document.documentElement.style.setProperty('--tp-font-scale', String(prefs.fontScale || 1)); } catch {}
+		} catch {}
+		// Expose cookie helpers globally for legacy JS
+		try { (window as any).readPrefsCookie = readPrefsCookie; (window as any).writePrefsCookie = writePrefsCookie; } catch {}
 		// Folder mapping + scripts dropdown (TS path)
 		const onLoadIntoEditor = (text: string, title?: string) => {
 			try { (window as any).setEditorContent?.(text); } catch {}
