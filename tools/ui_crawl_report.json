@@ -121,10 +121,6 @@
       "text": "Color…"
     },
     {
-      "id": "refreshFolderBtn",
-      "text": "Refresh"
-    },
-    {
       "checkboxIndex": 0
     },
     {
@@ -267,7 +263,7 @@
       "text": "[src/index] module imports complete",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 229,
+        "lineNumber": 228,
         "columnNumber": 10
       }
     },
@@ -285,7 +281,7 @@
       "text": "[src/index] boot()",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 362,
+        "lineNumber": 361,
         "columnNumber": 12
       }
     },
@@ -447,7 +443,7 @@
       "text": "[ASR] initialized from http://127.0.0.1:5180/src/index-hooks/asr.js",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 645,
+        "lineNumber": 644,
         "columnNumber": 26
       }
     },
@@ -474,7 +470,7 @@
       "text": "[gate] orchestrator initialized",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 721,
+        "lineNumber": 720,
         "columnNumber": 28
       }
     },
@@ -483,7 +479,7 @@
       "text": "[src/index] boot completed",
       "location": {
         "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 856,
+        "lineNumber": 855,
         "columnNumber": 10
       }
     },
@@ -775,7 +771,7 @@
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 32 candidate controls"
+    "Found 31 candidate controls"
   ],
   "meta": {
     "target": {
@@ -784,9 +780,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "90549b5540d7cc441547bdc1ab7f3a1dd7394b03",
+      "gitSha": "361544ddd8a58632c77b4479c5af1743cbfe0627",
       "branch": "scroll-fix-clean",
-      "buildTime": "2025-11-11T13:39:24.278Z"
+      "buildTime": "2025-11-11T13:47:59.393Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -853,7 +849,7 @@
   "contentLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 40.66666793823242,
+    "delta": 41.33333444595337,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "wpmChipProbe": {
@@ -884,7 +880,7 @@
     "speed": 62,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: On",
-    "delta": 26
+    "delta": 25
   },
   "appVersionText": "v1.6.4",
   "screenshot": "tools\\ui_crawl_screenshot.png"

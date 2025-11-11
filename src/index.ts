@@ -149,6 +149,27 @@ try {
 
 try {
 	document.addEventListener('DOMContentLoaded', () => {
+		// Folder mapping + scripts dropdown (TS path)
+		try {
+			const onLoadIntoEditor = (text: string, title?: string) => {
+				try { (window as any).setEditorContent?.(text); } catch {}
+				try { (window as any).renderScript?.(text); } catch {}
+				try {
+					if (title) {
+						const tEl = document.getElementById('scriptTitle') as HTMLInputElement | null;
+						if (tEl) tEl.value = title;
+					}
+				} catch {}
+			};
+			// Lazy dynamic import so initial bundle stays lean
+			Promise.all([
+				import('./features/settings/advanced-folder'),
+				import('./features/script-folder-browser'),
+			]).then(([adv, fold]) => {
+				try { adv.initAdvancedFolderControls?.(); } catch {}
+				try { fold.initScriptFolderBrowser?.(onLoadIntoEditor); } catch {}
+			}).catch(() => {});
+		} catch {}
 			// Initialize ASR feature (settings card, hotkeys, topbar UI)
 			try { initAsrFeature(); } catch {}
 			// OBS Settings wiring (inline bridge-backed "Test connect")
