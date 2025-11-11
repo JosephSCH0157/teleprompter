@@ -7,6 +7,8 @@
 
 import type { WpmMotor } from './features/wpm';
 import { createWpmScroller } from './features/wpm';
+// SSOT mode integration
+import { getMode as ssotGetMode, onMode as ssotOnMode } from './core/mode-state';
 
 // ---------- Types ----------
 
@@ -57,7 +59,15 @@ function isDev(): boolean {
 
 // ---------- Mode + Gate state ----------
 
-let currentMode: ScrollMode = 'manual';
+// Legacy mirror of mode; now seeded from SSOT and kept in sync.
+let currentMode: ScrollMode = ((): ScrollMode => {
+  try { return ssotGetMode() as ScrollMode; } catch { return 'manual'; }
+})();
+// Subscribe to SSOT changes to keep legacy reads coherent.
+let offModeSync: (() => void) | undefined;
+try {
+  offModeSync = ssotOnMode?.((m) => { currentMode = m as ScrollMode; });
+} catch {}
 let _userIntent = false;   // auto toggle (reserved)
 let _speechGate = false;   // speech engine (reserved)
 let lastGateOpen = false;
@@ -587,6 +597,15 @@ export function initScrollRouter() {
 
   // Seed PRM cap and magnet threshold labels if any UI is listening
   try { window.dispatchEvent(new CustomEvent('tp:router:init')); } catch {}
+}
+
+// Optional public dispose to release SSOT subscription & observers if hot-reloading.
+export function disposeScrollRouter() {
+  try { offModeSync && offModeSync(); } catch {}
+  try { if (wpm.isRunning()) wpm.stop(); } catch {}
+  stopWpmChip();
+  detachViewerObservers();
+  stopViewerDomObserver();
 }
 
 // Best-effort cleanup to avoid stray observers/intervals on unload

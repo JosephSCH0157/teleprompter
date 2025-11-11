@@ -13,7 +13,7 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "src/**/*.js"],
+  "include": ["src/**/*.ts", "src/**/*.js", "src/types/**/*.d.ts"],
   "references": [
     { "path": "src/logic" }
   ]
