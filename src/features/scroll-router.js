@@ -477,9 +477,60 @@ function installScrollRouter(opts) {
   // WPM motor: independent of Auto engine and speech lifecycle
   const getViewerEl = () => document.getElementById('viewer');
   const wpm = createWpmScroller(getViewerEl, (t, d) => { try { window.HUD?.log?.('wpm:'+t, d); } catch {} });
+  // Optional: seed words-per-line hint from global if provided
+  try {
+    const hint = Number((window && window.__tpWplHint) || NaN);
+    if (Number.isFinite(hint) && hint > 0) wpm.setWordsPerLineHint(hint);
+  } catch {}
   let wpmOpen = false;
   let wpmSetting = (() => { try { return parseFloat(localStorage.getItem('tp_baseline_wpm') || '120') || 120; } catch { return 120; } })();
   let wpmUpdateInterval = null;
+  // Live chip showing WPM • px/s while motor runs
+  let wpmChipTimer = 0;
+  function setWpmChip(text) {
+    try {
+      const el = document.getElementById('wpmChip');
+      if (el) el.textContent = text;
+    } catch {}
+  }
+  function startWpmChip(currentWpm) {
+    stopWpmChip();
+    const fmt = (n) => Math.round(n).toString();
+    try {
+      wpmChipTimer = window.setInterval(() => {
+        const pxs = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
+        setWpmChip(`${wpmSetting} WPM • ${fmt(pxs)} px/s`);
+      }, 250);
+      const pxs0 = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
+      setWpmChip(`${currentWpm} WPM • ${Math.round(pxs0)} px/s`);
+    } catch {}
+  }
+  function stopWpmChip() {
+    if (wpmChipTimer) {
+      try { clearInterval(wpmChipTimer); } catch {}
+      wpmChipTimer = 0;
+    }
+  }
+
+  // Manual touch pause: brief stop on wheel/scroll keys, auto-resume if still in WPM with auto intent on
+  let userPauseTimer = 0;
+  function userPause(ms = 1500) {
+    try {
+      if (!wpm.isRunning()) return;
+      wpm.stop();
+      stopWpmChip();
+      try { window.HUD?.log?.('wpm:pause', { reason: 'manual' }); } catch {}
+      if (userPauseTimer) clearTimeout(userPauseTimer);
+      userPauseTimer = window.setTimeout(() => {
+        try {
+          if (state2.mode === 'wpm' && userEnabled) {
+            wpm.start(wpmSetting);
+            startWpmChip(wpmSetting);
+          }
+        } catch {}
+      }, ms);
+    } catch {}
+  }
   
   // Update WPM display periodically when in WPM mode (legacy; orchestrator off for WPM). Keep underscored to satisfy lint.
   function _updateWpmDisplay() {
@@ -540,6 +591,19 @@ function installScrollRouter(opts) {
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
   let speechActive = false;
+  // Gate logging hygiene: only on transitions and ~1s cadence
+  let lastGateOpen = false;
+  let lastGateLog = 0;
+  function logGate(mode, user, speech, open) {
+    try {
+      const now = performance.now();
+      if (open !== lastGateOpen || now - lastGateLog > 1000) {
+        window.HUD?.log?.('scroll-router:applyGate', { mode, user, speech, open });
+        lastGateOpen = open;
+        lastGateLog = now;
+      }
+    } catch {}
+  }
   try {
     window.addEventListener("tp:speech-state", (e) => {
       try {
@@ -595,8 +659,6 @@ function installScrollRouter(opts) {
     }
   };
   function applyGate() {
-    console.log('[applyGate] Called:', { mode: state2.mode, userEnabled, speechActive });
-    try { window.HUD?.log?.('scroll-router', `applyGate: mode=${state2.mode} user=${userEnabled} speech=${speechActive}`); } catch {}
   if (state2.mode !== "hybrid") {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
@@ -639,8 +701,8 @@ function installScrollRouter(opts) {
           if (was) window.Auto?.setEnabled?.(false);
         } catch {}
         try {
-          if (want && !wpmOpen) { wpm.start(wpmSetting); }
-          else if (!want && wpmOpen) { wpm.stop(); }
+          if (want && !wpmOpen) { wpm.start(wpmSetting); startWpmChip(wpmSetting); }
+          else if (!want && wpmOpen) { wpm.stop(); stopWpmChip(); }
           wpmOpen = want;
         } catch {}
       } else {
@@ -651,8 +713,8 @@ function installScrollRouter(opts) {
         } catch {}
       }
 
-      // Optional: richer debug
-      try { window.HUD?.log?.('router:gate', { mode, userEnabled, speechActive, hasScript, want }); } catch {}
+  // Gate log (throttled)
+  try { logGate(mode, !!userEnabled, !!speechActive, !!want); } catch {}
 
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
@@ -692,6 +754,7 @@ function installScrollRouter(opts) {
     };
   const gateWanted = computeGateWanted();
   const wantEnabled = userEnabled && speechActive && (isHybridBypass() ? true : gateWanted);
+  try { logGate('hybrid', !!userEnabled, !!speechActive, !!wantEnabled); } catch {}
   const dueToGateSilence = userEnabled && speechActive && !isHybridBypass() && !gateWanted;
     if (wantEnabled) {
       if (silenceTimer) {
@@ -800,6 +863,19 @@ function installScrollRouter(opts) {
         applyMode(modeVal);
         applyGate();
         ensureOrchestratorForMode();
+        // Auto-recalibrate px/s mapping on resize/typography changes
+        try {
+          const viewerEl = document.getElementById('viewer');
+          if (viewerEl && typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(() => {
+              try { if (wpm.isRunning()) wpm.recalcFromDom(wpmSetting); } catch {}
+            });
+            ro.observe(viewerEl);
+          }
+          window.addEventListener('orientationchange', () => {
+            try { if (wpm.isRunning()) wpm.recalcFromDom(wpmSetting); } catch {}
+          });
+        } catch {}
       }
       // Handle WPM target changes
       if (t?.id === "wpmTarget") {
@@ -873,6 +949,17 @@ function installScrollRouter(opts) {
     }, { capture: true });
   } catch {
   }
+  // Manual touch pause bindings
+  try {
+    const viewerEl = document.getElementById('viewer');
+    viewerEl?.addEventListener('wheel', () => userPause(), { passive: true });
+    window.addEventListener('keydown', (e) => {
+      try {
+        const keys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
+        if (keys.includes(e.key)) userPause();
+      } catch {}
+    }, { passive: true });
+  } catch {}
   try {
     window.addEventListener("tp:db", (e) => {
       const db = e && e.detail && typeof e.detail.db === "number" ? e.detail.db : -60;
