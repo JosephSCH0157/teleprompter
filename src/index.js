@@ -717,6 +717,44 @@ async function boot() {
       // Use shared helpers (idempotent) instead of inline duplication
       try { installModeRowsSync(); } catch {}
       try { installAutoToggleSync(Auto); } catch {}
+      // Seed and broadcast helper-friendly events
+      try {
+        // Auto state emitter (reads from Auto)
+        function __emitAutoState(){
+          try {
+            const st = (Auto && typeof Auto.getState === 'function') ? Auto.getState() : null;
+            if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st }));
+          } catch {}
+        }
+        // Mode emitter: emits after initial bind and on user changes
+        (function __wireModeEmitter(){
+          try {
+            const sel = document.getElementById('scrollMode');
+            if (!sel) return;
+            if (!window.__tpModeEmitterInstalled) {
+              window.__tpModeEmitterInstalled = true;
+              sel.addEventListener('change', () => {
+                try {
+                  const mode = sel && sel.value;
+                  window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode } }));
+                } catch {}
+              }, { capture: true });
+            }
+            // Seed one event with current selection
+            try { const mode = sel && sel.value; window.dispatchEvent(new CustomEvent('tp:mode', { detail: { mode } })); } catch {}
+          } catch {}
+        })();
+        // Seed auto state once helpers are installed
+        __emitAutoState();
+        // Keep label current on engine start/stop
+        try { document.addEventListener('autoscroll:start', __emitAutoState, { capture: true }); } catch {}
+        try { document.addEventListener('autoscroll:stop', __emitAutoState,  { capture: true }); } catch {}
+        // Also re-emit on speed input changes
+        try {
+          document.addEventListener('input', (ev) => { try { if (ev?.target?.id === 'autoSpeed') __emitAutoState(); } catch {} }, { capture: true });
+          document.addEventListener('change', (ev) => { try { if (ev?.target?.id === 'autoSpeed') __emitAutoState(); } catch {} }, { capture: true });
+        } catch {}
+      } catch {}
       // Resilient event delegation (works in headless + when nodes re-render)
       let __lastAutoToggleAt = 0;
       const __applyAutoChip = () => {
@@ -736,8 +774,8 @@ async function boot() {
         const t = e && e.target;
         // If the new TS Scroll Router is active, it owns auto +/- and intent controls
         try { if (window.__tpScrollRouterTsActive) { /* delegate to TS router */ } else {
-          try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
-          try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
+          try { if (t?.closest?.('#autoInc'))    { const r = Auto.inc(); try { window.dispatchEvent(new Event('autoscroll:tick')); } catch {}; try { const st = Auto.getState?.(); if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st })); } catch {}; return r; } } catch {}
+          try { if (t?.closest?.('#autoDec'))    { const r = Auto.dec(); try { window.dispatchEvent(new Event('autoscroll:tick')); } catch {}; try { const st = Auto.getState?.(); if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st })); } catch {}; return r; } } catch {}
         } } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
@@ -751,6 +789,7 @@ async function boot() {
             const t = ev?.target;
             if (t?.id === 'autoSpeed') {
               Auto.setSpeed(t.value);
+              try { const st = Auto.getState?.(); if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st })); } catch {}
             }
           } catch {}
         }, { capture: true });
@@ -760,6 +799,7 @@ async function boot() {
             const t = ev?.target;
             if (t?.id === 'autoSpeed') {
               Auto.setSpeed(t.value);
+              try { const st = Auto.getState?.(); if (st) window.dispatchEvent(new CustomEvent('tp:autoState', { detail: st })); } catch {}
             }
           } catch {}
         }, { capture: true });

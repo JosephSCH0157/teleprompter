@@ -66,22 +66,41 @@ const URL_TO_OPEN = RAW_URL;
       // Open page
       await page.goto(URL_TO_OPEN, { waitUntil: type === 'playwright' ? 'networkidle' : 'networkidle0', timeout: ARG_TIMEOUT });
 
+      // EARLY event taps: attach before querying selectors so we don't miss boot-time emissions
+      try {
+        await page.evaluate(() => {
+          try {
+            window.__SMOKE = window.__SMOKE || { modes: [], autoStates: [] };
+            if (!window.__SMOKE_EARLY_TAPS) {
+              window.__SMOKE_EARLY_TAPS = true;
+              window.addEventListener('tp:mode', (e) => { try { window.__SMOKE.modes.push(e && e.detail && e.detail.mode || null); } catch {} });
+              window.addEventListener('tp:autoState', (e) => { try { window.__SMOKE.autoStates.push(e && e.detail || {}); } catch {} });
+            }
+          } catch {}
+        });
+      } catch {}
+
       // Wait for UI bits (race tolerant)
       const waitFor = async (selector) => {
         try { await page.waitForSelector(selector, { timeout: Math.min(ARG_TIMEOUT, 15000) }); return true; }
         catch { return false; }
       };
 
-      const hasToast = await waitFor('#tp_toast_container'); // toast container
-      const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
+  const hasToast = await waitFor('#tp_toast_container'); // toast container
+  const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
 
-      // Install lightweight event taps for helper verification
+      // Reaffirm taps (idempotent) and send handshake trigger so app can re-emit signals for late observers
       try {
         await page.evaluate(() => {
           try {
             window.__SMOKE = window.__SMOKE || { modes: [], autoStates: [] };
-            window.addEventListener('tp:mode', (e) => { try { window.__SMOKE.modes.push(e?.detail?.mode || null); } catch {} });
-            window.addEventListener('tp:autoState', (e) => { try { window.__SMOKE.autoStates.push(e?.detail || {}); } catch {} });
+            if (!window.__SMOKE_LATE_TAPS) {
+              window.__SMOKE_LATE_TAPS = true;
+              window.addEventListener('tp:mode', (e) => { try { window.__SMOKE.modes.push(e && e.detail && e.detail.mode || null); } catch {} });
+              window.addEventListener('tp:autoState', (e) => { try { window.__SMOKE.autoStates.push(e && e.detail || {}); } catch {} });
+            }
+            // Handshake signal: app should re-emit current signals for smoke to observe
+            try { window.dispatchEvent(new Event('tp:smoke:tap')); } catch {}
           } catch {}
         });
       } catch {}
