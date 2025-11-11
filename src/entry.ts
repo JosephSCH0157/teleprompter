@@ -4,7 +4,7 @@
 import { installAutoToggleSync } from './boot/autoToggleSync.js';
 import './boot/compat-ids';
 import { installModeRowsSync } from './boot/uiModeSync.js';
-import { bindModeSelect, getMode, hydratePersistedMode, onMode } from './core/mode-state';
+import { bindModeSelect, getMode, hydratePersistedMode, onMode, initModeState, bindSelect } from './core/mode-state';
 import * as Auto from './features/autoscroll.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
@@ -227,9 +227,8 @@ async function boot(){
     // Hydrate unified mode state (SSOT) before helpers
     try {
       const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      const valid = sel ? Array.from(sel.options || []).map(o => (o as HTMLOptionElement).value).filter(Boolean) : undefined;
-      hydratePersistedMode(valid);
-      bindModeSelect();
+      initModeState({ defaultMode: 'manual', select: sel });
+      if (!sel) { queueMicrotask(() => { try { bindSelect(document.getElementById('scrollMode') as HTMLSelectElement | null); } catch {} }); }
     } catch {}
     try { installModeRowsSync(); } catch {}
     try { installAutoToggleSync(Auto); } catch {}

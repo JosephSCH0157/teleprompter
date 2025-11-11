@@ -93,7 +93,7 @@ export function initGateOrchestrator() {
   state.user = readAutoIntentFromDOM();
   state.speech = false;
 
-  bindMode();
+  bindMode(); // subscription to SSOT
   bindAuto();
   bindSpeech();
   bindViewerNudges();
