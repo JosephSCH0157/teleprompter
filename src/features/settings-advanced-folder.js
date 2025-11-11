@@ -1,6 +1,6 @@
 // src/features/settings-advanced-folder.js
 // Wiring for Settings → Advanced panel folder mapping controls.
-import { fsApiSupported, setScriptsFolderFromPicker, forgetPersistedFolder, getPersistedFolder, EVT_FOLDER_CHANGED } from '../adapters/folder-mapper.js';
+import { EVT_FOLDER_CHANGED, forgetPersistedFolder, fsApiSupported, getPersistedFolder, setScriptsFolderFromPicker } from '../adapters/folder-mapper.js';
 
 export function initAdvancedFolderControls() {
   try {
