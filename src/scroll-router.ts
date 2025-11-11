@@ -5,8 +5,8 @@
  * - CI test nudge hook
  */
 
-import { createWpmScroller } from './features/wpm';
 import type { WpmMotor } from './features/wpm';
+import { createWpmScroller } from './features/wpm';
 
 // ---------- Types ----------
 
