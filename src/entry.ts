@@ -14,7 +14,7 @@ import { initTelemetry } from './features/telemetry.js';
 import * as UI from './ui/dom.js';
 // Settings SSOT
 import { initSettings } from './core/settings-state';
-import { bindSettingsForm } from './ui/settings-bind';
+import { retrofitSettingsAttributes } from './ui/settings-retrofit';
 // Test/runtime detection and safe dynamic import helper
 const IS_NODE = typeof process !== 'undefined' && !!(process.versions?.node);
 const IS_TEST = IS_NODE && ((process as any)?.env?.NODE_ENV === 'test' || (process as any)?.env?.TP_TEST === '1');
@@ -213,8 +213,8 @@ async function boot(){
 
   // Core UI and feature boot now live in TS entry (index.js will skip these when __TP_TS_CORE_BOOT is true)
   try { UI.bindStaticDom(); } catch {}
-  // Initialize settings SSOT early; binder is safe to call even when panel not present yet
-  try { initSettings(); queueMicrotask(() => { try { bindSettingsForm(document); } catch {} }); } catch {}
+  // Initialize settings SSOT early; retrofit tags legacy IDs then binds
+  try { initSettings(); queueMicrotask(() => { try { retrofitSettingsAttributes(document); } catch {} }); } catch {}
   try { initPersistence();   try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { try { console.warn('[entry.ts] initPersistence failed', e); } catch {} }
   try { initTelemetry();     try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { try { console.warn('[entry.ts] initTelemetry failed', e); } catch {} }
   try { initScroll();        try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { try { console.warn('[entry.ts] initScroll failed', e); } catch {} }
