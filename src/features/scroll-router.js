@@ -498,6 +498,7 @@ function installScrollRouter(opts) {
         el.id = 'wpmChip';
         el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
         el.textContent = '—';
+        try { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); } catch {}
         autoPill.parentElement.insertBefore(el, autoPill.nextSibling);
         return el;
       }
@@ -507,6 +508,7 @@ function installScrollRouter(opts) {
         el.id = 'wpmChip';
         el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
         el.textContent = '—';
+        try { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); } catch {}
         host.appendChild(el);
         return el;
       }
@@ -516,6 +518,7 @@ function installScrollRouter(opts) {
     el.className = 'tp-chip tp-chip--wpm tp-chip--ok';
     el.textContent = '—';
     try { Object.assign(el.style, { position:'fixed', top:'12px', right:'12px', zIndex:'1000' }); } catch {}
+    try { el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); } catch {}
     document.body.appendChild(el);
     return el;
   }
@@ -532,13 +535,15 @@ function installScrollRouter(opts) {
     const fmt = (n) => Math.round(n).toString();
     try {
       wpmChipTimer = window.setInterval(() => {
-        // Detect end-of-script without waiting for gate transition
-        if (window.__tpWpmEnded) {
-          setWpmChip('End of script', 'end');
-          window.__tpWpmEnded = false;
-          stopWpmChip();
-          return;
-        }
+        // Detect end-of-script via motor getter without waiting for gate transition
+        try {
+          if (wpm.didEnd && wpm.didEnd()) {
+            setWpmChip('End of script', 'end');
+            stopWpmChip();
+            fadeOutWpmChip(2500);
+            return;
+          }
+        } catch {}
         const pxs = (wpm.getPxPerSec && wpm.getPxPerSec()) || 0;
         setWpmChip(`${wpmSetting} WPM • ${fmt(pxs)} px/s`, 'ok');
       }, 250);
@@ -551,6 +556,38 @@ function installScrollRouter(opts) {
       try { clearInterval(wpmChipTimer); } catch {}
       wpmChipTimer = 0;
     }
+  }
+
+  // Attach/detach viewer observers for recalibration and cleanup
+  let resizeObs = null;
+  function attachViewerObservers(v, motor, getWpmSetting) {
+    try {
+      if (!v || typeof ResizeObserver === 'undefined') return;
+      detachViewerObservers();
+      resizeObs = new ResizeObserver(() => { try { if (motor.isRunning()) motor.recalcFromDom(getWpmSetting()); } catch {} });
+      resizeObs.observe(v);
+    } catch {}
+  }
+  function detachViewerObservers() {
+    try { resizeObs?.disconnect?.(); } catch {}
+    resizeObs = null;
+    try { if (wpmChipTimer) { clearInterval(wpmChipTimer); wpmChipTimer = 0; } } catch {}
+  }
+
+  function fadeOutWpmChip(delay=2000){
+    try {
+      const el = document.getElementById('wpmChip');
+      if (!el) return;
+      el.classList.add('tp-chip--fade');
+      setTimeout(()=> el.classList.add('tp-chip--hidden'), delay);
+    } catch {}
+  }
+  function showWpmChip(){
+    try {
+      const el = ensureWpmChip();
+      el.classList.remove('tp-chip--hidden');
+      el.classList.add('tp-chip--fade');
+    } catch {}
   }
 
   // Manual touch pause: brief stop on wheel/scroll keys, auto-resume if still in WPM with auto intent on
@@ -573,6 +610,7 @@ function installScrollRouter(opts) {
           if (state2.mode === 'wpm' && isAutoOn()) {
             wpm.start(wpmSetting);
             startWpmChip(wpmSetting);
+            showWpmChip();
           } else {
             setWpmChip('Paused', 'muted');
           }
@@ -750,18 +788,20 @@ function installScrollRouter(opts) {
           if (was) window.Auto?.setEnabled?.(false);
         } catch {}
         try {
-          if (want && !wpmOpen) { wpm.start(wpmSetting); startWpmChip(wpmSetting); }
-          else if (!want && wpmOpen) {
+          if (want && !wpmOpen) {
+            wpm.start(wpmSetting);
+            startWpmChip(wpmSetting);
+            showWpmChip();
+            // Attach observers on viewer for recalibration
+            try { attachViewerObservers(getViewerEl(), wpm, () => wpmSetting); } catch {}
+          } else if (!want && wpmOpen) {
+            const hitEnd = (wpm.didEnd && wpm.didEnd()) || false;
             wpm.stop();
             stopWpmChip();
-            try {
-              if (window.__tpWpmEnded) {
-                setWpmChip('End of script', 'end');
-                window.__tpWpmEnded = false;
-              } else {
-                setWpmChip('Paused', 'muted');
-              }
-            } catch {}
+            setWpmChip(hitEnd ? 'End of script' : 'Paused', hitEnd ? 'end' : 'muted');
+            if (hitEnd) fadeOutWpmChip(2500);
+            // Detach observers when leaving WPM running state
+            try { detachViewerObservers(); } catch {}
           }
           wpmOpen = want;
         } catch {}
@@ -923,15 +963,8 @@ function installScrollRouter(opts) {
         applyMode(modeVal);
         applyGate();
         ensureOrchestratorForMode();
-        // Auto-recalibrate px/s mapping on resize/typography changes
+        // Orientation change still triggers recalculation while running
         try {
-          const viewerEl = document.getElementById('viewer');
-          if (viewerEl && typeof ResizeObserver !== 'undefined') {
-            const ro = new ResizeObserver(() => {
-              try { if (wpm.isRunning()) wpm.recalcFromDom(wpmSetting); } catch {}
-            });
-            ro.observe(viewerEl);
-          }
           window.addEventListener('orientationchange', () => {
             try { if (wpm.isRunning()) wpm.recalcFromDom(wpmSetting); } catch {}
           });
@@ -1011,10 +1044,11 @@ function installScrollRouter(opts) {
   }
   // Manual touch pause bindings
   try {
-    const viewerEl = document.getElementById('viewer');
-    viewerEl?.addEventListener('wheel', () => userPause(), { passive: true });
+    const viewerEl2 = document.getElementById('viewer');
+    viewerEl2?.addEventListener('wheel', () => { if (state2.mode === 'wpm') userPause(); }, { passive: true });
     window.addEventListener('keydown', (e) => {
       try {
+        if (state2.mode !== 'wpm') return;
         const keys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
         if (keys.includes(e.key)) userPause();
       } catch {}

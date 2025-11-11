@@ -18,6 +18,8 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
 
   // Words-per-line hint (router can tune)
   let wplHint = 7;
+  // End-of-script flag (consumable via didEnd())
+  let ended = false;
 
   function sampleLineHeight(): number {
     const sc = getViewer();
@@ -71,10 +73,7 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
       const next = Math.min(max, sc.scrollTop + pxPerSec * dt);
       sc.scrollTop = next;
       try { log('wpm:tick', { dt, pxPerSec, top: next, max }); } catch {}
-      if (next >= max) {
-        try { (window as any).__tpWpmEnded = true; } catch {}
-        stop();
-      }
+      if (next >= max) { ended = true; stop(); }
     }
     raf = requestAnimationFrame(loop);
   }
@@ -98,6 +97,10 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     try { log('wpm:stop'); } catch {}
   }
 
+  function didEnd() {
+    const e = ended; ended = false; return e;
+  }
+
   return {
     start,
     stop,
@@ -106,6 +109,7 @@ export function createWpmScroller(getViewer: GetViewer, log: LogFn = (_tag?: str
     recalcFromDom,
     getPxPerSec,
     isRunning: () => running,
+    didEnd,
   } as const;
 }
 
