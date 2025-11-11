@@ -1,10 +1,19 @@
 /*
  Simple node test for mode normalization and SSOT provenance.
  Runs under Node with minimal DOM shims and dynamic import of built dist/entry.js which initializes mode-state.
+ Includes a hard timeout and clean teardown for deterministic exit.
 */
 
+const DEADLINE = Number(process.env.TP_TEST_TIMEOUT_MS || 15000);
+const timeout = setTimeout(() => {
+  console.error('[test_mode_normalize] TIMEOUT');
+  process.exit(124);
+}, DEADLINE);
+
 (async function(){
-  const assert = (cond, msg) => { if (!cond) { console.error('ASSERT FAIL:', msg); process.exitCode = 1; } };
+  try {
+  try { process.env.TP_TEST = '1'; } catch {}
+  const assert = (cond, msg) => { if (!cond) { throw new Error(msg || 'assert'); } };
   // Basic DOM + storage shims
   global.window = global;
   const ls = new Map();
@@ -75,4 +84,12 @@
   assert(saw && saw.ssot === true && saw.mode === 'manual', 'Event did not carry ssot provenance or wrong mode');
 
   console.log('[test_mode_normalize] OK');
+  process.exitCode = 0;
+} catch (e) {
+  console.error('[test_mode_normalize] FAIL', e);
+  process.exitCode = 1;
+} finally {
+  clearTimeout(timeout);
+  setTimeout(() => process.exit(process.exitCode || 0), 0);
+}
 })();

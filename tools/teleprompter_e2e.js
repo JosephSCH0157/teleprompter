@@ -426,8 +426,8 @@ async function main() {
             window.tpScrollTo(val);
             return true;
           }
-          if (typeof tpScrollTo !== 'undefined' && typeof tpScrollTo === 'function') {
-            tpScrollTo(val);
+          if (typeof globalThis.tpScrollTo === 'function') {
+            globalThis.tpScrollTo(val);
             return true;
           }
           // fallback: set scrollTop directly on the main wrapper

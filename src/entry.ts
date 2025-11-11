@@ -12,6 +12,22 @@ import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
 import * as UI from './ui/dom.js';
+// Settings SSOT
+import { initSettings } from './core/settings-state';
+import { bindSettingsForm } from './ui/settings-bind';
+// Test/runtime detection and safe dynamic import helper
+const IS_NODE = typeof process !== 'undefined' && !!(process.versions?.node);
+const IS_TEST = IS_NODE && ((process as any)?.env?.NODE_ENV === 'test' || (process as any)?.env?.TP_TEST === '1');
+async function safeImport(rel: string) {
+  if (IS_TEST) return null; // skip noisy imports in Node tests
+  try {
+    const url = new URL(rel, import.meta.url);
+    return await import(url.href);
+  } catch (e) {
+    try { (window as any).HUD?.log?.('import:skip', { rel, err: String(e) }); } catch {}
+    return null;
+  }
+}
 // Signal JS path to skip its internal router and ASR boot logic
 try {
   (window as any).__TP_TS_ROUTER_BOOT = true;
@@ -43,7 +59,7 @@ try {
 async function boot(){
   try {
     // Delegate to existing JS boot for legacy pieces (router boot skipped via flag)
-    await import('./index.js');
+    await safeImport('./index.js');
     // Minimal HUD SSOT (dev) — moved under TS entry ownership
     try {
       if (!(window as any).__tpHudWireActive) {
@@ -122,27 +138,26 @@ async function boot(){
     // Perform router + gate orchestrator boot here (mirrors logic from index.js)
     try {
       async function tryImport(spec: string, flag?: string){
-        try {
-          const m = await import(spec);
-          if (m) { try { flag && ((window as any)[flag] = true); } catch {} return m; }
-        } catch (err){ try { console.warn('[router] import failed', spec, (err as any)?.message); } catch {} }
+        const m = await safeImport(spec);
+        if (m) { try { flag && ((window as any)[flag] = true); } catch {} return m; }
         return null;
       }
       const candidates = [
-        { spec: '/dist/scroll-router.js', flag: '__tpScrollRouterTsActive' },
-        { spec: '/dist/features/scroll-router.js', flag: '__tpScrollRouterLegacyDist' },
-        { spec: './features/scroll-router.js', flag: '__tpScrollRouterJsActive' }
+        { spec: './scroll-router.js', flag: '__tpScrollRouterTsActive' },
+        { spec: './features/scroll-router.js', flag: '__tpScrollRouterJsActive' },
       ];
       let mod: any = null;
       for (const c of candidates){ mod = await tryImport(c.spec, c.flag); if (mod) break; }
       if (!mod){
-        try {
-          console.warn('[router] all candidates failed; injecting legacy script');
-          const s = document.createElement('script');
-          s.src = './teleprompter_pro.js'; s.defer = true;
-          s.onload = () => { try { console.info('[router] legacy script loaded'); } catch {} };
-          document.head.appendChild(s);
-        } catch {}
+        if (!IS_TEST) {
+          try {
+            console.warn('[router] all candidates failed; injecting legacy script');
+            const s = document.createElement('script');
+            s.src = './teleprompter_pro.js'; s.defer = true;
+            s.onload = () => { try { console.info('[router] legacy script loaded'); } catch {} };
+            document.head.appendChild(s);
+          } catch {}
+        }
       } else {
         try {
           if (typeof mod.initScrollRouter === 'function') {
@@ -157,12 +172,7 @@ async function boot(){
           }
         } catch (e){ console.warn('[entry.ts] router init failed', e); }
         try {
-          const go = await (async () => {
-            try {
-              const goSpec = '/dist/gate-orchestrator.js' as string;
-              return await import(goSpec as any);
-            } catch (err){ try { console.warn('[gate] import failed', (err as any)?.message); } catch {} return null; }
-          })();
+          const go = await safeImport('./gate-orchestrator.js');
           if (go && typeof go.initGateOrchestrator === 'function') {
             go.initGateOrchestrator();
             try { (window as any).__tpGateOrchestratorActive = true; } catch {}
@@ -177,27 +187,21 @@ async function boot(){
     try {
       const asrSpecs: string[] = [
         './index-hooks/asr.js',
-        '/dist/index-hooks/asr.js',
-        '/dist/asr.js',
+        './asr.js',
       ];
       let asrInitDone = false;
       for (const spec of asrSpecs) {
-        const dynSpec = spec as any; // avoid static analyzer complaints
-        try {
-          const mod: any = await import(dynSpec);
-          if (mod) {
-            const init = (mod.initAsrFeature || mod.default);
-            if (typeof init === 'function') {
-              try { init(); } catch {}
-              try { (window as any).__tpAsrFeatureActive = true; } catch {}
-              try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:asr'); } catch {}
-              try { console.info('[ASR] initialized from', spec); } catch {}
-              asrInitDone = true;
-              break;
-            }
+        const mod: any = await safeImport(spec);
+        if (mod) {
+          const init = (mod.initAsrFeature || mod.default);
+          if (typeof init === 'function') {
+            try { init(); } catch {}
+            try { (window as any).__tpAsrFeatureActive = true; } catch {}
+            try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:asr'); } catch {}
+            try { console.info('[ASR] initialized from', spec); } catch {}
+            asrInitDone = true;
+            break;
           }
-        } catch (e) {
-          try { console.warn('[ASR] import failed', spec, (e as any)?.message || e); } catch {}
         }
       }
       if (!asrInitDone) {
@@ -209,6 +213,8 @@ async function boot(){
 
   // Core UI and feature boot now live in TS entry (index.js will skip these when __TP_TS_CORE_BOOT is true)
   try { UI.bindStaticDom(); } catch {}
+  // Initialize settings SSOT early; binder is safe to call even when panel not present yet
+  try { initSettings(); queueMicrotask(() => { try { bindSettingsForm(document); } catch {} }); } catch {}
   try { initPersistence();   try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { try { console.warn('[entry.ts] initPersistence failed', e); } catch {} }
   try { initTelemetry();     try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { try { console.warn('[entry.ts] initTelemetry failed', e); } catch {} }
   try { initScroll();        try { (window as any).__tpRegisterInit && (window as any).__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { try { console.warn('[entry.ts] initScroll failed', e); } catch {} }
