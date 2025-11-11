@@ -497,6 +497,21 @@ export function applyGate(mode: ScrollMode, user: boolean, speech: boolean) {
     window.dispatchEvent(new CustomEvent('tp:gate', { detail }));
   } catch {}
 
+  // Sidebar UI switching: show WPM controls and hide Auto-scroll controls in WPM mode
+  try {
+    const autoRow = document.getElementById('autoRow');
+    const wpmRow  = document.getElementById('wpmRow');
+    const isWpm = mode === 'wpm';
+    if (autoRow) {
+      autoRow.classList.toggle('visually-hidden', isWpm);
+      if (isWpm) autoRow.setAttribute('aria-hidden','true'); else autoRow.removeAttribute('aria-hidden');
+    }
+    if (wpmRow) {
+      wpmRow.classList.toggle('visually-hidden', !isWpm);
+      if (isWpm) wpmRow.removeAttribute('aria-hidden'); else wpmRow.setAttribute('aria-hidden','true');
+    }
+  } catch {}
+
   // WPM transitions
   if (mode === 'wpm') {
     if (open && !prevOpen) {

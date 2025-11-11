@@ -437,7 +437,7 @@ function applyMode(m) {
   
   // Toggle UI controls based on mode
   try {
-    const autoRow = document.querySelector('.row:has(#autoSpeed)');
+    const autoRow = document.getElementById('autoRow') || document.querySelector('.row:has(#autoSpeed)');
     const wpmRow = document.getElementById('wpmRow');
     
     if (m === 'wpm') {
