@@ -787,9 +787,7 @@ function installScrollRouter(opts) {
       }
     }, { capture: true });
     
-    // DEV-ONLY POLLING (SSOT migration guard)
-    // TODO(v1.7.1): Remove any legacy select polling shim after soak once no dev logs show legacy select pokes.
-    // (Current implementation is event-driven; shim no longer present. This marker ensures we audit again next minor.)
+  // (Removed v1.7.1: dev-only polling shim for legacy select pokes — SSOT stable)
 
     // Also handle input event for real-time WPM target updates
     document.addEventListener("input", (e) => {
