@@ -155,7 +155,14 @@ function closestAction(el: Element | null): { node: HTMLElement, action: string 
   try {
     const node = (el as HTMLElement).closest?.('[data-action],button,[role="button"]') as HTMLElement | null;
     if (!node) return null;
-    const action = node.dataset?.action || guessActionFor(node) || node.getAttribute('data-action') || '';
+    const ds = (node.dataset?.action || node.getAttribute('data-action') || '').trim();
+    const guessed = guessActionFor(node) || '';
+    let action = ds || guessed;
+    // Special-case: release mic buttons with wrong data-action
+    try {
+      const id = (node.id || '').toLowerCase();
+      if (action === 'request-mic' && id.includes('release')) action = 'release-mic';
+    } catch {}
     return action ? { node, action } : null;
   } catch { return null; }
 }
@@ -198,6 +205,8 @@ function toggleOverlayList(list: readonly string[], show?: boolean) {
     if (!el) return;
     const want = show ?? el.classList.contains('hidden');
     el.classList.toggle('hidden', !want);
+    // Force inline display to counteract global .overlay { display: none }
+    try { (el as HTMLElement).style.display = want ? 'block' : 'none'; } catch {}
     try { el.setAttribute('aria-hidden', want ? 'false' : 'true'); } catch {}
   } catch {}
 }
@@ -331,9 +340,27 @@ export function installEmergencyBinder() {
               const mocked = (() => { try { return (new URL(location.href)).searchParams.get('uiMock') === '1'; } catch { return false; } })();
               if (mocked) { renderNow('SmokeUpload.txt','[s1] CI upload OK [/s1]'); break; }
               const f = await pickPlainFile(); if (!f) break;
-              const isDocx = f.name.toLowerCase().endsWith('.docx') && (window as any).docxToText;
-              const text = isDocx ? await (window as any).docxToText(f) : await f.text();
-              renderNow(f.name, text);
+              const lower = f.name.toLowerCase();
+              if (lower.endsWith('.docx')) {
+                // Ensure mammoth is present, then extract raw text
+                try { await (window as any).ensureMammoth?.(); } catch {}
+                const mammoth = (window as any).mammoth;
+                if (mammoth && mammoth.extractRawText) {
+                  const arrayBuf = await f.arrayBuffer();
+                  try {
+                    const res = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
+                    const txt = (res && (res.value || res.text)) || '';
+                    renderNow(f.name, txt);
+                  } catch {
+                    // Fallback to zip-based or plain text if available
+                    try { const t = await f.text(); renderNow(f.name, t); } catch { renderNow(f.name, '[note]Failed to parse DOCX[/note]'); }
+                  }
+                } else {
+                  try { const t = await f.text(); renderNow(f.name, t); } catch { renderNow(f.name, '[note]Failed to parse DOCX[/note]'); }
+                }
+              } else {
+                renderNow(f.name, await f.text());
+              }
             } catch {}
             break; }
           case 'download': {
