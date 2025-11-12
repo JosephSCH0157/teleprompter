@@ -130,7 +130,7 @@ import './hud/loader';
 // Mapped Folder (scripts directory) binder
 import { installScriptIngest } from './features/script-ingest';
 import { disableLegacyScriptsUI } from './ui/hide-legacy-scripts';
-import { ensureSettingsFolderControls } from './ui/inject-settings-folder';
+import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
@@ -362,6 +362,7 @@ try {
 		try {
 			queueMicrotask(() => {
 				try { ensureSettingsFolderControls(); } catch {}
+					try { ensureSettingsFolderControlsAsync(6000); } catch {}
 				try { disableLegacyScriptsUI(); } catch {}
 				try {
 					bindMappedFolderUI({

@@ -29,3 +29,15 @@ export function ensureSettingsFolderControls() {
   advanced.appendChild(wrap);
   return true;
 }
+
+// Async variant: observes DOM for late-mounted Settings panel up to timeoutMs.
+export function ensureSettingsFolderControlsAsync(timeoutMs = 4000) {
+  try {
+    if (ensureSettingsFolderControls()) return;
+    const obs = new MutationObserver(() => {
+      try { if (ensureSettingsFolderControls()) obs.disconnect(); } catch {}
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => { try { obs.disconnect(); } catch {} }, timeoutMs);
+  } catch {}
+}

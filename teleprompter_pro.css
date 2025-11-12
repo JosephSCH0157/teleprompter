@@ -399,6 +399,10 @@ body.ck::after{
 
 /* Settings row layout */
 .settings-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.settings-row__label { font-weight:600; min-width:120px; }
+.settings-row__controls { display:flex; gap:.5rem; flex:1 1 auto; align-items:center; flex-wrap:wrap; }
+.settings-row select#scriptSelect { min-width:220px; }
+.settings-row button, .settings-row select { font-size:.85rem; }
 
 /* Label + field */
 .tp-field { display:inline-flex; flex-direction:column; gap:6px; }
