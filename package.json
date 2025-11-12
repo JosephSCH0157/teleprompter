@@ -7,7 +7,7 @@
     "lint": "eslint . --ext .js,.ts --max-warnings=0 --ignore-pattern dist/**",
     "lint:fix": "eslint . --ext .js,.ts --fix",
   "dev": "npx live-server --port=8080 --no-browser --watch=.",
-  "build:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outfile=dist/index.js",
+  "build:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outfile=dist/index.js && esbuild src/bridge.ts --format=esm --outfile=bridge.js && esbuild src/obs.ts --format=esm --outfile=obs.js && esbuild src/hotkey.ts --format=esm --outfile=hotkey.js",
   "watch:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outfile=dist/index.js --watch",
     "build:logic": "tsc -b src/logic",
     "build:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js",
