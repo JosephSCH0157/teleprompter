@@ -518,43 +518,64 @@ function ensureSettingsTabsWiring() {
     const tabsWrap = document.getElementById('settingsTabs');
     if (!tabsWrap) return;
     if ((tabsWrap as any)._tabsWired) return; (tabsWrap as any)._tabsWired = 1;
-    const body = document.getElementById('settingsBody');
-    const activate = (tab: string) => {
-      try {
-        // Mark tabs
-        const btns = tabsWrap.querySelectorAll('.settings-tab');
-        btns.forEach(b => {
-          const match = (b as HTMLElement).dataset.tab === tab;
-          b.classList.toggle('active', match);
-          b.setAttribute('aria-selected', match ? 'true' : 'false');
-          b.setAttribute('tabindex', match ? '0' : '-1');
-        });
-        // Show cards
-        if (body) {
-          const cards = body.querySelectorAll('.settings-card');
-          cards.forEach(c => {
-            const want = (c as HTMLElement).dataset.tab === tab;
-            (c as HTMLElement).style.display = want ? 'flex' : 'none';
-          });
-        }
-        // Accessibility announcement
-        try { document.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { tab } })); } catch {}
-      } catch {}
-    };
-    tabsWrap.addEventListener('click', (e) => {
-      try {
-        const t = e.target as HTMLElement | null;
-        const btn = t?.closest('.settings-tab') as HTMLElement | null;
-        if (!btn) return;
-        e.preventDefault(); e.stopPropagation();
-        const tab = btn.dataset.tab || 'general';
-        activate(tab);
-      } catch {}
-    }, { capture: true });
-    // Auto-activate first active or default to 'general'
+
+    // Ensure container role
+    try { if (!tabsWrap.getAttribute('role')) tabsWrap.setAttribute('role', 'tablist'); } catch {}
+
+    // Prefer role="tab" buttons, fallback to .settings-tab
+    let tabs = Array.from(tabsWrap.querySelectorAll('[role="tab"]')) as HTMLElement[];
+    if (!tabs.length) tabs = Array.from(tabsWrap.querySelectorAll('.settings-tab')) as HTMLElement[];
+    if (!tabs.length) return;
+
+    const body = document.getElementById('settingsBody') as HTMLElement | null;
+    // Panels: prefer [role=tabpanel][data-tabpanel], fallback to .settings-card[data-tab]
+    const allPanels = Array.from((body || document).querySelectorAll('[role="tabpanel"][data-tabpanel], .settings-card[data-tab]')) as HTMLElement[];
+
+    function panelFor(name: string): HTMLElement | null {
+      const p = allPanels.find(p => (p.getAttribute('data-tabpanel') || (p as any).dataset?.tab) === name) || null;
+      return p || null;
+    }
+
+    // Normalize roles/ids/relations
+    tabs.forEach((btn) => {
+      try { if (!btn.getAttribute('role')) btn.setAttribute('role', 'tab'); } catch {}
+      const name = btn.dataset.tab || btn.getAttribute('data-tab') || 'general';
+      if (!btn.id) btn.id = `tab-${name}`;
+      const p = panelFor(name);
+      if (p) {
+        try { if (!p.getAttribute('role')) p.setAttribute('role', 'tabpanel'); } catch {}
+        if (!p.id) p.id = `panel-${name}`;
+        try { p.setAttribute('aria-labelledby', btn.id); } catch {}
+        try { btn.setAttribute('aria-controls', p.id); } catch {}
+      }
+    });
+
+    function activate(name: string) {
+      tabs.forEach((btn) => {
+        const isOn = (btn.dataset.tab || btn.getAttribute('data-tab') || 'general') === name;
+        btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+        btn.tabIndex = isOn ? 0 : -1;
+        btn.classList.toggle('active', isOn);
+        const p = panelFor(btn.dataset.tab || '');
+        if (p) p.hidden = !isOn;
+      });
+      try { window.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { name } })); } catch {}
+    }
+
+    tabs.forEach((btn) => {
+      btn.addEventListener('click', () => activate(btn.dataset.tab || 'general'), { passive: true });
+      btn.addEventListener('keydown', (e: KeyboardEvent) => {
+        const i = tabs.indexOf(btn);
+        if (e.key === 'ArrowRight') { tabs[(i + 1) % tabs.length].click(); }
+        else if (e.key === 'ArrowLeft') { tabs[(i - 1 + tabs.length) % tabs.length].click(); }
+        else if (e.key === 'Home') { tabs[0].click(); }
+        else if (e.key === 'End') { tabs[tabs.length - 1].click(); }
+      }, { passive: true });
+    });
+
     const initActive = (() => {
-      const first = tabsWrap.querySelector('.settings-tab.active') as HTMLElement | null;
-      return (first && first.dataset.tab) || 'general';
+      const already = tabs.find((b) => b.getAttribute('aria-selected') === 'true');
+      return (already && (already.dataset.tab || already.getAttribute('data-tab'))) || 'general';
     })();
     activate(initActive);
   } catch {}

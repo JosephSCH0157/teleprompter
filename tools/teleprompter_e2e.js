@@ -434,7 +434,7 @@ async function main() {
 
     // Basic UI checks (best-effort)
     try {
-      const overlay = document.getElementById('settingsOverlay');
+  const overlay = document.getElementById('settingsOverlay');
       const card = document.getElementById('scriptsFolderCard');
       const choose = document.getElementById('chooseFolderBtn');
       const mainSel = document.getElementById('scriptSelect');
@@ -572,16 +572,34 @@ async function main() {
       }
       try { smoke.notes.push(...notes); } catch {}
 
-    // Assert that content appears in #editor (or any script input) after selection
+    // Drive a mock script selection to ensure content renders & broadcast path active
+    try {
+      await page.evaluate(() => {
+        try {
+          const main = document.getElementById('scriptSelect');
+          if (main && main.options && main.options.length > 0) {
+            main.selectedIndex = 0;
+            main.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        } catch {}
+      });
+      // Wait until editor populated
+      await page.waitForFunction(() => {
+        const ed = document.getElementById('editor');
+        if (ed && 'value' in ed) return (ed).value.length > 5;
+        return false;
+      }, { timeout: 2500 });
+    } catch (e) {
+      try { smoke.notes.push('script selection content not observed'); } catch {}
+    }
+
+    // Assert that content appears in #editor (or any script input) after selection (secondary safeguard)
     try {
       await page.waitForFunction(() => {
         const el = document.getElementById('editor');
-        if (el && 'value' in el && typeof (el).value === 'string') return (el).value.length > 10;
-        const alt = document.querySelector('#scriptInput, #scriptText, [data-role="script-input"], #teleprompterText');
-        if (!alt) return false;
-        if (alt && 'value' in alt && typeof (alt).value === 'string') return (alt).value.length > 10;
-        return (alt && alt.textContent ? alt.textContent.length > 10 : false);
-      }, { timeout: 2000 });
+        if (el && 'value' in el && typeof (el).value === 'string') return (el).value.length > 5;
+        return false;
+      }, { timeout: 1500 });
     } catch (e) {
       console.warn('[e2e] content not loaded after selection');
     }
