@@ -796,6 +796,13 @@ async function boot() {
     try { ensureSettingsFolderControls(); } catch {}
     try { ensureSettingsFolderControlsAsync(6000); } catch {}
 
+    // Wire native folder picker + fallback, deferring to our binder if already present
+    function wireMappedFolderNative() {
+      try { window.__bindMappedFolderUI?.(); } catch {}
+    }
+    try { wireMappedFolderNative(); } catch {}
+    try { document.addEventListener('DOMContentLoaded', () => { try { wireMappedFolderNative(); } catch {} }); } catch {}
+
     // Binder for Scripts Folder (JS path) – minimal parity with TS binder
     function __bindMappedFolderUI() {
       try {
@@ -874,9 +881,9 @@ async function boot() {
           }
         } catch {}
 
-        btn.addEventListener('click', (ev) => { try { ev.preventDefault(); ev.stopImmediatePropagation(); } catch {}; pickFolder(); });
+        btn.addEventListener('click', (ev) => { try { ev.stopImmediatePropagation(); } catch {}; pickFolder(); });
         recheckBtn?.addEventListener('click', (ev) => {
-          try { ev.preventDefault(); ev.stopImmediatePropagation(); } catch {}
+          try { ev.stopImmediatePropagation(); } catch {}
           try {
             const raw = localStorage.getItem('tp_last_folder_scripts');
             if (raw) {
