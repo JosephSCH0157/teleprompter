@@ -439,6 +439,17 @@
 <p class="status" id="status"></p>
 <h2>Script</h2>
 <textarea id="editor" placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+<!-- External scripts (mapped folder) -->
+<h2>External Scripts</h2>
+<div class="row" id="externalScriptsRow">
+  <button id="chooseFolderBtn" class="chip">Choose Folder</button>
+  <button id="recheckFolderBtn" class="chip" title="Re-check folder read permission">Recheck permissions</button>
+  <select id="scriptSelect" class="select-md" aria-label="Mapped folder scripts">
+    <option value="" selected>(No folder)</option>
+  </select>
+  <input id="folderFallback" type="file" webkitdirectory directory multiple hidden>
+  <span class="chip" id="extScriptsHint">Map a directory to load .txt / .md / .docx</span>
+</div>
 </aside>
 <main class="viewer" id="viewer">
 <div class="marker"></div>
