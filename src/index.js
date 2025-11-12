@@ -156,6 +156,7 @@ import './ui/settings.js';
 // HUD: minimal ASR stats line (dev only)
 import './hud/asr-stats.js';
 import './hud/rec-stats.js';
+import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
@@ -791,6 +792,9 @@ async function boot() {
   try { window.__tp_init_done = true; } catch {}
   console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
+    // Ensure Settings Scripts Folder card is available (JS path)
+    try { ensureSettingsFolderControls(); } catch {}
+    try { ensureSettingsFolderControlsAsync(6000); } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch {}

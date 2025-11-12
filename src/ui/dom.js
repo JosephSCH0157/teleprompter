@@ -559,7 +559,13 @@ function wireOverlays() {
         try {
           const t = e.target;
           if (t && t.closest && t.closest('#shortcutsBtn')) return open('shortcuts');
-          if (t && t.closest && t.closest('#settingsBtn')) return open('settings');
+          if (t && t.closest && t.closest('#settingsBtn')) {
+            // Ensure Scripts Folder card injected before/after opening
+            try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+            open('settings');
+            try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+            return;
+          }
           if (t && t.closest && t.closest('#shortcutsClose')) return close('shortcuts');
           if (t && t.closest && t.closest('#settingsClose')) return close('settings');
           const sc = $id('shortcutsOverlay');
