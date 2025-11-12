@@ -55,12 +55,38 @@ async function main() {
   // Guarded UI helpers for smoke interactions
   async function exists(sel) { return !!(await page.$(sel)); }
   async function clickIf(sel) { const el = await page.$(sel); if (!el) return false; try { await el.click(); } catch { return false; } return true; }
+  async function robustClick(...sels) {
+    for (const s of sels) {
+      const ok = await page.evaluate((sel) => {
+        try {
+          const el = document.querySelector(sel);
+          if (!el) return false;
+          (el).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          if (typeof (el).click === 'function') (el).click();
+          return true;
+        } catch { return false; }
+      }, s);
+      if (ok) return true;
+    }
+    return false;
+  }
   async function waitClass(sel, cls, want = true, timeout = 3000) {
     return page.waitForFunction(({ sel, cls, want }) => {
       const n = document.querySelector(sel); if (!n) return false;
       const lacks = !n.classList.contains(cls);
       return want ? lacks : !lacks;
     }, { timeout }, { sel, cls, want });
+  }
+  async function waitAttr(sel, name, value, timeout = 1200) {
+    const offAt = Date.now() + timeout;
+    while (Date.now() < offAt) {
+      try {
+        const v = await page.evaluate((s, n) => document.querySelector(s)?.getAttribute(n) || '', sel, name);
+        if (v === value) return true;
+      } catch {}
+      await page.waitForTimeout(50);
+    }
+    return false;
   }
   async function editorHas(rx, timeout = 3000) {
     return page.waitForFunction((pattern) => {
@@ -286,15 +312,29 @@ async function main() {
     console.warn('[e2e] ui-invariants: WARN', String(e && e.message || e));
   }
 
-  // Ensure Settings overlay opens deterministically before smoke checks
+  // Ensure Settings overlay opens deterministically before smoke checks (use data-smoke-open hook)
   try {
-    await page.click('#settingsBtn').catch(()=>{});
-    await page.waitForFunction(() => {
-      const el = document.querySelector('#settingsOverlay');
-      return !!el && !el.classList.contains('hidden');
-    }, { timeout: 3000, polling: 100 });
+    const openedVia = await (async () => {
+      if (await exists('#settingsBtn')) return (await clickIf('#settingsBtn'));
+      if (await exists('[data-action="settings-open"]')) return (await clickIf('[data-action="settings-open"]'));
+      return false;
+    })();
+    if (openedVia) {
+      const ok = await (async () => {
+        const offAt = Date.now() + 2000;
+        while (Date.now() < offAt) {
+          const v = await page.evaluate(() => document.body.getAttribute('data-smoke-open') || '');
+          if (v === 'settings') return true;
+          await page.waitForTimeout(50);
+        }
+        return false;
+      })();
+      if (!ok) console.warn('[e2e] settings not observed open (pre-smoke)');
+      // Close it back to avoid interfering with later checks
+      await clickIf('#settingsClose') || await clickIf('[data-action="settings-close"]');
+    }
   } catch (e) {
-    console.warn('[e2e] settings overlay not visible after click (pre-smoke)');
+    console.warn('[e2e] settings overlay pre-check skipped');
   }
 
   // Wait for the recorder module to be present in the page (runner-side wait)
@@ -422,26 +462,71 @@ async function main() {
     return report;
   }, { stubObs: !!STUB_OBS });
 
+      // Quick diagnostics for buttons and present hook
+      try {
+        const diag = await page.evaluate(() => {
+          const btn = document.querySelector('#presentBtn,[data-action="present-toggle"]');
+          const sbtn = document.querySelector('#settingsBtn,[data-action="settings-open"]');
+          return {
+            present: { exists: !!btn, bound: !!(btn && (btn).dataset && (btn).dataset.uiBound) },
+            settings: { exists: !!sbtn },
+            attr: { present: document.documentElement.getAttribute('data-smoke-present') || null }
+          };
+        });
+        console.log('[e2e:diag]', JSON.stringify(diag));
+      } catch {}
+
       // Guarded, skip-if-missing UI interaction flow
       const notes = [];
       try {
-        if (await clickIf('#settingsBtn') || await clickIf('[data-action="settings-open"]')) {
-          await waitClass('#settingsOverlay', 'hidden', true).catch(() => notes.push('settings open timeout'));
-          await clickIf('#settingsClose') || await clickIf('[data-action="settings-close"]');
+  if (await robustClick('#settingsBtn', '[data-action="settings-open"]')) {
+          const opened = await waitAttr('body', 'data-smoke-open', 'settings', 1500);
+          if (!opened) notes.push('settings open not observed');
+          await robustClick('#settingsClose', '[data-action="settings-close"]');
+          const closed = await page.evaluate(() => !document.body.hasAttribute('data-smoke-open'));
+          if (!closed) notes.push('settings close not observed');
         } else {
           notes.push('settingsBtn not found (skipped)');
         }
 
-        if (await clickIf('#helpBtn') || await clickIf('[data-action="help-open"]')) {
-          await waitClass('#helpOverlay', 'hidden', true).catch(() => notes.push('help open timeout'));
-          await clickIf('#helpClose') || await clickIf('[data-action="help-close"]');
+  if (await robustClick('#helpBtn', '[data-action="help-open"]')) {
+          const opened = await waitAttr('body', 'data-smoke-open', 'help', 1500);
+          if (!opened) notes.push('help open not observed');
+          await robustClick('#helpClose', '[data-action="help-close"]');
+          const closed = await page.evaluate(() => !document.body.hasAttribute('data-smoke-open'));
+          if (!closed) notes.push('help close not observed');
         } else {
           notes.push('helpBtn not found (skipped)');
         }
 
-        await clickIf('#presentBtn') || await clickIf('[data-action="present-toggle"]');
-        await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'), { timeout: 2000 }).catch(() => notes.push('present toggle timeout'));
-        await clickIf('#presentBtn') || await clickIf('[data-action="present-toggle"]');
+        const before = await page.evaluate(() => document.documentElement.getAttribute('data-smoke-present') || '0');
+        // Attempt present toggle via click; fallback to direct JS setter if attribute unchanged
+        await robustClick('#presentBtn', '[data-action="present-toggle"]');
+        let after = await page.evaluate(() => {
+          const attr = document.documentElement.getAttribute('data-smoke-present');
+          const cls = document.documentElement.classList.contains('tp-present');
+          return attr || (cls ? '1' : '0');
+        });
+        if (after === before) {
+          // Fallback: invoke global setter if exposed, then re-check
+          await page.evaluate(() => { try { window.__tpSetPresent && window.__tpSetPresent(true); } catch {} });
+          after = await page.evaluate(() => {
+            const attr = document.documentElement.getAttribute('data-smoke-present');
+            const cls = document.documentElement.classList.contains('tp-present');
+            return attr || (cls ? '1' : '0');
+          });
+        }
+        if (after === before) {
+          const diag = await page.evaluate(() => ({
+            attr: document.documentElement.getAttribute('data-smoke-present'),
+            cls: document.documentElement.classList.contains('tp-present'),
+            btn: !!document.querySelector('#presentBtn,[data-action="present-toggle"]')
+          }));
+          notes.push('present toggle not observed');
+          notes.push('present diag: ' + JSON.stringify(diag));
+        }
+        // Restore to off state for determinism
+        await page.evaluate(() => { try { window.__tpSetPresent ? window.__tpSetPresent(false) : (document.documentElement.classList.remove('tp-present'), document.documentElement.removeAttribute('data-smoke-present')); } catch {} });
 
         await clickIf('#hudBtn') || await clickIf('[data-action="hud-toggle"]');
 

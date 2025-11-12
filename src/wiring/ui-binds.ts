@@ -22,6 +22,20 @@ export interface CoreUIBindOptions {
   presentBtn?: string;            // Present mode toggle button (supports CSS list)
 }
 
+// CI detection helper (query flag or webdriver)
+function isCI(): boolean {
+  try { return /\bci=1\b/i.test(location.search) || ((navigator as any).webdriver === true); } catch { return false; }
+}
+
+// Focusable finder (first tabbable inside an overlay)
+function firstFocusable(root: HTMLElement): HTMLElement | null {
+  try {
+    const sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const all = Array.from(root.querySelectorAll(sel)) as HTMLElement[];
+    return all.find(el => !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden')) || null;
+  } catch { return null; }
+}
+
 function q<T extends HTMLElement = HTMLElement>(sel: string | undefined | null): T | null {
   if (!sel) return null; try { return document.querySelector(sel) as T | null; } catch { return null; }
 }
@@ -199,15 +213,33 @@ function toggleOverlay(sel: string, show?: boolean) {
 }
 
 // overlay show/hide helper (list of tolerant selectors)
-function toggleOverlayList(list: readonly string[], show?: boolean) {
+function toggleOverlayList(list: readonly string[], show?: boolean, kind?: 'settings'|'help') {
   try {
     const el = findOne(list);
     if (!el) return;
+    const body = document.body;
     const want = show ?? el.classList.contains('hidden');
-    el.classList.toggle('hidden', !want);
-    // Force inline display to counteract global .overlay { display: none }
-    try { (el as HTMLElement).style.display = want ? 'block' : 'none'; } catch {}
-    try { el.setAttribute('aria-hidden', want ? 'false' : 'true'); } catch {}
+    if (want) {
+      el.classList.remove('hidden');
+      el.style.display = 'block';
+      el.setAttribute('role','dialog');
+      el.setAttribute('aria-modal','true');
+      el.setAttribute('aria-hidden','false');
+      if (kind) body.setAttribute('data-smoke-open', kind);
+      try { (firstFocusable(el) ?? el).focus({ preventScroll: true }); } catch {}
+      // CI latch: hold attribute for brief window so harness sees the open state
+      if (isCI()) {
+        el.dataset.ciHold = '1';
+        setTimeout(() => { try { delete el.dataset.ciHold; } catch {} }, 350);
+      }
+      try { window.dispatchEvent(new CustomEvent(`tp:${kind}:open`, { detail: { source: 'binder' } })); } catch {}
+    } else {
+      el.classList.add('hidden');
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden','true');
+      if (kind && body.getAttribute('data-smoke-open') === kind) body.removeAttribute('data-smoke-open');
+      try { window.dispatchEvent(new CustomEvent(`tp:${kind}:close`, { detail: { source: 'binder' } })); } catch {}
+    }
   } catch {}
 }
 
@@ -259,26 +291,21 @@ export function installEmergencyBinder() {
         evt.stopPropagation();
         switch (action) {
           case 'settings-open':
-            toggleOverlayList(OVERLAY.settings, true);
+            toggleOverlayList(OVERLAY.settings, true, 'settings');
             try { document.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'emergency' } })); } catch {}
             break;
           case 'settings-close':
-            toggleOverlayList(OVERLAY.settings, false);
+            toggleOverlayList(OVERLAY.settings, false, 'settings');
             try { document.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'emergency' } })); } catch {}
             break;
           case 'help-open':
-            toggleOverlayList(OVERLAY.help, true);
+            toggleOverlayList(OVERLAY.help, true, 'help');
             break;
           case 'help-close':
-            toggleOverlayList(OVERLAY.help, false);
+            toggleOverlayList(OVERLAY.help, false, 'help');
             break;
           case 'present-toggle':
-            try {
-              const root = document.documentElement;
-              const on = !root.classList.contains('tp-present');
-              root.classList.toggle('tp-present', on);
-              document.body.classList.toggle('present-mode', on);
-            } catch {}
+            try { setPresent(!document.documentElement.classList.contains('tp-present')); } catch {}
             break;
           case 'hud-toggle':
             try { (window as any).HUD?.toggle?.(); } catch {}
@@ -528,18 +555,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
     const btn = q<HTMLButtonElement>(opts.presentBtn || '#presentBtn, [data-action="present-toggle"]');
     if (btn && !btn.dataset.uiBound) {
       btn.dataset.uiBound = '1';
-      on(btn, 'click', (e: Event) => {
-        try { e.preventDefault(); } catch {}
-        try {
-          const root = document.documentElement;
-            const on = !root.classList.contains('tp-present');
-            root.classList.toggle('tp-present', on);
-            // Keep body class in sync for smoke harness compatibility
-            try { document.body.classList.toggle('present-mode', on); } catch {}
-            btn.textContent = on ? 'Exit Present' : 'Present Mode';
-            try { localStorage.setItem('tp_present', on ? '1' : '0'); } catch {}
-        } catch {}
-      });
+      on(btn, 'click', (e: Event) => { try { e.preventDefault(); } catch {}; try { setPresent(!document.documentElement.classList.contains('tp-present')); } catch {} });
       // Do NOT restore persisted present mode automatically on load.
       // Default should be non-present; user must opt-in via a click each session.
     }
@@ -552,10 +568,8 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       window.addEventListener('keydown', (e) => {
         try {
           const root = document.documentElement;
-          if (e.key === 'Escape' && root.classList.contains('tp-present')) root.classList.remove('tp-present');
-          if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-            root.classList.toggle('tp-present');
-          }
+          if (e.key === 'Escape' && root.classList.contains('tp-present')) setPresent(false);
+          if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) setPresent(!root.classList.contains('tp-present'));
         } catch {}
       });
     }
@@ -586,12 +600,11 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
 
     const settingsBtn     = _qq<HTMLButtonElement>(SEL.settingsOpen);
     const settingsClose   = _qq<HTMLButtonElement>(SEL.settingsClose);
-    const settingsOverlay = _qq<HTMLElement>(SEL.settingsOverlay);
     if (settingsBtn && !settingsBtn.dataset.uiBound) {
       settingsBtn.dataset.uiBound = '1';
       on(settingsBtn, 'click', (e: Event) => {
         try { e.preventDefault?.(); } catch {}
-        toggle(settingsOverlay, true);
+        toggleOverlayList(OVERLAY.settings, true, 'settings');
         try { dispatch('tp:settings:open', { source: 'binder' }); } catch {}
         try { document.body.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'binder' } })); } catch {}
       });
@@ -600,22 +613,23 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       settingsClose.dataset.uiBound = '1';
       on(settingsClose, 'click', (e: Event) => {
         try { e.preventDefault?.(); } catch {}
-        toggle(settingsOverlay, false);
+        toggleOverlayList(OVERLAY.settings, false, 'settings');
         try { dispatch('tp:settings:close', { source: 'binder' }); } catch {}
         try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'binder' } })); } catch {}
       });
     }
 
-    const helpBtn     = _qq<HTMLButtonElement>(SEL.helpOpen);
-    const helpClose   = _qq<HTMLButtonElement>(SEL.helpClose);
-    const helpOverlay = _qq<HTMLElement>(SEL.helpOverlay);
+  const helpBtn     = _qq<HTMLButtonElement>(SEL.helpOpen);
+  const helpClose   = _qq<HTMLButtonElement>(SEL.helpClose);
+  const helpOverlay = _qq<HTMLElement>(SEL.helpOverlay);
+  const settingsOverlay = _qq<HTMLElement>(SEL.settingsOverlay);
     if (helpBtn && !helpBtn.dataset.uiBound) {
       helpBtn.dataset.uiBound = '1';
-      on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, true); try { document.dispatchEvent(new CustomEvent('tp:help:open', { detail: { source: 'binder' } })); } catch {} });
+      on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlayList(OVERLAY.help, true, 'help'); try { document.dispatchEvent(new CustomEvent('tp:help:open', { detail: { source: 'binder' } })); } catch {} });
     }
     if (helpClose && !helpClose.dataset.uiBound) {
       helpClose.dataset.uiBound = '1';
-      on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, false); try { document.dispatchEvent(new CustomEvent('tp:help:close', { detail: { source: 'binder' } })); } catch {} });
+      on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlayList(OVERLAY.help, false, 'help'); try { document.dispatchEvent(new CustomEvent('tp:help:close', { detail: { source: 'binder' } })); } catch {} });
     }
     // ESC to close overlays (SAFE for window)
     onGlobal(window, 'keydown', (e: Event) => {
@@ -627,12 +641,12 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
 
         let handled = false;
         if (isOpen(settingsOverlay)) {
-          toggle(settingsOverlay, false);
+          toggleOverlayList(OVERLAY.settings, false, 'settings');
           try { dispatch('tp:settings:close', { source: 'esc' }); } catch {}
           try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'esc' } })); } catch {}
           handled = true;
         } else if (isOpen(helpOverlay)) {
-          toggle(helpOverlay, false);
+          toggleOverlayList(OVERLAY.help, false, 'help');
           // If you later emit a specific help close event, dispatch here as well.
           handled = true;
         }
@@ -645,6 +659,27 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
     }, 'esc-close', { capture: true });
   } catch {}
 }
+
+// Present mode setter with CI smoke hook
+function setPresent(on: boolean) {
+  try {
+    const html = document.documentElement;
+    const body = document.body;
+    html.classList.toggle('tp-present', on);
+    body.classList.toggle('present-mode', on);
+    html.setAttribute('data-smoke-present', on ? '1' : '0');
+    const btn = document.querySelector<HTMLButtonElement>('#presentBtn,[data-action="present-toggle"]');
+    if (btn) {
+      btn.textContent = on ? 'Exit Present' : 'Present Mode';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    try { localStorage.setItem('tp_present', on ? '1' : '0'); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:present:changed', { detail: { on } })); } catch {}
+  } catch {}
+}
+
+// Expose setter for test harness / legacy fallbacks
+try { (window as any).__tpSetPresent = setPresent; } catch {}
 
 // (No auto‑invoke here; index.ts calls bindCoreUI() inside its onReady path)
 

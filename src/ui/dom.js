@@ -368,6 +368,9 @@ function wireScriptControls() {
 }
 
 function wirePresentMode() {
+  // Under TS primary runtime, present mode is handled by ui-binds.ts (setPresent with CI hooks).
+  // Avoid double-binding which can flip state twice on a single click.
+  try { if (window.__TP_TS_PRIMARY__) return; } catch {}
   once('present', () => {
     const btn = $id('presentBtn');
     const exitBtn = $id('presentExitBtn');
@@ -385,8 +388,8 @@ function wirePresentMode() {
     // restore on load
     try { apply(localStorage.getItem(KEY) === '1'); } catch {}
 
-    // main toggle
-    on(btn, 'click', () => apply(!root.classList.contains('tp-present')));
+  // main toggle
+  on(btn, 'click', () => apply(!root.classList.contains('tp-present')));
 
     // guaranteed escape routes
     on(exitBtn, 'click', () => apply(false));
