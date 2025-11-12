@@ -174,8 +174,12 @@ import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
-// Install emergency binder immediately as a safety net (idempotent) — survives early failures
-try { installEmergencyBinder(); } catch {}
+// Install emergency binder only in dev/CI/headless harness contexts (to reduce double-binding risk in prod)
+try {
+	const qs = String(location.search || '');
+	const isHarness = /[?&](ci=1|dev=1|uiMock=1|mockFolder=1)/i.test(qs) || (navigator as any).webdriver === true;
+	if (isHarness) installEmergencyBinder();
+} catch {}
 // Display mode: apply top-level class early for popup/display contexts
 try {
 	const Q = new URLSearchParams(location.search || '');
@@ -188,17 +192,23 @@ try {
 
 // Cross-window document channel (main <-> display)
 let __docCh: BroadcastChannel | null = null;
+let __isRemote = false; // loop guard for cross-window broadcast
 try {
 	__docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = new BroadcastChannel('tp-doc'));
-	if (__docCh) (__docCh as BroadcastChannel).onmessage = (ev: MessageEvent<any>) => {
-		try {
-			const d = ev?.data || {};
-			if (d?.type === 'script' && typeof d?.text === 'string') {
-				try { (window as any).__tpCurrentName = d.name || 'Untitled'; } catch {}
-				try { renderScript(String(d.text)); } catch {}
-			}
-		} catch {}
-	};
+	if (__docCh && !(window as any).__tpDocChOnMsg) {
+		(window as any).__tpDocChOnMsg = true;
+		(__docCh as BroadcastChannel).onmessage = (ev: MessageEvent<any>) => {
+			try {
+				const d = ev?.data || {};
+				if (d?.type === 'script' && typeof d?.text === 'string') {
+					__isRemote = true;
+					try { (window as any).__tpCurrentName = d.name || 'Untitled'; } catch {}
+					try { renderScript(String(d.text)); } catch {}
+					__isRemote = false;
+				}
+			} catch {}
+		};
+	}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 function injectSpeechNotesHud(){
@@ -294,8 +304,7 @@ export async function boot() {
 					// Core UI binder (idempotent)
 								try { autoMarkActions(); } catch {}
 								try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
-								// Emergency delegated binder (last — safety net if any earlier wiring failed)
-								try { installEmergencyBinder(); } catch {}
+								// (Emergency binder only installed above for harness contexts)
 								try { ensureSidebarMirror(); } catch {}
 								try { auditBindingsOnce(); } catch {}
 								// Optional console noise filter: activate only when explicitly requested

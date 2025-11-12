@@ -13,8 +13,25 @@ export type IngestOpts = {
 // Cross-window document broadcast channel (idempotent creation)
 let __ingestListening = false;
 let __docCh: BroadcastChannel | null = null;
+let __isRemote = false; // broadcast loop guard
 try {
   __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));
+  if (__docCh && !(window as any).__tpDocChOnMsg) {
+    (window as any).__tpDocChOnMsg = true;
+    try {
+      __docCh.onmessage = (ev: MessageEvent) => {
+        try {
+          const m = ev.data;
+          if (m?.type === 'script' && typeof m.text === 'string') {
+            __isRemote = true;
+            try { (window as any).__tpCurrentName = m.name; } catch {}
+            try { renderScript(m.text); } catch {}
+            __isRemote = false;
+          }
+        } catch {}
+      };
+    } catch {}
+  }
 } catch { __docCh = null; }
 
 function $(q: string): HTMLElement | null {
@@ -189,8 +206,10 @@ export function installGlobalIngestListener() {
       // Render locally
       try { renderScript(text); } catch {}
 
-      // Broadcast to other windows (display, etc)
-      try { __docCh?.postMessage({ type: 'script', name, text }); } catch {}
+      // Broadcast to other windows only if local origin
+      if (!__isRemote) {
+        try { __docCh?.postMessage({ type: 'script', name, text }); } catch {}
+      }
 
       // Signals for any legacy listeners
       try { document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { name, length: text.length } })); } catch {}
@@ -210,6 +229,7 @@ export function installGlobalIngestListener() {
           const text = ed.value || '';
           tmr = setTimeout(() => {
             try {
+              // Treat editor input as local changes (do not set __isRemote)
               window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: ((window as any).__tpCurrentName || 'Untitled'), text } }));
             } catch {}
           }, 160);

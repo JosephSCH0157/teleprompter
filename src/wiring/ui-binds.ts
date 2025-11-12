@@ -485,7 +485,7 @@ export function installEmergencyBinder() {
               const key = document.querySelector<HTMLInputElement>('#speakersKey,[data-speakers-key]');
               const panel = document.querySelector<HTMLElement>('[data-panel="speakers"],#speakersBody');
               if (panel) { panel.hidden = false; panel.setAttribute('aria-expanded','true'); }
-              key?.focus();
+              if (key) { try { requestAnimationFrame(() => { try { key.focus(); } catch {} }); } catch { try { key.focus(); } catch {} } }
             } catch {}
             break; }
           case 'load-sample': {
@@ -655,8 +655,25 @@ function ensureSettingsTabsWiring() {
 try {
   window.addEventListener('tp:settings:open', () => {
     try { queueMicrotask(() => { try { ensureSettingsTabsWiring(); } catch {} }); } catch {}
-    // Wire camera picker & refresh devices
-    try { queueMicrotask(() => { try { refreshCameras(); } catch {}; const sel = document.querySelector<HTMLSelectElement>('#cameraSelect'); sel?.addEventListener('change', e => startCameraById((e.target as HTMLSelectElement).value), { once: true }); }); } catch {}
+    // Wire camera picker & refresh devices, and auto-start first camera selection
+    try {
+      queueMicrotask(() => {
+        try {
+          const p = refreshCameras();
+          Promise.resolve(p).then(() => {
+            const sel = document.querySelector<HTMLSelectElement>('#cameraSelect');
+            if (sel && sel.options.length && !sel.dataset._tpPrimed) {
+              sel.dataset._tpPrimed = '1';
+              try { startCameraById(sel.value); } catch {}
+            }
+            sel?.addEventListener('change', e => startCameraById((e.target as HTMLSelectElement).value), { once: true });
+          }).catch(()=>{
+            const sel = document.querySelector<HTMLSelectElement>('#cameraSelect');
+            sel?.addEventListener('change', e => startCameraById((e.target as HTMLSelectElement).value), { once: true });
+          });
+        } catch {}
+      });
+    } catch {}
   });
 } catch {}
 
