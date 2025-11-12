@@ -56,40 +56,90 @@ function onGlobal(target: EventTarget | null | undefined, type: string, listener
   } catch {}
 }
 
+/** Normalize visible button text for matching */
+function _txt(el: Element | null): string {
+  if (!el) return '';
+  try {
+    const t = (el as HTMLElement).innerText || (el.textContent || '');
+    return t.trim().toLowerCase().replace(/\s+/g, ' ');
+  } catch { return ''; }
+}
+
+/** Best-effort action guesser for legacy buttons by id or label */
+function guessActionFor(el: HTMLElement): string | null {
+  try {
+    const id = (el.id || '').toLowerCase();
+    // by id
+    if (id.includes('settings'))   return 'settings-open';
+    if (id.includes('help') || id.includes('shortcuts')) return 'help-open';
+    if (id.includes('present'))    return 'present-toggle';
+    if (id.includes('display'))    return 'display';
+    if (id.includes('hud'))        return 'hud-toggle';
+    if (id.includes('mic'))        return 'request-mic';
+    if (id.includes('speech') || id.includes('rec')) return 'start-speech';
+    if (id.includes('camera') || id.includes('cam')) return 'start-camera';
+    if (id.includes('pip'))        return 'pip';
+    if (id.includes('loadsample') || id.includes('load_sample') || id.includes('loadsampletext') || id.includes('loadsamplebtn') || id === 'loadsample') return 'load-sample';
+    if (id.includes('normalize'))  return 'normalize';
+    if (id.includes('upload'))     return 'upload';
+    if (id.includes('saveas'))     return 'save-as';
+    if (id === 'save' || id.includes('save_btn')) return 'save';
+    if (id.includes('clear'))      return 'clear';
+    if (id.includes('delete'))     return 'delete';
+    if (id.includes('rename'))     return 'rename';
+    if (id.includes('reset'))      return 'reset';
+    if (id.includes('speakers') && id.includes('toggle')) return 'speakers-toggle';
+    if (id.includes('speakers') && id.includes('key'))    return 'speakers-key';
+
+    // by visible label
+    const t = _txt(el);
+    if (/^settings$/.test(t))                  return 'settings-open';
+    if (/^help$|shortcuts/.test(t))            return 'help-open';
+    if (/^present$|present mode/.test(t))      return 'present-toggle';
+    if (/^display( window)?$/.test(t))         return 'display';
+    if (/^hud$/.test(t))                       return 'hud-toggle';
+    if (/request mic|mic( on)?/i.test(t))      return 'request-mic';
+    if (/start speech|start sync|speech/i.test(t)) return 'start-speech';
+    if (/start camera|camera on/i.test(t))     return 'start-camera';
+    if (/picture[- ]in[- ]picture|pip/i.test(t)) return 'pip';
+    if (/load sample/.test(t))                 return 'load-sample';
+    if (/normalize/.test(t))                   return 'normalize';
+    if (/upload/.test(t))                      return 'upload';
+    if (/save as/.test(t))                     return 'save-as';
+    if (/^save$/.test(t))                      return 'save';
+    if (/^clear$/.test(t))                     return 'clear';
+    if (/^delete$/.test(t))                    return 'delete';
+    if (/^rename$/.test(t))                    return 'rename';
+    if (/^reset$/.test(t))                     return 'reset';
+    if (/speakers.*show|hide|toggle/i.test(t)) return 'speakers-toggle';
+    if (/speakers.*key/i.test(t))              return 'speakers-key';
+  } catch {}
+  return null;
+}
+
+/** Add data-action to legacy buttons so binders always recognize them */
+export function autoMarkActions() {
+  try {
+    const all = document.querySelectorAll('button,[role="button"],.btn');
+    for (const el of Array.from(all)) {
+      const he = el as HTMLElement;
+      if (he.dataset.action) continue;
+      const act = guessActionFor(he);
+      if (act) he.dataset.action = act;
+    }
+  } catch {}
+}
+
 // ——— Emergency delegated binder (keeps UI alive even if per-button binding breaks) ———
 let __tpEmergencyBound = false;
 
-function closestAction(el: Element | null): string | null {
+function closestAction(el: Element | null): { node: HTMLElement, action: string } | null {
   if (!el) return null;
   try {
-    const withAction = (el as HTMLElement).closest?.('[data-action],button,[role="button"]') as HTMLElement | null;
-    if (!withAction) return null;
-    const action = withAction.dataset?.action
-              || withAction.getAttribute('data-action')
-              || (withAction.id?.includes('loadSample') ? 'load-sample' : null)
-              || (withAction.id?.includes('settings')   ? 'settings-open' : null)
-              || (withAction.id?.includes('present')    ? 'present-toggle' : null)
-              || (withAction.id?.includes('display')    ? 'display' : null)
-              || (withAction.id?.includes('closeDisplay') ? 'display-close' : null)
-              || (withAction.id?.includes('mic')        ? 'request-mic' : null)
-              || (withAction.id?.includes('releaseMic') ? 'release-mic' : null)
-              || (withAction.id?.includes('speech')     ? 'start-speech' : null)
-              || (withAction.id?.includes('startCam')   ? 'start-camera' : null)
-              || (withAction.id?.includes('camPiP')     ? 'pip' : null)
-              || (withAction.id?.includes('hud')        ? 'hud-toggle' : null)
-              || (withAction.id?.includes('toggleSpeakers') ? 'speakers-toggle' : null)
-              || (withAction.id?.includes('speakersKey') ? 'speakers-key' : null)
-              || (withAction.id?.includes('upload')     ? 'upload' : null)
-              || (withAction.id?.includes('normalize')  ? 'normalize' : null)
-              || (withAction.id?.includes('clear')      ? 'clear' : null)
-              || (withAction.id?.includes('download')   ? 'download' : null)
-              || (withAction.id?.includes('scriptSaveAs') ? 'save-as' : null)
-              || (withAction.id?.includes('scriptSave') ? 'save' : null)
-              || (withAction.id?.includes('scriptLoad') ? 'load' : null)
-              || (withAction.id?.includes('scriptDelete') ? 'delete' : null)
-              || (withAction.id?.includes('scriptRename') ? 'rename' : null)
-              || (withAction.id?.includes('resetScript') ? 'reset-script' : null);
-    return action;
+    const node = (el as HTMLElement).closest?.('[data-action],button,[role="button"]') as HTMLElement | null;
+    if (!node) return null;
+    const action = node.dataset?.action || guessActionFor(node) || node.getAttribute('data-action') || '';
+    return action ? { node, action } : null;
   } catch { return null; }
 }
 
@@ -164,11 +214,12 @@ export function installEmergencyBinder() {
     document.addEventListener('click', async (evt) => {
       try {
         const target = evt.target as Element | null;
-        const act = closestAction(target);
-        if (!act) return;
+        const hit = closestAction(target);
+        if (!hit) return;
+        const { action } = hit;
         evt.preventDefault();
         evt.stopPropagation();
-        switch (act) {
+        switch (action) {
           case 'settings-open':
             toggleOverlay('#settingsOverlay', true);
             try { document.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'emergency' } })); } catch {}
@@ -300,10 +351,10 @@ export function installEmergencyBinder() {
           case 'rename':
           case 'reset-script':
             // No-ops for legacy buttons; provide minimal UX feedback
-            try { console.debug('[emergency-binder]', act, 'not implemented'); } catch {}
+            try { console.debug('[emergency-binder]', action, 'not implemented'); } catch {}
             break;
           default:
-            try { console.debug('[emergency-binder] no handler for', act); } catch {}
+            try { console.debug('[emergency-binder] no handler for', action); } catch {}
         }
       } catch (e) {
         try { console.warn('[emergency-binder] handler error', e); } catch {}

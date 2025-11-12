@@ -146,38 +146,57 @@ export function installScriptIngest(opts: IngestOpts = {}) {
 }
 
 // Idempotent global listener to mirror ingest into #editor for tests and DEV
-try {
-  const w: any = window as any;
-  if (!w.__ingestWired) {
-    document.addEventListener('tp:script-load', (ev: any) => {
-      try {
-        const d = ev?.detail || {};
-        const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
-        if (typeof d?.text === 'string') {
-          const t = d.text as string; const name = d.name || 'Untitled';
-          if (ed) ed.value = t;
-          try { renderScript(t); } catch {}
-          try { console.log('[INGEST] loaded', name || '(unnamed)'); } catch {}
-          try { document.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: t.length } })); } catch {}
-          return;
-        }
-        // Optional legacy: File or Handle under detail.fileOrHandle or detail.file
-        (async () => {
-          try {
-            const fh = d?.fileOrHandle || d?.file || null;
-            const file = fh && typeof fh.getFile === 'function' ? await fh.getFile() : fh;
-            if (file && typeof file.text === 'function') {
-              const t = await file.text();
-              const name = file.name || 'Untitled';
-              if (ed) ed.value = t;
-              try { renderScript(t); } catch {}
-              try { console.log('[INGEST] loaded (file)', name); } catch {}
-              try { document.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: t.length } })); } catch {}
-            }
-          } catch (e) { try { console.warn('[INGEST] legacy path failed', e); } catch {} }
-        })();
-      } catch {}
-    }, { once: false });
-    w.__ingestWired = true;
-  }
-} catch {}
+(() => {
+  let settingEditor = false; // guard against loops when we set editor programmatically
+  try {
+    const w: any = window as any;
+    if (!w.__ingestWired) {
+      document.addEventListener('tp:script-load', (ev: any) => {
+        try {
+          const d = ev?.detail || {};
+          const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
+          if (typeof d?.text === 'string') {
+            const t = d.text as string; const name = d.name || 'Untitled';
+            if (ed) { settingEditor = true; ed.value = t; settingEditor = false; }
+            try { renderScript(t); } catch {}
+            try { console.log('[INGEST] loaded', name || '(unnamed)'); } catch {}
+            try { document.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: t.length } })); } catch {}
+            return;
+          }
+          // Optional legacy: File or Handle under detail.fileOrHandle or detail.file
+          (async () => {
+            try {
+              const fh = d?.fileOrHandle || d?.file || null;
+              const file = fh && typeof fh.getFile === 'function' ? await fh.getFile() : fh;
+              if (file && typeof file.text === 'function') {
+                const t = await file.text();
+                const name = file.name || 'Untitled';
+                if (ed) { settingEditor = true; ed.value = t; settingEditor = false; }
+                try { renderScript(t); } catch {}
+                try { console.log('[INGEST] loaded (file)', name); } catch {}
+                try { document.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: t.length } })); } catch {}
+              }
+            } catch (e) { try { console.warn('[INGEST] legacy path failed', e); } catch {} }
+          })();
+        } catch {}
+      }, { once: false });
+      w.__ingestWired = true;
+    }
+  } catch {}
+
+  // Echo manual edits/paste into render (debounced)
+  try {
+    const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
+    if (ed && !(ed as any).__echoWired) {
+      (ed as any).__echoWired = 1;
+      let tmr: any;
+      ed.addEventListener('input', () => {
+        try {
+          if (settingEditor) return;
+          clearTimeout(tmr);
+          tmr = setTimeout(() => { try { renderScript(ed.value || ''); } catch {} }, 120);
+        } catch {}
+      });
+    }
+  } catch {}
+})();
