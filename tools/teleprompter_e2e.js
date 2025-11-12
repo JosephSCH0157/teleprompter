@@ -220,6 +220,16 @@ async function main() {
     console.error('[e2e] page.goto error', e);
   });
 
+  // Wait for TS feature initializers to be marked ready (guard against regressions)
+  try {
+    await page.waitForFunction(() => {
+      const r = (window).__tpInit || {};
+      return r.persistence && r.telemetry && r.scroll && r.hotkeys;
+    }, { timeout: 3000, polling: 100 });
+  } catch (e) {
+    console.warn('[e2e] feature readiness flags not observed within timeout');
+  }
+
   // Quick UI invariants: no legacy Mode pill; a11y present; persistence works
   try {
     await page.waitForSelector('#scrollMode', { timeout: 5000 });

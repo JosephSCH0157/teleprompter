@@ -7,6 +7,20 @@ import './boot/console-noise-filter';
 
 import { bootstrap } from './boot/boot';
 
+// Idempotent init guard for feature initializers (prevents double-init as we migrate)
+function initOnce<T extends (...args: any[]) => any>(name: string, fn: T): T {
+	(window as any).__tpInit = (window as any).__tpInit || {};
+	return ((...args: any[]) => {
+		try {
+			if ((window as any).__tpInit[name]) return;
+			(window as any).__tpInit[name] = true;
+		} catch {}
+		const res = fn(...args as any);
+		try { document.dispatchEvent(new CustomEvent('tp:feature:init', { detail: { name } })); } catch {}
+		return res as any;
+	}) as T;
+}
+
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
@@ -134,6 +148,17 @@ import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
+// Feature initializers (legacy JS modules)
+// If/when these are migrated to TS, drop the .js extension and types will flow.
+import { initPersistence } from './features/persistence.js';
+import { initTelemetry } from './features/telemetry.js';
+import { initScroll } from './features/scroll.js';
+import { initHotkeys } from './features/hotkeys.js';
+// Create idempotent starters
+const startPersistence = initOnce('persistence', initPersistence);
+const startTelemetry   = initOnce('telemetry',   initTelemetry);
+const startScroll      = initOnce('scroll',      initScroll);
+const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
@@ -225,11 +250,17 @@ export async function boot() {
 					// Ensure autoscroll engine init
 					try { (Auto as any).initAutoScroll?.(); } catch {}
 
-					// Restore legacy feature initializers (persistence, telemetry, scroll, hotkeys)
-					try { initPersistence(); } catch {}
-					try { initTelemetry(); } catch {}
-					try { initScroll(); } catch {}
-					try { initHotkeys(); } catch {}
+					// Initialize features via idempotent wrappers
+					try { startPersistence(); } catch {}
+					try { startTelemetry(); } catch {}
+					try { startScroll(); } catch {}
+					try { startHotkeys(); } catch {}
+
+					// Readiness summary for visibility and testability
+					try {
+						const ready = Object.assign({}, (window as any).__tpInit || {});
+						console.log('[TP-READY]', ready);
+					} catch {}
 
 					// Resilient click delegation (auto +/-)
 					try {
