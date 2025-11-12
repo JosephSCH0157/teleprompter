@@ -73,7 +73,9 @@ const URL_TO_OPEN = RAW_URL;
       };
 
       const hasToast = await waitFor('#tp_toast_container'); // toast container
-      const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
+  // Legacy '#scriptSlots' removed; treat absence as ok.
+  let hasScripts = false;
+  try { hasScripts = !!document.querySelector('#scriptSlots'); } catch {}
 
       // VAD gate latency (simulated)
       try {
