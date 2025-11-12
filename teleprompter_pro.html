@@ -24,8 +24,8 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- TS-only boot: single ESM entry -->
-  <script type="module" src="/dist/index.js"></script>
+  <!-- TS-only boot: single ESM entry (cache-busted in deploys) -->
+  <script type="module" src="/dist/index.js?v=1.7.1"></script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>

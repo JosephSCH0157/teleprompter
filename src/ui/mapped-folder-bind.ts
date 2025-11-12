@@ -93,22 +93,27 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
         return;
       }
+      try { sel.setAttribute('aria-busy','true'); } catch {}
       if ('showDirectoryPicker' in window) {
         const entries = await listScripts();
         populateSelect(entries);
         _lastCount = entries.length;
+        try { announceCount(_lastCount); } catch {}
       }
     } catch {}
+    finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   }
 
   function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
     try {
       sel.innerHTML = '';
+      try { sel.setAttribute('aria-busy','true'); } catch {}
       if (!entries.length) {
         sel.disabled = true;
         sel.append(new Option('(No scripts found)', '', true, false));
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
+        try { announceCount(0); } catch {}
         return;
       }
       sel.disabled = false;
@@ -126,7 +131,10 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         }
         maybeAutoLoad(sel);
       } catch {}
-      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
+      const cnt = sel.options.length;
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
+      try { announceCount(cnt); } catch {}
+      try { sel.setAttribute('aria-busy','false'); } catch {}
     } catch {}
   }
 
@@ -140,12 +148,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         return;
       }
       sel.innerHTML = '';
+      try { sel.setAttribute('aria-busy','true'); } catch {}
       const filtered = files.filter(f => /\.(txt|docx|md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
         sel.disabled = true;
         sel.append(new Option('(No scripts found)', '', true, false));
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
+        try { announceCount(0); } catch {}
         return;
       }
       sel.disabled = false;
@@ -164,7 +174,31 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         }
         maybeAutoLoad(sel);
       } catch {}
-      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
+      const cnt = sel.options.length;
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
+      try { announceCount(cnt); } catch {}
+      try { sel.setAttribute('aria-busy','false'); } catch {}
+    } catch {}
+  }
+
+  function announceCount(n: number) {
+    try {
+      // Ensure a small aria-live polite status next to the select
+      const id = (sel && sel.id) ? ('scriptsStatus_' + sel.id) : 'scriptsStatus_generic';
+      let s = document.getElementById(id) as HTMLElement | null;
+      if (!s) {
+        s = document.createElement('span');
+        s.id = id;
+        s.setAttribute('aria-live', 'polite');
+        s.className = 'chip sidebar-hint';
+        // Try to place after the select; fallback to append to its parent
+        if (sel && sel.parentElement) {
+          sel.parentElement.appendChild(s);
+        } else {
+          document.body.appendChild(s);
+        }
+      }
+      s.textContent = n === 1 ? '1 script found' : `${n} scripts found`;
     } catch {}
   }
 }

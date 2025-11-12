@@ -101,6 +101,16 @@ export function getMappedFolder(): FileSystemDirectoryHandle | null { return _di
 
 export async function initMappedFolder(): Promise<void> {
   try {
+    // Best-effort: request persistent storage once so directory handles survive eviction
+    try {
+      const FLAG = 'tp_persist_req_v1';
+      if (!(localStorage.getItem(FLAG) === '1') && (navigator as any)?.storage?.persist) {
+        (navigator as any).storage.persist().then((ok: boolean) => {
+          try { localStorage.setItem(FLAG, ok ? '1' : '0'); } catch {}
+        }).catch(() => { try { localStorage.setItem(FLAG, '0'); } catch {} });
+      }
+    } catch {}
+
     const h = await idbGet<FileSystemDirectoryHandle>(KEY);
     if (h && await verifyPermission(h, 'read')) { _dir = h; ensureBroadcast(); emit('init'); return; }
   } catch {}

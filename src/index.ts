@@ -8,14 +8,14 @@ import './boot/console-noise-filter';
 import { bootstrap } from './boot/boot';
 
 // Idempotent init guard for feature initializers (prevents double-init as we migrate)
-function initOnce<T extends (...args: any[]) => any>(name: string, fn: T): T {
+function initOnce<T extends (..._args: any[]) => any>(name: string, fn: T): T {
 	(window as any).__tpInit = (window as any).__tpInit || {};
-	return ((...args: any[]) => {
+	return ((..._args: any[]) => {
 		try {
 			if ((window as any).__tpInit[name]) return;
 			(window as any).__tpInit[name] = true;
 		} catch {}
-		const res = fn(...args as any);
+		const res = fn(..._args as any);
 		try { document.dispatchEvent(new CustomEvent('tp:feature:init', { detail: { name } })); } catch {}
 		return res as any;
 	}) as T;
