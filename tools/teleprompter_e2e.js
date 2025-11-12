@@ -28,6 +28,8 @@ async function main() {
 
   // Start the static server in-process
   console.log('[e2e] starting static server...');
+  // Ensure CI stub endpoints are enabled in the static server for smoke
+  try { process.env.CI = process.env.CI || 'true'; } catch {}
   // If running the smoke harness, prefer a deterministic non-dev port and ensure
   // the static server listens on that port so the loader can see ?ci=1 without dev mode.
   const effectivePort = RUN_SMOKE ? 5180 : port;

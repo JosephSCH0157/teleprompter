@@ -14,7 +14,8 @@
   <link rel="canonical" href="https://example.com/teleprompter/" />
 
   <!-- Favicons -->
-  <link rel="icon" type="image/png" href="/favicon.png">
+  <!-- Use a tiny inlined favicon to avoid 404s in dev/CI; replace with a real asset for production if desired -->
+  <link rel="icon" href="data:,">
 
   <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
   <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
