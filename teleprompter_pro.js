@@ -1901,14 +1901,37 @@ let _toast = function (msg, opts) {
     } catch {
       void 0;
     }
-      // Keep bottom padding responsive to viewport changes and refresh end spacer
+      // Keep bottom padding responsive with guarded/throttled resize logic.
+      // Replaces prior multiple raw resize listeners with a single debounced handler:
+      //  - Ignores while an overlay is open (settings/help)
+      //  - Debounces 150ms
+      //  - Only applies scroll adjustments if the active element changed during the resize burst
       try {
-        window.addEventListener('resize', () => {
-          try {
-            applyBottomPad();
-            refreshEndSpacer();
-          } catch {}
-        }, { passive: true });
+        if (!window.__tpInstallResizeGuard) {
+          window.__tpInstallResizeGuard = function () {
+            try { if (window.__tpResizeGuarded) return; window.__tpResizeGuarded = 1; } catch {}
+            let startActive = null; let timer = null;
+            window.addEventListener('resize', () => {
+              try {
+                // Ignore while overlay open (data-smoke-open latch or visible overlay nodes)
+                if (document.body?.getAttribute('data-smoke-open') || document.querySelector('#settingsOverlay:not(.hidden), #shortcutsOverlay:not(.hidden), [data-overlay="settings"]:not(.hidden), [data-overlay="help"]:not(.hidden)')) return;
+                if (timer) clearTimeout(timer);
+                if (!startActive) startActive = document.activeElement;
+                timer = setTimeout(() => {
+                  try {
+                    const now = document.activeElement;
+                    if (now !== startActive) {
+                      try { applyBottomPad?.(); } catch {}
+                      try { refreshEndSpacer?.(); } catch {}
+                    }
+                  } catch {}
+                  startActive = null;
+                }, 150);
+              } catch {}
+            }, { passive: true });
+          };
+        }
+        try { window.__tpInstallResizeGuard(); } catch {}
       } catch {}
   }
   try {
@@ -7468,10 +7491,8 @@ let _toast = function (msg, opts) {
       setTimeout(runSelfChecks, 0);
     } catch {}
 
-    // Keep bottom padding responsive to viewport changes
-    try {
-      window.addEventListener('resize', applyBottomPad, { passive: true });
-    } catch {}
+    // Keep bottom padding responsive (guarded/debounced handler installed earlier)
+    try { if (window.__tpInstallResizeGuard) window.__tpInstallResizeGuard(); } catch {}
     // Update debug chip on scroll
     try {
       viewer?.addEventListener(
@@ -7482,14 +7503,7 @@ let _toast = function (msg, opts) {
         { passive: true }
       );
     } catch {}
-    // Refresh end spacer on resize (do not replace existing applyBottomPad listener)
-    try {
-      window.addEventListener('resize', () => {
-        try {
-          refreshEndSpacer();
-        } catch {}
-      }, { passive: true });
-    } catch {}
+    // End spacer also handled by guarded/debounced handler
     // Initial debug chip paint
     try {
       updateDebugPosChip();

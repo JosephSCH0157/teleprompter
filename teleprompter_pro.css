@@ -122,6 +122,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
             --tp-dim: 0.25;
         }
     html,body{height:100%}
+    /* Stabilize scrollbar to prevent horizontal reflow when overlays/content change */
+    html{ overflow-y: scroll; }
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
     /* Reserve fixed layout slots to prevent layout shifts (CLS) */

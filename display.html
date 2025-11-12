@@ -186,8 +186,23 @@
               }catch{}
             }
 
-            // Call on resize
-            window.addEventListener('resize', ()=>applyBottomPad());
+            // Call on resize (debounced 150ms; only adjust if focus changed)
+            (function(){
+              let startActive = null; let t = null;
+              window.addEventListener('resize', () => {
+                try {
+                  if (t) clearTimeout(t);
+                  if (!startActive) startActive = document.activeElement;
+                  t = setTimeout(() => {
+                    try {
+                      const now = document.activeElement;
+                      if (now !== startActive) applyBottomPad();
+                    } catch {}
+                    startActive = null;
+                  }, 150);
+                } catch {}
+              }, { passive:true });
+            })();
 
             // requestScroll: absolute pixels in the same container as viewer
             function requestScroll(value) {
