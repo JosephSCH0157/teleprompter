@@ -52,6 +52,24 @@ async function main() {
     }
   });
 
+  // Guarded UI helpers for smoke interactions
+  async function exists(sel) { return !!(await page.$(sel)); }
+  async function clickIf(sel) { const el = await page.$(sel); if (!el) return false; try { await el.click(); } catch { return false; } return true; }
+  async function waitClass(sel, cls, want = true, timeout = 3000) {
+    return page.waitForFunction(({ sel, cls, want }) => {
+      const n = document.querySelector(sel); if (!n) return false;
+      const lacks = !n.classList.contains(cls);
+      return want ? lacks : !lacks;
+    }, { timeout }, { sel, cls, want });
+  }
+  async function editorHas(rx, timeout = 3000) {
+    return page.waitForFunction((pattern) => {
+      const ed = document.querySelector('#editor') || document.querySelector('#scriptInput') || document.querySelector('textarea#script') || document.querySelector('[data-editor]');
+      const text = ed && ('value' in ed ? ed.value : ed?.textContent) || '';
+      return new RegExp(pattern, 'i').test(text);
+    }, { timeout }, rx.source || String(rx));
+  }
+
   const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1&uiMock=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
@@ -389,66 +407,64 @@ async function main() {
     return report;
   }, { stubObs: !!STUB_OBS });
 
-      console.log('[e2e] ui: load sample');
-  try {
-    const clickIf = async (selA, selB) => {
-      const target = await page.evaluate((a, b) => {
-        const elA = document.querySelector(a);
-        if (elA) return a;
-        const elB = document.querySelector(b);
-        return elB ? b : null;
-      }, selA, selB);
-      if (!target) return false;
-      await page.evaluate((selector) => { try { var el = document.querySelector(selector); if (el && typeof el.click === 'function') el.click(); } catch {} }, target);
-      return true;
-    };
+      // Guarded, skip-if-missing UI interaction flow
+      const notes = [];
+      try {
+        if (await clickIf('#settingsBtn') || await clickIf('[data-action="settings-open"]')) {
+          await waitClass('#settingsOverlay', 'hidden', true).catch(() => notes.push('settings open timeout'));
+          await clickIf('#settingsClose') || await clickIf('[data-action="settings-close"]');
+        } else {
+          notes.push('settingsBtn not found (skipped)');
+        }
 
-    // Settings open/close
-  await clickIf('#settingsBtn', '#SettingsBtn');
-  await page.waitForFunction(() => !document.querySelector('#settingsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
-    await clickIf('#settingsClose', '#settingsClose');
-  await page.waitForFunction(() => document.querySelector('#settingsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
-    // Help open/close (shortcuts)
-  await clickIf('#helpBtn', '#shortcutsBtn');
-  await page.waitForFunction(() => !document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
-    await clickIf('#helpClose', '#shortcutsClose');
-  await page.waitForFunction(() => document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
-    // Present mode
-  await clickIf('#presentBtn', '#presentBtn');
-  await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'), { timeout: 3000 });
-  await clickIf('#presentBtn', '#presentBtn');
-  await page.waitForFunction(() => !(document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present')), { timeout: 3000 });
-    // Display window (tolerate blocked popups in headless)
-    await clickIf('#displayWindowBtn', '#openDisplayBtn');
-    // HUD button is optional; click if present
-    const hud = await page.$('#hudBtn'); if (hud) await hud.click();
-    // Mic/Speech
-    await clickIf('#requestMicBtn', '#micBtn');
-    await clickIf('#startSpeechBtn', '#recBtn');
-    // Camera/PiP
-    await clickIf('#startCameraBtn', '#startCam');
-    await clickIf('#pipBtn', '#camPiP');
-    // Scripts load sample and upload (mock)
-    await clickIf('#loadSampleBtn', '#loadSample');
-    await page.waitForFunction(() => {
-      const ed = document.querySelector('#editor');
-      return !!ed && 'value' in ed && (ed.value || '').length > 10;
-    }, { timeout: 2000 });
-    await clickIf('#uploadBtn', '#uploadFileBtn');
-    await page.waitForFunction(() => {
-      const ed = document.querySelector('#editor');
-      if (!ed || !('value' in ed)) return false;
-      return /CI upload OK/i.test(ed.value || '');
-    }, { timeout: 2000 });
-    // Speakers toggle
-    await clickIf('#speakersToggleBtn', '#toggleSpeakers');
-    await page.waitForFunction(() => {
-      const el = document.querySelector('#speakersBody, #speakersPanel');
-      return !!el;
-    }, { timeout: 2000 });
-  } catch (e) {
-    console.warn('[e2e] ui-binds clicks: WARN', String(e && e.message || e));
-  }
+        if (await clickIf('#helpBtn') || await clickIf('[data-action="help-open"]')) {
+          await waitClass('#helpOverlay', 'hidden', true).catch(() => notes.push('help open timeout'));
+          await clickIf('#helpClose') || await clickIf('[data-action="help-close"]');
+        } else {
+          notes.push('helpBtn not found (skipped)');
+        }
+
+        await clickIf('#presentBtn') || await clickIf('[data-action="present-toggle"]');
+        await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'), { timeout: 2000 }).catch(() => notes.push('present toggle timeout'));
+        await clickIf('#presentBtn') || await clickIf('[data-action="present-toggle"]');
+
+        await clickIf('#hudBtn') || await clickIf('[data-action="hud-toggle"]');
+
+        const displayClicked = await clickIf('#displayWindowBtn') || await clickIf('[data-action="display"]');
+        if (displayClicked) {
+          const pop = await page.waitForEvent('popup', { timeout: 1500 }).catch(() => null);
+          if (!pop) notes.push('display popup not detected');
+          if (pop) await pop.close().catch(() => {});
+        } else {
+          notes.push('display button missing (skipped)');
+        }
+
+        await clickIf('#loadSampleBtn') || await clickIf('[data-action="load-sample"]');
+        await editorHas(/sample|use the arrow keys/).catch(() => notes.push('sample not loaded'));
+
+        await clickIf('#uploadBtn') || await clickIf('[data-action="upload"]');
+        await editorHas(/CI upload OK/).catch(() => notes.push('upload mock not reflected'));
+
+        await clickIf('#requestMicBtn') || await clickIf('[data-action="request-mic"]');
+        await clickIf('#startSpeechBtn') || await clickIf('[data-action="start-speech"]');
+
+        await clickIf('#startCameraBtn') || await clickIf('[data-action="start-camera"]');
+        await clickIf('#pipBtn') || await clickIf('[data-action="pip"]');
+
+        if (await clickIf('#speakersToggleBtn') || await clickIf('[data-action="speakers-toggle"]')) {
+          await page.waitForFunction(() => {
+            const p = document.querySelector('#speakersPanel') || document.querySelector('[data-panel="speakers"]');
+            return p && !p.classList.contains('hidden');
+          }, { timeout: 1500 }).catch(() => notes.push('speakers panel not visible'));
+          await clickIf('#speakersKeyBtn') || await clickIf('[data-action="speakers-key"]');
+          await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'speakersKey', { timeout: 1500 }).catch(() => notes.push('speakers key not focused'));
+        } else {
+          notes.push('speakers controls not found (skipped)');
+        }
+      } catch (e) {
+        notes.push('ui sequence error: ' + String(e && e.message || e));
+      }
+      try { smoke.notes.push(...notes); } catch {}
 
     // Assert that content appears in #editor (or any script input) after selection
     try {
