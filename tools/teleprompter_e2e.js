@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-disable no-unused-vars, no-undef */
+/* eslint-disable no-unused-vars */
 const path = require('path');
 const { spawn } = require('child_process');
 const readline = require('readline');
@@ -489,8 +489,8 @@ async function main() {
             window.tpScrollTo(val);
             return true;
           }
-          if (typeof tpScrollTo !== 'undefined' && typeof tpScrollTo === 'function') {
-            tpScrollTo(val);
+          if (typeof globalThis.tpScrollTo === 'function') {
+            globalThis.tpScrollTo(val);
             return true;
           }
           // fallback: set scrollTop directly on the main wrapper

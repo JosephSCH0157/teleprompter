@@ -16,7 +16,7 @@ const STORAGE_KEY = 'tp_mapped_folder_bcast';
 
 let _dir: FileSystemDirectoryHandle | null = null;
 let _bc: BroadcastChannel | null = null;
-const _listeners = new Set<(h: FileSystemDirectoryHandle | null, why: 'init'|'pick'|'clear'|'sync'|'error') => void>();
+const _listeners = new Set<(_h: FileSystemDirectoryHandle | null, _why: 'init'|'pick'|'clear'|'sync'|'error') => void>();
 
 // ---------------- IndexedDB helpers ----------------
 function openDB(): Promise<IDBDatabase> {
@@ -90,7 +90,7 @@ async function verifyPermission(handle: FileSystemHandle, mode: 'read'|'readwrit
 }
 
 // ---------------- Public API ----------------
-export function onMappedFolder(cb: (h: FileSystemDirectoryHandle | null, why: 'init'|'pick'|'clear'|'sync'|'error') => void): () => void {
+export function onMappedFolder(cb: (_h: FileSystemDirectoryHandle | null, _why: 'init'|'pick'|'clear'|'sync'|'error') => void): () => void {
   _listeners.add(cb); return () => _listeners.delete(cb);
 }
 function emit(why: 'init'|'pick'|'clear'|'sync'|'error') {

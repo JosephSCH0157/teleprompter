@@ -6,7 +6,7 @@ export type IngestOpts = {
   /** Where to inject the text (textarea or contenteditable). Optional if you handle tp:script-apply elsewhere. */
   target?: string | HTMLElement;
   /** If you already have a loader pipeline, use this instead of DOM injection. */
-  onApply?: (text: string, name: string) => void;
+  onApply?: (_text: string, _name: string) => void;
 };
 
 function $(q: string): HTMLElement | null {
@@ -59,10 +59,10 @@ async function readFile(f: File): Promise<{ name: string; text: string }> {
 }
 
 // Lazy DOCX extractor (jszip). Keep light and resilient.
-type JSZipT = typeof import('jszip');
 async function docxToText(file: File): Promise<string> {
   try {
-    const { default: JSZip }: { default: JSZipT } = await import('jszip');
+    const mod: any = await import('jszip');
+    const JSZip = mod?.default || mod;
     const buf = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(buf);
     const part = zip.file('word/document.xml') || zip.file('/word/document.xml') || null;

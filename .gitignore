@@ -20,11 +20,7 @@ dist/
 build/
 *.zip
 
-# Legacy CI-only stub outputs (ignored so they don't ship)
-# CI-only adapter stubs (in dist/src/adapters) ignored so they never ship standalone
-/dist/src/adapters/bridge.js
-/dist/src/adapters/obs.js
-/dist/src/adapters/hotkey.js
+# Legacy CI-only stub outputs served dynamically by the smoke server; no files generated.
 
 # Env
 .env

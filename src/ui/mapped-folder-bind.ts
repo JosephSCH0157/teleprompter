@@ -8,7 +8,7 @@ type BindOpts = {
   button: string | HTMLElement; // Choose Folder button selector or element
   select: string | HTMLSelectElement; // Scripts dropdown selector or element
   fallbackInput?: string | HTMLInputElement; // optional <input type="file" webkitdirectory>
-  onSelect?: (fileOrHandle: FileSystemFileHandle | File | null) => void; // callback when user picks a script
+  onSelect?: (_fileOrHandle: FileSystemFileHandle | File | null) => void; // callback when user picks a script
 };
 
 export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {

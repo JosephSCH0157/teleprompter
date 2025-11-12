@@ -8,7 +8,6 @@
     "lint:fix": "eslint . --ext .js,.ts --fix",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
   "build:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src",
-  "build:stubs": "esbuild src/adapters/bridge.ts src/adapters/obs.ts src/adapters/hotkey.ts --format=esm --outdir=dist --outbase=src",
   "watch:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src --watch",
     "build:logic": "tsc -b src/logic",
     "build:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js",
@@ -36,7 +35,6 @@
     "prepare": "husky",
     "build:speech": "node tools/esbuild-speech.mjs",
   "watch:speech": "node tools/esbuild-speech.mjs --watch",
-  "dev:stubs": "esbuild src/obs.ts --format=esm --outfile=obs.js --watch & esbuild src/hotkey.ts --format=esm --outfile=hotkey.js --watch",
     "gate:clean": "node tools/gate_clean.js",
     "postversion": "node tools/bump_html_version.js && git add teleprompter_pro.html && git commit -m \"chore(html): bump visible version\" || true"
   },

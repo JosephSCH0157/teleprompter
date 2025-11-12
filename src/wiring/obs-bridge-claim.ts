@@ -5,7 +5,6 @@
 export type ObsBridgeClaim = { ok: boolean; bridge?: string; version?: string; error?: string };
 
 // Declare ambient chrome for type safety without pulling full @types/chrome
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare const chrome: any;
 
 export function claimObsBridge(timeoutMs = 800): Promise<ObsBridgeClaim> {
