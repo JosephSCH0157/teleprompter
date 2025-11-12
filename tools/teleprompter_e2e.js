@@ -351,9 +351,11 @@ async function main() {
 
       // UI checks: Settings Scripts Folder card presence and sidebar mirror basics
       try {
-        // Open Settings via button and allow a brief layout settle
+        // Open Settings via button and ensure folder controls injected (defensive)
         try { document.getElementById('settingsBtn')?.click(); } catch {}
-        await new Promise(r => setTimeout(r, 200));
+        try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+        // Allow longer layout + injection settle
+        await new Promise(r => setTimeout(r, 350));
         const overlay = document.getElementById('settingsOverlay');
         const body = document.getElementById('settingsBody');
         const card = document.getElementById('scriptsFolderCard');
