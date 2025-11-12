@@ -150,7 +150,7 @@ import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
-import { auditBindingsOnce, bindCoreUI, ensureSidebarMirror, installEmergencyBinder, autoMarkActions } from './wiring/ui-binds';
+import { auditBindingsOnce, autoMarkActions, bindCoreUI, ensureSidebarMirror, installEmergencyBinder } from './wiring/ui-binds';
 // Side-effect debug / DOM helpers (legacy parity)
 import './ui/dom.js';
 // Feature initializers (legacy JS modules)
