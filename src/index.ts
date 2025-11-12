@@ -127,6 +127,8 @@ import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
+// Mapped Folder (scripts directory) binder
+import { bindMappedFolderUI } from './ui/mapped-folder-bind';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
@@ -350,6 +352,32 @@ try {
 				} catch {}
 			});
 			window.addEventListener('beforeunload', () => { try { stopVad?.(); } catch {} });
+		} catch {}
+
+		// Bind mapped folder UI (safe no-op if elements absent)
+		try {
+			queueMicrotask(() => {
+				try {
+					bindMappedFolderUI({
+						button: '#chooseFolderBtn',
+						select: '#scriptSelect',
+						fallbackInput: '#folderFallback',
+						onSelect: async (item) => {
+							try {
+								let file: File | null = null;
+								if (item && 'getFile' in (item as any)) {
+									file = await (item as FileSystemFileHandle).getFile();
+								} else if (item instanceof File) {
+									file = item;
+								}
+								if (file) {
+									window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { file } }));
+								}
+							} catch {}
+						}
+					});
+				} catch {}
+			});
 		} catch {}
 	});
 } catch {}
