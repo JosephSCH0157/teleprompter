@@ -404,20 +404,20 @@ async function main() {
     };
 
     // Settings open/close
-    await clickIf('#settingsBtn', '#SettingsBtn');
-    await page.waitForFunction(() => !document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
+  await clickIf('#settingsBtn', '#SettingsBtn');
+  await page.waitForFunction(() => !document.querySelector('#settingsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
     await clickIf('#settingsClose', '#settingsClose');
-    await page.waitForFunction(() => document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
+  await page.waitForFunction(() => document.querySelector('#settingsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
     // Help open/close (shortcuts)
-    await clickIf('#helpBtn', '#shortcutsBtn');
-    await page.waitForFunction(() => !document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
+  await clickIf('#helpBtn', '#shortcutsBtn');
+  await page.waitForFunction(() => !document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
     await clickIf('#helpClose', '#shortcutsClose');
-    await page.waitForFunction(() => document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
+  await page.waitForFunction(() => document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'), { timeout: 3000 });
     // Present mode
-    await clickIf('#presentBtn', '#presentBtn');
-    await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'));
-    await clickIf('#presentBtn', '#presentBtn');
-    await page.waitForFunction(() => !(document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present')));
+  await clickIf('#presentBtn', '#presentBtn');
+  await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'), { timeout: 3000 });
+  await clickIf('#presentBtn', '#presentBtn');
+  await page.waitForFunction(() => !(document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present')), { timeout: 3000 });
     // Display window (tolerate blocked popups in headless)
     await clickIf('#displayWindowBtn', '#openDisplayBtn');
     // HUD button is optional; click if present
