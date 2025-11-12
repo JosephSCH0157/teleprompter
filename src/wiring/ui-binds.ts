@@ -371,6 +371,32 @@ function toggleOverlayList(list: readonly string[], show?: boolean, kind?: 'sett
   } catch {}
 }
 
+// Name-based overlay toggler that forces visibility and wires settings tabs
+function toggleOverlay(name: 'settings'|'help', on: boolean) {
+  try {
+    const list = name === 'settings' ? OVERLAY.settings : OVERLAY.help;
+    const el = findOne(list);
+    if (!el) return;
+    if (on) {
+      el.hidden = false;
+      (el as HTMLElement).style.display = 'block';
+      document.body.setAttribute('data-smoke-open', name);
+      if (name === 'settings') {
+        try { queueMicrotask(() => { try { ensureSettingsTabsWiring(); } catch {} }); } catch {}
+      }
+      try { window.dispatchEvent(new CustomEvent(`tp:${name}:open`, { detail: { source: 'binder' } })); } catch {}
+    } else {
+      (el as HTMLElement).style.display = 'none';
+      el.hidden = true;
+      if (document.body.getAttribute('data-smoke-open') === name) {
+        document.body.removeAttribute('data-smoke-open');
+      }
+      try { window.dispatchEvent(new CustomEvent(`tp:${name}:close`, { detail: { source: 'binder' } })); } catch {}
+    }
+  } catch {}
+}
+try { (window as any).__tpOpen = (name: 'settings'|'help') => toggleOverlay(name, true); } catch {}
+
 function downloadNow(name: string, text: string, ext?: string) {
   try {
     const fmtSel = document.getElementById('downloadFormat') as HTMLSelectElement | null;
@@ -419,19 +445,19 @@ export function installEmergencyBinder() {
         evt.stopPropagation();
         switch (action) {
           case 'settings-open':
-            toggleOverlayList(OVERLAY.settings, true, 'settings');
+            toggleOverlay('settings', true);
             try { document.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'emergency' } })); } catch {}
             try { ensureSettingsTabsWiring(); } catch {}
             break;
           case 'settings-close':
-            toggleOverlayList(OVERLAY.settings, false, 'settings');
+            toggleOverlay('settings', false);
             try { document.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'emergency' } })); } catch {}
             break;
           case 'help-open':
-            toggleOverlayList(OVERLAY.help, true, 'help');
+            toggleOverlay('help', true);
             break;
           case 'help-close':
-            toggleOverlayList(OVERLAY.help, false, 'help');
+            toggleOverlay('help', false);
             break;
           case 'present-toggle':
             try {
@@ -800,7 +826,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       settingsBtn.dataset.uiBound = '1';
       on(settingsBtn, 'click', (e: Event) => {
         try { e.preventDefault?.(); } catch {}
-        toggleOverlayList(OVERLAY.settings, true, 'settings');
+        toggleOverlay('settings', true);
         try { dispatch('tp:settings:open', { source: 'binder' }); } catch {}
         try { document.body.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'binder' } })); } catch {}
       });
@@ -809,7 +835,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       settingsClose.dataset.uiBound = '1';
       on(settingsClose, 'click', (e: Event) => {
         try { e.preventDefault?.(); } catch {}
-        toggleOverlayList(OVERLAY.settings, false, 'settings');
+        toggleOverlay('settings', false);
         try { dispatch('tp:settings:close', { source: 'binder' }); } catch {}
         try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'binder' } })); } catch {}
       });
@@ -821,35 +847,21 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
   const settingsOverlay = _qq<HTMLElement>(SEL.settingsOverlay);
     if (helpBtn && !helpBtn.dataset.uiBound) {
       helpBtn.dataset.uiBound = '1';
-      on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlayList(OVERLAY.help, true, 'help'); try { document.dispatchEvent(new CustomEvent('tp:help:open', { detail: { source: 'binder' } })); } catch {} });
+  on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlay('help', true); try { document.dispatchEvent(new CustomEvent('tp:help:open', { detail: { source: 'binder' } })); } catch {} });
     }
     if (helpClose && !helpClose.dataset.uiBound) {
       helpClose.dataset.uiBound = '1';
-      on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlayList(OVERLAY.help, false, 'help'); try { document.dispatchEvent(new CustomEvent('tp:help:close', { detail: { source: 'binder' } })); } catch {} });
+  on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlay('help', false); try { document.dispatchEvent(new CustomEvent('tp:help:close', { detail: { source: 'binder' } })); } catch {} });
     }
     // ESC to close overlays (SAFE for window)
     onGlobal(window, 'keydown', (e: Event) => {
       try {
         const ev = e as KeyboardEvent;
         if (ev.key !== 'Escape') return;
-
-        const isOpen = (el: HTMLElement | null) => !!el && !el.classList.contains('hidden');
-
-        let handled = false;
-        if (isOpen(settingsOverlay)) {
-          toggleOverlayList(OVERLAY.settings, false, 'settings');
-          try { dispatch('tp:settings:close', { source: 'esc' }); } catch {}
-          try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'esc' } })); } catch {}
-          handled = true;
-        } else if (isOpen(helpOverlay)) {
-          toggleOverlayList(OVERLAY.help, false, 'help');
-          // If you later emit a specific help close event, dispatch here as well.
-          handled = true;
-        }
-
-        if (handled) {
-          try { ev.stopPropagation(); } catch {}
-          try { ev.preventDefault(); } catch {}
+        const name = document.body.getAttribute('data-smoke-open') as ('settings'|'help'|null);
+        if (name) {
+          try { ev.preventDefault?.(); } catch {}
+          toggleOverlay(name, false);
         }
       } catch {}
     }, 'esc-close', { capture: true });
