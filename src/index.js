@@ -796,6 +796,130 @@ async function boot() {
     try { ensureSettingsFolderControls(); } catch {}
     try { ensureSettingsFolderControlsAsync(6000); } catch {}
 
+    // Binder for Scripts Folder (JS path) – minimal parity with TS binder
+    function __bindMappedFolderUI() {
+      try {
+        const btn = document.getElementById('chooseFolderBtn');
+        if (!btn || btn.dataset.mappedFolderWired === '1') return;
+        const recheckBtn = document.getElementById('recheckFolderBtn');
+        const sel = document.getElementById('scriptSelect');
+        const fallback = document.getElementById('folderFallback');
+        const useMock = (() => { try { const Q = new URLSearchParams(location.search||''); return Q.has('mockFolder'); } catch { return false; } })();
+        btn.dataset.mappedFolderWired = '1';
+        try { btn.disabled = false; } catch {}
+
+        function populate(names) {
+          try {
+            if (!sel) return;
+            sel.setAttribute('aria-busy','true');
+            const filtered = (names||[]).filter(n => /\.(txt|md|docx)$/i.test(n));
+            sel.innerHTML = '';
+            filtered.forEach((n,i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = n; sel.appendChild(o); });
+            sel.setAttribute('aria-busy','false');
+            sel.disabled = filtered.length === 0;
+            sel.dataset.count = String(filtered.length);
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: filtered.length } })); } catch {}
+          } catch {}
+        }
+
+        async function pickFolder() {
+          try {
+            btn.disabled = true; btn.textContent = 'Choosing…';
+            let scriptNames = [];
+            if (window.showDirectoryPicker) {
+              try {
+                const dirHandle = await window.showDirectoryPicker();
+                for await (const entry of dirHandle.values()) {
+                  try {
+                    if (entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
+                      scriptNames.push(entry.name);
+                    }
+                  } catch {}
+                }
+              } catch (e) {
+                // user cancel → fall back to input
+                if (e && e.name !== 'AbortError') console.warn('[folder] picker err', e);
+                if (!fallback) return;
+                try { fallback.click(); } catch {}
+                return;
+              }
+            } else if (fallback) {
+              // Use hidden directory input (webkitdirectory) – user picks then change event populates
+              try { fallback.click(); } catch {}
+              return;
+            }
+            if (scriptNames.length) {
+              populate(scriptNames);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(scriptNames)); } catch {}
+            }
+          } catch (e) { console.warn('[folder] pickFolder failed', e); }
+          finally {
+            try { btn.disabled = false; btn.textContent = 'Choose Folder'; } catch {}
+          }
+        }
+
+        // Fallback input change handler (webkitdirectory)
+        try {
+          if (fallback) {
+            fallback.addEventListener('change', () => {
+              try {
+                const files = Array.from(fallback.files || []);
+                const names = files.map(f => f && f.name).filter(Boolean);
+                if (names.length) {
+                  populate(names);
+                  try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch {}
+                }
+              } catch {}
+            });
+          }
+        } catch {}
+
+        btn.addEventListener('click', (ev) => { try { ev.preventDefault(); ev.stopImmediatePropagation(); } catch {}; pickFolder(); });
+        recheckBtn?.addEventListener('click', (ev) => {
+          try { ev.preventDefault(); ev.stopImmediatePropagation(); } catch {}
+          try {
+            const raw = localStorage.getItem('tp_last_folder_scripts');
+            if (raw) {
+              const arr = JSON.parse(raw) || [];
+              if (Array.isArray(arr) && arr.length) populate(arr);
+            }
+          } catch {}
+        });
+
+        // Do not auto-populate from stored if mock folder flag active (avoid parity mismatch)
+        if (!useMock) {
+          try {
+            const raw = localStorage.getItem('tp_last_folder_scripts');
+            if (raw) {
+              const arr = JSON.parse(raw) || [];
+              if (Array.isArray(arr) && arr.length && (!sel || !sel.options || sel.options.length === 0)) {
+                populate(arr);
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    try { window.__bindMappedFolderUI = __bindMappedFolderUI; } catch {}
+    try { __bindMappedFolderUI(); } catch {}
+
+    // Re-bind if card is re-injected (mutation observer)
+    try {
+      if (!window.__tpFolderBinderWatcher) {
+        window.__tpFolderBinderWatcher = true;
+        const mo = new MutationObserver(() => {
+          try {
+            const btn = document.getElementById('chooseFolderBtn');
+            if (btn && btn.dataset.mappedFolderWired !== '1') {
+              try { window.__bindMappedFolderUI?.(); } catch {}
+            }
+          } catch {}
+        });
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+        setTimeout(() => { try { mo.disconnect(); } catch {} }, 120000);
+      }
+    } catch {}
+
     // Test-only mock folder population: enable with ?mockFolder=1
     try {
       const Q = new URLSearchParams(location.search || '');
@@ -837,6 +961,8 @@ async function boot() {
           } catch { return false; }
         };
         // Try now; if selects not present yet, wait briefly
+        // Defer a bit to allow injection of the Settings card
+        setTimeout(() => { try { populate(); } catch {} }, 50);
         if (!populate()) {
           let tries = 0; const iv = setInterval(() => {
             tries++; if (populate() || tries > 30) { try { clearInterval(iv); } catch {} }

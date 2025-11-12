@@ -32,6 +32,26 @@ export function ensureSettingsFolderControls() {
     `;
     host.appendChild(card);
 
+    // Test-only mock population for JS path (if ?mockFolder=1)
+    try {
+      const Q = new URLSearchParams(location.search || '');
+      const useMock = Q.has('mockFolder') || (typeof navigator !== 'undefined' && navigator.webdriver === true);
+      if (useMock) {
+        const sel = card.querySelector('#scriptSelect');
+        if (sel) {
+          sel.setAttribute('aria-busy','true');
+          const names = ['Practice_Intro.txt','Main_Episode.txt','Notes.docx'];
+          const items = names.filter(n => /\.(txt|docx)$/i.test(n));
+          sel.innerHTML = '';
+          items.forEach((n,i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = n; sel.appendChild(o); });
+          sel.setAttribute('aria-busy','false');
+          sel.disabled = items.length === 0;
+          sel.dataset.count = String(items.length);
+          try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: items.length } })); } catch {}
+        }
+      }
+    } catch {}
+
     // Track tab visibility
     try {
       const tabs = document.getElementById('settingsTabs');
