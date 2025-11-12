@@ -42,6 +42,20 @@ function on(el: Element | null | undefined, ev: string, fn: any, opts?: any) {
   try { if (el && 'addEventListener' in el) (el as any).addEventListener(ev, fn, opts); } catch {}
 }
 
+// Global-safe binding cache so we can bind window/document idempotently
+const __bound = new WeakMap<EventTarget, Set<string>>();
+function onGlobal(target: EventTarget | null | undefined, type: string, listener: EventListener, key?: string, options?: AddEventListenerOptions) {
+  try {
+    if (!target) return;
+    const k = key || type;
+    let set = __bound.get(target);
+    if (!set) { set = new Set(); __bound.set(target, set); }
+    if (set.has(k)) return; // idempotent
+    target.addEventListener(type, listener, options);
+    set.add(k);
+  } catch {}
+}
+
 // Map <option value> → internal UiScrollMode (see index.ts applyUiScrollMode)
 function mapScrollValue(v: string): 'auto'|'asr'|'step'|'rehearsal'|'off' {
   switch (v) {
@@ -176,28 +190,32 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       helpClose.dataset.uiBound = '1';
       on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, false); });
     }
-    // ESC to close any open overlay (Settings/Help)
-    try {
-      if (!(window as any).__tpOverlayEscBound) {
-        (window as any).__tpOverlayEscBound = true;
-        window.addEventListener('keydown', (e: KeyboardEvent) => {
-          try {
-            if (e.key !== 'Escape') return;
-            const settingsOpen = settingsOverlay && !settingsOverlay.classList.contains('hidden');
-            const helpOpen = helpOverlay && !helpOverlay.classList.contains('hidden');
-            if (settingsOpen) {
-              toggle(settingsOverlay, false);
-              try { dispatch('tp:settings:close', { source: 'binder' }); } catch {}
-              try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'binder' } })); } catch {}
-              e.preventDefault();
-            } else if (helpOpen) {
-              toggle(helpOverlay, false);
-              e.preventDefault();
-            }
-          } catch {}
-        }, { capture: true });
-      }
-    } catch {}
+    // ESC to close overlays (SAFE for window)
+    onGlobal(window, 'keydown', (e: Event) => {
+      try {
+        const ev = e as KeyboardEvent;
+        if (ev.key !== 'Escape') return;
+
+        const isOpen = (el: HTMLElement | null) => !!el && !el.classList.contains('hidden');
+
+        let handled = false;
+        if (isOpen(settingsOverlay)) {
+          toggle(settingsOverlay, false);
+          try { dispatch('tp:settings:close', { source: 'esc' }); } catch {}
+          try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'esc' } })); } catch {}
+          handled = true;
+        } else if (isOpen(helpOverlay)) {
+          toggle(helpOverlay, false);
+          // If you later emit a specific help close event, dispatch here as well.
+          handled = true;
+        }
+
+        if (handled) {
+          try { ev.stopPropagation(); } catch {}
+          try { ev.preventDefault(); } catch {}
+        }
+      } catch {}
+    }, 'esc-close', { capture: true });
   } catch {}
 }
 
