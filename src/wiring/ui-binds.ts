@@ -202,15 +202,8 @@ async function pickPlainFile(): Promise<File | null> {
   } catch { return null; }
 }
 
-function toggleOverlay(sel: string, show?: boolean) {
-  // Deprecated signature retained for safety; prefer list below
-  try {
-    const el = document.querySelector(sel) as HTMLElement | null;
-    if (!el) return;
-    const visible = show ?? el.classList.contains('hidden');
-    el.classList.toggle('hidden', !visible);
-  } catch {}
-}
+// (legacy toggleOverlay kept during migration; now unused)
+// function toggleOverlay(sel: string, show?: boolean) {}
 
 // overlay show/hide helper (list of tolerant selectors)
 function toggleOverlayList(list: readonly string[], show?: boolean, kind?: 'settings'|'help') {
@@ -305,7 +298,20 @@ export function installEmergencyBinder() {
             toggleOverlayList(OVERLAY.help, false, 'help');
             break;
           case 'present-toggle':
-            try { setPresent(!document.documentElement.classList.contains('tp-present')); } catch {}
+            try {
+              const root = document.documentElement;
+              const next = !root.classList.contains('tp-present');
+              const fn = (window as any).__tpSetPresent;
+              if (typeof fn === 'function') {
+                fn(next);
+              } else if (typeof (setPresent as any) === 'function') {
+                (setPresent as any)(next);
+              } else {
+                // Fallback manual toggle if setter not yet defined (early emergency binder install)
+                root.classList.toggle('tp-present', next);
+                root.setAttribute('data-smoke-present', next ? '1' : '0');
+              }
+            } catch {}
             break;
           case 'hud-toggle':
             try { (window as any).HUD?.toggle?.(); } catch {}
@@ -585,18 +591,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
 
   // Settings / Help overlay wiring (single source of truth)
   try {
-    const toggle = (el: HTMLElement | null, visible?: boolean) => {
-      if (!el) return;
-      try {
-        if (typeof visible === 'boolean') {
-          el.classList.toggle('hidden', !visible);
-        } else {
-          el.classList.toggle('hidden');
-        }
-        // Force inline style to guarantee visibility even if global .overlay { display: none }
-        try { (el as HTMLElement).style.display = el.classList.contains('hidden') ? 'none' : 'block'; } catch {}
-      } catch {}
-    };
+    // Deprecated local toggle helper removed (use toggleOverlayList instead)
 
     const settingsBtn     = _qq<HTMLButtonElement>(SEL.settingsOpen);
     const settingsClose   = _qq<HTMLButtonElement>(SEL.settingsClose);
