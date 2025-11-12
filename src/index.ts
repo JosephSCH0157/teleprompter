@@ -171,6 +171,9 @@ import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bin
 import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
+
+// Install emergency binder immediately as a safety net (idempotent) — survives early failures
+try { installEmergencyBinder(); } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 function injectSpeechNotesHud(){
 	try {

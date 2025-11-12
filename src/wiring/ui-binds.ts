@@ -70,11 +70,25 @@ function closestAction(el: Element | null): string | null {
               || (withAction.id?.includes('settings')   ? 'settings-open' : null)
               || (withAction.id?.includes('present')    ? 'present-toggle' : null)
               || (withAction.id?.includes('display')    ? 'display' : null)
+              || (withAction.id?.includes('closeDisplay') ? 'display-close' : null)
               || (withAction.id?.includes('mic')        ? 'request-mic' : null)
+              || (withAction.id?.includes('releaseMic') ? 'release-mic' : null)
               || (withAction.id?.includes('speech')     ? 'start-speech' : null)
+              || (withAction.id?.includes('startCam')   ? 'start-camera' : null)
+              || (withAction.id?.includes('camPiP')     ? 'pip' : null)
+              || (withAction.id?.includes('hud')        ? 'hud-toggle' : null)
+              || (withAction.id?.includes('toggleSpeakers') ? 'speakers-toggle' : null)
+              || (withAction.id?.includes('speakersKey') ? 'speakers-key' : null)
               || (withAction.id?.includes('upload')     ? 'upload' : null)
               || (withAction.id?.includes('normalize')  ? 'normalize' : null)
-              || (withAction.id?.includes('clear')      ? 'clear' : null);
+              || (withAction.id?.includes('clear')      ? 'clear' : null)
+              || (withAction.id?.includes('download')   ? 'download' : null)
+              || (withAction.id?.includes('scriptSaveAs') ? 'save-as' : null)
+              || (withAction.id?.includes('scriptSave') ? 'save' : null)
+              || (withAction.id?.includes('scriptLoad') ? 'load' : null)
+              || (withAction.id?.includes('scriptDelete') ? 'delete' : null)
+              || (withAction.id?.includes('scriptRename') ? 'rename' : null)
+              || (withAction.id?.includes('resetScript') ? 'reset-script' : null);
     return action;
   } catch { return null; }
 }
@@ -109,11 +123,44 @@ function toggleOverlay(sel: string, show?: boolean) {
   } catch {}
 }
 
+function downloadNow(name: string, text: string, ext?: string) {
+  try {
+    const fmtSel = document.getElementById('downloadFormat') as HTMLSelectElement | null;
+    const extFromSel = fmtSel ? (fmtSel.value || '').replace(/^\./,'') : '';
+    const finalExt = (ext || extFromSel || 'txt').replace(/^\./,'');
+    const base = String(name || 'Untitled').replace(/\.[^.]+$/, '');
+    const fname = base + '.' + finalExt;
+    const blob = new Blob([text||''], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 1000);
+  } catch {}
+}
+
 export function installEmergencyBinder() {
   if (__tpEmergencyBound) return;
   __tpEmergencyBound = true;
 
   try {
+    // Live-render on editor paste/input as a safety net
+    try {
+      const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+      if (ed && !(ed as any)._emergencyInputWired) {
+        (ed as any)._emergencyInputWired = 1;
+        const apply = () => {
+          try {
+            const t = ed.value || '';
+            const name = (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled';
+            document.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text: t } }));
+          } catch {}
+        };
+        ed.addEventListener('paste', () => { try { setTimeout(apply, 0); } catch {} }, { capture: true });
+        ed.addEventListener('input', () => { try { setTimeout(apply, 0); } catch {} }, { capture: true });
+      }
+    } catch {}
+
     document.addEventListener('click', async (evt) => {
       try {
         const target = evt.target as Element | null;
@@ -137,7 +184,12 @@ export function installEmergencyBinder() {
             toggleOverlay('#helpOverlay', false);
             break;
           case 'present-toggle':
-            try { document.body.classList.toggle('present-mode'); } catch {}
+            try {
+              const root = document.documentElement;
+              const on = !root.classList.contains('tp-present');
+              root.classList.toggle('tp-present', on);
+              document.body.classList.toggle('present-mode', on);
+            } catch {}
             break;
           case 'hud-toggle':
             try { (window as any).HUD?.toggle?.(); } catch {}
@@ -148,9 +200,16 @@ export function installEmergencyBinder() {
               window.open(url.toString(), 'AnvilDisplay', 'popup=yes,resizable=yes,scrollbars=no,width=1280,height=720');
             } catch {}
             break; }
+          case 'display-close': {
+            try { (window as any).__tpDisplayWindow?.close?.(); } catch {}
+            break; }
           case 'request-mic':
             try { (window as any).__tpAsrImpl?.requestMic?.(); } catch {}
             try { (window as any).asr?.requestMic?.(); } catch {}
+            break;
+          case 'release-mic':
+            try { (window as any).__tpAsrImpl?.releaseMic?.(); } catch {}
+            try { (window as any).asr?.stop?.(); } catch {}
             break;
           case 'start-speech':
             try { (window as any).__tpAsrImpl?.start?.(); } catch {}
@@ -164,6 +223,17 @@ export function installEmergencyBinder() {
             try { (window as any).__tpCamImpl?.pip?.(); } catch {}
             try { (window as any).cam?.pip?.(); } catch {}
             break;
+          case 'speakers-toggle': {
+            try {
+              const body = document.getElementById('speakersBody') as HTMLElement | null;
+              const btn = document.getElementById('toggleSpeakers') as HTMLButtonElement | null;
+              if (body) body.hidden = !body.hidden;
+              if (btn) { btn.textContent = body && body.hidden ? 'Show' : 'Hide'; btn.setAttribute('aria-expanded', String(!(body && body.hidden))); }
+            } catch {}
+            break; }
+          case 'speakers-key': {
+            try { (document.getElementById('speakersKey') as HTMLInputElement | null)?.focus(); } catch {}
+            break; }
           case 'load-sample': {
             const sample = `[s1]\nWelcome to Anvil — sample is live.\n[beat]\nUse step keys or auto-scroll to move.\n[/s1]`;
             renderNow('Sample.txt', sample);
@@ -172,6 +242,36 @@ export function installEmergencyBinder() {
             try {
               const mocked = (() => { try { return (new URL(location.href)).searchParams.get('uiMock') === '1'; } catch { return false; } })();
               if (mocked) { renderNow('SmokeUpload.txt','[s1] CI upload OK [/s1]'); break; }
+              const f = await pickPlainFile(); if (!f) break;
+              const isDocx = f.name.toLowerCase().endsWith('.docx') && (window as any).docxToText;
+              const text = isDocx ? await (window as any).docxToText(f) : await f.text();
+              renderNow(f.name, text);
+            } catch {}
+            break; }
+          case 'download': {
+            try {
+              const name = (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled';
+              const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+              const text = (ed && ed.value) || '';
+              downloadNow(name, text);
+            } catch {}
+            break; }
+          case 'save': {
+            try {
+              const name = (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled';
+              const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+              downloadNow(name, (ed && ed.value) || '');
+            } catch {}
+            break; }
+          case 'save-as': {
+            try {
+              const name = prompt('Save As name:', (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled') || 'Untitled';
+              const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+              downloadNow(name, (ed && ed.value) || '');
+            } catch {}
+            break; }
+          case 'load': {
+            try {
               const f = await pickPlainFile(); if (!f) break;
               const isDocx = f.name.toLowerCase().endsWith('.docx') && (window as any).docxToText;
               const text = isDocx ? await (window as any).docxToText(f) : await f.text();
@@ -196,6 +296,12 @@ export function installEmergencyBinder() {
               renderNow('Untitled.txt','');
             } catch {}
             break; }
+          case 'delete':
+          case 'rename':
+          case 'reset-script':
+            // No-ops for legacy buttons; provide minimal UX feedback
+            try { console.debug('[emergency-binder]', act, 'not implemented'); } catch {}
+            break;
           default:
             try { console.debug('[emergency-binder] no handler for', act); } catch {}
         }
