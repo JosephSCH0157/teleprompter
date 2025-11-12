@@ -33,6 +33,13 @@ function contentType(p) {
 const server = http.createServer((req, res) => {
   try {
     const u = decodeURI(req.url.split('?')[0]);
+    // CI-only legacy adapter stub endpoints (served dynamically; no files shipped)
+    if (u === '/dist/adapters/bridge.js' || u === '/dist/adapters/obs.js' || u === '/dist/adapters/hotkey.js') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.end('/* CI stub */ export default {};');
+      return;
+    }
     let file = path.join(ROOT, u);
     // Directory default to teleprompter_pro.html for '/'
     if (u === '/' || u === '') {
