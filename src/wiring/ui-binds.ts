@@ -27,7 +27,7 @@ function q<T extends HTMLElement = HTMLElement>(sel: string | undefined | null):
 }
 
 // Multi-selector helper: returns first match from a list
-function _qq<T extends HTMLElement = HTMLElement>(sels: string[] | undefined | null): T | null {
+function _qq<T extends HTMLElement = HTMLElement>(sels: readonly string[] | undefined | null): T | null {
   try {
     if (!sels || !Array.isArray(sels)) return null as any;
     for (const s of sels) {
@@ -130,6 +130,54 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
     if (!(window as any).__tpAnchorPulse) {
       (window as any).__tpAnchorPulse = true;
       setInterval(() => { try { window.dispatchEvent(new CustomEvent('tp:anchor:pulse')); } catch {}; }, 2000);
+    }
+  } catch {}
+
+  // Settings / Help overlay wiring (single source of truth)
+  try {
+    const toggle = (el: HTMLElement | null, visible?: boolean) => {
+      if (!el) return;
+      try {
+        if (typeof visible === 'boolean') {
+          el.classList.toggle('hidden', !visible);
+        } else {
+          el.classList.toggle('hidden');
+        }
+      } catch {}
+    };
+
+    const settingsBtn     = _qq<HTMLButtonElement>(SEL.settingsOpen);
+    const settingsClose   = _qq<HTMLButtonElement>(SEL.settingsClose);
+    const settingsOverlay = _qq<HTMLElement>(SEL.settingsOverlay);
+    if (settingsBtn && !settingsBtn.dataset.uiBound) {
+      settingsBtn.dataset.uiBound = '1';
+      on(settingsBtn, 'click', (e: Event) => {
+        try { e.preventDefault?.(); } catch {}
+        toggle(settingsOverlay, true);
+        try { dispatch('tp:settings:open', { source: 'binder' }); } catch {}
+        try { document.body.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'binder' } })); } catch {}
+      });
+    }
+    if (settingsClose && !settingsClose.dataset.uiBound) {
+      settingsClose.dataset.uiBound = '1';
+      on(settingsClose, 'click', (e: Event) => {
+        try { e.preventDefault?.(); } catch {}
+        toggle(settingsOverlay, false);
+        try { dispatch('tp:settings:close', { source: 'binder' }); } catch {}
+        try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'binder' } })); } catch {}
+      });
+    }
+
+    const helpBtn     = _qq<HTMLButtonElement>(SEL.helpOpen);
+    const helpClose   = _qq<HTMLButtonElement>(SEL.helpClose);
+    const helpOverlay = _qq<HTMLElement>(SEL.helpOverlay);
+    if (helpBtn && !helpBtn.dataset.uiBound) {
+      helpBtn.dataset.uiBound = '1';
+      on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, true); });
+    }
+    if (helpClose && !helpClose.dataset.uiBound) {
+      helpClose.dataset.uiBound = '1';
+      on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, false); });
     }
   } catch {}
 }
@@ -285,7 +333,7 @@ const SEL = {
 // Wire the related buttons if present (idempotent via dataset flags); support both IDs and data-action hooks
 (() => {
   try {
-    const map: Array<{ sels: string[]; fn: () => any }> = [
+  const map: Array<{ sels: readonly string[]; fn: () => any }> = [
       { sels: SEL.sample, fn: () => scripts.loadSample() },
       { sels: SEL.upload, fn: () => scripts.upload() },
       { sels: SEL.mic,    fn: () => asr.requestMic() },

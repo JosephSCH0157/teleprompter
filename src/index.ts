@@ -407,32 +407,7 @@ export async function boot() {
 						});
 					} catch {}
 
-					// Settings overlay wiring with open/close events for smoke determinism
-					try {
-						const overlay = document.getElementById('settingsOverlay');
-						const btn = document.getElementById('settingsBtn') as HTMLButtonElement | null;
-						const closeBtn = document.getElementById('settingsClose') as HTMLButtonElement | null;
-						const openSettings = () => {
-							try { overlay?.classList.remove('hidden'); } catch {}
-							try { btn?.setAttribute('aria-expanded','true'); } catch {}
-							try { document.body.dispatchEvent(new CustomEvent('tp:settings:open')); } catch {}
-						};
-						const closeSettings = () => {
-							try { overlay?.classList.add('hidden'); } catch {}
-							try { btn?.setAttribute('aria-expanded','false'); } catch {}
-							try { document.body.dispatchEvent(new CustomEvent('tp:settings:close')); } catch {}
-						};
-						btn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; openSettings(); }, { capture: true });
-						closeBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; closeSettings(); }, { capture: true });
-						document.addEventListener('keydown', (e) => {
-							try {
-								if (e.key === 'Escape') {
-									const hidden = overlay?.classList.contains('hidden');
-									if (hidden === false) closeSettings();
-								}
-							} catch {}
-						}, { capture: true });
-					} catch {}
+					// Settings/Help overlay wiring is now owned by the centralized binder (ui-binds.ts)
 
 					// Script ingest
 					try { installScriptIngest({}); } catch {}
