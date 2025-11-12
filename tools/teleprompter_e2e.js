@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-disable no-unused-vars */
+/* eslint-disable no-unused-vars, no-undef */
 const path = require('path');
 const { spawn } = require('child_process');
 const readline = require('readline');
@@ -349,6 +349,32 @@ async function main() {
         report.notes.push(`assert: wsSentCount (${report.wsSentCount}) !== wsOps.length (${(report.wsOps||[]).length})`);
       }
 
+      // UI checks: Settings Scripts Folder card presence and sidebar mirror basics
+      try {
+        // Open Settings via button and allow a brief layout settle
+        try { document.getElementById('settingsBtn')?.click(); } catch {}
+        await new Promise(r => setTimeout(r, 200));
+        const overlay = document.getElementById('settingsOverlay');
+        const body = document.getElementById('settingsBody');
+        const card = document.getElementById('scriptsFolderCard');
+        const choose = document.getElementById('chooseFolderBtn');
+        const mainSel = document.getElementById('scriptSelect');
+        const mirrorSel = document.getElementById('scriptSelectSidebar');
+        const overlayVisible = !!overlay && !overlay.classList.contains('hidden') && overlay.style.display !== 'none';
+        const settingsCard = !!card && !!choose && !!mainSel;
+        const mirrorExists = !!mirrorSel;
+        let mirrorDisabledParity = true;
+        let mirrorAriaBusyDone = true;
+        try { if (mirrorSel && mainSel) mirrorDisabledParity = !!mirrorSel.disabled === !!mainSel.disabled; } catch {}
+        try { if (mirrorSel) mirrorAriaBusyDone = (mirrorSel.getAttribute('aria-busy') || '') === 'false'; } catch {}
+        report.ui = { overlayVisible, settingsCard, mirrorExists, mirrorDisabledParity, mirrorAriaBusyDone };
+        if (!settingsCard) report.notes.push('assert: Settings Scripts Folder card missing (choose/scripts)');
+        if (!overlayVisible) report.notes.push('warn: settings overlay not visible after click');
+        if (!mirrorExists) report.notes.push('warn: sidebar mirror select missing');
+      } catch (e) {
+        try { report.notes.push('ui-check err: ' + String(e)); } catch {}
+      }
+
       return {
         ok,
         tBootMs: report.tBootMs,
@@ -360,7 +386,8 @@ async function main() {
         wsOpened: report.wsOpened,
         notes: report.notes,
         appVersion,
-        asserts: { hasIdentify, wsCountsMatch }
+        asserts: { hasIdentify, wsCountsMatch },
+        ui: report.ui || null
       };
     }, { stubObs: !!STUB_OBS });
     // Attach CI metadata (sha/ref) and print a single-line JSON report for CI
