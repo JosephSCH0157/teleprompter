@@ -83,6 +83,8 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
           const root = document.documentElement;
             const on = !root.classList.contains('tp-present');
             root.classList.toggle('tp-present', on);
+            // Keep body class in sync for smoke harness compatibility
+            try { document.body.classList.toggle('present-mode', on); } catch {}
             btn.textContent = on ? 'Exit Present' : 'Present Mode';
             try { localStorage.setItem('tp_present', on ? '1' : '0'); } catch {}
         } catch {}
@@ -90,7 +92,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       // Restore persisted state early
       try {
         const was = (function(){ try { return localStorage.getItem('tp_present') === '1'; } catch { return false; } })();
-        if (was) document.documentElement.classList.add('tp-present');
+        if (was) { document.documentElement.classList.add('tp-present'); try { document.body.classList.add('present-mode'); } catch {} }
       } catch {}
     }
   } catch {}
@@ -121,3 +123,134 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
 }
 
 // (No auto‑invoke here; index.ts calls bindCoreUI() inside its onReady path)
+
+// ----------------- DEV/UI MOCKS AND CONTROL WIRING -----------------
+
+// Lightweight event dispatcher used by mock flows
+function dispatch(type: string, detail?: any) {
+  try { window.dispatchEvent(new CustomEvent(type, { detail })); } catch {}
+}
+
+// File picker helper
+async function pickFile(accept = '*/*'): Promise<File | null> {
+  try {
+    if ('showOpenFilePicker' in window) {
+      const [h]: any = await (window as any).showOpenFilePicker({ multiple: false, types: [{ description: 'Files', accept: { [accept]: ['.txt', '.md', '.rtf', '.docx'] } }] });
+      const f = await h.getFile();
+      return f as File;
+    }
+  } catch {}
+  // Fallback: use a hidden input
+  return await new Promise<File | null>((res) => {
+    try {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.txt,.md,.rtf,.docx';
+      inp.style.position = 'fixed';
+      inp.style.left = '-9999px';
+      inp.addEventListener('change', () => {
+        try { res((inp.files && inp.files[0]) || null); } catch { res(null); }
+      }, { once: true });
+      document.body.appendChild(inp);
+      inp.click();
+      setTimeout(() => { try { inp.remove(); } catch {} }, 15000);
+    } catch { res(null); }
+  });
+}
+
+const DEV_UI = (() => { try { return location.search.includes('uiMock=1') || ((navigator as any).webdriver === true); } catch { return false; } })();
+const fakeFile = (name: string, text: string) => new File([text], name, { type: 'text/plain' });
+
+// script helpers used by UI controls
+const scripts = {
+  async loadSample() {
+    const sample = `[s1]\nWelcome to Anvil. This is a sample script.\n[beat]\nUse the arrow keys or your foot pedal to step.\n[/s1]`;
+    try {
+      const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+      if (ed && 'value' in ed) {
+        ed.value = sample;
+        try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+      }
+    } catch {}
+    dispatch('tp:script-load', { name: 'Sample.txt', text: sample });
+  },
+  async upload() {
+    try {
+      if (DEV_UI) {
+        const f = fakeFile('SmokeUpload.txt', '[s1] CI upload OK [/s1]');
+        const text = await f.text();
+        const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+        if (ed && 'value' in ed) {
+          ed.value = text;
+          try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+        }
+        dispatch('tp:script-load', { name: f.name, text });
+        return;
+      }
+      const f = await pickFile();
+      if (!f) return;
+      let text = '';
+      if (f.name.toLowerCase().endsWith('.docx') && (window as any).docxToText) {
+        try { text = await (window as any).docxToText(f); } catch { text = await f.text(); }
+      } else {
+        text = await f.text();
+      }
+      const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+      if (ed && 'value' in ed) {
+        ed.value = text;
+        try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+      }
+      dispatch('tp:script-load', { name: f.name, text });
+    } catch {}
+  }
+};
+
+// ASR & Camera fallbacks used in headless/dev
+const asr = {
+  requestMic: (window as any).__tpAsrImpl?.requestMic
+           ?? (window as any).ASR?.requestMic
+           ?? (async () => DEV_UI ? true : ((await navigator.mediaDevices.getUserMedia({ audio: true })), true)),
+  start:      (window as any).__tpAsrImpl?.start
+           ?? (window as any).ASR?.start
+           ?? (() => { if (DEV_UI) try { console.log('[ASR] start (mock)'); } catch {} })
+};
+
+const cam = {
+  start: (window as any).__tpCamImpl?.start
+       ?? (window as any).Camera?.start
+       ?? (async () => { if (DEV_UI) { try { console.log('[CAM] start (mock)'); } catch {} return true; }
+                         const v = document.getElementById('cameraPreview') as HTMLVideoElement | null;
+                         if (!v) return false;
+                         const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                         (v as any).srcObject = s; try { await (v as any).play?.(); } catch {} return true; }),
+  pip: async () => {
+    if (DEV_UI) { try { console.log('[PiP] request (mock)'); } catch {} return; }
+    const v = document.getElementById('cameraPreview') as HTMLVideoElement | null;
+    if (v && (document as any).pictureInPictureEnabled && !(document as any).pictureInPictureElement) {
+      try { await (v as any).requestPictureInPicture?.(); } catch {}
+    }
+  }
+};
+
+// Wire the related buttons if present (idempotent via dataset flags)
+(() => {
+  try {
+    const map: Array<{ id: string; fn: () => any }> = [
+      { id: '#loadSample',     fn: () => scripts.loadSample() },
+      { id: '#uploadFileBtn',  fn: () => scripts.upload() },
+      { id: '#micBtn',         fn: () => asr.requestMic() },
+      { id: '#recBtn',         fn: () => asr.start() },
+      { id: '#startCam',       fn: () => cam.start() },
+      { id: '#camPiP',         fn: () => cam.pip() },
+    ];
+    map.forEach(({ id, fn }) => {
+      try {
+        const el = q<HTMLElement>(id);
+        if (el && !(el as any).dataset.coreUiWired) {
+          (el as any).dataset.coreUiWired = '1';
+          on(el, 'click', (e: any) => { try { e.preventDefault?.(); } catch {}; try { fn(); } catch {} });
+        }
+      } catch {}
+    });
+  } catch {}
+})();

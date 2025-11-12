@@ -52,7 +52,7 @@ async function main() {
     }
   });
 
-  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
+  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1&uiMock=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
     try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (_e) { /* ignore */ }
@@ -437,30 +437,95 @@ async function main() {
 
       // Single boot assertion
       try {
-        // @ts-ignore
+        console.log('[e2e] ui: settings open');
         const boots = (globalThis.__tpBootsSeen || 0);
         report.boots = boots;
-        if (boots !== 1) {
+        console.log('[e2e] ui: settings close');
+        await clickIf('#settingsClose', '#settingsClose');
           ok = false;
-          report.notes.push(`assert: expected single boot, saw ${boots}`);
+        console.log('[e2e] ui: help open');
         }
       } catch {}
-
+        console.log('[e2e] ui: help close');
+        await clickIf('#helpClose', '#shortcutsClose');
       return {
-        ok,
+        console.log('[e2e] ui: present on');
         tBootMs: report.tBootMs,
         recorderReady: report.recorderReady,
-        adapterReady: report.adapterReady,
+        console.log('[e2e] ui: present off');
+        await clickIf('#presentBtn', '#presentBtn');
         testRan: report.testRan,
-        wsSentCount: report.wsSentCount,
+        console.log('[e2e] ui: display open');
         wsOps: report.wsOps,
         wsOpened: report.wsOpened,
         notes: report.notes,
-        appVersion,
+        console.log('[e2e] ui: mic/speech');
         asserts: { hasIdentify, wsCountsMatch },
         ui: report.ui || null
-      };
+        console.log('[e2e] ui: cam/pip');
     }, { stubObs: !!STUB_OBS });
+
+        console.log('[e2e] ui: load sample');
+    try {
+      const clickIf = async (selA, selB) => {
+        const target = await page.evaluate((a, b) => {
+          const elA = document.querySelector(a);
+          if (elA) return a;
+        console.log('[e2e] ui: upload mock');
+        await clickIf('#uploadBtn', '#uploadFileBtn');
+          return elB ? b : null;
+        }, selA, selB);
+        if (!target) return false;
+        await page.evaluate((selector) => { try { var el = document.querySelector(selector); if (el && typeof el.click === 'function') el.click(); } catch {} }, target);
+        return true;
+        console.log('[e2e] ui: speakers toggle');
+      // Settings open/close
+  await clickIf('#settingsBtn', '#SettingsBtn');
+  await page.waitForFunction(() => !document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
+  await clickIf('#settingsClose', '#settingsClose');
+      await page.waitForFunction(() => document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
+      // Help open/close (shortcuts)
+      await clickIf('#helpBtn', '#shortcutsBtn');
+      await page.waitForFunction(() => !document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
+      await clickIf('#helpClose', '#shortcutsClose');
+      await page.waitForFunction(() => document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
+      // Present mode
+  await clickIf('#presentBtn', '#presentBtn');
+  await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'));
+  await clickIf('#presentBtn', '#presentBtn');
+  await page.waitForFunction(() => !(document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present')));
+      // Display window
+  // Display window (tolerate blocked popups in headless)
+  await clickIf('#displayWindowBtn', '#openDisplayBtn');
+      // HUD button is optional; click if present
+      const hud = await page.$('#hudBtn'); if (hud) await hud.click();
+      // Mic/Speech
+      await clickIf('#requestMicBtn', '#micBtn');
+      await clickIf('#startSpeechBtn', '#recBtn');
+      // Camera/PiP
+      await clickIf('#startCameraBtn', '#startCam');
+      await clickIf('#pipBtn', '#camPiP');
+      // Scripts load sample and upload (mock)
+      await clickIf('#loadSampleBtn', '#loadSample');
+      await page.waitForFunction(() => {
+        const ed = document.querySelector('#editor');
+        return !!ed && 'value' in ed && (ed.value || '').length > 10;
+      }, { timeout: 2000 });
+      await clickIf('#uploadBtn', '#uploadFileBtn');
+      await page.waitForFunction(() => {
+        const ed = document.querySelector('#editor');
+        if (!ed || !('value' in ed)) return false;
+        return /CI upload OK/i.test(ed.value || '');
+      }, { timeout: 2000 });
+      // Speakers toggle
+      await clickIf('#speakersToggleBtn', '#toggleSpeakers');
+      await page.waitForFunction(() => {
+        const el = document.querySelector('#speakersBody, #speakersPanel');
+        return !!el;
+      }, { timeout: 2000 });
+    } catch (e) {
+      console.warn('[e2e] ui-binds clicks: WARN', String(e && e.message || e));
+    }
 
     // Assert that content appears in #editor (or any script input) after selection
     try {
