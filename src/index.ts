@@ -174,6 +174,13 @@ import './smoke/settings-mapped-folder.smoke.js';
 
 // Install emergency binder immediately as a safety net (idempotent) — survives early failures
 try { installEmergencyBinder(); } catch {}
+// Display mode: apply top-level class early for popup/display contexts
+try {
+	const Q = new URLSearchParams(location.search || '');
+	if (Q.get('display') === '1') {
+		document.documentElement.classList.add('tp-display');
+	}
+} catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 function injectSpeechNotesHud(){
 	try {

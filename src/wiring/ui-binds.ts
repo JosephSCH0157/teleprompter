@@ -65,6 +65,23 @@ function _txt(el: Element | null): string {
   } catch { return ''; }
 }
 
+// try a list of selectors, return the first match
+function findOne(list: readonly string[]): HTMLElement | null {
+  try {
+    for (const s of list) {
+      const el = document.querySelector(s) as HTMLElement | null;
+      if (el) return el;
+    }
+  } catch {}
+  return null;
+}
+
+// tolerant overlay lookups
+const OVERLAY = {
+  settings: ['#settingsOverlay','[data-overlay="settings"]','#settingsPanel','[role="dialog"][data-name="settings"]'] as const,
+  help:     ['#helpOverlay','#shortcutsOverlay','[data-overlay="help"]','[role="dialog"][data-name="help"]'] as const,
+} as const;
+
 /** Best-effort action guesser for legacy buttons by id or label */
 function guessActionFor(el: HTMLElement): string | null {
   try {
@@ -165,11 +182,23 @@ async function pickPlainFile(): Promise<File | null> {
 }
 
 function toggleOverlay(sel: string, show?: boolean) {
+  // Deprecated signature retained for safety; prefer list below
   try {
     const el = document.querySelector(sel) as HTMLElement | null;
     if (!el) return;
     const visible = show ?? el.classList.contains('hidden');
     el.classList.toggle('hidden', !visible);
+  } catch {}
+}
+
+// overlay show/hide helper (list of tolerant selectors)
+function toggleOverlayList(list: readonly string[], show?: boolean) {
+  try {
+    const el = findOne(list);
+    if (!el) return;
+    const want = show ?? el.classList.contains('hidden');
+    el.classList.toggle('hidden', !want);
+    try { el.setAttribute('aria-hidden', want ? 'false' : 'true'); } catch {}
   } catch {}
 }
 
@@ -221,18 +250,18 @@ export function installEmergencyBinder() {
         evt.stopPropagation();
         switch (action) {
           case 'settings-open':
-            toggleOverlay('#settingsOverlay', true);
+            toggleOverlayList(OVERLAY.settings, true);
             try { document.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'emergency' } })); } catch {}
             break;
           case 'settings-close':
-            toggleOverlay('#settingsOverlay', false);
+            toggleOverlayList(OVERLAY.settings, false);
             try { document.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'emergency' } })); } catch {}
             break;
           case 'help-open':
-            toggleOverlay('#helpOverlay', true);
+            toggleOverlayList(OVERLAY.help, true);
             break;
           case 'help-close':
-            toggleOverlay('#helpOverlay', false);
+            toggleOverlayList(OVERLAY.help, false);
             break;
           case 'present-toggle':
             try {
@@ -247,8 +276,15 @@ export function installEmergencyBinder() {
             break;
           case 'display': {
             try {
-              const url = new URL(location.href); url.searchParams.set('display','1');
-              window.open(url.toString(), 'AnvilDisplay', 'popup=yes,resizable=yes,scrollbars=no,width=1280,height=720');
+              const displayUrl = `${location.origin}/display.html`;
+              let urlToOpen = '';
+              try {
+                const r = await fetch(displayUrl, { method: 'HEAD' });
+                urlToOpen = r.ok ? displayUrl : `${location.pathname}?display=1`;
+              } catch {
+                urlToOpen = `${location.pathname}?display=1`;
+              }
+              window.open(urlToOpen, 'AnvilDisplay', 'popup=yes,resizable=yes,scrollbars=no,width=1280,height=720');
             } catch {}
             break; }
           case 'display-close': {
@@ -276,7 +312,8 @@ export function installEmergencyBinder() {
             break;
           case 'speakers-toggle': {
             try {
-              const body = document.getElementById('speakersBody') as HTMLElement | null;
+              const body = (document.getElementById('speakersBody') as HTMLElement | null)
+                        || (document.querySelector('#speakersPanel,[data-panel="speakers"]') as HTMLElement | null);
               const btn = document.getElementById('toggleSpeakers') as HTMLButtonElement | null;
               if (body) body.hidden = !body.hidden;
               if (btn) { btn.textContent = body && body.hidden ? 'Show' : 'Hide'; btn.setAttribute('aria-expanded', String(!(body && body.hidden))); }
