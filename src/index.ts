@@ -388,6 +388,35 @@ try {
 						}
 					});
 				} catch {}
+				// Optional: mirror the list into the sidebar while keeping Settings as SSOT
+				try {
+					bindMappedFolderUI({
+						button: '#chooseFolderBtn',
+						select: '#scriptSelectSidebar',
+						fallbackInput: '#folderFallback',
+						onSelect: async (item) => {
+							try {
+								const detail: any = {};
+								if (item && 'getFile' in (item as any)) {
+									const f = await (item as FileSystemFileHandle).getFile();
+									detail.file = f;
+								} else if (item instanceof File) {
+									detail.file = item;
+								} else {
+									detail.file = item as File | null;
+								}
+								if (detail.file) window.dispatchEvent(new CustomEvent('tp:script-load', { detail }));
+							} catch {}
+						}
+					});
+				} catch {}
+				// Sidebar button opens Settings
+				try {
+					const btn = document.getElementById('openScriptsSettings');
+					btn?.addEventListener('click', () => {
+						try { document.getElementById('settingsBtn')?.click(); } catch {}
+					});
+				} catch {}
 				// Install script ingest (auto-detect target)
 				try { installScriptIngest({}); } catch {}
 				// Wire optional permission recheck button
