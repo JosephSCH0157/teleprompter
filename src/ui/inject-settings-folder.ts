@@ -2,7 +2,9 @@
 // Ensures the mapped-folder controls exist inside the Settings panel.
 // Creates a compact row with: Choose Folder, Recheck, Scripts <select>, hidden fallback input.
 export function ensureSettingsFolderControls() {
-  const host = (document.querySelector('#settings, #settingsPanel, [data-panel="settings"], aside.settings, .settings-panel') as HTMLElement | null)
+  // Host resolution: try Settings overlay body first (#settingsBody), then legacy panel fallbacks.
+  const settingsBody = document.getElementById('settingsBody') as HTMLElement | null;
+  const host = settingsBody || (document.querySelector('#settings, #settingsPanel, [data-panel="settings"], aside.settings, .settings-panel') as HTMLElement | null)
     || (document.querySelector('#menu, #sidebar, [data-role="settings"]') as HTMLElement | null);
 
   if (!host) return false;
@@ -11,22 +13,32 @@ export function ensureSettingsFolderControls() {
   const already = document.querySelector('#chooseFolderBtn, #scriptSelect, #recheckFolderBtn');
   if (already) return true;
 
-  // Prefer an Advanced section if present
-  const advanced = (host.querySelector('[data-section="advanced"], .settings-advanced, #settingsAdvanced') as HTMLElement | null) || host;
+  // If legacy external scripts row exists in sidebar, hide it (will be relocated here).
+  try {
+    const legacyRow = document.getElementById('externalScriptsRow');
+    if (legacyRow) legacyRow.style.display = 'none';
+  } catch {}
 
-  const wrap = document.createElement('div');
-  wrap.className = 'settings-row settings-mapped-folder';
-  wrap.innerHTML = `
-    <div class="settings-row__label">Scripts Folder</div>
-    <div class="settings-row__controls">
-      <button id="chooseFolderBtn" type="button">Choose Folder</button>
-      <button id="recheckFolderBtn" type="button" title="Recheck permission">Recheck</button>
-      <select id="scriptSelect" class="select-md" aria-label="Mapped folder scripts" style="min-width: 240px;"></select>
-      <input id="folderFallback" type="file" webkitdirectory directory multiple hidden>
+  // Card wrapper (Settings overlay uses cards keyed by data-tab). Prefer 'general' tab.
+  const card = document.createElement('div');
+  card.className = 'settings-card settings-card--scripts';
+  (card as any).dataset.tab = 'general';
+
+  card.innerHTML = `
+    <h4>Scripts Folder</h4>
+    <div class="settings-small">Map a directory of .txt / .md / .docx files; select to load instantly.</div>
+    <div class="settings-row settings-mapped-folder">
+      <div class="settings-row__controls">
+        <button id="chooseFolderBtn" type="button">Choose Folder</button>
+        <button id="recheckFolderBtn" type="button" title="Recheck permission">Recheck</button>
+        <select id="scriptSelect" class="select-md" aria-label="Mapped folder scripts" style="min-width:240px"></select>
+        <input id="folderFallback" type="file" webkitdirectory directory multiple hidden>
+      </div>
     </div>
   `;
 
-  advanced.appendChild(wrap);
+  host.appendChild(card);
+  try { (window as any).HUD?.log?.('settings:folder:injected', { late: false }); } catch {}
   return true;
 }
 
