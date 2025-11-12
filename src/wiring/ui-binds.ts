@@ -176,6 +176,28 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       helpClose.dataset.uiBound = '1';
       on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, false); });
     }
+    // ESC to close any open overlay (Settings/Help)
+    try {
+      if (!(window as any).__tpOverlayEscBound) {
+        (window as any).__tpOverlayEscBound = true;
+        window.addEventListener('keydown', (e: KeyboardEvent) => {
+          try {
+            if (e.key !== 'Escape') return;
+            const settingsOpen = settingsOverlay && !settingsOverlay.classList.contains('hidden');
+            const helpOpen = helpOverlay && !helpOverlay.classList.contains('hidden');
+            if (settingsOpen) {
+              toggle(settingsOverlay, false);
+              try { dispatch('tp:settings:close', { source: 'binder' }); } catch {}
+              try { document.body.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'binder' } })); } catch {}
+              e.preventDefault();
+            } else if (helpOpen) {
+              toggle(helpOverlay, false);
+              e.preventDefault();
+            }
+          } catch {}
+        }, { capture: true });
+      }
+    } catch {}
   } catch {}
 }
 
