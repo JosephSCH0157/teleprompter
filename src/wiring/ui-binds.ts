@@ -56,6 +56,158 @@ function onGlobal(target: EventTarget | null | undefined, type: string, listener
   } catch {}
 }
 
+// ——— Emergency delegated binder (keeps UI alive even if per-button binding breaks) ———
+let __tpEmergencyBound = false;
+
+function closestAction(el: Element | null): string | null {
+  if (!el) return null;
+  try {
+    const withAction = (el as HTMLElement).closest?.('[data-action],button,[role="button"]') as HTMLElement | null;
+    if (!withAction) return null;
+    const action = withAction.dataset?.action
+              || withAction.getAttribute('data-action')
+              || (withAction.id?.includes('loadSample') ? 'load-sample' : null)
+              || (withAction.id?.includes('settings')   ? 'settings-open' : null)
+              || (withAction.id?.includes('present')    ? 'present-toggle' : null)
+              || (withAction.id?.includes('display')    ? 'display' : null)
+              || (withAction.id?.includes('mic')        ? 'request-mic' : null)
+              || (withAction.id?.includes('speech')     ? 'start-speech' : null)
+              || (withAction.id?.includes('upload')     ? 'upload' : null)
+              || (withAction.id?.includes('normalize')  ? 'normalize' : null)
+              || (withAction.id?.includes('clear')      ? 'clear' : null);
+    return action;
+  } catch { return null; }
+}
+
+// minimal helpers used by handlers
+function renderNow(name: string, text: string) {
+  try { document.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
+}
+
+async function pickPlainFile(): Promise<File | null> {
+  try {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.docx,.md,.rtf,.json,.html,.htm';
+    return await new Promise(resolve => {
+      try {
+        input.onchange = async () => {
+          try { const f = input.files && input.files[0]; resolve(f || null); } catch { resolve(null); }
+        };
+        input.click();
+      } catch { resolve(null); }
+    });
+  } catch { return null; }
+}
+
+function toggleOverlay(sel: string, show?: boolean) {
+  try {
+    const el = document.querySelector(sel) as HTMLElement | null;
+    if (!el) return;
+    const visible = show ?? el.classList.contains('hidden');
+    el.classList.toggle('hidden', !visible);
+  } catch {}
+}
+
+export function installEmergencyBinder() {
+  if (__tpEmergencyBound) return;
+  __tpEmergencyBound = true;
+
+  try {
+    document.addEventListener('click', async (evt) => {
+      try {
+        const target = evt.target as Element | null;
+        const act = closestAction(target);
+        if (!act) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        switch (act) {
+          case 'settings-open':
+            toggleOverlay('#settingsOverlay', true);
+            try { document.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'emergency' } })); } catch {}
+            break;
+          case 'settings-close':
+            toggleOverlay('#settingsOverlay', false);
+            try { document.dispatchEvent(new CustomEvent('tp:settings:close', { detail: { source: 'emergency' } })); } catch {}
+            break;
+          case 'help-open':
+            toggleOverlay('#helpOverlay', true);
+            break;
+          case 'help-close':
+            toggleOverlay('#helpOverlay', false);
+            break;
+          case 'present-toggle':
+            try { document.body.classList.toggle('present-mode'); } catch {}
+            break;
+          case 'hud-toggle':
+            try { (window as any).HUD?.toggle?.(); } catch {}
+            break;
+          case 'display': {
+            try {
+              const url = new URL(location.href); url.searchParams.set('display','1');
+              window.open(url.toString(), 'AnvilDisplay', 'popup=yes,resizable=yes,scrollbars=no,width=1280,height=720');
+            } catch {}
+            break; }
+          case 'request-mic':
+            try { (window as any).__tpAsrImpl?.requestMic?.(); } catch {}
+            try { (window as any).asr?.requestMic?.(); } catch {}
+            break;
+          case 'start-speech':
+            try { (window as any).__tpAsrImpl?.start?.(); } catch {}
+            try { (window as any).asr?.start?.(); } catch {}
+            break;
+          case 'start-camera':
+            try { (window as any).__tpCamImpl?.start?.(); } catch {}
+            try { (window as any).cam?.start?.(); } catch {}
+            break;
+          case 'pip':
+            try { (window as any).__tpCamImpl?.pip?.(); } catch {}
+            try { (window as any).cam?.pip?.(); } catch {}
+            break;
+          case 'load-sample': {
+            const sample = `[s1]\nWelcome to Anvil — sample is live.\n[beat]\nUse step keys or auto-scroll to move.\n[/s1]`;
+            renderNow('Sample.txt', sample);
+            break; }
+          case 'upload': {
+            try {
+              const mocked = (() => { try { return (new URL(location.href)).searchParams.get('uiMock') === '1'; } catch { return false; } })();
+              if (mocked) { renderNow('SmokeUpload.txt','[s1] CI upload OK [/s1]'); break; }
+              const f = await pickPlainFile(); if (!f) break;
+              const isDocx = f.name.toLowerCase().endsWith('.docx') && (window as any).docxToText;
+              const text = isDocx ? await (window as any).docxToText(f) : await f.text();
+              renderNow(f.name, text);
+            } catch {}
+            break; }
+          case 'normalize': {
+            try {
+              const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
+              if (!ed) break;
+              const t = (ed.value || '')
+                .replace(/\u00A0/g, ' ')
+                .replace(/[ \t]+\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n');
+              ed.value = t; renderNow('Normalized.txt', t);
+            } catch {}
+            break; }
+          case 'clear': {
+            try {
+              const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
+              if (ed) ed.value = '';
+              renderNow('Untitled.txt','');
+            } catch {}
+            break; }
+          default:
+            try { console.debug('[emergency-binder] no handler for', act); } catch {}
+        }
+      } catch (e) {
+        try { console.warn('[emergency-binder] handler error', e); } catch {}
+      }
+    }, { capture: true });
+  } catch {}
+
+  try { console.log('[emergency-binder] installed'); } catch {}
+}
+
 // Map <option value> → internal UiScrollMode (see index.ts applyUiScrollMode)
 function mapScrollValue(v: string): 'auto'|'asr'|'step'|'rehearsal'|'off' {
   switch (v) {

@@ -150,7 +150,7 @@ import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
-import { auditBindingsOnce, bindCoreUI, ensureSidebarMirror } from './wiring/ui-binds';
+import { auditBindingsOnce, bindCoreUI, ensureSidebarMirror, installEmergencyBinder } from './wiring/ui-binds';
 // Side-effect debug / DOM helpers (legacy parity)
 import './ui/dom.js';
 // Feature initializers (legacy JS modules)
@@ -264,6 +264,8 @@ export async function boot() {
 					} catch {}
 					// Core UI binder (idempotent)
 								try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+								// Emergency delegated binder (last — safety net if any earlier wiring failed)
+								try { installEmergencyBinder(); } catch {}
 								try { ensureSidebarMirror(); } catch {}
 								try { auditBindingsOnce(); } catch {}
 								// Optional console noise filter: activate only when explicitly requested
