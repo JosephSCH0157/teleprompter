@@ -347,14 +347,7 @@
 <button id="normalizeTopBtn">Normalize</button>
 <button id="clearText">Clear</button>
 </div>
-<!-- Sidebar quick Scripts select (mirrors Settings card) -->
-<div class="row" id="scriptsQuickRow">
-  <label>Scripts
-    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true"></select>
-  </label>
-  <button id="openScriptsSettings" class="btn-chip" aria-controls="scriptSelectSidebar">Folder…</button>
-  <span class="chip sidebar-hint">Manage folder in Settings → General</span>
-</div>
+<!-- Sidebar quick Scripts select moved into Title row below -->
 <h2 class="section-title">
   Speakers
   <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody">Hide</button>
@@ -413,7 +406,13 @@
 </div>
 <!-- (Removed legacy Saved Scripts row; browser-saved scripts feature deprecated in favor of mapped folder + Settings card) -->
 <div class="row">
-  <label>Title <input id="scriptTitle" type="text" placeholder="Untitled"/></label>
+  <label>Scripts
+    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true"></select>
+  </label>
+  <button id="openScriptsSettings" class="btn-chip" aria-controls="scriptSelectSidebar">Folder…</button>
+  <span class="chip sidebar-hint">Manage folder in Settings → General</span>
+  <!-- Keep legacy title input hidden for compatibility with tests and legacy save paths -->
+  <input id="scriptTitle" type="text" placeholder="Untitled" hidden />
   <button id="scriptSaveBtn">Save</button>
   <button id="scriptSaveAsBtn">Save As</button>
   <button id="scriptLoadBtn">Load</button>

@@ -256,6 +256,21 @@ function renderNow(name: string, text: string) {
   try { document.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
 }
 
+// Central script name resolver: prefer mapped-folder current name, then sidebar select, then hidden title input
+function getScriptName(): string {
+  try { if ((window as any).__tpCurrentName) return String((window as any).__tpCurrentName); } catch {}
+  try {
+    const sel = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+    if (sel && sel.selectedOptions && sel.selectedOptions[0]) return sel.selectedOptions[0].text || sel.value || 'Untitled';
+  } catch {}
+  try {
+    const t = document.getElementById('scriptTitle') as HTMLInputElement | null;
+    if (t && t.value) return t.value;
+  } catch {}
+  return 'Untitled';
+}
+try { (window as any).__tpGetScriptName = getScriptName; } catch {}
+
 async function pickPlainFile(): Promise<File | null> {
   try {
     const input = document.createElement('input');
@@ -359,7 +374,7 @@ export function installEmergencyBinder() {
         const apply = () => {
           try {
             const t = ed.value || '';
-            const name = (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled';
+            const name = getScriptName();
             document.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text: t } }));
           } catch {}
         };
@@ -499,7 +514,7 @@ export function installEmergencyBinder() {
             break; }
           case 'download': {
             try {
-              const name = (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled';
+              const name = getScriptName();
               const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
               const text = (ed && ed.value) || '';
               downloadNow(name, text);
@@ -507,14 +522,14 @@ export function installEmergencyBinder() {
             break; }
           case 'save': {
             try {
-              const name = (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled';
+              const name = getScriptName();
               const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
               downloadNow(name, (ed && ed.value) || '');
             } catch {}
             break; }
           case 'save-as': {
             try {
-              const name = prompt('Save As name:', (document.getElementById('scriptTitle') as HTMLInputElement | null)?.value || 'Untitled') || 'Untitled';
+              const name = prompt('Save As name:', getScriptName()) || getScriptName();
               const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
               downloadNow(name, (ed && ed.value) || '');
             } catch {}
