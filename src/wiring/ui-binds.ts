@@ -101,11 +101,8 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
             try { localStorage.setItem('tp_present', on ? '1' : '0'); } catch {}
         } catch {}
       });
-      // Restore persisted state early
-      try {
-        const was = (function(){ try { return localStorage.getItem('tp_present') === '1'; } catch { return false; } })();
-        if (was) { document.documentElement.classList.add('tp-present'); try { document.body.classList.add('present-mode'); } catch {} }
-      } catch {}
+      // Do NOT restore persisted present mode automatically on load.
+      // Default should be non-present; user must opt-in via a click each session.
     }
   } catch {}
 
