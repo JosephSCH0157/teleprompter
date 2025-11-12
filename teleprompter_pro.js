@@ -2946,77 +2946,79 @@ let _toast = function (msg, opts) {
       const lineNum = i + 1;
       let m;
       tagRe.lastIndex = 0;
-      while ((m = tagRe.exec(rawLine))) {
-        const closing = !!m[1];
-        const nameRaw = m[2];
-        const name = nameRaw.toLowerCase();
-        if (!allowed.has(name)) {
-          unknownCount++;
-          addIssue(lineNum, `unsupported tag [${closing ? '\/' : ''}${nameRaw}]`, 'unsupported', {
-            tag: name,
-          });
-          continue;
-        }
-        if (!closing) {
-          if (name === 'note') {
-            if (stack.length) {
-              addIssue(
-                lineNum,
-                `[note] must not appear inside [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
-                'nested-note',
-                { parent: stack[stack.length - 1].tag }
-              );
-            }
-            stack.push({ tag: name, line: lineNum });
-          } else if (speakerTags.has(name)) {
-            if (stack.length && speakerTags.has(stack[stack.length - 1].tag))
-              addIssue(
-                lineNum,
-                `[${name}] opened before closing previous [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
-                'nested-speaker',
-                { prev: stack[stack.length - 1].tag, prevLine: stack[stack.length - 1].line }
-              );
-            stack.push({ tag: name, line: lineNum });
-          } else {
-            stack.push({ tag: name, line: lineNum });
-          }
-        } else {
-          if (!stack.length) {
-            addIssue(lineNum, `stray closing tag [\/${name}]`, 'stray-close', { tag: name });
+      try {
+        while ((m = tagRe.exec(rawLine))) {
+          const closing = !!m[1];
+          const nameRaw = m[2];
+          const name = nameRaw.toLowerCase();
+          if (!allowed.has(name)) {
+            unknownCount++;
+            addIssue(lineNum, `unsupported tag [${closing ? '\/' : ''}${nameRaw}]`, 'unsupported', {
+              tag: name,
+            });
             continue;
           }
-          const top = stack[stack.length - 1];
-          if (top.tag === name) {
-            stack.pop();
-            if (name === 's1') s1Blocks++;
-            else if (name === 's2') s2Blocks++;
-            else if (name === 'note') noteBlocks++;
-          } else {
-            addIssue(
-              lineNum,
-              `mismatched closing [\/${name}] – expected [\/${top.tag}] for opening on line ${top.line}`,
-              'mismatch',
-              { expected: top.tag, openLine: top.line, found: name }
-            );
-            let poppedAny = false;
-            while (stack.length && stack[stack.length - 1].tag !== name) {
-              stack.pop();
-              poppedAny = true;
+          if (!closing) {
+            if (name === 'note') {
+              if (stack.length) {
+                addIssue(
+                  lineNum,
+                  `[note] must not appear inside [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
+                  'nested-note',
+                  { parent: stack[stack.length - 1].tag }
+                );
+              }
+              stack.push({ tag: name, line: lineNum });
+            } else if (speakerTags.has(name)) {
+              if (stack.length && speakerTags.has(stack[stack.length - 1].tag))
+                addIssue(
+                  lineNum,
+                  `[${name}] opened before closing previous [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
+                  'nested-speaker',
+                  { prev: stack[stack.length - 1].tag, prevLine: stack[stack.length - 1].line }
+                );
+              stack.push({ tag: name, line: lineNum });
+            } else {
+              stack.push({ tag: name, line: lineNum });
             }
-            if (stack.length && stack[stack.length - 1].tag === name) {
-              const opener = stack.pop();
+          } else {
+            if (!stack.length) {
+              addIssue(lineNum, `stray closing tag [\/${name}]`, 'stray-close', { tag: name });
+              continue;
+            }
+            const top = stack[stack.length - 1];
+            if (top.tag === name) {
+              stack.pop();
               if (name === 's1') s1Blocks++;
               else if (name === 's2') s2Blocks++;
               else if (name === 'note') noteBlocks++;
-              if (poppedAny)
-                addIssue(
-                  lineNum,
-                  `auto-recovered by closing [\/${name}] (opened line ${opener.line}) after mismatches`,
-                  'auto-recover',
-                  { tag: name, openLine: opener.line }
-                );
-            } else
-              addIssue(lineNum, `no matching open tag for [\/${name}]`, 'no-match', { tag: name });
+            } else {
+              addIssue(
+                lineNum,
+                `mismatched closing [\/${name}] – expected [\/${top.tag}] for opening on line ${top.line}`,
+                'mismatch',
+                { expected: top.tag, openLine: top.line, found: name }
+              );
+              let poppedAny = false;
+              while (stack.length && stack[stack.length - 1].tag !== name) {
+                stack.pop();
+                poppedAny = true;
+              }
+              if (stack.length && stack[stack.length - 1].tag === name) {
+                const opener = stack.pop();
+                if (name === 's1') s1Blocks++;
+                else if (name === 's2') s2Blocks++;
+                else if (name === 'note') noteBlocks++;
+                if (poppedAny)
+                  addIssue(
+                    lineNum,
+                    `auto-recovered by closing [\/${name}] (opened line ${opener.line}) after mismatches`,
+                    'auto-recover',
+                    { tag: name, openLine: opener.line }
+                  );
+              } else
+                addIssue(lineNum, `no matching open tag for [\/${name}]`, 'no-match', { tag: name });
+            }
           }
         }
       } catch (e) {
