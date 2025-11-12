@@ -2,7 +2,7 @@
 // Bind Choose Folder button + Scripts <select> to mapped-folder SSOT.
 // Safe no-op if elements are missing.
 
-import { initMappedFolder, pickMappedFolder, listScripts, onMappedFolder } from '../fs/mapped-folder';
+import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
 
 type BindOpts = {
   button: string | HTMLElement; // Choose Folder button selector or element
