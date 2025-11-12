@@ -26,6 +26,18 @@ function q<T extends HTMLElement = HTMLElement>(sel: string | undefined | null):
   if (!sel) return null; try { return document.querySelector(sel) as T | null; } catch { return null; }
 }
 
+// Multi-selector helper: returns first match from a list
+function _qq<T extends HTMLElement = HTMLElement>(sels: string[] | undefined | null): T | null {
+  try {
+    if (!sels || !Array.isArray(sels)) return null as any;
+    for (const s of sels) {
+      const el = q<T>(s);
+      if (el) return el;
+    }
+  } catch {}
+  return null as any;
+}
+
 function on(el: Element | null | undefined, ev: string, fn: any, opts?: any) {
   try { if (el && 'addEventListener' in el) (el as any).addEventListener(ev, fn, opts); } catch {}
 }
@@ -232,23 +244,63 @@ const cam = {
   }
 };
 
-// Wire the related buttons if present (idempotent via dataset flags)
+// Common selectors for legacy + new data-action hooks
+const SEL = {
+  // overlays
+  settingsOpen:   ['#settingsBtn','#btnSettings','#shortcutsBtn','[data-action="settings-open"]'],
+  settingsClose:  ['#settingsClose','[data-action="settings-close"]'],
+  settingsOverlay:['#settingsOverlay','[data-overlay="settings"]'],
+
+  helpOpen:       ['#helpBtn','#shortcutsBtn','[data-action="help-open"]'],
+  helpClose:      ['#helpClose','[data-action="help-close"]'],
+  helpOverlay:    ['#helpOverlay','#shortcutsOverlay','[data-overlay="help"]'],
+
+  // core toggles / windows
+  present:        ['#presentBtn','[data-action="present-toggle"]'],
+  display:        ['#displayWindowBtn','#openDisplayBtn','[data-action="display"]'],
+  hud:            ['#hudBtn','[data-action="hud-toggle"]'],
+
+  // asr / cam
+  mic:            ['#requestMicBtn','#micBtn','[data-action="request-mic"]'],
+  speech:         ['#startSpeechBtn','#recBtn','[data-action="start-speech"]'],
+  camera:         ['#startCameraBtn','#startCam','[data-action="start-camera"]'],
+  pip:            ['#pipBtn','#camPiP','[data-action="pip"]'],
+
+  // scripts
+  sample:         ['#loadSampleBtn','#loadSample','[data-action="load-sample"]'],
+  upload:         ['#uploadBtn','#uploadFileBtn','[data-action="upload"]'],
+
+  // speakers
+  speakersToggle: ['#speakersToggleBtn','[data-action="speakers-toggle"]'],
+  speakersKey:    ['#speakersKeyBtn','[data-action="speakers-key"]'],
+  speakersPanel:  ['#speakersPanel','[data-panel="speakers"]'],
+  speakersKeyInput:['#speakersKey','[name="speakersKey"]','[data-key="speakers"]'],
+
+  // scripts selects
+  mainSelect:     ['#scriptSelect','[data-select="scripts-main"]'],
+  sideSelect:     ['#scriptSelectSidebar','[data-select="scripts-side"]'],
+  sidebar:        ['#sidebar','.sidebar','#leftCol'],
+} as const;
+
+// Wire the related buttons if present (idempotent via dataset flags); support both IDs and data-action hooks
 (() => {
   try {
-    const map: Array<{ id: string; fn: () => any }> = [
-      { id: '#loadSample',     fn: () => scripts.loadSample() },
-      { id: '#uploadFileBtn',  fn: () => scripts.upload() },
-      { id: '#micBtn',         fn: () => asr.requestMic() },
-      { id: '#recBtn',         fn: () => asr.start() },
-      { id: '#startCam',       fn: () => cam.start() },
-      { id: '#camPiP',         fn: () => cam.pip() },
+    const map: Array<{ sels: string[]; fn: () => any }> = [
+      { sels: SEL.sample, fn: () => scripts.loadSample() },
+      { sels: SEL.upload, fn: () => scripts.upload() },
+      { sels: SEL.mic,    fn: () => asr.requestMic() },
+      { sels: SEL.speech, fn: () => asr.start() },
+      { sels: SEL.camera, fn: () => cam.start() },
+      { sels: SEL.pip,    fn: () => cam.pip() },
     ];
-    map.forEach(({ id, fn }) => {
+    map.forEach(({ sels, fn }) => {
       try {
-        const el = q<HTMLElement>(id);
-        if (el && !(el as any).dataset.coreUiWired) {
-          (el as any).dataset.coreUiWired = '1';
-          on(el, 'click', (e: any) => { try { e.preventDefault?.(); } catch {}; try { fn(); } catch {} });
+        for (const s of sels) {
+          const el = q<HTMLElement>(s);
+          if (el && !(el as any).dataset.coreUiWired) {
+            (el as any).dataset.coreUiWired = '1';
+            on(el, 'click', (e: any) => { try { e.preventDefault?.(); } catch {}; try { fn(); } catch {} });
+          }
         }
       } catch {}
     });
