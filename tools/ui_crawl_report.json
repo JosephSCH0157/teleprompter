@@ -158,7 +158,7 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
-        "lineNumber": 9384,
+        "lineNumber": 9410,
         "columnNumber": 10
       }
     },
@@ -212,7 +212,7 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
-        "lineNumber": 9646,
+        "lineNumber": 9672,
         "columnNumber": 18
       }
     },
@@ -221,7 +221,7 @@
       "text": "[Scroll Mode] UI: asr | Brain: hybrid | Clamp: follow | ASR: on | Auto: on",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
-        "lineNumber": 9468,
+        "lineNumber": 9494,
         "columnNumber": 12
       }
     },
@@ -255,9 +255,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "282b62c590495ccee3a0dec4d6c2dbb2f2460a16",
+      "gitSha": "787fc33b46840809417213eacdc1beb7bc30ee99",
       "branch": "main",
-      "buildTime": "2025-11-12T13:56:12.375Z"
+      "buildTime": "2025-11-12T14:02:43.154Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

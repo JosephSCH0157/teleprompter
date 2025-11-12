@@ -122,7 +122,19 @@ export function installScriptIngest(opts: IngestOpts = {}) {
   try {
     window.addEventListener('tp:script-load', (e: any) => {
       try {
-        const item = e?.detail?.file ?? e?.detail;
+        const d = e?.detail;
+        // Support both { name, text } payloads and File/Handle payloads
+        if (d && typeof d.text === 'string') {
+          const name = typeof d.name === 'string' ? d.name : (function(){ try { return localStorage.getItem('tp_last_script_name') || 'Script.txt'; } catch { return 'Script.txt'; } })();
+          const text = String(d.text);
+          if (opts.onApply) opts.onApply(text, name);
+          else if (tgt) applyToTarget(tgt, text);
+          try { (window as any).HUD?.log?.('script:loaded', { name, chars: text.length }); } catch {}
+          try { localStorage.setItem('tp_last_script_name', name); } catch {}
+          try { window.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: text.length } })); } catch {}
+          return;
+        }
+        const item = d?.file ?? d;
         if (!item) return;
         handle(item);
       } catch {}
