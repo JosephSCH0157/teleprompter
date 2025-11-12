@@ -428,6 +428,39 @@ try {
 				try { bindPermissionButton('#recheckFolderBtn'); } catch {}
 				// Wire settings export/import buttons
 				try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
+				// Mirror select sync + persistence + accessibility polishing
+				try {
+					const main = document.querySelector<HTMLSelectElement>('#scriptSelect');
+					const mirror = document.querySelector<HTMLSelectElement>('#scriptSelectSidebar');
+					const KEY = 'mapped.lastScript';
+					function sync(a?: HTMLSelectElement|null, b?: HTMLSelectElement|null) {
+						if (!a || !b) return;
+						b.value = a.value;
+						b.toggleAttribute('disabled', a.options.length === 0);
+						b.setAttribute('aria-busy', 'false');
+					}
+					main?.addEventListener('change', () => { try { localStorage.setItem(KEY, main.value); } catch {}; sync(main, mirror); });
+					mirror?.addEventListener('change', () => { try { localStorage.setItem(KEY, mirror.value); } catch {}; sync(mirror, main); });
+					// When scripts list repopulates, attempt to restore last selection
+					window.addEventListener('tp:folderScripts:populated', () => {
+						try {
+							const last = localStorage.getItem(KEY);
+							if (last && main?.querySelector(`option[value="${CSS.escape(last)}"]`)) {
+								main.value = last;
+								main.dispatchEvent(new Event('change', { bubbles: true }));
+							}
+							sync(main, mirror);
+						} catch {}
+					});
+					queueMicrotask(() => sync(main, mirror));
+				} catch {}
+				// Scroll Settings to scripts card after opening via sidebar button
+				try {
+					const openBtn = document.getElementById('openScriptsSettings');
+					openBtn?.addEventListener('click', () => {
+						requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} });
+					});
+				} catch {}
 			});
 		} catch {}
 	});

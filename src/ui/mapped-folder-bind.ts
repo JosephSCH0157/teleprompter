@@ -81,6 +81,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         sel.disabled = true;
         sel.append(new Option('(No scripts found)', '', true, false));
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
+        try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         return;
       }
       sel.disabled = false;
@@ -98,6 +99,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         }
         maybeAutoLoad(sel);
       } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
     } catch {}
   }
 
@@ -109,6 +111,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         sel.disabled = true;
         sel.append(new Option('(No scripts found)', '', true, false));
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
+        try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         return;
       }
       sel.disabled = false;
@@ -127,6 +130,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         }
         maybeAutoLoad(sel);
       } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
     } catch {}
   }
 }

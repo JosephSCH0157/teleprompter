@@ -22,6 +22,7 @@ export function ensureSettingsFolderControls() {
   // Card wrapper (Settings overlay uses cards keyed by data-tab). Place under 'general' tab (primary visibility).
   const card = document.createElement('div');
   card.className = 'settings-card settings-card--scripts';
+  card.id = 'scriptsFolderCard';
   (card as any).dataset.tab = 'general';
 
   card.innerHTML = `

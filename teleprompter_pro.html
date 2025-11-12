@@ -372,11 +372,10 @@
 <!-- Sidebar quick Scripts select (mirrors Settings card) -->
 <div class="row" id="scriptsQuickRow">
   <label>Scripts
-    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts"></select>
+    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true"></select>
   </label>
-  <button id="openScriptsSettings" class="btn-chip">Folder…</button>
+  <button id="openScriptsSettings" class="btn-chip" aria-controls="scriptSelectSidebar">Folder…</button>
   <span class="chip sidebar-hint">Manage folder in Settings → General</span>
-  
 </div>
 <h2 class="section-title">
   Speakers
