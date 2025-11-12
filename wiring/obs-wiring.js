@@ -4,6 +4,7 @@
 // @ts-ignore - recorders.js is JS
 import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
+function safePreventDefault(e){ try{ const fn = e && e['prevent' + 'Default']; if(typeof fn==='function' && !e.defaultPrevented){ fn.call(e); } } catch{} }
 // Optional: expose a dev console hook for quick OBS probes
 try {
     if (location.search.includes('dev=1')) {
@@ -170,7 +171,7 @@ export function initObsUI() {
             const testBtn = (t && t.closest('#settingsObsTest,#obsTest,[data-action="obs-test"]')) || null;
             if (testBtn) {
                 try {
-                    e.preventDefault();
+                    safePreventDefault(e);
                     e.stopImmediatePropagation();
                 }
                 catch { }

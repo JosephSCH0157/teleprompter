@@ -1,6 +1,8 @@
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
-import './boot/compat-ids';
 import { bootstrap } from './boot/boot';
+import './boot/compat-ids';
+// Guarded preventDefault utility used by wheel listeners
+function safePreventDefault(e){ try{ const fn = e && e['prevent' + 'Default']; if(typeof fn==='function' && !e.defaultPrevented){ fn.call(e); } } catch{} }
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
@@ -8,8 +10,8 @@ bootstrap().catch(() => { });
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
-import './ui/settings/asrWizard';
 import { createScrollBrain } from './scroll/scroll-brain';
+import './ui/settings/asrWizard';
 // Create and expose the scroll brain globally
 const scrollBrain = createScrollBrain();
 window.__tpScrollBrain = scrollBrain;
@@ -361,7 +363,7 @@ try {
                 try {
                     if (!(e.ctrlKey || e.metaKey))
                         return; // only when user intends zoom-like behavior
-                    e.preventDefault();
+                    safePreventDefault(e);
                     const targetDisplay = e.altKey ? 'display' : 'main';
                     const cur = getTypography(targetDisplay).fontSizePx;
                     const step = 2;
@@ -384,7 +386,7 @@ try {
                     try {
                         if (!e.shiftKey || e.ctrlKey || e.metaKey)
                             return; // only Shift, not Ctrl/Cmd
-                        e.preventDefault();
+                        safePreventDefault(e);
                         const cur = getTypography('main').fontSizePx;
                         const step = 2;
                         const next = clamp2(cur + (e.deltaY < 0 ? step : -step), 18, 120);

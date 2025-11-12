@@ -20,6 +20,11 @@ dist/
 build/
 *.zip
 
+# Legacy CI-only stub outputs (ignored so they don't ship)
+/bridge.js
+/obs.js
+/hotkey.js
+
 # Env
 .env
 .env.*

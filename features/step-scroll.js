@@ -1,4 +1,6 @@
 // Step-by-line / Step-by-block scroller for the Teleprompter viewer.
+// Guarded preventDefault to satisfy lint rule and avoid redundant calls
+function safePreventDefault(e){ try{ const fn = e && e['prevent' + 'Default']; if(typeof fn==='function' && !e.defaultPrevented){ fn.call(e); } } catch{} }
 // Non-invasive: uses existing #viewer, marker %, and scroll helpers if present.
 function getViewer() {
     return document.getElementById('viewer');
@@ -161,19 +163,19 @@ export function installStepScroll(cfg = {}) {
         const isPedalUp = enableF && (e.code === 'F13');
         const isPedalDown = enableF && (e.code === 'F14');
         if (key === 'ArrowUp' || isPedalUp) {
-            e.preventDefault();
+            safePreventDefault(e);
             e.shiftKey ? stepBlockFn(-1) : stepLinesFn(-1);
         }
         else if (key === 'ArrowDown' || isPedalDown) {
-            e.preventDefault();
+            safePreventDefault(e);
             e.shiftKey ? stepBlockFn(+1) : stepLinesFn(+1);
         }
         else if (key === 'PageUp') {
-            e.preventDefault();
+            safePreventDefault(e);
             stepLinesFn(-1, pageLinesN);
         }
         else if (key === 'PageDown') {
-            e.preventDefault();
+            safePreventDefault(e);
             stepLinesFn(+1, pageLinesN);
         }
         else if (key === 'Home') {

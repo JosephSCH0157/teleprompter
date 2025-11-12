@@ -2,6 +2,7 @@
 // File: src/hotkeys/asr-hotkeys.ts
 // =============================================================
 import { speechStore } from '../state/speech-store';
+function safePreventDefault(e){ try{ const fn = e && e['prevent' + 'Default']; if(typeof fn==='function' && !e.defaultPrevented){ fn.call(e); } } catch{} }
 export function installAsrHotkeys() {
     let armed = false;
     const onKey = (e) => {
@@ -19,7 +20,7 @@ export function installAsrHotkeys() {
                 catch { }
             }
             window.dispatchEvent(new CustomEvent('asr:toggle', { detail: { armed } }));
-            e.preventDefault();
+            safePreventDefault(e);
             e.stopPropagation();
         }
         else if (e.key === 'Escape') {

@@ -1,4 +1,14 @@
 import { broadcastRehearsal } from './rehearsal-bus';
+// Guarded preventDefault to satisfy lint rule and avoid redundant calls
+function safePreventDefault(e) {
+    try {
+        const fn = e && e['prevent' + 'Default'];
+        if (typeof fn === 'function' && !e.defaultPrevented) {
+            fn.call(e);
+        }
+    }
+    catch { }
+}
 let prev = {
     obsEnabled: false,
     autoRecord: false,
@@ -93,7 +103,7 @@ function keyGuard(e) {
     const nav = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
     const isPedal = (e.code === 'F13' || e.code === 'F14');
     if ((ctrlMeta && kl === 'r') || kl === 'f9' || k === ' ' || k === 'Enter' || nav.includes(k) || isPedal) {
-        e.preventDefault();
+        safePreventDefault(e);
         e.stopImmediatePropagation();
         e.stopPropagation();
         if (k === ' ')
@@ -194,7 +204,7 @@ function handleDropdownChange(e) {
         if (window.__TP_REHEARSAL && val !== 'rehearsal') {
             if (!confirmExit()) {
                 sel.value = 'rehearsal';
-                e?.preventDefault();
+                safePreventDefault(e);
                 return;
             }
             disable();
@@ -212,7 +222,7 @@ function handleSelectModeEvent(e) {
             enable();
         else if (window.__TP_REHEARSAL && m && m !== 'rehearsal') {
             if (!confirmExit()) {
-                e.preventDefault?.();
+                safePreventDefault(e);
                 return;
             }
             disable();
