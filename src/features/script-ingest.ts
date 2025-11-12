@@ -22,6 +22,14 @@ try {
       __docCh.onmessage = (ev: MessageEvent) => {
         try {
           const m = ev.data;
+          // Respond to display hydration request
+          if (m?.type === 'hello' && m.client === 'display') {
+            try {
+              const snap = getCurrentScriptSnapshot();
+              __docCh?.postMessage({ type: 'script', ...snap });
+            } catch {}
+            return;
+          }
           if (m?.type === 'script' && typeof m.text === 'string') {
             __isRemote = true;
             try { (window as any).__tpCurrentName = m.name; } catch {}
@@ -237,6 +245,15 @@ export function installGlobalIngestListener() {
       });
     }
   } catch {}
+}
+
+function getCurrentScriptSnapshot(): { name: string; text: string } {
+  try {
+    const name = (window as any).__tpCurrentName || 'Untitled';
+    const ed = document.querySelector('#editor,[data-editor]') as HTMLTextAreaElement | null;
+    const text = (ed && ed.value) || '';
+    return { name, text };
+  } catch { return { name: 'Untitled', text: '' }; }
 }
 
 // Back-compat: keep previous behavior for environments that relied on auto-wiring

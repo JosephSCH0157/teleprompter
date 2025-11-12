@@ -209,6 +209,13 @@ try {
 			} catch {}
 		};
 	}
+  // If this is a display window, immediately request current script snapshot
+  try {
+    const Q = new URLSearchParams(location.search || '');
+    if (Q.get('display') === '1') {
+      (__docCh as BroadcastChannel)?.postMessage({ type: 'hello', client: 'display' });
+    }
+  } catch {}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 function injectSpeechNotesHud(){

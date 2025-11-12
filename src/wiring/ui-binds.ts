@@ -29,10 +29,15 @@ async function requestMic(): Promise<boolean> {
   try {
     // Prefer app ASR if present
     const fn = (window as any).__tpAsrImpl?.requestMic || (window as any).asr?.requestMic;
-    if (typeof fn === 'function') { await fn(); return true; }
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaStore.mic = s; return true;
-  } catch { return false; }
+    if (typeof fn === 'function') { await fn(); }
+    else {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStore.mic = s;
+    }
+    try { document.getElementById('recBtn')?.removeAttribute('disabled'); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:mic:state', { detail: { on: true } })); } catch {}
+    return true;
+  } catch (e) { try { console.warn('[mic] request failed', e); } catch {}; return false; }
 }
 function releaseMic() {
   try {
@@ -41,6 +46,10 @@ function releaseMic() {
     try { (window as any).__tpAsrImpl?.releaseMic?.(); } catch {}
     try { (window as any).asr?.stop?.(); } catch {}
   } catch {}
+  finally {
+    try { document.getElementById('recBtn')?.setAttribute('disabled','true'); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:mic:state', { detail: { on: false } })); } catch {}
+  }
 }
 async function startCamera(): Promise<boolean> {
   try {
@@ -89,6 +98,23 @@ async function startCameraById(deviceId?: string) {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     const v = document.querySelector<HTMLVideoElement>('#cameraPreview');
     if (v) { (v as any).srcObject = stream; try { await v.play(); } catch {}; v.hidden = false; }
+  } catch {}
+}
+
+// Deterministic focus helper: waits until element is visible before focusing
+function focusWhenVisible(el: HTMLElement | null, tries = 5) {
+  try {
+    if (!el) return;
+    let n = 0;
+    const tick = () => {
+      try {
+        n++;
+        const visible = !!el && (el.offsetParent !== null || getComputedStyle(el).display !== 'none');
+        if (visible) { try { (el as any).focus?.({ preventScroll: true }); } catch {}; return; }
+        if (n < tries) requestAnimationFrame(tick);
+      } catch {}
+    };
+    requestAnimationFrame(tick);
   } catch {}
 }
 
@@ -475,17 +501,21 @@ export function installEmergencyBinder() {
               if (btn) { btn.textContent = body && body.hidden ? 'Show' : 'Hide'; btn.setAttribute('aria-expanded', String(!(body && body.hidden))); }
               // When opening, also focus the key input if present for accessibility
               if (body && !body.hidden) {
-                const key = document.querySelector<HTMLInputElement>('#speakersKey,[data-speakers-key]');
-                try { key?.focus(); } catch {}
+                const key = document.querySelector<HTMLInputElement>('#speakersKey, [data-speakers-key], input[name="speakersKey"]');
+                focusWhenVisible(key);
               }
             } catch {}
             break; }
           case 'speakers-key': {
             try {
-              const key = document.querySelector<HTMLInputElement>('#speakersKey,[data-speakers-key]');
-              const panel = document.querySelector<HTMLElement>('[data-panel="speakers"],#speakersBody');
-              if (panel) { panel.hidden = false; panel.setAttribute('aria-expanded','true'); }
-              if (key) { try { requestAnimationFrame(() => { try { key.focus(); } catch {} }); } catch { try { key.focus(); } catch {} } }
+              const panel = document.querySelector<HTMLElement>('[data-panel="speakers"], #speakersBody');
+              if (panel) {
+                panel.hidden = false;
+                panel.setAttribute('aria-expanded','true');
+                panel.style.display = 'block';
+              }
+              const key = document.querySelector<HTMLInputElement>('#speakersKey, [data-speakers-key], input[name="speakersKey"]');
+              focusWhenVisible(key);
             } catch {}
             break; }
           case 'load-sample': {
