@@ -143,3 +143,22 @@ export function installScriptIngest(opts: IngestOpts = {}) {
 
   try { (window as any).__tpIngest = { handle }; } catch {}
 }
+
+// Idempotent global listener to mirror ingest into #editor for tests and DEV
+try {
+  const w: any = window as any;
+  if (!w.__ingestWired) {
+    document.addEventListener('tp:script-load', (ev: any) => {
+      try {
+        const d = ev?.detail || {};
+        const text = typeof d?.text === 'string' ? d.text : '';
+        const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
+        if (ed) ed.value = text ?? '';
+        const alt = document.querySelector('#scriptInput') as HTMLTextAreaElement | null;
+        if (alt) alt.value = text ?? '';
+        try { console.log('[INGEST] loaded', d?.name || '(unnamed)'); } catch {}
+      } catch {}
+    }, { once: false });
+    w.__ingestWired = true;
+  }
+} catch {}
