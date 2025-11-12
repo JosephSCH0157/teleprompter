@@ -28,10 +28,23 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   btn.addEventListener('click', async () => {
     try {
       if ('showDirectoryPicker' in window) {
-        const ok = await pickMappedFolder();
-        if (ok) {
-          await refreshList();
-          try { (window as any).HUD?.log?.('folder:mapped', { count: _lastCount }); } catch {}
+        try {
+          const ok = await pickMappedFolder();
+          if (ok) {
+            await refreshList();
+            try { (window as any).HUD?.log?.('folder:mapped', { count: _lastCount }); } catch {}
+          } else {
+            // If picker returns falsy (cancel/no-op), do nothing
+          }
+        } catch (err: any) {
+          // Handle non-user-activation environments (CI/automation) by falling back to hidden input when present
+          const name = (err && (err.name || err.code)) || '';
+          if (String(name) === 'NotAllowedError' && fallback) {
+            try { (window as any).HUD?.log?.('folder:pick:not-allowed', { fallback: true }); } catch {}
+            fallback.click();
+          } else {
+            try { console.warn('[mapped-folder] pick failed', err); } catch {}
+          }
         }
       } else if (fallback) {
         fallback.click();
@@ -45,6 +58,8 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     fallback.addEventListener('change', () => {
       try {
         const files = Array.from(fallback.files || []);
+        // If user canceled or automation triggered empty selection, ignore silently
+        if (!files.length) { try { (window as any).HUD?.log?.('folder:fallback:empty'); } catch {}; return; }
         populateSelectFromFiles(files);
       } catch {}
     });
