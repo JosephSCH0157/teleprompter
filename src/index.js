@@ -795,6 +795,55 @@ async function boot() {
     // Ensure Settings Scripts Folder card is available (JS path)
     try { ensureSettingsFolderControls(); } catch {}
     try { ensureSettingsFolderControlsAsync(6000); } catch {}
+
+    // Test-only mock folder population: enable with ?mockFolder=1
+    try {
+      const Q = new URLSearchParams(location.search || '');
+      const useMock = Q.has('mockFolder') || (typeof navigator !== 'undefined' && navigator.webdriver === true) || (window && window.__TP_TEST_MOCK__);
+      if (useMock) {
+        const NAMES = ['Practice_Intro.txt', 'Main_Episode.txt', 'Notes.docx'];
+        const populate = () => {
+          try {
+            const main = document.getElementById('scriptSelect');
+            const mirror = document.getElementById('scriptSelectSidebar');
+            if (!main) return false;
+            const targets = [main, mirror].filter(Boolean);
+            for (const sel of targets) {
+              try { sel.setAttribute('aria-busy','true'); sel.disabled = true; } catch {}
+            }
+            const items = NAMES.filter(n => /\.(txt|docx)$/i.test(n));
+            for (const sel of targets) {
+              try {
+                sel.innerHTML = '';
+                items.forEach((n, i) => {
+                  const o = document.createElement('option');
+                  o.value = String(i);
+                  o.textContent = n;
+                  sel.appendChild(o);
+                });
+                sel.setAttribute('aria-busy','false');
+                sel.disabled = items.length === 0;
+                sel.dataset.count = String(items.length);
+              } catch {}
+            }
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: items.length } })); } catch {}
+            // minimal sync: when one changes, reflect value to the other
+            try {
+              const sync = (a, b) => { try { if (a && b) b.value = a.value; } catch {} };
+              if (main) main.addEventListener('change', () => sync(main, mirror));
+              if (mirror) mirror.addEventListener('change', () => sync(mirror, main));
+            } catch {}
+            return true;
+          } catch { return false; }
+        };
+        // Try now; if selects not present yet, wait briefly
+        if (!populate()) {
+          let tries = 0; const iv = setInterval(() => {
+            tries++; if (populate() || tries > 30) { try { clearInterval(iv); } catch {} }
+          }, 50);
+        }
+      }
+    } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch {}

@@ -50,7 +50,7 @@ async function main() {
     }
   });
 
-  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
+  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
     try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (_e) { /* ignore */ }
@@ -354,14 +354,18 @@ async function main() {
         // Open Settings via button and ensure folder controls injected (defensive)
         try { document.getElementById('settingsBtn')?.click(); } catch {}
         try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
-        // Allow longer layout + injection settle
-        await new Promise(r => setTimeout(r, 350));
+        // Allow longer layout + injection + mock populate settle
+        await new Promise(r => setTimeout(r, 600));
         const overlay = document.getElementById('settingsOverlay');
         const body = document.getElementById('settingsBody');
         const card = document.getElementById('scriptsFolderCard');
         const choose = document.getElementById('chooseFolderBtn');
         const mainSel = document.getElementById('scriptSelect');
         const mirrorSel = document.getElementById('scriptSelectSidebar');
+        // Count options after mock populate
+        let mainCount = 0, mirrorCount = 0;
+        try { mainCount = mainSel ? mainSel.querySelectorAll('option').length : 0; } catch {}
+        try { mirrorCount = mirrorSel ? mirrorSel.querySelectorAll('option').length : 0; } catch {}
         const overlayVisible = !!overlay && !overlay.classList.contains('hidden') && overlay.style.display !== 'none';
         const settingsCard = !!card && !!choose && !!mainSel;
         const mirrorExists = !!mirrorSel;
@@ -369,10 +373,16 @@ async function main() {
         let mirrorAriaBusyDone = true;
         try { if (mirrorSel && mainSel) mirrorDisabledParity = !!mirrorSel.disabled === !!mainSel.disabled; } catch {}
         try { if (mirrorSel) mirrorAriaBusyDone = (mirrorSel.getAttribute('aria-busy') || '') === 'false'; } catch {}
-        report.ui = { overlayVisible, settingsCard, mirrorExists, mirrorDisabledParity, mirrorAriaBusyDone };
+        report.ui = { overlayVisible, settingsCard, mirrorExists, mirrorDisabledParity, mirrorAriaBusyDone, mainCount, mirrorCount };
+        if (settingsCard && mainCount === 0) report.notes.push('assert: mock folder population empty');
+        if (settingsCard && mainCount !== mirrorCount) report.notes.push('assert: mirror option count mismatch');
+        if (settingsCard && mainCount > 0 && mirrorAriaBusyDone !== true) report.notes.push('assert: aria-busy not cleared on mirror');
         if (!settingsCard) report.notes.push('assert: Settings Scripts Folder card missing (choose/scripts)');
         if (!overlayVisible) report.notes.push('warn: settings overlay not visible after click');
         if (!mirrorExists) report.notes.push('warn: sidebar mirror select missing');
+        // Hard assert: fail overall ok if settingsCard absent under mockFolder
+        if (!settingsCard) ok = false;
+        if (settingsCard && (mainCount === 0 || mainCount !== mirrorCount)) ok = false;
       } catch (e) {
         try { report.notes.push('ui-check err: ' + String(e)); } catch {}
       }
