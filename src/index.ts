@@ -114,7 +114,6 @@ function applyUiScrollMode(mode: UiScrollMode) {
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
 import './asr/v2/prompts';
-import { startVadAdapter } from './asr/vadAdapter';
 import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
@@ -122,7 +121,7 @@ import { installScrollRouter } from './features/scroll-router';
 import { installStepScroll } from './features/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
-import { getTypography, onTypography, setTypography } from './settings/typographyStore';
+import { onTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
