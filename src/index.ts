@@ -181,6 +181,8 @@ function __maybePopulateMockFolder() {
 // Unified TS boot function — consolidates prior scattered DOMContentLoaded wiring
 export async function boot() {
 		try {
+			// Count boot attempts (used by smoke to assert single boot)
+			try { (window as any).__tpBootsSeen = ((window as any).__tpBootsSeen || 0) + 1; } catch {}
 			if ((window as any).__tpTsBooted) return; // duplication guard
 			(window as any).__tpTsBooted = 1;
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
@@ -323,6 +325,33 @@ export async function boot() {
 							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
 							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
 						});
+					} catch {}
+
+					// Settings overlay wiring with open/close events for smoke determinism
+					try {
+						const overlay = document.getElementById('settingsOverlay');
+						const btn = document.getElementById('settingsBtn') as HTMLButtonElement | null;
+						const closeBtn = document.getElementById('settingsClose') as HTMLButtonElement | null;
+						const openSettings = () => {
+							try { overlay?.classList.remove('hidden'); } catch {}
+							try { btn?.setAttribute('aria-expanded','true'); } catch {}
+							try { document.body.dispatchEvent(new CustomEvent('tp:settings:open')); } catch {}
+						};
+						const closeSettings = () => {
+							try { overlay?.classList.add('hidden'); } catch {}
+							try { btn?.setAttribute('aria-expanded','false'); } catch {}
+							try { document.body.dispatchEvent(new CustomEvent('tp:settings:close')); } catch {}
+						};
+						btn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; openSettings(); }, { capture: true });
+						closeBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; closeSettings(); }, { capture: true });
+						document.addEventListener('keydown', (e) => {
+							try {
+								if (e.key === 'Escape') {
+									const hidden = overlay?.classList.contains('hidden');
+									if (hidden === false) closeSettings();
+								}
+							} catch {}
+						}, { capture: true });
 					} catch {}
 
 					// Script ingest

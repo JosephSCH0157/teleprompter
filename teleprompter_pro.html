@@ -23,34 +23,8 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- One true boot path: module try → legacy fallback; mark which path wins -->
-  <script>
-    (function () {
-      try {
-        if (window.__tpBooted) return; // hard guard if HTML is duplicated
-        window.__tpBootSrc = 'pending';
-      } catch {}
-    }());
-  </script>
-  <script type="module">
-    (async () => {
-      if (window.__tpBooted) return;
-      window.__tpBootSrc = 'ts-module';
-      try {
-        await import('/dist/index.js');
-      } catch (err) {
-        try { console.warn('[boot] TS entry failed, falling back to legacy JS', err); } catch {}
-        if (!window.__tpBooted) {
-          window.__tpBootSrc = 'fallback-js';
-          const s = document.createElement('script');
-          s.src = '/src/index.js';
-          s.type = 'module';
-          s.onload = () => { try { console.log('[boot] legacy module loaded'); } catch {} };
-          document.head.appendChild(s);
-        }
-      }
-    })();
-  </script>
+  <!-- TS-only boot: single ESM entry -->
+  <script type="module" src="/dist/index.js"></script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>

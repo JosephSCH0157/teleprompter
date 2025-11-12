@@ -238,6 +238,17 @@ async function main() {
     console.warn('[e2e] ui-invariants: WARN', String(e && e.message || e));
   }
 
+  // Ensure Settings overlay opens deterministically before smoke checks
+  try {
+    await page.click('#settingsBtn').catch(()=>{});
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#settingsOverlay');
+      return !!el && !el.classList.contains('hidden');
+    }, { timeout: 3000, polling: 100 });
+  } catch (e) {
+    console.warn('[e2e] settings overlay not visible after click (pre-smoke)');
+  }
+
   // Wait for the recorder module to be present in the page (runner-side wait)
   try {
     await page.waitForFunction(
@@ -354,8 +365,21 @@ async function main() {
         // Open Settings via button and ensure folder controls injected (defensive)
         try { document.getElementById('settingsBtn')?.click(); } catch {}
         try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
-        // Allow longer layout + injection + mock populate settle
-        await new Promise(r => setTimeout(r, 600));
+        // Wait for settings open event or visible state instead of arbitrary timeout
+        await new Promise((res) => {
+          const el = document.getElementById('settingsOverlay');
+          if (el && !el.classList.contains('hidden')) return res(true);
+          let done = false;
+          const to = setTimeout(() => { if (!done) { done = true; res(false); } }, 1500);
+          const h = () => { if (done) return; done = true; clearTimeout(to); res(true); };
+          try { document.body.addEventListener('tp:settings:open', h, { once: true }); } catch {}
+          setTimeout(() => {
+            try {
+              const el2 = document.getElementById('settingsOverlay');
+              if (el2 && !el2.classList.contains('hidden')) h();
+            } catch {}
+          }, 0);
+        });
         const overlay = document.getElementById('settingsOverlay');
         const body = document.getElementById('settingsBody');
         const card = document.getElementById('scriptsFolderCard');
@@ -378,7 +402,7 @@ async function main() {
         if (settingsCard && mainCount !== mirrorCount) report.notes.push('assert: mirror option count mismatch');
         if (settingsCard && mainCount > 0 && mirrorAriaBusyDone !== true) report.notes.push('assert: aria-busy not cleared on mirror');
         if (!settingsCard) report.notes.push('assert: Settings Scripts Folder card missing (choose/scripts)');
-        if (!overlayVisible) report.notes.push('warn: settings overlay not visible after click');
+  if (!overlayVisible) report.notes.push('warn: settings overlay not visible after click');
         if (!mirrorExists) report.notes.push('warn: sidebar mirror select missing');
         // Hard assert: fail overall ok if settingsCard absent under mockFolder
         if (!settingsCard) ok = false;
@@ -386,6 +410,17 @@ async function main() {
       } catch (e) {
         try { report.notes.push('ui-check err: ' + String(e)); } catch {}
       }
+
+      // Single boot assertion
+      try {
+        // @ts-ignore
+        const boots = (globalThis.__tpBootsSeen || 0);
+        report.boots = boots;
+        if (boots !== 1) {
+          ok = false;
+          report.notes.push(`assert: expected single boot, saw ${boots}`);
+        }
+      } catch {}
 
       return {
         ok,
