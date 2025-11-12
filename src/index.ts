@@ -148,6 +148,10 @@ import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
+// Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
+import { bindCoreUI } from './wiring/ui-binds';
+// Side-effect debug / DOM helpers (legacy parity)
+import './ui/dom.js';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
 // Create idempotent starters
@@ -243,6 +247,22 @@ export async function boot() {
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.
 			const onReady = () => {
 				try {
+					// Load debug tools dynamically in dev only (non-blocking)
+					try {
+						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
+						if (DEV) {
+							setTimeout(() => {
+								try {
+									const s = document.createElement('script');
+									s.src = '/debug-tools.js';
+									s.async = true;
+									document.head.appendChild(s);
+								} catch {}
+							}, 0);
+						}
+					} catch {}
+					// Core UI binder (idempotent)
+					try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn' }); } catch {}
 					// Ensure autoscroll engine init
 					try { (Auto as any).initAutoScroll?.(); } catch {}
 

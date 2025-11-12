@@ -1,8 +1,16 @@
-# Teleprompter Pro (v1.6.4)
+# Teleprompter Pro (v1.7.1)
 
-![Anvil v1.6.4](https://img.shields.io/badge/Anvil-v1.6.4-blue)
+![Anvil v1.7.1](https://img.shields.io/badge/Anvil-v1.7.1-blue)
 
 This is a browser-based teleprompter with display mirroring, speech sync, camera overlay, and convenient editing helpers.
+
+## What’s new in 1.7.x
+
+- TS-only boot via a single ESM entry (`/dist/index.js`); legacy preloaders stand down under `__TP_TS_PRIMARY__`.
+- Idempotent feature init with readiness flags: `window.__tpInit` and a `[TP-READY]` console line for deterministic waits.
+- Scripts Folder card lives in Settings → General, mirrored to the sidebar; aria-busy and a polite live region announce counts.
+- Cache-busted entry script in `teleprompter_pro.html` to avoid stale builds during dev/CI.
+- Unified UI binder for Scroll Mode and Present Mode wiring.
 
 ## Notes for contributors
 
@@ -56,6 +64,10 @@ npm run smoke:strict
 ```
 
 Flags
+
+- `?dev=1` or `localStorage.setItem('tp_dev_mode','1')` → DEV extras (HUD, logs)
+- `?ci=1` or `localStorage.setItem('tp_ci','1')` → CI profile for smoke/CI
+- `?mockFolder=1` → Deterministic mapped-folder scripts list in tests
 
 ?dev=1 or localStorage.setItem('tp_dev_mode','1') → DEV extras (HUD, logs)
 
