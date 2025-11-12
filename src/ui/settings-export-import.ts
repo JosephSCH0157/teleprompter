@@ -37,7 +37,11 @@ export function bindSettingsExportImport(btnExportSel: string, btnImportSel: str
         const text = await f.text();
         const ok = importSettings(text);
         (window as any).HUD?.log?.('settings:import', { ok });
-        // Notify runtime so any binders can re-sync
+        // Toast + notify runtime so any binders can re-sync
+        try {
+          const msg = ok ? 'Settings imported' : 'Settings import failed';
+          window.dispatchEvent(new CustomEvent('tp:toast', { detail: { msg, ts: Date.now() } }));
+        } catch {}
         window.dispatchEvent(new CustomEvent('tp:settings-imported'));
         // If a primary settings store exists, patch it for consistency
         try {
