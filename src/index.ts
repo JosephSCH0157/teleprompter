@@ -1,3 +1,5 @@
+// Signal TS is primary so legacy preloaders can stand down
+try { (window as any).__TP_TS_PRIMARY__ = true; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
@@ -200,6 +202,15 @@ export async function boot() {
 			try { initAsrFeature(); } catch {}
 			// OBS Settings wiring (Test connect button)
 			try { initObsUI(); } catch {}
+
+			// Load adapters via ESM imports (TS-controlled). Enable DEV hotkeys.
+			try {
+				const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
+				Promise.allSettled([
+					import('./adapters/obs').then(m => m.configure?.({})),
+					import('./adapters/hotkey').then(m => { if (DEV) m.enable?.(); })
+				]).catch(() => {});
+			} catch {}
 
 			// The following block previously lived inside a DOMContentLoaded listener.
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.

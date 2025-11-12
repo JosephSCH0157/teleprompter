@@ -21,9 +21,10 @@ build/
 *.zip
 
 # Legacy CI-only stub outputs (ignored so they don't ship)
-/bridge.js
-/obs.js
-/hotkey.js
+# CI-only adapter stubs (in dist/src/adapters) ignored so they never ship standalone
+/dist/src/adapters/bridge.js
+/dist/src/adapters/obs.js
+/dist/src/adapters/hotkey.js
 
 # Env
 .env

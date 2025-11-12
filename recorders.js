@@ -709,6 +709,8 @@ let _builtInsInit = false;
 export async function initBuiltIns() {
   if (_builtInsInit) return;
   _builtInsInit = true;
+  // Gate legacy dynamic adapter loader when TS is primary
+  try { if (typeof window !== 'undefined' && (window).__TP_TS_PRIMARY__) { return; } } catch {}
   try {
     // Attempt to load and register built-in adapters. Each is optional.
     const adapters = [];
