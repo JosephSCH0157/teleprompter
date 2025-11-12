@@ -131,6 +131,8 @@ import './hud/loader';
 import { installScriptIngest } from './features/script-ingest';
 import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
+import { ensureSettingsFolderControls } from './ui/inject-settings-folder';
+import { disableLegacyScriptsUI } from './ui/hide-legacy-scripts';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
@@ -356,9 +358,11 @@ try {
 			window.addEventListener('beforeunload', () => { try { stopVad?.(); } catch {} });
 		} catch {}
 
-		// Bind mapped folder UI (safe no-op if elements absent)
+		// Inject mapped-folder controls into Settings, disable legacy scripts UI, then bind folder + settings actions.
 		try {
 			queueMicrotask(() => {
+				try { ensureSettingsFolderControls(); } catch {}
+				try { disableLegacyScriptsUI(); } catch {}
 				try {
 					bindMappedFolderUI({
 						button: '#chooseFolderBtn',
@@ -366,25 +370,26 @@ try {
 						fallbackInput: '#folderFallback',
 						onSelect: async (item) => {
 							try {
-								let file: File | null = null;
+								const detail: any = {};
 								if (item && 'getFile' in (item as any)) {
-									file = await (item as FileSystemFileHandle).getFile();
+									const f = await (item as FileSystemFileHandle).getFile();
+									detail.file = f;
 								} else if (item instanceof File) {
-									file = item;
+									detail.file = item;
+								} else {
+									detail.file = item as File | null;
 								}
-								if (file) {
-									window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { file } }));
-								}
+								if (detail.file) window.dispatchEvent(new CustomEvent('tp:script-load', { detail }));
 							} catch {}
 						}
 					});
-					// Install script ingest (auto-detect target)
-					try { installScriptIngest({}); } catch {}
-					// Wire optional permission recheck button (no-op if absent)
-					try { bindPermissionButton('#recheckFolderBtn'); } catch {}
-					// Wire settings export/import buttons
-					try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
 				} catch {}
+				// Install script ingest (auto-detect target)
+				try { installScriptIngest({}); } catch {}
+				// Wire optional permission recheck button
+				try { bindPermissionButton('#recheckFolderBtn'); } catch {}
+				// Wire settings export/import buttons
+				try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
 			});
 		} catch {}
 	});
