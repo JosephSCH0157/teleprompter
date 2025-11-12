@@ -17,9 +17,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   const fallback = opts.fallbackInput ? (typeof opts.fallbackInput === 'string' ? document.querySelector(opts.fallbackInput) as HTMLInputElement : opts.fallbackInput) : null;
 
   if (!btn || !sel) return () => {};
+  // Avoid double-binding across reinjections
+  if ((btn as any).dataset && (btn as any).dataset.mappedFolderWired === '1') {
+    return () => {};
+  }
 
   await initMappedFolder();
 
+  try { (btn as any).dataset.mappedFolderWired = '1'; } catch {}
   btn.addEventListener('click', async () => {
     try {
       if ('showDirectoryPicker' in window) {

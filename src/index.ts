@@ -132,6 +132,7 @@ import { initObsUI } from './wiring/obs-wiring';
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
 import { installScriptIngest } from './features/script-ingest';
+import { pickMappedFolder } from './fs/mapped-folder';
 import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
@@ -419,6 +420,9 @@ try {
 				try {
 					const btn = document.getElementById('openScriptsSettings');
 					btn?.addEventListener('click', () => {
+						// Ensure Scripts Folder card exists before opening Settings (handles long-delayed opens)
+						try { ensureSettingsFolderControls(); } catch {}
+						try { ensureSettingsFolderControlsAsync(8000); } catch {}
 						try { document.getElementById('settingsBtn')?.click(); } catch {}
 					});
 				} catch {}
@@ -460,6 +464,31 @@ try {
 					openBtn?.addEventListener('click', () => {
 						requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} });
 					});
+				} catch {}
+
+				// Delegated safety handler: if Choose Folder button wasn't wired (due to reinjection), handle click here
+				try {
+					const onClick = async (e: Event) => {
+						try {
+							const t = e.target as HTMLElement | null;
+							const btn = t && (t.closest ? t.closest('#chooseFolderBtn') as HTMLButtonElement | null : null);
+							if (!btn) return;
+							// If binder already wired this button, let it handle the event
+							if ((btn as any).dataset && (btn as any).dataset.mappedFolderWired === '1') return;
+							e.preventDefault();
+							e.stopPropagation();
+							if ('showDirectoryPicker' in window) {
+								const ok = await pickMappedFolder();
+								if (ok) {
+									try { (window as any).HUD?.log?.('folder:mapped', {}); } catch {}
+								}
+							} else {
+								const fallback = document.getElementById('folderFallback') as HTMLInputElement | null;
+								fallback?.click();
+							}
+						} catch {}
+					};
+					document.addEventListener('click', onClick, { capture: true });
 				} catch {}
 			});
 		} catch {}
