@@ -19,10 +19,10 @@ export function ensureSettingsFolderControls() {
     if (legacyRow) legacyRow.style.display = 'none';
   } catch {}
 
-  // Card wrapper (Settings overlay uses cards keyed by data-tab). Prefer 'general' tab.
+  // Card wrapper (Settings overlay uses cards keyed by data-tab). Place under 'advanced' tab for power users.
   const card = document.createElement('div');
   card.className = 'settings-card settings-card--scripts';
-  (card as any).dataset.tab = 'general';
+  (card as any).dataset.tab = 'advanced';
 
   card.innerHTML = `
     <h4>Scripts Folder</h4>
@@ -38,6 +38,22 @@ export function ensureSettingsFolderControls() {
   `;
 
   host.appendChild(card);
+
+  // Ensure visibility tracks the active tab, even if injected after initial tab wiring.
+  try {
+    const tabs = document.getElementById('settingsTabs');
+    const desired = (card as any).dataset.tab || 'advanced';
+    const update = () => {
+      try {
+        const activeBtn = document.querySelector('.settings-tab.active') as HTMLElement | null;
+        const active = (activeBtn && (activeBtn as any).dataset.tab) || 'general';
+        card.style.display = (active === desired ? 'flex' : 'none');
+      } catch {}
+    };
+    update();
+    if (tabs) tabs.addEventListener('click', () => { try { update(); } catch {} }, { capture: true });
+  } catch {}
+
   try { (window as any).HUD?.log?.('settings:folder:injected', { late: false }); } catch {}
   return true;
 }
