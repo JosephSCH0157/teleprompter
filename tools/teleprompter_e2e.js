@@ -298,234 +298,157 @@ async function main() {
     console.log('[e2e] running non-interactive smoke test...');
 
     // drive init -> connect -> test -> report inside the page to keep adapter context local
-    const smoke = await page.evaluate(async ({ stubObs }) => {
-      const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], wsOpened: 0, notes: [] };
-      const T0 = Date.now();
+  const smoke = await page.evaluate(async ({ stubObs }) => {
+    const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], wsOpened: 0, notes: [] };
+    const T0 = Date.now();
 
-      const rec = globalThis.__recorder || globalThis.App?.recorder;
-      report.recorderReady = !!rec;
-      report.tBootMs = Date.now() - T0;
+    const rec = globalThis.__recorder || (globalThis.App && globalThis.App.recorder);
+    report.recorderReady = !!rec;
+    report.tBootMs = Date.now() - T0;
 
-      // init built-ins (tolerate no-op)
-      try { await rec?.initBuiltIns?.(); report.notes.push('initBuiltIns() ok'); } catch (e) { report.notes.push('initBuiltIns err: ' + String(e)); }
+    try { await rec?.initBuiltIns?.(); report.notes.push('initBuiltIns() ok'); } catch (e) { report.notes.push('initBuiltIns err: ' + String(e)); }
 
-      // small adapter retry (deterministic after initBuiltIns)
-      let obs = null;
-      for (let i = 0; i < 6 && !obs; i++) {
-        obs = rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || globalThis.App?.obs || null;
-        if (!obs) await new Promise(r => setTimeout(r, 100));
-      }
-      report.adapterReady = !!obs;
-      if (!obs) { report.notes.push('OBS adapter not found.'); return report; }
-
-      const SENT = (globalThis.__WS_SENT__ ||= []);
-      const OPENED = (globalThis.__WS_OPENED__ ||= []);
-      const baseSent = SENT.length;
-
-      // apply config and connect
-      try {
-        if (globalThis.__OBS_CFG__ && typeof obs.configure === 'function') {
-          await obs.configure(globalThis.__OBS_CFG__);
-          report.notes.push('obs.configure() applied');
-        }
-      } catch (e) { report.notes.push('configure err: ' + String(e)); }
-
-      try { await obs.connect?.(); report.notes.push('obs.connect() ok'); } catch (e) { report.notes.push('connect err: ' + String(e)); }
-
-      // brief post-connect settle so IDENTIFY/auth frames flush
-      await new Promise(r => setTimeout(r, 250));
-
-      try {
-        if (typeof obs.test === 'function') {
-          await obs.test();
-          report.testRan = true;
-          report.notes.push('obs.test() ok');
-        } else {
-          report.notes.push('obs.test() not present');
-        }
-      } catch (e) { report.notes.push('test err: ' + String(e)); }
-
-      const newSent = SENT.length - baseSent;
-      report.wsSentCount = Math.max(0, newSent);
-      report.wsOps = SENT.slice(-report.wsSentCount).map((m) => { try { const j = typeof m === 'string' ? JSON.parse(m) : m; return j?.op ?? j?.opcode ?? 'unknown'; } catch { return 'raw'; } });
-      report.wsOpened = Array.isArray(OPENED) ? OPENED.length : 0;
-
-      // app version (best-effort) - normalize newlines into a single-line value for CI
-      const appVersionRaw =
-        (window.APP_VERSION) ||
-        (window.VERSION) ||
-        ((window.App && window.App.version) || null);
-
-      const appVersion = appVersionRaw == null
-        ? null
-        : String(appVersionRaw).replace(/\r?\n/g, ' | ').trim();
-
-      // Invariants
-      const hasIdentify = Array.isArray(report.wsOps) && report.wsOps.includes(1);
-      const wsCountsMatch = report.wsSentCount === (Array.isArray(report.wsOps) ? report.wsOps.length : 0);
-
-      // Evaluate assertions into ok
-      let ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
-      if (stubObs && !hasIdentify) {
-        ok = false;
-        report.notes.push('assert: missing IDENTIFY opcode (1) under --stubObs');
-      }
-      if (!wsCountsMatch) {
-        ok = false;
-        report.notes.push(`assert: wsSentCount (${report.wsSentCount}) !== wsOps.length (${(report.wsOps||[]).length})`);
-      }
-
-      // UI checks: Settings Scripts Folder card presence and sidebar mirror basics
-      try {
-        // Open Settings via button and ensure folder controls injected (defensive)
-        try { document.getElementById('settingsBtn')?.click(); } catch {}
-        try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
-        // Wait for settings open event or visible state instead of arbitrary timeout
-        await new Promise((res) => {
-          const el = document.getElementById('settingsOverlay');
-          if (el && !el.classList.contains('hidden')) return res(true);
-          let done = false;
-          const to = setTimeout(() => { if (!done) { done = true; res(false); } }, 1500);
-          const h = () => { if (done) return; done = true; clearTimeout(to); res(true); };
-          try { document.body.addEventListener('tp:settings:open', h, { once: true }); } catch {}
-          setTimeout(() => {
-            try {
-              const el2 = document.getElementById('settingsOverlay');
-              if (el2 && !el2.classList.contains('hidden')) h();
-            } catch {}
-          }, 0);
-        });
-        const overlay = document.getElementById('settingsOverlay');
-        const body = document.getElementById('settingsBody');
-        const card = document.getElementById('scriptsFolderCard');
-        const choose = document.getElementById('chooseFolderBtn');
-        const mainSel = document.getElementById('scriptSelect');
-        const mirrorSel = document.getElementById('scriptSelectSidebar');
-        // Count options after mock populate
-        let mainCount = 0, mirrorCount = 0;
-        try { mainCount = mainSel ? mainSel.querySelectorAll('option').length : 0; } catch {}
-        try { mirrorCount = mirrorSel ? mirrorSel.querySelectorAll('option').length : 0; } catch {}
-        const overlayVisible = !!overlay && !overlay.classList.contains('hidden') && overlay.style.display !== 'none';
-        const settingsCard = !!card && !!choose && !!mainSel;
-        const mirrorExists = !!mirrorSel;
-        let mirrorDisabledParity = true;
-        let mirrorAriaBusyDone = true;
-        try { if (mirrorSel && mainSel) mirrorDisabledParity = !!mirrorSel.disabled === !!mainSel.disabled; } catch {}
-        try { if (mirrorSel) mirrorAriaBusyDone = (mirrorSel.getAttribute('aria-busy') || '') === 'false'; } catch {}
-        report.ui = { overlayVisible, settingsCard, mirrorExists, mirrorDisabledParity, mirrorAriaBusyDone, mainCount, mirrorCount };
-        if (settingsCard && mainCount === 0) report.notes.push('assert: mock folder population empty');
-        if (settingsCard && mainCount !== mirrorCount) report.notes.push('assert: mirror option count mismatch');
-        if (settingsCard && mainCount > 0 && mirrorAriaBusyDone !== true) report.notes.push('assert: aria-busy not cleared on mirror');
-        if (!settingsCard) report.notes.push('assert: Settings Scripts Folder card missing (choose/scripts)');
-  if (!overlayVisible) report.notes.push('warn: settings overlay not visible after click');
-        if (!mirrorExists) report.notes.push('warn: sidebar mirror select missing');
-        // Hard assert: fail overall ok if settingsCard absent under mockFolder
-        if (!settingsCard) ok = false;
-        if (settingsCard && (mainCount === 0 || mainCount !== mirrorCount)) ok = false;
-
-        // If we can, simulate a selection and expect text to land in a script input
-        try {
-          const sel = document.getElementById('scriptSelect');
-          if (sel && sel.options.length > 1) {
-            sel.selectedIndex = 1;
-            sel.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        } catch {}
-      } catch (e) {
-        try { report.notes.push('ui-check err: ' + String(e)); } catch {}
-      }
-
-      // Single boot assertion
-      try {
-        console.log('[e2e] ui: settings open');
-        const boots = (globalThis.__tpBootsSeen || 0);
-        report.boots = boots;
-        console.log('[e2e] ui: settings close');
-        await clickIf('#settingsClose', '#settingsClose');
-          ok = false;
-        console.log('[e2e] ui: help open');
-        }
-      } catch {}
-        console.log('[e2e] ui: help close');
-        await clickIf('#helpClose', '#shortcutsClose');
-      return {
-        console.log('[e2e] ui: present on');
-        tBootMs: report.tBootMs,
-        recorderReady: report.recorderReady,
-        console.log('[e2e] ui: present off');
-        await clickIf('#presentBtn', '#presentBtn');
-        testRan: report.testRan,
-        console.log('[e2e] ui: display open');
-        wsOps: report.wsOps,
-        wsOpened: report.wsOpened,
-        notes: report.notes,
-        console.log('[e2e] ui: mic/speech');
-        asserts: { hasIdentify, wsCountsMatch },
-        ui: report.ui || null
-        console.log('[e2e] ui: cam/pip');
-    }, { stubObs: !!STUB_OBS });
-
-        console.log('[e2e] ui: load sample');
-    try {
-      const clickIf = async (selA, selB) => {
-        const target = await page.evaluate((a, b) => {
-          const elA = document.querySelector(a);
-          if (elA) return a;
-        console.log('[e2e] ui: upload mock');
-        await clickIf('#uploadBtn', '#uploadFileBtn');
-          return elB ? b : null;
-        }, selA, selB);
-        if (!target) return false;
-        await page.evaluate((selector) => { try { var el = document.querySelector(selector); if (el && typeof el.click === 'function') el.click(); } catch {} }, target);
-        return true;
-        console.log('[e2e] ui: speakers toggle');
-      // Settings open/close
-  await clickIf('#settingsBtn', '#SettingsBtn');
-  await page.waitForFunction(() => !document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
-  await clickIf('#settingsClose', '#settingsClose');
-      await page.waitForFunction(() => document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
-      // Help open/close (shortcuts)
-      await clickIf('#helpBtn', '#shortcutsBtn');
-      await page.waitForFunction(() => !document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
-      await clickIf('#helpClose', '#shortcutsClose');
-      await page.waitForFunction(() => document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
-      // Present mode
-  await clickIf('#presentBtn', '#presentBtn');
-  await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'));
-  await clickIf('#presentBtn', '#presentBtn');
-  await page.waitForFunction(() => !(document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present')));
-      // Display window
-  // Display window (tolerate blocked popups in headless)
-  await clickIf('#displayWindowBtn', '#openDisplayBtn');
-      // HUD button is optional; click if present
-      const hud = await page.$('#hudBtn'); if (hud) await hud.click();
-      // Mic/Speech
-      await clickIf('#requestMicBtn', '#micBtn');
-      await clickIf('#startSpeechBtn', '#recBtn');
-      // Camera/PiP
-      await clickIf('#startCameraBtn', '#startCam');
-      await clickIf('#pipBtn', '#camPiP');
-      // Scripts load sample and upload (mock)
-      await clickIf('#loadSampleBtn', '#loadSample');
-      await page.waitForFunction(() => {
-        const ed = document.querySelector('#editor');
-        return !!ed && 'value' in ed && (ed.value || '').length > 10;
-      }, { timeout: 2000 });
-      await clickIf('#uploadBtn', '#uploadFileBtn');
-      await page.waitForFunction(() => {
-        const ed = document.querySelector('#editor');
-        if (!ed || !('value' in ed)) return false;
-        return /CI upload OK/i.test(ed.value || '');
-      }, { timeout: 2000 });
-      // Speakers toggle
-      await clickIf('#speakersToggleBtn', '#toggleSpeakers');
-      await page.waitForFunction(() => {
-        const el = document.querySelector('#speakersBody, #speakersPanel');
-        return !!el;
-      }, { timeout: 2000 });
-    } catch (e) {
-      console.warn('[e2e] ui-binds clicks: WARN', String(e && e.message || e));
+    // find adapter with small retry loop
+    let obs = null;
+    for (let i = 0; i < 6 && !obs; i++) {
+      obs = rec?.getAdapter?.('obs') || rec?.adapters?.obs || globalThis.obs || (globalThis.App && globalThis.App.obs) || null;
+      if (!obs) await new Promise(r => setTimeout(r, 100));
     }
+    report.adapterReady = !!obs;
+    if (!obs) { report.notes.push('OBS adapter not found.'); report.ok = false; return report; }
+
+    const SENT = (globalThis.__WS_SENT__ = globalThis.__WS_SENT__ || []);
+    const OPENED = (globalThis.__WS_OPENED__ = globalThis.__WS_OPENED__ || []);
+    const baseSent = SENT.length;
+
+    try {
+      if (globalThis.__OBS_CFG__ && typeof obs.configure === 'function') {
+        await obs.configure(globalThis.__OBS_CFG__);
+        report.notes.push('obs.configure() applied');
+      }
+    } catch (e) { report.notes.push('configure err: ' + String(e)); }
+
+    try { await obs.connect?.(); report.notes.push('obs.connect() ok'); } catch (e) { report.notes.push('connect err: ' + String(e)); }
+
+    await new Promise(r => setTimeout(r, 250));
+
+    try {
+      if (typeof obs.test === 'function') {
+        await obs.test();
+        report.testRan = true;
+        report.notes.push('obs.test() ok');
+      } else {
+        report.notes.push('obs.test() not present');
+      }
+    } catch (e) { report.notes.push('test err: ' + String(e)); }
+
+    report.wsSentCount = Math.max(0, SENT.length - baseSent);
+    report.wsOps = SENT.slice(-report.wsSentCount).map((m) => { try { const j = typeof m === 'string' ? JSON.parse(m) : m; return j?.op ?? j?.opcode ?? 'unknown'; } catch { return 'raw'; } });
+    report.wsOpened = Array.isArray(OPENED) ? OPENED.length : 0;
+
+    const hasIdentify = Array.isArray(report.wsOps) && report.wsOps.includes(1);
+    const wsCountsMatch = report.wsSentCount === (Array.isArray(report.wsOps) ? report.wsOps.length : 0);
+
+    let ok = report.recorderReady && report.adapterReady && (report.testRan || report.wsSentCount > 0);
+    if (stubObs && !hasIdentify) {
+      ok = false;
+      report.notes.push('assert: missing IDENTIFY opcode (1) under --stubObs');
+    }
+    if (!wsCountsMatch) {
+      ok = false;
+      report.notes.push(`assert: wsSentCount (${report.wsSentCount}) !== wsOps.length (${(report.wsOps||[]).length})`);
+    }
+
+    // Basic UI checks (best-effort)
+    try {
+      const overlay = document.getElementById('settingsOverlay');
+      const card = document.getElementById('scriptsFolderCard');
+      const choose = document.getElementById('chooseFolderBtn');
+      const mainSel = document.getElementById('scriptSelect');
+      const mirrorSel = document.getElementById('scriptSelectSidebar');
+
+      const overlayVisible = !!overlay && !overlay.classList.contains('hidden') && overlay.style.display !== 'none';
+      const settingsCard = !!card && !!choose && !!mainSel;
+      const mainCount = mainSel ? (mainSel.querySelectorAll('option') || []).length : 0;
+      const mirrorCount = mirrorSel ? (mirrorSel.querySelectorAll('option') || []).length : 0;
+
+      report.ui = { overlayVisible, settingsCard, mirrorExists: !!mirrorSel, mainCount, mirrorCount };
+
+      if (!settingsCard) {
+        ok = false;
+        report.notes.push('assert: Settings Scripts Folder card missing (choose/scripts)');
+      } else {
+        if (mainCount === 0) { ok = false; report.notes.push('assert: mock folder population empty'); }
+        if (mainCount !== mirrorCount) { ok = false; report.notes.push('assert: mirror option count mismatch'); }
+      }
+    } catch (e) {
+      report.notes.push('ui-check err: ' + String(e));
+    }
+
+    report.ok = ok;
+    return report;
+  }, { stubObs: !!STUB_OBS });
+
+      console.log('[e2e] ui: load sample');
+  try {
+    const clickIf = async (selA, selB) => {
+      const target = await page.evaluate((a, b) => {
+        const elA = document.querySelector(a);
+        if (elA) return a;
+        const elB = document.querySelector(b);
+        return elB ? b : null;
+      }, selA, selB);
+      if (!target) return false;
+      await page.evaluate((selector) => { try { var el = document.querySelector(selector); if (el && typeof el.click === 'function') el.click(); } catch {} }, target);
+      return true;
+    };
+
+    // Settings open/close
+    await clickIf('#settingsBtn', '#SettingsBtn');
+    await page.waitForFunction(() => !document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
+    await clickIf('#settingsClose', '#settingsClose');
+    await page.waitForFunction(() => document.querySelector('#settingsOverlay')?.classList.contains('hidden'));
+    // Help open/close (shortcuts)
+    await clickIf('#helpBtn', '#shortcutsBtn');
+    await page.waitForFunction(() => !document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
+    await clickIf('#helpClose', '#shortcutsClose');
+    await page.waitForFunction(() => document.querySelector('#shortcutsOverlay')?.classList.contains('hidden'));
+    // Present mode
+    await clickIf('#presentBtn', '#presentBtn');
+    await page.waitForFunction(() => document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present'));
+    await clickIf('#presentBtn', '#presentBtn');
+    await page.waitForFunction(() => !(document.body.classList.contains('present-mode') || document.documentElement.classList.contains('tp-present')));
+    // Display window (tolerate blocked popups in headless)
+    await clickIf('#displayWindowBtn', '#openDisplayBtn');
+    // HUD button is optional; click if present
+    const hud = await page.$('#hudBtn'); if (hud) await hud.click();
+    // Mic/Speech
+    await clickIf('#requestMicBtn', '#micBtn');
+    await clickIf('#startSpeechBtn', '#recBtn');
+    // Camera/PiP
+    await clickIf('#startCameraBtn', '#startCam');
+    await clickIf('#pipBtn', '#camPiP');
+    // Scripts load sample and upload (mock)
+    await clickIf('#loadSampleBtn', '#loadSample');
+    await page.waitForFunction(() => {
+      const ed = document.querySelector('#editor');
+      return !!ed && 'value' in ed && (ed.value || '').length > 10;
+    }, { timeout: 2000 });
+    await clickIf('#uploadBtn', '#uploadFileBtn');
+    await page.waitForFunction(() => {
+      const ed = document.querySelector('#editor');
+      if (!ed || !('value' in ed)) return false;
+      return /CI upload OK/i.test(ed.value || '');
+    }, { timeout: 2000 });
+    // Speakers toggle
+    await clickIf('#speakersToggleBtn', '#toggleSpeakers');
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#speakersBody, #speakersPanel');
+      return !!el;
+    }, { timeout: 2000 });
+  } catch (e) {
+    console.warn('[e2e] ui-binds clicks: WARN', String(e && e.message || e));
+  }
 
     // Assert that content appears in #editor (or any script input) after selection
     try {
