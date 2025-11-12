@@ -72,6 +72,26 @@ async function requestPiP() {
   } catch {}
 }
 
+// Camera picker helpers (enumerate + start by deviceId)
+async function refreshCameras() {
+  try {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === 'videoinput');
+    const sel = document.querySelector<HTMLSelectElement>('#cameraSelect');
+    if (!sel) return;
+    sel.innerHTML = cams.map(d => `<option value="${d.deviceId}">${d.label || 'Camera'}</option>`).join('');
+  } catch {}
+}
+async function startCameraById(deviceId?: string) {
+  try {
+    const constraints = deviceId ? { video: { deviceId: { exact: deviceId } }, audio: false } : { video: true, audio: false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const v = document.querySelector<HTMLVideoElement>('#cameraPreview');
+    if (v) { (v as any).srcObject = stream; try { await v.play(); } catch {}; v.hidden = false; }
+  } catch {}
+}
+
 // CI detection helper (query flag or webdriver)
 function isCI(): boolean {
   try { return /\bci=1\b/i.test(location.search) || ((navigator as any).webdriver === true); } catch { return false; }
@@ -252,6 +272,30 @@ async function pickPlainFile(): Promise<File | null> {
   } catch { return null; }
 }
 
+// Upload helper: normalize File→text (DOCX via Mammoth ArrayBuffer, else plain text)
+async function toText(file: File): Promise<string> {
+  try {
+    if (/\.docx$/i.test(file.name)) {
+      const buf = await file.arrayBuffer();
+      const ensure = (window as any).ensureMammoth;
+      if (ensure) { try { await ensure(); } catch {} }
+      const m = (window as any).mammoth;
+      if (m && typeof m.extractRawText === 'function') {
+        try {
+          const { value } = await m.extractRawText({ arrayBuffer: buf });
+          return value || '';
+        } catch (e) {
+          try { console.warn('[upload] mammoth parse failed', e); } catch {}
+        }
+      }
+      // Fallback: treat as plain text inside (will likely be garbage XML)
+      try { return await file.text(); } catch {}
+      return '';
+    }
+    return await file.text();
+  } catch { return ''; }
+}
+
 // (legacy toggleOverlay kept during migration; now unused)
 // function toggleOverlay(sel: string, show?: boolean) {}
 
@@ -384,7 +428,12 @@ export function installEmergencyBinder() {
             try { (window as any).__tpDisplayWindow?.close?.(); } catch {}
             break; }
           case 'request-mic':
-            try { await requestMic(); } catch {}
+            try {
+              // Treat mislabeled release button that still carries request-mic id/data-action
+              const el = target as HTMLElement | null;
+              if (el && /release/i.test(el.id || '')) { releaseMic(); }
+              else { await requestMic(); }
+            } catch {}
             break;
           case 'release-mic':
             try { releaseMic(); } catch {}
@@ -409,10 +458,20 @@ export function installEmergencyBinder() {
               const btn = document.getElementById('toggleSpeakers') as HTMLButtonElement | null;
               if (body) body.hidden = !body.hidden;
               if (btn) { btn.textContent = body && body.hidden ? 'Show' : 'Hide'; btn.setAttribute('aria-expanded', String(!(body && body.hidden))); }
+              // When opening, also focus the key input if present for accessibility
+              if (body && !body.hidden) {
+                const key = document.querySelector<HTMLInputElement>('#speakersKey,[data-speakers-key]');
+                try { key?.focus(); } catch {}
+              }
             } catch {}
             break; }
           case 'speakers-key': {
-            try { (document.getElementById('speakersKey') as HTMLInputElement | null)?.focus(); } catch {}
+            try {
+              const key = document.querySelector<HTMLInputElement>('#speakersKey,[data-speakers-key]');
+              const panel = document.querySelector<HTMLElement>('[data-panel="speakers"],#speakersBody');
+              if (panel) { panel.hidden = false; panel.setAttribute('aria-expanded','true'); }
+              key?.focus();
+            } catch {}
             break; }
           case 'load-sample': {
             const sample = `[s1]\nWelcome to Anvil — sample is live.\n[beat]\nUse step keys or auto-scroll to move.\n[/s1]`;
@@ -422,23 +481,19 @@ export function installEmergencyBinder() {
             try {
               const mocked = (() => { try { return (new URL(location.href)).searchParams.get('uiMock') === '1'; } catch { return false; } })();
               if (mocked) { renderNow('SmokeUpload.txt','[s1] CI upload OK [/s1]'); break; }
-              const f = await pickPlainFile(); if (!f) break;
-              const lower = f.name.toLowerCase();
-              if (lower.endsWith('.docx')) {
-                try {
-                  await (window as any).ensureMammoth?.();
-                  const mammoth = (window as any).mammoth;
-                  if (!mammoth) throw new Error('mammoth not loaded');
-                  const buf = await f.arrayBuffer();
-                  const out = await mammoth.extractRawText({ arrayBuffer: buf });
-                  const txt = (out && (out.value || out.text)) || '';
-                  renderNow(f.name, txt);
-                } catch (e) {
-                  try { console.warn('[upload] mammoth parse failed', e); } catch {}
-                  try { renderNow(f.name, await f.text()); } catch { renderNow(f.name, '[note]Failed to parse DOCX[/note]'); }
-                }
-              } else {
-                try { renderNow(f.name, await f.text()); } catch { renderNow(f.name, '[error]Failed to read file[/error]'); }
+              const input = document.querySelector<HTMLInputElement>('input[type=file]#uploadInput,[data-upload-input]');
+              if (input && !(input as any)._uploadBound) {
+                (input as any)._uploadBound = 1;
+                input.addEventListener('change', async () => {
+                  const f = input.files?.[0]; if (!f) return;
+                  const text = await toText(f).catch(()=>'');
+                  renderNow(f.name, text);
+                }, { once: true });
+              }
+              if (input) { input.click(); }
+              else {
+                const f = await pickPlainFile(); if (!f) break;
+                renderNow(f.name, await toText(f));
               }
             } catch {}
             break; }
@@ -585,6 +640,8 @@ function ensureSettingsTabsWiring() {
 try {
   window.addEventListener('tp:settings:open', () => {
     try { queueMicrotask(() => { try { ensureSettingsTabsWiring(); } catch {} }); } catch {}
+    // Wire camera picker & refresh devices
+    try { queueMicrotask(() => { try { refreshCameras(); } catch {}; const sel = document.querySelector<HTMLSelectElement>('#cameraSelect'); sel?.addEventListener('change', e => startCameraById((e.target as HTMLSelectElement).value), { once: true }); }); } catch {}
   });
 } catch {}
 
