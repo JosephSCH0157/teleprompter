@@ -58,15 +58,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       if (handle && 'getFile' in handle) {
         opts.onSelect?.(handle);
         try {
-          const f = await handle.getFile();
-          const text = await f.text();
-          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: f.name, text } }));
+          // Let the ingest pipeline handle file reading and DOCX parsing
+          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { file: handle } }));
         } catch {}
       } else if (file) {
         opts.onSelect?.(file);
         try {
-          const text = await file.text();
-          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: file.name, text } }));
+          // Forward the File object to ingest to support DOCX extraction
+          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { file } }));
         } catch {}
       } else {
         opts.onSelect?.(null);

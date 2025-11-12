@@ -427,6 +427,58 @@ export function installEmergencyBinder() {
   } catch {}
 
   try { console.log('[emergency-binder] installed'); } catch {}
+  // Attempt to wire settings tabs after emergency binder install (in case primary binder missed it)
+  try { ensureSettingsTabsWiring(); } catch {}
+}
+
+// Lightweight settings tabs activation (fallback if primary wiring missing)
+// Ensures clicking a .settings-tab button marks it active and shows only cards matching data-tab.
+// Cards are elements inside #settingsBody with data-tab attr (injected dynamically by features).
+function ensureSettingsTabsWiring() {
+  try {
+    const tabsWrap = document.getElementById('settingsTabs');
+    if (!tabsWrap) return;
+    if ((tabsWrap as any)._tabsWired) return; (tabsWrap as any)._tabsWired = 1;
+    const body = document.getElementById('settingsBody');
+    const activate = (tab: string) => {
+      try {
+        // Mark tabs
+        const btns = tabsWrap.querySelectorAll('.settings-tab');
+        btns.forEach(b => {
+          const match = (b as HTMLElement).dataset.tab === tab;
+          b.classList.toggle('active', match);
+          b.setAttribute('aria-selected', match ? 'true' : 'false');
+          b.setAttribute('tabindex', match ? '0' : '-1');
+        });
+        // Show cards
+        if (body) {
+          const cards = body.querySelectorAll('.settings-card');
+          cards.forEach(c => {
+            const want = (c as HTMLElement).dataset.tab === tab;
+            (c as HTMLElement).style.display = want ? 'flex' : 'none';
+          });
+        }
+        // Accessibility announcement
+        try { document.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { tab } })); } catch {}
+      } catch {}
+    };
+    tabsWrap.addEventListener('click', (e) => {
+      try {
+        const t = e.target as HTMLElement | null;
+        const btn = t?.closest('.settings-tab') as HTMLElement | null;
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        const tab = btn.dataset.tab || 'general';
+        activate(tab);
+      } catch {}
+    }, { capture: true });
+    // Auto-activate first active or default to 'general'
+    const initActive = (() => {
+      const first = tabsWrap.querySelector('.settings-tab.active') as HTMLElement | null;
+      return (first && first.dataset.tab) || 'general';
+    })();
+    activate(initActive);
+  } catch {}
 }
 
 // Map <option value> → internal UiScrollMode (see index.ts applyUiScrollMode)
@@ -527,6 +579,8 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
         } else {
           el.classList.toggle('hidden');
         }
+        // Force inline style to guarantee visibility even if global .overlay { display: none }
+        try { (el as HTMLElement).style.display = el.classList.contains('hidden') ? 'none' : 'block'; } catch {}
       } catch {}
     };
 
@@ -557,11 +611,11 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
     const helpOverlay = _qq<HTMLElement>(SEL.helpOverlay);
     if (helpBtn && !helpBtn.dataset.uiBound) {
       helpBtn.dataset.uiBound = '1';
-      on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, true); });
+      on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, true); try { document.dispatchEvent(new CustomEvent('tp:help:open', { detail: { source: 'binder' } })); } catch {} });
     }
     if (helpClose && !helpClose.dataset.uiBound) {
       helpClose.dataset.uiBound = '1';
-      on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, false); });
+      on(helpClose, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggle(helpOverlay, false); try { document.dispatchEvent(new CustomEvent('tp:help:close', { detail: { source: 'binder' } })); } catch {} });
     }
     // ESC to close overlays (SAFE for window)
     onGlobal(window, 'keydown', (e: Event) => {

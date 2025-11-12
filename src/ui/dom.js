@@ -529,6 +529,38 @@ function installObsChip() {
 function wireOverlays() {
   once('overlays', () => {
     try {
+      const ensureHelpContents = () => {
+        try {
+          const ov = $id('shortcutsOverlay'); if (!ov) return;
+          const sheet = ov.querySelector('.sheet'); if (!sheet) return;
+          if (ov.querySelector('#tagGuide')) return; // already injected
+          const wrap = document.createElement('section');
+          wrap.id = 'tagGuide';
+          wrap.className = 'tag-guide';
+          wrap.innerHTML = `
+            <h4>Tag Guide</h4>
+            <div class="settings-small">Use bracket tags inside your script to style and segment content.</div>
+            <ul class="tag-list">
+              <li><code>[s1]</code>…<code>[/s1]</code> — Speaker 1</li>
+              <li><code>[s2]</code>…<code>[/s2]</code> — Speaker 2</li>
+              <li><code>[g1]</code>…<code>[/g1]</code> — Guest 1</li>
+              <li><code>[g2]</code>…<code>[/g2]</code> — Guest 2</li>
+              <li><code>[b]</code>/<code>[i]</code>/<code>[u]</code> — Bold/Italic/Underline</li>
+              <li><code>[note]</code>…<code>[/note]</code> — Sidebar note</li>
+              <li><code>[color=#ff0]</code>…<code>[/color]</code> — Text color</li>
+              <li><code>[bg=#112233]</code>…<code>[/bg]</code> — Background color</li>
+            </ul>
+            <div class="row">
+              <button id="normalizeBtn" class="btn-chip">Normalize</button>
+              <span class="chip">Fix whitespace and non-breaking spaces</span>
+            </div>`;
+          sheet.appendChild(wrap);
+        } catch {}
+      };
+      // Also respond to binder events to ensure content is present even when help opened via delegated binder
+      try {
+        window.addEventListener('tp:help:open', () => { try { ensureHelpContents(); } catch {} });
+      } catch {}
       const open = (name) => {
         try {
           const btn = $id(name + 'Btn');
@@ -540,6 +572,9 @@ function wireOverlays() {
               const api = (window.__tp && window.__tp.settings) ? window.__tp.settings : null;
               if (api && typeof api.mount === 'function') api.mount();
             } catch {}
+          } else if (name === 'shortcuts') {
+            // Inject help contents if missing
+            ensureHelpContents();
           }
           dlg.classList.remove('hidden');
           btn && btn.setAttribute('aria-expanded', 'true');
