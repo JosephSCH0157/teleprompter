@@ -17,6 +17,7 @@ function pickTarget(sel?: string | HTMLElement): HTMLElement | null {
     return (
       $('#scriptInput') ||
       $('#scriptText') ||
+      $('#editor') ||
       $('[data-role="script-input"]') ||
       $('[data-script="input"]') ||
       ($('#teleprompterText') as HTMLElement | null) ||

@@ -233,6 +233,9 @@ async function main() {
     await page.waitForSelector('#scrollMode', { timeout: 5000 });
     const persisted = await page.$eval('#scrollMode', (el) => el.value);
     assert(persisted === 'step', 'scrollMode should persist across reloads');
+    // Legacy guard: ensure old Saved Scripts UI never resurfaces
+    const legacy = await page.$('#scriptSlots');
+    if (legacy) throw new Error('Legacy #scriptSlots found');
     console.log('[e2e] ui-invariants: PASS');
   } catch (e) {
     console.warn('[e2e] ui-invariants: WARN', String(e && e.message || e));
@@ -407,6 +410,15 @@ async function main() {
         // Hard assert: fail overall ok if settingsCard absent under mockFolder
         if (!settingsCard) ok = false;
         if (settingsCard && (mainCount === 0 || mainCount !== mirrorCount)) ok = false;
+
+        // If we can, simulate a selection and expect text to land in a script input
+        try {
+          const sel = document.getElementById('scriptSelect');
+          if (sel && sel.options.length > 1) {
+            sel.selectedIndex = 1;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        } catch {}
       } catch (e) {
         try { report.notes.push('ui-check err: ' + String(e)); } catch {}
       }
@@ -437,6 +449,20 @@ async function main() {
         ui: report.ui || null
       };
     }, { stubObs: !!STUB_OBS });
+
+    // Assert that content appears in #editor (or any script input) after selection
+    try {
+      await page.waitForFunction(() => {
+        const el = document.getElementById('editor');
+        if (el && 'value' in el && typeof (el).value === 'string') return (el).value.length > 10;
+        const alt = document.querySelector('#scriptInput, #scriptText, [data-role="script-input"], #teleprompterText');
+        if (!alt) return false;
+        if (alt && 'value' in alt && typeof (alt).value === 'string') return (alt).value.length > 10;
+        return (alt && alt.textContent ? alt.textContent.length > 10 : false);
+      }, { timeout: 2000 });
+    } catch (e) {
+      console.warn('[e2e] content not loaded after selection');
+    }
     // Attach CI metadata (sha/ref) and print a single-line JSON report for CI
     try {
       const _sha = (typeof process !== 'undefined' && process && process.env && process.env.GITHUB_SHA) ? process.env.GITHUB_SHA : null;

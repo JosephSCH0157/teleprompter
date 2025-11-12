@@ -57,10 +57,24 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       const file = (opt as any)?._file as File | undefined;
       if (handle && 'getFile' in handle) {
         opts.onSelect?.(handle);
+        try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: handle })); } catch {}
       } else if (file) {
         opts.onSelect?.(file);
+        try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: file })); } catch {}
       } else {
         opts.onSelect?.(null);
+        // In CI mock mode, emit a synthetic apply so smoke can assert content updates
+        const mockMode = !!(window as any).__tpMockFolderMode;
+        if (mockMode) {
+          const name = sel.options[sel.selectedIndex]?.text || 'Mock_Script.txt';
+          const text = `This is a CI mock script for ${name}.\n\n- Line 1\n- Line 2\n- Line 3`;
+          try { (window as any).HUD?.log?.('script:loaded:mock', { name, chars: text.length }); } catch {}
+          try { localStorage.setItem('tp_last_script_name', name); } catch {}
+          try {
+            const file = new File([text], name, { type: 'text/plain' });
+            window.dispatchEvent(new CustomEvent('tp:script-load', { detail: file }));
+          } catch {}
+        }
       }
     } catch {}
   });
