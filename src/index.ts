@@ -189,8 +189,8 @@ try {
 // Cross-window document channel (main <-> display)
 let __docCh: BroadcastChannel | null = null;
 try {
-	__docCh = new BroadcastChannel('tp-doc');
-	__docCh.onmessage = (ev: MessageEvent<any>) => {
+	__docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = new BroadcastChannel('tp-doc'));
+	if (__docCh) (__docCh as BroadcastChannel).onmessage = (ev: MessageEvent<any>) => {
 		try {
 			const d = ev?.data || {};
 			if (d?.type === 'script' && typeof d?.text === 'string') {

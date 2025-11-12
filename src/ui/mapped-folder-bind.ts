@@ -67,39 +67,30 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   sel.addEventListener('change', async () => {
     try {
-      const opt = sel.options[sel.selectedIndex];
-      const handle = (opt as any)?._handle as FileSystemFileHandle | undefined;
-      const file = (opt as any)?._file as File | undefined;
-      if (handle && 'getFile' in handle) {
-        opts.onSelect?.(handle);
-        try {
-          const f = await (handle as any).getFile();
-          const { name, text } = await readHandleOrFile(f);
-          try { localStorage.setItem('tp_last_script_name', name); } catch {}
-          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
-        } catch {}
-      } else if (file) {
-        opts.onSelect?.(file);
-        try {
-          const { name, text } = await readHandleOrFile(file);
-          try { localStorage.setItem('tp_last_script_name', name); } catch {}
-          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
-        } catch {}
+      const opt = sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : sel.options[sel.selectedIndex];
+      if (!opt) return;
+      sel.setAttribute('aria-busy','true');
+      const handle = (opt as any)?.__handle || (opt as any)?._handle;
+      const file = (opt as any)?.__file || (opt as any)?._file;
+      if (handle || file) {
+        const { name, text } = await readHandleOrFile(handle || file);
+        try { (window as any).__tpCurrentName = name; } catch {}
+        try { localStorage.setItem('tp_last_script_name', name); } catch {}
+        window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
       } else {
         opts.onSelect?.(null);
         // In CI mock mode, emit a synthetic apply so smoke can assert content updates
         const mockMode = !!(window as any).__tpMockFolderMode;
         if (mockMode) {
-          const name = sel.options[sel.selectedIndex]?.text || 'Mock_Script.txt';
+          const name = opt?.text || 'Mock_Script.txt';
           const text = `This is a CI mock script for ${name}.\n\n- Line 1\n- Line 2\n- Line 3`;
           try { (window as any).HUD?.log?.('script:loaded:mock', { name, chars: text.length }); } catch {}
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
-          try {
-            window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
-          } catch {}
+          try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
         }
       }
-    } catch {}
+    } catch (e) { try { console.warn('[mapped-folder] mammoth parse failed', e); } catch {} }
+    finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   });
 
   const off = onMappedFolder(async () => { await refreshList(); });
@@ -226,21 +217,18 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   }
 }
 
-async function readHandleOrFile(file: File): Promise<{ name: string; text: string }> {
-  const name = file?.name || 'Script.txt';
-  const lower = name.toLowerCase();
+async function readHandleOrFile(handleOrFile: any): Promise<{ name: string; text: string }> {
   try {
-    if (/\.(txt|md)$/i.test(lower)) {
-      const text = await file.text();
+    const file: File = handleOrFile?.getFile ? await handleOrFile.getFile() : handleOrFile;
+    const name = file?.name || 'Untitled';
+    if (file && /\.docx$/i.test(name)) {
+      const text = await docxToTextViaMammoth(file);
       return { name, text };
     }
-    if (/\.docx$/i.test(lower)) {
-      const text = await docxToTextViaMammoth(file);
-      if (text) return { name, text };
-      return { name, text: '[note]DOCX could not be parsed. Convert to .txt/.md or use a richer extractor.[/note]' };
-    }
-    return { name, text: '[note]Unsupported file type. Use .txt / .md / .docx[/note]' };
+    const text = file ? await file.text() : '';
+    return { name, text };
   } catch (e) {
+    const name = 'Untitled';
     return { name, text: '[error] Failed to read file: ' + (e && (e as any).message || String(e)) + '[/error]' };
   }
 }
@@ -252,7 +240,7 @@ async function docxToTextViaMammoth(file: File): Promise<string> {
     const mammoth = (mod && (mod.mammoth || mod.default)) || (window as any).mammoth || null;
     if (!mammoth) throw new Error('mammoth not available');
     const buf = await file.arrayBuffer();
-    const res = await mammoth.extractRawText({ arrayBuffer: () => buf });
+  const res = await mammoth.extractRawText({ arrayBuffer: buf });
     const raw = (res && (res.value || res.text || '')) || '';
     return String(raw).replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   } catch (e) {

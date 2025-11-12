@@ -14,7 +14,7 @@ export type IngestOpts = {
 let __ingestListening = false;
 let __docCh: BroadcastChannel | null = null;
 try {
-  __docCh = new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null;
+  __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));
 } catch { __docCh = null; }
 
 function $(q: string): HTMLElement | null {

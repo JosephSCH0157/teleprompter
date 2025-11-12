@@ -425,24 +425,20 @@ export function installEmergencyBinder() {
               const f = await pickPlainFile(); if (!f) break;
               const lower = f.name.toLowerCase();
               if (lower.endsWith('.docx')) {
-                // Ensure mammoth is present, then extract raw text
-                try { await (window as any).ensureMammoth?.(); } catch {}
-                const mammoth = (window as any).mammoth;
-                if (mammoth && mammoth.extractRawText) {
-                  const arrayBuf = await f.arrayBuffer();
-                  try {
-                    const res = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
-                    const txt = (res && (res.value || res.text)) || '';
-                    renderNow(f.name, txt);
-                  } catch {
-                    // Fallback to zip-based or plain text if available
-                    try { const t = await f.text(); renderNow(f.name, t); } catch { renderNow(f.name, '[note]Failed to parse DOCX[/note]'); }
-                  }
-                } else {
-                  try { const t = await f.text(); renderNow(f.name, t); } catch { renderNow(f.name, '[note]Failed to parse DOCX[/note]'); }
+                try {
+                  await (window as any).ensureMammoth?.();
+                  const mammoth = (window as any).mammoth;
+                  if (!mammoth) throw new Error('mammoth not loaded');
+                  const buf = await f.arrayBuffer();
+                  const out = await mammoth.extractRawText({ arrayBuffer: buf });
+                  const txt = (out && (out.value || out.text)) || '';
+                  renderNow(f.name, txt);
+                } catch (e) {
+                  try { console.warn('[upload] mammoth parse failed', e); } catch {}
+                  try { renderNow(f.name, await f.text()); } catch { renderNow(f.name, '[note]Failed to parse DOCX[/note]'); }
                 }
               } else {
-                renderNow(f.name, await f.text());
+                try { renderNow(f.name, await f.text()); } catch { renderNow(f.name, '[error]Failed to read file[/error]'); }
               }
             } catch {}
             break; }
@@ -563,6 +559,13 @@ function ensureSettingsTabsWiring() {
     activate(initActive);
   } catch {}
 }
+
+// Ensure settings tabs wiring runs whenever Settings opens
+try {
+  window.addEventListener('tp:settings:open', () => {
+    try { queueMicrotask(() => { try { ensureSettingsTabsWiring(); } catch {} }); } catch {}
+  });
+} catch {}
 
 // Map <option value> → internal UiScrollMode (see index.ts applyUiScrollMode)
 function mapScrollValue(v: string): 'auto'|'asr'|'step'|'rehearsal'|'off' {
@@ -918,12 +921,22 @@ export function ensureSidebarMirror() {
     }
     if ((side as any)._mirrorWired) return;
     (side as any)._mirrorWired = '1';
-    const sync = (src: HTMLSelectElement, dst: HTMLSelectElement) => {
-      try { dst.selectedIndex = src.selectedIndex; } catch {}
-      try { dst.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
-    };
-    side.addEventListener('change', () => { if (main) sync(side!, main); }, { capture: true });
-    main.addEventListener('change', () => { if (side) sync(main, side!); }, { capture: true });
+    let __syncingSelects = false;
+    function syncSelect(from: HTMLSelectElement, to: HTMLSelectElement) {
+      if (__syncingSelects) return;
+      __syncingSelects = true;
+      try {
+        if (to.value !== from.value) {
+          to.value = from.value;
+          try { to.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+          try { to.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+        }
+      } finally {
+        __syncingSelects = false;
+      }
+    }
+    main.addEventListener('change', () => { if (side) syncSelect(main, side!); }, { capture: false });
+    side.addEventListener('change', () => { if (main) syncSelect(side!, main); }, { capture: false });
   } catch {}
 }
 
