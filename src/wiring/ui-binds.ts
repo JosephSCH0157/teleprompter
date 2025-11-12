@@ -396,6 +396,30 @@ function toggleOverlay(name: 'settings'|'help', on: boolean) {
   } catch {}
 }
 try { (window as any).__tpOpen = (name: 'settings'|'help') => toggleOverlay(name, true); } catch {}
+try { (window as any).__tpClose = (name: 'settings'|'help') => toggleOverlay(name, false); } catch {}
+
+// --- Hot-fix: explicit overlay button wiring (idempotent) ---
+export function installOverlayButtonWiringOnce() {
+  try {
+    if ((window as any).__tpOverlayFixed) return; // allow re-run only if lost
+    (window as any).__tpOverlayFixed = 1;
+    const map: Array<[string, () => void]> = [
+      ['[data-action="settings-open"], #settingsBtn', () => toggleOverlay('settings', true)],
+      ['[data-action="settings-close"], #settingsClose', () => toggleOverlay('settings', false)],
+      ['[data-action="help-open"], #shortcutsBtn', () => toggleOverlay('help', true)],
+      ['[data-action="help-close"], #helpClose', () => toggleOverlay('help', false)],
+    ];
+    for (const [sel, fn] of map) {
+      try {
+        document.querySelectorAll<HTMLElement>(sel).forEach((el) => {
+          if ((el as any).__tpOLBound) return;
+          el.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; try { fn(); } catch {}; }, { capture: false });
+          (el as any).__tpOLBound = 1;
+        });
+      } catch {}
+    }
+  } catch {}
+}
 
 function downloadNow(name: string, text: string, ext?: string) {
   try {
