@@ -71,6 +71,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   async function refreshList() {
     try {
+      // In deterministic CI mock mode, preserve pre-populated options (avoid wiping to "(No scripts found)")
+      const mockMode = !!(window as any).__tpMockFolderMode;
+      const hasPreMock = mockMode && sel && sel.options && sel.options.length > 1 && !(window as any).__tpFolder?.get?.();
+      if (hasPreMock) {
+        // Skip clearing; still emit populated event for parity
+        try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
+        return;
+      }
       if ('showDirectoryPicker' in window) {
         const entries = await listScripts();
         populateSelect(entries);
@@ -110,6 +118,13 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   function populateSelectFromFiles(files: File[]) {
     try {
+      const mockMode = !!(window as any).__tpMockFolderMode;
+      const hasPreMock = mockMode && sel && sel.options && sel.options.length > 1 && !(window as any).__tpFolder?.get?.();
+      if (hasPreMock) {
+        // Preserve mock; skip replacing with fallback file list
+        try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: sel.options.length } })); } catch {}
+        return;
+      }
       sel.innerHTML = '';
       const filtered = files.filter(f => /\.(txt|docx|md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {

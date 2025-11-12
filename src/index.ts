@@ -77,8 +77,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
       asrEnabled = false;
       autoEnabled = false;
       break;
-  }
-
+	}
   // Apply decisions
   if (brain) brain.setMode(brainMode);
   if (setClampMode) setClampMode(clampMode);
@@ -140,357 +139,237 @@ import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
-try {
-	function injectSpeechNotesHud(){
-		try {
-			if (document.getElementById('tp-speech-notes-hud')) return; // already present
-			const s = document.createElement('script');
-			s.src = './hud/speech-notes-hud.js';
-			s.async = true; // non-blocking
-			document.head.appendChild(s);
-		} catch {}
-	}
-	window.addEventListener('hud:ready', () => { injectSpeechNotesHud(); }, { once: true });
-	if ((window as any).__tpHudWireActive) { injectSpeechNotesHud(); }
-} catch {}
+function injectSpeechNotesHud(){
+	try {
+		if (document.getElementById('tp-speech-notes-hud')) return; // already present
+		const s = document.createElement('script');
+		s.src = './hud/speech-notes-hud.js';
+		s.async = true; // non-blocking
+		document.head.appendChild(s);
+	} catch {}
+}
+window.addEventListener('hud:ready', () => { injectSpeechNotesHud(); }, { once: true });
+if ((window as any).__tpHudWireActive) { injectSpeechNotesHud(); }
+// Expose folder injection helpers globally for smoke harness / fallback JS paths
+try { (window as any).ensureSettingsFolderControls = ensureSettingsFolderControls; } catch {}
+try { (window as any).ensureSettingsFolderControlsAsync = ensureSettingsFolderControlsAsync; } catch {}
 
-try {
-		document.addEventListener('DOMContentLoaded', () => {
+// Test-only mock population (deterministic CI) — mirrors legacy JS path behavior
+function __maybePopulateMockFolder() {
+	try {
+		const Q = new URLSearchParams(location.search || '');
+		const useMock = Q.has('mockFolder') || (navigator.webdriver === true);
+		if (!useMock) return;
+		try { (window as any).__tpMockFolderMode = true; } catch {}
+		const main = document.getElementById('scriptSelect') as HTMLSelectElement | null;
+		const mirror = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+		if (!main && !mirror) return;
+		const names = ['Practice_Intro.txt','Main_Episode.txt','Notes.docx'];
+		const opts = names.filter(n=>/\.(txt|docx)$/i.test(n));
+		const populate = (sel: HTMLSelectElement|null) => {
+			if (!sel) return;
+			sel.setAttribute('aria-busy','true');
+			sel.innerHTML = opts.map((n,i)=>`<option value="${i}">${n}</option>`).join('');
+			sel.setAttribute('aria-busy','false');
+			sel.disabled = opts.length === 0;
+			sel.dataset.count = String(opts.length);
+		};
+		populate(main); populate(mirror);
+		try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated',{ detail:{ count: opts.length } })); } catch {}
+	} catch {}
+}
+
+// Unified TS boot function — consolidates prior scattered DOMContentLoaded wiring
+export async function boot() {
+		try {
+			if ((window as any).__tpTsBooted) return; // duplication guard
+			(window as any).__tpTsBooted = 1;
+			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
+			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
+
+			// Early: folder card injection + async watcher (before any user opens Settings)
+			try { ensureSettingsFolderControls(); } catch {}
+			try { ensureSettingsFolderControlsAsync(6000); } catch {}
+			// Mock population for CI (after initial injection attempt)
+			__maybePopulateMockFolder();
+
 			// Attempt OBS bridge claim early (non-blocking)
 			try { initObsBridgeClaim(); } catch {}
-			// Initialize ASR feature (settings card, hotkeys, topbar UI)
+			// ASR feature (hotkeys & UI)
 			try { initAsrFeature(); } catch {}
-			// OBS Settings wiring (inline bridge-backed "Test connect")
+			// OBS Settings wiring (Test connect button)
 			try { initObsUI(); } catch {}
-		// Ensure autoscroll engine is initialized
-		try { (Auto as any).initAutoScroll?.(); } catch {}
 
-		// Wire Auto buttons via resilient delegation (nodes may be re-rendered)
-		try {
-			const onClick = (e: Event) => {
-				const t = e && (e.target as any);
-				// The Scroll Router manages #autoToggle intent; avoid double-toggling here
-				try { if (t?.closest?.('#autoInc'))    return (Auto as any).inc?.(); } catch {}
-				try { if (t?.closest?.('#autoDec'))    return (Auto as any).dec?.(); } catch {}
-			};
-			document.addEventListener('click', onClick, { capture: true });
-		} catch {}
-
-		// Auto-record when the session actually starts (one-shot per page load)
-		try {
-			(function autoRecordOnStart(){
-				const FLAG = 'tp_auto_record_on_start_v1';
-				let fired = false;
-				function wants(){ try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } }
-				async function maybe(){
-					if (fired || !wants()) return;
-					try {
-						if ((window as any).__tpRecording?.getAdapter?.() === 'obs') {
-							// Respect OBS "Off" gating
-							if (!(window as any).__tpObs?.armed?.()) return;
-						}
-						fired = true;
-						await ((window as any).__tpRecording?.start?.() || Promise.resolve());
-					} catch (e) {
-						// allow retry on next event if it fails
-						fired = false;
-						try { console.warn('auto-record failed', e); } catch {}
-					}
-				}
-				['tp:session:start','speech:start','autoscroll:start'].forEach((ev) => {
-					document.addEventListener(ev as any, () => { try { (maybe as any)(); } catch {} }, { capture: true });
-				});
-			})();
-		} catch {}
-
-		// Install the new Scroll Router (Step/Hybrid; WPM/ASR/Rehearsal stubs)
-		try {
-			installScrollRouter({ auto: {
-				toggle: (Auto as any).toggle,
-				inc:    (Auto as any).inc,
-				dec:    (Auto as any).dec,
-				setEnabled: (Auto as any).setEnabled,
-				setSpeed: (Auto as any).setSpeed,
-				getState: (Auto as any).getState,
-			}});
-		} catch {}
-
-		// Install TS-first Step scroller (non-invasive). Expose API and allow optional override.
-		try {
-			const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
-			const rehearsal = installRehearsal();
-			// Honor URL/localStorage bootstrap for Rehearsal
-			try { resolveInitialRehearsal(); } catch {}
-			// Optional wiring: allow window.setScrollMode('step') to control Step when router is absent
-			if (!(window as any).setScrollMode) {
-				(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
-					try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
-					try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
-					if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
-					else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
-				};
-			}
-			// If explicitly requested, override router Step with TS module
-			try {
-				if ((window as any).__TP_TS_STEP_OVERRIDE) {
-					// Basic observer: when a custom event selects a mode, reflect into TS step
-					document.addEventListener('tp:selectMode', (e: any) => {
-						const m = e?.detail?.mode as string;
-						if (m === 'step') step.enable(); else step.disable();
-					}, { capture: true });
-				}
-			} catch {}
-		} catch {}
-
-		// Install coalesced Display Sync (hash + optional HTML text) for external display
-		try {
-			installDisplaySync({
-				getText: () => {
-					try { return (document.getElementById('script')?.innerHTML) || ''; } catch { return ''; }
-				},
-				getAnchorRatio: () => {
-					try {
-						const v = document.getElementById('viewer') as HTMLElement | null;
-						if (!v) return 0;
-						const max = Math.max(0, v.scrollHeight - v.clientHeight);
-						return max > 0 ? (v.scrollTop / max) : 0;
-					} catch { return 0; }
-				},
-				getDisplayWindow: () => {
-					try { return (window as any).__tpDisplayWindow || null; } catch { return null; }
-				},
-				// onApplyRemote is used on display side only; main does not need it here
-			});
-		} catch {}
-
-		// Apply typography to main window and, if present, to display window
-		try {
-			// Mark TS typography path active so legacy bridge can stand down
-			try { (window as any).__tpTsTypographyActive = true; } catch {}
-			applyTypographyTo(window, 'main');
-			const w = (window as any).__tpDisplayWindow as Window | null;
-			if (w) applyTypographyTo(w, 'display');
-		} catch {}
-
-		// Broadcast typography changes to external display (only when linked)
-		try {
-			let bc: BroadcastChannel | null = null;
-			try { bc = new BroadcastChannel('tp_display'); } catch {}
-			onTypography((d, t) => {
-				// Only broadcast if explicitly linked
-				try { if (!getUiPrefs().linkTypography) return; } catch {}
-				// Push to the other screen (target opposite of the source display)
-				const target = (d === 'main' ? 'display' : 'main');
-				const snap = { kind: 'tp:typography', source: 'main', display: target, t } as const;
-				try { bc?.postMessage(snap as any); } catch {}
-				try { const w = (window as any).__tpDisplayWindow as Window | null; w?.postMessage?.(snap as any, '*'); } catch {}
-			});
-		} catch {}
-
-		// Auto-recompute scroll step after typography changes
-		try {
-			window.addEventListener('tp:lineMetricsDirty', () => {
+			// The following block previously lived inside a DOMContentLoaded listener.
+			// We still gate some UI-dependent wiring on DOM readiness for robustness.
+			const onReady = () => {
 				try {
-					const root = document.documentElement;
-					const cs = getComputedStyle(root);
-					const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
-					const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
-					const pxPerLine = fs * lh;
-					const stepPx = Math.round(pxPerLine * 7); // ~7 lines per step
-					try { (window as any).__tpAuto?.setStepPx?.(stepPx); } catch {}
-				} catch {}
-			});
-		} catch {}
+					// Ensure autoscroll engine init
+					try { (Auto as any).initAutoScroll?.(); } catch {}
 
-		// Ctrl/Cmd + Mouse Wheel to adjust font size (main by default, Ctrl+Alt for display)
-		try {
-			// If legacy typography bridge is present, skip TS wheel bindings to avoid duplicate handling
-			if ((window as any).__tpTypographyBridgeActive) {
-				// still keep TS store/reactivity, but avoid attaching wheel listeners twice
-				throw new Error('skip-ts-wheel');
-			}
-			const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-			window.addEventListener('wheel', (e: WheelEvent) => {
-				try {
-					if (!(e.ctrlKey || e.metaKey)) return; // only when user intends zoom-like behavior
-					e.preventDefault();
-					const targetDisplay = e.altKey ? 'display' : 'main';
-					const cur = getTypography(targetDisplay as any).fontSizePx;
-					const step = 2;
-					const next = clamp(cur + (e.deltaY < 0 ? step : -step), 18, 120);
-					setTypography(targetDisplay as any, { fontSizePx: next });
-				} catch {}
-			}, { passive: false });
-		} catch {}
-
-		// Shift + Wheel over the viewer to adjust font size (no Ctrl/Cmd required)
-		try {
-			if ((window as any).__tpTypographyBridgeActive) { throw new Error('skip-ts-wheel'); }
-			const clamp2 = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-			const viewer = document.getElementById('viewer');
-			if (viewer) {
-				viewer.addEventListener('wheel', (e: WheelEvent) => {
+					// Resilient click delegation (auto +/-)
 					try {
-						if (!e.shiftKey || e.ctrlKey || e.metaKey) return; // only Shift, not Ctrl/Cmd
-						e.preventDefault();
-						const cur = getTypography('main').fontSizePx;
-						const step = 2;
-						const next = clamp2(cur + (e.deltaY < 0 ? step : -step), 18, 120);
-						setTypography('main', { fontSizePx: next });
+						const onClick = (e: Event) => {
+							const t = e && (e.target as any);
+							try { if (t?.closest?.('#autoInc'))    return (Auto as any).inc?.(); } catch {}
+							try { if (t?.closest?.('#autoDec'))    return (Auto as any).dec?.(); } catch {}
+						};
+						document.addEventListener('click', onClick, { capture: true });
 					} catch {}
-				}, { passive: false });
-			}
-		} catch {}
 
-		// Dev-only sanity ping: ensure our line selector matches something at boot
-		try {
-			const isDevHost = () => {
-				try { return /^(localhost|127\.0\.0\.1)$/i.test(location.hostname); } catch { return false; }
+					// Auto-record one-shot
+					try {
+						(function autoRecordOnStart(){
+							const FLAG = 'tp_auto_record_on_start_v1';
+							let fired = false;
+							const wants = () => { try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } };
+							const maybe = async () => {
+								if (fired || !wants()) return;
+								try {
+									if ((window as any).__tpRecording?.getAdapter?.() === 'obs') {
+										if (!(window as any).__tpObs?.armed?.()) return;
+									}
+									fired = true;
+									await ((window as any).__tpRecording?.start?.() || Promise.resolve());
+								} catch (e) {
+									fired = false; try { console.warn('auto-record failed', e); } catch {}
+								}
+							};
+							['tp:session:start','speech:start','autoscroll:start'].forEach(ev => {
+								document.addEventListener(ev as any, () => { try { (maybe as any)(); } catch {} }, { capture: true });
+							});
+						})();
+					} catch {}
+
+					// Scroll Router
+					try {
+						installScrollRouter({ auto: {
+							toggle: (Auto as any).toggle,
+							inc:    (Auto as any).inc,
+							dec:    (Auto as any).dec,
+							setEnabled: (Auto as any).setEnabled,
+							setSpeed: (Auto as any).setSpeed,
+							getState: (Auto as any).getState,
+						}});
+					} catch {}
+
+					// Step / Rehearsal
+					try {
+						const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
+						const rehearsal = installRehearsal();
+						try { resolveInitialRehearsal(); } catch {}
+						if (!(window as any).setScrollMode) {
+							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
+								try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
+								try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
+								if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
+								else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
+							};
+						}
+					} catch {}
+
+					// Display Sync
+					try {
+						installDisplaySync({
+							getText: () => { try { return (document.getElementById('script')?.innerHTML) || ''; } catch { return ''; } },
+							getAnchorRatio: () => {
+								try {
+									const v = document.getElementById('viewer') as HTMLElement | null;
+									if (!v) return 0;
+									const max = Math.max(0, v.scrollHeight - v.clientHeight);
+									return max > 0 ? (v.scrollTop / max) : 0;
+								} catch { return 0; }
+							},
+							getDisplayWindow: () => { try { return (window as any).__tpDisplayWindow || null; } catch { return null; } },
+						});
+					} catch {}
+
+					// Typography
+					try {
+						try { (window as any).__tpTsTypographyActive = true; } catch {}
+						applyTypographyTo(window, 'main');
+						const w = (window as any).__tpDisplayWindow as Window | null; if (w) applyTypographyTo(w, 'display');
+						let bc: BroadcastChannel | null = null; try { bc = new BroadcastChannel('tp_display'); } catch {}
+						onTypography((d, t) => {
+							try { if (!getUiPrefs().linkTypography) return; } catch {}
+							const target = (d === 'main' ? 'display' : 'main');
+							const snap = { kind: 'tp:typography', source: 'main', display: target, t } as const;
+							try { bc?.postMessage(snap as any); } catch {}
+							try { const w2 = (window as any).__tpDisplayWindow as Window | null; w2?.postMessage?.(snap as any, '*'); } catch {}
+						});
+						window.addEventListener('tp:lineMetricsDirty', () => {
+							try {
+								const root = document.documentElement;
+								const cs = getComputedStyle(root);
+								const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+								const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
+								const pxPerLine = fs * lh;
+								const stepPx = Math.round(pxPerLine * 7);
+								try { (window as any).__tpAuto?.setStepPx?.(stepPx); } catch {}
+							} catch {}
+						});
+					} catch {}
+
+					// Mapped-folder controls: disable legacy + bind folder UI (Settings + mirror) + permissions + export/import
+					try {
+						queueMicrotask(() => {
+							try { ensureSettingsFolderControls(); } catch {}
+							try { ensureSettingsFolderControlsAsync(6000); } catch {}
+							try { disableLegacyScriptsUI(); } catch {}
+							try { neuterLegacyScriptsInit(); } catch {}
+							try {
+								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' });
+								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' });
+							} catch {}
+							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
+							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
+						});
+					} catch {}
+
+					// Script ingest
+					try { installScriptIngest({}); } catch {}
+
+					// Open Settings scroll into scripts card when sidebar button clicked
+					try {
+						document.getElementById('openScriptsSettings')?.addEventListener('click', () => {
+							try { ensureSettingsFolderControls(); } catch {}
+							try { ensureSettingsFolderControlsAsync(8000); } catch {}
+							try { document.getElementById('settingsBtn')?.click(); } catch {}
+							requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} });
+						});
+					} catch {}
+
+					// Delegated safety handler for Choose Folder if binder missed reinjection
+					try {
+						document.addEventListener('click', async (e) => {
+							try {
+								const t = e.target as HTMLElement | null;
+								const btn = t?.closest('#chooseFolderBtn') as HTMLButtonElement | null;
+								if (!btn) return;
+								if (btn.dataset.mappedFolderWired === '1') return; // already wired
+								if ('showDirectoryPicker' in window) { await pickMappedFolder(); }
+								else { (document.getElementById('folderFallback') as HTMLInputElement | null)?.click(); }
+							} catch {}
+						}, { capture: true });
+					} catch {}
+
+				} catch {}
 			};
-			if (isDevHost()) {
-				const LINE_SEL = '#viewer .script :is(p,.line,.tp-line)';
-				try { if (!document.querySelector(LINE_SEL)) console.warn('[TP] No line nodes matched — check renderer/markup'); } catch {}
+
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', onReady, { once: true });
+			} else {
+				onReady();
 			}
-		} catch {}
 
-		// Start/stop VAD adapter when mic stream is provided
-		try {
-			let stopVad: (() => void) | null = null;
-			window.addEventListener('tp:mic:stream', (e: any) => {
-				try { stopVad?.(); } catch {}
-				try {
-					const s: MediaStream | undefined = e?.detail?.stream;
-					if (s) stopVad = startVadAdapter(s, (_speaking: boolean, _rms: number) => {});
-				} catch {}
-			});
-			window.addEventListener('beforeunload', () => { try { stopVad?.(); } catch {} });
-		} catch {}
+			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:done:ts' });
+		} catch (e) {
+			try { console.warn('[ts-boot] failed', e); } catch {}
+			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:fail:ts' });
+		}
+}
 
-		// Inject mapped-folder controls into Settings, disable legacy scripts UI, neuter legacy init, then bind folder + settings actions.
-		try {
-			queueMicrotask(() => {
-				try { ensureSettingsFolderControls(); } catch {}
-				try { ensureSettingsFolderControlsAsync(6000); } catch {}
-				try { disableLegacyScriptsUI(); } catch {}
-				try { neuterLegacyScriptsInit(); } catch {}
-				try {
-					bindMappedFolderUI({
-						button: '#chooseFolderBtn',
-						select: '#scriptSelect',
-						fallbackInput: '#folderFallback',
-						onSelect: async (item) => {
-							try {
-								const detail: any = {};
-								if (item && 'getFile' in (item as any)) {
-									const f = await (item as FileSystemFileHandle).getFile();
-									detail.file = f;
-								} else if (item instanceof File) {
-									detail.file = item;
-								} else {
-									detail.file = item as File | null;
-								}
-								if (detail.file) window.dispatchEvent(new CustomEvent('tp:script-load', { detail }));
-							} catch {}
-						}
-					});
-				} catch {}
-				// Optional: mirror the list into the sidebar while keeping Settings as SSOT
-				try {
-					bindMappedFolderUI({
-						button: '#chooseFolderBtn',
-						select: '#scriptSelectSidebar',
-						fallbackInput: '#folderFallback',
-						onSelect: async (item) => {
-							try {
-								const detail: any = {};
-								if (item && 'getFile' in (item as any)) {
-									const f = await (item as FileSystemFileHandle).getFile();
-									detail.file = f;
-								} else if (item instanceof File) {
-									detail.file = item;
-								} else {
-									detail.file = item as File | null;
-								}
-								if (detail.file) window.dispatchEvent(new CustomEvent('tp:script-load', { detail }));
-							} catch {}
-						}
-					});
-				} catch {}
-				// Sidebar button opens Settings
-				try {
-					const btn = document.getElementById('openScriptsSettings');
-					btn?.addEventListener('click', () => {
-						// Ensure Scripts Folder card exists before opening Settings (handles long-delayed opens)
-						try { ensureSettingsFolderControls(); } catch {}
-						try { ensureSettingsFolderControlsAsync(8000); } catch {}
-						try { document.getElementById('settingsBtn')?.click(); } catch {}
-					});
-				} catch {}
-				// Install script ingest (auto-detect target)
-				try { installScriptIngest({}); } catch {}
-				// Wire optional permission recheck button
-				try { bindPermissionButton('#recheckFolderBtn'); } catch {}
-				// Wire settings export/import buttons
-				try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
-				// Mirror select sync + persistence + accessibility polishing
-				try {
-					const main = document.querySelector<HTMLSelectElement>('#scriptSelect');
-					const mirror = document.querySelector<HTMLSelectElement>('#scriptSelectSidebar');
-					const KEY = 'mapped.lastScript';
-					function sync(a?: HTMLSelectElement|null, b?: HTMLSelectElement|null) {
-						if (!a || !b) return;
-						b.value = a.value;
-						b.toggleAttribute('disabled', a.options.length === 0);
-						b.setAttribute('aria-busy', 'false');
-					}
-					main?.addEventListener('change', () => { try { localStorage.setItem(KEY, main.value); } catch {}; sync(main, mirror); });
-					mirror?.addEventListener('change', () => { try { localStorage.setItem(KEY, mirror.value); } catch {}; sync(mirror, main); });
-					// When scripts list repopulates, attempt to restore last selection
-					window.addEventListener('tp:folderScripts:populated', () => {
-						try {
-							const last = localStorage.getItem(KEY);
-							if (last && main?.querySelector(`option[value="${CSS.escape(last)}"]`)) {
-								main.value = last;
-								main.dispatchEvent(new Event('change', { bubbles: true }));
-							}
-							sync(main, mirror);
-						} catch {}
-					});
-					queueMicrotask(() => sync(main, mirror));
-				} catch {}
-				// Scroll Settings to scripts card after opening via sidebar button
-				try {
-					const openBtn = document.getElementById('openScriptsSettings');
-					openBtn?.addEventListener('click', () => {
-						requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} });
-					});
-				} catch {}
-
-				// Delegated safety handler: if Choose Folder button wasn't wired (due to reinjection), handle click here
-				try {
-					const onClick = async (e: Event) => {
-						try {
-							const t = e.target as HTMLElement | null;
-							const btn = t && (t.closest ? t.closest('#chooseFolderBtn') as HTMLButtonElement | null : null);
-							if (!btn) return;
-							// If binder already wired this button, let it handle the event
-							if ((btn as any).dataset && (btn as any).dataset.mappedFolderWired === '1') return;
-							e.preventDefault();
-							e.stopPropagation();
-							if ('showDirectoryPicker' in window) {
-								const ok = await pickMappedFolder();
-								if (ok) {
-									try { (window as any).HUD?.log?.('folder:mapped', {}); } catch {}
-								}
-							} else {
-								const fallback = document.getElementById('folderFallback') as HTMLInputElement | null;
-								fallback?.click();
-							}
-						} catch {}
-					};
-					document.addEventListener('click', onClick, { capture: true });
-				} catch {}
-			});
-		} catch {}
-	});
+// Auto-run boot (primary entry)
+try {
+	if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', () => { boot(); });
 } catch {}

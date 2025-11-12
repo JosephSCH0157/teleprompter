@@ -30,5 +30,11 @@ declare global {
   }
 }
 
+// Optional ambient chrome namespace (extension or injected environment)
+// Declared loose to avoid forcing dependency on @types/chrome for builds that don't need it.
+// Consumers should defensively guard for existence.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const chrome: any;
+
 export { };
 

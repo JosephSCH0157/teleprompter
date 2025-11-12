@@ -35,19 +35,21 @@
   <script type="module">
     (async () => {
       if (window.__tpBooted) return;
-      window.__tpBootSrc = 'module';
-      await import('./src/index.js');
-    })().catch(err => {
-      try { console.warn('[boot] module import failed → fallback', err); } catch {}
-      if (!window.__tpBooted) {
-        window.__tpBootSrc = 'fallback';
-        const s = document.createElement('script');
-        s.src = './teleprompter_pro.js';
-        s.defer = true;
-        s.onload = () => { try { console.log('[boot] legacy loaded'); } catch {} };
-        document.head.appendChild(s);
+      window.__tpBootSrc = 'ts-module';
+      try {
+        await import('/dist/index.js');
+      } catch (err) {
+        try { console.warn('[boot] TS entry failed, falling back to legacy JS', err); } catch {}
+        if (!window.__tpBooted) {
+          window.__tpBootSrc = 'fallback-js';
+          const s = document.createElement('script');
+          s.src = '/src/index.js';
+          s.type = 'module';
+          s.onload = () => { try { console.log('[boot] legacy module loaded'); } catch {} };
+          document.head.appendChild(s);
+        }
       }
-    });
+    })();
   </script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
