@@ -8,7 +8,6 @@
 - feat(mapped-folder): folder ingest + DOCX extraction + auto-load toggle shipped in 1.7.0 polish
 - misc: mapped-folder + ingest enhancements remain green
 
-
 ## v1.6.0-scroll-router (2025-11-09)
 
 **Scroll Architecture Refactor**

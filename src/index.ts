@@ -129,10 +129,10 @@ import { initObsUI } from './wiring/obs-wiring';
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
 import { installScriptIngest } from './features/script-ingest';
+import { disableLegacyScriptsUI } from './ui/hide-legacy-scripts';
+import { ensureSettingsFolderControls } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
-import { ensureSettingsFolderControls } from './ui/inject-settings-folder';
-import { disableLegacyScriptsUI } from './ui/hide-legacy-scripts';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
