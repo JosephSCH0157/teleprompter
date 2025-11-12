@@ -1,5 +1,7 @@
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
+// Early dev console noise filter (benign extension async-response errors)
+import './boot/console-noise-filter';
 
 import { bootstrap } from './boot/boot';
 
@@ -125,6 +127,7 @@ import { getTypography, onTypography, setTypography } from './settings/typograph
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
 import { initObsUI } from './wiring/obs-wiring';
+import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
@@ -151,7 +154,9 @@ try {
 } catch {}
 
 try {
-	document.addEventListener('DOMContentLoaded', () => {
+		document.addEventListener('DOMContentLoaded', () => {
+			// Attempt OBS bridge claim early (non-blocking)
+			try { initObsBridgeClaim(); } catch {}
 			// Initialize ASR feature (settings card, hotkeys, topbar UI)
 			try { initAsrFeature(); } catch {}
 			// OBS Settings wiring (inline bridge-backed "Test connect")

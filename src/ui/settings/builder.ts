@@ -103,7 +103,9 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <div class="settings-inline-row">
           <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455"/></label>
-          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>
+          <form onsubmit="return false;" style="display:contents">
+            <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>
+          </form>
         </div>
         <div class="row gap">
           <button id="settingsObsTest" data-action="obs-test" class="chip btn-chip" type="button">Test connection</button>
