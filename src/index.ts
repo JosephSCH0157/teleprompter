@@ -3,7 +3,8 @@ try { (window as any).__TP_TS_PRIMARY__ = true; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
-import './boot/console-noise-filter';
+// Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
+// import './boot/console-noise-filter';
 
 import { bootstrap } from './boot/boot';
 
@@ -149,7 +150,7 @@ import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
-import { bindCoreUI } from './wiring/ui-binds';
+import { auditBindingsOnce, bindCoreUI, ensureSidebarMirror } from './wiring/ui-binds';
 // Side-effect debug / DOM helpers (legacy parity)
 import './ui/dom.js';
 // Feature initializers (legacy JS modules)
@@ -262,7 +263,16 @@ export async function boot() {
 						}
 					} catch {}
 					// Core UI binder (idempotent)
-					try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn' }); } catch {}
+								try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+								try { ensureSidebarMirror(); } catch {}
+								try { auditBindingsOnce(); } catch {}
+								// Optional console noise filter: activate only when explicitly requested
+								try {
+									const params = new URLSearchParams(location.search || '');
+									if (params.has('muteExt')) {
+										import('./boot/console-noise-filter').then(m => m.installConsoleNoiseFilter?.({ debug: false })).catch(()=>{});
+									}
+								} catch {}
 					// Ensure autoscroll engine init
 					try { (Auto as any).initAutoScroll?.(); } catch {}
 

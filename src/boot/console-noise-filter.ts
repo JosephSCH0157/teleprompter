@@ -36,8 +36,12 @@ export function installConsoleNoiseFilter(opts: { debug?: boolean } = {}) {
   } catch {}
 }
 
-// Auto-install in dev mode when imported directly (optional convenience)
+// Gated auto-install: only when explicitly requested via ?muteExt=1 (or dev + localStorage override)
 try {
-  const DEV = (window as any).__TP_DEV || /[?&#]dev=1\b/.test(String(location && location.href || ''));
-  if (DEV) installConsoleNoiseFilter({ debug: false });
+  const url = String(location && location.href || '');
+  const params = new URL(url).searchParams;
+  const explicit = params.has('muteExt');
+  const DEV = (window as any).__TP_DEV || /[?&#]dev=1\b/.test(url);
+  const lsFlag = (() => { try { return localStorage.getItem('tp_mute_ext') === '1'; } catch { return false; } })();
+  if (explicit || (DEV && lsFlag)) installConsoleNoiseFilter({ debug: false });
 } catch {}

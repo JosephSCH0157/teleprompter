@@ -19,7 +19,7 @@
 
 export interface CoreUIBindOptions {
   scrollModeSelect?: string;      // CSS selector for the scroll mode <select>
-  presentBtn?: string;            // Present mode toggle button
+  presentBtn?: string;            // Present mode toggle button (supports CSS list)
 }
 
 function q<T extends HTMLElement = HTMLElement>(sel: string | undefined | null): T | null {
@@ -74,7 +74,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
 
   // Present Mode toggle (mirrors legacy wiring in ui/dom.js but harmless if duplicated)
   try {
-    const btn = q<HTMLButtonElement>(opts.presentBtn || '#presentBtn');
+    const btn = q<HTMLButtonElement>(opts.presentBtn || '#presentBtn, [data-action="present-toggle"]');
     if (btn && !btn.dataset.uiBound) {
       btn.dataset.uiBound = '1';
       on(btn, 'click', (e: Event) => {
@@ -254,3 +254,57 @@ const cam = {
     });
   } catch {}
 })();
+
+// Ensure sidebar mirror select exists and two-way syncs (idempotent)
+export function ensureSidebarMirror() {
+  try {
+    const main = document.querySelector('#scriptSelect,[data-select="scripts-main"]') as HTMLSelectElement | null;
+    let side = document.querySelector('#scriptSelectSidebar,[data-select="scripts-side"]') as HTMLSelectElement | null;
+    if (!main) return;
+    if (!side) {
+      side = document.createElement('select');
+      side.id = 'scriptSelectSidebar';
+      side.setAttribute('aria-label', 'Mapped folder scripts');
+      side.className = 'select-md';
+      side.setAttribute('aria-busy', 'true');
+      const host = document.getElementById('scriptsQuickRow') || document.getElementById('sidebar') || document.body;
+      const wrap = document.createElement('div'); wrap.className = 'row';
+      const lab = document.createElement('label'); lab.textContent = 'Scripts';
+      lab.appendChild(side); wrap.appendChild(lab); host?.appendChild(wrap);
+    }
+    if ((side as any)._mirrorWired) return;
+    (side as any)._mirrorWired = '1';
+    const sync = (src: HTMLSelectElement, dst: HTMLSelectElement) => {
+      try { dst.selectedIndex = src.selectedIndex; } catch {}
+      try { dst.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+    };
+    side.addEventListener('change', () => { if (main) sync(side!, main); }, { capture: true });
+    main.addEventListener('change', () => { if (side) sync(main, side!); }, { capture: true });
+  } catch {}
+}
+
+// One-time binding audit: prints presence of common controls/selectors
+export function auditBindingsOnce() {
+  try {
+    if ((window as any).__tpUiAuditDone) return; (window as any).__tpUiAuditDone = true;
+    const has = (s: string) => !!document.querySelector(s);
+    const report = {
+      settingsBtn: has('#settingsBtn,[data-action="settings-open"]'),
+      helpBtn:     has('#helpBtn,#shortcutsBtn,[data-action="help-open"]'),
+      presentBtn:  has('#presentBtn,[data-action="present-toggle"]'),
+      displayBtn:  has('#displayWindowBtn,#openDisplayBtn,[data-action="display"]'),
+      hudBtn:      has('#hudBtn,[data-action="hud-toggle"]'),
+      mic:         has('#requestMicBtn,#micBtn,[data-action="request-mic"]'),
+      speech:      has('#startSpeechBtn,#recBtn,[data-action="start-speech"]'),
+      cam:         has('#startCameraBtn,#startCam,[data-action="start-camera"]'),
+      pip:         has('#pipBtn,#camPiP,[data-action="pip"]'),
+      loadSample:  has('#loadSampleBtn,#loadSample,[data-action="load-sample"]'),
+      upload:      has('#uploadBtn,#uploadFileBtn,[data-action="upload"]'),
+      speakersT:   has('#speakersToggleBtn,#toggleSpeakers,[data-action="speakers-toggle"]'),
+      speakersK:   has('#speakersKeyBtn,[data-action="speakers-key"]'),
+      mainSelect:  has('#scriptSelect,[data-select="scripts-main"]'),
+      sideSelect:  has('#scriptSelectSidebar,[data-select="scripts-side"]'),
+    } as const;
+  console.table(report);
+  } catch {}
+}
