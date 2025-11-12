@@ -536,6 +536,14 @@ export function installEmergencyBinder() {
             break; }
           case 'load': {
             try {
+              // Prefer loading the currently selected mapped-folder script
+              const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect')) as HTMLSelectElement | null;
+              if (sel) {
+                // Trigger the existing change handler to perform the real load logic
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                break;
+              }
+              // Fallback: manual file pick if no mapped select exists
               const f = await pickPlainFile(); if (!f) break;
               const isDocx = f.name.toLowerCase().endsWith('.docx') && (window as any).docxToText;
               const text = isDocx ? await (window as any).docxToText(f) : await f.text();
@@ -974,6 +982,7 @@ const SEL = {
   // scripts
   sample:         ['#loadSampleBtn','#loadSample','[data-action="load-sample"]'],
   upload:         ['#uploadBtn','#uploadFileBtn','[data-action="upload"]'],
+  load:           ['#scriptLoadBtn','[data-action="load"]'],
 
   // speakers
   speakersToggle: ['#speakersToggleBtn','[data-action="speakers-toggle"]'],
@@ -993,6 +1002,7 @@ const SEL = {
   const map: Array<{ sels: readonly string[]; fn: () => any }> = [
       { sels: SEL.sample, fn: () => scripts.loadSample() },
       { sels: SEL.upload, fn: () => scripts.upload() },
+      { sels: SEL.load,   fn: () => triggerMappedSelectLoad() },
       { sels: SEL.mic,    fn: () => asr.requestMic() },
       { sels: SEL.speech, fn: () => asr.start() },
       { sels: SEL.camera, fn: () => cam.start() },
@@ -1011,6 +1021,16 @@ const SEL = {
     });
   } catch {}
 })();
+
+// Trigger the mapped-folder select change to load the currently selected script
+function triggerMappedSelectLoad(): boolean {
+  try {
+    const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect')) as HTMLSelectElement | null;
+    if (!sel) return false;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  } catch { return false; }
+}
 
 // Ensure sidebar mirror select exists and two-way syncs (idempotent)
 export function ensureSidebarMirror() {
