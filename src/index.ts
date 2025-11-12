@@ -16,6 +16,12 @@ bootstrap().catch(() => {});
 import './vendor/mammoth';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
 import './ui/settings/asrWizard';
+// Feature initializers (legacy JS modules)
+// If/when these are migrated to TS, drop the .js extension and types will flow.
+import { initHotkeys } from './features/hotkeys.js';
+import { initPersistence } from './features/persistence.js';
+import { initScroll } from './features/scroll.js';
+import { initTelemetry } from './features/telemetry.js';
 
 // === UI Scroll Mode Router ===
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
@@ -218,6 +224,12 @@ export async function boot() {
 				try {
 					// Ensure autoscroll engine init
 					try { (Auto as any).initAutoScroll?.(); } catch {}
+
+					// Restore legacy feature initializers (persistence, telemetry, scroll, hotkeys)
+					try { initPersistence(); } catch {}
+					try { initTelemetry(); } catch {}
+					try { initScroll(); } catch {}
+					try { initHotkeys(); } catch {}
 
 					// Resilient click delegation (auto +/-)
 					try {
