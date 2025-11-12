@@ -128,8 +128,8 @@ import { initObsUI } from './wiring/obs-wiring';
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
-import { bindMappedFolderUI } from './ui/mapped-folder-bind';
 import { installScriptIngest } from './features/script-ingest';
+import { bindMappedFolderUI } from './ui/mapped-folder-bind';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
