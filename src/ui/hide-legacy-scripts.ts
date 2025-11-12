@@ -13,3 +13,16 @@ export function disableLegacyScriptsUI() {
   }
   try { (window as any).HUD?.log?.('ui:legacy-scripts:disabled', { count: candidates.length }); } catch {}
 }
+
+// Neuters legacy saved-scripts initialization functions so they cannot reattach UI.
+export function neuterLegacyScriptsInit() {
+  try {
+    const g: any = window as any;
+    const initFns = ['initBrowserSavedScripts', 'bindLocalScripts', '__tpLegacyScriptsInit'];
+    for (const k of initFns) {
+      if (typeof g[k] === 'function') {
+        g[k] = () => { try { (window as any).HUD?.log?.('ui:legacy-scripts:neutered', { fn: k }); } catch {}; };
+      }
+    }
+  } catch {}
+}

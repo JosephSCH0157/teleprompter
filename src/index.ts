@@ -129,10 +129,12 @@ import { initObsUI } from './wiring/obs-wiring';
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
 import { installScriptIngest } from './features/script-ingest';
-import { disableLegacyScriptsUI } from './ui/hide-legacy-scripts';
+import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
+// ensure this file is executed in smoke runs
+import './smoke/settings-mapped-folder.smoke.js';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
@@ -358,12 +360,13 @@ try {
 			window.addEventListener('beforeunload', () => { try { stopVad?.(); } catch {} });
 		} catch {}
 
-		// Inject mapped-folder controls into Settings, disable legacy scripts UI, then bind folder + settings actions.
+		// Inject mapped-folder controls into Settings, disable legacy scripts UI, neuter legacy init, then bind folder + settings actions.
 		try {
 			queueMicrotask(() => {
 				try { ensureSettingsFolderControls(); } catch {}
-					try { ensureSettingsFolderControlsAsync(6000); } catch {}
+				try { ensureSettingsFolderControlsAsync(6000); } catch {}
 				try { disableLegacyScriptsUI(); } catch {}
+				try { neuterLegacyScriptsInit(); } catch {}
 				try {
 					bindMappedFolderUI({
 						button: '#chooseFolderBtn',

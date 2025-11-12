@@ -31,11 +31,16 @@ export function ensureSettingsFolderControls() {
 }
 
 // Async variant: observes DOM for late-mounted Settings panel up to timeoutMs.
-export function ensureSettingsFolderControlsAsync(timeoutMs = 4000) {
+export function ensureSettingsFolderControlsAsync(timeoutMs = 6000) {
   try {
     if (ensureSettingsFolderControls()) return;
     const obs = new MutationObserver(() => {
-      try { if (ensureSettingsFolderControls()) obs.disconnect(); } catch {}
+      try {
+        if (ensureSettingsFolderControls()) {
+          obs.disconnect();
+          try { (window as any).HUD?.log?.('settings:folder:injected', { late: true }); } catch {}
+        }
+      } catch {}
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(() => { try { obs.disconnect(); } catch {} }, timeoutMs);
