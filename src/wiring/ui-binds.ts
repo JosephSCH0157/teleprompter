@@ -22,6 +22,56 @@ export interface CoreUIBindOptions {
   presentBtn?: string;            // Present mode toggle button (supports CSS list)
 }
 
+// Minimal media store for mic/camera fallbacks
+const mediaStore: { mic?: MediaStream | null; cam?: MediaStream | null } = { mic: null, cam: null };
+
+async function requestMic(): Promise<boolean> {
+  try {
+    // Prefer app ASR if present
+    const fn = (window as any).__tpAsrImpl?.requestMic || (window as any).asr?.requestMic;
+    if (typeof fn === 'function') { await fn(); return true; }
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaStore.mic = s; return true;
+  } catch { return false; }
+}
+function releaseMic() {
+  try {
+    const s = mediaStore.mic; mediaStore.mic = null;
+    if (s) s.getTracks().forEach(t => { try { t.stop(); } catch {} });
+    try { (window as any).__tpAsrImpl?.releaseMic?.(); } catch {}
+    try { (window as any).asr?.stop?.(); } catch {}
+  } catch {}
+}
+async function startCamera(): Promise<boolean> {
+  try {
+    // Prefer app camera if present
+    const fn = (window as any).__tpCamImpl?.start || (window as any).cam?.start;
+    if (typeof fn === 'function') { await fn(); return true; }
+    const v = document.getElementById('cameraPreview') as HTMLVideoElement | null;
+    const s = mediaStore.cam || await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    mediaStore.cam = s;
+    if (v) { (v as any).srcObject = s; try { await v.play(); } catch {} }
+    return true;
+  } catch { return false; }
+}
+function stopCamera() {
+  try {
+    const s = mediaStore.cam; mediaStore.cam = null;
+    if (s) s.getTracks().forEach(t => { try { t.stop(); } catch {} });
+    const v = document.getElementById('cameraPreview') as HTMLVideoElement | null;
+    if (v) { try { v.pause(); } catch {}; try { (v as any).srcObject = null; } catch {} }
+  } catch {}
+}
+async function requestPiP() {
+  try {
+    const v = document.getElementById('cameraPreview') as HTMLVideoElement | null;
+    if (!v) return;
+    if ((document as any).pictureInPictureEnabled && !(document as any).pictureInPictureElement) {
+      try { await (v as any).requestPictureInPicture?.(); } catch {}
+    }
+  } catch {}
+}
+
 // CI detection helper (query flag or webdriver)
 function isCI(): boolean {
   try { return /\bci=1\b/i.test(location.search) || ((navigator as any).webdriver === true); } catch { return false; }
@@ -286,6 +336,7 @@ export function installEmergencyBinder() {
           case 'settings-open':
             toggleOverlayList(OVERLAY.settings, true, 'settings');
             try { document.dispatchEvent(new CustomEvent('tp:settings:open', { detail: { source: 'emergency' } })); } catch {}
+            try { ensureSettingsTabsWiring(); } catch {}
             break;
           case 'settings-close':
             toggleOverlayList(OVERLAY.settings, false, 'settings');
@@ -333,24 +384,23 @@ export function installEmergencyBinder() {
             try { (window as any).__tpDisplayWindow?.close?.(); } catch {}
             break; }
           case 'request-mic':
-            try { (window as any).__tpAsrImpl?.requestMic?.(); } catch {}
-            try { (window as any).asr?.requestMic?.(); } catch {}
+            try { await requestMic(); } catch {}
             break;
           case 'release-mic':
-            try { (window as any).__tpAsrImpl?.releaseMic?.(); } catch {}
-            try { (window as any).asr?.stop?.(); } catch {}
+            try { releaseMic(); } catch {}
             break;
           case 'start-speech':
             try { (window as any).__tpAsrImpl?.start?.(); } catch {}
             try { (window as any).asr?.start?.(); } catch {}
             break;
           case 'start-camera':
-            try { (window as any).__tpCamImpl?.start?.(); } catch {}
-            try { (window as any).cam?.start?.(); } catch {}
+            try { await startCamera(); } catch {}
+            break;
+          case 'stop-camera':
+            try { stopCamera(); } catch {}
             break;
           case 'pip':
-            try { (window as any).__tpCamImpl?.pip?.(); } catch {}
-            try { (window as any).cam?.pip?.(); } catch {}
+            try { await requestPiP(); } catch {}
             break;
           case 'speakers-toggle': {
             try {

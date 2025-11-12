@@ -151,6 +151,8 @@ import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { auditBindingsOnce, autoMarkActions, bindCoreUI, ensureSidebarMirror, installEmergencyBinder } from './wiring/ui-binds';
+// Render + ingest helpers
+import { renderScript } from './render-script';
 // Side-effect debug / DOM helpers (legacy parity)
 import './ui/dom.js';
 // Feature initializers (legacy JS modules)
@@ -163,7 +165,7 @@ const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
-import { installScriptIngest } from './features/script-ingest';
+import { installGlobalIngestListener, installScriptIngest } from './features/script-ingest';
 import { pickMappedFolder } from './fs/mapped-folder';
 import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
@@ -179,7 +181,24 @@ try {
 	const Q = new URLSearchParams(location.search || '');
 	if (Q.get('display') === '1') {
 		document.documentElement.classList.add('tp-display');
+		try { (document.getElementById('sidebar') as HTMLElement | null)?.setAttribute('hidden',''); } catch {}
+		try { (document.getElementById('editor') as HTMLElement | null)?.setAttribute('hidden',''); } catch {}
 	}
+} catch {}
+
+// Cross-window document channel (main <-> display)
+let __docCh: BroadcastChannel | null = null;
+try {
+	__docCh = new BroadcastChannel('tp-doc');
+	__docCh.onmessage = (ev: MessageEvent<any>) => {
+		try {
+			const d = ev?.data || {};
+			if (d?.type === 'script' && typeof d?.text === 'string') {
+				try { (window as any).__tpCurrentName = d.name || 'Untitled'; } catch {}
+				try { renderScript(String(d.text)); } catch {}
+			}
+		} catch {}
+	};
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 function injectSpeechNotesHud(){
@@ -424,6 +443,7 @@ export async function boot() {
 
 					// Script ingest
 					try { installScriptIngest({}); } catch {}
+					try { installGlobalIngestListener(); } catch {}
 
 					// Open Settings scroll into scripts card when sidebar button clicked
 					try {

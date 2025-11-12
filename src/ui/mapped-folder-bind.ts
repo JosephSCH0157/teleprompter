@@ -73,14 +73,17 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       if (handle && 'getFile' in handle) {
         opts.onSelect?.(handle);
         try {
-          // Let the ingest pipeline handle file reading and DOCX parsing
-          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { file: handle } }));
+          const f = await (handle as any).getFile();
+          const { name, text } = await readHandleOrFile(f);
+          try { localStorage.setItem('tp_last_script_name', name); } catch {}
+          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
         } catch {}
       } else if (file) {
         opts.onSelect?.(file);
         try {
-          // Forward the File object to ingest to support DOCX extraction
-          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { file } }));
+          const { name, text } = await readHandleOrFile(file);
+          try { localStorage.setItem('tp_last_script_name', name); } catch {}
+          window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
         } catch {}
       } else {
         opts.onSelect?.(null);
@@ -220,6 +223,41 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       }
       s.textContent = n === 1 ? '1 script found' : `${n} scripts found`;
     } catch {}
+  }
+}
+
+async function readHandleOrFile(file: File): Promise<{ name: string; text: string }> {
+  const name = file?.name || 'Script.txt';
+  const lower = name.toLowerCase();
+  try {
+    if (/\.(txt|md)$/i.test(lower)) {
+      const text = await file.text();
+      return { name, text };
+    }
+    if (/\.docx$/i.test(lower)) {
+      const text = await docxToTextViaMammoth(file);
+      if (text) return { name, text };
+      return { name, text: '[note]DOCX could not be parsed. Convert to .txt/.md or use a richer extractor.[/note]' };
+    }
+    return { name, text: '[note]Unsupported file type. Use .txt / .md / .docx[/note]' };
+  } catch (e) {
+    return { name, text: '[error] Failed to read file: ' + (e && (e as any).message || String(e)) + '[/error]' };
+  }
+}
+
+async function docxToTextViaMammoth(file: File): Promise<string> {
+  try {
+    const ensure = (window as any).ensureMammoth as undefined | (() => Promise<any>);
+    const mod = ensure ? await ensure() : null;
+    const mammoth = (mod && (mod.mammoth || mod.default)) || (window as any).mammoth || null;
+    if (!mammoth) throw new Error('mammoth not available');
+    const buf = await file.arrayBuffer();
+    const res = await mammoth.extractRawText({ arrayBuffer: () => buf });
+    const raw = (res && (res.value || res.text || '')) || '';
+    return String(raw).replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  } catch (e) {
+    try { console.warn('[mapped-folder] mammoth parse failed', e); } catch {}
+    return '';
   }
 }
 

@@ -10,6 +10,13 @@ export type IngestOpts = {
   onApply?: (_text: string, _name: string) => void;
 };
 
+// Cross-window document broadcast channel (idempotent creation)
+let __ingestListening = false;
+let __docCh: BroadcastChannel | null = null;
+try {
+  __docCh = new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null;
+} catch { __docCh = null; }
+
 function $(q: string): HTMLElement | null {
   try { return document.querySelector(q) as HTMLElement | null; } catch { return null; }
 }
@@ -145,48 +152,54 @@ export function installScriptIngest(opts: IngestOpts = {}) {
   try { (window as any).__tpIngest = { handle }; } catch {}
 }
 
-// Idempotent global listener to mirror ingest into #editor for tests and DEV
-(() => {
-  let settingEditor = false; // guard against loops when we set editor programmatically
-  try {
-    const w: any = window as any;
-    if (!w.__ingestWired) {
-      document.addEventListener('tp:script-load', (ev: any) => {
-        try {
-          const d = ev?.detail || {};
-          const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
-          if (typeof d?.text === 'string') {
-            const t = d.text as string; const name = d.name || 'Untitled';
-            if (ed) { settingEditor = true; ed.value = t; settingEditor = false; }
-            try { renderScript(t); } catch {}
-            try { console.log('[INGEST] loaded', name || '(unnamed)'); } catch {}
-            try { document.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: t.length } })); } catch {}
-            return;
-          }
-          // Optional legacy: File or Handle under detail.fileOrHandle or detail.file
-          (async () => {
-            try {
-              const fh = d?.fileOrHandle || d?.file || null;
-              const file = fh && typeof fh.getFile === 'function' ? await fh.getFile() : fh;
-              if (file && typeof file.text === 'function') {
-                const t = await file.text();
-                const name = file.name || 'Untitled';
-                if (ed) { settingEditor = true; ed.value = t; settingEditor = false; }
-                try { renderScript(t); } catch {}
-                try { console.log('[INGEST] loaded (file)', name); } catch {}
-                try { document.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: t.length } })); } catch {}
-              }
-            } catch (e) { try { console.warn('[INGEST] legacy path failed', e); } catch {} }
-          })();
-        } catch {}
-      }, { once: false });
-      w.__ingestWired = true;
-    }
-  } catch {}
+// Install a single global listener that mirrors tp:script-load into editor + render + broadcast
+export function installGlobalIngestListener() {
+  if (__ingestListening) return;
+  __ingestListening = true;
 
-  // Echo manual edits/paste into render (debounced)
+  let settingEditor = false; // guard against loops when we set editor programmatically
+  const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
+
+  // 1) Primary ingest listener
+  window.addEventListener('tp:script-load' as any, async (ev: any) => {
+    try {
+      const d = ev?.detail || {};
+      let name = d?.name || 'Untitled';
+      let text: string | null = null;
+
+      if (typeof d?.text === 'string') {
+        text = String(d.text);
+      } else {
+        // Legacy path: File or Handle
+        const fh = d?.fileOrHandle || d?.file || null;
+        const file = fh && typeof fh.getFile === 'function' ? await fh.getFile() : fh;
+        if (file && typeof file.text === 'function') {
+          text = await file.text();
+          name = file.name || name;
+        }
+      }
+
+      if (typeof text !== 'string') return;
+
+      // Mirror into editor (for DEV/tests)
+      if (ed) { settingEditor = true; ed.value = text; settingEditor = false; }
+
+      try { (window as any).__tpCurrentName = name; } catch {}
+
+      // Render locally
+      try { renderScript(text); } catch {}
+
+      // Broadcast to other windows (display, etc)
+      try { __docCh?.postMessage({ type: 'script', name, text }); } catch {}
+
+      // Signals for any legacy listeners
+      try { document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { name, length: text.length } })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:script:rendered', { detail: { name, length: text.length } })); } catch {}
+    } catch {}
+  });
+
+  // 2) Debounced echo from editor back into ingest
   try {
-    const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
     if (ed && !(ed as any).__echoWired) {
       (ed as any).__echoWired = 1;
       let tmr: any;
@@ -194,9 +207,17 @@ export function installScriptIngest(opts: IngestOpts = {}) {
         try {
           if (settingEditor) return;
           clearTimeout(tmr);
-          tmr = setTimeout(() => { try { renderScript(ed.value || ''); } catch {} }, 120);
+          const text = ed.value || '';
+          tmr = setTimeout(() => {
+            try {
+              window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: ((window as any).__tpCurrentName || 'Untitled'), text } }));
+            } catch {}
+          }, 160);
         } catch {}
       });
     }
   } catch {}
-})();
+}
+
+// Back-compat: keep previous behavior for environments that relied on auto-wiring
+(() => { try { installGlobalIngestListener(); } catch {} })();
