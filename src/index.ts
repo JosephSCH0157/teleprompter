@@ -150,10 +150,6 @@ import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
-import { initPersistence } from './features/persistence.js';
-import { initTelemetry } from './features/telemetry.js';
-import { initScroll } from './features/scroll.js';
-import { initHotkeys } from './features/hotkeys.js';
 // Create idempotent starters
 const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
