@@ -62,16 +62,46 @@ export function ensureSettingsFolderControls() {
 // Async variant: observes DOM for late-mounted Settings panel up to timeoutMs.
 export function ensureSettingsFolderControlsAsync(timeoutMs = 6000) {
   try {
-    if (ensureSettingsFolderControls()) return;
+    if (ensureSettingsFolderControls()) {
+      // Also start persistence watcher in case another script removes the card later.
+      startPersistenceWatcher();
+      return;
+    }
     const obs = new MutationObserver(() => {
       try {
         if (ensureSettingsFolderControls()) {
           obs.disconnect();
           try { (window as any).HUD?.log?.('settings:folder:injected', { late: true }); } catch {}
+          startPersistenceWatcher();
         }
       } catch {}
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(() => { try { obs.disconnect(); } catch {} }, timeoutMs);
+  } catch {}
+}
+
+// Persistence watcher: if scripts folder card is removed after injection, re-inject it.
+function startPersistenceWatcher() {
+  try {
+    const WATCH_MS = 120000; // cap auto-reinjection window (2 min) to avoid infinite loops
+    const start = Date.now();
+    const mo = new MutationObserver(() => {
+      try {
+        const present = document.getElementById('scriptsFolderCard');
+        if (!present && Date.now() - start < WATCH_MS) {
+          // Only attempt reinjection if host (#settingsBody) still exists
+          const host = document.getElementById('settingsBody');
+          if (host) {
+            const ok = ensureSettingsFolderControls();
+            if (ok) {
+              try { (window as any).HUD?.log?.('settings:folder:reinjected', {}); } catch {}
+            }
+          }
+        }
+      } catch {}
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => { try { mo.disconnect(); } catch {} }, WATCH_MS + 5000);
   } catch {}
 }
