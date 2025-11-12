@@ -70,6 +70,21 @@ async function main() {
     }, { timeout }, rx.source || String(rx));
   }
 
+  // Puppeteer-correct popup detection helper
+  async function waitForPopupAfterClick(clickSel, { timeout = 1500, urlHint = 'display=1' } = {}) {
+    const br = page.browser();
+    const popupOnce = new Promise(resolve => {
+      const timer = setTimeout(() => resolve(null), timeout);
+      page.once('popup', p => { try { clearTimeout(timer); } catch {} resolve(p); });
+    });
+    const targetHint = br.waitForTarget(
+      t => t.type() === 'page' && (t.url() || '').includes(urlHint), { timeout }
+    ).then(t => t && t.page()).catch(() => null);
+    try { await page.click(clickSel); } catch {}
+    const popup = await Promise.race([popupOnce, targetHint]);
+    return popup || null;
+  }
+
   const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1&uiMock=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
@@ -430,11 +445,17 @@ async function main() {
 
         await clickIf('#hudBtn') || await clickIf('[data-action="hud-toggle"]');
 
-        const displayClicked = await clickIf('#displayWindowBtn') || await clickIf('[data-action="display"]');
-        if (displayClicked) {
-          const pop = await page.waitForEvent('popup', { timeout: 1500 }).catch(() => null);
-          if (!pop) notes.push('display popup not detected');
-          if (pop) await pop.close().catch(() => {});
+        // DISPLAY WINDOW (popup) — Puppeteer version
+        let displayClicked = false;
+        if (await exists('#displayWindowBtn') || await exists('[data-action="display"]')) {
+          displayClicked = true;
+          const sel = (await exists('#displayWindowBtn')) ? '#displayWindowBtn' : '[data-action="display"]';
+          const popup = await waitForPopupAfterClick(sel, { timeout: 1500, urlHint: 'display=1' });
+          if (!popup) {
+            notes.push('display popup not detected');
+          } else {
+            try { await popup.close(); } catch {}
+          }
         } else {
           notes.push('display button missing (skipped)');
         }
