@@ -450,6 +450,13 @@
   <input id="folderFallback" type="file" webkitdirectory directory multiple hidden>
   <span class="chip" id="extScriptsHint">Map a directory to load .txt / .md / .docx</span>
 </div>
+<div class="row" id="settingsExportImportRow">
+  <button id="btnExportSettings" class="chip" title="Download your settings as JSON">Export Settings</button>
+  <button id="btnImportSettings" class="chip" title="Load settings from a JSON file">Import Settings</button>
+  <label class="chip autoload-last" title="Automatically load the last selected script after refresh">
+    <input type="checkbox" data-setting="autoLoadLastScript" class="mr4"> Auto-load last script
+  </label>
+</div>
 </aside>
 <main class="viewer" id="viewer">
 <div class="marker"></div>

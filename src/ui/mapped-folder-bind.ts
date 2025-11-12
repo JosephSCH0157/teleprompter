@@ -95,8 +95,8 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         if (last) {
           setSelectedByName(sel, last);
           (window as any).HUD?.log?.('script:last:preselect', { name: last });
-          // maybeAutoLoad(sel); // opt-in auto-load if desired
         }
+        maybeAutoLoad(sel);
       } catch {}
     } catch {}
   }
@@ -118,14 +118,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         sel.append(opt);
       }
       try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
-      // Preselect last used script if present (fallback path)
+      // Preselect last used script if present (fallback path) + maybe auto-load
       try {
         const last = getLastScriptName();
         if (last) {
           setSelectedByName(sel, last);
           (window as any).HUD?.log?.('script:last:preselect', { name: last });
-          // maybeAutoLoad(sel);
         }
+        maybeAutoLoad(sel);
       } catch {}
     } catch {}
   }
@@ -176,9 +176,10 @@ function setSelectedByName(sel: HTMLSelectElement, name: string | null): void {
   }
 }
 function maybeAutoLoad(sel: HTMLSelectElement) {
-  const AUTO = false; // gate behind a setting later if desired
   try {
-    if (AUTO && sel.selectedIndex >= 0) {
+    const s = (window as any).__tpSettings?.get?.() || (window as any).__tpSettingsStore || null;
+    const auto = !!(s && s.autoLoadLastScript);
+    if (auto && sel.selectedIndex >= 0) {
       sel.dispatchEvent(new Event('change', { bubbles: true }));
       (window as any).HUD?.log?.('script:auto-load:last', { name: sel.options[sel.selectedIndex]?.text });
     }

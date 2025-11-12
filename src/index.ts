@@ -130,6 +130,7 @@ import './hud/loader';
 // Mapped Folder (scripts directory) binder
 import { installScriptIngest } from './features/script-ingest';
 import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
+import { bindSettingsExportImport } from './ui/settings-export-import';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
@@ -381,6 +382,8 @@ try {
 					try { installScriptIngest({}); } catch {}
 					// Wire optional permission recheck button (no-op if absent)
 					try { bindPermissionButton('#recheckFolderBtn'); } catch {}
+					// Wire settings export/import buttons
+					try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
 				} catch {}
 			});
 		} catch {}
