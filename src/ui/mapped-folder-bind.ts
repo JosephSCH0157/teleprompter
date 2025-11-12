@@ -89,6 +89,15 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         (opt as any)._handle = e.handle;
         sel.append(opt);
       }
+      // Preselect last used script if present
+      try {
+        const last = getLastScriptName();
+        if (last) {
+          setSelectedByName(sel, last);
+          (window as any).HUD?.log?.('script:last:preselect', { name: last });
+          // maybeAutoLoad(sel); // opt-in auto-load if desired
+        }
+      } catch {}
     } catch {}
   }
 
@@ -109,6 +118,15 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         sel.append(opt);
       }
       try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
+      // Preselect last used script if present (fallback path)
+      try {
+        const last = getLastScriptName();
+        if (last) {
+          setSelectedByName(sel, last);
+          (window as any).HUD?.log?.('script:last:preselect', { name: last });
+          // maybeAutoLoad(sel);
+        }
+      } catch {}
     } catch {}
   }
 }
@@ -118,10 +136,51 @@ let _lastCount = 0; // track last script count for HUD logging
 export async function recheckMappedFolderPermissions() {
   try {
     const dir = (window as any).__tpFolder?.get?.();
-    if (!dir) return false;
+    if (!dir) { toast('No folder mapped'); return false; }
     // @ts-ignore
-    const ok = await (dir as any).requestPermission?.({ mode: 'read' });
-    try { (window as any).HUD?.log?.('folder:permission', { granted: ok === 'granted' }); } catch {}
-    return ok === 'granted';
+    const res = await (dir as any).requestPermission?.({ mode: 'read' });
+    const granted = res === 'granted';
+    try { (window as any).HUD?.log?.('folder:permission', { granted }); } catch {}
+    toast(granted ? 'Folder access granted' : 'Folder access denied');
+    if (!granted) {
+      try { await (window as any).__tpFolder?.clear?.(); } catch {}
+    }
+    return granted;
   } catch { return false; }
+}
+
+// tiny toast: HUD event first; alert fallback to ensure visibility
+function toast(msg: string) {
+  try { (window as any).HUD?.log?.('toast', { msg }); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:toast', { detail: { msg, ts: Date.now() } })); } catch {}
+  try { if (!(window as any).HUD) alert(msg); } catch {}
+}
+
+// Optional binder for a recheck button; no-op if selector missing
+export function bindPermissionButton(selector: string) {
+  try {
+    const btn = document.querySelector(selector) as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.addEventListener('click', () => { try { recheckMappedFolderPermissions(); } catch {} });
+  } catch {}
+}
+
+// "Last script" helpers
+function getLastScriptName(): string | null {
+  try { return localStorage.getItem('tp_last_script_name'); } catch { return null; }
+}
+function setSelectedByName(sel: HTMLSelectElement, name: string | null): void {
+  if (!name) return;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].text === name) { sel.selectedIndex = i; break; }
+  }
+}
+function maybeAutoLoad(sel: HTMLSelectElement) {
+  const AUTO = false; // gate behind a setting later if desired
+  try {
+    if (AUTO && sel.selectedIndex >= 0) {
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      (window as any).HUD?.log?.('script:auto-load:last', { name: sel.options[sel.selectedIndex]?.text });
+    }
+  } catch {}
 }

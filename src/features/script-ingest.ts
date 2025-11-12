@@ -45,11 +45,46 @@ async function readFile(f: File): Promise<{ name: string; text: string }> {
       return { name, text };
     }
     if (/\.docx$/i.test(lower)) {
-      return { name, text: '[note]DOCX import needs a text extractor. Convert to .txt/.md or add an extractor.[/note]' };
+      const text = await docxToText(f);
+      return {
+        name,
+        text: text || '[note]DOCX could not be parsed. Convert to .txt/.md or install a richer DOCX extractor.[/note]'
+      };
     }
     return { name, text: '[note]Unsupported file type. Use .txt / .md / .docx[/note]' };
   } catch (e) {
     return { name, text: '[error] Failed to read file: ' + (e && (e as any).message || String(e)) + '[/error]' };
+  }
+}
+
+// Lazy DOCX extractor (jszip). Keep light and resilient.
+type JSZipT = typeof import('jszip');
+async function docxToText(file: File): Promise<string> {
+  try {
+    const { default: JSZip }: { default: JSZipT } = await import('jszip');
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const part = zip.file('word/document.xml') || zip.file('/word/document.xml') || null;
+    if (!part) throw new Error('document.xml missing');
+    const xml = await part.async('string');
+    const s1 = xml
+      .replace(/<w:tab\b[^>]*\/>/g, '\t')
+      .replace(/<w:br\b[^>]*\/>/g, '\n')
+      .replace(/<\/w:p>/g, '\n')
+      .replace(/<w:p\b[^>]*>/g, '');
+    const s2 = s1.replace(/<[^>]+>/g, '');
+    return s2
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#x0D;?/g, '\n')
+      .replace(/&#13;?/g, '\n')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  } catch (e) {
+    try { (window as any).HUD?.log?.('docx:extract:fail', { msg: String(e) }); } catch {}
+    return '';
   }
 }
 
