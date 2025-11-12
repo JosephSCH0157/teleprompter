@@ -129,6 +129,7 @@ import { initObsUI } from './wiring/obs-wiring';
 import './hud/loader';
 // Mapped Folder (scripts directory) binder
 import { bindMappedFolderUI } from './ui/mapped-folder-bind';
+import { installScriptIngest } from './features/script-ingest';
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 try {
 	function injectSpeechNotesHud(){
@@ -376,6 +377,8 @@ try {
 							} catch {}
 						}
 					});
+					// Install script ingest (auto-detect target)
+					try { installScriptIngest({}); } catch {}
 				} catch {}
 			});
 		} catch {}

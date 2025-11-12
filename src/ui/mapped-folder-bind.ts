@@ -24,7 +24,10 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     try {
       if ('showDirectoryPicker' in window) {
         const ok = await pickMappedFolder();
-        if (ok) await refreshList();
+        if (ok) {
+          await refreshList();
+          try { (window as any).HUD?.log?.('folder:mapped', { count: _lastCount }); } catch {}
+        }
       } else if (fallback) {
         fallback.click();
       } else {
@@ -66,6 +69,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       if ('showDirectoryPicker' in window) {
         const entries = await listScripts();
         populateSelect(entries);
+        _lastCount = entries.length;
       }
     } catch {}
   }
@@ -76,6 +80,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       if (!entries.length) {
         sel.disabled = true;
         sel.append(new Option('(No scripts found)', '', true, false));
+        try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         return;
       }
       sel.disabled = false;
@@ -94,6 +99,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       if (!filtered.length) {
         sel.disabled = true;
         sel.append(new Option('(No scripts found)', '', true, false));
+        try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         return;
       }
       sel.disabled = false;
@@ -102,6 +108,20 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         (opt as any)._file = f;
         sel.append(opt);
       }
+      try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
     } catch {}
   }
+}
+
+let _lastCount = 0; // track last script count for HUD logging
+
+export async function recheckMappedFolderPermissions() {
+  try {
+    const dir = (window as any).__tpFolder?.get?.();
+    if (!dir) return false;
+    // @ts-ignore
+    const ok = await (dir as any).requestPermission?.({ mode: 'read' });
+    try { (window as any).HUD?.log?.('folder:permission', { granted: ok === 'granted' }); } catch {}
+    return ok === 'granted';
+  } catch { return false; }
 }
