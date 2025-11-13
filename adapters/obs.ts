@@ -1,159 +1,192 @@
-// adapters/obs.ts
-function createOBSAdapter() {
+// OBS adapter for browser with dev-only candidate auth attempts and identify payload logging
+
+/** @returns {import('../recorders.js').RecorderAdapter} */
+export function createOBSAdapter() {
   var ws = null;
   var identified = false;
   var _lastErr = null;
-  var cfg = { url: "ws://127.0.0.1:4455", password: "" };
+  var cfg = { url: 'ws://127.0.0.1:4455', password: '' };
+
+  // Dev tracing state
   var _candidateList = null;
   var _candidateIndex = 0;
   var _lastAuthSent = null;
   var _lastCandidateIndexUsed = null;
   var _retryingCandidates = false;
+  // reconnect/backoff state
   var _backoff = 800;
   var _attempts = 0;
+
+  // lightweight dev log (keeps short history when window._TP_DEV is enabled)
   try {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       window.__obsLog = window.__obsLog || [];
       window.__obsLogMax = window.__obsLogMax || 500;
-      window.logObs = function(ev, data) {
+      window.logObs = function (ev, data) {
         try {
           if (!window._TP_DEV) return;
-          window.__obsLog.push({ t: Date.now(), ev, data });
+          window.__obsLog.push({ t: Date.now(), ev: ev, data: data });
           if (window.__obsLog.length > window.__obsLogMax) {
             window.__obsLog.splice(0, window.__obsLog.length - window.__obsLogMax);
           }
         } catch {
+          void 0;
         }
       };
     }
   } catch {
+    void 0;
   }
-  var _enc = function(s) {
+
+  var _enc = function (s) {
     return new TextEncoder().encode(s);
   };
-  var _b64 = function(buf) {
+  var _b64 = function (buf) {
     return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
   };
+  // Keep last auth sent for debug logging
+  // canonical OBS v5 auth — exact recipe (no trims, no decoding, UTF-8 byte hashes)
   const _te = new TextEncoder();
   async function _sha(s) {
-    return crypto.subtle.digest("SHA-256", _te.encode(s));
+    return crypto.subtle.digest('SHA-256', _te.encode(s));
   }
   async function computeObsAuth(password, authInfo) {
-    const salt = authInfo && authInfo.salt ? String(authInfo.salt) : "";
-    const challenge = authInfo && authInfo.challenge ? String(authInfo.challenge) : "";
-    const secretBuf = await _sha(String(password ?? "") + salt);
+    // authInfo is expected to contain { salt, challenge }
+    const salt = authInfo && authInfo.salt ? String(authInfo.salt) : '';
+    const challenge = authInfo && authInfo.challenge ? String(authInfo.challenge) : '';
+    // 1) secretB64 = base64( SHA256( password + salt ) )
+    const secretBuf = await _sha(String(password ?? '') + salt);
     const secretB64 = _b64(secretBuf);
+    // 2) authentication = base64( SHA256( secretB64 + challenge ) )
     const authBuf = await _sha(secretB64 + challenge);
     return _b64(authBuf);
   }
+
   function configure(newCfg) {
     cfg = Object.assign({}, cfg, newCfg || {});
   }
   function isAvailable() {
-    return Promise.resolve(typeof WebSocket !== "undefined");
+    return Promise.resolve(typeof WebSocket !== 'undefined');
   }
+
+  // computeAuthCandidates removed; using canonical computeObsAuth
+
   function _connect(opts) {
     opts = opts || {};
     var testOnly = !!opts.testOnly;
-    return new Promise(function(resolve, reject) {
+    return new Promise(function (resolve, reject) {
       try {
         try {
-          if (ws) ws.close(1e3, "reconnect");
-        } catch {
-        }
+          if (ws) ws.close(1000, 'reconnect');
+                } catch {
+                void 0;
+              }
         identified = false;
         _lastErr = null;
-        var url = cfg.url || "ws://127.0.0.1:4455";
+        var url = cfg.url || 'ws://127.0.0.1:4455';
         ws = new WebSocket(url);
-        ws.onopen = function() {
+
+        ws.onopen = function () {
           try {
-            if (window && window.__TP_DEV) console.debug("[OBS-HS] socket open", url);
-          } catch {
-          }
+            if (window && window.__TP_DEV) console.debug('[OBS-HS] socket open', url);
+            } catch {
+                void 0;
+              }
           try {
             window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-            window.__obsHandshakeLog.push({ t: Date.now(), event: "open", url });
+            window.__obsHandshakeLog.push({ t: Date.now(), event: 'open', url: url });
             try {
               _backoff = 800;
               _attempts = 0;
-            } catch {
-            }
+            } catch {}
             try {
-              cfg.onStatus && cfg.onStatus("connected", true);
+              cfg.onStatus && cfg.onStatus('connected', true);
               try {
-                window.logObs && window.logObs("open", { url });
+                // dev log
+                window.logObs && window.logObs('open', { url: url });
               } catch {
-              }
+                  void 0;
+                }
+            } catch {}
             } catch {
-            }
-          } catch {
-          }
+                void 0;
+              }
         };
-        ws.onmessage = async function(ev) {
+
+        ws.onmessage = async function (ev) {
           try {
             var msg = JSON.parse(ev.data);
             try {
-              if (window && window.__TP_DEV) console.debug("[OBS-HS] recv op=" + msg.op, msg.d);
-            } catch {
-            }
+              if (window && window.__TP_DEV) console.debug('[OBS-HS] recv op=' + msg.op, msg.d);
+                    } catch {
+                    void 0;
+                    }
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
               window.__obsHandshakeLog.push({ t: Date.now(), op: msg.op, data: msg.d });
             } catch {
               void ex;
             }
+
             if (msg.op === 0) {
               var authInfo = msg.d && msg.d.authentication;
               try {
-                window.logObs && window.logObs("hello", { authentication: authInfo });
+                window.logObs && window.logObs('hello', { authentication: authInfo });
               } catch {
                 void ex;
               }
               var identify = { op: 1, d: { rpcVersion: 1 } };
               if (authInfo) {
-                var pass = "";
+                // Read password without trimming or normalization. Prefer configured value, then cfg.getPass(), then DOM fallbacks.
+                var pass = '';
                 try {
-                  if (typeof cfg.password !== "undefined" && cfg.password !== null)
+                  if (typeof cfg.password !== 'undefined' && cfg.password !== null)
                     pass = String(cfg.password);
-                  else if (typeof cfg.getPass === "function") pass = String(cfg.getPass());
+                  else if (typeof cfg.getPass === 'function') pass = String(cfg.getPass());
                 } catch {
                   try {
-                    pass = String(cfg.password || "");
+                    pass = String(cfg.password || '');
                   } catch {
-                    pass = "";
+                    pass = '';
                   }
                 }
                 if (!pass) {
                   try {
-                    var domPass = "";
-                    var setEl = typeof document !== "undefined" && document.getElementById("settingsObsPass");
-                    var mainEl = typeof document !== "undefined" && document.getElementById("obsPassword");
+                    var domPass = '';
+                    var setEl =
+                      typeof document !== 'undefined' && document.getElementById('settingsObsPass');
+                    var mainEl =
+                      typeof document !== 'undefined' && document.getElementById('obsPassword');
+                    // Do NOT trim — spaces are valid characters
                     if (setEl && setEl.value) domPass = setEl.value;
                     else if (mainEl && mainEl.value) domPass = mainEl.value;
                     if (domPass) pass = domPass;
                     if (domPass && window && window.__TP_DEV)
-                      console.debug("[OBS adapter] using DOM password fallback (settings/main)");
+                      console.debug('[OBS adapter] using DOM password fallback (settings/main)');
                   } catch {
+                    /* ignore */
                   }
                 }
                 if (!pass) {
                   try {
-                    ws.close(4009, "password-empty");
+                    ws.close(4009, 'password-empty');
                   } catch {
                     void ex;
                   }
-                  _lastErr = new Error("OBS authentication required but no password is set.");
+                  _lastErr = new Error('OBS authentication required but no password is set.');
                   return reject(_lastErr);
                 }
+
+                // Compute canonical OBS v5 authentication value and attach to identify payload
                 try {
                   const authVal = await computeObsAuth(pass, authInfo);
                   identify.d.authentication = authVal;
                   _lastAuthSent = authVal;
                   if (window && window.__TP_DEV)
-                    console.debug("[OBS-HS] sending IDENTIFY (authentication present)");
+                    console.debug('[OBS-HS] sending IDENTIFY (authentication present)');
                   try {
                     if (window && window.__TP_DEV)
-                      console.debug("[OBS-HS] IDENTIFY payload:", identify);
+                      console.debug('[OBS-HS] IDENTIFY payload:', identify);
                   } catch {
                     void ex;
                   }
@@ -161,19 +194,21 @@ function createOBSAdapter() {
                     window.__obsHandshakeLog = window.__obsHandshakeLog || [];
                     var ent = {
                       t: Date.now(),
-                      event: "identify-sent",
-                      auth: !!identify.d.authentication
+                      event: 'identify-sent',
+                      auth: !!identify.d.authentication,
                     };
                     if (window && window.__TP_DEV) ent.identifyPayload = identify;
                     window.__obsHandshakeLog.push(ent);
-                    window.logObs && window.logObs("identify-sent", { auth: !!identify.d.authentication });
+                    window.logObs &&
+                      window.logObs('identify-sent', { auth: !!identify.d.authentication });
                   } catch {
                     void ex;
                   }
                 } catch {
+                  // failed to compute auth — set last error and close
                   _lastErr = exAuth;
                   try {
-                    ws.close(4009, "auth-compute-failed");
+                    ws.close(4009, 'auth-compute-failed');
                   } catch {
                     void ex;
                   }
@@ -188,15 +223,15 @@ function createOBSAdapter() {
             } else if (msg.op === 2) {
               identified = true;
               try {
-                if (window && window.__TP_DEV) console.debug("[OBS-HS] IDENTIFIED", msg.d);
+                if (window && window.__TP_DEV) console.debug('[OBS-HS] IDENTIFIED', msg.d);
               } catch {
                 void ex;
               }
               try {
                 window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-                window.__obsHandshakeLog.push({ t: Date.now(), event: "identified", data: msg.d });
+                window.__obsHandshakeLog.push({ t: Date.now(), event: 'identified', data: msg.d });
                 try {
-                  window.logObs && window.logObs("identified", { data: msg.d });
+                  window.logObs && window.logObs('identified', { data: msg.d });
                 } catch {
                   void ex;
                 }
@@ -205,7 +240,7 @@ function createOBSAdapter() {
               }
               if (testOnly) {
                 try {
-                  ws.close(1e3, "test-ok");
+                  ws.close(1000, 'test-ok');
                 } catch {
                   void ex;
                 }
@@ -215,21 +250,22 @@ function createOBSAdapter() {
           } catch {
             _lastErr = e;
             try {
-              ws.close(4e3, "msg-parse-error");
+              ws.close(4000, 'msg-parse-error');
             } catch {
               void ex;
             }
             return reject(e);
           }
         };
-        ws.onerror = function(ev) {
+
+        ws.onerror = function (ev) {
           try {
-            if (window && window.__TP_DEV) console.debug("[OBS-HS] socket error", ev);
+            if (window && window.__TP_DEV) console.debug('[OBS-HS] socket error', ev);
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-              window.__obsHandshakeLog.push({ t: Date.now(), event: "error", data: ev });
+              window.__obsHandshakeLog.push({ t: Date.now(), event: 'error', data: ev });
               try {
-                window.logObs && window.logObs("error", { data: ev });
+                window.logObs && window.logObs('error', { data: ev });
               } catch {
                 void ex;
               }
@@ -240,19 +276,20 @@ function createOBSAdapter() {
             void ex;
           }
         };
-        ws.onclose = function(e2) {
+
+        ws.onclose = function (e) {
           try {
             if (window && window.__TP_DEV)
-              console.debug("[OBS-HS] socket close", e2 && e2.code, e2 && e2.reason);
+              console.debug('[OBS-HS] socket close', e && e.code, e && e.reason);
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
               var entry = {
                 t: Date.now(),
-                event: "close",
-                code: e2 && e2.code || 0,
-                reason: e2 && e2.reason || ""
+                event: 'close',
+                code: (e && e.code) || 0,
+                reason: (e && e.reason) || '',
               };
-              if (e2 && e2.code === 4009 && window && window.__TP_DEV) {
+              if (e && e.code === 4009 && window && window.__TP_DEV) {
                 try {
                   entry.debugAuth = _lastAuthSent || null;
                 } catch {
@@ -261,22 +298,25 @@ function createOBSAdapter() {
               }
               window.__obsHandshakeLog.push(entry);
               try {
-                window.logObs && window.logObs("close", {
-                  code: e2 && e2.code || 0,
-                  reason: e2 && e2.reason || ""
-                });
+                window.logObs &&
+                  window.logObs('close', {
+                    code: (e && e.code) || 0,
+                    reason: (e && e.reason) || '',
+                  });
               } catch {
                 void ex;
               }
               try {
+                // increment attempts and advance backoff for retry reporting
                 _attempts = (_attempts || 0) + 1;
-                _backoff = Math.min(Math.floor((_backoff || 800) * 1.6), 8e3);
-                cfg.onStatus && cfg.onStatus("closed", false, {
-                  code: e2 && e2.code || 0,
-                  reason: e2 && e2.reason || "",
-                  attempt: _attempts,
-                  backoffMs: _backoff
-                });
+                _backoff = Math.min(Math.floor((_backoff || 800) * 1.6), 8000);
+                cfg.onStatus &&
+                  cfg.onStatus('closed', false, {
+                    code: (e && e.code) || 0,
+                    reason: (e && e.reason) || '',
+                    attempt: _attempts,
+                    backoffMs: _backoff,
+                  });
               } catch {
                 void ex;
               }
@@ -286,26 +326,29 @@ function createOBSAdapter() {
           } catch {
             void ex;
           }
+
           if (!identified) {
-            var err2 = new Error(
-              ("close " + (e2 && e2.code || 0) + " " + (e2 && e2.reason || "")).trim()
+            var err = new Error(
+              ('close ' + ((e && e.code) || 0) + ' ' + ((e && e.reason) || '')).trim()
             );
-            _lastErr = err2;
+            _lastErr = err;
             try {
-              if (cfg && typeof cfg.isEnabled === "function" && cfg.isEnabled() && (e2 && e2.code) !== 1e3) {
+              if (
+                cfg &&
+                typeof cfg.isEnabled === 'function' &&
+                cfg.isEnabled() &&
+                (e && e.code) !== 1000
+              ) {
                 try {
-                  setTimeout(function() {
+                  setTimeout(function () {
                     try {
                       connect();
-                    } catch {
-                    }
+                    } catch {}
                   }, _backoff);
-                } catch {
-                }
+                } catch {}
               }
-            } catch {
-            }
-            return reject(err2);
+            } catch {}
+            return reject(err);
           }
         };
       } catch {
@@ -314,16 +357,19 @@ function createOBSAdapter() {
       }
     });
   }
+
+  // wrapper to call _connect in non-test mode; returns a promise
   function connect() {
     return _connect({ testOnly: false });
   }
+
   async function start() {
     await connect();
   }
   async function stop() {
     identified = false;
     try {
-      if (ws) ws.close(1e3, "stop");
+      if (ws) ws.close(1000, 'stop');
     } catch {
       void ex;
     }
@@ -332,8 +378,10 @@ function createOBSAdapter() {
   async function test() {
     return _connect({ testOnly: true });
   }
+  // Dev helper: probe multiple ws URLs (host+port) and return which one authenticates.
+  // Accepts an array of url strings (e.g. ['ws://host:4455','ws://host:64376']).
   async function probePorts(urls) {
-    if (!Array.isArray(urls)) throw new Error("urls must be an array");
+    if (!Array.isArray(urls)) throw new Error('urls must be an array');
     const orig = cfg.url;
     const results = [];
     for (let u of urls) {
@@ -343,6 +391,7 @@ function createOBSAdapter() {
           const ok = await _connect({ testOnly: true });
           results.push({ url: u, ok: !!ok });
           if (ok) {
+            // restore and return early with success
             cfg.url = orig;
             return { success: true, url: u, results };
           }
@@ -350,14 +399,14 @@ function createOBSAdapter() {
           results.push({
             url: u,
             ok: false,
-            error: String(err && err.message ? err.message : err)
+            error: String(err && err.message ? err.message : err),
           });
         }
       } catch {
         results.push({
           url: u,
           ok: false,
-          error: String(outer && outer.message ? outer.message : outer)
+          error: String(outer && outer.message ? outer.message : outer),
         });
       }
     }
@@ -367,17 +416,20 @@ function createOBSAdapter() {
   function getLastError() {
     return _lastErr ? _lastErr.message || String(_lastErr) : null;
   }
+
+  // Small runtime helper: from the page console call __recorder.get('obs').pokeStatusTest()
+  // This triggers cfg.onStatus if present and logs a short dev entry.
   function pokeStatusTest() {
     try {
-      const meta = { now: Date.now(), note: "poke" };
+      const meta = { now: Date.now(), note: 'poke' };
       try {
-        window.logObs && window.logObs("poke", meta);
+        window.logObs && window.logObs('poke', meta);
       } catch {
         void ex;
       }
-      cfg.onStatus && cfg.onStatus("poke", true, meta);
+      cfg.onStatus && cfg.onStatus('poke', true, meta);
       try {
-        if (window && window.__TP_DEV) console.info("[OBS adapter] pokeStatusTest fired", meta);
+        if (window && window.__TP_DEV) console.info('[OBS adapter] pokeStatusTest fired', meta);
       } catch {
         void ex;
       }
@@ -387,10 +439,12 @@ function createOBSAdapter() {
       return false;
     }
   }
+
+  // Dev-only: expose a quick helper to test a specific candidate from the console
   try {
-    if (typeof window !== "undefined" && window.__TP_DEV) {
+    if (typeof window !== 'undefined' && window.__TP_DEV) {
       try {
-        window.__obsProbePorts = function(urls) {
+        window.__obsProbePorts = function (urls) {
           try {
             return probePorts(urls);
           } catch {
@@ -404,21 +458,19 @@ function createOBSAdapter() {
   } catch {
     void ex;
   }
+
   return {
-    id: "obs",
-    label: "OBS (WebSocket)",
-    configure,
-    isAvailable,
-    start,
-    stop,
-    connect,
-    test,
-    pokeStatusTest,
+    id: 'obs',
+    label: 'OBS (WebSocket)',
+    configure: configure,
+    isAvailable: isAvailable,
+    start: start,
+    stop: stop,
+    connect: connect,
+    test: test,
+    pokeStatusTest: pokeStatusTest,
     // testCandidate removed; use __obsProbePorts or adapter.test()
-    getLastError
+    getLastError: getLastError,
   };
 }
-export {
-  createOBSAdapter
-};
-//# sourceMappingURL=obs.js.map
+
