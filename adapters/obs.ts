@@ -1,11 +1,28 @@
 // OBS adapter for browser with dev-only candidate auth attempts and identify payload logging
 
+declare global {
+  interface Window {
+    __obsLog?: Array<{ t: number; ev: string; data?: any }>;
+    __obsLogMax?: number;
+    logObs?: (ev: string, data?: any) => void;
+    __obsHandshakeLog?: any[];
+    __obsProbePorts?: (urls: string[]) => Promise<any>;
+    __TP_DEV?: boolean;
+  }
+}
+
 /** @returns {import('../recorders.js').RecorderAdapter} */
 export function createOBSAdapter() {
-  var ws = null;
+  var ws: WebSocket | null = null;
   var identified = false;
-  var _lastErr = null;
-  var cfg = { url: 'ws://127.0.0.1:4455', password: '' };
+  var _lastErr: unknown = null;
+  var cfg: {
+    url: string;
+    password?: string;
+    getPass?: () => string;
+    onStatus?: (status: string, connected: boolean, meta?: any) => void;
+    isEnabled?: () => boolean;
+  } = { url: 'ws://127.0.0.1:4455', password: '' };
 
   // Dev tracing state
   var _candidateList = null;
@@ -24,33 +41,33 @@ export function createOBSAdapter() {
       window.__obsLogMax = window.__obsLogMax || 500;
       window.logObs = function (ev, data) {
         try {
-          if (!window._TP_DEV) return;
-          window.__obsLog.push({ t: Date.now(), ev: ev, data: data });
-          if (window.__obsLog.length > window.__obsLogMax) {
-            window.__obsLog.splice(0, window.__obsLog.length - window.__obsLogMax);
+          if (!window.__TP_DEV) return;
+          window.__obsLog!.push({ t: Date.now(), ev: ev, data: data });
+          if (window.__obsLog!.length > (window.__obsLogMax || 0)) {
+            window.__obsLog!.splice(0, window.__obsLog!.length - (window.__obsLogMax || 0));
           }
         } catch {
-          void 0;
+          // ignore
         }
       };
     }
   } catch {
-    void 0;
+    // ignore
   }
 
-  var _enc = function (s) {
+  var _enc = function (s: string) {
     return new TextEncoder().encode(s);
   };
-  var _b64 = function (buf) {
-    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+  var _b64 = function (buf: ArrayBuffer) {
+    return btoa(String.fromCharCode(...new Uint8Array(buf)));
   };
   // Keep last auth sent for debug logging
   // canonical OBS v5 auth — exact recipe (no trims, no decoding, UTF-8 byte hashes)
   const _te = new TextEncoder();
-  async function _sha(s) {
+  async function _sha(s: string) {
     return crypto.subtle.digest('SHA-256', _te.encode(s));
   }
-  async function computeObsAuth(password, authInfo) {
+  async function computeObsAuth(password: string, authInfo: { salt?: string; challenge?: string } | null | undefined) {
     // authInfo is expected to contain { salt, challenge }
     const salt = authInfo && authInfo.salt ? String(authInfo.salt) : '';
     const challenge = authInfo && authInfo.challenge ? String(authInfo.challenge) : '';
@@ -62,25 +79,25 @@ export function createOBSAdapter() {
     return _b64(authBuf);
   }
 
-  function configure(newCfg) {
+  function configure(newCfg?: Partial<typeof cfg>) {
     cfg = Object.assign({}, cfg, newCfg || {});
   }
-  function isAvailable() {
+  function isAvailable(): Promise<boolean> {
     return Promise.resolve(typeof WebSocket !== 'undefined');
   }
 
   // computeAuthCandidates removed; using canonical computeObsAuth
 
-  function _connect(opts) {
+  function _connect(opts?: { testOnly?: boolean }): Promise<boolean> {
     opts = opts || {};
     var testOnly = !!opts.testOnly;
     return new Promise(function (resolve, reject) {
       try {
         try {
           if (ws) ws.close(1000, 'reconnect');
-                } catch {
-                void 0;
-              }
+        } catch {
+          // ignore
+        }
         identified = false;
         _lastErr = null;
         var url = cfg.url || 'ws://127.0.0.1:4455';
@@ -89,9 +106,9 @@ export function createOBSAdapter() {
         ws.onopen = function () {
           try {
             if (window && window.__TP_DEV) console.debug('[OBS-HS] socket open', url);
-            } catch {
-                void 0;
-              }
+          } catch {
+            // ignore
+          }
           try {
             window.__obsHandshakeLog = window.__obsHandshakeLog || [];
             window.__obsHandshakeLog.push({ t: Date.now(), event: 'open', url: url });
@@ -105,12 +122,12 @@ export function createOBSAdapter() {
                 // dev log
                 window.logObs && window.logObs('open', { url: url });
               } catch {
-                  void 0;
-                }
-            } catch {}
-            } catch {
-                void 0;
+                // ignore
               }
+            } catch {}
+          } catch {
+            // ignore
+          }
         };
 
         ws.onmessage = async function (ev) {
@@ -118,14 +135,14 @@ export function createOBSAdapter() {
             var msg = JSON.parse(ev.data);
             try {
               if (window && window.__TP_DEV) console.debug('[OBS-HS] recv op=' + msg.op, msg.d);
-                    } catch {
-                    void 0;
-                    }
+            } catch {
+              // ignore
+            }
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
               window.__obsHandshakeLog.push({ t: Date.now(), op: msg.op, data: msg.d });
             } catch {
-              void ex;
+              // ignore
             }
 
             if (msg.op === 0) {
@@ -133,7 +150,7 @@ export function createOBSAdapter() {
               try {
                 window.logObs && window.logObs('hello', { authentication: authInfo });
               } catch {
-                void ex;
+                // ignore
               }
               var identify = { op: 1, d: { rpcVersion: 1 } };
               if (authInfo) {
@@ -153,10 +170,12 @@ export function createOBSAdapter() {
                 if (!pass) {
                   try {
                     var domPass = '';
-                    var setEl =
-                      typeof document !== 'undefined' && document.getElementById('settingsObsPass');
-                    var mainEl =
-                      typeof document !== 'undefined' && document.getElementById('obsPassword');
+                    var setEl = (typeof document !== 'undefined'
+                      ? document.getElementById('settingsObsPass')
+                      : null) as HTMLInputElement | null;
+                    var mainEl = (typeof document !== 'undefined'
+                      ? document.getElementById('obsPassword')
+                      : null) as HTMLInputElement | null;
                     // Do NOT trim — spaces are valid characters
                     if (setEl && setEl.value) domPass = setEl.value;
                     else if (mainEl && mainEl.value) domPass = mainEl.value;
@@ -171,7 +190,7 @@ export function createOBSAdapter() {
                   try {
                     ws.close(4009, 'password-empty');
                   } catch {
-                    void ex;
+                    // ignore
                   }
                   _lastErr = new Error('OBS authentication required but no password is set.');
                   return reject(_lastErr);
@@ -188,7 +207,7 @@ export function createOBSAdapter() {
                     if (window && window.__TP_DEV)
                       console.debug('[OBS-HS] IDENTIFY payload:', identify);
                   } catch {
-                    void ex;
+                    // ignore
                   }
                   try {
                     window.__obsHandshakeLog = window.__obsHandshakeLog || [];
@@ -202,15 +221,15 @@ export function createOBSAdapter() {
                     window.logObs &&
                       window.logObs('identify-sent', { auth: !!identify.d.authentication });
                   } catch {
-                    void ex;
+                    // ignore
                   }
-                } catch {
+                } catch (exAuth) {
                   // failed to compute auth — set last error and close
                   _lastErr = exAuth;
                   try {
                     ws.close(4009, 'auth-compute-failed');
                   } catch {
-                    void ex;
+                    // ignore
                   }
                   return reject(exAuth);
                 }
@@ -218,14 +237,14 @@ export function createOBSAdapter() {
               try {
                 ws.send(JSON.stringify(identify));
               } catch {
-                void ex;
+                // ignore
               }
             } else if (msg.op === 2) {
               identified = true;
               try {
                 if (window && window.__TP_DEV) console.debug('[OBS-HS] IDENTIFIED', msg.d);
               } catch {
-                void ex;
+                // ignore
               }
               try {
                 window.__obsHandshakeLog = window.__obsHandshakeLog || [];
@@ -233,26 +252,26 @@ export function createOBSAdapter() {
                 try {
                   window.logObs && window.logObs('identified', { data: msg.d });
                 } catch {
-                  void ex;
+                  // ignore
                 }
               } catch {
-                void ex;
+                // ignore
               }
               if (testOnly) {
                 try {
                   ws.close(1000, 'test-ok');
                 } catch {
-                  void ex;
+                  // ignore
                 }
               }
               return resolve(true);
             }
-          } catch {
+          } catch (e) {
             _lastErr = e;
             try {
               ws.close(4000, 'msg-parse-error');
             } catch {
-              void ex;
+              // ignore
             }
             return reject(e);
           }
@@ -267,13 +286,13 @@ export function createOBSAdapter() {
               try {
                 window.logObs && window.logObs('error', { data: ev });
               } catch {
-                void ex;
+                // ignore
               }
             } catch {
-              void ex;
+              // ignore
             }
           } catch {
-            void ex;
+            // ignore
           }
         };
 
@@ -293,7 +312,7 @@ export function createOBSAdapter() {
                 try {
                   entry.debugAuth = _lastAuthSent || null;
                 } catch {
-                  void ex;
+                  // ignore
                 }
               }
               window.__obsHandshakeLog.push(entry);
@@ -304,7 +323,7 @@ export function createOBSAdapter() {
                     reason: (e && e.reason) || '',
                   });
               } catch {
-                void ex;
+                // ignore
               }
               try {
                 // increment attempts and advance backoff for retry reporting
@@ -318,13 +337,13 @@ export function createOBSAdapter() {
                     backoffMs: _backoff,
                   });
               } catch {
-                void ex;
+                // ignore
               }
             } catch {
-              void ex;
+              // ignore
             }
           } catch {
-            void ex;
+            // ignore
           }
 
           if (!identified) {
@@ -351,7 +370,7 @@ export function createOBSAdapter() {
             return reject(err);
           }
         };
-      } catch {
+      } catch (outer) {
         _lastErr = outer;
         return reject(outer);
       }
@@ -359,7 +378,7 @@ export function createOBSAdapter() {
   }
 
   // wrapper to call _connect in non-test mode; returns a promise
-  function connect() {
+  function connect(): Promise<boolean> {
     return _connect({ testOnly: false });
   }
 
@@ -371,7 +390,7 @@ export function createOBSAdapter() {
     try {
       if (ws) ws.close(1000, 'stop');
     } catch {
-      void ex;
+      // ignore
     }
     ws = null;
   }
@@ -380,7 +399,7 @@ export function createOBSAdapter() {
   }
   // Dev helper: probe multiple ws URLs (host+port) and return which one authenticates.
   // Accepts an array of url strings (e.g. ['ws://host:4455','ws://host:64376']).
-  async function probePorts(urls) {
+  async function probePorts(urls: string[]) {
     if (!Array.isArray(urls)) throw new Error('urls must be an array');
     const orig = cfg.url;
     const results = [];
@@ -395,14 +414,14 @@ export function createOBSAdapter() {
             cfg.url = orig;
             return { success: true, url: u, results };
           }
-        } catch {
+        } catch (err) {
           results.push({
             url: u,
             ok: false,
             error: String(err && err.message ? err.message : err),
           });
         }
-      } catch {
+      } catch (outer) {
         results.push({
           url: u,
           ok: false,
@@ -413,7 +432,7 @@ export function createOBSAdapter() {
     cfg.url = orig;
     return { success: false, results };
   }
-  function getLastError() {
+  function getLastError(): string | null {
     return _lastErr ? _lastErr.message || String(_lastErr) : null;
   }
 
@@ -425,17 +444,16 @@ export function createOBSAdapter() {
       try {
         window.logObs && window.logObs('poke', meta);
       } catch {
-        void ex;
+        // ignore
       }
       cfg.onStatus && cfg.onStatus('poke', true, meta);
       try {
         if (window && window.__TP_DEV) console.info('[OBS adapter] pokeStatusTest fired', meta);
       } catch {
-        void ex;
+        // ignore
       }
       return true;
     } catch {
-      void ex;
       return false;
     }
   }
@@ -447,16 +465,16 @@ export function createOBSAdapter() {
         window.__obsProbePorts = function (urls) {
           try {
             return probePorts(urls);
-          } catch {
-            return Promise.reject(ex);
+          } catch (e) {
+            return Promise.reject(e);
           }
         };
       } catch {
-        void ex;
+        // ignore
       }
     }
   } catch {
-    void ex;
+    // ignore
   }
 
   return {

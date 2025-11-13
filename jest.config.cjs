@@ -1,6 +1,10 @@
 module.exports = {
 	testEnvironment: 'jsdom',
-	testMatch: ['**/tests/ui/**/*.test.ts'],
+	testMatch: [
+		'**/tests/ui/**/*.test.ts',
+		'**/tests/recording/**/*.test.ts',
+		'**/tests/adapters/**/*.test.ts'
+	],
 	setupFiles: ['<rootDir>/tests/setup-jest.ts'],
 	transform: {
 		'^.+\\.(ts|tsx)$': [
@@ -11,4 +15,5 @@ module.exports = {
 	extensionsToTreatAsEsm: ['.ts'],
 	moduleFileExtensions: ['ts','tsx','js','jsx','json'],
 	verbose: false,
+  testPathIgnorePatterns: ['<rootDir>/.worktrees/']
 };

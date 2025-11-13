@@ -4,22 +4,25 @@
 
 /** @returns {import('../recorders.js').RecorderAdapter} */
 export function createBridgeAdapter(){
-  let cfg = { startUrl: '', stopUrl: '' };
+  type BridgeConfig = { startUrl: string; stopUrl?: string };
+  let cfg: BridgeConfig = { startUrl: '', stopUrl: '' };
   let active = false;
-  function configure(next){ cfg = { ...cfg, ...(next||{}) }; }
-  async function ping(url){
+  function configure(next: Partial<BridgeConfig>){ cfg = { ...cfg, ...(next||{}) }; }
+  async function ping(url?: string): Promise<void>{
     if (!url) return;
     try {
       await fetch(url, { method: 'POST', mode: 'no-cors' });
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
   return {
     id: 'bridge',
     label: 'Bridge (HTTP hooks)',
     configure,
-    async isAvailable(){ return true; },
-    async start(){ active = true; await ping(cfg.startUrl); },
-    async stop(){ if (!active) return; active = false; await ping(cfg.stopUrl); },
-    async test(){ await ping(cfg.startUrl || cfg.stopUrl); }
+    async isAvailable(): Promise<boolean>{ return true; },
+    async start(): Promise<void>{ active = true; await ping(cfg.startUrl); },
+    async stop(): Promise<void>{ if (!active) return; active = false; await ping(cfg.stopUrl); },
+    async test(): Promise<void>{ await ping(cfg.startUrl || cfg.stopUrl); }
   };
 }
