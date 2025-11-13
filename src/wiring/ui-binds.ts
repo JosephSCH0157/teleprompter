@@ -294,11 +294,6 @@ function findOne(list: readonly string[]): HTMLElement | null {
   return null;
 }
 
-// tolerant overlay lookups
-const OVERLAY = {
-  settings: ['#settingsOverlay','[data-overlay="settings"]','#settingsPanel','[role="dialog"][data-name="settings"]'] as const,
-  help:     ['#helpOverlay','#shortcutsOverlay','[data-overlay="help"]','[role="dialog"][data-name="help"]'] as const,
-} as const;
 
 /** Best-effort action guesser for legacy buttons by id or label */
 function guessActionFor(el: HTMLElement): string | null {
@@ -448,36 +443,6 @@ async function toText(file: File): Promise<string> {
 // (legacy toggleOverlay kept during migration; now unused)
 // function toggleOverlay(sel: string, show?: boolean) {}
 
-// overlay show/hide helper (list of tolerant selectors)
-function toggleOverlayList(list: readonly string[], show?: boolean, kind?: 'settings'|'help') {
-  try {
-    const el = findOne(list);
-    if (!el) return;
-    const body = document.body;
-    const want = show ?? el.classList.contains('hidden');
-    if (want) {
-      el.classList.remove('hidden');
-      el.style.display = 'block';
-      el.setAttribute('role','dialog');
-      el.setAttribute('aria-modal','true');
-      el.setAttribute('aria-hidden','false');
-      if (kind) body.setAttribute('data-smoke-open', kind);
-      try { (firstFocusable(el) ?? el).focus({ preventScroll: true }); } catch {}
-      // CI latch: hold attribute for brief window so harness sees the open state
-      if (isCI()) {
-        el.dataset.ciHold = '1';
-        setTimeout(() => { try { delete el.dataset.ciHold; } catch {} }, 350);
-      }
-      try { window.dispatchEvent(new CustomEvent(`tp:${kind}:open`, { detail: { source: 'binder' } })); } catch {}
-    } else {
-      el.classList.add('hidden');
-      el.style.display = 'none';
-      el.setAttribute('aria-hidden','true');
-      if (kind && body.getAttribute('data-smoke-open') === kind) body.removeAttribute('data-smoke-open');
-      try { window.dispatchEvent(new CustomEvent(`tp:${kind}:close`, { detail: { source: 'binder' } })); } catch {}
-    }
-  } catch {}
-}
 
 // Compatibility export: still provide this for callers; delegates to the bootstrap installer
 export function installOverlayButtonWiringOnce() { try { installOverlayDelegatorOnce(); } catch {} }
@@ -974,8 +939,6 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
 
   const helpBtn     = _qq<HTMLButtonElement>(SEL.helpOpen);
   const helpClose   = _qq<HTMLButtonElement>(SEL.helpClose);
-  const helpOverlay = _qq<HTMLElement>(SEL.helpOverlay);
-  const settingsOverlay = _qq<HTMLElement>(SEL.settingsOverlay);
     if (helpBtn && !helpBtn.dataset.uiBound) {
       helpBtn.dataset.uiBound = '1';
   on(helpBtn, 'click', (e: Event) => { try { e.preventDefault?.(); } catch {}; toggleOverlay('help', true); try { document.dispatchEvent(new CustomEvent('tp:help:open', { detail: { source: 'binder' } })); } catch {} });
