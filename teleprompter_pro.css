@@ -677,3 +677,12 @@ html.tp-present .present-exit { display: inline-flex; }
         calc(100vw - 2 * max(16px, 3vw))
     );
 }
+
+/* overlays must never intercept when hidden */
+.overlay[hidden],
+#settingsOverlay[hidden],
+#shortcutsOverlay[hidden],
+#helpOverlay[hidden] {
+    display: none !important;
+    pointer-events: none !important;
+}

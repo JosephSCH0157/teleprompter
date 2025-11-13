@@ -58,8 +58,12 @@ export function toggleOverlay(name: OverlayName, on?: boolean) {
         el.hidden = false;
         el.classList.remove('hidden','visually-hidden');
         try { el.style.setProperty('display','block','important'); } catch { el.style.display = 'block'; }
+        // Allow clicks while open
+        try { el.style.setProperty('pointer-events','auto','important'); } catch { el.style.pointerEvents = 'auto'; }
       } else {
         try { el.style.setProperty('display','none','important'); } catch { el.style.display = 'none'; }
+        // Never eat clicks while closed
+        try { el.style.setProperty('pointer-events','none','important'); } catch { el.style.pointerEvents = 'none'; }
         el.hidden = true;
       }
     }
@@ -106,10 +110,16 @@ function installOverlayDelegatorOnce() {
           || (btn.id === 'settingsClose' && 'settings-close')
           || (btn.id === 'helpClose'     && 'help-close')
           || '') as string;
-        if (act === 'settings-open')  { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('settings', true); }
-        if (act === 'settings-close') { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('settings', false); }
-        if (act === 'help-open')      { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('help', true); }
-        if (act === 'help-close')     { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('help', false); }
+        // Only prevent default for anchors with href="#"
+        try {
+          const isAnchor = btn.tagName === 'A';
+          const href = isAnchor ? (btn as HTMLAnchorElement).getAttribute('href') : null;
+          if (isAnchor && href === '#') (ev as Event).preventDefault?.();
+        } catch {}
+        if (act === 'settings-open')  { return toggleOverlay('settings', true); }
+        if (act === 'settings-close') { return toggleOverlay('settings', false); }
+        if (act === 'help-open')      { return toggleOverlay('help', true); }
+        if (act === 'help-close')     { return toggleOverlay('help', false); }
       } catch {}
     }, { capture: true });
 

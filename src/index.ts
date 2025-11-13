@@ -313,8 +313,8 @@ export async function boot() {
 								try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Hot-fix explicit overlay button wiring (always run)
 								try { installOverlayButtonWiringOnce(); } catch {}
-								// Temporarily install emergency binder unconditionally for stability; it is idempotent
-								try { installEmergencyBinder(); } catch {}
+								// Emergency binder only in harness/dev contexts (installed earlier if flagged)
+								// Do not install unconditionally to avoid hijacking clicks in prod.
 								// (Emergency binder only installed above for harness contexts)
 								try { ensureSidebarMirror(); } catch {}
 								try { auditBindingsOnce(); } catch {}
