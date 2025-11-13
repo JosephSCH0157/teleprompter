@@ -5,12 +5,15 @@
 Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.3
 
 ### Added
+
 - build:compat script to compile TypeScript sources to in-place JS for runtime.
 
 ### Changed
+
 - Migrated `recorders.js`, `adapters/bridge.js`, and `adapters/obs.js` to TypeScript sources (`recorders.ts`, `adapters/bridge.ts`, `adapters/obs.ts`) while preserving existing import surface.
 
 ### Fixed
+
 - Ensured recorder/adapter readiness under strict smoke after migration.
 
 ## v1.7.1
