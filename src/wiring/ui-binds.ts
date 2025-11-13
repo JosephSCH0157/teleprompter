@@ -523,6 +523,12 @@ export function installEmergencyBinder() {
     document.addEventListener('click', async (evt) => {
       try {
         const target = evt.target as Element | null;
+        // Do not hijack clicks inside overlays or on ARIA tabs (Settings/Help UI owns these)
+        try {
+          const withinOverlay = (target as HTMLElement | null)?.closest?.('[data-overlay="settings"],#settingsOverlay,[data-overlay="help"],#helpOverlay,#shortcutsOverlay');
+          const isAriaTab = (target as HTMLElement | null)?.closest?.('[role="tab"]');
+          if (withinOverlay || isAriaTab) return;
+        } catch {}
         const hit = closestAction(target);
         if (!hit) return;
         const { action } = hit;
