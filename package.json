@@ -28,7 +28,7 @@
     "smoke:hud": "node tools/teleprompter_e2e.js --runSmoke --headless --timeout=45000 && node tools/hud_smoke.js",
     "smoke:reh_api": "node tools/rehearsal_api_smoke.js",
     "gate": "npm run lint && npm run types && npm run build:router && npm run smoke:strict && npm run smoke:rehearsal && npm run smoke:hud && npm run smoke:reh_api && node tools/ui_crawl.js && node tools/validate_ui_crawl.js",
-    "gate:quick": "npm run lint && npm run types && npm run build:router && npm run smoke && npm run smoke:rehearsal && npm run smoke:hud && npm run smoke:reh_api",
+    "gate:quick": "npm run lint && npm run types && npm test",
     "smoke:fast": "node tools/asr_smoke.js && node tools/rec_smoke.js",
     "test:save-ci": "node tools/test_save_ci.js",
     "test:obs-scene-ci": "node tools/test_obs_scene_ci.js",

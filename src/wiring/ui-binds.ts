@@ -66,9 +66,11 @@ export function toggleOverlay(name: OverlayName, on?: boolean) {
     if (want) {
       try { (document.body as any).dataset.smokeOpen = name; } catch {}
       try { document.body.setAttribute('data-smoke-open', name); } catch {}
+      try { document.body.style.overflow = 'hidden'; } catch {}
     } else {
       try { delete (document.body as any).dataset.smokeOpen; } catch {}
       try { document.body.removeAttribute('data-smoke-open'); } catch {}
+      try { document.body.style.overflow = ''; } catch {}
     }
 
     // Dispatch overlay lifecycle events for downstream wiring (tabs, camera, etc.)
@@ -747,10 +749,21 @@ export function ensureSettingsTabsWiring() {
   tabs.forEach((t, i) => {
     if (!t.id) t.id = `tab-${t.dataset.tab || i}`;
     const name = (t.dataset.tab || t.id.replace(/^tab-/, '')).toString();
+    // ensure data-tab attribute exists canonically
+    if (!t.dataset.tab) t.dataset.tab = name;
+    // find / normalize panel
     const panel =
       overlay.querySelector<HTMLElement>(`[role="tabpanel"][data-tabpanel="${name}"], .settings-card[data-tab="${name}"]`);
-    if (panel) panel.setAttribute('aria-labelledby', t.id);
+    if (panel) {
+      // assign canonical attributes
+      panel.setAttribute('aria-labelledby', t.id);
+      panel.setAttribute('data-tabpanel', name);
+      if (!panel.id) panel.id = `settings-panel-${name}`;
+      try { t.setAttribute('aria-controls', panel.id); } catch {}
+    }
     t.setAttribute('role', 'tab');
+    // defense in depth: remove rogue actions
+    t.removeAttribute('data-action');
   });
 
   const indexOf = (tab: HTMLElement) => tabs.indexOf(tab);
@@ -807,6 +820,17 @@ export function ensureSettingsTabsWiring() {
     tabs[next].focus();
   }, { capture: true });
 }
+
+// Defense in depth: strip any rogue data-action attributes from tabs at module load.
+try {
+  document.querySelectorAll('[role="tab"],.settings-tab').forEach(el => el.removeAttribute('data-action'));
+} catch {}
+
+// Gate emergency binder to harness/dev contexts only
+try {
+  const isHarness = /[?&](dev|ci|uiMock|mockFolder)=1/.test(location.search) || ((navigator as any).webdriver === true);
+  if (isHarness) { try { installEmergencyBinder(); } catch {} }
+} catch {}
 
 // Map <option value> → internal UiScrollMode (see index.ts applyUiScrollMode)
 function mapScrollValue(v: string): 'auto'|'asr'|'step'|'rehearsal'|'off' {
