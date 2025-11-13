@@ -58,7 +58,6 @@ export function toggleOverlay(name: OverlayName, on?: boolean) {
         el.hidden = false;
         el.classList.remove('hidden','visually-hidden');
         try { el.style.setProperty('display','block','important'); } catch { el.style.display = 'block'; }
-        if (name === 'settings') { try { (window as any).ensureSettingsTabsWiring?.(); } catch {} }
       } else {
         try { el.style.setProperty('display','none','important'); } catch { el.style.display = 'none'; }
         el.hidden = true;
@@ -70,6 +69,17 @@ export function toggleOverlay(name: OverlayName, on?: boolean) {
     } else {
       try { delete (document.body as any).dataset.smokeOpen; } catch {}
       try { document.body.removeAttribute('data-smoke-open'); } catch {}
+    }
+
+    // Dispatch overlay lifecycle events for downstream wiring (tabs, camera, etc.)
+    try {
+      const evName = `tp:${name}:${want ? 'open' : 'close'}`;
+      window.dispatchEvent(new CustomEvent(evName, { detail: { source: 'toggler' } }));
+    } catch {}
+
+    // After listeners run, wire tabs on settings open (microtask to allow DOM updates)
+    if (name === 'settings' && want) {
+      try { queueMicrotask(() => { try { (window as any).ensureSettingsTabsWiring?.(); } catch {} }); } catch {}
     }
   } catch {}
 }
