@@ -97,6 +97,10 @@ Open `teleprompter_pro.html` in a modern browser (Chromium-based recommended). G
 
 There is a small `tools/` folder with developer helpers (Puppeteer runner, safe pre-commit helper). See `TOOLS-README.md` for usage and installation instructions.
 
+## Design docs
+
+- Sitemap & Wireframes: see `docs/sitemap-wireframes.md` for the current IA and low‑fi ASCII wireframes.
+
 ## Troubleshooting
 
 - If the camera doesn’t start automatically on iOS, tap the video area to trigger playback.
