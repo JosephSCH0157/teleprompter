@@ -6,6 +6,25 @@
 
 ## Sitemap (Information Architecture)
 
+### Mermaid Sitemap
+
+```mermaid
+flowchart TD
+  A[Home / App Shell]
+  A --> TP[Teleprompter (Main)]
+  TP --> STG[Settings Overlay]
+  STG --> STG_G[General]
+  STG --> STG_M[Media]
+  STG --> STG_R[Recording]
+  STG --> STG_A[Advanced]
+  TP --> HELP[Help / Shortcuts]
+  TP --> DISP[Display Window (?display=1)]
+  TP --> SCRIPTS[Scripts Sidebar]
+  SCRIPTS --> MAP[Mapped Folder Picker]
+  SCRIPTS --> UP[Upload (.txt/.docx)]
+  SCRIPTS --> SAVE[Save / Save As / Download]
+```
+
 - **Landing / Marketing** _(future/optional)_
   - Hero (value prop, Try Anvil)
   - Features (Teleprompter, Display, ASR/Hybrid, Mapped Folder)
