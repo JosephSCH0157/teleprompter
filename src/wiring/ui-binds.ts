@@ -22,6 +22,104 @@ export interface CoreUIBindOptions {
   presentBtn?: string;            // Present mode toggle button (supports CSS list)
 }
 
+// --- Overlay bootstrap (globals + toggler + click delegator) ---
+type OverlayName = 'settings' | 'help';
+
+const OVERSEL: Record<OverlayName, string> = {
+  settings: `[data-overlay="settings"], #settingsOverlay`,
+  help:     `[data-overlay="help"], #helpOverlay, #shortcutsOverlay`,
+};
+
+function ensureOverlaysExist() {
+  try {
+    const root = document.body || document.documentElement;
+    if (root && !root.querySelector(OVERSEL.settings)) {
+      root.insertAdjacentHTML(
+        'beforeend',
+        `<div id="settingsOverlay" data-overlay="settings" role="dialog" aria-modal="true" style="display:none"></div>`
+      );
+    }
+    if (root && !root.querySelector(OVERSEL.help)) {
+      root.insertAdjacentHTML(
+        'beforeend',
+        `<div id="helpOverlay" data-overlay="help" role="dialog" aria-modal="true" style="display:none"></div>`
+      );
+    }
+  } catch {}
+}
+
+export function toggleOverlay(name: OverlayName, on?: boolean) {
+  try {
+    const list = Array.from(document.querySelectorAll<HTMLElement>(OVERSEL[name]));
+    if (!list.length) return;
+    const want = on ?? list.some(el => el.hidden || getComputedStyle(el).display === 'none');
+    for (const el of list) {
+      if (want) {
+        el.hidden = false;
+        el.classList.remove('hidden','visually-hidden');
+        try { el.style.setProperty('display','block','important'); } catch { el.style.display = 'block'; }
+        if (name === 'settings') { try { (window as any).ensureSettingsTabsWiring?.(); } catch {} }
+      } else {
+        try { el.style.setProperty('display','none','important'); } catch { el.style.display = 'none'; }
+        el.hidden = true;
+      }
+    }
+    if (want) {
+      try { (document.body as any).dataset.smokeOpen = name; } catch {}
+      try { document.body.setAttribute('data-smoke-open', name); } catch {}
+    } else {
+      try { delete (document.body as any).dataset.smokeOpen; } catch {}
+      try { document.body.removeAttribute('data-smoke-open'); } catch {}
+    }
+  } catch {}
+}
+
+function installOverlayDelegatorOnce() {
+  try {
+    if ((document as any).__tpOLBound) return;
+    document.addEventListener('click', (ev) => {
+      try {
+        const t = ev.target as HTMLElement | null;
+        const btn = t?.closest?.('[data-action], #settingsBtn, #shortcutsBtn, #settingsClose, #helpClose') as HTMLElement | null;
+        if (!btn) return;
+        const act = (btn.dataset?.action
+          || (btn.id === 'settingsBtn'   && 'settings-open')
+          || (btn.id === 'shortcutsBtn'  && 'help-open')
+          || (btn.id === 'settingsClose' && 'settings-close')
+          || (btn.id === 'helpClose'     && 'help-close')
+          || '') as string;
+        if (act === 'settings-open')  { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('settings', true); }
+        if (act === 'settings-close') { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('settings', false); }
+        if (act === 'help-open')      { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('help', true); }
+        if (act === 'help-close')     { try { ev.preventDefault?.(); } catch {}; return toggleOverlay('help', false); }
+      } catch {}
+    }, { capture: true });
+
+    document.addEventListener('keydown', (ev) => {
+      try {
+        if ((ev as KeyboardEvent).key !== 'Escape') return;
+        const open = document.body.getAttribute('data-smoke-open') as OverlayName | null;
+        if (open) toggleOverlay(open, false);
+      } catch {}
+    }, { capture: true });
+
+    (document as any).__tpOLBound = true;
+  } catch {}
+}
+
+declare global {
+  interface Window {
+    __tpOpen?: (name: OverlayName)  => void;
+    __tpClose?: (name: OverlayName) => void;
+  }
+}
+try { if (!(window as any).__tpOpen)  (window as any).__tpOpen  = (n: OverlayName) => toggleOverlay(n, true); } catch {}
+try { if (!(window as any).__tpClose) (window as any).__tpClose = (n: OverlayName) => toggleOverlay(n, false); } catch {}
+
+// init immediately so they exist even if other binders fail
+try { ensureOverlaysExist(); } catch {}
+try { installOverlayDelegatorOnce(); } catch {}
+
 // Minimal media store for mic/camera fallbacks
 const mediaStore: { mic?: MediaStream | null; cam?: MediaStream | null } = { mic: null, cam: null };
 
@@ -371,103 +469,8 @@ function toggleOverlayList(list: readonly string[], show?: boolean, kind?: 'sett
   } catch {}
 }
 
-// --- Overlay utils (Settings / Help) ---
-function findOverlays(name: 'settings'|'help'): HTMLElement[] {
-  try {
-    const sel = [
-      `[data-overlay="${name}"]`,
-      name === 'settings' ? '#settingsOverlay' : '#helpOverlay',
-      name === 'help' ? '#shortcutsOverlay' : '',
-    ].filter(Boolean).join(',');
-    return Array.from(document.querySelectorAll<HTMLElement>(sel));
-  } catch { return []; }
-}
-
-function showOverlay(el: HTMLElement) {
-  try {
-    el.hidden = false;
-    el.style.display = 'block';
-    el.setAttribute('role','dialog');
-    el.setAttribute('aria-modal','true');
-  } catch {}
-}
-
-function hideOverlay(el: HTMLElement) {
-  try {
-    el.hidden = true;
-    el.style.display = 'none';
-    el.removeAttribute('aria-modal');
-  } catch {}
-}
-
-// Name-based overlay toggler, deterministic signals for smoke/debug, idempotent ESC
-export function toggleOverlay(name: 'settings'|'help', on: boolean) {
-  try {
-    const list = findOverlays(name);
-    if (!list.length) return;
-    list.forEach(on ? showOverlay : hideOverlay);
-    // deterministic smoke/debug latch
-    const b: any = document.body;
-    if (on) {
-      try { b.dataset.smokeOpen = name as any; } catch {}
-      try { document.body.setAttribute('data-smoke-open', name); } catch {}
-    } else {
-      try { if (b.dataset.smokeOpen === name) delete b.dataset.smokeOpen; } catch {}
-      try { if (document.body.getAttribute('data-smoke-open') === name) document.body.removeAttribute('data-smoke-open'); } catch {}
-    }
-
-    // (re)wire tabs each time Settings opens
-    if (name === 'settings' && on) {
-      try { queueMicrotask(() => { try { (window as any).ensureSettingsTabsWiring?.(); } catch {} }); } catch {}
-    }
-
-    // Fire open/close events for listeners
-    try { window.dispatchEvent(new CustomEvent(`tp:${name}:${on ? 'open' : 'close'}`, { detail: { source: 'binder' } })); } catch {}
-
-    // ESC to close (idempotent)
-    if (!(window as any).__tpEscBound) {
-      (window as any).__tpEscBound = 1;
-      window.addEventListener('keydown', (e: KeyboardEvent) => {
-        try {
-          if (e.key !== 'Escape') return;
-          const open = (document.body as any)?.dataset?.smokeOpen as ('settings'|'help'|undefined);
-          if (open) { try { e.preventDefault?.(); } catch {}; toggleOverlay(open, false); }
-        } catch {}
-      }, { capture: true });
-    }
-  } catch {}
-}
-// Console helpers (handy during dev)
-try { (window as any).__tpOpen  = (name: 'settings'|'help') => toggleOverlay(name, true); } catch {}
-try { (window as any).__tpClose = (name: 'settings'|'help') => toggleOverlay(name, false); } catch {}
-
-// --- Hot-fix: explicit overlay button wiring (idempotent) ---
-export function installOverlayButtonWiringOnce() {
-  try {
-    if ((document as any).__tpOLDelegated) return;
-    (document as any).__tpOLDelegated = 1;
-    document.addEventListener('click', (ev) => {
-      try {
-        const t = ev.target as HTMLElement | null;
-        const btn = t?.closest?.('[data-action],button,[role="button"],#settingsBtn,#shortcutsBtn,#settingsClose,#helpClose') as HTMLElement | null;
-        if (!btn) return;
-        const act = (btn.dataset?.action ||
-          (/^settingsBtn$/.test(btn.id) ? 'settings-open'
-          : /^shortcutsBtn$/.test(btn.id) ? 'help-open'
-          : /^settingsClose$/.test(btn.id) ? 'settings-close'
-          : /^helpClose$/.test(btn.id) ? 'help-close'
-          : '')) as string;
-        switch (act) {
-          case 'settings-open': ev.preventDefault(); toggleOverlay('settings', true);  break;
-          case 'settings-close': ev.preventDefault(); toggleOverlay('settings', false); break;
-          case 'help-open':     ev.preventDefault(); toggleOverlay('help', true);      break;
-          case 'help-close':    ev.preventDefault(); toggleOverlay('help', false);     break;
-          default: return;
-        }
-      } catch {}
-    }, { capture: true });
-  } catch {}
-}
+// Compatibility export: still provide this for callers; delegates to the bootstrap installer
+export function installOverlayButtonWiringOnce() { try { installOverlayDelegatorOnce(); } catch {} }
 
 function downloadNow(name: string, text: string, ext?: string) {
   try {
