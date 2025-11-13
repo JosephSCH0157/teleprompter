@@ -712,25 +712,21 @@ export async function initBuiltIns() {
   try {
     // Attempt to load and register built-in adapters. Each is optional.
     const adapters = [];
-    // Only preload legacy network-based adapters when TS is NOT primary
-    let __tsPrimary = false; try { __tsPrimary = !!(typeof window !== 'undefined' && (window).__TP_TS_PRIMARY__); } catch {}
-    if (!__tsPrimary) {
-      try {
-        const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/bridge.js'));
-        const a = m?.createBridgeAdapter?.();
-        if (a) adapters.push(a);
-      } catch {}
-      try {
-        const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/obs.js'));
-        const a = m?.createOBSAdapter?.();
-        if (a) adapters.push(a);
-      } catch {}
-      try {
-        const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/hotkey.js'));
-        const aPrem = m?.createHotkeyAdapter?.('premiere', 'Adobe Premiere Pro');
-        if (aPrem) adapters.push(aPrem);
-      } catch {}
-    }
+    try {
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/bridge.js'));
+      const a = m?.createBridgeAdapter?.();
+      if (a) adapters.push(a);
+    } catch {}
+    try {
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/obs.js'));
+      const a = m?.createOBSAdapter?.();
+      if (a) adapters.push(a);
+    } catch {}
+    try {
+      const m = await import((window.__TP_ADDV || ((p) => p))('./adapters/hotkey.js'));
+      const aPrem = m?.createHotkeyAdapter?.('premiere', 'Adobe Premiere Pro');
+      if (aPrem) adapters.push(aPrem);
+    } catch {}
     try {
       // If obsBridge exists, register a thin adapter that delegates to it. This keeps
       // backwards compatibility for code that expects an adapter with id 'obs'.
