@@ -79,7 +79,7 @@ export function toggleOverlay(name: OverlayName, on?: boolean) {
 
     // After listeners run, wire tabs on settings open (microtask to allow DOM updates)
     if (name === 'settings' && want) {
-      try { queueMicrotask(() => { try { (window as any).ensureSettingsTabsWiring?.(); } catch {} }); } catch {}
+      try { queueMicrotask(() => ensureSettingsTabsWiring()); } catch {}
     }
   } catch {}
 }
@@ -89,6 +89,12 @@ function installOverlayDelegatorOnce() {
     if ((document as any).__tpOLBound) return;
     document.addEventListener('click', (ev) => {
       try {
+        // Guard: ignore tab interactions; inside overlays only act on explicit close buttons
+        const el = ev.target as Element;
+        if (el.closest('[role="tab"], .settings-tab')) return;
+        if (el.closest('#settingsOverlay,[data-overlay="settings"],#shortcutsOverlay,[data-overlay="help"]')) {
+          if (!el.closest('[data-action="settings-close"],#settingsClose,[data-action="help-close"],#helpClose')) return;
+        }
         const t = ev.target as HTMLElement | null;
         const btn = t?.closest?.('[data-action], #settingsBtn, #shortcutsBtn, #settingsClose, #helpClose') as HTMLElement | null;
         if (!btn) return;
@@ -487,13 +493,13 @@ export function installEmergencyBinder() {
 
     document.addEventListener('click', async (evt) => {
       try {
-        const target = evt.target as Element | null;
-        // Do not hijack clicks inside overlays or on ARIA tabs (Settings/Help UI owns these)
-        try {
-          const withinOverlay = (target as HTMLElement | null)?.closest?.('[data-overlay="settings"],#settingsOverlay,[data-overlay="help"],#helpOverlay,#shortcutsOverlay');
-          const isAriaTab = (target as HTMLElement | null)?.closest?.('[role="tab"]');
-          if (withinOverlay || isAriaTab) return;
-        } catch {}
+        const el = evt.target as Element;
+        if (el.closest('[role="tab"], .settings-tab')) return; // let tab wiring handle it
+        if (el.closest('#settingsOverlay,[data-overlay="settings"],#shortcutsOverlay,[data-overlay="help"]')) {
+          // inside overlays, only handle explicit close buttons
+          if (!el.closest('[data-action="settings-close"],#settingsClose,[data-action="help-close"],#helpClose')) return;
+        }
+        const target = el;
         const hit = closestAction(target);
         if (!hit) return;
         const { action } = hit;
@@ -700,142 +706,107 @@ export function installEmergencyBinder() {
   try { ensureSettingsTabsWiring(); } catch {}
 }
 
-// Lightweight settings tabs activation (fallback if primary wiring missing)
-// Ensures clicking a .settings-tab button marks it active and shows only cards matching data-tab.
-// Cards are elements inside #settingsBody with data-tab attr (injected dynamically by features).
-// ---------- SETTINGS TABS Wiring (robust + idempotent) ----------
-type TabEl = HTMLElement & { id: string };
-const SETTINGS_BIND_MARK = Symbol.for('tp.settings.bound');
-const SETTINGS_LAST_KEY = 'tp_settings_last_tab';
+// --- Settings tabs: robust, idempotent wiring ---
+export function ensureSettingsTabsWiring() {
+  const overlay =
+    document.querySelector<HTMLElement>('#settingsOverlay,[data-overlay="settings"]');
+  if (!overlay) return;
 
-function qs<T extends Element = Element>(sel: string, root: ParentNode = document) {
-  try { return Array.from(root.querySelectorAll<T>(sel)); } catch { return []; }
-}
-function ensureId(el: HTMLElement, prefix: string) {
-  if (!el.id) el.id = `${prefix}-${Math.random().toString(36).slice(2, 8)}`; return el.id;
-}
-function show(el: HTMLElement) { try { el.hidden = false; el.style.display = 'block'; } catch {} }
-function hide(el: HTMLElement) { try { el.hidden = true;  el.style.display = 'none'; } catch {} }
+  // run once per DOM session
+  if ((overlay as any).__tabsWired) return;
+  (overlay as any).__tabsWired = true;
 
-export function ensureSettingsTabsWiring(): boolean {
-  const root = document.querySelector<HTMLElement>('[data-overlay="settings"], #settingsOverlay');
-  if (!root) return false;
+  // prefer role-based markup, fall back to legacy
+  const tablist =
+    overlay.querySelector<HTMLElement>('[role="tablist"]') ||
+    overlay.querySelector<HTMLElement>('#settingsTabs');
 
-  if ((root as any)[SETTINGS_BIND_MARK]) return true;
+  const tabs = Array.from(
+    overlay.querySelectorAll<HTMLElement>('[role="tab"], .settings-tab')
+  );
 
-  const tablist = (root.querySelector<HTMLElement>('[role="tablist"], #settingsTabs') || root) as HTMLElement;
-  let tabs = qs<TabEl>('[role="tab"], .settings-tab', tablist);
-  let panels = qs<HTMLElement>('[role="tabpanel"][data-tabpanel], .settings-card[data-tab]', root);
+  const panels = Array.from(
+    overlay.querySelectorAll<HTMLElement>(
+      '[role="tabpanel"][data-tabpanel], .settings-card[data-tab]'
+    )
+  ).map(p => {
+    // normalize role/attrs
+    p.setAttribute('role', 'tabpanel');
+    if (!p.hasAttribute('data-tabpanel') && (p as any).dataset.tab) {
+      p.setAttribute('data-tabpanel', (p as any).dataset.tab!);
+    }
+    return p;
+  });
 
-  if (!tabs.length || !panels.length) {
-    let tries = 0;
-    const tick = () => {
-      if ((root as any)[SETTINGS_BIND_MARK]) return;
-      tabs = qs<TabEl>('[role="tab"], .settings-tab', root);
-      panels = qs<HTMLElement>('[role="tabpanel"][data-tabpanel], .settings-card[data-tab]', root);
-      if (tabs.length && panels.length) {
-        (root as any)[SETTINGS_BIND_MARK] = true;
-        _bind(tabs, panels, tablist);
-      } else if (++tries < 10) {
-        requestAnimationFrame(tick);
-      }
-    };
-    requestAnimationFrame(tick);
-    return false;
-  }
+  if (!tabs.length) return;
 
-  (root as any)[SETTINGS_BIND_MARK] = true;
-  _bind(tabs, panels, tablist);
-  return true;
+  // tabs must not be treated as feature buttons
+  tabs.forEach(t => t.removeAttribute('data-action'));
 
-  function _bind(tabs: TabEl[], panels: HTMLElement[], tablist: HTMLElement) {
-    try { tablist.setAttribute('role','tablist'); } catch {}
-    tabs.forEach((t, i) => {
-      try { t.setAttribute('role','tab'); } catch {}
-      ensureId(t, 'tp-tab');
-      t.tabIndex = -1;
-      const name = t.getAttribute('data-tab') || (t.textContent?.trim() || `tab-${i}`);
-      const panel = panels.find(p => p.getAttribute('data-tab') === name) || panels[i] || panels[0];
-      if (panel) {
-        ensureId(panel as HTMLElement, 'tp-panel');
-        try { panel.setAttribute('role','tabpanel'); } catch {}
-        try { panel.setAttribute('data-tabpanel',''); } catch {}
-        try { t.setAttribute('aria-controls', (panel as HTMLElement).id); } catch {}
-        try { (panel as HTMLElement).setAttribute('aria-labelledby', t.id); } catch {}
-      }
+  // ensure each tab has a stable id + aria-controls
+  tabs.forEach((t, i) => {
+    if (!t.id) t.id = `tab-${t.dataset.tab || i}`;
+    const name = (t.dataset.tab || t.id.replace(/^tab-/, '')).toString();
+    const panel =
+      overlay.querySelector<HTMLElement>(`[role="tabpanel"][data-tabpanel="${name}"], .settings-card[data-tab="${name}"]`);
+    if (panel) panel.setAttribute('aria-labelledby', t.id);
+    t.setAttribute('role', 'tab');
+  });
+
+  const indexOf = (tab: HTMLElement) => tabs.indexOf(tab);
+
+  const show = (idx: number) => {
+    const clamped = Math.max(0, Math.min(idx, tabs.length - 1));
+    const activeTab = tabs[clamped];
+    const name = (activeTab.dataset.tab || activeTab.id.replace(/^tab-/, '')).toString();
+
+    tabs.forEach((t, j) => {
+      const on = j === clamped;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
     });
 
-    tablist.addEventListener('click', (ev) => {
-      const t = (ev.target as HTMLElement | null)?.closest?.('[role="tab"], .settings-tab') as TabEl | null;
-      if (!t) return;
-      activateTab(t, tabs, panels);
-      try { (t as any).focus?.(); } catch {}
-    }, { capture: true });
+    panels.forEach(p => {
+      const hit =
+        p.getAttribute('data-tabpanel') === name ||
+        (p as any).dataset.tab === name;
+      p.toggleAttribute('hidden', !hit);
+    });
 
-    tablist.addEventListener('keydown', (ev: KeyboardEvent) => {
-      const cur = document.activeElement as TabEl | null;
-      if (!cur || !tabs.includes(cur)) return;
-      let idx = tabs.indexOf(cur);
-      if (ev.key === 'ArrowRight') idx = (idx + 1) % tabs.length;
-      else if (ev.key === 'ArrowLeft') idx = (idx - 1 + tabs.length) % tabs.length;
-      else if (ev.key === 'Home') idx = 0;
-      else if (ev.key === 'End') idx = tabs.length - 1;
-      else return;
-      ev.preventDefault();
-      activateTab(tabs[idx], tabs, panels);
-      try { tabs[idx].focus(); } catch {}
-    }, { capture: true });
+    // handy for smoke/debug
+    (overlay as any).dataset.activeTab = name;
+    window.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { name } }));
+  };
 
-    const last = (() => { try { return localStorage.getItem(SETTINGS_LAST_KEY) || ''; } catch { return ''; } })();
-    const initial = tabs.find(t => (t.getAttribute('data-tab') || t.textContent?.trim()) === last) || tabs[0];
-    if (initial) activateTab(initial, tabs, panels);
-  }
+  // initial state: if multiple were "active", collapse to the first
+  const firstActive = Math.max(0, tabs.findIndex(t => t.classList.contains('active')));
+  show(firstActive);
+
+  // click: capture so nothing upstream swallows it
+  tablist?.addEventListener('click', (e: MouseEvent) => {
+    const t = (e.target as Element).closest('[role="tab"], .settings-tab') as HTMLElement | null;
+    if (!t) return;
+    e.preventDefault();
+    show(indexOf(t));
+  }, { capture: true });
+
+  // keyboard: Arrow/Home/End
+  tablist?.addEventListener('keydown', (e: KeyboardEvent) => {
+    const current = indexOf(document.activeElement as HTMLElement);
+    if (current < 0) return;
+    let next = current;
+    if (e.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else return;
+
+    e.preventDefault();
+    show(next);
+    tabs[next].focus();
+  }, { capture: true });
 }
-
-function activateTab(tab: TabEl, tabs: TabEl[], panels: HTMLElement[]) {
-  const name = tab.getAttribute('data-tab') || tab.textContent?.trim() || '';
-  const panelId = tab.getAttribute('aria-controls') || (panels.find(p => p.getAttribute('data-tab') === name)?.id) || panels[0]?.id || '';
-
-  tabs.forEach(t => { try { t.setAttribute('aria-selected','false'); t.tabIndex = -1; t.classList.remove('active'); } catch {} });
-  panels.forEach(p => hide(p));
-
-  try { tab.setAttribute('aria-selected','true'); } catch {}
-  tab.tabIndex = 0; try { tab.classList.add('active'); } catch {}
-
-  if (panelId) { const panel = document.getElementById(panelId) as HTMLElement | null; if (panel) show(panel); }
-
-  try { window.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { name } })); } catch {}
-  try { localStorage.setItem(SETTINGS_LAST_KEY, name); } catch {}
-}
-
-// Expose tabs wiring on window for overlay toggler compatibility
-try { (window as any).ensureSettingsTabsWiring = ensureSettingsTabsWiring; } catch {}
-
-// Ensure settings tabs wiring runs whenever Settings opens
-try {
-  window.addEventListener('tp:settings:open', () => {
-    try { queueMicrotask(() => { try { ensureSettingsTabsWiring(); } catch {} }); } catch {}
-    // Wire camera picker & refresh devices, and auto-start first camera selection
-    try {
-      queueMicrotask(() => {
-        try {
-          const p = refreshCameras();
-          Promise.resolve(p).then(() => {
-            const sel = document.querySelector<HTMLSelectElement>('#cameraSelect');
-            if (sel && sel.options.length && !sel.dataset._tpPrimed) {
-              sel.dataset._tpPrimed = '1';
-              try { startCameraById(sel.value); } catch {}
-            }
-            sel?.addEventListener('change', e => startCameraById((e.target as HTMLSelectElement).value), { once: true });
-          }).catch(()=>{
-            const sel = document.querySelector<HTMLSelectElement>('#cameraSelect');
-            sel?.addEventListener('change', e => startCameraById((e.target as HTMLSelectElement).value), { once: true });
-          });
-        } catch {}
-      });
-    } catch {}
-  });
-} catch {}
 
 // Map <option value> → internal UiScrollMode (see index.ts applyUiScrollMode)
 function mapScrollValue(v: string): 'auto'|'asr'|'step'|'rehearsal'|'off' {
