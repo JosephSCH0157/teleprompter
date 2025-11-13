@@ -1,5 +1,5 @@
 // Polyfills for jsdom environment under Jest
-import { TextEncoder, TextDecoder } from 'util';
+import { TextDecoder, TextEncoder } from 'util';
 
 // @ts-ignore
 if (!(global as any).TextEncoder) (global as any).TextEncoder = TextEncoder;
