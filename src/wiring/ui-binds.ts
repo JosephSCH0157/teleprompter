@@ -738,72 +738,109 @@ export function installEmergencyBinder() {
 // Lightweight settings tabs activation (fallback if primary wiring missing)
 // Ensures clicking a .settings-tab button marks it active and shows only cards matching data-tab.
 // Cards are elements inside #settingsBody with data-tab attr (injected dynamically by features).
-function ensureSettingsTabsWiring() {
-  try {
-    const tabsWrap = document.getElementById('settingsTabs');
-    if (!tabsWrap) return;
-    if ((tabsWrap as any)._tabsWired) return; (tabsWrap as any)._tabsWired = 1;
+// ---------- SETTINGS TABS Wiring (robust + idempotent) ----------
+type TabEl = HTMLElement & { id: string };
+const SETTINGS_BIND_MARK = Symbol.for('tp.settings.bound');
+const SETTINGS_LAST_KEY = 'tp_settings_last_tab';
 
-    // Ensure container role
-    try { if (!tabsWrap.getAttribute('role')) tabsWrap.setAttribute('role', 'tablist'); } catch {}
+function qs<T extends Element = Element>(sel: string, root: ParentNode = document) {
+  try { return Array.from(root.querySelectorAll<T>(sel)); } catch { return []; }
+}
+function ensureId(el: HTMLElement, prefix: string) {
+  if (!el.id) el.id = `${prefix}-${Math.random().toString(36).slice(2, 8)}`; return el.id;
+}
+function show(el: HTMLElement) { try { el.hidden = false; el.style.display = 'block'; } catch {} }
+function hide(el: HTMLElement) { try { el.hidden = true;  el.style.display = 'none'; } catch {} }
 
-    // Prefer role="tab" buttons, fallback to .settings-tab
-    let tabs = Array.from(tabsWrap.querySelectorAll('[role="tab"]')) as HTMLElement[];
-    if (!tabs.length) tabs = Array.from(tabsWrap.querySelectorAll('.settings-tab')) as HTMLElement[];
-    if (!tabs.length) return;
+export function ensureSettingsTabsWiring(): boolean {
+  const root = document.querySelector<HTMLElement>('[data-overlay="settings"], #settingsOverlay');
+  if (!root) return false;
 
-    const body = document.getElementById('settingsBody') as HTMLElement | null;
-    // Panels: prefer [role=tabpanel][data-tabpanel], fallback to .settings-card[data-tab]
-    const allPanels = Array.from((body || document).querySelectorAll('[role="tabpanel"][data-tabpanel], .settings-card[data-tab]')) as HTMLElement[];
+  if ((root as any)[SETTINGS_BIND_MARK]) return true;
 
-    function panelFor(name: string): HTMLElement | null {
-      const p = allPanels.find(p => (p.getAttribute('data-tabpanel') || (p as any).dataset?.tab) === name) || null;
-      return p || null;
-    }
+  const tablist = (root.querySelector<HTMLElement>('[role="tablist"], #settingsTabs') || root) as HTMLElement;
+  let tabs = qs<TabEl>('[role="tab"], .settings-tab', tablist);
+  let panels = qs<HTMLElement>('[role="tabpanel"][data-tabpanel], .settings-card[data-tab]', root);
 
-    // Normalize roles/ids/relations
-    tabs.forEach((btn) => {
-      try { if (!btn.getAttribute('role')) btn.setAttribute('role', 'tab'); } catch {}
-      const name = btn.dataset.tab || btn.getAttribute('data-tab') || 'general';
-      if (!btn.id) btn.id = `tab-${name}`;
-      const p = panelFor(name);
-      if (p) {
-        try { if (!p.getAttribute('role')) p.setAttribute('role', 'tabpanel'); } catch {}
-        if (!p.id) p.id = `panel-${name}`;
-        try { p.setAttribute('aria-labelledby', btn.id); } catch {}
-        try { btn.setAttribute('aria-controls', p.id); } catch {}
+  if (!tabs.length || !panels.length) {
+    let tries = 0;
+    const tick = () => {
+      if ((root as any)[SETTINGS_BIND_MARK]) return;
+      tabs = qs<TabEl>('[role="tab"], .settings-tab', root);
+      panels = qs<HTMLElement>('[role="tabpanel"][data-tabpanel], .settings-card[data-tab]', root);
+      if (tabs.length && panels.length) {
+        (root as any)[SETTINGS_BIND_MARK] = true;
+        _bind(tabs, panels, tablist);
+      } else if (++tries < 10) {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+    return false;
+  }
+
+  (root as any)[SETTINGS_BIND_MARK] = true;
+  _bind(tabs, panels, tablist);
+  return true;
+
+  function _bind(tabs: TabEl[], panels: HTMLElement[], tablist: HTMLElement) {
+    try { tablist.setAttribute('role','tablist'); } catch {}
+    tabs.forEach((t, i) => {
+      try { t.setAttribute('role','tab'); } catch {}
+      ensureId(t, 'tp-tab');
+      t.tabIndex = -1;
+      const name = t.getAttribute('data-tab') || (t.textContent?.trim() || `tab-${i}`);
+      const panel = panels.find(p => p.getAttribute('data-tab') === name) || panels[i] || panels[0];
+      if (panel) {
+        ensureId(panel as HTMLElement, 'tp-panel');
+        try { panel.setAttribute('role','tabpanel'); } catch {}
+        try { panel.setAttribute('data-tabpanel',''); } catch {}
+        try { t.setAttribute('aria-controls', (panel as HTMLElement).id); } catch {}
+        try { (panel as HTMLElement).setAttribute('aria-labelledby', t.id); } catch {}
       }
     });
 
-    function activate(name: string) {
-      tabs.forEach((btn) => {
-        const isOn = (btn.dataset.tab || btn.getAttribute('data-tab') || 'general') === name;
-        btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
-        btn.tabIndex = isOn ? 0 : -1;
-        btn.classList.toggle('active', isOn);
-        const p = panelFor(btn.dataset.tab || '');
-        if (p) p.hidden = !isOn;
-      });
-      try { window.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { name } })); } catch {}
-    }
+    tablist.addEventListener('click', (ev) => {
+      const t = (ev.target as HTMLElement | null)?.closest?.('[role="tab"], .settings-tab') as TabEl | null;
+      if (!t) return;
+      activateTab(t, tabs, panels);
+      try { (t as any).focus?.(); } catch {}
+    }, { capture: true });
 
-    tabs.forEach((btn) => {
-      btn.addEventListener('click', () => activate(btn.dataset.tab || 'general'), { passive: true });
-      btn.addEventListener('keydown', (e: KeyboardEvent) => {
-        const i = tabs.indexOf(btn);
-        if (e.key === 'ArrowRight') { tabs[(i + 1) % tabs.length].click(); }
-        else if (e.key === 'ArrowLeft') { tabs[(i - 1 + tabs.length) % tabs.length].click(); }
-        else if (e.key === 'Home') { tabs[0].click(); }
-        else if (e.key === 'End') { tabs[tabs.length - 1].click(); }
-      }, { passive: true });
-    });
+    tablist.addEventListener('keydown', (ev: KeyboardEvent) => {
+      const cur = document.activeElement as TabEl | null;
+      if (!cur || !tabs.includes(cur)) return;
+      let idx = tabs.indexOf(cur);
+      if (ev.key === 'ArrowRight') idx = (idx + 1) % tabs.length;
+      else if (ev.key === 'ArrowLeft') idx = (idx - 1 + tabs.length) % tabs.length;
+      else if (ev.key === 'Home') idx = 0;
+      else if (ev.key === 'End') idx = tabs.length - 1;
+      else return;
+      ev.preventDefault();
+      activateTab(tabs[idx], tabs, panels);
+      try { tabs[idx].focus(); } catch {}
+    }, { capture: true });
 
-    const initActive = (() => {
-      const already = tabs.find((b) => b.getAttribute('aria-selected') === 'true');
-      return (already && (already.dataset.tab || already.getAttribute('data-tab'))) || 'general';
-    })();
-    activate(initActive);
-  } catch {}
+    const last = (() => { try { return localStorage.getItem(SETTINGS_LAST_KEY) || ''; } catch { return ''; } })();
+    const initial = tabs.find(t => (t.getAttribute('data-tab') || t.textContent?.trim()) === last) || tabs[0];
+    if (initial) activateTab(initial, tabs, panels);
+  }
+}
+
+function activateTab(tab: TabEl, tabs: TabEl[], panels: HTMLElement[]) {
+  const name = tab.getAttribute('data-tab') || tab.textContent?.trim() || '';
+  const panelId = tab.getAttribute('aria-controls') || (panels.find(p => p.getAttribute('data-tab') === name)?.id) || panels[0]?.id || '';
+
+  tabs.forEach(t => { try { t.setAttribute('aria-selected','false'); t.tabIndex = -1; t.classList.remove('active'); } catch {} });
+  panels.forEach(p => hide(p));
+
+  try { tab.setAttribute('aria-selected','true'); } catch {}
+  tab.tabIndex = 0; try { tab.classList.add('active'); } catch {}
+
+  if (panelId) { const panel = document.getElementById(panelId) as HTMLElement | null; if (panel) show(panel); }
+
+  try { window.dispatchEvent(new CustomEvent('tp:settings:tab', { detail: { name } })); } catch {}
+  try { localStorage.setItem(SETTINGS_LAST_KEY, name); } catch {}
 }
 
 // Expose tabs wiring on window for overlay toggler compatibility
