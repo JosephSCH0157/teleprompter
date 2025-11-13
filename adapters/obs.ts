@@ -27,7 +27,7 @@ export function createOBSAdapter() {
   // Dev tracing state
   var _candidateList = null;
   var _candidateIndex = 0;
-  var _lastAuthSent = null;
+  var _lastAuthSent: string | null = null;
   var _lastCandidateIndexUsed = null;
   var _retryingCandidates = false;
   // reconnect/backoff state
@@ -152,7 +152,7 @@ export function createOBSAdapter() {
               } catch {
                 // ignore
               }
-              var identify = { op: 1, d: { rpcVersion: 1 } };
+              var identify: { op: number; d: { rpcVersion: number; authentication?: string } } = { op: 1, d: { rpcVersion: 1 } };
               if (authInfo) {
                 // Read password without trimming or normalization. Prefer configured value, then cfg.getPass(), then DOM fallbacks.
                 var pass = '';
@@ -188,7 +188,7 @@ export function createOBSAdapter() {
                 }
                 if (!pass) {
                   try {
-                    ws.close(4009, 'password-empty');
+                    ws?.close(4009, 'password-empty');
                   } catch {
                     // ignore
                   }
@@ -211,7 +211,7 @@ export function createOBSAdapter() {
                   }
                   try {
                     window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-                    var ent = {
+                    var ent: { t: number; event: string; auth: boolean; identifyPayload?: any } = {
                       t: Date.now(),
                       event: 'identify-sent',
                       auth: !!identify.d.authentication,
@@ -227,7 +227,7 @@ export function createOBSAdapter() {
                   // failed to compute auth — set last error and close
                   _lastErr = exAuth;
                   try {
-                    ws.close(4009, 'auth-compute-failed');
+                    ws?.close(4009, 'auth-compute-failed');
                   } catch {
                     // ignore
                   }
@@ -235,7 +235,7 @@ export function createOBSAdapter() {
                 }
               }
               try {
-                ws.send(JSON.stringify(identify));
+                ws?.send(JSON.stringify(identify));
               } catch {
                 // ignore
               }
@@ -259,7 +259,7 @@ export function createOBSAdapter() {
               }
               if (testOnly) {
                 try {
-                  ws.close(1000, 'test-ok');
+                  ws?.close(1000, 'test-ok');
                 } catch {
                   // ignore
                 }
@@ -269,7 +269,7 @@ export function createOBSAdapter() {
           } catch (e) {
             _lastErr = e;
             try {
-              ws.close(4000, 'msg-parse-error');
+              ws?.close(4000, 'msg-parse-error');
             } catch {
               // ignore
             }
@@ -302,7 +302,7 @@ export function createOBSAdapter() {
               console.debug('[OBS-HS] socket close', e && e.code, e && e.reason);
             try {
               window.__obsHandshakeLog = window.__obsHandshakeLog || [];
-              var entry = {
+              var entry: any = {
                 t: Date.now(),
                 event: 'close',
                 code: (e && e.code) || 0,
@@ -415,17 +415,19 @@ export function createOBSAdapter() {
             return { success: true, url: u, results };
           }
         } catch (err) {
+          const msg = (err as any)?.message;
           results.push({
             url: u,
             ok: false,
-            error: String(err && err.message ? err.message : err),
+            error: msg ? String(msg) : String(err),
           });
         }
       } catch (outer) {
+        const msg = (outer as any)?.message;
         results.push({
           url: u,
           ok: false,
-          error: String(outer && outer.message ? outer.message : outer),
+          error: msg ? String(msg) : String(outer),
         });
       }
     }
@@ -433,7 +435,11 @@ export function createOBSAdapter() {
     return { success: false, results };
   }
   function getLastError(): string | null {
-    return _lastErr ? _lastErr.message || String(_lastErr) : null;
+    if (_lastErr == null) return null;
+    if (typeof _lastErr === 'object' && 'message' in (_lastErr as any)) {
+      return String(((_lastErr as any).message));
+    }
+    return String(_lastErr);
   }
 
   // Small runtime helper: from the page console call __recorder.get('obs').pokeStatusTest()

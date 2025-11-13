@@ -22,6 +22,11 @@ build/
 
 # Legacy CI-only stub outputs served dynamically by the smoke server; no files generated.
 
+# TS compat outputs (built from ./recorders.ts and ./adapters/*.ts)
+recorders.js
+adapters/bridge.js
+adapters/obs.js
+
 # Env
 .env
 .env.*
