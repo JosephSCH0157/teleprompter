@@ -239,7 +239,12 @@ const URL_TO_OPEN = RAW_URL;
       // Cheap E2E: assert CSS var changes propagate to display
       try {
         // Open settings so the builder mounts (ensures inputs exist)
-        await page.click('#settingsBtn');
+        try { await page.evaluate(() => { try { window.scrollTo(0,0); } catch {} }); } catch {}
+        try { await page.$eval('#settingsBtn, [data-action="settings-open"]', el => { try { el.scrollIntoView({ behavior: 'instant', block: 'center' }); } catch {} }); } catch {}
+        // Prefer DOM click to avoid hit-testing flakiness
+        try { await page.$eval('#settingsBtn, [data-action="settings-open"]', el => { try { el && el.click && el.click(); } catch {} }); } catch {}
+        // Fallback to action click
+        await page.click('#settingsBtn, [data-action="settings-open"]').catch(()=>{});
         await page.waitForSelector('#settingsBody');
         // Type font size into main field if present
         const hasMainFS = await page.$('#typoFontSize-main');
@@ -267,9 +272,12 @@ const URL_TO_OPEN = RAW_URL;
 
       // Guard: unlink by default; then link → mirror
       try {
-        const hasSettingsBtn = await page.$('#settingsBtn');
+        const hasSettingsBtn = await page.$('#settingsBtn, [data-action="settings-open"]');
         if (hasSettingsBtn) {
-          await page.click('#settingsBtn');
+          try { await page.evaluate(() => { try { window.scrollTo(0,0); } catch {} }); } catch {}
+          try { await page.$eval('#settingsBtn, [data-action="settings-open"]', el => { try { el.scrollIntoView({ behavior: 'instant', block: 'center' }); } catch {} }); } catch {}
+          try { await page.$eval('#settingsBtn, [data-action="settings-open"]', el => { try { el && el.click && el.click(); } catch {} }); } catch {}
+          await page.click('#settingsBtn, [data-action="settings-open"]').catch(()=>{});
           await page.waitForSelector('#settingsOverlay:not(.hidden)', { timeout: 2000 }).catch(()=>{});
           // Ensure Link is off by default
           const linkChecked = await page.$eval('#typoLink', el => el && el.checked);

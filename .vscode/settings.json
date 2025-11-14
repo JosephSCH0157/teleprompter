@@ -22,5 +22,16 @@
   "git.autofetch": false,
   "git.postCommitCommand": "none",
   "git.enableSmartCommit": false,
-  "git.confirmSync": true
+  "git.confirmSync": true,
+  "cSpell.words": [
+    "booters",
+    "keybd",
+    "KEYEVENTF",
+    "KEYUP",
+    "LWIN",
+    "navbutton",
+    "preconnects",
+    "topbar",
+    "wscript"
+  ]
 }

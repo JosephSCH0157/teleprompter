@@ -8,6 +8,8 @@
   <title>Anvil v1.7.3</title>
   <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <meta name="theme-color" content="#0b0f19" />
+  <meta name="msapplication-navbutton-color" content="#0b0f19" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="color-scheme" content="dark light" />
 
   <!-- Canonical helps SEO (avoid /index.html vs /) -->
@@ -444,7 +446,7 @@
 <video autoplay="" id="camVideo" muted=""></video>
 </div>
 <!-- Hidden camera preview element used by PiP/mock flows -->
-<video id="cameraPreview" muted class="cam-preview" playsinline hidden></video>
+<video id="cameraPreview" muted class="cam-preview" autoplay hidden></video>
 </main>
 </div>
 <!-- Pre-roll overlay (main window) -->

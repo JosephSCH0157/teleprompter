@@ -596,16 +596,16 @@ function wireOverlays() {
       document.addEventListener('click', (e) => {
         try {
           const t = e.target;
-          if (t && t.closest && t.closest('#shortcutsBtn')) return open('shortcuts');
-          if (t && t.closest && t.closest('#settingsBtn')) {
+          if (t && t.closest && t.closest('#shortcutsBtn, [data-action="help-open"]')) return open('shortcuts');
+          if (t && t.closest && t.closest('#settingsBtn, [data-action="settings-open"]')) {
             // Ensure Scripts Folder card injected before/after opening
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
             open('settings');
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
             return;
           }
-          if (t && t.closest && t.closest('#shortcutsClose')) return close('shortcuts');
-          if (t && t.closest && t.closest('#settingsClose')) return close('settings');
+          if (t && t.closest && t.closest('#shortcutsClose, [data-action="help-close"]')) return close('shortcuts');
+          if (t && t.closest && t.closest('#settingsClose, [data-action="settings-close"]')) return close('settings');
           const sc = $id('shortcutsOverlay');
           if (sc && t === sc) close('shortcuts');
           const se = $id('settingsOverlay');
@@ -620,6 +620,8 @@ function wireOverlays() {
           $id('settingsOverlay')?.classList.add('hidden');
           $id('shortcutsBtn')?.setAttribute('aria-expanded','false');
           $id('settingsBtn')?.setAttribute('aria-expanded','false');
+          try { document.querySelector('[data-action="help-open"]')?.setAttribute('aria-expanded','false'); } catch {}
+          try { document.querySelector('[data-action\="settings-open\"]')?.setAttribute('aria-expanded','false'); } catch {}
         } catch {}
       });
     } catch {}

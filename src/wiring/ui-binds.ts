@@ -1101,7 +1101,7 @@ const cam = {
 // Common selectors for legacy + new data-action hooks
 const SEL = {
   // overlays
-  settingsOpen:   ['#settingsBtn','#btnSettings','#shortcutsBtn','[data-action="settings-open"]'],
+  settingsOpen:   ['[data-action="settings-open"]','#settingsBtn','#btnSettings','#shortcutsBtn'],
   settingsClose:  ['#settingsClose','[data-action="settings-close"]'],
   settingsOverlay:['#settingsOverlay','[data-overlay="settings"]'],
 

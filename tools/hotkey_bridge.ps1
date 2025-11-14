@@ -43,6 +43,20 @@ public static class KB {
 }
 "@
 
+function Parse-Query([string]$query) {
+  $map = @{}
+  if ([string]::IsNullOrEmpty($query)) { return $map }
+  if ($query.StartsWith('?')) { $query = $query.Substring(1) }
+  foreach ($pair in $query -split '&') {
+    if ([string]::IsNullOrEmpty($pair)) { continue }
+    $kv = $pair -split '=', 2
+    $k = [System.Uri]::UnescapeDataString($kv[0])
+    $v = if ($kv.Count -ge 2) { [System.Uri]::UnescapeDataString($kv[1]) } else { '' }
+    $map[$k] = $v
+  }
+  return $map
+}
+
 function Send-ComboWinAltR {
   [KB]::keybd_event([KB]::VK_LWIN, 0, 0, [IntPtr]::Zero)
   [KB]::keybd_event([KB]::VK_MENU, 0, 0, [IntPtr]::Zero)
@@ -98,7 +112,7 @@ while ($true) {
   $res = $ctx.Response
   try {
     $path = $ctx.Request.Url.AbsolutePath
-    $q = [System.Web.HttpUtility]::ParseQueryString($ctx.Request.Url.Query)
+    $q = Parse-Query $ctx.Request.Url.Query
     if ($path -eq '/record/start') {
       Send-Hotkey $StartHotkey
       $out = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true,"action":"start"}')
