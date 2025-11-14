@@ -26,6 +26,23 @@ export default function createScrollController(adapters = {}, telemetry) {
   // let lastErr = 0; // (unused)
   // let lastCommitTime = 0; // (unused)
   let lastTargetTop = 0;
+  
+  // --- Anti-jitter: monotonic forward clamp, surge catch-up ---
+  let clampMode = 'follow'; // 'follow' | 'backtrack' | 'free'
+  let lastRatio = 0; // last written scroll ratio for monotonic clamp
+  let prevErr = 0; // previous error for surge detection
+  let prevErrTs = 0; // timestamp for surge dt calculation
+  
+  // --- Viewer bounce filter: ignore bogus backward jumps unless recent wheel ---
+  let lastUserWheelAt = 0;
+  let _lastValidScrollTop = 0; // tracked for future use
+  
+  // Install wheel listener on window for bounce detection
+  try {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('wheel', () => { lastUserWheelAt = performance.now(); }, { passive: true });
+    }
+  } catch {}
 
   // --- Endgame taper state with hysteresis ---
   const HYS_ENTER = 0; // enter when lastLineTop <= markerY
@@ -84,6 +101,13 @@ export default function createScrollController(adapters = {}, telemetry) {
     const macro = 120;
     const maxStep = 320;
     const nowTs = now || (A.now ? A.now() : Date.now());
+    
+    // --- Surge catch-up: increase gain when error is large or growing ---
+    const SURGE = { px: 100, kp: 0.45, vmax: 1400 }; // px/sec
+    const dt = prevErrTs ? Math.max(0.001, (nowTs - prevErrTs) / 1000) : 0.016;
+    const growing = absErr > Math.abs(prevErr);
+    prevErr = err;
+    prevErrTs = nowTs;
 
     // --- Hard resync on big error ---
     if (absErr > macro) {
@@ -113,9 +137,20 @@ export default function createScrollController(adapters = {}, telemetry) {
     // --- Small errors: gentle easing (proportional) ---
     if (absErr <= micro) return null;
 
-    // --- Large errors: snap closer in one go (clamped) ---
-    const step = allowFastLane ? Math.min(absErr, maxStep) : Math.ceil(absErr * 0.35);
-    let targetTop = scrollTop + Math.sign(err) * step;
+    // --- Surge mode: if error > SURGE.px and growing, use higher kp and cap velocity ---
+    let stepPx;
+    if (absErr > SURGE.px && growing) {
+      const delta = err * SURGE.kp;
+      const maxSurgeStep = SURGE.vmax * dt;
+      stepPx = Math.sign(delta) * Math.min(Math.abs(delta), maxSurgeStep);
+      allowFastLane = true; // treat as snap mode
+    } else {
+      // --- Large errors: snap closer in one go (clamped) ---
+      const step = allowFastLane ? Math.min(absErr, maxStep) : Math.ceil(absErr * 0.35);
+      stepPx = Math.sign(err) * step;
+    }
+    
+    let targetTop = scrollTop + stepPx;
     targetTop = Math.max(0, Math.min(targetTop, maxScrollTop));
 
     // --- Clamp to marker lock after commit ---
@@ -459,6 +494,60 @@ export default function createScrollController(adapters = {}, telemetry) {
      */
     resetEndgame() {
       endState = { armed: false, locked: false, t0: 0, v0: 0 };
+    },
+    
+    /**
+     * Set scroll mode for monotonic clamp behavior
+     * @param {'follow' | 'backtrack' | 'free'} newMode
+     */
+    setclampMode(newMode) {
+      clampMode = newMode;
+      if (newMode !== 'follow') {
+        // When leaving follow mode, capture current ratio so we can resume properly
+        const viewerEl = A.getViewerElement();
+        if (viewerEl && viewerEl.scrollHeight > 0) {
+          lastRatio = viewerEl.scrollTop / Math.max(1, viewerEl.scrollHeight - viewerEl.clientHeight);
+        }
+      }
+      log('scroll', { tag: 'mode-change', mode: newMode, lastRatio });
+    },
+    
+    /**
+     * Write scroll with monotonic forward clamp in follow mode
+     * @param {number} nextRatio - The scroll ratio to write (0-1)
+     */
+    writeScrollRatio(nextRatio) {
+      let ratio = nextRatio;
+      if (clampMode === 'follow' && ratio < lastRatio) {
+        // Clamp forward during follow to avoid back-jogs
+        ratio = lastRatio;
+        log('scroll', { tag: 'clamped', lastRatio, requestedRatio: nextRatio });
+      }
+      lastRatio = ratio;
+      const viewerEl = A.getViewerElement();
+      if (viewerEl) {
+        const maxTop = Math.max(0, viewerEl.scrollHeight - viewerEl.clientHeight);
+        A.requestScroll(ratio * maxTop);
+      }
+    },
+    
+    /**
+     * Bounce filter: validate a scroll request to ignore spurious backward jumps
+     * @param {number} nextTopPx - Requested scroll position
+     * @returns {boolean} - true if allowed, false if filtered
+     */
+    filterViewerBounce(nextTopPx) {
+      const now = A.now ? A.now() : performance.now();
+      const cur = A.getViewerTop();
+      const backward = nextTopPx < cur - 80; // big backwards jump?
+      const recentWheel = (now - lastUserWheelAt) < 800;
+      
+      if (backward && !recentWheel) {
+        log('scroll', { tag: 'viewer:ignored-bounce', nextTopPx, cur });
+        return false; // filter this request
+      }
+      _lastValidScrollTop = nextTopPx;
+      return true;
     },
   };
 }

@@ -1,6 +1,6 @@
 // src/features/autoscroll.js (authoritative controller)
 let enabled = false;
-let speed = 16;          // px/sec default
+let speed = 21;          // px/sec default
 let raf = 0;
 let viewer = null;
 let autoChip = null;
@@ -31,6 +31,8 @@ function applyLabel() {
 function loop() {
   cancelAnimationFrame(raf);
   if (!enabled || !viewer) return;
+  // Respect Rehearsal Mode: do not auto-scroll
+  try { if (window.__TP_REHEARSAL) return; } catch {}
   let last = performance.now();
   const step = (now) => {
     const dt = (now - last) / 1000;
@@ -71,12 +73,31 @@ export function initAutoScroll() {
 }
 
 export function toggle() {
-  enabled = !enabled;
+  const want = !enabled;
+  // In rehearsal, deny enabling
+  try {
+    if (want && window.__TP_REHEARSAL) {
+      enabled = false;
+      try { window.toasts?.show?.('Auto-scroll disabled in Rehearsal Mode'); } catch {}
+      applyLabel();
+      return;
+    }
+  } catch {}
+  enabled = want;
   applyLabel();
   loop();
 }
 
 export function setEnabled(v) {
+  // In rehearsal, deny enabling
+  try {
+    if (v && window.__TP_REHEARSAL) {
+      enabled = false;
+      try { window.toasts?.show?.('Auto-scroll disabled in Rehearsal Mode'); } catch {}
+      applyLabel();
+      return;
+    }
+  } catch {}
   enabled = !!v;
   applyLabel();
   loop();

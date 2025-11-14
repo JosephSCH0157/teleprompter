@@ -261,10 +261,12 @@ function createOrchestrator() {
     });
     await a.start();
     started = true;
-    try {
-      motor.setEnabled(true);
-    } catch {
-    }
+    // Don't enable motor here - let applyGate() control it based on userEnabled and speechActive
+    // This ensures proper pre-roll and speech lifecycle control
+    // try {
+    //   motor.setEnabled(true);
+    // } catch {
+    // }
     try {
       const onErr = () => {
         if (restarts++ === 0) {
@@ -431,6 +433,35 @@ function applyMode(m) {
     if (sel && sel.value !== m) sel.value = m;
   } catch {
   }
+  
+  // Toggle UI controls based on mode
+  try {
+    const autoRow = document.querySelector('.row:has(#autoSpeed)');
+    const wpmRow = document.getElementById('wpmRow');
+    
+    if (m === 'wpm') {
+      // Show WPM controls, hide manual speed controls
+      if (wpmRow) {
+        wpmRow.classList.remove('visually-hidden');
+        wpmRow.removeAttribute('aria-hidden');
+      }
+      if (autoRow) {
+        autoRow.classList.add('visually-hidden');
+        autoRow.setAttribute('aria-hidden', 'true');
+      }
+    } else {
+      // Show manual speed controls, hide WPM controls
+      if (wpmRow) {
+        wpmRow.classList.add('visually-hidden');
+        wpmRow.setAttribute('aria-hidden', 'true');
+      }
+      if (autoRow) {
+        autoRow.classList.remove('visually-hidden');
+        autoRow.removeAttribute('aria-hidden');
+      }
+    }
+  } catch {
+  }
 }
 function installScrollRouter(opts) {
   try {
@@ -442,6 +473,29 @@ function installScrollRouter(opts) {
   applyMode(state2.mode);
   const orch = createOrchestrator();
   let orchRunning = false;
+  let wpmUpdateInterval = null;
+  
+  // Update WPM display periodically when in WPM mode
+  function updateWpmDisplay() {
+    try {
+      if (state2.mode !== 'wpm' || !orchRunning) return;
+      const status = orch.getStatus();
+      const wpmEl = document.getElementById('wpmPx');
+      
+      if (wpmEl && status) {
+        const wpm = status.wpm;
+        const pxs = status.targetPxs;
+        
+        if (wpm != null && isFinite(wpm) && pxs != null && isFinite(pxs)) {
+          wpmEl.textContent = `≈ ${Math.round(wpm)} WPM → ${Math.round(pxs)} px/s`;
+        } else {
+          wpmEl.textContent = '≈ — WPM';
+        }
+      }
+    } catch {
+    }
+  }
+  
   async function ensureOrchestratorForMode() {
     try {
       if (state2.mode === "wpm" || state2.mode === "asr") {
@@ -449,15 +503,40 @@ function installScrollRouter(opts) {
           await orch.start(createVadEventAdapter());
           orch.setMode("assist");
           orchRunning = true;
+          
+          // Start WPM display updates for WPM mode
+          if (state2.mode === "wpm") {
+            if (wpmUpdateInterval) clearInterval(wpmUpdateInterval);
+            wpmUpdateInterval = setInterval(updateWpmDisplay, 200);
+          }
         }
       } else if (orchRunning) {
         await orch.stop();
         orchRunning = false;
+        
+        // Stop WPM display updates
+        if (wpmUpdateInterval) {
+          clearInterval(wpmUpdateInterval);
+          wpmUpdateInterval = null;
+        }
       }
     } catch {
     }
   }
   ensureOrchestratorForMode();
+  
+  // Initialize WPM target input from localStorage
+  try {
+    const wpmTargetInput = document.getElementById('wpmTarget');
+    if (wpmTargetInput) {
+      const stored = localStorage.getItem('tp_baseline_wpm');
+      if (stored) {
+        wpmTargetInput.value = stored;
+      }
+    }
+  } catch {
+  }
+  
   let userEnabled = false;
   let dbGate = false;
   let vadGate = false;
@@ -523,6 +602,7 @@ function installScrollRouter(opts) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
+      // All non-hybrid modes require both user intent AND speech to be active
       const want = !!userEnabled && !!speechActive;
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
@@ -665,13 +745,102 @@ function installScrollRouter(opts) {
         applyGate();
         ensureOrchestratorForMode();
       }
+      // Handle WPM target changes
+      if (t?.id === "wpmTarget") {
+        try {
+          const val = Number(t.value);
+          if (isFinite(val) && val > 0) {
+            localStorage.setItem('tp_baseline_wpm', String(val));
+            // In WPM mode, immediately update scroll speed based on new target WPM
+            if (state2.mode === 'wpm') {
+              try {
+                // Calculate px/s from target WPM using typography settings
+                const cs = getComputedStyle(document.documentElement);
+                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+                const lineHeightPx = fsPx * lhScale;
+                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+                const pxs = (val / 60 / wpl) * lineHeightPx;
+                
+                // Update auto-scroll speed directly
+                if (typeof auto.setSpeed === 'function') {
+                  auto.setSpeed(pxs);
+                }
+                
+                // Also update orchestrator sensitivity if running
+                if (orchRunning) {
+                  const status = orch.getStatus();
+                  const detectedWpm = status.wpm;
+                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                    const sensitivity = val / detectedWpm;
+                    orch.setSensitivity(sensitivity);
+                  } else {
+                    orch.setSensitivity(1.0);
+                  }
+                }
+              } catch {
+              }
+            }
+          }
+        } catch {
+        }
+      }
     }, { capture: true });
+    
+  // (Removed v1.7.1: dev-only polling shim for legacy select pokes — SSOT stable)
+
+    // Also handle input event for real-time WPM target updates
+    document.addEventListener("input", (e) => {
+      const t = e.target;
+      if (t?.id === "wpmTarget") {
+        try {
+          const val = Number(t.value);
+          if (isFinite(val) && val > 0) {
+            localStorage.setItem('tp_baseline_wpm', String(val));
+            // In WPM mode, immediately update scroll speed
+            if (state2.mode === 'wpm') {
+              try {
+                // Calculate px/s from target WPM
+                const cs = getComputedStyle(document.documentElement);
+                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+                const lineHeightPx = fsPx * lhScale;
+                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+                const pxs = (val / 60 / wpl) * lineHeightPx;
+                
+                // Update auto-scroll speed directly
+                if (typeof auto.setSpeed === 'function') {
+                  auto.setSpeed(pxs);
+                }
+                
+                // Also update orchestrator sensitivity if running
+                if (orchRunning) {
+                  const status = orch.getStatus();
+                  const detectedWpm = status.wpm;
+                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                    const sensitivity = val / detectedWpm;
+                    orch.setSensitivity(sensitivity);
+                  } else {
+                    orch.setSensitivity(1.0);
+                  }
+                }
+              } catch {
+              }
+            }
+          }
+        } catch {
+        }
+      }
+    }, { capture: true });
+    
     const modeSel = document.getElementById("scrollMode");
     modeSel?.setAttribute("aria-live", "polite");
   } catch {
   }
   try {
     document.addEventListener("keydown", (e) => {
+      // In Rehearsal Mode, block router key behaviors (wheel-only)
+      try { if (window.__TP_REHEARSAL) return; } catch {}
       // Always support PageUp/PageDown stepping one line for usability and CI probe,
       // even when not in explicit step mode.
       if (e.key === "PageDown") {
@@ -694,6 +863,7 @@ function installScrollRouter(opts) {
       }
     }, { capture: true });
     document.addEventListener("keyup", (e) => {
+      try { if (window.__TP_REHEARSAL) return; } catch {}
       if (state2.mode !== "step") return;
       if (e.key === " ") {
         // eslint-disable-next-line no-restricted-syntax
@@ -747,17 +917,35 @@ function installScrollRouter(opts) {
     }, { capture: true });
   } catch {
   }
-  if (state2.mode === "hybrid") {
+  if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;
     try {
-      auto.setSpeed?.(getStoredSpeed());
+      // For WPM mode, use baseline WPM to set initial speed
+      if (state2.mode === "wpm") {
+        const baselineWpm = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
+        // Calculate approximate px/s from baseline WPM
+        const cs = getComputedStyle(document.documentElement);
+        const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+        const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+        const lineHeightPx = fsPx * lhScale;
+        const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+        const pxs = (baselineWpm / 60 / wpl) * lineHeightPx;
+        auto.setSpeed?.(pxs);
+      } else {
+        auto.setSpeed?.(getStoredSpeed());
+      }
     } catch {
     }
     try {
       const btn = document.getElementById("autoToggle");
       if (btn) {
         btn.dataset.state = "on";
-        btn.textContent = `Auto-scroll: On \u2014 ${getStoredSpeed()} px/s`;
+        if (state2.mode === "wpm") {
+          const baselineWpm = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
+          btn.textContent = `Auto-scroll: On — ${Math.round(baselineWpm)} WPM`;
+        } else {
+          btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
+        }
       }
     } catch {
     }
@@ -809,3 +997,4 @@ function installScrollRouter(opts) {
 export {
   installScrollRouter
 };
+

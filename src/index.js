@@ -31,9 +31,22 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
     }
 
     const root = ensureHudRoot();
+    
+    // Create a simple event bus for HUD components (compat shim before full bus import)
+    const hudBus = new EventTarget();
     const api = window.__tpHud = window.__tpHud || {
       enabled: false,
       root,
+      bus: {
+        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+        on: (type, fn) => {
+          try {
+            const h = (e) => { try { fn(e.detail); } catch {} };
+            hudBus.addEventListener(type, h);
+            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
+          } catch {}
+        },
+      },
       setEnabled(on) {
         try {
           this.enabled = !!on;
@@ -69,6 +82,34 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
     try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
     // Unify legacy HUD log calls to the SSOT
     try { if (!window.HUD) window.HUD = api; } catch {}
+    
+    // Listen to new typed transcript and state events (both captions and legacy speech)
+    try {
+      const logTx = (d) => {
+        if (!d) return;
+        api.log('captions:tx', {
+          partial: d.partial,
+          final: d.final,
+          conf: d.confidence?.toFixed(2),
+          len: d.text?.length ?? 0,
+          idx: d.lineIndex,
+          harness: d.harness,
+        });
+      };
+      const logState = (d) => {
+        if (!d) return;
+        api.log('captions:state', { state: d.state, reason: d.reason, harness: d.harness });
+      };
+      
+      // Primary captions events
+      window.addEventListener('tp:captions:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:captions:state', (e) => logState(e.detail));
+      
+      // Legacy speech events (for backwards compatibility)
+      window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
+      window.addEventListener('tp:speech:state', (e) => logState(e.detail));
+    } catch {}
+    
     // Announce readiness
     try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
   } catch {}
@@ -115,6 +156,7 @@ import './ui/settings.js';
 // HUD: minimal ASR stats line (dev only)
 import './hud/asr-stats.js';
 import './hud/rec-stats.js';
+import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder.js';
 
 // Single-source mic adapter facade for legacy callers
 try {
@@ -597,20 +639,52 @@ async function boot() {
     try {
       // Prefer the compiled TS router when available; fall back to JS router
       try {
+        // Robust dynamic import sequence with graceful legacy fallback.
+        async function tryImport(spec, flag) {
+          try {
+            const m = await import(spec);
+            if (m) {
+              try { flag && (window[flag] = true); } catch {}
+              return m;
+            }
+          } catch (err) {
+            try { console.warn('[router] import failed', spec, err && err.message); } catch {}
+          }
+          return null;
+        }
+        const candidates = [
+          { spec: '/dist/features/scroll-router.js', flag: '__tpScrollRouterTsActive' },
+          { spec: './features/scroll-router.js',     flag: '__tpScrollRouterJsActive' }
+        ];
         let mod = null;
-        try {
-          mod = await import('/dist/features/scroll-router.js');
-          try { window.__tpScrollRouterTsActive = true; } catch {}
-        } catch {}
+        for (const c of candidates) {
+          mod = await tryImport(c.spec, c.flag);
+          if (mod) break;
+        }
         if (!mod) {
-          mod = await import('./features/scroll-router.js');
-          try { window.__tpScrollRouterJsActive = true; } catch {}
+          // Final fallback: inject legacy monolith (teleprompter_pro.js) if router modules missing.
+          try {
+            console.warn('[router] all module candidates failed; attempting legacy fallback script');
+            const s = document.createElement('script');
+            s.src = './teleprompter_pro.js';
+            s.defer = true;
+            s.onload = () => { try { console.info('[router] legacy script loaded'); } catch {} };
+            document.head.appendChild(s);
+          } catch {}
+        } else {
+          // Pass the Auto API to the router so it can drive the engine.
+          try {
+            if (typeof mod.installScrollRouter === 'function') {
+              mod.installScrollRouter({ auto: Auto });
+              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {}
+            } else {
+              console.warn('[router] installScrollRouter not found on module');
+            }
+          } catch (e) {
+            console.warn('[src/index] installScrollRouter failed', e);
+          }
         }
-        // Pass the Auto API to the router so it can drive the engine
-        try { mod && typeof mod.installScrollRouter === 'function' && mod.installScrollRouter({ auto: Auto }); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {} } catch (e) {
-          console.warn('[src/index] installScrollRouter failed', e);
-        }
-      } catch (e) { console.warn('[src/index] router import failed', e); }
+      } catch (e) { console.warn('[src/index] router import sequence failed', e); }
       // Resilient event delegation (works in headless + when nodes re-render)
       let __lastAutoToggleAt = 0;
       const __applyAutoChip = () => {
@@ -637,32 +711,42 @@ async function boot() {
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
       }, { capture: true });
 
-      // Unified auto-speed input + wheel handling
+      // Unified auto-speed input + wheel handling (resilient delegation)
       try {
-        const wireSpeedInput = () => {
-          const inp = document.getElementById('autoSpeed');
-          if (!inp) return;
-          // input/change both: keep persisted and labels in sync via Auto.setSpeed
-          const onChange = () => { try { Auto.setSpeed(inp.value); } catch {} };
-          inp.addEventListener('input', onChange, { capture: true });
-          inp.addEventListener('change', onChange, { capture: true });
-          // Wheel on input adjusts ±0.5 (Shift: ±5), rounded to one decimal
-          inp.addEventListener('wheel', (ev) => {
-            try {
-              // eslint-disable-next-line no-restricted-syntax
-              ev.preventDefault();
-              const step = ev.shiftKey ? 5 : 0.5;
-              const dir = (ev.deltaY < 0) ? +1 : -1;
-              const cur = Number(inp.value || '0') || 0;
-              const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 10) / 10));
-              inp.value = String(next);
-              Auto.setSpeed(next);
-            } catch {}
-          }, { passive: false });
-        };
-        // wire now and after small delay in case DOM re-renders
-        wireSpeedInput();
-        setTimeout(wireSpeedInput, 250);
+        // Use event delegation to handle input changes even if DOM is replaced
+        document.addEventListener('input', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id === 'autoSpeed') {
+              Auto.setSpeed(t.value);
+            }
+          } catch {}
+        }, { capture: true });
+
+        document.addEventListener('change', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id === 'autoSpeed') {
+              Auto.setSpeed(t.value);
+            }
+          } catch {}
+        }, { capture: true });
+
+        // Wheel on speed input adjusts ±0.5 (Shift: ±5), rounded to one decimal
+        document.addEventListener('wheel', (ev) => {
+          try {
+            const t = ev?.target;
+            if (t?.id !== 'autoSpeed') return;
+            // eslint-disable-next-line no-restricted-syntax
+            ev.preventDefault();
+            const step = ev.shiftKey ? 5 : 0.5;
+            const dir = (ev.deltaY < 0) ? +1 : -1;
+            const cur = Number(t.value || '0') || 0;
+            const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 10) / 10));
+            t.value = String(next);
+            Auto.setSpeed(next);
+          } catch {}
+        }, { passive: false, capture: true });
       } catch {}
 
   // Ensure OBS persistent UI is wired and boot-restore applied (idempotent)
@@ -708,6 +792,191 @@ async function boot() {
   try { window.__tp_init_done = true; } catch {}
   console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
+    // Ensure Settings Scripts Folder card is available (JS path)
+    try { ensureSettingsFolderControls(); } catch {}
+    try { ensureSettingsFolderControlsAsync(6000); } catch {}
+
+    // Wire native folder picker + fallback, deferring to our binder if already present
+    function wireMappedFolderNative() {
+      try { window.__bindMappedFolderUI?.(); } catch {}
+    }
+    try { wireMappedFolderNative(); } catch {}
+    try { document.addEventListener('DOMContentLoaded', () => { try { wireMappedFolderNative(); } catch {} }); } catch {}
+
+    // Binder for Scripts Folder (JS path) – minimal parity with TS binder
+    function __bindMappedFolderUI() {
+      try {
+        const btn = document.getElementById('chooseFolderBtn');
+        if (!btn || btn.dataset.mappedFolderWired === '1') return;
+        const recheckBtn = document.getElementById('recheckFolderBtn');
+        const sel = document.getElementById('scriptSelect');
+        const fallback = document.getElementById('folderFallback');
+        const useMock = (() => { try { const Q = new URLSearchParams(location.search||''); return Q.has('mockFolder'); } catch { return false; } })();
+        btn.dataset.mappedFolderWired = '1';
+        try { btn.disabled = false; } catch {}
+
+        function populate(names) {
+          try {
+            if (!sel) return;
+            sel.setAttribute('aria-busy','true');
+            const filtered = (names||[]).filter(n => /\.(txt|md|docx)$/i.test(n));
+            sel.innerHTML = '';
+            filtered.forEach((n,i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = n; sel.appendChild(o); });
+            sel.setAttribute('aria-busy','false');
+            sel.disabled = filtered.length === 0;
+            sel.dataset.count = String(filtered.length);
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: filtered.length } })); } catch {}
+          } catch {}
+        }
+
+        async function pickFolder() {
+          try {
+            btn.disabled = true; btn.textContent = 'Choosing…';
+            let scriptNames = [];
+            if (window.showDirectoryPicker) {
+              try {
+                const dirHandle = await window.showDirectoryPicker();
+                for await (const entry of dirHandle.values()) {
+                  try {
+                    if (entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
+                      scriptNames.push(entry.name);
+                    }
+                  } catch {}
+                }
+              } catch (e) {
+                // user cancel → fall back to input
+                if (e && e.name !== 'AbortError') console.warn('[folder] picker err', e);
+                if (!fallback) return;
+                try { fallback.click(); } catch {}
+                return;
+              }
+            } else if (fallback) {
+              // Use hidden directory input (webkitdirectory) – user picks then change event populates
+              try { fallback.click(); } catch {}
+              return;
+            }
+            if (scriptNames.length) {
+              populate(scriptNames);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(scriptNames)); } catch {}
+            }
+          } catch (e) { console.warn('[folder] pickFolder failed', e); }
+          finally {
+            try { btn.disabled = false; btn.textContent = 'Choose Folder'; } catch {}
+          }
+        }
+
+        // Fallback input change handler (webkitdirectory)
+        try {
+          if (fallback) {
+            fallback.addEventListener('change', () => {
+              try {
+                const files = Array.from(fallback.files || []);
+                const names = files.map(f => f && f.name).filter(Boolean);
+                if (names.length) {
+                  populate(names);
+                  try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch {}
+                }
+              } catch {}
+            });
+          }
+        } catch {}
+
+        btn.addEventListener('click', (ev) => { try { ev.stopImmediatePropagation(); } catch {}; pickFolder(); });
+        recheckBtn?.addEventListener('click', (ev) => {
+          try { ev.stopImmediatePropagation(); } catch {}
+          try {
+            const raw = localStorage.getItem('tp_last_folder_scripts');
+            if (raw) {
+              const arr = JSON.parse(raw) || [];
+              if (Array.isArray(arr) && arr.length) populate(arr);
+            }
+          } catch {}
+        });
+
+        // Do not auto-populate from stored if mock folder flag active (avoid parity mismatch)
+        if (!useMock) {
+          try {
+            const raw = localStorage.getItem('tp_last_folder_scripts');
+            if (raw) {
+              const arr = JSON.parse(raw) || [];
+              if (Array.isArray(arr) && arr.length && (!sel || !sel.options || sel.options.length === 0)) {
+                populate(arr);
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    try { window.__bindMappedFolderUI = __bindMappedFolderUI; } catch {}
+    try { __bindMappedFolderUI(); } catch {}
+
+    // Re-bind if card is re-injected (mutation observer)
+    try {
+      if (!window.__tpFolderBinderWatcher) {
+        window.__tpFolderBinderWatcher = true;
+        const mo = new MutationObserver(() => {
+          try {
+            const btn = document.getElementById('chooseFolderBtn');
+            if (btn && btn.dataset.mappedFolderWired !== '1') {
+              try { window.__bindMappedFolderUI?.(); } catch {}
+            }
+          } catch {}
+        });
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+        setTimeout(() => { try { mo.disconnect(); } catch {} }, 120000);
+      }
+    } catch {}
+
+    // Test-only mock folder population: enable with ?mockFolder=1
+    try {
+      const Q = new URLSearchParams(location.search || '');
+      const useMock = Q.has('mockFolder') || (typeof navigator !== 'undefined' && navigator.webdriver === true) || (window && window.__TP_TEST_MOCK__);
+      if (useMock) {
+        const NAMES = ['Practice_Intro.txt', 'Main_Episode.txt', 'Notes.docx'];
+        const populate = () => {
+          try {
+            const main = document.getElementById('scriptSelect');
+            const mirror = document.getElementById('scriptSelectSidebar');
+            if (!main) return false;
+            const targets = [main, mirror].filter(Boolean);
+            for (const sel of targets) {
+              try { sel.setAttribute('aria-busy','true'); sel.disabled = true; } catch {}
+            }
+            const items = NAMES.filter(n => /\.(txt|docx)$/i.test(n));
+            for (const sel of targets) {
+              try {
+                sel.innerHTML = '';
+                items.forEach((n, i) => {
+                  const o = document.createElement('option');
+                  o.value = String(i);
+                  o.textContent = n;
+                  sel.appendChild(o);
+                });
+                sel.setAttribute('aria-busy','false');
+                sel.disabled = items.length === 0;
+                sel.dataset.count = String(items.length);
+              } catch {}
+            }
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: items.length } })); } catch {}
+            // minimal sync: when one changes, reflect value to the other
+            try {
+              const sync = (a, b) => { try { if (a && b) b.value = a.value; } catch {} };
+              if (main) main.addEventListener('change', () => sync(main, mirror));
+              if (mirror) mirror.addEventListener('change', () => sync(mirror, main));
+            } catch {}
+            return true;
+          } catch { return false; }
+        };
+        // Try now; if selects not present yet, wait briefly
+        // Defer a bit to allow injection of the Settings card
+        setTimeout(() => { try { populate(); } catch {} }, 50);
+        if (!populate()) {
+          let tries = 0; const iv = setInterval(() => {
+            tries++; if (populate() || tries > 30) { try { clearInterval(iv); } catch {} }
+          }, 50);
+        }
+      }
+    } catch {}
   } catch (err) {
     console.error('[src/index] boot failed', err);
     try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch {}

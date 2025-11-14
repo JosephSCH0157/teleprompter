@@ -108,6 +108,8 @@ async function _connectOnce() {
   try {
     if (typeof _armed !== 'undefined' && !_armed) return;
   } catch {}
+  // Rehearsal Mode: short-circuit all OBS connections (belt & suspenders)
+  try { if (typeof window !== 'undefined' && window.__TP_REHEARSAL) { return; } } catch {}
   if (_connected || _connecting) return;
   _connecting = true;
   try {
@@ -321,15 +323,48 @@ try {
 export default bridge;
 
 // ---- Armed gating (respect Settings “OBS Off”) -----------------------------
+// Unified gating: prefer store value when available, else fall back to localStorage.
+// Legacy key: tp_obs_enabled (boolean '1'/'0')
+// New mirror key: tp_obs_enabled_v2 (boolean '1'/'0') to allow future migrations without clobbering older sessions.
 let _armed = false;
 try {
-  _armed = (localStorage.getItem('tp_obs_enabled') === '1');
+  // If store is present, prefer its obsEnabled value (explicit user intent this session)
+  const S = (typeof window !== 'undefined' ? window.__tpStore : null);
+  if (S && typeof S.get === 'function') {
+    const v = S.get('obsEnabled');
+    if (typeof v === 'boolean') {
+      _armed = v;
+    } else {
+      // Non-boolean (undefined/null) → fall back to persisted localStorage flag(s)
+      _armed = (localStorage.getItem('tp_obs_enabled_v2') === '1')
+        || (localStorage.getItem('tp_obs_enabled_v1') === '1')
+        || (localStorage.getItem('tp_obs_enabled') === '1');
+    }
+  } else {
+    // No store yet (early boot) → fall back to persisted flags
+    _armed = (localStorage.getItem('tp_obs_enabled_v2') === '1')
+      || (localStorage.getItem('tp_obs_enabled_v1') === '1')
+      || (localStorage.getItem('tp_obs_enabled') === '1');
+  }
+} catch {}
+
+// Early subscription (best-effort): if the store loads after this module, reflect changes immediately
+try {
+  const S = (typeof window !== 'undefined' ? window.__tpStore : null);
+  if (S && typeof S.subscribe === 'function') {
+    S.subscribe('obsEnabled', (v) => {
+      try { setArmed(!!v); } catch {}
+    });
+  }
 } catch {}
 
 function armed(){ return !!_armed; }
 function setArmed(on){
   _armed = !!on;
+  // Persist all known keys for compatibility / migration across wiring paths
   try { localStorage.setItem('tp_obs_enabled', _armed ? '1' : '0'); } catch {}
+  try { localStorage.setItem('tp_obs_enabled_v1', _armed ? '1' : '0'); } catch {}
+  try { localStorage.setItem('tp_obs_enabled_v2', _armed ? '1' : '0'); } catch {}
   // Tie auto-reconnect to armed
   _autoReconnect = !!_armed;
   if (!_armed) {

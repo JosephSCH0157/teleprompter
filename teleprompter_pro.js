@@ -20,7 +20,27 @@ try {
 } catch {}
 
 // --- HUD hotkey safety (Alt+Shift+H always opens HUD) ---
+// Global typing guard helper (single source of truth)
+window.isTyping = window.isTyping || function (el) {
+  try {
+    el = el || document.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'select') return true;
+    if (tag === 'input') {
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      // Inputs that are text-like; allow arrows etc. to work elsewhere
+      const texty = ['text','search','email','url','number','password','tel'];
+      return texty.includes(type) || type === '';
+    }
+    return false;
+  } catch { return false; }
+};
+// Mark events originating while typing so deeper listeners can skip
+window.addEventListener('keydown', (e) => { try { if (window.isTyping()) e.__tpTyping = true; } catch {} }, { capture: true });
 window.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
   if (e.altKey && e.shiftKey && e.code === 'KeyH') {
     e.preventDefault();
     e.stopPropagation();
@@ -169,6 +189,7 @@ window.ensureHud = window.ensureHud || function () {
 };
 
 window.addEventListener('keydown', (e) => {
+  if (window.isTyping?.() || e.__tpTyping) return;
   if (e.altKey && e.shiftKey && e.code === 'KeyH') {
     const hud = window.ensureHud();
     hud?.toggle?.();
@@ -387,7 +408,8 @@ function ensureHud() {
 
 // keyboard: Alt+Shift+H toggles HUD
 document.addEventListener('keydown', (e) => {
-  if (e.altKey && e.shiftKey && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
+  if (window.isTyping?.() || e.__tpTyping) return;
+  if (e.altKey && e.shiftKey && (e.code === 'KeyH' || (e.key && e.key.toLowerCase() === 'h'))) {
     ensureHud();
     window.__HUD?.toggle?.();
   }
@@ -1271,8 +1293,9 @@ let _toast = function (msg, opts) {
         window.__tpRealCore.__tpWaiter = true;
       } catch {}
     }
-  } catch {}
-  // Install an early stub for core init that queues until the real core is defined
+    } catch (_e) {
+      void 0;
+    }
   try {
     if (typeof window._initCore !== 'function') {
       window._initCore = async function __initCoreStub() {
@@ -1878,14 +1901,37 @@ let _toast = function (msg, opts) {
     } catch {
       void 0;
     }
-      // Keep bottom padding responsive to viewport changes and refresh end spacer
+      // Keep bottom padding responsive with guarded/throttled resize logic.
+      // Replaces prior multiple raw resize listeners with a single debounced handler:
+      //  - Ignores while an overlay is open (settings/help)
+      //  - Debounces 150ms
+      //  - Only applies scroll adjustments if the active element changed during the resize burst
       try {
-        window.addEventListener('resize', () => {
-          try {
-            applyBottomPad();
-            refreshEndSpacer();
-          } catch {}
-        }, { passive: true });
+        if (!window.__tpInstallResizeGuard) {
+          window.__tpInstallResizeGuard = function () {
+            try { if (window.__tpResizeGuarded) return; window.__tpResizeGuarded = 1; } catch {}
+            let startActive = null; let timer = null;
+            window.addEventListener('resize', () => {
+              try {
+                // Ignore while overlay open (data-smoke-open latch or visible overlay nodes)
+                if (document.body?.getAttribute('data-smoke-open') || document.querySelector('#settingsOverlay:not(.hidden), #shortcutsOverlay:not(.hidden), [data-overlay="settings"]:not(.hidden), [data-overlay="help"]:not(.hidden)')) return;
+                if (timer) clearTimeout(timer);
+                if (!startActive) startActive = document.activeElement;
+                timer = setTimeout(() => {
+                  try {
+                    const now = document.activeElement;
+                    if (now !== startActive) {
+                      try { applyBottomPad?.(); } catch {}
+                      try { refreshEndSpacer?.(); } catch {}
+                    }
+                  } catch {}
+                  startActive = null;
+                }, 150);
+              } catch {}
+            }, { passive: true });
+          };
+        }
+        try { window.__tpInstallResizeGuard(); } catch {}
       } catch {}
   }
   try {
@@ -2900,79 +2946,83 @@ let _toast = function (msg, opts) {
       const lineNum = i + 1;
       let m;
       tagRe.lastIndex = 0;
-      while ((m = tagRe.exec(rawLine))) {
-        const closing = !!m[1];
-        const nameRaw = m[2];
-        const name = nameRaw.toLowerCase();
-        if (!allowed.has(name)) {
-          unknownCount++;
-          addIssue(lineNum, `unsupported tag [${closing ? '\/' : ''}${nameRaw}]`, 'unsupported', {
-            tag: name,
-          });
-          continue;
-        }
-        if (!closing) {
-          if (name === 'note') {
-            if (stack.length) {
-              addIssue(
-                lineNum,
-                `[note] must not appear inside [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
-                'nested-note',
-                { parent: stack[stack.length - 1].tag }
-              );
-            }
-            stack.push({ tag: name, line: lineNum });
-          } else if (speakerTags.has(name)) {
-            if (stack.length && speakerTags.has(stack[stack.length - 1].tag))
-              addIssue(
-                lineNum,
-                `[${name}] opened before closing previous [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
-                'nested-speaker',
-                { prev: stack[stack.length - 1].tag, prevLine: stack[stack.length - 1].line }
-              );
-            stack.push({ tag: name, line: lineNum });
-          } else {
-            stack.push({ tag: name, line: lineNum });
-          }
-        } else {
-          if (!stack.length) {
-            addIssue(lineNum, `stray closing tag [\/${name}]`, 'stray-close', { tag: name });
+      try {
+        while ((m = tagRe.exec(rawLine))) {
+          const closing = !!m[1];
+          const nameRaw = m[2];
+          const name = nameRaw.toLowerCase();
+          if (!allowed.has(name)) {
+            unknownCount++;
+            addIssue(lineNum, `unsupported tag [${closing ? '\/' : ''}${nameRaw}]`, 'unsupported', {
+              tag: name,
+            });
             continue;
           }
-          const top = stack[stack.length - 1];
-          if (top.tag === name) {
-            stack.pop();
-            if (name === 's1') s1Blocks++;
-            else if (name === 's2') s2Blocks++;
-            else if (name === 'note') noteBlocks++;
-          } else {
-            addIssue(
-              lineNum,
-              `mismatched closing [\/${name}] – expected [\/${top.tag}] for opening on line ${top.line}`,
-              'mismatch',
-              { expected: top.tag, openLine: top.line, found: name }
-            );
-            let poppedAny = false;
-            while (stack.length && stack[stack.length - 1].tag !== name) {
-              stack.pop();
-              poppedAny = true;
+          if (!closing) {
+            if (name === 'note') {
+              if (stack.length) {
+                addIssue(
+                  lineNum,
+                  `[note] must not appear inside [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
+                  'nested-note',
+                  { parent: stack[stack.length - 1].tag }
+                );
+              }
+              stack.push({ tag: name, line: lineNum });
+            } else if (speakerTags.has(name)) {
+              if (stack.length && speakerTags.has(stack[stack.length - 1].tag))
+                addIssue(
+                  lineNum,
+                  `[${name}] opened before closing previous [${stack[stack.length - 1].tag}] (opened line ${stack[stack.length - 1].line})`,
+                  'nested-speaker',
+                  { prev: stack[stack.length - 1].tag, prevLine: stack[stack.length - 1].line }
+                );
+              stack.push({ tag: name, line: lineNum });
+            } else {
+              stack.push({ tag: name, line: lineNum });
             }
-            if (stack.length && stack[stack.length - 1].tag === name) {
-              const opener = stack.pop();
+          } else {
+            if (!stack.length) {
+              addIssue(lineNum, `stray closing tag [\/${name}]`, 'stray-close', { tag: name });
+              continue;
+            }
+            const top = stack[stack.length - 1];
+            if (top.tag === name) {
+              stack.pop();
               if (name === 's1') s1Blocks++;
               else if (name === 's2') s2Blocks++;
               else if (name === 'note') noteBlocks++;
-              if (poppedAny)
-                addIssue(
-                  lineNum,
-                  `auto-recovered by closing [\/${name}] (opened line ${opener.line}) after mismatches`,
-                  'auto-recover',
-                  { tag: name, openLine: opener.line }
-                );
-            } else
-              addIssue(lineNum, `no matching open tag for [\/${name}]`, 'no-match', { tag: name });
+            } else {
+              addIssue(
+                lineNum,
+                `mismatched closing [\/${name}] – expected [\/${top.tag}] for opening on line ${top.line}`,
+                'mismatch',
+                { expected: top.tag, openLine: top.line, found: name }
+              );
+              let poppedAny = false;
+              while (stack.length && stack[stack.length - 1].tag !== name) {
+                stack.pop();
+                poppedAny = true;
+              }
+              if (stack.length && stack[stack.length - 1].tag === name) {
+                const opener = stack.pop();
+                if (name === 's1') s1Blocks++;
+                else if (name === 's2') s2Blocks++;
+                else if (name === 'note') noteBlocks++;
+                if (poppedAny)
+                  addIssue(
+                    lineNum,
+                    `auto-recovered by closing [\/${name}] (opened line ${opener.line}) after mismatches`,
+                    'auto-recover',
+                    { tag: name, openLine: opener.line }
+                  );
+              } else
+                addIssue(lineNum, `no matching open tag for [\/${name}]`, 'no-match', { tag: name });
+            }
           }
         }
+      } catch (e) {
+        if (window.__TP_DEV) console.warn('[settings] delegator error', e);
       }
     }
     for (const open of stack)
@@ -4468,9 +4518,8 @@ let _toast = function (msg, opts) {
     });
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
-      const tag = (e.target.tagName || '').toLowerCase();
-      const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
-      if (typing) return; // don't steal keys when user is typing
+      // don't steal keys when user is typing
+      if (window.isTyping?.() || e.__tpTyping) return;
 
       switch (e.key) {
         case ' ': // Space
@@ -5893,6 +5942,10 @@ let _toast = function (msg, opts) {
           } catch {}
         }
       );
+      // Expose clamp mode API globally for UI mode router
+      if (__scrollCtl && typeof __scrollCtl.setclampMode === 'function') {
+        window.__tpSetClampMode = (mode) => __scrollCtl.setclampMode(mode);
+      }
     } catch {
       console.warn('scroll-control load failed', e);
     }
@@ -6326,6 +6379,7 @@ let _toast = function (msg, opts) {
         if (e.target === settingsOverlay) closeSettings();
       });
       window.addEventListener('keydown', (e) => {
+        if (window.isTyping?.() && e.key !== 'Escape') return; // allow Escape to still close
         if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) closeSettings();
       });
     }
@@ -7339,6 +7393,7 @@ let _toast = function (msg, opts) {
     }
     // Keybinding to toggle panel (dev mode only)
     window.addEventListener('keydown', (e) => {
+      if (window.isTyping?.() || e.__tpTyping) return;
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 't') {
         if (DEV_MODE) {
           ensureTuningPanel();
@@ -7438,10 +7493,8 @@ let _toast = function (msg, opts) {
       setTimeout(runSelfChecks, 0);
     } catch {}
 
-    // Keep bottom padding responsive to viewport changes
-    try {
-      window.addEventListener('resize', applyBottomPad, { passive: true });
-    } catch {}
+    // Keep bottom padding responsive (guarded/debounced handler installed earlier)
+    try { if (window.__tpInstallResizeGuard) window.__tpInstallResizeGuard(); } catch {}
     // Update debug chip on scroll
     try {
       viewer?.addEventListener(
@@ -7452,14 +7505,7 @@ let _toast = function (msg, opts) {
         { passive: true }
       );
     } catch {}
-    // Refresh end spacer on resize (do not replace existing applyBottomPad listener)
-    try {
-      window.addEventListener('resize', () => {
-        try {
-          refreshEndSpacer();
-        } catch {}
-      }, { passive: true });
-    } catch {}
+    // End spacer also handled by guarded/debounced handler
     // Initial debug chip paint
     try {
       updateDebugPosChip();
@@ -7797,6 +7843,7 @@ let _toast = function (msg, opts) {
 
   // Dump boot trace if user presses Ctrl+Alt+B (debug aid)
   window.addEventListener('keydown', (e) => {
+    if (window.isTyping?.() || e.__tpTyping) return;
     if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'b') {
       try {
         console.log(
@@ -10746,6 +10793,14 @@ let _toast = function (msg, opts) {
     let __momentaryMult = 1;
     const _onKey = (e) => {
       try {
+        // If user is typing in an input/textarea/contentEditable, don't affect scroll speed
+        if (window.isTyping?.() || e.__tpTyping) {
+          if (__momentaryMult !== 1) {
+            __momentaryMult = 1;
+            try { (window.tp_hud || window.__tpHud)?.('speed:momentary', { n: __momentaryMult }); } catch {}
+          }
+          return;
+        }
         const next = e.shiftKey ? 1.1 : e.altKey ? 0.88 : 1;
         if (next !== __momentaryMult) {
           __momentaryMult = next;
@@ -10900,7 +10955,7 @@ let _toast = function (msg, opts) {
   }
 
   // Resume catch-up controller if speech sync is active — via heuristic gate
-  if (recActive) {
+  if (speechOn) {
     try {
       const vRect = viewer.getBoundingClientRect();
       // Compute current anchor from active paragraph or currentIndex
@@ -12017,6 +12072,7 @@ let _toast = function (msg, opts) {
     const konami = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
     let pos = 0;
     window.addEventListener('keydown', (e) => {
+      if (window.isTyping?.() || e.__tpTyping) return; // skip sequence when typing
       const code = e.keyCode || e.which;
       pos = code === konami[pos] ? pos + 1 : 0;
       if (pos === konami.length) {
@@ -12129,6 +12185,7 @@ Easter eggs: Konami (savanna), Meter party, :roar</pre>
     about.classList.remove('hidden');
   }
   window.addEventListener('keydown', (e) => {
+    if (window.isTyping?.() || e.__tpTyping) return;
     if (e.ctrlKey && e.altKey && e.key?.toLowerCase?.() === 'k') {
       e.preventDefault();
       showAbout();
