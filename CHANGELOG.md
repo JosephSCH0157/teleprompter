@@ -35,6 +35,14 @@ Stability and alignment improvements across matching, scrolling, and observabili
 - Versioning
   - Bump to 1.6.0; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. PLL controller added to Advanced settings with live readout.
 
+## v1.6.5 — 2025-11-13
+
+Stability revert to the known-good v1.6.4 baseline.
+
+- Revert: restore project state to v1.6.4 to address regressions and re‑establish a stable baseline.
+- Tests: smoke suite remains green (recorderReady/adapterReady; UI invariants pass).
+- Versioning: tag as v1.6.5 after merge; no historical tags rewritten.
+
 ## v1.5.7 — 2025-09-27
 
 Stability baseline after init/boot fixes and camera/display guards.
