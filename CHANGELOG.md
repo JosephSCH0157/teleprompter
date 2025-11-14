@@ -1,5 +1,76 @@
 # Teleprompter Pro — Changelog
 
+## [1.7.3] - 2025-11-13
+
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.3
+
+### Added
+
+- build:compat script to compile TypeScript sources to in-place JS for runtime.
+
+### Changed
+
+- Migrated `recorders.js`, `adapters/bridge.js`, and `adapters/obs.js` to TypeScript sources (`recorders.ts`, `adapters/bridge.ts`, `adapters/obs.ts`) while preserving existing import surface.
+
+### Fixed
+
+- Ensured recorder/adapter readiness under strict smoke after migration.
+
+## v1.7.1
+
+- chore(mode): remove dev-only select polling shim (SSOT stable)
+- test(smoke): add mode:ssot-guard to ensure only SSOT emits `tp:mode`
+- feat(settings): settings import now emits HUD toast and `tp:settings-imported`
+- feat(mapped-folder): folder ingest + DOCX extraction + auto-load toggle shipped in 1.7.0 polish
+- misc: mapped-folder + ingest enhancements remain green
+
+## v1.6.0-scroll-router (2025-11-09)
+
+**Scroll Architecture Refactor**
+
+- **UI Scroll Mode Router**: Unified `setScrollMode()` / `getScrollMode()` API coordinates all scroll subsystems
+  - Single coordinator function (`applyUiScrollMode`) maps UI modes → internal modes
+  - Routes to: Scroll Brain mode, Clamp mode (anti-jitter), ASR enabled state, Auto-scroll system
+  - Exposed globally: `window.setScrollMode()`, `window.getScrollMode()`, `window.__tpScrollBrain`
+  - Auto-scroll system integration: Timed and ASR modes now properly enable/disable window.\_\_tpAuto
+- **Scroll Brain**: New TypeScript module manages all scroll movement
+  - Modes: `'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal'`
+  - Single requestAnimationFrame loop for all programmatic scrolling
+  - Clean separation: UI mode (user-facing) vs internal mode (implementation)
+
+- **WPM Mode**: Intelligent auto-scroll based on speech rate
+  - Estimates words per minute from speech recognition tokens
+  - Automatically adjusts scroll speed to match speaking pace
+  - Live WPM display: "≈ {wpm} WPM → {pxs} px/s" updated every 200ms
+  - Target WPM input for baseline speed (persisted to localStorage)
+  - Typography-aware conversion using `mapWpmToPxPerSec()`
+  - UI automatically toggles between manual speed controls and WPM controls
+
+- **Clamp Mode Refactor**: Renamed from `scrollMode` to `clampMode` in scroll-control.js
+  - Three modes: `'follow'` (monotonic forward), `'backtrack'` (allow reversal), `'free'` (no constraints)
+  - ASR mode automatically enables `'follow'` clamp to prevent back-jogs
+  - Exposed via `window.__tpSetClampMode()` for router coordination
+
+- **ASR Integration**: Simplified control via `setEnabled(boolean)` method
+  - ASR instance exposed as `window.__tpAsrMode`
+  - Router automatically starts/stops ASR based on UI mode selection
+  - Clean lifecycle: UI mode `'asr'` → hybrid brain + follow clamp + ASR on
+
+- **Type Safety**: Full TypeScript support for scroll modes and event system
+  - `ScrollMode` type exported from scroll-brain
+  - `UiScrollMode` type for user-facing modes
+  - Proper interface contracts for all scroll subsystems
+
+**Bug Fixes**
+
+- **Pre-roll Timing**: Fixed auto-scroll starting during countdown instead of after
+  - Moved `tp:autoIntent` event dispatch from before `beginCountdownThen()` to inside callback
+  - Ensures proper sequence: pause during "3...2...1..." → start scrolling after countdown completes
+- **Speed Input Reactivity**: Fixed speed slider/input not responding in timed mode
+  - Replaced direct element event listeners with document-level event delegation
+  - Speed changes now apply immediately to running auto-scroll via `Auto.setSpeed()`
+  - Handles input, change, and wheel events reliably regardless of DOM timing
+
 ## Unreleased
 
 Stability and alignment improvements across matching, scrolling, and observability.
@@ -35,13 +106,23 @@ Stability and alignment improvements across matching, scrolling, and observabili
 - Versioning
   - Bump to 1.6.0; update MANIFEST, VERSION.txt, HTML title, and APP_VERSION. PLL controller added to Advanced settings with live readout.
 
-## v1.6.5 — 2025-11-13
+## [1.6.5] - 2025-11-08
 
-Stability revert to the known-good v1.6.4 baseline.
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.6.5
 
-- Revert: restore project state to v1.6.4 to address regressions and re‑establish a stable baseline.
-- Tests: smoke suite remains green (recorderReady/adapterReady; UI invariants pass).
-- Versioning: tag as v1.6.5 after merge; no historical tags rewritten.
+### Fixed
+
+- OBS connection gating: never attempt to connect when disabled in Settings.
+  - Unified armed gating across store and localStorage: prefer `__tpStore.get('obsEnabled')`; fall back to any of `tp_obs_enabled_v2`, `tp_obs_enabled_v1`, or `tp_obs_enabled`.
+  - Persist all keys on toggle for compatibility; tie auto‑reconnect strictly to the armed flag; respect Rehearsal mode.
+  - Exposed `window.__tpObs.{armed,setArmed,maybeConnect}` remains the single control surface.
+- Auto‑record guard: when the selected recorder is OBS and it's disarmed, `doAutoRecordStart()` is a no‑op. Prevents unintended starts when OBS is off.
+- ASR smoke “Mode flip no‑dup” reliability: test‑only `tp:speech-result` path now pre‑positions the index for synthetic large leaps, avoiding false suppressions in the headless harness. Runtime coverage‑based gating is unchanged.
+
+### Tests
+
+- Recording smoke suite remains green (fallback, handoff, idempotency).
+- ASR smoke now passes “Mode flip no‑dup” along with existing gates (leap guard, freeze clamp, etc.).
 
 ## v1.5.7 — 2025-09-27
 
@@ -59,6 +140,8 @@ Stability baseline after init/boot fixes and camera/display guards.
 This snapshot is declared the new baseline.
 
 ## [1.6.4] - 2025-11-06
+
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.6.4
 
 ### Fixed
 

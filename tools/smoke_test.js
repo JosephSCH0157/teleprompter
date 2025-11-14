@@ -73,7 +73,9 @@ const URL_TO_OPEN = RAW_URL;
       };
 
       const hasToast = await waitFor('#tp_toast_container'); // toast container
-      const hasScripts = await waitFor('#scriptSlots');      // scripts UI area
+  // Legacy '#scriptSlots' removed; treat absence as ok.
+  let hasScripts = false;
+  try { hasScripts = !!document.querySelector('#scriptSlots'); } catch {}
 
       // VAD gate latency (simulated)
       try {
@@ -209,6 +211,29 @@ const URL_TO_OPEN = RAW_URL;
         if (after === before) warnLogs.push('[smoke] inline typography must affect actual line nodes');
       } catch (e) {
         warnLogs.push('[smoke] line typography guard failed: ' + (e?.message || String(e)));
+      }
+
+      // Legacy settings writers guard: ensure no legacy tp_* keys remain besides allowed modern ones
+      try {
+        const legacy = await page.evaluate(() => {
+          try {
+            const allowed = new Set([
+              // modern or unrelated keys we intentionally allow
+              'tp_ui_prefs_v1', 'tp_asr_profiles_v1', 'tp_baseline_wpm', 'tp_wpl_hint', 'scrollMode', 'tp_vad_apply_hybrid',
+              'tp_auto_speed', 'tp_auto_record_on_start_v1'
+            ]);
+            const keys = Object.keys(localStorage || {});
+            const legacyPattern = /^tp_(theme|font|line|mirror|colorize|hide|hud|wpm|step|auto_start|asr_lang)$/;
+            return keys.filter(k => legacyPattern.test(k) && !allowed.has(k));
+          } catch { return ['<eval-error>']; }
+        });
+        if (legacy.length) {
+          warnLogs.push('[smoke] legacy-settings-writers detected: ' + legacy.join(','));
+        } else {
+          console.log('[smoke] settings:legacy-writers ok');
+        }
+      } catch (e) {
+        warnLogs.push('[smoke] legacy settings guard error: ' + (e?.message || String(e)));
       }
 
       // Cheap E2E: assert CSS var changes propagate to display

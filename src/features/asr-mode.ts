@@ -1,6 +1,8 @@
 // =============================================================
 // File: src/features/asr-mode.ts
 // =============================================================
+import type { AsrStateEvent, TranscriptEvent } from '../asr-types';
+import { emit } from '../events';
 import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
@@ -22,6 +24,15 @@ export class AsrMode {
   private opts: Required<AsrModeOptions>;
   private currentIdx = 0;
   private rescueCount = 0;
+  
+  // ASR feed-forward: track reading speed to lead the target
+  private tokensPerSec = 0;
+  private lastPartialTs = 0;
+  private lastPartialTokens = 0;
+  
+  // Transcript event throttling
+  private lastTxAt = 0;
+  private readonly TX_MIN_INTERVAL_MS = 90; // ~10–12 Hz max
 
   constructor(opts?: AsrModeOptions) {
     this.opts = {
@@ -33,6 +44,14 @@ export class AsrMode {
   }
 
   getState() { return this.state; }
+
+  async setEnabled(enabled: boolean): Promise<void> {
+    if (enabled) {
+      if (this.state === 'idle') await this.start();
+    } else {
+      if (this.state !== 'idle') await this.stop();
+    }
+  }
 
   async start(): Promise<void> {
     const s = speechStore.get();
@@ -61,11 +80,39 @@ export class AsrMode {
     if (e.type === 'partial' || e.type === 'final') {
       if (this.state !== 'running') this.setState('running');
       const text = this.prepareText(e.text);
-      this.tryAdvance(text, e.type === 'final', e.confidence ?? (e.type === 'final' ? 1 : 0.5));
+      const isFinal = e.type === 'final';
+      const confidence = e.confidence ?? (isFinal ? 1 : 0.5);
+      
+      // Emit transcript event (throttled for partials)
+      this.emitTranscript({
+        text,
+        confidence,
+        partial: !isFinal,
+        final: isFinal,
+        lineIndex: isFinal ? this.currentIdx : undefined,
+      });
+      
+      // Feed-forward: track token rate on partials
+      if (e.type === 'partial') {
+        const now = performance.now();
+        const tokens = text.split(/\s+/).filter(Boolean).length;
+        if (this.lastPartialTs) {
+          const dtSec = (now - this.lastPartialTs) / 1000;
+          if (dtSec > 0 && tokens > this.lastPartialTokens) {
+            const rate = (tokens - this.lastPartialTokens) / dtSec;
+            this.tokensPerSec = 0.8 * this.tokensPerSec + 0.2 * rate;
+          }
+        }
+        this.lastPartialTs = now;
+        this.lastPartialTokens = tokens;
+      }
+      
+      this.tryAdvance(text, isFinal, confidence);
     }
 
     if (e.type === 'error') {
       this.setState('error');
+      this.emitAsrState('error', e.message);
       this.dispatch('asr:error', { code: e.code, message: e.message });
     }
     if (e.type === 'stopped') {
@@ -76,11 +123,54 @@ export class AsrMode {
   private setState(next: AsrState) {
     this.state = next;
     this.dispatch('asr:state', { state: next });
+    this.emitAsrState(next);
   }
 
   private prepareText(s: string): string {
     const st = speechStore.get();
     return st.fillerFilter ? stripFillers(s) : normalizeText(s);
+  }
+  
+  /**
+   * Gate: only emit transcript events in dev OR when explicitly enabled in Settings
+   */
+  private shouldEmitTx(): boolean {
+    try {
+      return localStorage.getItem('tp_dev_mode') === '1' || 
+             localStorage.getItem('tp_hud_prod') === '1' ||
+             (window as any).__TP_DEV === true;
+    } catch {
+      return false;
+    }
+  }
+  
+  /**
+   * Emit transcript event with throttling for partials
+   */
+  private emitTranscript(detail: Omit<TranscriptEvent, 'timestamp'>): void {
+    if (!this.shouldEmitTx()) return;
+    const now = performance.now();
+    if (now - this.lastTxAt < this.TX_MIN_INTERVAL_MS && !detail.final) return; // throttle partials
+    this.lastTxAt = now;
+    const payload = { ...detail, timestamp: now };
+    
+    // Emit primary captions event
+    emit<TranscriptEvent>('tp:captions:transcript', payload);
+    // Also emit legacy speech event for backwards compatibility
+    emit<TranscriptEvent>('tp:speech:transcript', payload);
+  }
+  
+  /**
+   * Emit ASR state change event
+   */
+  private emitAsrState(state: AsrStateEvent['state'], reason?: string): void {
+    if (!this.shouldEmitTx()) return;
+    const payload = { state, reason, timestamp: performance.now() };
+    
+    // Emit primary captions event
+    emit<AsrStateEvent>('tp:captions:state', payload);
+    // Also emit legacy speech event for backwards compatibility
+    emit<AsrStateEvent>('tp:speech:state', payload);
   }
 
   private tryAdvance(hyp: string, isFinal: boolean, confidence: number) {
@@ -95,11 +185,18 @@ export class AsrMode {
     }
 
     if (bestIdx >= 0 && bestScore >= threshold) {
-      const newIdx = idx0 + bestIdx;
+      let newIdx = idx0 + bestIdx;
+      
+      // Feed-forward: lead the target slightly when reading actively
+      const leadLines = this.getReadingLeadLines();
+      if (leadLines > 0) {
+        newIdx = Math.min(newIdx + leadLines, this.getAllLineEls().length - 1);
+      }
+      
       if (newIdx >= this.currentIdx) {
         this.currentIdx = newIdx;
         this.scrollToLine(newIdx);
-        this.dispatch('asr:advance', { index: newIdx, score: bestScore });
+        this.dispatch('asr:advance', { index: newIdx, score: bestScore, lead: leadLines });
       }
     } else if (isFinal) {
       // Rescue attempt on weak finals: nudge by one to keep momentum
@@ -110,6 +207,17 @@ export class AsrMode {
         this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'weak-final' });
       }
     }
+  }
+  
+  /**
+   * Calculate reading lead in lines based on current token rate
+   * @returns Number of lines to lead (0-3)
+   */
+  private getReadingLeadLines(): number {
+    // ~1 line per 8 tokens (tune per your scripts)
+    const linesPerSec = this.tokensPerSec / 8;
+    // Lead ~600ms ahead so scroll "meets you" instead of "chases you"
+    return Math.max(0, Math.min(3, Math.round(linesPerSec * 0.6)));
   }
 
   private getWindow() {

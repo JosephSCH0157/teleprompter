@@ -1,12 +1,16 @@
 {
   "name": "teleprompter",
   "type": "module",
-  "version": "1.6.4",
+  "version": "1.7.3",
   "private": true,
   "scripts": {
     "lint": "eslint . --ext .js,.ts --max-warnings=0 --ignore-pattern dist/**",
     "lint:fix": "eslint . --ext .js,.ts --fix",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
+    "build:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src",
+    "build:compat": "esbuild recorders.ts adapters/bridge.ts adapters/obs.ts --bundle --format=esm --sourcemap --outdir=. --platform=browser --banner:js=\"/* GENERATED FROM TypeScript - DO NOT EDIT. Edit recorders.ts / adapters/*.ts instead. */\"",
+    "build": "npm run build:ts && npm run build:compat",
+    "watch:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src --watch",
     "build:logic": "tsc -b src/logic",
     "build:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js",
     "watch:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js --watch",
@@ -17,23 +21,30 @@
     "test:asr-smoke": "node tools/asr_smoke.js",
     "test:rec-smoke": "node tools/rec_smoke.js",
     "lint:ts": "eslint \"**/*.{ts,tsx}\"",
-    "smoke:ci": "node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
-    "smoke:strict": "node tools/teleprompter_e2e.js --runSmoke --headless",
+    "smoke:ci": "npm run build:ts && npm run build:compat && node tools/teleprompter_e2e.js --runSmoke --stubObs --shimRecorder --headless",
+    "smoke:strict": "npm run build:ts && npm run build:compat && node tools/teleprompter_e2e.js --runSmoke --headless",
     "smoke:strict:slow": "node tools/teleprompter_e2e.js --runSmoke --timeout=60000 --headless",
     "types": "tsc -p tsconfig.json --noEmit",
     "check": "npm run lint && npm run types",
-    "gate": "npm run lint && npm run types && npm run build:router && npm run smoke:strict && node tools/ui_crawl.js && node tools/validate_ui_crawl.js",
-    "gate:quick": "npm run lint && npm run types && npm run build:router && npm run smoke",
+    "smoke:rehearsal": "node tools/rehearsal_smoke.js",
+    "smoke:hud": "node tools/teleprompter_e2e.js --runSmoke --headless --timeout=45000 && node tools/hud_smoke.js",
+    "smoke:reh_api": "node tools/rehearsal_api_smoke.js",
+    "gate": "npm run lint && npm run types && npm run build:router && npm run smoke:strict && npm run smoke:rehearsal && npm run smoke:hud && npm run smoke:reh_api && node tools/ui_crawl.js && node tools/validate_ui_crawl.js",
+    "gate:quick": "npm run lint && npm run types && npm test",
     "smoke:fast": "node tools/asr_smoke.js && node tools/rec_smoke.js",
     "test:save-ci": "node tools/test_save_ci.js",
     "test:obs-scene-ci": "node tools/test_obs_scene_ci.js",
-    "prepare": "husky",
+    "prepare": "husky && npm run build:compat",
     "build:speech": "node tools/esbuild-speech.mjs",
-    "watch:speech": "node tools/esbuild-speech.mjs --watch"
+    "watch:speech": "node tools/esbuild-speech.mjs --watch",
+    "gate:clean": "node tools/gate_clean.js",
+    "postversion": "node tools/bump_html_version.js && git add teleprompter_pro.html && git commit -m \"chore(html): bump visible version\" || true",
+    "test": "jest --config jest.config.cjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "esbuild": "^0.24.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.0",
@@ -41,9 +52,12 @@
     "lint-staged": "^16.2.3",
     "playwright": "^1.56.1",
     "prettier": "^3.3.0",
-    "esbuild": "^0.24.0",
     "puppeteer": "^24.26.1",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.2.5",
+    "@types/jest": "^29.5.12",
+    "jest-environment-jsdom": "^30.2.0"
   },
   "lint-staged": {
     "*.{js,jsx}": [
@@ -52,6 +66,7 @@
     ]
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "obs-websocket-js": "^5.0.6"
   }
 }

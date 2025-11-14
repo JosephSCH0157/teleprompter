@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>Teleprompter — Pro v1_6_2</title>
+  <title>Anvil v1.7.3</title>
   <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <meta name="theme-color" content="#0b0f19" />
   <meta name="color-scheme" content="dark light" />
@@ -14,7 +14,8 @@
   <link rel="canonical" href="https://example.com/teleprompter/" />
 
   <!-- Favicons -->
-  <link rel="icon" href="data:," />
+  <!-- Use a tiny inlined favicon to avoid 404s in dev/CI; replace with a real asset for production if desired -->
+  <link rel="icon" href="data:,">
 
   <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
   <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
@@ -23,32 +24,8 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- One true boot path: module try → legacy fallback; mark which path wins -->
-  <script>
-    (function () {
-      try {
-        if (window.__tpBooted) return; // hard guard if HTML is duplicated
-        window.__tpBootSrc = 'pending';
-      } catch {}
-    }());
-  </script>
-  <script type="module">
-    (async () => {
-      if (window.__tpBooted) return;
-      window.__tpBootSrc = 'module';
-      await import('./src/index.js');
-    })().catch(err => {
-      try { console.warn('[boot] module import failed → fallback', err); } catch {}
-      if (!window.__tpBooted) {
-        window.__tpBootSrc = 'fallback';
-        const s = document.createElement('script');
-        s.src = './teleprompter_pro.js';
-        s.defer = true;
-        s.onload = () => { try { console.log('[boot] legacy loaded'); } catch {} };
-        document.head.appendChild(s);
-      }
-    });
-  </script>
+  <!-- TS-only boot: single ESM entry (cache-busted in deploys) -->
+  <script type="module" src="/dist/index.js?v=1.7.1"></script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
@@ -248,6 +225,7 @@
 </script>
 <div class="topbar">
 <strong>Teleprompter_Pro</strong>
+<span id="appVersion" class="version-badge" aria-label="App version">v1.7.3</span>
 <span class="chip" id="saveChip">Draft: —</span>
 <span class="chip" id="permChip">Mic: unknown</span>
 <span class="chip" id="displayChip">Display: closed</span>
@@ -273,9 +251,10 @@
 <!-- Right-side controls wrapper (ASR chip mounts here) -->
 <div id="topbarRight" class="inl-1">
   <!-- ASR chip + button will mount here -->
-  <button class="chip" id="presentBtn">Present Mode</button>
-  <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Settings</button>
-  <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
+    <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
+    <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
+    <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
+    <button id="hudBtn" class="chip" data-action="hud-toggle">HUD</button>
   <span id="selfChecksChip" class="chip chip-muted">
     Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
   </span>
@@ -284,20 +263,20 @@
 <div class="legend" id="legend"></div>
 </div>
 <div class="app">
-<aside class="panel">
+<aside class="panel" id="sidebar">
 <h2>Controls</h2>
 <div class="row">
-<button id="openDisplayBtn">Open display window</button>
+<button id="openDisplayBtn" data-action="display">Open display window</button>
 <button disabled="" id="closeDisplayBtn">Close display window</button>
 </div>
 <div class="row">
-<button id="micBtn">Request mic</button>
+<button id="micBtn" data-action="request-mic">Request mic</button>
 <button id="releaseMicBtn">Release mic</button>
-<button disabled="" id="recBtn" class="btn-primary btn-start">Start speech sync</button>
+<button disabled="" id="recBtn" class="btn-primary btn-start" data-action="start-speech">Start speech sync</button>
 </div>
 <div class="row">
   <label>Auto-scroll (px/s)
-    <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="25"/>
+    <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
   </label>
   <button id="autoDec" class="chip" title="–1 (Shift: –5)">–</button>
   <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
@@ -318,14 +297,14 @@
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
 <div class="row">
-<button id="startCam">Start camera</button>
+<button id="startCam" data-action="start-camera">Start camera</button>
 <button disabled="" id="stopCam">Stop camera</button>
 </div>
 <div class="row">
 <label>Size (%) <input id="camSize" max="60" min="15" step="1" type="number" value="28"/></label>
 <label>Opacity <input id="camOpacity" max="100" min="20" step="5" type="number" value="100"/></label>
 <label><input checked="" id="camMirror" type="checkbox"/> Mirror</label>
-<button id="camPiP">Picture-in-Picture</button>
+<button id="camPiP" data-action="pip">Picture-in-Picture</button>
 </div>
 <div class="row visually-hidden" id="typographyRow" aria-hidden="true">
 <label>Font size <input id="fontSize" max="96" min="16" step="2" type="number" value="48"/></label>
@@ -364,16 +343,17 @@
 <div class="timer" id="timer">00:00.0</div>
 </div>
 <div class="row">
-<button id="loadSample">Load sample text</button>
+<button id="loadSample" data-action="load-sample">Load sample text</button>
 <button id="normalizeTopBtn">Normalize</button>
 <button id="clearText">Clear</button>
 </div>
+<!-- Sidebar quick Scripts select moved into Title row below -->
 <h2 class="section-title">
   Speakers
   <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody">Hide</button>
 </h2>
 
-<div id="speakersBody">
+<div id="speakersBody" data-panel="speakers">
   <div class="row">
     <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
     <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
@@ -405,6 +385,10 @@
     <button id="autoTagBtn">Smart Tag</button>
     <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
   </div>
+  <div class="row">
+    <button id="speakersKeyBtn" data-action="speakers-key" class="chip">Key…</button>
+    <input id="speakersKey" type="text" placeholder="Type a key for speaker toggle" />
+  </div>
 </div>
 <div class="row">
 <label>Format
@@ -417,15 +401,18 @@
   </select>
   </label>
 <button id="downloadFile">Download</button>
-<button id="uploadFileBtn">Upload file</button>
+<button id="uploadFileBtn" data-action="upload">Upload file</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
 </div>
+<!-- (Removed legacy Saved Scripts row; browser-saved scripts feature deprecated in favor of mapped folder + Settings card) -->
 <div class="row">
-  <label>Saved Scripts</label>
-  <select id="scriptSlots" class="select-md" aria-label="Saved scripts"></select>
-</div>
-<div class="row">
-  <label>Title <input id="scriptTitle" type="text" placeholder="Untitled"/></label>
+  <label>Scripts
+    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true"></select>
+  </label>
+  <button id="openScriptsSettings" class="btn-chip" aria-controls="scriptSelectSidebar">Folder…</button>
+  <span class="chip sidebar-hint">Manage folder in Settings → General</span>
+  <!-- Keep legacy title input hidden for compatibility with tests and legacy save paths -->
+  <input id="scriptTitle" type="text" placeholder="Untitled" hidden />
   <button id="scriptSaveBtn">Save</button>
   <button id="scriptSaveAsBtn">Save As</button>
   <button id="scriptLoadBtn">Load</button>
@@ -437,7 +424,16 @@
 </div>
 <p class="status" id="status"></p>
 <h2>Script</h2>
-<textarea id="editor" placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+<textarea id="editor" data-editor placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+<!-- Injected fallback speakers toggle & key buttons (ensure binder selectors always resolve even before JS mutates visibility) -->
+<!-- speakersToggleBtn already present as #toggleSpeakers; provide data-action alias without duplicate id -->
+<button id="speakersToggleBtnAlias" data-action="speakers-toggle" class="hidden" type="button" aria-controls="speakersBody" hidden>Speakers</button>
+<!-- speakersKeyBtn already exists; add alias element for binder multi-selector without duplicate id -->
+<button id="speakersKeyBtnAlias" data-action="speakers-key" class="hidden" type="button" hidden>Focus Key</button>
+<!-- Ensure help overlay root & settings overlay root exist early for binder wiring (already have #shortcutsOverlay & #settingsOverlay) -->
+<!-- Camera preview fallback (binder expects #cameraPreview) already present later; duplicate guarded by ID uniqueness -->
+<!-- cameraPreview already defined later with proper classes; avoid duplicate -->
+<!-- (Removed legacy External Scripts + settings export/import UI: now injected into Settings overlay) -->
 </aside>
 <main class="viewer" id="viewer">
 <div class="marker"></div>
@@ -447,6 +443,8 @@
 <div class="camWrap" id="camWrap">
 <video autoplay="" id="camVideo" muted=""></video>
 </div>
+<!-- Hidden camera preview element used by PiP/mock flows -->
+<video id="cameraPreview" muted class="cam-preview" playsinline hidden></video>
 </main>
 </div>
 <!-- Pre-roll overlay (main window) -->
@@ -457,11 +455,11 @@
 </div>
 </div>
 <!-- Near the end of <body> -->
-<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help">
   <div class="sheet">
     <header>
       <h3 id="shortcutsTitle">Shortcuts</h3>
-      <button id="shortcutsClose" class="btn-chip">Close</button>
+  <button id="shortcutsClose" class="btn-chip" data-action="help-close">Close</button>
     </header>
 
     <div class="shortcuts-grid">
@@ -477,11 +475,11 @@
   </div>
 </div>
 <!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
-<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings">
   <div class="sheet settings-sheet">
     <header class="sheet-head">
       <h3 id="settingsTitle" class="settings-title">Settings</h3>
-      <button id="settingsClose" class="btn-chip">Close</button>
+  <button id="settingsClose" class="btn-chip" data-action="settings-close">Close</button>
     </header>
     <div class="settings-tabs" id="settingsTabs">
       <button class="settings-tab active" data-tab="general">General</button>
@@ -508,5 +506,6 @@
 
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
 
+  
 </body>
 </html>

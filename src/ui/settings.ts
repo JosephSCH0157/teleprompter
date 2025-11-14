@@ -1,3 +1,4 @@
+import { ensureSettingsFolderControls } from './inject-settings-folder';
 import { initAsrSettingsUI } from './settings/asrWizard';
 import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { bindHybridGateSetting } from './settings/hybridGate';
@@ -142,6 +143,9 @@ export function mountSettings(rootEl: HTMLElement | null) {
         } catch {}
       });
     } catch {}
+
+    // Ensure the Scripts Folder card is present after builder render (builder may overwrite earlier injection)
+    try { ensureSettingsFolderControls(); } catch {}
   } catch {}
 }
 

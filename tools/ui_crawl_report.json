@@ -13,6 +13,10 @@
       "text": "Help"
     },
     {
+      "id": "hudBtn",
+      "text": "HUD"
+    },
+    {
       "id": "openDisplayBtn",
       "text": "Open display window"
     },
@@ -81,6 +85,10 @@
       "text": "Clear"
     },
     {
+      "id": "openScriptsSettings",
+      "text": "Folder…"
+    },
+    {
       "id": "toggleSpeakers",
       "text": "Hide"
     },
@@ -121,6 +129,10 @@
       "text": "Color…"
     },
     {
+      "id": "speakersKeyBtn",
+      "text": "Key…"
+    },
+    {
       "checkboxIndex": 0
     },
     {
@@ -128,569 +140,122 @@
     },
     {
       "checkboxIndex": 2
-    },
-    {
-      "checkboxIndex": 3
-    },
-    {
-      "checkboxIndex": 4
-    },
-    {
-      "checkboxIndex": 5
     }
   ],
   "errors": [],
   "console": [
     {
-      "type": "log",
-      "text": "[obs.state] wire init (claim bridge) ",
+      "type": "info",
+      "text": "[HUD] Captions HUD is off. Enable dev mode or set tp_hud_prod=1.",
       "location": {
-        "url": "http://127.0.0.1:5180/src/wiring/wire.js",
-        "lineNumber": 6,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 8274,
         "columnNumber": 16
       }
     },
     {
       "type": "log",
-      "text": "[obs.ui] delegate installed JSHandle@object",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:5180/src/wiring/wire.js",
-        "lineNumber": 6,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../eggs.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../adapters/obsBridge.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../adapters/bridge.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../adapters/obs.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../debug-tools.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../recorders.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../debug-seed.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../io-anchor.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../help.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../scroll-control.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] import:../scroll-helpers.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/index] module imports complete",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 169,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 9513,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] boot:start",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/index] boot()",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 302,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/ui/dom] bindStaticDom",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 698,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] ui:bindStaticDom",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] auto:init",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] speech:db JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     },
     {
       "type": "table",
-      "text": "JSHandle@array",
+      "text": "JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:5180/src/ui/dom.js",
-        "lineNumber": 848,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/adapters/obs] init",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
-        "lineNumber": 3,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "log",
-      "text": "[src/adapters/recorder] init",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/recorder.js",
-        "lineNumber": 3,
-        "columnNumber": 10
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 8072,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
       "text": "[src/features/persistence] initPersistence",
       "location": {
-        "url": "http://127.0.0.1:5180/src/features/persistence.js",
-        "lineNumber": 2,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 3131,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] feature:persistence",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
       }
     },
     {
       "type": "log",
       "text": "[src/features/telemetry] initTelemetry",
       "location": {
-        "url": "http://127.0.0.1:5180/src/features/telemetry.js",
-        "lineNumber": 2,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 3141,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] feature:telemetry",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
       }
     },
     {
       "type": "log",
       "text": "[src/features/scroll] initScroll",
       "location": {
-        "url": "http://127.0.0.1:5180/src/features/scroll.js",
-        "lineNumber": 2,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 3136,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] feature:scroll",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
       }
     },
     {
       "type": "log",
       "text": "[src/features/hotkeys] initHotkeys",
       "location": {
-        "url": "http://127.0.0.1:5180/src/features/hotkeys.js",
-        "lineNumber": 2,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 3126,
         "columnNumber": 10
       }
     },
     {
-      "type": "debug",
-      "text": "[init] feature:hotkeys",
+      "type": "log",
+      "text": "[TP-READY] JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 9775,
         "columnNumber": 18
       }
     },
     {
       "type": "debug",
-      "text": "[init] feature:speech",
+      "text": "[Scroll Mode] UI: asr | Brain: hybrid | Clamp: follow | ASR: on | Auto: on",
       "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "info",
-      "text": "[ASR] dev initAsrFeature()",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/index-hooks/asr.js",
-        "lineNumber": 17,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[ASR] initialized from http://127.0.0.1:5180/src/index-hooks/asr.js",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 585,
-        "columnNumber": 26
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 9597,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[HUD] {\"perf\":{\"r\":2,\"w\":1},\"drops\":{\"command\":0,\"oov\":0,\"meta\":0},\"softAdv\":{\"allowed\":0,\"blockedLost\":0,\"frozen\":0},\"rescue\":{\"count\":0,\"rescuesPerMin\":0}}",
+      "text": "[INGEST] loaded Crawler.txt",
       "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 640,
-        "columnNumber": 30
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[init] feature:router",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 27,
-        "columnNumber": 18
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 8597,
+        "columnNumber": 20
       }
     },
     {
       "type": "log",
-      "text": "[src/index] boot completed",
+      "text": "[CAM] start (mock)",
       "location": {
-        "url": "http://127.0.0.1:5180/src/index.js",
-        "lineNumber": 708,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "verbose",
-      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
-      }
-    },
-    {
-      "type": "table",
-      "text": "JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 38,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 7912,
         "columnNumber": 16
       }
     },
     {
       "type": "log",
-      "text": "[dup-init:summary] {\"dups\":[],\"total\":20}",
+      "text": "[PiP] request (mock)",
       "location": {
-        "url": "http://127.0.0.1:5180/src/dev/dup-init-check.js",
-        "lineNumber": 39,
+        "url": "http://127.0.0.1:5180/dist/index.js?v=1.7.1",
+        "lineNumber": 7930,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] speech JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:cam-mirror JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:render JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-      "location": {
-        "url": "http://127.0.0.1:5180/src/adapters/obs.js",
-        "lineNumber": 185
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[OBS test failed] JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-        "lineNumber": 188,
-        "columnNumber": 26
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] scroll:viewer JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] display:scroll JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     }
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 31 candidate controls"
+    "Found 35 candidate controls"
   ],
   "meta": {
     "target": {
@@ -699,13 +264,20 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "23e853b293743db507de35a4560a7612eacf20c0",
+      "gitSha": "c497325bc02fccbc5282d77b61b2322dbf01c35f",
       "branch": "main",
-      "buildTime": "2025-11-06T13:10:57.075Z"
+      "buildTime": "2025-11-12T14:19:59.444Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
   "ci": true,
+  "scrollMove": {
+    "before": 0,
+    "after": 1456,
+    "delta": 1456
+  },
+  "contentLines": 70,
+  "editorContentLines": 70,
   "fileInputs": [
     {
       "id": "uploadFile",
@@ -713,71 +285,63 @@
       "width": 0,
       "height": 0,
       "ariaLabel": null
+    },
+    {
+      "id": "folderFallback",
+      "hidden": true,
+      "width": 0,
+      "height": 0,
+      "ariaLabel": null
     }
   ],
-  "legendProbe": [
-    {
-      "text": "S1",
-      "color": "rgb(96, 165, 250)"
-    },
-    {
-      "text": "S2",
-      "color": "rgb(250, 204, 21)"
-    },
-    {
-      "text": "G1",
-      "color": "rgb(52, 211, 153)"
-    },
-    {
-      "text": "G2",
-      "color": "rgb(244, 114, 182)"
-    }
-  ],
+  "legendProbe": [],
   "renderProbe": {
-    "lineCount": 3,
-    "iHello": 0,
-    "iWorld": 1,
-    "cHello": "rgb(96, 165, 250)",
-    "cWorld": "rgb(250, 204, 21)"
+    "lineCount": 70,
+    "iHello": -1,
+    "iWorld": -1,
+    "cHello": null,
+    "cWorld": null
   },
   "hudProbe": {
     "isDevClass": false,
-    "hasHudChildren": true
+    "hasHudChildren": false
   },
   "lateProbe": {
     "supported": true,
     "approxFps": 60,
     "jitterStd": 0,
-    "moved": false
+    "moved": true
   },
   "settingsProbe": {
     "hasBody": true,
     "tabs": 4,
     "hasMedia": true,
-    "hasMicSel": true,
-    "hasMicLevel": true,
-    "hasAsrCalibBtn": true
+    "hasMicSel": false,
+    "hasMicLevel": false,
+    "hasAsrCalibBtn": false
   },
   "obsTestProbe": {
-    "hasBtn": true,
-    "hasDataAction": true,
+    "hasBtn": false,
+    "hasDataAction": false,
     "hadPillBefore": false,
-    "hasPillAfter": true,
-    "btnId": "settingsObsTest"
+    "hasPillAfter": false,
+    "btnId": null
   },
+  "renderedLines": 70,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 41.33333206176758,
+    "delta": 60,
     "label": "Auto-scroll: On — 61.0 px/s"
   },
   "autoState": {
     "sawEvent": true,
     "intentOn": true,
     "gate": "on",
-    "speed": 62,
+    "speed": 60,
     "label": "Auto-scroll: On — 62.0 px/s",
     "chip": "Auto: Paused",
-    "delta": 26
+    "delta": 36
   },
+  "appVersionText": "v1.7.1",
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }

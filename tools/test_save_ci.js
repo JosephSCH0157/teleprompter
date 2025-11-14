@@ -25,7 +25,7 @@ const fs = require('fs');
     await page.waitForTimeout(800);
 
     // ensure required elements exist
-    const ids = ['editor','scriptTitle','scriptSaveAsBtn','scriptSaveBtn','scriptSlots'];
+  const ids = ['editor','scriptTitle','scriptSaveAsBtn','scriptSaveBtn']; // removed 'scriptSlots' (legacy Saved Scripts UI)
     const missing = await page.evaluate((ids) => ids.filter(id => !document.getElementById(id)).map(id=>id), ids);
     if (missing.length) throw new Error('Missing required UI elements: ' + missing.join(','));
 

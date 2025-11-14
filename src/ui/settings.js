@@ -140,6 +140,9 @@
         '  <h4>Advanced</h4>',
         '  <div class="row">',
         '    <label><input type="checkbox" id="settingsDevHud"/> Enable HUD (dev only)</label>',
+  '  </div>',
+  '  <div class="row">',
+  '    <label><input type="checkbox" id="settingsHudProd"/> Show Transcript HUD in production</label>',
         '  </div>',
         '  <div class="row">',
         '    <button id="settingsResetState" class="chip">Reset app state</button>',
@@ -1375,6 +1378,17 @@
             } catch {}
           } catch {}
         });
+      }
+
+      // Production HUD toggle (advanced) — persists tp_hud_prod key and prompts reload
+      const hudProd = q('settingsHudProd');
+      try { if (hudProd) hudProd.checked = localStorage.getItem('tp_hud_prod') === '1'; } catch {}
+      if (hudProd && !hudProd.dataset.wired) {
+        hudProd.dataset.wired = '1';
+        hudProd.addEventListener('change', () => {
+          try { localStorage.setItem('tp_hud_prod', hudProd.checked ? '1' : '0'); } catch {}
+          try { alert('Transcript HUD production setting updated. Reload to apply.'); } catch {}
+        }, { capture: true });
       }
 
       // Removed duplicate fallback HUD wiring block — store-managed block above is the single source of truth.

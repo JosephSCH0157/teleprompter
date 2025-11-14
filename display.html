@@ -5,7 +5,8 @@
   });
 </script>
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="/favicon.png">
   <title>Display</title>
   <script type="module" src="typography-bridge.js"></script>
   <style>
@@ -185,8 +186,23 @@
               }catch{}
             }
 
-            // Call on resize
-            window.addEventListener('resize', ()=>applyBottomPad());
+            // Call on resize (debounced 150ms; only adjust if focus changed)
+            (function(){
+              let startActive = null; let t = null;
+              window.addEventListener('resize', () => {
+                try {
+                  if (t) clearTimeout(t);
+                  if (!startActive) startActive = document.activeElement;
+                  t = setTimeout(() => {
+                    try {
+                      const now = document.activeElement;
+                      if (now !== startActive) applyBottomPad();
+                    } catch {}
+                    startActive = null;
+                  }, 150);
+                } catch {}
+              }, { passive:true });
+            })();
 
             // requestScroll: absolute pixels in the same container as viewer
             function requestScroll(value) {
@@ -402,5 +418,42 @@
                 else if (k === '0'){ e.preventDefault(); dispScale = 1.0; try{ localStorage.setItem('tp_display_font_scale_v1','1'); }catch{} applyScaled(); }
               }
             });
+            // Rehearsal Mode mirror: apply tint + watermark listener
+            try {
+              function applyRehearsalDisplay(active){
+                try {
+                  document.body.classList.toggle('is-rehearsal-display', !!active);
+                  // Soft visual cue distinct from main watermark
+                  if (active) {
+                    if (!document.getElementById('rehearsalDisplayWatermark')){
+                      const w = document.createElement('div');
+                      w.id='rehearsalDisplayWatermark';
+                      w.style.cssText='position:fixed;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:9999;font:700 clamp(20px,6vw,60px)/1 system-ui;color:#fff;opacity:.06;letter-spacing:.15em;text-transform:uppercase;';
+                      w.textContent='REHEARSAL';
+                      document.body.appendChild(w);
+                    }
+                  }
+                } catch {}
+              }
+              // Initial state (if main already set flag before spawn)
+              try { applyRehearsalDisplay(window.opener && window.opener.__TP_REHEARSAL); } catch {}
+              window.addEventListener('message', (ev)=>{
+                try {
+                  if (ev && ev.data === 'tp:rehearsal:start') applyRehearsalDisplay(true);
+                  else if (ev && ev.data === 'tp:rehearsal:stop') applyRehearsalDisplay(false);
+                } catch {}
+              });
+              // BroadcastChannel mirror (in case direct postMessage missed)
+              try {
+                const rchan = new BroadcastChannel('tp_rehearsal');
+                rchan.addEventListener('message', (e)=>{
+                  try {
+                    if (e?.data?.t === 'rehearsal' && typeof e.data.on === 'boolean') {
+                      applyRehearsalDisplay(!!e.data.on);
+                    }
+                  } catch {}
+                });
+              } catch {}
+            } catch {}
           </script>
         </body></html>
