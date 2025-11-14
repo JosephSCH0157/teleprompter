@@ -7,8 +7,14 @@
 
   <title>Anvil v1.7.3</title>
   <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <!-- Fallback for browsers that ignore media attribute on theme-color -->
   <meta name="theme-color" content="#0b0f19" />
-  <meta name="msapplication-navbutton-color" content="#0b0f19" />
+  <!-- Enable standalone display mode for iOS when added to Home Screen (needed for status-bar-style below) -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <!-- Removed: <meta name="msapplication-navbutton-color" ...> (obsolete) -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="color-scheme" content="dark light" />
 
