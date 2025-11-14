@@ -76,8 +76,8 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
   function controlScroll({ yActive, yMarker, scrollTop, maxScrollTop, now, markerOffset = 0, sim = 1, stallFired = false }: any) {
     const err = yActive - yMarker;
     const absErr = Math.abs(err);
-    const micro = 12;
-    const macro = 120;
+  const micro = 12;
+  const macro = 100; // snappier snap threshold (was ~120)
     const maxStep = 320;
     const nowTs = now || (A.now ? A.now() : Date.now());
 

@@ -1,6 +1,16 @@
-# Teleprompter Pro (v1.6.2)
+# Teleprompter Pro (v1.7.1)
+
+![Anvil v1.7.1](https://img.shields.io/badge/Anvil-v1.7.1-blue)
 
 This is a browser-based teleprompter with display mirroring, speech sync, camera overlay, and convenient editing helpers.
+
+## What’s new in 1.7.x
+
+- TS-only boot via a single ESM entry (`/dist/index.js`); legacy preloaders stand down under `__TP_TS_PRIMARY__`.
+- Idempotent feature init with readiness flags: `window.__tpInit` and a `[TP-READY]` console line for deterministic waits.
+- Scripts Folder card lives in Settings → General, mirrored to the sidebar; aria-busy and a polite live region announce counts.
+- Cache-busted entry script in `teleprompter_pro.html` to avoid stale builds during dev/CI.
+- Unified UI binder for Scroll Mode and Present Mode wiring.
 
 ## Notes for contributors
 
@@ -55,6 +65,10 @@ npm run smoke:strict
 
 Flags
 
+- `?dev=1` or `localStorage.setItem('tp_dev_mode','1')` → DEV extras (HUD, logs)
+- `?ci=1` or `localStorage.setItem('tp_ci','1')` → CI profile for smoke/CI
+- `?mockFolder=1` → Deterministic mapped-folder scripts list in tests
+
 ?dev=1 or localStorage.setItem('tp_dev_mode','1') → DEV extras (HUD, logs)
 
 ?ci=1 or localStorage.setItem('tp_ci','1') → CI mode (sets window.\_\_TP_SKIP_BOOT_FOR_TESTS=true)
@@ -82,6 +96,10 @@ Open `teleprompter_pro.html` in a modern browser (Chromium-based recommended). G
 ## Tools & developer helpers
 
 There is a small `tools/` folder with developer helpers (Puppeteer runner, safe pre-commit helper). See `TOOLS-README.md` for usage and installation instructions.
+
+## Design docs
+
+- Sitemap & Wireframes: see `docs/sitemap-wireframes.md` for the current IA and low‑fi ASCII wireframes.
 
 ## Troubleshooting
 

@@ -10,13 +10,25 @@ function getRoleColor(role) {
   return DEF[role] || '#9fb4c9';
 }
 
+// Segmenter v2: preserves explicit newlines, performs sentence-edge splits,
+// and isolates [pause]/[beat] cues onto their own tiny lines.
+function segmentScript(raw = '') {
+  const NL = String(raw || '').replace(/\r\n?/g, '\n');
+  return NL
+    .split(/\n+/)                                       // explicit newlines first
+    .flatMap(block => block.split(/(?<=[.!?])\s+(?=[A-Z[])/)) // sentence-ish boundaries
+    .flatMap(line => line.split(/(\[pause\]|\[beat\])/).filter(Boolean)) // isolate cues
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 export function renderScript(text = '') {
   try {
     const host = document.getElementById('script');
     if (!host) return;
     let t = String(text || '');
     try { if (typeof window.stripNoteBlocks === 'function') t = window.stripNoteBlocks(t); } catch {}
-    const lines = t.replace(/\r\n?/g, '\n').split('\n');
+    const lines = segmentScript(t);
     // Preserve current scroll position if the viewer is the scroller
     const viewer = document.getElementById('viewer');
     const scroller = viewer || document.scrollingElement || document.documentElement;
@@ -30,13 +42,16 @@ export function renderScript(text = '') {
       // fallback escape only
       try { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); } catch { return String(s||''); }
     };
-    for (const raw of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
       const ln = String(raw || '');
       const tag = ln.trim().toLowerCase();
       const mOpen = tag.match(/^\[(s1|s2|g1|g2)\]$/);
       const mClose = tag.match(/^\[\/(s1|s2|g1|g2)\]$/);
       if (mOpen) { curRole = mOpen[1]; continue; }
       if (mClose) { if (curRole === mClose[1]) curRole = null; continue; }
+      // Hide note lines entirely from the prompter surface
+      if (/^\[note]/i.test(tag)) continue;
       if (ln.trim() === '') { // blank spacer line
         const div = document.createElement('div');
         div.className = 'line';
@@ -54,6 +69,17 @@ export function renderScript(text = '') {
       div.innerHTML = fmt(ln);
       if (curRole) {
         try { div.style.color = getRoleColor(curRole); } catch {}
+      }
+      // Data index for downstream match / scroll alignment helpers
+      try { div.dataset.lineIdx = String(i); } catch {}
+      // Mark cue lines distinctly (optional styling hook)
+      if (/^\[(pause|beat)]$/i.test(tag)) {
+        try {
+          div.dataset.cue = tag.replace(/\[|]/g,'');
+          div.classList.add('tp-cue');
+          div.dataset.silent = '1'; // mark cue lines as silent for ASR skip logic
+          div.setAttribute('data-silent','1');
+        } catch {}
       }
       host.appendChild(div);
     }

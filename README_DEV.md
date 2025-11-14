@@ -33,6 +33,14 @@ Quick QA checklist
 - Eggs module
   - Press Ctrl+Alt+C to toggle CK mode and check for the small toast "CK on" / "CK off".
 
+- Debug / Speech HUDs
+  - Debug HUD: toggle with `~` to view runtime scroll, match, and speech breadcrumbs.
+  - Speech Notes HUD (transcript capture) is gated to dev sessions (`?dev=1` or `window.__TP_DEV`) or explicit prod opt‑in via `localStorage.setItem('tp_hud_prod','1')`.
+    - Captures `tp:speech:transcript` + legacy HUD bus events ONLY when: mode is `asr` or `hybrid`, mic is active, and NOT in rehearsal.
+    - Finals-only checkbox plus Copy / Export / Clear buttons. Stores last 500 entries in `localStorage` under `tp_hud_speech_notes_v1`.
+    - Script auto-injects after the legacy HUD announces readiness (`hud:ready`) so the bus exists first.
+    - To enable in production for an admin test: run `localStorage.setItem('tp_hud_prod','1')` in the console and reload.
+
 Notes
 
 - The dev task in VS Code (`Serve (live-server)`) uses `npx live-server` to provide live-reload when files change.
