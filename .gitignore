@@ -19,6 +19,7 @@ Thumbs.db
 dist/
 build/
 *.zip
+.worktrees/
 
 # Legacy CI-only stub outputs served dynamically by the smoke server; no files generated.
 
