@@ -15,8 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
+      - name: Checkout (no submodules)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
