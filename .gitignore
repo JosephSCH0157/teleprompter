@@ -19,6 +19,7 @@ Thumbs.db
 dist/
 build/
 *.zip
+.worktrees/
 
 # Env
 .env
