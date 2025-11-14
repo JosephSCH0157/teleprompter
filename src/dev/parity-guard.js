@@ -11,8 +11,8 @@
     // existence
     must('.topbar');
     must('#viewer');
-    ['#presentBtn','#settingsBtn','#shortcutsBtn','#speakerIndexChip',
-     '#settingsOverlay','#settingsClose','#shortcutsOverlay','#shortcutsClose']
+    ['#presentBtn','#settingsBtn,[data-action="settings-open"]','#shortcutsBtn,[data-action="help-open"]','#speakerIndexChip',
+     '#settingsOverlay','#settingsClose,[data-action="settings-close"]','#shortcutsOverlay','#shortcutsClose,[data-action="help-close"]']
      .forEach(id => must(id));
 
     // Accept either legacy bottom meter (#dbMeter) or current top-bar meter (#dbMeterTop)
@@ -42,14 +42,14 @@
     // wiring checks (open/close overlays)
     (function () {
       const so = q('#shortcutsOverlay'), sb = q('#shortcutsBtn');
-      const se = q('#settingsOverlay'),  sb2 = q('#settingsBtn');
+      const se = q('#settingsOverlay'),  sb2 = q('#settingsBtn, [data-action="settings-open"]');
       try { sb?.click(); } catch {}
       if (so && so.classList.contains('hidden')) fails.push('Help overlay does not open');
       // Close explicitly via Close button to avoid depending on keydown target
-      try { q('#shortcutsClose')?.click(); } catch {}
+      try { q('#shortcutsClose, [data-action="help-close"]')?.click(); } catch {}
       try { sb2?.click(); } catch {}
       if (se && se.classList.contains('hidden')) fails.push('Settings overlay does not open');
-      q('#settingsClose')?.click();
+      q('#settingsClose, [data-action="settings-close"]')?.click();
     })();
 
     // present toggle works (and reverts)

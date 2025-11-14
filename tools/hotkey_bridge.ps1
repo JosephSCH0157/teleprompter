@@ -43,7 +43,7 @@ public static class KB {
 }
 "@
 
-function Parse-Query([string]$query) {
+function Get-QueryParameters([string]$query) {
   $map = @{}
   if ([string]::IsNullOrEmpty($query)) { return $map }
   if ($query.StartsWith('?')) { $query = $query.Substring(1) }
@@ -104,7 +104,7 @@ function Send-ComboGeneric([string]$combo) {
 }
 
 function Send-Hotkey([string]$combo) {
-  try { Send-ComboGeneric $combo } catch { Write-Warning "Failed to send $combo: $_" }
+  try { Send-ComboGeneric $combo } catch { Write-Warning ("Failed to send {0}: {1}" -f $combo, $_) }
 }
 
 while ($true) {
@@ -112,7 +112,7 @@ while ($true) {
   $res = $ctx.Response
   try {
     $path = $ctx.Request.Url.AbsolutePath
-    $q = Parse-Query $ctx.Request.Url.Query
+    $q = Get-QueryParameters $ctx.Request.Url.Query
     if ($path -eq '/record/start') {
       Send-Hotkey $StartHotkey
       $out = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true,"action":"start"}')

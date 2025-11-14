@@ -315,8 +315,8 @@ async function main() {
   // Ensure Settings overlay opens deterministically before smoke checks (use data-smoke-open hook)
   try {
     const openedVia = await (async () => {
-      if (await exists('#settingsBtn')) return (await clickIf('#settingsBtn'));
       if (await exists('[data-action="settings-open"]')) return (await clickIf('[data-action="settings-open"]'));
+      if (await exists('#settingsBtn')) return (await clickIf('#settingsBtn'));
       return false;
     })();
     if (openedVia) {
