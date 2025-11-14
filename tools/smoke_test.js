@@ -73,9 +73,16 @@ const URL_TO_OPEN = RAW_URL;
       };
 
       const hasToast = await waitFor('#tp_toast_container'); // toast container
-  // Legacy '#scriptSlots' removed; treat absence as ok.
-  let hasScripts = false;
-  try { hasScripts = !!document.querySelector('#scriptSlots'); } catch {}
+      // Script container presence: accept modern '#script' or a script inside the viewer
+      const hasScripts = await page.evaluate(() => {
+        try {
+          if (document.querySelector('#script')) return true;
+          if (document.querySelector('#viewer .script')) return true;
+          // Legacy fallback
+          if (document.querySelector('#scriptSlots')) return true;
+        } catch {}
+        return false;
+      });
 
       // VAD gate latency (simulated)
       try {

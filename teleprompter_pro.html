@@ -509,5 +509,27 @@
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
 
   
+  <!-- Init-done shim for harnesses: mark when DOM is ready -->
+  <script>
+  (function(){
+    function mark(){
+      try {
+        if (typeof window.tpMarkInitDone === 'function') {
+          window.tpMarkInitDone('html:ready');
+        } else {
+          window.__tp_init_done = true;
+          try { window.dispatchEvent(new CustomEvent('tp:init:done', { detail: { reason: 'html:ready' } })); } catch {}
+        }
+      } catch {}
+    }
+    try {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function(){ setTimeout(mark, 0); }, { once: true });
+      } else {
+        setTimeout(mark, 0);
+      }
+    } catch { setTimeout(mark, 0); }
+  })();
+  </script>
 </body>
 </html>

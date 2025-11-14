@@ -489,6 +489,16 @@ export async function boot() {
 						}, { capture: true });
 					} catch {}
 
+					// Signal init completion so harness/tests can proceed
+					try {
+						if (typeof (window as any).tpMarkInitDone === 'function') {
+							(window as any).tpMarkInitDone('ts:index:onReady');
+						} else {
+							(window as any).__tp_init_done = true;
+							try { window.dispatchEvent(new CustomEvent('tp:init:done', { detail: { reason: 'ts:index:onReady' } })); } catch {}
+						}
+					} catch {}
+
 				} catch {}
 			};
 
