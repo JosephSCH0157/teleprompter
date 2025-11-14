@@ -1,3 +1,7 @@
+// DEV: sanity marker so we know TS entry is live.
+;(window as any).__tpBootPath = 'ts:index';
+try { console.log('[TP-BOOT] TS index.ts booted'); } catch {}
+
 // Signal TS is primary so legacy preloaders can stand down
 try { (window as any).__TP_TS_PRIMARY__ = true; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early

@@ -32,36 +32,8 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- One true boot path: prefer built dist, then dev modules, else legacy fallback -->
-  <script>
-    (function () {
-      try {
-        if (window.__tpBooted) return; // hard guard if HTML is duplicated
-        window.__tpBootSrc = 'pending';
-      } catch {}
-    }());
-  </script>
-  <script type="module">
-    (async () => {
-      if (window.__tpBooted) return;
-      const tryImport = async (spec, label) => {
-        try { await import(spec); window.__tpBootSrc = label; return true; } catch (e) {
-          try { console.warn('[boot]', label, 'failed → next', e); } catch {}
-          return false;
-        }
-      };
-      // Prefer dev source in local runs, then built dist in packaged builds
-      if (await tryImport('./src/index.js', 'module')) return;
-      if (await tryImport('/dist/index.js', 'dist')) return;
-      // Last-resort: legacy bundle
-      window.__tpBootSrc = 'fallback';
-      const s = document.createElement('script');
-      s.src = './teleprompter_pro.js';
-      s.defer = true;
-      s.onload = () => { try { console.log('[boot] legacy loaded'); } catch {} };
-      document.head.appendChild(s);
-    })();
-  </script>
+  <!-- Modern TS boot loader (single entry) -->
+  <script type="module" src="/src/boot/boot-loader.js"></script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
