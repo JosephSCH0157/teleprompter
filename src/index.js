@@ -893,6 +893,8 @@ async function boot() {
         const recheckBtn = document.getElementById('recheckFolderBtn');
         const sel = document.getElementById('scriptSelect');
         const fallback = document.getElementById('folderFallback');
+        // Session-only map of files when using the fallback directory input
+        try { if (!window.__tpFolderFilesMap) window.__tpFolderFilesMap = new Map(); } catch {}
         const useMock = (() => { try { const Q = new URLSearchParams(location.search||''); return Q.has('mockFolder'); } catch { return false; } })();
         btn.dataset.mappedFolderWired = '1';
         try { btn.disabled = false; } catch {}
@@ -919,6 +921,8 @@ async function boot() {
               try {
                 const dirHandle = await window.showDirectoryPicker();
                 try { window.__tpFolderHandle = dirHandle; } catch {}
+                // New native selection replaces any prior fallback file map
+                try { if (window.__tpFolderFilesMap && window.__tpFolderFilesMap.clear) window.__tpFolderFilesMap.clear(); } catch {}
                 for await (const entry of dirHandle.values()) {
                   try {
                     if (entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
@@ -955,6 +959,14 @@ async function boot() {
               try {
                 const files = Array.from(fallback.files || []);
                 const names = files.map(f => f && f.name).filter(Boolean);
+                // Reset any native handle since we're using the fallback source now
+                try { window.__tpFolderHandle = null; } catch {}
+                // Store File objects in a session map for on-demand loads
+                try {
+                  if (!window.__tpFolderFilesMap) window.__tpFolderFilesMap = new Map();
+                  window.__tpFolderFilesMap.clear();
+                  for (const f of files) { if (f && f.name) window.__tpFolderFilesMap.set(f.name, f); }
+                } catch {}
                 if (names.length) {
                   populate(names);
                   try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch {}
@@ -1177,21 +1189,37 @@ async function boot() {
           } catch {}
         });
 
-        // Load content on select change when folder handle exists
+        // Load content on select change when folder handle exists or fallback files map is set
         document.addEventListener('change', async (ev) => {
           try {
             const t = ev && ev.target;
             const isSel = !!(t && (t.id === 'scriptSelect' || t.id === 'scriptSelectSidebar'));
             if (!isSel) return;
-            const dir = getDir(); if (!dir) return;
             const sel = t; const name = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
             if (!name) return;
+            const dir = getDir();
+            // Try native directory read first
+            if (dir) {
+              try {
+                const fh = await dir.getFileHandle(String(name), { create: false });
+                const file = await fh.getFile();
+                const text = await file.text();
+                try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} } } catch {}
+                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch {}
+                return;
+              } catch {}
+            }
+            // Fallback: if we have a session files map from the fallback picker, use it
             try {
-              const fh = await dir.getFileHandle(String(name), { create: false });
-              const file = await fh.getFile();
-              const text = await file.text();
-              try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} } } catch {}
-              try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch {}
+              const mp = window.__tpFolderFilesMap;
+              if (mp && typeof mp.get === 'function') {
+                const f = mp.get(String(name));
+                if (f) {
+                  const text = await f.text();
+                  try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} } } catch {}
+                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch {}
+                }
+              }
             } catch {}
           } catch {}
         }, { capture: true });
