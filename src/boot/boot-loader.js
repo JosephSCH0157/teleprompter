@@ -72,11 +72,12 @@
       let relaxDevFallback = false;
       try {
         const qs = new URLSearchParams(location.search || '');
+        const noRelax = qs.has('noRelax') || (function(){ try { return localStorage.getItem('tp_noRelax') === '1'; } catch { return false; } })();
         const ci = qs.has('ci');
         const uiMock = qs.has('uiMock');
         const mockFolder = qs.has('mockFolder');
         const isWebDriver = (typeof navigator !== 'undefined') && ((navigator).webdriver === true);
-        relaxDevFallback = !!(ci || uiMock || mockFolder || isWebDriver);
+        relaxDevFallback = !!(ci || uiMock || mockFolder || isWebDriver) && !noRelax;
       } catch {}
       if (isDev && !forceLegacy && !relaxDevFallback) {
         try {
@@ -87,12 +88,28 @@
       }
       // Prod or forced legacy: inject monolith/module as a last resort
       try {
+        try { g.applyCamOpacity = g.applyCamOpacity || function(){ try { console.debug('[boot-loader] shim: applyCamOpacity'); } catch{} }; } catch {}
         const s = document.createElement('script');
         s.src = './teleprompter_pro.js';
         // The current legacy build uses ESM import statements; load as a module
         s.type = 'module';
         s.defer = true;
-        s.onload = () => push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
+        s.onload = async () => {
+          push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
+          try {
+            // Augment legacy with minimal UI bindings and Settings Scripts card for smoke
+            const ui = await import('/src/wiring/ui-binds.js').catch(()=>null);
+            if (ui && typeof ui.bindCoreUI === 'function') {
+              try { ui.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+            }
+          } catch {}
+          try {
+            const inj = await import('/src/ui/inject-settings-folder.js').catch(()=>null);
+            if (inj && typeof inj.ensureSettingsFolderControlsAsync === 'function') {
+              try { inj.ensureSettingsFolderControlsAsync(6000); } catch {}
+            }
+          } catch {}
+        };
         s.onerror = () => push({ tag: 'boot-loader', msg: 'legacy failed', ok: false });
         document.head.appendChild(s);
       } catch {}

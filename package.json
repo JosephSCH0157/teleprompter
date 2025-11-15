@@ -9,7 +9,7 @@
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
     "build:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src",
     "build:compat": "esbuild recorders.ts adapters/bridge.ts adapters/obs.ts --bundle --format=esm --sourcemap --outdir=. --platform=browser --banner:js=\"/* GENERATED FROM TypeScript - DO NOT EDIT. Edit recorders.ts / adapters/*.ts instead. */\"",
-    "build": "npm run build:ts && npm run build:compat",
+    "build": "npm run build:ts && npm run build:compat && npm run build:speech && npm run build:hud",
     "watch:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src --watch",
     "build:logic": "tsc -b src/logic",
     "build:asr": "npx esbuild src/index-hooks/asr.ts --bundle --format=esm --sourcemap --outfile=dist/index-hooks/asr.js",
@@ -37,6 +37,8 @@
     "prepare": "husky && npm run build:compat",
     "build:speech": "node tools/esbuild-speech.mjs",
     "watch:speech": "node tools/esbuild-speech.mjs --watch",
+    "build:hud": "node tools/esbuild-hud.mjs",
+    "watch:hud": "node tools/esbuild-hud.mjs --watch",
     "gate:clean": "node tools/gate_clean.js",
     "postversion": "node tools/bump_html_version.js && git add teleprompter_pro.html && git commit -m \"chore(html): bump visible version\" || true",
     "test": "jest --config jest.config.cjs"

@@ -7,13 +7,11 @@ const shared = {
   platform: 'browser',
   sourcemap: true,
   target: ['es2020'],
-  outdir: 'speech',            // served at /speech/*.js
+  outdir: 'dist/hud',
 };
 
 const entries = [
-  { in: 'src/speech/orchestrator.ts', outbase: 'src/speech' },
-  { in: 'src/speech/recognizer.ts',   outbase: 'src/speech' },
-  { in: 'src/speech/matcher.ts',      outbase: 'src/speech' },
+  { in: 'src/hud/debug.ts', outbase: 'src/hud' },
 ];
 
 const ctx = await esbuild.context({
@@ -24,9 +22,9 @@ const ctx = await esbuild.context({
 
 if (watch) {
   await ctx.watch();
-  console.log('[esbuild] speech watch on → /speech/*.js');
+  console.log('[esbuild] hud watch → dist/hud/*.js');
 } else {
   await ctx.rebuild();
   await ctx.dispose();
-  console.log('[esbuild] speech build → /speech/*.js');
+  console.log('[esbuild] hud build → dist/hud/*.js');
 }
