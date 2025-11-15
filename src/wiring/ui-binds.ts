@@ -951,6 +951,129 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
     }
   } catch {}
 
+  // Unified Display Window toggle (replaces separate Open/Close buttons)
+  try {
+    if (!(window as any).__tpDisplayToggleWired) {
+      (window as any).__tpDisplayToggleWired = true;
+      const openBtn = document.getElementById('openDisplayBtn') as HTMLButtonElement | null;
+      const closeBtn = document.getElementById('closeDisplayBtn') as HTMLButtonElement | null;
+      // Hide legacy pair, but keep in DOM for fallback
+      try { openBtn?.setAttribute('hidden',''); openBtn && (openBtn.style.display = 'none'); } catch {}
+      try { closeBtn?.setAttribute('hidden',''); closeBtn && (closeBtn.style.display = 'none'); } catch {}
+
+      // Place toggle near the old buttons if possible
+      const host = (openBtn?.parentElement) || (closeBtn?.parentElement) || document.getElementById('topbarRight') || document.body;
+      let tbtn = document.getElementById('displayToggleBtn') as HTMLButtonElement | null;
+      if (!tbtn) {
+        tbtn = document.createElement('button');
+        tbtn.id = 'displayToggleBtn';
+        tbtn.className = 'chip';
+        host?.insertBefore(tbtn, (openBtn || closeBtn) || null);
+      }
+
+      const isOpen = () => {
+        try { const w = (window as any).__tpDisplayWindow as Window | null; return !!(w && !w.closed); } catch { return false; }
+      };
+      const setUi = () => {
+        const on = isOpen();
+        try { tbtn!.textContent = on ? 'Close display window' : 'Open display window'; } catch {}
+        try { tbtn!.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch {}
+      };
+      setUi();
+
+      const openDisplay = async () => {
+        try {
+          // Reuse emergency binder logic to choose URL
+          const displayUrl = `${location.origin}/display.html`;
+          let urlToOpen = '';
+          try {
+            const r = await fetch(displayUrl, { method: 'HEAD' });
+            urlToOpen = r.ok ? displayUrl : `${location.pathname}?display=1`;
+          } catch {
+            urlToOpen = `${location.pathname}?display=1`;
+          }
+          const w = window.open(urlToOpen, 'AnvilDisplay', 'popup=yes,resizable=yes,scrollbars=no,width=1280,height=720');
+          try { (window as any).__tpDisplayWindow = w; } catch {}
+        } catch {}
+      };
+      const closeDisplay = () => {
+        try { (window as any).__tpDisplayWindow?.close?.(); } catch {}
+        try { (window as any).__tpDisplayWindow = null; } catch {}
+      };
+
+      tbtn?.addEventListener('click', async (e) => {
+        try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+        if (isOpen()) closeDisplay(); else await openDisplay();
+        setTimeout(setUi, 0);
+      }, { capture: true });
+
+      // Monitor external close
+      try {
+        const iv = setInterval(() => {
+          try { if (!isOpen()) setUi(); } catch {}
+        }, 800);
+        setTimeout(() => { try { clearInterval(iv); } catch {} }, 120000);
+      } catch {}
+    }
+  } catch {}
+
+  // Unified Camera toggle (replaces Start/Stop camera)
+  try {
+    if (!(window as any).__tpCameraToggleWired) {
+      (window as any).__tpCameraToggleWired = true;
+      const startBtn = document.getElementById('startCam') as HTMLButtonElement | null;
+      const stopBtn  = document.getElementById('stopCam') as HTMLButtonElement | null;
+      // Hide legacy pair
+      try { startBtn?.setAttribute('hidden',''); startBtn && (startBtn.style.display = 'none'); } catch {}
+      try { stopBtn?.setAttribute('hidden','');  stopBtn  && (stopBtn.style.display  = 'none'); } catch {}
+
+      const host = (startBtn?.parentElement) || (stopBtn?.parentElement) || document.getElementById('sidebar') || document.body;
+      let cbtn = document.getElementById('cameraToggleBtn') as HTMLButtonElement | null;
+      if (!cbtn) {
+        cbtn = document.createElement('button');
+        cbtn.id = 'cameraToggleBtn';
+        cbtn.className = 'chip';
+        cbtn.type = 'button';
+        host?.insertBefore(cbtn, (startBtn || stopBtn) || null);
+      }
+
+      const isCamOn = () => {
+        try {
+          const v = document.getElementById('cameraPreview') as HTMLVideoElement | null;
+          const hasStream = !!(v && (v as any).srcObject);
+          const ms = (mediaStore && mediaStore.cam) ? true : false;
+          return hasStream || ms;
+        } catch { return false; }
+      };
+      const setUi = () => {
+        const on = isCamOn();
+        try { cbtn!.textContent = on ? 'Stop camera' : 'Start camera'; } catch {}
+        try { cbtn!.setAttribute('aria-pressed', on ? 'true' : 'false'); } catch {}
+      };
+      setUi();
+
+      cbtn?.addEventListener('click', async (e) => {
+        try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+        if (isCamOn()) { try { stopCamera(); } catch {} }
+        else {
+          try {
+            // Prefer app camera if present via cam.start; fall back to local helper
+            const fn = (window as any).__tpCamImpl?.start || (window as any).Camera?.start;
+            if (typeof fn === 'function') { await fn(); }
+            else { await startCamera(); }
+          } catch {}
+        }
+        setTimeout(setUi, 0);
+      }, { capture: true });
+
+      // Small monitor to keep label in sync if stream changes elsewhere
+      try {
+        const iv = setInterval(() => { setUi(); }, 1200);
+        setTimeout(() => { try { clearInterval(iv); } catch {} }, 120000);
+      } catch {}
+    }
+  } catch {}
+
   // Settings / Help overlay wiring (single source of truth)
   try {
     // Deprecated local toggle helper removed (use toggleOverlayList instead)
