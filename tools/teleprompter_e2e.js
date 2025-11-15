@@ -489,6 +489,53 @@ async function main() {
           notes.push('settingsBtn not found (skipped)');
         }
 
+        // Builder-path guard: ensure dynamic Pricing/About sections exist when builder is mounted
+        try {
+          const reopened = await robustClick('#settingsBtn', '[data-action="settings-open"]');
+          if (reopened) {
+            const okOpen2 = await waitAttr('body', 'data-smoke-open', 'settings', 1500);
+            if (!okOpen2) {
+              notes.push('settings open not observed (builder check)');
+            } else {
+              const builderCheck = await page.evaluate(() => {
+                try {
+                  const root = document.getElementById('settingsBody');
+                  if (!root) return { hasBuilder:false };
+                  const dynSections = root.querySelectorAll('[data-tab-content]');
+                  const hasBuilder = dynSections && dynSections.length > 0;
+                  const pricing = root.querySelector('[data-tab-content="pricing"]');
+                  const about = root.querySelector('[data-tab-content="about"]');
+                  const len = (el)=>{ try { return ((el && el.textContent) || '').trim().length; } catch { return 0; } };
+                  return {
+                    hasBuilder,
+                    hasPricing: !!pricing,
+                    hasAbout: !!about,
+                    pricingLen: len(pricing),
+                    aboutLen: len(about)
+                  };
+                } catch { return { hasBuilder:false }; }
+              });
+              if (builderCheck && builderCheck.hasBuilder) {
+                if (!builderCheck.hasPricing || builderCheck.pricingLen < 8) {
+                  notes.push('assert: builder missing pricing content');
+                  try { smoke.ok = false; } catch {}
+                }
+                if (!builderCheck.hasAbout || builderCheck.aboutLen < 8) {
+                  notes.push('assert: builder missing about content');
+                  try { smoke.ok = false; } catch {}
+                }
+              } else {
+                notes.push('builder not detected (static HTML path ok)');
+              }
+            }
+            await robustClick('#settingsClose', '[data-action="settings-close"]');
+            const closed2 = await page.evaluate(() => !document.body.hasAttribute('data-smoke-open'));
+            if (!closed2) notes.push('settings close not observed (builder check)');
+          }
+        } catch (e) {
+          notes.push('builder check error: ' + String(e && e.message || e));
+        }
+
   if (await robustClick('#helpBtn', '[data-action="help-open"]')) {
           const opened = await waitAttr('body', 'data-smoke-open', 'help', 1500);
           if (!opened) notes.push('help open not observed');
