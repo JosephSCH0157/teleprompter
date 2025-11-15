@@ -150,8 +150,8 @@ import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
 import { onTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
-import './ui/micMenu';
 import { wireMicToggle } from './ui/mic-toggle';
+import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
