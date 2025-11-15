@@ -347,6 +347,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 /* Sidebar hint for relocated media/OBS controls */
 .sidebar-hint{flex:1 1 100%;text-align:left;opacity:.75}
 
+/* Widen mapped folder scripts select in sidebar for readability */
+#scriptSelectSidebar {
+    flex: 1 1 auto;            /* allow it to grow within flex row */
+    min-width: 240px;          /* prevent overly narrow collapsed width */
+    width: 100%;               /* take remaining horizontal space */
+    max-width: 100%;           /* avoid overflow */
+}
+/* Ensure label housing the select does not constrain width */
+label:has(#scriptSelectSidebar) { flex: 1 1 auto; }
+
 /* Disable browser smooth scrolling for live-follow (always snap immediately) */
 #viewer, #scriptScrollContainer { scroll-behavior: auto !important; }
 
