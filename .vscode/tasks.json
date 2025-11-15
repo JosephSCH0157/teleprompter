@@ -21,6 +21,61 @@
 			"command": "npx live-server --port=8080 --no-browser --watch=.",
 			"isBackground": true,
 			"group": "build"
+		},
+		{
+			"label": "Test: Hotkey Load",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tools/test_hotkey_load.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Test: Hotkey Load",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tools/test_hotkey_load.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Test: Hotkey Load (2)",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tools/test_hotkey_load.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Test: Hotkey Load (3)",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tools/test_hotkey_load.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Test: Hotkey Load (4)",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tools/test_hotkey_load.js"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
 		}
 	]
 }

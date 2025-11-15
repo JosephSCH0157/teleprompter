@@ -19,16 +19,26 @@ const puppeteer = require('puppeteer');
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
+    // Force-load the production bundle to avoid dev TS import issues under static server
+    try {
+      await page.addScriptTag({ type: 'module', content: "import('/dist/index.js')" });
+    } catch {}
+
     // Wait for editor to exist
     await page.waitForSelector('#editor', { timeout: 10000 });
 
-    // Give binder a brief moment to attach capture-phase listeners
-    await page.waitForTimeout(300);
+    // Wait for core UI binder to attach capture-phase listeners
+    await page.waitForFunction(() => {
+      try { return !!(window).__tpCoreUiBound; } catch { return false; }
+    }, { timeout: 5000 }).catch(() => {});
 
-    // Press Ctrl+O to trigger our resilient load flow
-    await page.keyboard.down('Control');
-    await page.keyboard.press('KeyO');
-    await page.keyboard.up('Control');
+    // Trigger Ctrl/Cmd+O via a synthetic keydown on window (capture-phase listener)
+    await page.evaluate(() => {
+      try {
+        const ev = new KeyboardEvent('keydown', { key: 'o', ctrlKey: true, bubbles: true, cancelable: true });
+        window.dispatchEvent(ev);
+      } catch {}
+    });
 
     // Expect mock upload text to appear (DEV uiMock path)
     const ok = await page.waitForFunction(() => {
