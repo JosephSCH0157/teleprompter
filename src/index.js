@@ -578,6 +578,9 @@ async function boot() {
     // Install speech start/stop delegator
     initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
 
+    // Ensure local auto-recorder surface exists (camera+mic → WebM)
+    try { await import('./recording/local-auto.js'); } catch (e) { try { console.warn('[src/index] local-auto import failed', e); } catch {} }
+
     // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {
       // Tiny helper: HEAD probe without caching

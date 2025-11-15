@@ -108,7 +108,7 @@
         '<div data-tab-content="recording" style="display:none">',
         '  <h4>Recording</h4>',
         '  <div class="row">',
-  '    <label><input type="checkbox" id="settingsAutoRecord"/> Auto-record on start</label>',
+  '    <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>',
         '  </div>',
         '  <div class="row">',
         '    <label>Pre-roll (sec) <input id="settingsPreroll" type="number" min="0" max="10" step="1" class="select-md"/></label>',
