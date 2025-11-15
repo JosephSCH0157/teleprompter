@@ -493,8 +493,55 @@
       <button class="settings-tab" data-tab="media">Media</button>
       <button class="settings-tab" data-tab="recording">Recording</button>
       <button class="settings-tab" data-tab="advanced">Advanced</button>
+      <button class="settings-tab" data-tab="pricing" type="button">Pricing</button>
+      <button class="settings-tab" data-tab="about" type="button">About</button>
     </div>
-    <div id="settingsBody" class="settings-body"></div>
+    <div id="settingsBody" class="settings-body">
+      <div class="settings-card" data-tab="pricing">
+        <h3>Pricing</h3>
+        <p class="dim">
+          Anvil starts with a free tier for solo creators. Paid plans unlock advanced features like
+          multi-recorder control, hybrid scroll tuning presets, and future Forge integrations.
+        </p>
+
+        <ul class="dim">
+          <li><strong>Free:</strong> Core teleprompter, script saving, basic OBS control.</li>
+          <li><strong>Creator:</strong> Auto-record presets, hybrid scroll profiles, priority fixes.</li>
+          <li><strong>Studio:</strong> Multi-seat, shared presets, dedicated support. (Coming soon)</li>
+        </ul>
+
+        <div class="hr"></div>
+
+        <p>
+          Want to keep Anvil’s hammer swinging while this all ships?
+          <br />
+          <a href="https://www.buymeacoffee.com/YOUR_SLUG_HERE" target="_blank" rel="noopener noreferrer">
+            Buy me a coffee ☕
+          </a>
+        </p>
+      </div>
+
+      <div class="settings-card" data-tab="about">
+        <h3>About Anvil</h3>
+        <p class="dim">
+          Anvil is part of the Podcaster’s Forge toolset — an all-in-one toolkit for creators who
+          record, edit, and ship shows without a full studio staff.
+        </p>
+
+        <p class="dim">
+          Version: <span id="aboutVersion">v1.6.x</span><br />
+          Built by: Podcaster’s Forge
+        </p>
+
+        <div class="hr"></div>
+
+        <h4>Contact</h4>
+        <p class="dim">
+          Questions, bugs, or feature requests? Reach out at:<br />
+          <a href="mailto:info@podcastersforge.com">info@podcastersforge.com</a>
+        </p>
+      </div>
+    </div>
     <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
   </div>
 </div>
@@ -515,5 +562,20 @@
 
   
   
+  <script>
+    (function(){
+      try {
+        var el = document.getElementById('aboutVersion');
+        if (!el) return;
+        var v = '';
+        try { if (window.APP_VERSION) v = String(window.APP_VERSION); } catch {}
+        if (!v) {
+          var av = document.getElementById('appVersion');
+          if (av && av.textContent) v = av.textContent.trim();
+        }
+        if (v) el.textContent = v;
+      } catch {}
+    })();
+  </script>
 </body>
 </html>
