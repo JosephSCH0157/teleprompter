@@ -980,6 +980,72 @@ async function boot() {
     try { window.__bindMappedFolderUI = __bindMappedFolderUI; } catch {}
     try { __bindMappedFolderUI(); } catch {}
 
+    // Sidebar mirror: keep #scriptSelectSidebar in sync with Settings #scriptSelect (JS path)
+    (function ensureSidebarMirror(){
+      try {
+        if (window.__tpSidebarMirrorInstalled) return; window.__tpSidebarMirrorInstalled = true;
+        const getMain = () => document.getElementById('scriptSelect');
+        const getSide = () => document.getElementById('scriptSelectSidebar');
+
+        function copyOptionsFromMain(){
+          try {
+            const main = getMain();
+            const side = getSide();
+            if (!main || !side) return;
+            const opts = Array.from(main.options || []);
+            side.setAttribute('aria-busy','true');
+            side.disabled = true;
+            side.innerHTML = '';
+            for (const o of opts) {
+              try { const n = document.createElement('option'); n.value = o.value; n.textContent = o.textContent || ''; side.appendChild(n); } catch {}
+            }
+            // reflect value if present
+            try { side.value = main.value; } catch {}
+            side.setAttribute('aria-busy','false');
+            side.disabled = side.options.length === 0;
+            side.dataset.count = String(side.options.length || 0);
+          } catch {}
+        }
+
+        // One-time sync attempt (handles case when population already happened)
+        try { copyOptionsFromMain(); } catch {}
+
+        // Refresh mirror whenever folder scripts are (re)populated
+        try {
+          window.addEventListener('tp:folderScripts:populated', () => { try { copyOptionsFromMain(); } catch {} });
+        } catch {}
+
+        // Keep selection in sync both ways
+        try {
+          const main = getMain(); const side = getSide();
+          if (main && !main.__mirrorSel) {
+            main.__mirrorSel = true;
+            main.addEventListener('change', () => { try { const s = getSide(); if (s) s.value = main.value; } catch {} });
+          }
+          if (side && !side.__mirrorSel) {
+            side.__mirrorSel = true;
+            side.addEventListener('change', () => { try { const m = getMain(); if (m) m.value = side.value; } catch {} });
+          }
+        } catch {}
+
+        // If either select is not present yet, observe briefly and retry
+        try {
+          if (!(getMain() && getSide())) {
+            const mo = new MutationObserver(() => {
+              try {
+                if (getMain() && getSide()) {
+                  try { copyOptionsFromMain(); } catch {}
+                  try { mo.disconnect(); } catch {}
+                }
+              } catch {}
+            });
+            mo.observe(document.documentElement, { childList: true, subtree: true });
+            setTimeout(() => { try { mo.disconnect(); } catch {} }, 20000);
+          }
+        } catch {}
+      } catch {}
+    })();
+
     // Re-bind if card is re-injected (mutation observer)
     try {
       if (!window.__tpFolderBinderWatcher) {
