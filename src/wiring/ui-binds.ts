@@ -1276,8 +1276,12 @@ const SEL = {
 function triggerMappedSelectLoad(): boolean {
   try {
     const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect')) as HTMLSelectElement | null;
-    if (!sel) return false;
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    if (sel) {
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    // Resilience: if no mapped select exists, fall back to Upload picker
+    try { (scripts as any)?.upload?.(); } catch {}
     return true;
   } catch { return false; }
 }

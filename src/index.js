@@ -725,9 +725,64 @@ async function boot() {
           const loadHit = t?.closest?.('#scriptLoadBtn,[data-action="load"]');
           if (loadHit) {
             try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            // Helper: quick file picker fallback
+            const pickFile = async () => {
+              return await new Promise((res) => {
+                try {
+                  const inp = document.createElement('input');
+                  inp.type = 'file';
+                  inp.accept = '.txt,.md,.rtf,.docx';
+                  inp.style.position = 'fixed';
+                  inp.style.left = '-9999px';
+                  inp.addEventListener('change', async () => {
+                    try {
+                      const f = (inp.files && inp.files[0]) || null;
+                      res(f || null);
+                    } catch { res(null); }
+                    try { inp.remove(); } catch {}
+                  }, { once: true });
+                  document.body.appendChild(inp);
+                  inp.click();
+                  setTimeout(() => { try { inp.remove(); } catch {} }, 15000);
+                } catch { res(null); }
+              });
+            };
+            const render = async (file) => {
+              try {
+                if (!file) return;
+                let text = '';
+                if (file.name.toLowerCase().endsWith('.docx') && window.docxToText) {
+                  try { text = await window.docxToText(file); } catch { text = await file.text(); }
+                } else {
+                  text = await file.text();
+                }
+                const ed = document.getElementById('editor');
+                if (ed && 'value' in ed) {
+                  ed.value = text;
+                  try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+                }
+                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: file.name, text } })); } catch {}
+              } catch {}
+            };
             try {
               const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect'));
-              if (sel) sel.dispatchEvent(new Event('change', { bubbles: true }));
+              if (sel) {
+                // If we have a native folder handle or a fallback map with this file, let the change handler load it.
+                const name = (sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent) || '';
+                const hasDir = !!(window.__tpFolderHandle);
+                const hasMapEntry = (() => { try { return !!(window.__tpFolderFilesMap && window.__tpFolderFilesMap.get && name && window.__tpFolderFilesMap.get(String(name))); } catch { return false; } })();
+                if (hasDir || hasMapEntry) {
+                  sel.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                  // No backing source; prompt user to pick a file now.
+                  const f = await pickFile();
+                  await render(f);
+                }
+              } else {
+                // No select exists; prompt for a file directly.
+                const f = await pickFile();
+                await render(f);
+              }
             } catch {}
             return;
           }
@@ -769,6 +824,44 @@ async function boot() {
           }
         } catch {}
       }, { capture: true });
+
+      // Ctrl/Cmd+O → Load selected script (capture early to beat browser default)
+      try {
+        if (!window.__tpCtrlOLoadHotkey) {
+          window.__tpCtrlOLoadHotkey = true;
+          window.addEventListener('keydown', async (e) => {
+            try {
+              const k = (e.key || '').toLowerCase();
+              if (!(e && (e.ctrlKey || e.metaKey) && k === 'o')) return;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              // Prefer clicking the Load button to reuse click handler logic
+              const btn = document.querySelector('#scriptLoadBtn,[data-action="load"]');
+              if (btn && typeof (btn).click === 'function') { (btn).click(); return; }
+              // Fallback: attempt direct select-trigger or file pick
+              const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect'));
+              if (sel) { sel.dispatchEvent(new Event('change', { bubbles: true })); return; }
+              // As a last resort, open a file picker
+              const inp = document.createElement('input');
+              inp.type = 'file'; inp.accept = '.txt,.md,.rtf,.docx';
+              inp.style.position = 'fixed'; inp.style.left = '-9999px';
+              inp.addEventListener('change', async () => {
+                try {
+                  const f = (inp.files && inp.files[0]) || null;
+                  if (!f) return;
+                  const text = f.name.toLowerCase().endsWith('.docx') && window.docxToText ? await window.docxToText(f) : await f.text();
+                  const ed = document.getElementById('editor');
+                  if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} }
+                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: f.name, text } })); } catch {}
+                } catch {}
+                try { inp.remove(); } catch {}
+              }, { once: true });
+              document.body.appendChild(inp); inp.click();
+              setTimeout(() => { try { inp.remove(); } catch {} }, 15000);
+            } catch {}
+          }, { capture: true });
+        }
+      } catch {}
 
       // Reflect mic state changes to the single-button UI if events are emitted
       try {
