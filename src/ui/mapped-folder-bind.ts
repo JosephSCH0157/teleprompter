@@ -88,6 +88,11 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
         }
+        // Settings link sentinel (sidebar placeholder when no folder mapped)
+        if ((opt as any).dataset && (opt as any).dataset.settingsLink === '1') {
+          try { document.getElementById('settingsBtn')?.click(); } catch {}
+          try { requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} }); } catch {}
+        }
       }
     } catch (e) { try { console.warn('[mapped-folder] mammoth parse failed', e); } catch {} }
     finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
@@ -123,8 +128,16 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       sel.innerHTML = '';
       try { sel.setAttribute('aria-busy','true'); } catch {}
       if (!entries.length) {
-        sel.disabled = true;
-        sel.append(new Option('(No scripts found)', '', true, false));
+        // Sidebar gets a Settings link placeholder instead of disabled select
+        if (sel.id === 'scriptSelectSidebar') {
+          sel.disabled = false;
+          const opt = new Option('Map script folder…', '__OPEN_SETTINGS__');
+          (opt as any).dataset.settingsLink = '1';
+          sel.append(opt);
+        } else {
+          sel.disabled = true;
+          sel.append(new Option('(No scripts found)', '', true, false));
+        }
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
@@ -165,8 +178,15 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       try { sel.setAttribute('aria-busy','true'); } catch {}
       const filtered = files.filter(f => /\.(txt|docx|md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
-        sel.disabled = true;
-        sel.append(new Option('(No scripts found)', '', true, false));
+        if (sel.id === 'scriptSelectSidebar') {
+          sel.disabled = false;
+          const opt = new Option('Map script folder…', '__OPEN_SETTINGS__');
+          (opt as any).dataset.settingsLink = '1';
+          sel.append(opt);
+        } else {
+          sel.disabled = true;
+          sel.append(new Option('(No scripts found)', '', true, false));
+        }
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
