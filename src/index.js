@@ -918,6 +918,7 @@ async function boot() {
             if (window.showDirectoryPicker) {
               try {
                 const dirHandle = await window.showDirectoryPicker();
+                try { window.__tpFolderHandle = dirHandle; } catch {}
                 for await (const entry of dirHandle.values()) {
                   try {
                     if (entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
@@ -1055,6 +1056,145 @@ async function boot() {
             setTimeout(() => { try { mo.disconnect(); } catch {} }, 20000);
           }
         } catch {}
+      } catch {}
+    })();
+
+    // Real FS operations: save, save-as, delete, rename, and load from folder if handle is available
+    (function installFolderFsOps(){
+      try {
+        if (window.__tpFolderFsOpsInstalled) return; window.__tpFolderFsOpsInstalled = true;
+        const getDir = () => { try { return window.__tpFolderHandle || null; } catch { return null; } };
+        const getEditorText = () => { try { const ed = document.getElementById('editor'); return (ed && 'value' in ed) ? (ed.value || '') : ''; } catch { return ''; } };
+        async function saveToFolder(name, text){
+          try {
+            const dir = getDir(); if (!dir || !name) return false;
+            const fh = await dir.getFileHandle(name, { create: true });
+            const w = await fh.createWritable();
+            await w.write(text || '');
+            await w.close();
+            return true;
+          } catch { return false; }
+        }
+        async function copyFile(dir, fromName, toName){
+          try {
+            const src = await dir.getFileHandle(fromName, { create: false });
+            const file = await src.getFile();
+            const text = await file.text();
+            return await saveToFolder(toName, text);
+          } catch { return false; }
+        }
+        function addOptionIfMissing(name){
+          try {
+            const sels = [document.getElementById('scriptSelectSidebar'), document.getElementById('scriptSelect')].filter(Boolean);
+            for (const s of sels) {
+              try {
+                const sel = s; if (!sel) continue;
+                const exists = Array.from(sel.options || []).some(o => (o.textContent || '') === name);
+                if (!exists) {
+                  const o = document.createElement('option'); o.value = String((sel.options?.length||0)); o.textContent = name; sel.appendChild(o);
+                  sel.dataset.count = String(sel.options.length || 0);
+                }
+                sel.disabled = (sel.options.length === 0);
+              } catch {}
+            }
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch {}
+          } catch {}
+        }
+        function removeOptionEverywhere(name){
+          try {
+            const sels = [document.getElementById('scriptSelectSidebar'), document.getElementById('scriptSelect')].filter(Boolean);
+            for (const s of sels) {
+              try {
+                const sel = s; if (!sel) continue;
+                const opt = Array.from(sel.options || []).find(o => (o.textContent || '') === name);
+                if (opt) opt.remove();
+                sel.dataset.count = String(sel.options.length || 0);
+                sel.disabled = (sel.options.length === 0);
+              } catch {}
+            }
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch {}
+          } catch {}
+        }
+        function renameOptionEverywhere(from, to){
+          try {
+            const sels = [document.getElementById('scriptSelectSidebar'), document.getElementById('scriptSelect')].filter(Boolean);
+            for (const s of sels) {
+              try {
+                const sel = s; if (!sel) continue;
+                const opt = Array.from(sel.options || []).find(o => (o.textContent || '') === from);
+                if (opt) { opt.textContent = to; }
+              } catch {}
+            }
+          } catch {}
+        }
+
+        // Save to existing selected name (if folder handle exists), else no-op; TS binder still did download
+        window.addEventListener('tp:script:save', async () => {
+          try {
+            const dir = getDir(); if (!dir) return;
+            const sel = (document.getElementById('scriptSelectSidebar') || document.getElementById('scriptSelect'));
+            const name = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+            if (!name) return;
+            const ok = await saveToFolder(String(name), getEditorText());
+            if (ok) addOptionIfMissing(String(name));
+          } catch {}
+        });
+
+        // Save As → write new file and add option
+        window.addEventListener('tp:script:saveas', async (ev) => {
+          try {
+            const dir = getDir(); if (!dir) return;
+            const to = ev && ev.detail && ev.detail.to; if (!to) return;
+            const ok = await saveToFolder(String(to), getEditorText());
+            if (ok) addOptionIfMissing(String(to));
+          } catch {}
+        });
+
+        // Delete selected file by name
+        window.addEventListener('tp:folderScripts:delete', async (ev) => {
+          try {
+            const dir = getDir();
+            const name = ev && ev.detail && ev.detail.name; if (!name) return;
+            if (dir && typeof dir.removeEntry === 'function') {
+              try { await dir.removeEntry(String(name)); } catch {}
+            }
+            removeOptionEverywhere(String(name));
+          } catch {}
+        });
+
+        // Rename: copy to new, then delete old; update UI
+        window.addEventListener('tp:folderScripts:rename', async (ev) => {
+          try {
+            const dir = getDir(); if (!dir) return;
+            const from = ev && ev.detail && ev.detail.from; const to = ev && ev.detail && ev.detail.to;
+            if (!from || !to || from === to) return;
+            const ok = await copyFile(dir, String(from), String(to));
+            if (ok) {
+              try { await dir.removeEntry(String(from)); } catch {}
+              renameOptionEverywhere(String(from), String(to));
+              addOptionIfMissing(String(to));
+            }
+          } catch {}
+        });
+
+        // Load content on select change when folder handle exists
+        document.addEventListener('change', async (ev) => {
+          try {
+            const t = ev && ev.target;
+            const isSel = !!(t && (t.id === 'scriptSelect' || t.id === 'scriptSelectSidebar'));
+            if (!isSel) return;
+            const dir = getDir(); if (!dir) return;
+            const sel = t; const name = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+            if (!name) return;
+            try {
+              const fh = await dir.getFileHandle(String(name), { create: false });
+              const file = await fh.getFile();
+              const text = await file.text();
+              try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} } } catch {}
+              try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch {}
+            } catch {}
+          } catch {}
+        }, { capture: true });
       } catch {}
     })();
 
