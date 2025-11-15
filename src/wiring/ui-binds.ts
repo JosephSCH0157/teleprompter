@@ -918,6 +918,24 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
             try { (scripts as any)?.save?.(); } catch {}
             return;
           }
+          // F2 → Rename selected script (avoid while typing in inputs/textareas)
+          if (!withAccel && (e.key === 'F2' || key === 'f2')) {
+            const ae = (document.activeElement as HTMLElement | null);
+            const inEditable = !!(ae && (ae.closest('input,textarea,[contenteditable="true"]')));
+            if (inEditable) return;
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { (scripts as any)?.renameSel?.(); } catch {}
+            return;
+          }
+          // Delete → Delete selected script (confirm inside handler). Skip while editing text.
+          if (!withAccel && (e.key === 'Delete' || key === 'delete')) {
+            const ae = (document.activeElement as HTMLElement | null);
+            const inEditable = !!(ae && (ae.closest('input,textarea,[contenteditable="true"]')));
+            if (inEditable) return;
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { (scripts as any)?.deleteSel?.(); } catch {}
+            return;
+          }
         } catch {}
       });
     }
