@@ -67,6 +67,36 @@
     } catch (err) {
       g.__TP_BOOT_INFO.imported = false;
       push({ tag: 'boot-loader', msg: 'import failed', ok: false, err: String(err), isDev, forceLegacy });
+      // Dev: attempt a granular import probe of src/index.js dependencies to find the failing module
+      try {
+        if (isDev && typeof fetch === 'function') {
+          const baseUrl = new URL('../index.js', import.meta.url);
+          const txt = await (await fetch(baseUrl.href, { cache: 'no-store' })).text();
+          const specs = [];
+          try {
+            const re = /(^|\n)\s*import\s+(?:[^'"\n]+\s+from\s+)?["']([^"']+)["']/g;
+            let m;
+            while ((m = re.exec(txt))) {
+              const spec = m[2];
+              // Only probe bare/relative imports that look like module files (avoid side-effect CSS etc.)
+              if (spec && /^(\.|\/)/.test(spec)) specs.push(spec);
+            }
+          } catch {}
+          const uniq = Array.from(new Set(specs));
+          for (const s of uniq) {
+            try {
+              const u = new URL(s, baseUrl).href;
+              // eslint-disable-next-line no-await-in-loop
+              await import(/* @vite-ignore */ u);
+              try { console.info('[boot-loader] probe ok:', u); } catch {}
+            } catch (eProbe) {
+              try {
+                console.error('[boot-loader] probe failed:', s, eProbe && (eProbe.stack || eProbe.message || String(eProbe)));
+              } catch {}
+            }
+          }
+        }
+      } catch {}
       // Dev safety: avoid silent fallback in regular dev sessions.
       // However, in CI/headless or when uiMock/mockFolder are set, prefer resilience.
       let relaxDevFallback = false;

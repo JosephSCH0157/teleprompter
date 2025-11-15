@@ -1,16 +1,5 @@
 // src/adapters/obs.ts - TS facade adapter
 
-declare global {
-  interface Window {
-    obs?: {
-      test?: () => void | Promise<void>;
-      connect?: (...args: any[]) => any;
-      configure?: (...args: any[]) => any;
-    };
-    __tpSmoke?: { obsTestRan?: boolean };
-  }
-}
-
 function g(): any { return (window as any); }
 
 export async function connect(cfg?: any) {
