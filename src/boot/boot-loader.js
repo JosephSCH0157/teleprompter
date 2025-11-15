@@ -24,6 +24,14 @@
       if (isDev) {
         // We are in /src/boot/boot-loader.js → dev entry is ../index.js
         push({ tag: 'boot-loader', msg: 'import ../index.js → start' });
+        // Helpful probe: if /src/index.js is missing or blocked, log a targeted hint
+        try {
+          const base = new URL('../index.js', import.meta.url).href + `?v=${v}`;
+          const head = await fetch(base, { method: 'HEAD', cache: 'no-store' });
+          if (!head || !head.ok) {
+            try { console.error('[boot-loader] probe failed for', base, 'status=', head && head.status); } catch {}
+          }
+        } catch {}
         await import(`../index.js?v=${v}`);
         push({ tag: 'boot-loader', msg: 'import ../index.js → done', ok: true });
       } else {
@@ -48,7 +56,10 @@
         relaxDevFallback = !!(ci || uiMock || mockFolder || isWebDriver);
       } catch {}
       if (isDev && !forceLegacy && !relaxDevFallback) {
-        try { console.error('[boot-loader] TS import failed; not falling back in dev. Set ?legacy=1 to force legacy.'); } catch {}
+        try {
+          console.error('[boot-loader] TS import failed; not falling back in dev. Set ?legacy=1 to force legacy.');
+          if (err) console.error('[boot-loader] import error detail:', err && (err.stack || err.message || String(err)));
+        } catch {}
         return;
       }
       // Prod or forced legacy: inject monolith as a last resort
