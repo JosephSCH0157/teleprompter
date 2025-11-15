@@ -111,7 +111,7 @@
   '    <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>',
         '  </div>',
         '  <div class="row" id="autoRecordFolderRow">',
-        '    <span class="microcopy" style="color:#9fb4c9;font-size:12px">Folder: <span id="autoRecordFolderName">Not set</span></span>',
+        '    <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>',
         '    <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder…</button>',
         '    <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>',
         '  </div>',

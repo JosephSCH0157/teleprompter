@@ -566,6 +566,13 @@ async function boot() {
       if (!window.__tpRecorder && Adapters.recorderAdapter?.create) {
         window.__tpRecorder = Adapters.recorderAdapter.create();
       }
+      // Bridge legacy smoke harness (__recorder) to modern OBS adapter so rec.getAdapter('obs') works
+      try {
+        if (window.__tpOBS && window.__recorder) {
+          window.__recorder.getAdapter = (id) => id === 'obs' ? window.__tpOBS : null;
+          window.__recorder.get = (id) => id === 'obs' ? window.__tpOBS : null;
+        }
+      } catch {}
     } catch {}
 
     // Initialize features (idempotent)
@@ -580,6 +587,14 @@ async function boot() {
 
     // Ensure local auto-recorder surface exists (camera+mic → WebM)
     try { await import('./recording/local-auto.js'); } catch (e) { try { console.warn('[src/index] local-auto import failed', e); } catch {} }
+
+    // Bind core UI (present/settings/help) for JS boot path so smoke harness sees dataset.uiBound
+    try {
+      const core = await import('./wiring/ui-binds.js').catch(() => null);
+      if (core && typeof core.bindCoreUI === 'function') {
+        try { core.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+      }
+    } catch {}
 
     // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {

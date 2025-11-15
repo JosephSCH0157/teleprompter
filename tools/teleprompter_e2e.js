@@ -372,6 +372,30 @@ async function main() {
 
     // drive init -> connect -> test -> report inside the page to keep adapter context local
   const smoke = await page.evaluate(async ({ stubObs }) => {
+    // Optional folder picker mocking & auto-record toggle when ?mockFolder=1
+    try {
+      if (location.search.includes('mockFolder=1')) {
+        if (!('showDirectoryPicker' in window)) {
+          window.showDirectoryPicker = async () => ({
+            name: 'MockRecordings',
+            kind: 'directory',
+            getFileHandle: async (n, opts) => ({
+              name: n,
+              async createWritable() { return { async write() {}, async close() {} }; }
+            })
+          });
+        }
+        // Open settings to ensure toggle/label present
+        try { document.querySelector('#settingsBtn,[data-action="settings-open"]')?.dispatchEvent(new Event('click',{bubbles:true})); } catch {}
+        await new Promise(r=>setTimeout(r,120));
+        const box = document.getElementById('settingsAutoRecord');
+        if (box && !box.checked) {
+          box.checked = true;
+          box.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+        await new Promise(r=>setTimeout(r,200));
+      }
+    } catch {}
     const report = { ok: false, tBootMs: 0, recorderReady: false, adapterReady: false, testRan: false, wsSentCount: 0, wsOps: [], wsOpened: 0, notes: [] };
     const T0 = Date.now();
 
@@ -434,7 +458,7 @@ async function main() {
 
     // Basic UI checks (best-effort)
     try {
-  const overlay = document.getElementById('settingsOverlay');
+      const overlay = document.getElementById('settingsOverlay');
       const card = document.getElementById('scriptsFolderCard');
       const choose = document.getElementById('chooseFolderBtn');
       const mainSel = document.getElementById('scriptSelect');
@@ -453,6 +477,18 @@ async function main() {
       } else {
         if (mainCount === 0) { ok = false; report.notes.push('assert: mock folder population empty'); }
         if (mainCount !== mirrorCount) { ok = false; report.notes.push('assert: mirror option count mismatch'); }
+        // Non-fatal folder label check under mockFolder flag
+        try {
+          if (location.search.includes('mockFolder=1')) {
+            const lbl = document.querySelector('[data-test-id="rec-folder-label"]');
+            const txt = lbl ? (lbl.textContent||'') : '';
+            if (/MockRecordings/i.test(txt)) {
+              report.notes.push('folder picker mock applied');
+            } else {
+              report.notes.push('folder picker label not updated');
+            }
+          }
+        } catch {}
       }
     } catch (e) {
       report.notes.push('ui-check err: ' + String(e));
