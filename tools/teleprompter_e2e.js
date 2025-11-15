@@ -506,12 +506,16 @@ async function main() {
                   const pricing = root.querySelector('[data-tab-content="pricing"]');
                   const about = root.querySelector('[data-tab-content="about"]');
                   const len = (el)=>{ try { return ((el && el.textContent) || '').trim().length; } catch { return 0; } };
+                  // Collect About bullets (if any)
+                  const bullets = about ? Array.from(about.querySelectorAll('ul li')).map(li => (li.textContent||'').trim()) : [];
                   return {
                     hasBuilder,
                     hasPricing: !!pricing,
                     hasAbout: !!about,
                     pricingLen: len(pricing),
-                    aboutLen: len(about)
+                    aboutLen: len(about),
+                    aboutBullets: bullets,
+                    aboutBulletsCount: bullets.length
                   };
                 } catch { return { hasBuilder:false }; }
               });
@@ -523,6 +527,25 @@ async function main() {
                 if (!builderCheck.hasAbout || builderCheck.aboutLen < 8) {
                   notes.push('assert: builder missing about content');
                   try { smoke.ok = false; } catch {}
+                }
+                // About bullets: expect at least 4 and basic keyword coverage
+                try {
+                  const items = Array.isArray(builderCheck.aboutBullets) ? builderCheck.aboutBullets : [];
+                  if (items.length < 4) {
+                    notes.push('assert: about bullets fewer than 4');
+                    smoke.ok = false;
+                  } else {
+                    const text = items.join(' \n ').toLowerCase();
+                    const kws = ['scroll', 'color', 'script', 'obs'];
+                    const missing = kws.filter(k => !text.includes(k));
+                    if (missing.length) {
+                      notes.push('assert: about bullets missing keywords: ' + missing.join(', '));
+                      smoke.ok = false;
+                    }
+                  }
+                } catch (e) {
+                  notes.push('about bullets check error: ' + String(e && e.message || e));
+                  smoke.ok = false;
                 }
               } else {
                 notes.push('builder not detected (static HTML path ok)');
