@@ -1178,7 +1178,24 @@ export function ensureSidebarMirror() {
   try {
     const main = document.querySelector('#scriptSelect,[data-select="scripts-main"]') as HTMLSelectElement | null;
     let side = document.querySelector('#scriptSelectSidebar,[data-select="scripts-side"]') as HTMLSelectElement | null;
-    if (!main) return;
+    if (!main) {
+      // If main select isn't present yet (late injection), observe once and retry when it appears
+      try {
+        if (!(window as any).__tpMirrorWait) {
+          (window as any).__tpMirrorWait = 1;
+          const mo = new MutationObserver(() => {
+            try {
+              const m = document.querySelector('#scriptSelect,[data-select="scripts-main"]') as HTMLSelectElement | null;
+              if (m) { try { mo.disconnect(); } catch {}; (window as any).__tpMirrorWait = 2; ensureSidebarMirror(); }
+            } catch {}
+          });
+          mo.observe(document.documentElement, { childList: true, subtree: true });
+          // Safety timeout to avoid leaking the observer
+          setTimeout(() => { try { mo.disconnect(); } catch {} }, 8000);
+        }
+      } catch {}
+      return;
+    }
     if (!side) {
       side = document.createElement('select');
       side.id = 'scriptSelectSidebar';

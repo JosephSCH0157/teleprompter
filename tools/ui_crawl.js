@@ -121,6 +121,12 @@ const cp = require('child_process');
     }
   }
   await navigateWithFallback(page);
+    // Ensure Scripts Folder controls are injected before probing selects
+    try {
+      await page.evaluate(() => {
+        try { (window).ensureSettingsFolderControls && (window).ensureSettingsFolderControls(); } catch {}
+      });
+    } catch {}
     // Ensure app is fully ready and content is present for stable probes
     async function waitReady(page, timeout = 3000) {
       await page.waitForFunction(() => {
@@ -457,6 +463,22 @@ const cp = require('child_process');
       out.lateProbe = probes.lateProbe;
       out.settingsProbe = probes.settingsProbe;
       out.obsTestProbe = probes.obsTestProbe;
+
+      // Sidebar/Main scripts selects probe (counts, busy state, value sync)
+      try {
+        out.sidebarProbe = await page.evaluate(() => {
+          try {
+            const main = document.getElementById('scriptSelect');
+            const side = document.getElementById('scriptSelectSidebar');
+            const mainCount = main ? ((main.querySelectorAll('option') || []).length) : -1;
+            const sideCount = side ? ((side.querySelectorAll('option') || []).length) : -1;
+            const mainBusy = main ? main.getAttribute('aria-busy') : null;
+            const sideBusy = side ? side.getAttribute('aria-busy') : null;
+            const sameValue = !!(main && side && (main).value === (side).value);
+            return { mainExists: !!main, sideExists: !!side, mainCount, sideCount, mainBusy, sideBusy, sameValue };
+          } catch { return { mainExists:false, sideExists:false, mainCount:-1, sideCount:-1, mainBusy:null, sideBusy:null, sameValue:false }; }
+        });
+      } catch {}
 
       // Ensure long content before movement-related probes (sample injection above may have shortened it)
       try {
