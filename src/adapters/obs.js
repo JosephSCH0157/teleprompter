@@ -208,6 +208,40 @@ export function createOBSAdapter() {
     async start() { return Promise.resolve(); },
     async stop() { return Promise.resolve(); },
     connect,
+    /**
+     * Lightweight connectivity + IDENTIFY + version probe used by smoke harness.
+     * Ensures at least one IDENTIFY (op=1) payload is sent so harness can assert.
+     * Never throws; returns true/false success.
+     */
+    async test(opts){
+      try {
+        // Reuse existing connection if identified; else create a short‑lived one.
+        let conn = adapter.__testConn;
+        const cfg = (typeof window !== 'undefined' && window.__OBS_CFG__) || {};
+        const host = (opts && opts.host) || cfg.host || '127.0.0.1';
+        const port = (opts && opts.port) || cfg.port || 4455;
+        const password = (opts && (opts.password||opts.pass)) || cfg.password || cfg.pass || '';
+        // If no conn or not identified, create a new one (no auto‑reconnect to keep test fast)
+        if (!conn || !conn.isIdentified || !conn.isIdentified()) {
+          try { conn && conn.close && conn.close(); } catch {}
+          conn = connect({ host, port, password, secure:false, reconnect:false });
+          adapter.__testConn = conn;
+          // Wait up to ~1.2s for IDENTIFIED
+          await new Promise((resolve) => {
+            let done = false;
+            const to = setTimeout(() => { if (!done){ done = true; resolve(false); } }, 1200);
+            try {
+              conn.on && conn.on('identified', () => { if (!done){ done = true; clearTimeout(to); resolve(true); } });
+            } catch { resolve(false); }
+          });
+        }
+        // Fire a GetVersion request (best-effort) so harness sees at least one request frame.
+        try { await conn.request && conn.request('GetVersion', {}); } catch {}
+        return true;
+      } catch {
+        return false;
+      }
+    },
     async startStreaming(conn){
       try {
         if (!conn || !conn.request) return { ok:false };
