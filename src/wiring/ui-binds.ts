@@ -1275,12 +1275,25 @@ const SEL = {
 // Trigger the mapped-folder select change to load the currently selected script
 function triggerMappedSelectLoad(): boolean {
   try {
-    const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect')) as HTMLSelectElement | null;
-    if (sel) {
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const main = document.querySelector('#scriptSelect') as HTMLSelectElement | null;
+    const side = document.querySelector('#scriptSelectSidebar') as HTMLSelectElement | null;
+    // Prefer main select to ensure mapped-folder handles/files are used
+    if (main && main.options && main.options.length > 0) {
+      // If sidebar has a different selection, mirror it into main first
+      try {
+        if (side && side.value && side.value !== main.value) {
+          main.value = side.value;
+        }
+      } catch {}
+      main.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     }
-    // Resilience: if no mapped select exists, fall back to Upload picker
+    // Fallback to sidebar only when main is missing (will sync to main if mirror wiring is active)
+    if (side && side.options && side.options.length > 0) {
+      side.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    // Resilience: if no mapped select exists at all, fall back to Upload picker
     try { (scripts as any)?.upload?.(); } catch {}
     return true;
   } catch { return false; }

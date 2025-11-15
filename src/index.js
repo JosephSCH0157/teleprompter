@@ -765,14 +765,20 @@ async function boot() {
               } catch {}
             };
             try {
-              const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect'));
+              // Prefer main select so the mapped-folder loader reads via folder handle
+              const main = document.querySelector('#scriptSelect');
+              const side = document.querySelector('#scriptSelectSidebar');
+              const sel = (main || side);
               if (sel) {
-                // If we have a native folder handle or a fallback map with this file, let the change handler load it.
                 const name = (sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent) || '';
                 const hasDir = !!(window.__tpFolderHandle);
                 const hasMapEntry = (() => { try { return !!(window.__tpFolderFilesMap && window.__tpFolderFilesMap.get && name && window.__tpFolderFilesMap.get(String(name))); } catch { return false; } })();
                 if (hasDir || hasMapEntry) {
-                  sel.dispatchEvent(new Event('change', { bubbles: true }));
+                  // If sidebar exists and main exists, mirror selection to main before dispatch
+                  try {
+                    if (main && side && side.value && main.value !== side.value) { main.value = side.value; }
+                  } catch {}
+                  (main || side).dispatchEvent(new Event('change', { bubbles: true }));
                 } else {
                   // No backing source; prompt user to pick a file now.
                   const f = await pickFile();
@@ -838,9 +844,14 @@ async function boot() {
               // Prefer clicking the Load button to reuse click handler logic
               const btn = document.querySelector('#scriptLoadBtn,[data-action="load"]');
               if (btn && typeof (btn).click === 'function') { (btn).click(); return; }
-              // Fallback: attempt direct select-trigger or file pick
-              const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect'));
-              if (sel) { sel.dispatchEvent(new Event('change', { bubbles: true })); return; }
+              // Fallback: attempt direct select-trigger (prefer main) or file pick
+              const main = document.querySelector('#scriptSelect');
+              const side = document.querySelector('#scriptSelectSidebar');
+              if (main || side) {
+                try { if (main && side && side.value && main.value !== side.value) main.value = side.value; } catch {}
+                (main || side).dispatchEvent(new Event('change', { bubbles: true }));
+                return;
+              }
               // As a last resort, open a file picker
               const inp = document.createElement('input');
               inp.type = 'file'; inp.accept = '.txt,.md,.rtf,.docx';
