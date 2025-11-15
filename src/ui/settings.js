@@ -22,8 +22,15 @@
       tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
       const sb = document.getElementById('settingsBody');
       if (!sb) return;
-      const cards = Array.from(sb.querySelectorAll('[data-tab-content]'));
-      cards.forEach(c => { c.style.display = (c.getAttribute('data-tab-content') === tab) ? '' : 'none'; });
+      // Toggle builder sections ([data-tab-content])
+      const dyn = Array.from(sb.querySelectorAll('[data-tab-content]'));
+      dyn.forEach(c => { c.style.display = (c.getAttribute('data-tab-content') === tab) ? '' : 'none'; });
+      // Toggle static cards (.settings-card[data-tab]) — keep parity with HTML variant
+      const stat = Array.from(sb.querySelectorAll('.settings-card[data-tab]'));
+      stat.forEach(c => {
+        const on = (c.getAttribute('data-tab') === tab);
+        if (on) c.removeAttribute('hidden'); else c.setAttribute('hidden','');
+      });
     } catch {}
   }
 
@@ -147,10 +154,63 @@
         '  <div class="row">',
         '    <button id="settingsResetState" class="chip">Reset app state</button>',
         '  </div>',
+        '</div>',
+        '',
+        // Pricing — mirror static card content in HTML build
+        '<div data-tab-content="pricing" style="display:none">',
+        '  <h4>Pricing</h4>',
+        '  <div class="row">',
+        '    <p class="microcopy" style="color:#9fb4c9">',
+        '      Anvil starts with a free tier for solo creators. Paid plans unlock advanced features like',
+        '      multi-recorder control, hybrid scroll tuning presets, and future Forge integrations.',
+        '    </p>',
+        '  </div>',
+        '  <ul class="microcopy" style="color:#9fb4c9">',
+        '    <li><strong>Free:</strong> Core teleprompter, script saving, basic OBS control.</li>',
+        '    <li><strong>Creator:</strong> Auto-record presets, hybrid scroll profiles, priority fixes.</li>',
+        '    <li><strong>Studio:</strong> Multi-seat, shared presets, dedicated support. (Coming soon)</li>',
+        '  </ul>',
+        '  <div class="hr"></div>',
+        '  <div class="row">',
+        '    <p>Want to keep Anvil’s hammer swinging while this all ships?<br/>',
+        '      <a href="https://buymeacoffee.com/podcastersforge" target="_blank" rel="noopener noreferrer">Buy me a coffee ☕</a>',
+        '    </p>',
+        '  </div>',
+        '</div>',
+        '',
+        // About — includes #aboutVersion so the version filler can target it
+        '<div data-tab-content="about" style="display:none">',
+        '  <h4>About Anvil</h4>',
+        '  <p class="microcopy" style="color:#9fb4c9">',
+        '    Anvil is part of the Podcaster’s Forge toolset — an all‑in‑one toolkit for creators who record,',
+        '    edit, and ship shows without a full studio staff.',
+        '  </p>',
+        '  <p class="microcopy" style="color:#9fb4c9">',
+        '    Version: <span id="aboutVersion">—</span><br/>',
+        '    Built by: Podcaster’s Forge',
+        '  </p>',
+        '  <div class="hr"></div>',
+        '  <h5>Contact</h5>',
+        '  <p class="microcopy" style="color:#9fb4c9">',
+        '    Questions, bugs, or feature requests? Reach out at:<br/>',
+        '    <a href="mailto:info@podcastersforge.com">info@podcastersforge.com</a>',
+        '  </p>',
         '</div>'
       ].join('\n');
       rootEl.innerHTML = html;
       rootEl.dataset.mounted = '1';
+      // Fill About version if available (works even when replacing static HTML later)
+      try {
+        const el = document.getElementById('aboutVersion');
+        if (el) {
+          let v = '';
+          try { v = String(window.APP_VERSION || ''); } catch {}
+          if (!v) {
+            try { const av = document.getElementById('appVersion'); v = (av && av.textContent) ? av.textContent.trim() : ''; } catch {}
+          }
+          if (v) el.textContent = v;
+        }
+      } catch {}
     } catch {}
   }
 
