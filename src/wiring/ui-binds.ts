@@ -1029,6 +1029,73 @@ const fakeFile = (name: string, text: string) => new File([text], name, { type: 
 
 // script helpers used by UI controls
 const scripts = {
+  save() {
+    try {
+      const name = getScriptName();
+      const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+      const text = (ed && ed.value) || '';
+      downloadNow(name, text);
+      // Announce for any listeners (mapped-folder, telemetry)
+      try { window.dispatchEvent(new CustomEvent('tp:script:save', { detail: { name, size: text.length } })); } catch {}
+    } catch {}
+  },
+  async saveAs() {
+    try {
+      const current = getScriptName();
+      const next = prompt('Save As name:', current) || current;
+      const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+      const text = (ed && ed.value) || '';
+      downloadNow(next, text);
+      try { window.dispatchEvent(new CustomEvent('tp:script:saveas', { detail: { from: current, to: next, size: text.length } })); } catch {}
+    } catch {}
+  },
+  deleteSel() {
+    try {
+      const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect')) as HTMLSelectElement | null;
+      const name = (sel && sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].text) || getScriptName();
+      if (!name) return;
+      const ok = confirm(`Delete script "${name}"?`);
+      if (!ok) return;
+      // Notify mapped-folder layer if present
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:delete', { detail: { name } })); } catch {}
+      // Best-effort UI removal from both selects
+      const both = [
+        document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null,
+        document.getElementById('scriptSelect') as HTMLSelectElement | null,
+      ].filter(Boolean) as HTMLSelectElement[];
+      for (const s of both) {
+        try {
+          const opt = Array.from(s.options).find(o => (o.text || '') === name);
+          if (opt) opt.remove();
+          s.disabled = (s.options.length === 0);
+          (s as any).dataset.count = String(s.options.length);
+        } catch {}
+      }
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (both[0]?.options.length || 0) } })); } catch {}
+    } catch {}
+  },
+  renameSel() {
+    try {
+      const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect')) as HTMLSelectElement | null;
+      const cur = (sel && sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].text) || getScriptName();
+      if (!cur) return;
+      const next = prompt('Rename script to:', cur);
+      if (!next || next === cur) return;
+      // Notify mapped-folder layer if present
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:rename', { detail: { from: cur, to: next } })); } catch {}
+      // Best-effort UI rename in both selects
+      const both = [
+        document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null,
+        document.getElementById('scriptSelect') as HTMLSelectElement | null,
+      ].filter(Boolean) as HTMLSelectElement[];
+      for (const s of both) {
+        try {
+          const opt = Array.from(s.options).find(o => (o.text || '') === cur);
+          if (opt) opt.text = next;
+        } catch {}
+      }
+    } catch {}
+  },
   async loadSample() {
     const sample = `[s1]\nWelcome to Anvil. This is a sample script.\n[beat]\nUse the arrow keys or your foot pedal to step.\n[/s1]`;
     try {
@@ -1124,6 +1191,10 @@ const SEL = {
   sample:         ['#loadSampleBtn','#loadSample','[data-action="load-sample"]'],
   upload:         ['#uploadBtn','#uploadFileBtn','[data-action="upload"]'],
   load:           ['#scriptLoadBtn','[data-action="load"]'],
+  save:           ['#scriptSaveBtn','[data-action="save"]'],
+  saveAs:         ['#scriptSaveAsBtn','[data-action="save-as"]'],
+  del:            ['#scriptDeleteBtn','[data-action="delete"]'],
+  ren:            ['#scriptRenameBtn','[data-action="rename"]'],
 
   // speakers
   speakersToggle: ['#speakersToggleBtn','[data-action="speakers-toggle"]'],
@@ -1144,6 +1215,10 @@ const SEL = {
       { sels: SEL.sample, fn: () => scripts.loadSample() },
       { sels: SEL.upload, fn: () => scripts.upload() },
       { sels: SEL.load,   fn: () => triggerMappedSelectLoad() },
+      { sels: SEL.save,   fn: () => scripts.save() },
+      { sels: SEL.saveAs, fn: () => scripts.saveAs() },
+      { sels: SEL.del,    fn: () => scripts.deleteSel() },
+      { sels: SEL.ren,    fn: () => scripts.renameSel() },
       { sels: SEL.mic,    fn: () => asr.requestMic() },
       { sels: SEL.speech, fn: () => asr.start() },
       { sels: SEL.camera, fn: () => cam.start() },
