@@ -6,13 +6,19 @@
       try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; }
     })();
     if (!devQuery && !devLocal && !(window).__TP_DEV) return;
-    // Dynamically import the TS module (build may compile this to JS)
-    import('./debug.ts')
-      .then((m) => {
-        try { m && typeof m.default === 'function' && m.default({ aggressive: devLocal }); } catch {}
-      })
-      .catch((e) => {
-        try { console.warn('HUD loader failed', e); } catch {}
-      });
+    // Prefer JS builds; avoid importing .ts in the browser
+    const tryImport = async (spec) => {
+      try { return await import(spec); } catch { return null; }
+    };
+    (async () => {
+      const candidates = [
+        '/dist/hud/debug.js',
+        new URL('./debug.js', import.meta.url).href,
+      ];
+      let mod = null;
+      for (const c of candidates) { mod = await tryImport(c); if (mod) break; }
+      if (!mod) { try { console.warn('HUD loader failed: no JS module found'); } catch {} ; return; }
+      try { mod && typeof mod.default === 'function' && mod.default({ aggressive: devLocal }); } catch {}
+    })();
   } catch {}
 })();
