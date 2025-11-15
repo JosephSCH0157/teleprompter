@@ -114,6 +114,21 @@
           console.error('[boot-loader] TS import failed; not falling back in dev. Set ?legacy=1 to force legacy.');
           if (err) console.error('[boot-loader] import error detail:', err && (err.stack || err.message || String(err)));
         } catch {}
+        // Optional dev escape hatch: allow using built dist bundle with ?useDist=1
+        try {
+          const qs = new URLSearchParams(location.search || '');
+          if (qs.has('useDist')) {
+            push({ tag: 'boot-loader', msg: 'dev import failed; trying dist bundle (useDist=1)' });
+            try {
+              const v2 = encodeURIComponent(g.__TP_ADDV || 'dev');
+              await import(`../../dist/index.js?v=${v2}`);
+              push({ tag: 'boot-loader', msg: 'dist bundle loaded in dev', ok: true });
+              return;
+            } catch (e2) {
+              try { console.error('[boot-loader] dist import in dev failed', e2 && (e2.stack || e2.message || String(e2))); } catch {}
+            }
+          }
+        } catch {}
         return;
       }
       // Prod or forced legacy: inject monolith/module as a last resort

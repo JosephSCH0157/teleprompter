@@ -17,6 +17,7 @@ async function main() {
   };
 
   const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke');
+  const USE_DIST = flag('--useDist') || flag('--usedist');
   const STUB_OBS = flag('--stubObs') || flag('--stubobs');
   const SHIM_RECORDER = flag('--shimRecorder') || flag('--shimrecorder');
   const TIMEOUT_MS = Number(kv('timeout', process.env.SMOKE_TIMEOUT_MS || '30000')) || 30000; // default 30s
@@ -111,7 +112,7 @@ async function main() {
     return popup || null;
   }
 
-  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1&uiMock=1&dev=1&noRelax=1` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
+  const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1&uiMock=1&dev=1&noRelax=1${USE_DIST?'&useDist=1':''}` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
     try { globalThis.__OBS_CFG__ = { host: cfg.host, port: cfg.port, password: cfg.pass }; } catch (_e) { /* ignore */ }

@@ -607,29 +607,22 @@ async function boot() {
       // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
       // Prefer dev module first so we always run the freshest code in dev
       const candidates = [
-        // Correct relative path from src/index.js to the dev JS entry
-        './index-hooks/asr.js',
+        // Use absolute paths to avoid import.meta.url reliance
+        '/src/index-hooks/asr.js',
         '/dist/index-hooks/asr.js',
         '/dist/asr.js',
       ];
 
       let asrEntry = null;
       for (const c of candidates) {
-        // Resolve module-relative specs for probing so fetch doesn't use document base
-        let probeUrl = c;
-        try {
-          if (c.startsWith('./')) {
-            const u = new URL(c, import.meta.url);
-            probeUrl = u.href; // absolute URL to this module
-          }
-        } catch {}
-        if (await headOk(probeUrl)) { asrEntry = c.startsWith('./') ? probeUrl : c; break; }
+        const probeUrl = c;
+        if (await headOk(probeUrl)) { asrEntry = c; break; }
       }
 
       // Dev-friendly fallback: if HEAD probes fail (server may not support HEAD), attempt a single import of the dev path.
       if (!asrEntry) {
         try {
-          const fallback = './index-hooks/asr.js';
+          const fallback = '/src/index-hooks/asr.js';
           const mod = await import(fallback);
           const init = (mod && (mod.initAsrFeature || mod.default));
           if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch {} }
