@@ -320,6 +320,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Cards: start hidden; only show when activated to avoid flicker */
 .settings-card{border:1px solid var(--edge);padding:14px 16px;border-radius:10px;background:#0e141b;display:none;flex-direction:column;gap:10px}
+/* When active (not [hidden]), show the card as a flex column */
+.settings-card:not([hidden]){ display:flex; }
 
 /* Cross-fade animations; outgoing card shouldn’t push layout */
 @keyframes cardFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }

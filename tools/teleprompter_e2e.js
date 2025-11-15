@@ -660,6 +660,63 @@ async function main() {
       console.log('[SMOKE-REPORT]', JSON.stringify(smoke));
     } catch {
       console.log('[SMOKE-REPORT] {}');
+
+      // Settings tabs/content assertions: Pricing and About should render
+      try {
+        let uiFail = false;
+        // Open Settings overlay
+        const opened = await robustClick('#settingsBtn', '[data-action="settings-open"]');
+        if (!opened) {
+          notes.push('settings open control missing (tabs checks skipped)');
+        } else {
+          const okOpen = await waitAttr('body', 'data-smoke-open', 'settings', 1500);
+          if (!okOpen) notes.push('settings open not observed for tabs');
+
+          // Click Pricing tab and verify its card is visible and non-empty
+          const clickedPricing = await robustClick('[role="tab"][data-tab="pricing"]', '#settingsTabs [data-tab="pricing"]');
+          if (!clickedPricing) {
+            notes.push('pricing tab not found');
+            uiFail = true;
+          } else {
+            const pricingVisible = await page.evaluate(() => {
+              const el = document.querySelector('.settings-card[data-tab="pricing"]');
+              if (!el) return false;
+              const st = getComputedStyle(el);
+              const hasText = (el.textContent || '').trim().length > 10;
+              return !el.hasAttribute('hidden') && st.display !== 'none' && hasText;
+            });
+            if (!pricingVisible) { notes.push('pricing card not visible/content-empty'); uiFail = true; }
+          }
+
+          // Click About tab and verify its card is visible and has version text
+          const clickedAbout = await robustClick('[role="tab"][data-tab="about"]', '#settingsTabs [data-tab="about"]');
+          if (!clickedAbout) {
+            notes.push('about tab not found');
+            uiFail = true;
+          } else {
+            const aboutVisible = await page.evaluate(() => {
+              const el = document.querySelector('.settings-card[data-tab="about"]');
+              if (!el) return false;
+              const st = getComputedStyle(el);
+              const v = document.getElementById('aboutVersion');
+              const hasHdr = /about/i.test((el.textContent||''));
+              const hasVer = !!(v && (v.textContent||'').trim().length);
+              return !el.hasAttribute('hidden') && st.display !== 'none' && hasHdr && hasVer;
+            });
+            if (!aboutVisible) { notes.push('about card not visible or missing version'); uiFail = true; }
+          }
+
+          // Close settings to return to baseline
+          await robustClick('#settingsClose', '[data-action="settings-close"]');
+          const okClose = await page.evaluate(() => !document.body.hasAttribute('data-smoke-open'));
+          if (!okClose) notes.push('settings close not observed after tabs checks');
+
+          // If UI failed, mark smoke as failed for CI signal
+          if (uiFail) { smoke.ok = false; }
+        }
+      } catch (e) {
+        notes.push('settings tabs check error: ' + String(e && e.message || e));
+      }
     }
     try { await browser.close(); } catch (e) { /* ignore */ }
     try { server.close(); } catch (e) { /* ignore */ }
