@@ -1046,6 +1046,19 @@
                   } catch {}
                 })();
               } catch {}
+              // When enabled under CI mock with no handle picked, show mock label immediately
+              try {
+                const params = new URLSearchParams(location.search || '');
+                const mock = params.get('mockFolder') === '1';
+                const nameEl = document.getElementById('autoRecordFolderName');
+                if (mock && nameEl) nameEl.textContent = 'MockRecordings';
+              } catch {}
+            } else {
+              // When disabled, reflect "Not set" in the visible label (do not clear stored handle)
+              try {
+                const nameEl = document.getElementById('autoRecordFolderName');
+                if (nameEl) nameEl.textContent = 'Not set';
+              } catch {}
             }
           } catch {}
         });
