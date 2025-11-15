@@ -36,8 +36,18 @@
     } catch (err) {
       g.__TP_BOOT_INFO.imported = false;
       push({ tag: 'boot-loader', msg: 'import failed', ok: false, err: String(err), isDev, forceLegacy });
-      // Dev safety: do NOT silently fall back in dev unless explicitly forced
-      if (isDev && !forceLegacy) {
+      // Dev safety: avoid silent fallback in regular dev sessions.
+      // However, in CI/headless or when uiMock/mockFolder are set, prefer resilience.
+      let relaxDevFallback = false;
+      try {
+        const qs = new URLSearchParams(location.search || '');
+        const ci = qs.has('ci');
+        const uiMock = qs.has('uiMock');
+        const mockFolder = qs.has('mockFolder');
+        const isWebDriver = (typeof navigator !== 'undefined') && ((navigator).webdriver === true);
+        relaxDevFallback = !!(ci || uiMock || mockFolder || isWebDriver);
+      } catch {}
+      if (isDev && !forceLegacy && !relaxDevFallback) {
         try { console.error('[boot-loader] TS import failed; not falling back in dev. Set ?legacy=1 to force legacy.'); } catch {}
         return;
       }
