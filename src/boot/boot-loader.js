@@ -22,6 +22,27 @@
     try {
       const v = encodeURIComponent(g.__TP_ADDV || 'dev');
       if (isDev) {
+        // Install verbose error hooks early in dev to capture script URL/line on failures
+        try {
+          if (!g.__TP_DEV_ERROR_HOOKS) {
+            g.__TP_DEV_ERROR_HOOKS = true;
+            g.addEventListener('error', function (ev) {
+              try {
+                var fn = (ev && ev.filename) || (ev && ev.target && ev.target.src) || '';
+                var ln = (ev && ev.lineno) || 0;
+                var cn = (ev && ev.colno) || 0;
+                var msg = (ev && ev.message) || '';
+                console.error('[boot-loader] window.error', { filename: fn, lineno: ln, colno: cn, message: msg });
+              } catch {}
+            }, { capture: true });
+            g.addEventListener('unhandledrejection', function (ev) {
+              try {
+                var r = ev && ev.reason;
+                console.error('[boot-loader] unhandledrejection', r && (r.stack || r.message || String(r)));
+              } catch {}
+            }, { capture: true });
+          }
+        } catch {}
         // We are in /src/boot/boot-loader.js → dev entry is ../index.js
         push({ tag: 'boot-loader', msg: 'import ../index.js → start' });
         // Helpful probe: if /src/index.js is missing or blocked, log a targeted hint
