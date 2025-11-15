@@ -1192,6 +1192,25 @@ export function ensureSidebarMirror() {
     }
     if ((side as any)._mirrorWired) return;
     (side as any)._mirrorWired = '1';
+    // Ensure the sidebar initially reflects the main select's options/state
+    const copyOptions = () => {
+      try {
+        if (!main || !side) return;
+        // Copy options list
+        side.innerHTML = main.innerHTML;
+        // Mirror disabled/busy state and dataset count for quick diagnostics
+        const busy = main.getAttribute('aria-busy');
+        if (busy != null) side.setAttribute('aria-busy', busy);
+        else side.removeAttribute('aria-busy');
+        try { (side as any).dataset.count = (main as any).dataset.count || String((main.options||[]).length||0); } catch {}
+        // Keep value in sync if possible
+        try { side.value = main.value; } catch {}
+        // Enable/disable based on presence of options
+        side.disabled = (side.options?.length || 0) === 0;
+      } catch {}
+    };
+    // Run once now in case main is already populated
+    copyOptions();
     let __syncingSelects = false;
     function syncSelect(from: HTMLSelectElement, to: HTMLSelectElement) {
       if (__syncingSelects) return;
@@ -1208,6 +1227,8 @@ export function ensureSidebarMirror() {
     }
     main.addEventListener('change', () => { if (side) syncSelect(main, side!); }, { capture: false });
     side.addEventListener('change', () => { if (main) syncSelect(side!, main); }, { capture: false });
+    // When folder scripts are (re)populated, refresh sidebar options
+    window.addEventListener('tp:folderScripts:populated', () => { copyOptions(); }, { capture: true });
   } catch {}
 }
 
