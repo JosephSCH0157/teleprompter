@@ -895,11 +895,11 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
     }
   } catch {}
 
-  // ESC safety exit & P hotkey (non-invasive; capture late)
+  // ESC safety exit & keybinds (capture early to beat browser defaults)
   try {
     if (!(window as any).__tpCoreUiKeybinds) {
       (window as any).__tpCoreUiKeybinds = true;
-      window.addEventListener('keydown', (e) => {
+      const hotkeys = (e: KeyboardEvent) => {
         try {
           const root = document.documentElement;
           const key = (e.key || '').toLowerCase();
@@ -908,13 +908,13 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
           if ((key === 'p') && !e.metaKey && !e.ctrlKey && !e.altKey) setPresent(!root.classList.contains('tp-present'));
           // Ctrl/Cmd+O → Load selected script from mapped folder
           if (withAccel && key === 'o') {
-            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); } catch {}
             try { triggerMappedSelectLoad(); } catch {}
             return;
           }
           // Ctrl/Cmd+S → Save current script (browser download or FS handler)
           if (withAccel && key === 's') {
-            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); } catch {}
             try { (scripts as any)?.save?.(); } catch {}
             return;
           }
@@ -923,7 +923,7 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
             const ae = (document.activeElement as HTMLElement | null);
             const inEditable = !!(ae && (ae.closest('input,textarea,[contenteditable="true"]')));
             if (inEditable) return;
-            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); } catch {}
             try { (scripts as any)?.renameSel?.(); } catch {}
             return;
           }
@@ -932,12 +932,14 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
             const ae = (document.activeElement as HTMLElement | null);
             const inEditable = !!(ae && (ae.closest('input,textarea,[contenteditable="true"]')));
             if (inEditable) return;
-            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); } catch {}
             try { (scripts as any)?.deleteSel?.(); } catch {}
             return;
           }
         } catch {}
-      });
+      };
+      // Capture phase ensures we pre-empt browser defaults like Ctrl/Cmd+O
+      onGlobal(window, 'keydown', hotkeys as any, 'core-ui-hotkeys-capture', { capture: true });
     }
   } catch {}
 
