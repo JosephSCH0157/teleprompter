@@ -902,8 +902,22 @@ export function bindCoreUI(opts: CoreUIBindOptions = {}) {
       window.addEventListener('keydown', (e) => {
         try {
           const root = document.documentElement;
-          if (e.key === 'Escape' && root.classList.contains('tp-present')) setPresent(false);
-          if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) setPresent(!root.classList.contains('tp-present'));
+          const key = (e.key || '').toLowerCase();
+          const withAccel = !!(e.ctrlKey || e.metaKey);
+          if (key === 'escape' && root.classList.contains('tp-present')) setPresent(false);
+          if ((key === 'p') && !e.metaKey && !e.ctrlKey && !e.altKey) setPresent(!root.classList.contains('tp-present'));
+          // Ctrl/Cmd+O → Load selected script from mapped folder
+          if (withAccel && key === 'o') {
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { triggerMappedSelectLoad(); } catch {}
+            return;
+          }
+          // Ctrl/Cmd+S → Save current script (browser download or FS handler)
+          if (withAccel && key === 's') {
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { (scripts as any)?.save?.(); } catch {}
+            return;
+          }
         } catch {}
       });
     }

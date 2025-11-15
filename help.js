@@ -221,6 +221,7 @@ export function ensureHelpUI() {
           <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed</div>
           <div><strong>Shift + ?</strong></div><div>Open Help</div>
           <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
+          <div><strong>Ctrl/Cmd + O</strong></div><div>Load selected script</div>
         </div>
 
         <hr class="hr" />
