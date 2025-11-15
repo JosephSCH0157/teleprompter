@@ -1027,13 +1027,21 @@ async function boot() {
                 try { window.__tpFolderHandle = dirHandle; } catch {}
                 // New native selection replaces any prior fallback file map
                 try { if (window.__tpFolderFilesMap && window.__tpFolderFilesMap.clear) window.__tpFolderFilesMap.clear(); } catch {}
-                for await (const entry of dirHandle.values()) {
-                  try {
-                    if (entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
-                      scriptNames.push(entry.name);
-                    }
-                  } catch {}
-                }
+                // Avoid `for await ... of` for wider runtime compatibility
+                try {
+                  const it = dirHandle.values();
+                  while (true) {
+                    let step;
+                    try { step = await it.next(); } catch { step = { done: true }; }
+                    if (!step || step.done) break;
+                    const entry = step.value;
+                    try {
+                      if (entry && entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
+                        scriptNames.push(entry.name);
+                      }
+                    } catch {}
+                  }
+                } catch {}
               } catch (e) {
                 // user cancel → fall back to input
                 if (e && e.name !== 'AbortError') console.warn('[folder] picker err', e);
