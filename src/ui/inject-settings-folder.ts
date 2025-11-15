@@ -38,22 +38,12 @@ export function ensureSettingsFolderControls() {
     </div>
   `;
 
-  host.appendChild(card);
+  // Prefer inserting inside the General tab content container if present
+  const generalContainer = document.querySelector('[data-tab-content="general"]') as HTMLElement | null;
+  if (generalContainer) generalContainer.appendChild(card); else host.appendChild(card);
 
   // Ensure visibility tracks the active tab, even if injected after initial tab wiring.
-  try {
-    const tabs = document.getElementById('settingsTabs');
-  const desired = (card as any).dataset.tab || 'general';
-    const update = () => {
-      try {
-        const activeBtn = document.querySelector('.settings-tab.active') as HTMLElement | null;
-        const active = (activeBtn && (activeBtn as any).dataset.tab) || 'general';
-        card.style.display = (active === desired ? 'flex' : 'none');
-      } catch {}
-    };
-    update();
-    if (tabs) tabs.addEventListener('click', () => { try { update(); } catch {} }, { capture: true });
-  } catch {}
+  // If we managed to place it inside the General tab content, we don't need custom visibility wiring.
 
   try { (window as any).HUD?.log?.('settings:folder:injected', { late: false }); } catch {}
   return true;

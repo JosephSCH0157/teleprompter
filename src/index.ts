@@ -460,6 +460,10 @@ export async function boot() {
 							try {
 								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' });
 								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' });
+								// If the sidebar select is created later, bind on readiness signal
+								window.addEventListener('tp:sidebar:ready', () => {
+									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' }); } catch {}
+								}, { once: true, capture: true });
 							} catch {}
 							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
 							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}

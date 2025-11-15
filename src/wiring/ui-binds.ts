@@ -1206,6 +1206,7 @@ export function ensureSidebarMirror() {
       const wrap = document.createElement('div'); wrap.className = 'row';
       const lab = document.createElement('label'); lab.textContent = 'Scripts';
       lab.appendChild(side); wrap.appendChild(lab); host?.appendChild(wrap);
+      try { window.dispatchEvent(new CustomEvent('tp:sidebar:ready', { detail: { id: 'scriptSelectSidebar' } })); } catch {}
     }
     if ((side as any)._mirrorWired) return;
     (side as any)._mirrorWired = '1';
