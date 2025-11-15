@@ -151,6 +151,7 @@ import { initAsrFeature } from './index-hooks/asr';
 import { onTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/micMenu';
+import { wireMicToggle } from './ui/mic-toggle';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
@@ -317,6 +318,8 @@ export async function boot() {
 								try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Hot-fix explicit overlay button wiring (always run)
 								try { installOverlayButtonWiringOnce(); } catch {}
+								// Wire single mic toggle button if present
+								try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)
 								// Do not install unconditionally to avoid hijacking clicks in prod.
 								// (Emergency binder only installed above for harness contexts)
