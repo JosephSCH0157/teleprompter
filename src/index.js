@@ -720,6 +720,18 @@ async function boot() {
       // We still delegate clicks for speed +/- and mic buttons.
       document.addEventListener('click', (e) => {
         const t = e && e.target;
+        // Load button → trigger mapped-folder select change to load the chosen script
+        try {
+          const loadHit = t?.closest?.('#scriptLoadBtn,[data-action="load"]');
+          if (loadHit) {
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try {
+              const sel = (document.querySelector('#scriptSelectSidebar') || document.querySelector('#scriptSelect'));
+              if (sel) sel.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch {}
+            return;
+          }
+        } catch {}
         // If the new TS Scroll Router is active, it owns auto +/- and intent controls
         try { if (window.__tpScrollRouterTsActive) { /* delegate to TS router */ } else {
           try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
