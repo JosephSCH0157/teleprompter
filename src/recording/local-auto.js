@@ -1,4 +1,160 @@
 (function(){
+  let mediaRecorder = null;
+  let chunks = [];
+  let active = false;
+  let currentStream = null;
+
+  function nowName(){
+    try {
+      const d = new Date();
+      const pad = (n)=> String(n).padStart(2,'0');
+      return `Teleprompter_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}.webm`;
+    } catch { return 'Teleprompter_Recording.webm'; }
+  }
+
+  function pickMime(){
+    try {
+      const cand = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      for (const t of cand) { if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t; }
+    } catch {}
+    return 'video/webm';
+  }
+
+  async function getVideoStream(){
+    try {
+      // Prefer existing camera stream from #camVideo
+      const v = document.getElementById('camVideo');
+      const s = v && v.srcObject;
+      if (s && typeof s.getVideoTracks === 'function' && s.getVideoTracks().length) return new MediaStream([ ...s.getVideoTracks() ]);
+    } catch {}
+    try {
+      // High-quality preferences; browsers will clamp as needed
+      return await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } }, audio: false });
+    } catch {
+      return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+  }
+
+  async function getAudioStream(){
+    try {
+      const w = window;
+      // Prefer existing mic stream
+      const s = (w.__tpMic && w.__tpMic.__lastStream) ? w.__tpMic.__lastStream : null;
+      if (s && typeof s.getAudioTracks === 'function' && s.getAudioTracks().length) return new MediaStream([ ...s.getAudioTracks() ]);
+    } catch {}
+    try {
+      // Attempt to request mic via app API to keep HUD/meter in sync
+      if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') {
+        const s = await window.__tpMic.requestMic();
+        return new MediaStream([ ...s.getAudioTracks() ]);
+      }
+    } catch {}
+    // Fallback: direct getUserMedia
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    return new MediaStream([ ...s.getAudioTracks() ]);
+  }
+
+  function mustSkipForMode(){
+    try {
+      const store = window.__tpStore;
+      const mode = store && typeof store.get === 'function' ? String(store.get('scrollMode') || '') : '';
+      return /rehearsal/i.test(mode);
+    } catch { return false; }
+  }
+
+  async function start(){
+    if (active) return;
+    if (mustSkipForMode()) { try { console.info('[auto-rec] skip in rehearsal mode'); } catch {}; return; }
+    try {
+      const v = await getVideoStream();
+      const a = await getAudioStream();
+      const mix = new MediaStream();
+      try { a.getAudioTracks().forEach(t => mix.addTrack(t)); } catch {}
+      try { v.getVideoTracks().forEach(t => mix.addTrack(t)); } catch {}
+      currentStream = mix;
+      const mime = pickMime();
+      mediaRecorder = new MediaRecorder(mix, { mimeType: mime, videoBitsPerSecond: 5_000_000, audioBitsPerSecond: 128_000 });
+      chunks = [];
+      mediaRecorder.ondataavailable = (e) => { try { if (e && e.data && e.data.size) chunks.push(e.data); } catch {} };
+      mediaRecorder.onstop = async () => {
+        try {
+          const blob = new Blob(chunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'video/webm' });
+          chunks = [];
+          await saveBlob(blob, nowName());
+        } catch (e) { try { console.warn('[auto-rec] save failed', e); } catch {} }
+      };
+      mediaRecorder.start();
+      active = true;
+      try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'recording' } })); } catch {}
+    } catch (e) {
+      try { console.warn('[auto-rec] start failed', e); } catch {}
+    }
+  }
+
+  async function stop(){
+    if (!active) return;
+    try {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    } catch {}
+    try { if (currentStream) currentStream.getTracks().forEach(t => { try { t.stop(); } catch {} }); } catch {}
+    currentStream = null; mediaRecorder = null; active = false;
+    try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'idle' } })); } catch {}
+  }
+
+  async function saveBlob(blob, name){
+    try {
+      // Lazy-load dir helper
+      let dir = null; let supported = false;
+      try {
+        const mod = await import('../fs/recording-dir.js');
+        // mod exposes window shim; prefer direct window surface
+        supported = !!(window.__tpRecDir && window.__tpRecDir.supported && window.__tpRecDir.supported());
+        if (window.__tpRecDir && typeof window.__tpRecDir.init === 'function') { try { await window.__tpRecDir.init(); } catch {} }
+        dir = window.__tpRecDir && typeof window.__tpRecDir.get === 'function' ? window.__tpRecDir.get() : null;
+      } catch {}
+
+      if (dir) {
+        try {
+          // @ts-ignore
+          const ok = (await dir.requestPermission?.({ mode: 'readwrite' })) || (await dir.queryPermission?.({ mode: 'readwrite' }));
+          if (ok === 'granted' || ok === 'prompt') {
+            const fh = await dir.getFileHandle(name, { create: true });
+            const w = await fh.createWritable(); await w.write(blob); await w.close();
+            try { (window.toast || console.debug)('Recording saved to folder', { type: 'ok' }); } catch {}
+            return;
+          }
+        } catch {}
+      }
+
+      // Save-as picker fallback if available
+      try {
+        // @ts-ignore
+        if ('showSaveFilePicker' in window) {
+          // @ts-ignore
+          const handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ accept: { 'video/webm': ['.webm'] } }] });
+          const w = await handle.createWritable(); await w.write(blob); await w.close();
+          return;
+        }
+      } catch {}
+
+      // Last resort: force a download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch (e) { try { console.warn('[auto-rec] save fallback failed', e); } catch {} }
+  }
+
+  try { window.__tpAutoRecord = window.__tpAutoRecord || {}; } catch {}
+  try { window.__tpAutoRecord.start = start; window.__tpAutoRecord.stop = stop; Object.defineProperty(window.__tpAutoRecord, 'active', { get(){ return active; } }); } catch {}
+})();
+
+export { };
+(function(){
   // Simple local auto-recorder: camera + mic to a single WebM file.
   // Exposes window.__tpAutoRecord with start/stop used by Speech Sync.
 

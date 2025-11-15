@@ -110,6 +110,11 @@
         '  <div class="row">',
   '    <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>',
         '  </div>',
+        '  <div class="row" id="autoRecordFolderRow">',
+        '    <span class="microcopy" style="color:#9fb4c9;font-size:12px">Folder: <span id="autoRecordFolderName">Not set</span></span>',
+        '    <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder…</button>',
+        '    <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>',
+        '  </div>',
         '  <div class="row">',
         '    <label>Pre-roll (sec) <input id="settingsPreroll" type="number" min="0" max="10" step="1" class="select-md"/></label>',
         '  </div>',
@@ -1045,6 +1050,70 @@
           } catch {}
         });
       }
+
+      // --- Auto-record folder picker wiring ---
+      try {
+        const folderNameEl = q('autoRecordFolderName');
+        const pickBtn = q('autoRecordPickBtn');
+        const clearBtn = q('autoRecordClearBtn');
+
+        async function renderFolder() {
+          try {
+            // lazy import helper; it attaches window.__tpRecDir
+            await import('../fs/recording-dir.js');
+            if (window.__tpRecDir && typeof window.__tpRecDir.init === 'function') { try { await window.__tpRecDir.init(); } catch {} }
+            const dir = window.__tpRecDir && window.__tpRecDir.get ? window.__tpRecDir.get() : null;
+            if (folderNameEl) folderNameEl.textContent = dir ? (dir.name || 'Selected') : 'Not set';
+          } catch {}
+        }
+
+        async function pickFolderFlow() {
+          try {
+            await import('../fs/recording-dir.js');
+            const supported = !!(window.__tpRecDir && window.__tpRecDir.supported && window.__tpRecDir.supported());
+            if (!supported) {
+              (window.toast || ((m)=>console.debug('[toast]', m)))('This browser will download recordings instead of saving to a folder.', { type: 'warn' });
+              return true; // not an error; we just warn and proceed with downloads
+            }
+            const existing = window.__tpRecDir && window.__tpRecDir.get ? window.__tpRecDir.get() : null;
+            if (existing) return true; // nothing to do
+            const dir = await window.__tpRecDir.pick();
+            if (!dir) {
+              (window.toast || ((m)=>console.debug('[toast]', m)))('Auto-save canceled — no folder selected.', { type: 'warn' });
+              return false;
+            }
+            await renderFolder();
+            return true;
+          } catch { return false; }
+        }
+
+        // On enabling auto-save, if supported and no folder yet: prompt; revert if canceled
+        if (settingsAutoRec && hasStore) {
+          settingsAutoRec.addEventListener('change', async () => {
+            try {
+              if (!settingsAutoRec.checked) return;
+              const ok = await pickFolderFlow();
+              if (!ok) {
+                settingsAutoRec.checked = false; S.set('autoRecord', false);
+              }
+            } catch {}
+          }, { capture: true });
+        }
+
+        if (pickBtn && !pickBtn.dataset.wired) {
+          pickBtn.dataset.wired = '1';
+          pickBtn.addEventListener('click', async () => { await pickFolderFlow(); });
+        }
+        if (clearBtn && !clearBtn.dataset.wired) {
+          clearBtn.dataset.wired = '1';
+          clearBtn.addEventListener('click', async () => {
+            try { await import('../fs/recording-dir.js'); await window.__tpRecDir?.clear?.(); await renderFolder(); } catch {}
+          });
+        }
+
+        // Initial render
+        try { renderFolder(); } catch {}
+      } catch {}
 
       // Preroll seconds persistence
       const settingsPreroll = q('settingsPreroll');
