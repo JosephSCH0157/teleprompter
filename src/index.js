@@ -709,7 +709,59 @@ async function boot() {
         } } catch {}
         try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
         try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
+        // Unified single-button mic toggle (JS path)
+        try {
+          const btn = t?.closest?.('#micToggleBtn');
+          if (btn) {
+            // Prevent other handlers from racing; we own this button
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            const mic = window.__tpMic || window.ASR || window.__tpAsrImpl;
+            const isActive = btn.classList?.contains?.('mic-active');
+            const sync = (on) => {
+              try {
+                if (on) {
+                  btn.textContent = 'Release Mic';
+                  btn.classList.remove('mic-idle');
+                  btn.classList.add('mic-active');
+                } else {
+                  btn.textContent = 'Request Mic';
+                  btn.classList.remove('mic-active');
+                  btn.classList.add('mic-idle');
+                }
+              } catch {}
+            };
+            // Try adapter first; fall back to best-effort UI toggle
+            try {
+              if (!isActive) { (mic && mic.requestMic) ? mic.requestMic() : null; sync(true); }
+              else { (mic && mic.releaseMic) ? mic.releaseMic() : null; sync(false); }
+            } catch { sync(!isActive); }
+            return;
+          }
+        } catch {}
       }, { capture: true });
+
+      // Reflect mic state changes to the single-button UI if events are emitted
+      try {
+        if (!window.__tpMicToggleListenerInstalled) {
+          window.__tpMicToggleListenerInstalled = true;
+          window.addEventListener('tp:mic:state', (ev) => {
+            try {
+              const on = !!(ev && ev.detail && ev.detail.on);
+              const btn = document.getElementById('micToggleBtn');
+              if (!btn) return;
+              if (on) {
+                btn.textContent = 'Release Mic';
+                btn.classList.remove('mic-idle');
+                btn.classList.add('mic-active');
+              } else {
+                btn.textContent = 'Request Mic';
+                btn.classList.remove('mic-active');
+                btn.classList.add('mic-idle');
+              }
+            } catch {}
+          });
+        }
+      } catch {}
 
       // Unified auto-speed input + wheel handling (resilient delegation)
       try {
