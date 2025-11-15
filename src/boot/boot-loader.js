@@ -32,7 +32,9 @@
                 var ln = (ev && ev.lineno) || 0;
                 var cn = (ev && ev.colno) || 0;
                 var msg = (ev && ev.message) || '';
-                console.error('[boot-loader] window.error', { filename: fn, lineno: ln, colno: cn, message: msg });
+                try {
+                  console.error('[boot-loader] window.error filename=' + fn + ' lineno=' + ln + ' colno=' + cn + ' message=' + msg);
+                } catch {}
               } catch {}
             }, { capture: true });
             g.addEventListener('unhandledrejection', function (ev) {
@@ -83,10 +85,12 @@
         } catch {}
         return;
       }
-      // Prod or forced legacy: inject monolith as a last resort
+      // Prod or forced legacy: inject monolith/module as a last resort
       try {
         const s = document.createElement('script');
         s.src = './teleprompter_pro.js';
+        // The current legacy build uses ESM import statements; load as a module
+        s.type = 'module';
         s.defer = true;
         s.onload = () => push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
         s.onerror = () => push({ tag: 'boot-loader', msg: 'legacy failed', ok: false });
