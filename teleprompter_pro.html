@@ -43,8 +43,11 @@
       try {
         var Q=new URLSearchParams(location.search);
         var DEV = Q.has('dev') || (function(){try{return localStorage.getItem('tp_dev_mode')==='1'}catch(e){return false}})() || (location.hash||'').indexOf('dev')!==-1;
+        var DEV1 = (Q.get('dev')==='1') || (Q.get('dev1')==='1') || Q.has('dev1') || ((location.hash||'').indexOf('dev1')!==-1);
         if (DEV) document.documentElement.classList.add('tp-dev');
+        if (DEV1) document.documentElement.classList.add('dev1');
         window.__TP_DEV = DEV;
+        window.__TP_DEV1 = DEV1;
       } catch (e) {}
     })();
   </script>
@@ -112,6 +115,12 @@
     /* Chip state colorization for toggles */
     .chip[data-state="open"], .chip[data-state="on"]{background:rgba(60,180,75,0.18)}
     .chip[data-state="closed"], .chip[data-state="off"]{background:var(--chip-bg)}
+    /* Save chip states */
+    #saveChip[data-state="saved"]{background:rgba(60,180,75,0.18)}
+    #saveChip[data-state="dirty"]{background:rgba(234,179,8,0.22)}
+    /* Dev-only controls hidden by default; shown only with ?dev=1 */
+    .dev-only{display:none !important}
+    html.dev1 .dev-only{display:inline-flex !important}
     /* Test aliases: keep clickable for headless smoke while visually hidden */
     .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
   </style>
@@ -246,7 +255,7 @@
 <span class="chip" id="displayChip">Display: closed</span>
 <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
 <span class="chip" id="scrollChip">Scroll: idle</span>
-<span class="chip" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
+<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
 <span class="chip" id="camRtcChip">CamRTC: idle</span>
 <span class="chip" id="speakerIndexChip">Speakers: —</span>
 <!-- dB Meter (top bar mini) -->
@@ -270,7 +279,7 @@
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
     <button id="hudBtn" class="chip" data-action="hud-toggle">HUD</button>
-  <span id="selfChecksChip" class="chip chip-muted">
+  <span id="selfChecksChip" class="chip chip-muted dev-only">
     Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
   </span>
   
@@ -659,6 +668,60 @@
         if (openAlias) openAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay==='function') window.__tpDisplay.openDisplay(); else window.open('display.html','TeleprompterDisplay','width=1000,height=700'); }catch(e){} });
         if (closeAlias) closeAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay==='function') window.__tpDisplay.closeDisplay(); else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close(); }catch(e){} });
       }catch(e){}
+    })();
+  </script>
+  <script>
+    (function(){
+      // Save status indicator wiring for #saveChip
+      try {
+        var saveChip = document.getElementById('saveChip');
+        if (!saveChip) return;
+
+        function setDirty(){
+          try {
+            saveChip.textContent = 'Draft: Modified';
+            saveChip.setAttribute('data-state','dirty');
+          } catch(e){}
+        }
+
+        function setSaved(){
+          try {
+            saveChip.textContent = 'Draft: Saved';
+            saveChip.setAttribute('data-state','saved');
+          } catch(e){}
+        }
+
+        // Initial state
+        try { saveChip.textContent = 'Draft: —'; saveChip.removeAttribute('data-state'); } catch(e){}
+
+        // Editor changes mark draft as modified
+        try {
+          var editor = document.getElementById('editor');
+          if (editor){ editor.addEventListener('input', setDirty, {passive:true}); }
+        } catch(e){}
+
+        // Title edits also mark as modified
+        try {
+          var title = document.getElementById('scriptTitle');
+          if (title){
+            title.addEventListener('input', setDirty, {passive:true});
+            title.addEventListener('change', setDirty, {passive:true});
+          }
+        } catch(e){}
+
+        // After user clicks Save / Save As, show Saved state
+        try {
+          var saveBtn = document.getElementById('scriptSaveBtn');
+          if (saveBtn){ saveBtn.addEventListener('click', function(){ setTimeout(setSaved, 0); }); }
+        } catch(e){}
+        try {
+          var saveAsBtn = document.getElementById('scriptSaveAsBtn');
+          if (saveAsBtn){ saveAsBtn.addEventListener('click', function(){ setTimeout(setSaved, 0); }); }
+        } catch(e){}
+
+        // If app dispatches a custom event upon successful save, reflect that as well
+        try { window.addEventListener('tp:script:saved', function(){ setSaved(); }); } catch(e){}
+      } catch(e){}
     })();
   </script>
   <script>
