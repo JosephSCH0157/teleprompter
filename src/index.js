@@ -979,7 +979,10 @@ async function boot() {
     // Install scroll modes & start router (enables timed/wpm/hybrid movement)
     try {
       installScrollModes && installScrollModes();
-      scrollRouterStart && scrollRouterStart();
+      // Defer starting the scroll router until preroll completes (tp:preroll:done)
+      try { window.__tpScrollRouterStarted = false; } catch {}
+      // Expose start function globally for deferred invocation
+      try { window.scrollRouterStart = scrollRouterStart; } catch {}
       // Adopt current select value if present (#scrollMode) for legacy/pro pages
       const modeSel = document.getElementById('scrollMode');
       if (modeSel && modeSel.value) { try { scrollRouterSetMode && scrollRouterSetMode(modeSel.value); } catch(e){} }
