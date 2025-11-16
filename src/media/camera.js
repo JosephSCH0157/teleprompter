@@ -55,7 +55,8 @@
       const camWrap = document.getElementById('camWrap');
       const camSize = document.getElementById('camSize');
       if (!camWrap || !camSize) return;
-      const pct = Math.max(15, Math.min(60, Number(camSize.value) || 28));
+      const val = Number((camSize && camSize.value) || 28);
+      const pct = Math.max(15, Math.min(60, isFinite(val) ? val : 28));
       camWrap.style.width = pct + '%';
       try { window.sendToDisplay && window.sendToDisplay({ type: 'cam-sizing', pct }); } catch {}
     } catch {}
@@ -323,12 +324,12 @@
       if (!state.stream) return; try { for (const t of state.stream.getTracks()) t.stop(); } catch(_){}
       state.stream = null;
       const videoEl = document.getElementById('camVideo'); if (videoEl) { try { videoEl.srcObject = null; } catch(_){} }
-      const wrap = document.getElementById('camWrap'); if (wrap) { try { wrap.style.display = 'none'; } catch(e){} }
+      const wrap = document.getElementById('camWrap'); if (wrap) { try { wrap.style.display = 'none'; } catch(_){ } }
       emit('tp:camera:stopped');
     }
     // Expose hardened API (override previous startCamera/stopCamera if present)
     cam.startCamera = start; cam.stopCamera = stop; cam.start = start; cam.stop = stop;
     // Legacy alias
     if (!window.__camApi) window.__camApi = cam;
-  } catch(e){}
+  } catch(_){ }
 })();

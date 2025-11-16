@@ -41,7 +41,7 @@ module.exports = [
       sourceType: 'module',
     },
     rules: {
-      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-console': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-useless-escape': 'off',
@@ -125,7 +125,7 @@ module.exports = [
       },
     },
     rules: {
-      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-undef': 'off',
       'no-console': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
@@ -215,15 +215,11 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
-  // Global unused-vars policy: allow underscore-prefixed args and locals in all JS/TS files
+  // Global unused-vars policy for JS only: allow underscore-prefixed args and locals
   {
-    files: ['**/*.{ts,js}'],
+    files: ['**/*.js'],
     rules: {
-      // Keep plain JS linting: allow underscore-prefixed unused vars/args
-      'no-unused-vars': ['warn', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-      }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
     },
   },
 ];

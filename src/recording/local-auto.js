@@ -110,11 +110,10 @@
   async function saveBlob(blob, name){
     try {
       // Lazy-load dir helper
-      let dir = null; let supported = false;
+      let dir = null;
       try {
-        const mod = await import('../fs/recording-dir.js');
-        // mod exposes window shim; prefer direct window surface
-        supported = !!(window.__tpRecDir && window.__tpRecDir.supported && window.__tpRecDir.supported());
+        await import('../fs/recording-dir.js');
+        // module exposes window shim; prefer direct window surface
         if (window.__tpRecDir && typeof window.__tpRecDir.init === 'function') { try { await window.__tpRecDir.init(); } catch {} }
         dir = window.__tpRecDir && typeof window.__tpRecDir.get === 'function' ? window.__tpRecDir.get() : null;
       } catch {}
@@ -279,7 +278,7 @@ export { };
           await w.write(blob); await w.close();
           try { (window.toast || ((m)=>console.debug('[toast]', m)))('Saved recording: ' + (fh.name || name), { type: 'ok' }); } catch {}
           return;
-        } catch (err) {
+        } catch {
           // User canceled or NotAllowed (no gesture) → fall back
         }
       }

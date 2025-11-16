@@ -822,7 +822,6 @@ async function boot() {
               if (!isActive) { (mic && mic.requestMic) ? mic.requestMic() : null; sync(true); }
               else { (mic && mic.releaseMic) ? mic.releaseMic() : null; sync(false); }
             } catch (e) { sync(!isActive); }
-            return;
           }
         } catch (e) {}
       }, { capture: true });
