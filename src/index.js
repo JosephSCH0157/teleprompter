@@ -1009,6 +1009,19 @@ async function boot() {
             }
             // Apply mode change for allowed cases
             try { scrollRouterSetMode && scrollRouterSetMode(val); } catch(e){}
+            // If leaving Rehearsal → auto-enable auto-scroll and ensure router is running
+            try {
+              const prev = (modeSel.dataset.prev || '').toLowerCase();
+              if (prev === 'rehearsal' && val !== 'rehearsal') {
+                try { Auto.setEnabled && Auto.setEnabled(true); } catch(_){ }
+                try {
+                  if (typeof window.scrollRouterStart === 'function' && !window.__tpScrollRouterStarted) {
+                    window.scrollRouterStart();
+                    window.__tpScrollRouterStarted = true;
+                  }
+                } catch(_){}
+              }
+            } catch(_){}
             try { modeSel.dataset.prev = String(val); } catch(e){}
             try { __syncRehearsalUI(); } catch(_){}
           } catch(e){}
