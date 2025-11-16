@@ -3918,6 +3918,11 @@ let _toast = function (msg, opts) {
       if (window.__tpMic && typeof window.__tpMic.requestMic === 'function') {
         const s = await window.__tpMic.requestMic();
         audioStream = s || audioStream;
+        try {
+          // Reflect mic state to UI and listeners
+          document.getElementById('recBtn')?.removeAttribute('disabled');
+          window.dispatchEvent(new CustomEvent('tp:mic:state', { detail: { on: true } }));
+        } catch {}
         return s;
       }
       // Fallback to inline behavior if module missing
@@ -3928,6 +3933,10 @@ let _toast = function (msg, opts) {
       try { permChip && (permChip.textContent = 'Mic: allowed'); } catch {}
       startDbMeter(stream);
       try { if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId); } catch {}
+      try {
+        document.getElementById('recBtn')?.removeAttribute('disabled');
+        window.dispatchEvent(new CustomEvent('tp:mic:state', { detail: { on: true } }));
+      } catch {}
       return stream;
     } catch (e) {
       warn('Mic denied or failed', e);
@@ -3945,6 +3954,10 @@ let _toast = function (msg, opts) {
         try { permChip && (permChip.textContent = 'Mic: released'); } catch {}
         try { _stopDbMeter(); } catch {}
       }
+      try {
+        document.getElementById('recBtn')?.setAttribute('disabled','true');
+        window.dispatchEvent(new CustomEvent('tp:mic:state', { detail: { on: false } }));
+      } catch {}
     } catch {}
   }
 
@@ -6907,6 +6920,51 @@ let _toast = function (msg, opts) {
 
     // Mic and devices
     micBtn?.addEventListener('click', requestMic);
+    // Unified mic toggle button (Request/Release)
+    try {
+      const micToggle = document.getElementById('micToggleBtn');
+      if (micToggle && !micToggle.dataset?.wired) {
+        micToggle.dataset.wired = '1';
+        const sync = (on) => {
+          try {
+            if (on) {
+              micToggle.textContent = 'Release Mic';
+              micToggle.classList.remove('mic-idle');
+              micToggle.classList.add('mic-active');
+            } else {
+              micToggle.textContent = 'Request Mic';
+              micToggle.classList.remove('mic-active');
+              micToggle.classList.add('mic-idle');
+            }
+          } catch {}
+        };
+        // Reflect global mic state events
+        try {
+          window.addEventListener('tp:mic:state', (ev) => {
+            try { sync(!!(ev && ev.detail && ev.detail.on)); } catch {}
+          });
+        } catch {}
+        // Initial UI
+        sync(false);
+        // Click handler toggles mic
+        micToggle.addEventListener('click', async (e) => {
+          try { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch {}
+          const isActive = micToggle.classList?.contains?.('mic-active');
+          try {
+            if (!isActive) {
+              const s = await requestMic();
+              sync(!!s || true);
+            } else {
+              _releaseMic();
+              sync(false);
+            }
+          } catch {
+            // Best-effort UI toggle if adapter fails
+            sync(!isActive);
+          }
+        });
+      }
+    } catch {}
     // Wire release mic button if present (tolerant lookup + prefer new API)
     try {
       const releaseBtn = $id('settingsReleaseMicBtn', 'releaseMicBtn');
