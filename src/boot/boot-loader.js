@@ -86,7 +86,6 @@
           for (const s of uniq) {
             try {
               const u = new URL(s, baseUrl).href;
-              // eslint-disable-next-line no-await-in-loop
               await import(/* @vite-ignore */ u);
               try { console.info('[boot-loader] probe ok:', u); } catch {}
             } catch (eProbe) {
