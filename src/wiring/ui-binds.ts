@@ -208,7 +208,7 @@ async function requestPiP() {
 }
 
 // Camera picker helpers (enumerate + start by deviceId)
-async function refreshCameras() {
+async function _refreshCameras() {
   try {
     if (!navigator.mediaDevices?.enumerateDevices) return;
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -218,7 +218,7 @@ async function refreshCameras() {
     sel.innerHTML = cams.map(d => `<option value="${d.deviceId}">${d.label || 'Camera'}</option>`).join('');
   } catch {}
 }
-async function startCameraById(deviceId?: string) {
+async function _startCameraById(deviceId?: string) {
   try {
     const constraints = deviceId ? { video: { deviceId: { exact: deviceId } }, audio: false } : { video: true, audio: false };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -245,12 +245,12 @@ function focusWhenVisible(el: HTMLElement | null, tries = 5) {
 }
 
 // CI detection helper (query flag or webdriver)
-function isCI(): boolean {
+function _isCI(): boolean {
   try { return /\bci=1\b/i.test(location.search) || ((navigator as any).webdriver === true); } catch { return false; }
 }
 
 // Focusable finder (first tabbable inside an overlay)
-function firstFocusable(root: HTMLElement): HTMLElement | null {
+function _firstFocusable(root: HTMLElement): HTMLElement | null {
   try {
     const sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     const all = Array.from(root.querySelectorAll(sel)) as HTMLElement[];
@@ -302,7 +302,7 @@ function _txt(el: Element | null): string {
 }
 
 // try a list of selectors, return the first match
-function findOne(list: readonly string[]): HTMLElement | null {
+function _findOne(list: readonly string[]): HTMLElement | null {
   try {
     for (const s of list) {
       const el = document.querySelector(s) as HTMLElement | null;

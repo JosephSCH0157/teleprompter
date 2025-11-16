@@ -287,7 +287,6 @@ async function boot() {
             const k = (e.key || '').toLowerCase();
             if ((e.altKey && e.shiftKey && k === 'h') || k === '`' || (e.ctrlKey && e.shiftKey && k === 'h')) {
               e.stopImmediatePropagation();
-              // eslint-disable-next-line no-restricted-syntax
               e.preventDefault();
               window.toggleHud?.();
             }
@@ -487,7 +486,6 @@ async function boot() {
         try {
           const el = ev.target?.closest?.(clickSel);
           if (!el) return;
-          // eslint-disable-next-line no-restricted-syntax
           ev.preventDefault();
           ev.stopImmediatePropagation();
           if (el.matches('#settingsRequestMicBtn,[data-action="settings-request-mic"]')) {
@@ -824,7 +822,6 @@ async function boot() {
               if (!isActive) { (mic && mic.requestMic) ? mic.requestMic() : null; sync(true); }
               else { (mic && mic.releaseMic) ? mic.releaseMic() : null; sync(false); }
             } catch (e) { sync(!isActive); }
-            return;
           }
         } catch (e) {}
       }, { capture: true });
@@ -921,7 +918,6 @@ async function boot() {
           try {
             const t = ev?.target;
             if (t?.id !== 'autoSpeed') return;
-            // eslint-disable-next-line no-restricted-syntax
             ev.preventDefault();
             const step = ev.shiftKey ? 5 : 0.5;
             const dir = (ev.deltaY < 0) ? +1 : -1;

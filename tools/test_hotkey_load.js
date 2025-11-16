@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-const path = require('path');
 const puppeteer = require('puppeteer');
 
 (async () => {
@@ -57,7 +56,7 @@ const puppeteer = require('puppeteer');
     }
     console.log('[hotkey-load] PASS: Ctrl+O triggered resilient load (mock upload)');
     process.exit(0);
-  } catch (e) {
+    } catch (e) {
     console.error('[hotkey-load] ERROR', e);
     process.exit(1);
   }

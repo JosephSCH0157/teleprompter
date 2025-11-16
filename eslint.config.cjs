@@ -9,6 +9,9 @@ module.exports = [
       'teleprompter_pro.js',
       'releases/**',
       '**/*.min.js',
+      'recorders.js',
+      'adapters/*.js',
+      '**/*.map',
       'node_modules/**',
       '.vscode/**',
       '**/*.d.ts',
@@ -41,7 +44,7 @@ module.exports = [
       sourceType: 'module',
     },
     rules: {
-      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-console': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-useless-escape': 'off',
@@ -125,7 +128,7 @@ module.exports = [
       },
     },
     rules: {
-      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-undef': 'off',
       'no-console': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
@@ -208,15 +211,18 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
-  // Global unused-vars policy: allow underscore-prefixed args and locals in all JS/TS files
+  // Entry files need preventDefault for precise wheel/zoom UX; allow it here only
   {
-    files: ['**/*.{ts,js}'],
+    files: ['index.js', 'src/index.js'],
     rules: {
-      // Keep plain JS linting: allow underscore-prefixed unused vars/args
-      'no-unused-vars': ['warn', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-      }],
+      'no-restricted-syntax': 'off',
+    },
+  },
+  // Global unused-vars policy for JS only: allow underscore-prefixed args and locals
+  {
+    files: ['**/*.js'],
+    rules: {
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
     },
   },
 ];
