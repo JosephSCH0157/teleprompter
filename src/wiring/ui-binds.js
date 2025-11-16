@@ -31,7 +31,9 @@ export function bindCoreUI(opts = {}) {
     const btn = document.querySelector(presentSel);
     if (btn && !btn.dataset.uiBound) {
       btn.dataset.uiBound = '1';
-      btn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; applyPresent(!root.classList.contains('tp-present')); });
+      btn.addEventListener('click', () => {
+        applyPresent(!root.classList.contains('tp-present'));
+      });
     }
   } catch {}
 
