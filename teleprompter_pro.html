@@ -260,7 +260,6 @@
 <span class="chip" id="scrollChip">Scroll: idle</span>
 <span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
 <span class="chip" id="camRtcChip">CamRTC: idle</span>
-<span class="chip" id="speakerIndexChip">Speakers: —</span>
 <!-- dB Meter (top bar mini) -->
 <div id="dbMeterTop" title="Input level"></div>
 <!-- Mode selector (compact) -->
@@ -663,6 +662,8 @@
   <!-- Test alias for legacy display selectors: clickable but visually hidden -->
   <button id="openDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-open">Open Display (alias)</button>
   <button id="closeDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-close">Close Display (alias)</button>
+  <!-- Hidden alias to preserve #speakerIndexChip for test/binders, removed from visible topbar -->
+  <span id="speakerIndexChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-speakers">Speakers</span>
   <script>
     (function(){
       try{
