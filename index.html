@@ -650,40 +650,35 @@
       }
       var camTog = document.getElementById('cameraToggleBtn');
       if (camTog) {
-        var startCamBtn = document.getElementById('startCam') || document.getElementById('startCamAlias') || document.querySelector('[data-action="start-camera"]');
-        var stopCamBtn  = document.getElementById('stopCam')  || document.getElementById('stopCamAlias')  || document.querySelector('[data-action="stop-camera"]');
         var setCam = function(on){
-          try{
+          try {
             camTog.dataset.state = on ? 'on' : 'off';
             camTog.textContent = on ? 'Camera: On' : 'Camera: Off';
             camTog.setAttribute('aria-pressed', on ? 'true' : 'false');
-          }catch(e){}
+          } catch(e){}
         };
         setCam(false);
         camTog.addEventListener('click', function(){
-          try{
+          try {
             var isOn = camTog.dataset.state === 'on';
+            var api = window.__tpCamera || window.__camApi;
+            var startBtnDyn = document.getElementById('startCamAlias') || document.getElementById('startCam') || document.querySelector('[data-action="start-camera"]');
+            var stopBtnDyn  = document.getElementById('stopCamAlias')  || document.getElementById('stopCam')  || document.querySelector('[data-action="stop-camera"]');
             if (isOn) {
               var did = false;
-              try {
-                if (window.__camApi && typeof window.__camApi.stopCamera === 'function') { window.__camApi.stopCamera(); did = true; }
-              } catch(e){}
-              if (!did && stopCamBtn && typeof stopCamBtn.click==='function') stopCamBtn.click();
+              try { if (api && typeof api.stopCamera === 'function') { api.stopCamera(); did = true; } } catch(e){}
+              if (!did && stopBtnDyn && typeof stopBtnDyn.click === 'function') stopBtnDyn.click();
               setCam(false);
             } else {
               var did2 = false;
-              try {
-                if (window.__camApi && typeof window.__camApi.startCamera === 'function') { window.__camApi.startCamera(); did2 = true; }
-              } catch(e){}
-              if (!did2 && startCamBtn && typeof startCamBtn.click==='function') startCamBtn.click();
+              try { if (api && typeof api.startCamera === 'function') { api.startCamera(); did2 = true; } } catch(e){}
+              if (!did2 && startBtnDyn && typeof startBtnDyn.click === 'function') startBtnDyn.click();
               setCam(true);
             }
-          }catch(e){}
+          } catch(e){}
         });
-        if (startCamBtn) startCamBtn.addEventListener('click', function(){ try{ setCam(true); }catch(e){} });
-        if (stopCamBtn) stopCamBtn.addEventListener('click', function(){ try{ setCam(false); }catch(e){} });
-        document.addEventListener('tp:camera:started', function(){ try{ setCam(true); }catch(e){} });
-        document.addEventListener('tp:camera:stopped', function(){ try{ setCam(false); }catch(e){} });
+        document.addEventListener('tp:camera:started', function(){ try { setCam(true); } catch(e){} });
+        document.addEventListener('tp:camera:stopped', function(){ try { setCam(false); } catch(e){} });
       }
     } catch (e) {}
   })();

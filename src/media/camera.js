@@ -239,6 +239,8 @@
   }
 
   try { window.__tpCamera = window.__tpCamera || {}; window.__tpCamera.startCamera = startCamera; window.__tpCamera.stopCamera = stopCamera; window.__tpCamera.switchCamera = switchCamera; window.__tpCamera.applyCamSizing = applyCamSizing; window.__tpCamera.applyCamOpacity = applyCamOpacity; window.__tpCamera.applyCamMirror = applyCamMirror; } catch {}
+  // Provide legacy alias expected by newer inline toggle code
+  try { if (!window.__camApi) window.__camApi = window.__tpCamera; } catch {}
   // Publish activity check
   try { window.__tpCamera = Object.assign(window.__tpCamera || {}, { isActive: isCamActive }); } catch {}
   // Aliases for simplified API expected by some callers
