@@ -130,6 +130,11 @@
     html.tp-present .app{grid-template-columns:1fr !important}
     /* Ensure toast container is visible to test harness (non-zero box) */
     #tp_toast_container{position:fixed;right:12px;top:12px;z-index:2147483630;pointer-events:none;min-width:1px;min-height:1px}
+    /* Chip state colorization for toggles */
+    .chip[data-state="open"], .chip[data-state="on"]{background:rgba(60,180,75,0.18)}
+    .chip[data-state="closed"], .chip[data-state="off"]{background:var(--chip-bg)}
+    /* Test aliases: keep clickable for headless smoke while visually hidden */
+    .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
   </style>
 
   <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
@@ -297,8 +302,6 @@
 <aside class="panel">
 <h2>Controls</h2>
 <div class="row">
-<button id="openDisplayBtn" class="chip">Open Display</button>
-<button disabled="" id="closeDisplayBtn" class="chip">Close Display</button>
 <button id="displayToggleBtn" class="chip" type="button" aria-pressed="false">Display: Closed</button>
 </div>
 <div class="row">
@@ -329,8 +332,6 @@
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
 <div class="row">
-<button id="startCam">Start camera</button>
-<button disabled="" id="stopCam">Stop camera</button>
 <button id="cameraToggleBtn" class="chip" type="button" aria-pressed="false">Camera: Off</button>
 </div>
 <div class="row">
@@ -527,8 +528,6 @@
     try {
       var tog = document.getElementById('displayToggleBtn');
       if (tog) {
-        var openBtn = document.getElementById('openDisplayBtn');
-        var closeBtn = document.getElementById('closeDisplayBtn');
         var setState = function(open){
           try{
             tog.dataset.state = open ? 'open' : 'closed';
@@ -540,19 +539,28 @@
         tog.addEventListener('click', function(){
           try{
             var isOpen = tog.dataset.state === 'open';
-            if (isOpen) { if (closeBtn && typeof closeBtn.click==='function') closeBtn.click(); setState(false); }
-            else { if (openBtn && typeof openBtn.click==='function') openBtn.click(); setState(true); }
+            if (isOpen) {
+              try {
+                if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay === 'function') window.__tpDisplay.closeDisplay();
+                else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close();
+              } catch(e) {}
+              setState(false);
+            } else {
+              try {
+                if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay === 'function') window.__tpDisplay.openDisplay();
+                else window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
+              } catch(e) {}
+              setState(true);
+            }
           }catch(e){}
         });
-        if (openBtn) openBtn.addEventListener('click', function(){ try{ setState(true); }catch(e){} });
-        if (closeBtn) closeBtn.addEventListener('click', function(){ try{ setState(false); }catch(e){} });
         document.addEventListener('tp:display:opened', function(){ try{ setState(true); }catch(e){} });
         document.addEventListener('tp:display:closed', function(){ try{ setState(false); }catch(e){} });
       }
       var camTog = document.getElementById('cameraToggleBtn');
       if (camTog) {
-        var startCamBtn = document.getElementById('startCam');
-        var stopCamBtn = document.getElementById('stopCam');
+        var startCamBtn = document.getElementById('startCam') || document.getElementById('startCamAlias') || document.querySelector('[data-action="start-camera"]');
+        var stopCamBtn  = document.getElementById('stopCam')  || document.getElementById('stopCamAlias')  || document.querySelector('[data-action="stop-camera"]');
         var setCam = function(on){
           try{
             camTog.dataset.state = on ? 'on' : 'off';
@@ -564,8 +572,21 @@
         camTog.addEventListener('click', function(){
           try{
             var isOn = camTog.dataset.state === 'on';
-            if (isOn) { if (stopCamBtn && typeof stopCamBtn.click==='function') stopCamBtn.click(); setCam(false); }
-            else { if (startCamBtn && typeof startCamBtn.click==='function') startCamBtn.click(); setCam(true); }
+            if (isOn) {
+              var did = false;
+              try {
+                if (window.__camApi && typeof window.__camApi.stopCamera === 'function') { window.__camApi.stopCamera(); did = true; }
+              } catch(e){}
+              if (!did && stopCamBtn && typeof stopCamBtn.click==='function') stopCamBtn.click();
+              setCam(false);
+            } else {
+              var did2 = false;
+              try {
+                if (window.__camApi && typeof window.__camApi.startCamera === 'function') { window.__camApi.startCamera(); did2 = true; }
+              } catch(e){}
+              if (!did2 && startCamBtn && typeof startCamBtn.click==='function') startCamBtn.click();
+              setCam(true);
+            }
           }catch(e){}
         });
         if (startCamBtn) startCamBtn.addEventListener('click', function(){ try{ setCam(true); }catch(e){} });
@@ -604,6 +625,22 @@
       document.addEventListener('tp:init:done', showIfEmpty, { once: true });
     }catch(e){}
   })();
+  </script>
+  <!-- Hidden alias controls to preserve binder hooks for camera (no visible legacy buttons) -->
+  <button id="startCamAlias" data-action="start-camera" hidden type="button" tabindex="-1" aria-hidden="true"></button>
+  <button id="stopCamAlias" data-action="stop-camera" hidden type="button" tabindex="-1" aria-hidden="true"></button>
+  <!-- Test alias for legacy display selectors: clickable but visually hidden -->
+  <button id="openDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-open">Open Display (alias)</button>
+  <button id="closeDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-close">Close Display (alias)</button>
+  <script>
+    (function(){
+      try{
+        var openAlias = document.getElementById('openDisplayBtn');
+        var closeAlias = document.getElementById('closeDisplayBtn');
+        if (openAlias) openAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay==='function') window.__tpDisplay.openDisplay(); else window.open('display.html','TeleprompterDisplay','width=1000,height=700'); }catch(e){} });
+        if (closeAlias) closeAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay==='function') window.__tpDisplay.closeDisplay(); else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close(); }catch(e){} });
+      }catch(e){}
+    })();
   </script>
 </body>
 </html>
