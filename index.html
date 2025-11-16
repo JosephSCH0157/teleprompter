@@ -202,6 +202,9 @@
     /* Dev-only controls hidden by default; shown only with ?dev=1 */
     .dev-only{display:none !important}
     html.dev1 .dev-only{display:inline-flex !important}
+    /* Dev-only HUD stats: ASR HUD visible only in dev1 */
+    #asrStatsHud{display:none !important}
+    html.dev1 #asrStatsHud{display:block !important}
   </style>
 
   <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->

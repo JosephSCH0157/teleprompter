@@ -121,6 +121,9 @@
     /* Dev-only controls hidden by default; shown only with ?dev=1 */
     .dev-only{display:none !important}
     html.dev1 .dev-only{display:inline-flex !important}
+    /* Dev-only HUD stats: ASR HUD visible only in dev1 */
+    #asrStatsHud{display:none !important}
+    html.dev1 #asrStatsHud{display:block !important}
     /* Test aliases: keep clickable for headless smoke while visually hidden */
     .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
   </style>
