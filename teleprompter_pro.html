@@ -344,7 +344,7 @@
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
 <div class="row">
-<button id="cameraToggleBtn" class="chip" type="button" aria-pressed="false" data-action="camera-toggle">Camera: Off</button>
+<button id="cameraToggleBtn" class="chip" type="button" aria-pressed="false" data-action="camera-toggle"><span class="cam-label">Camera: Off</span><span class="spinner" aria-hidden="true"></span></button>
 </div>
 <div class="row">
 <label>Size (%) <input id="camSize" max="60" min="15" step="1" type="number" value="28"/></label>
@@ -648,7 +648,9 @@
           var setCam = function(on){
             try {
               camTog.dataset.state = on ? 'on' : 'off';
-              camTog.textContent = on ? 'Camera: On' : 'Camera: Off';
+              var lab = camTog.querySelector('.cam-label');
+              if (lab) lab.textContent = on ? 'Camera: On' : 'Camera: Off';
+              else camTog.textContent = on ? 'Camera: On' : 'Camera: Off';
               camTog.setAttribute('aria-pressed', on ? 'true' : 'false');
             } catch(e){}
           };

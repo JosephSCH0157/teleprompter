@@ -391,6 +391,10 @@ body.ck::after{
 /* Error state */
 .chip.obs-error{ background:#3e0b0b; color:#ffd6d6; border-color:#E03E3E }
 /* OBS test icon within chip */
+/* Camera busy spinner (shown while starting) */
+#cameraToggleBtn .spinner{display:none;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:camSpin .8s linear infinite;margin-left:6px;vertical-align:middle}
+#cameraToggleBtn.busy .spinner{display:inline-block}
+@keyframes camSpin{to{transform:rotate(360deg)}}
 .obs-test-icon{
     display:inline-block; margin-left:6px; font-style:normal; font-weight:700; opacity:0; transform: translateY(-2px) scale(0.9);
     transition: opacity .18s ease, transform .18s ease; user-select:none;

@@ -187,6 +187,7 @@ function beginCountdownThen(sec, cb) {
         if (s <= 0) {
           hidePreroll();
           try { await cb(); } catch {}
+          try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail: { seconds: s } })); } catch {}
           done = true;
           return;
         }
@@ -197,6 +198,7 @@ function beginCountdownThen(sec, cb) {
         }
         hidePreroll();
         try { await cb(); } catch {}
+        try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail: { seconds: s } })); } catch {}
         done = true;
       } catch {}
       finally {
