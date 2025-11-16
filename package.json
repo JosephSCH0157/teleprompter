@@ -27,6 +27,7 @@
     "smoke:strict:slow": "node tools/teleprompter_e2e.js --runSmoke --timeout=60000 --headless",
     "types": "tsc -p tsconfig.json --noEmit",
     "check": "npm run lint && npm run types",
+    "ci": "npm run check && npm run smoke:strict",
     "smoke:rehearsal": "node tools/rehearsal_smoke.js",
     "smoke:hud": "node tools/teleprompter_e2e.js --runSmoke --headless --timeout=45000 && node tools/hud_smoke.js",
     "smoke:reh_api": "node tools/rehearsal_api_smoke.js",
