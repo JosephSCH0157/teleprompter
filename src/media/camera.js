@@ -287,3 +287,48 @@
     }
   } catch {}
 })();
+
+// Hardened camera start/stop facade (starting flag + clean event emissions)
+(function(){
+  try {
+    const cam = (window.__tpCamera = window.__tpCamera || {});
+    const state = { stream: null, starting: false };
+    function emit(name, detail){ try { window.dispatchEvent(new CustomEvent(name, { detail })); } catch(e){} }
+    async function start(){
+      if (state.starting) return; // ignore parallel calls
+      if (state.stream) { emit('tp:camera:started', { resumed: true }); return; }
+      state.starting = true; emit('tp:camera:starting');
+      try {
+        const constraints = { video: true, audio: false };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        state.stream = stream;
+        const videoEl = document.getElementById('camVideo');
+        if (videoEl) {
+          try {
+            videoEl.srcObject = stream;
+            videoEl.muted = true; videoEl.autoplay = true; videoEl.playsInline = true; videoEl.controls = false;
+            videoEl.play().catch(()=>{});
+            const wrap = document.getElementById('camWrap'); if (wrap) wrap.style.display = 'block';
+          } catch(e){}
+        }
+        emit('tp:camera:started', { label: (stream.getVideoTracks?.()[0]?.label)||'' });
+      } catch(err) {
+        try { console.error('[camera] start failed', err); } catch(e){}
+        emit('tp:camera:error', { message: String(err && err.message || err) });
+        try { (window.toast && window.toast('Camera failed: ' + (err && err.message || 'Unknown'), { type:'error' })); } catch(e){}
+        throw err; // allow callers to handle
+      } finally { state.starting = false; }
+    }
+    function stop(){
+      if (!state.stream) return; try { for (const t of state.stream.getTracks()) t.stop(); } catch(e){}
+      state.stream = null;
+      const videoEl = document.getElementById('camVideo'); if (videoEl) { try { videoEl.srcObject = null; } catch(e){} }
+      const wrap = document.getElementById('camWrap'); if (wrap) { try { wrap.style.display = 'none'; } catch(e){} }
+      emit('tp:camera:stopped');
+    }
+    // Expose hardened API (override previous startCamera/stopCamera if present)
+    cam.startCamera = start; cam.stopCamera = stop; cam.start = start; cam.stop = stop;
+    // Legacy alias
+    if (!window.__camApi) window.__camApi = cam;
+  } catch(e){}
+})();
