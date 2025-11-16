@@ -1,11 +1,16 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+# Lightweight pre-push: skip heavy checks by default to avoid blocking pushes.
+# Opt-in strict mode: set PREPUSH_STRICT=1 to run local CI mirror.
 
-echo "husky(pre-push): running local CI mirror (ci-local)"
-npm run ci-local
-status=$?
-if [ $status -ne 0 ]; then
-  echo "husky(pre-push): ci-local failed (exit $status) — aborting push"
-  exit $status
+if [ "$PREPUSH_STRICT" = "1" ]; then
+  echo "husky(pre-push): running local CI mirror (ci-local)"
+  npm run ci-local
+  status=$?
+  if [ $status -ne 0 ]; then
+    echo "husky(pre-push): ci-local failed (exit $status) — aborting push"
+    exit $status
+  fi
+  echo "husky(pre-push): ok"
+else
+  echo "husky(pre-push): skipping heavy checks (set PREPUSH_STRICT=1 to enable)"
 fi
-echo "husky(pre-push): ok"

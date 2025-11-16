@@ -78,6 +78,15 @@ module.exports = [
     },
   },
 
+  // Specific ESM tool files (use ESM parsing)
+  {
+    files: ['tools/capture_logs.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'module',
+    },
+  },
+
   // Legacy browser scripts: treat a small set of known legacy files as scripts with browser globals
   {
     files: [

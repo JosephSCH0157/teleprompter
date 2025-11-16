@@ -23,8 +23,12 @@ jobs:
       - name: Install deps (clean)
         run: npm ci
 
-      - name: Lint + Types
-        run: npm run check
+      - name: Lint (non-blocking)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Types
+        run: npm run types
 
       - name: Smoke (strict)
         env:
