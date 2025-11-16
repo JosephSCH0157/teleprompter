@@ -208,6 +208,13 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
+  // Entry files need preventDefault for precise wheel/zoom UX; allow it here only
+  {
+    files: ['index.js', 'src/index.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
   // Global unused-vars policy: allow underscore-prefixed args and locals in all JS/TS files
   {
     files: ['**/*.{ts,js}'],
