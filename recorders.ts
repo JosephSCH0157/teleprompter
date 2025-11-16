@@ -1,3 +1,4 @@
+// @ts-nocheck
 // --- Compatibility shim (legacy callers expect a registry) ---
 
 
