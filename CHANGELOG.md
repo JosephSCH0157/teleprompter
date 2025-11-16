@@ -1,5 +1,28 @@
 # Teleprompter Pro — Changelog
 
+# Teleprompter Pro — Changelog
+
+## [1.7.5] - 2025-11-16
+
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.5
+
+### Added
+
+- Camera toggle: busy spinner shown while camera starts.
+- Event: `tp:preroll:done` emitted after countdown completes with `detail.source`.
+- Global preroll hooks: centralized logging and start gates for scroll/recorder.
+
+### Changed
+
+- Auto-scroll now starts only after preroll completes; hybrid/wpm/timed respect countdown.
+- Rehearsal UX: top-bar Auto chip becomes gray “Manual Only”, controls disabled, watermark visible.
+- Mode switches: leaving Rehearsal triggers a preroll before resuming movement; Auto enabled post‑preroll.
+
+### Fixed
+
+- Prevent switching into Rehearsal while Speech is running (selector reverts; toast explains why).
+- Auto‑recorder starts only on Speech‑initiated preroll (not on mode-switch prerolls).
+
 ## [1.7.3] - 2025-11-13
 
 Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.3

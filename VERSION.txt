@@ -1,4 +1,4 @@
-1.6.2
-ANVIL build: 2025-10-22 00:00
-Baseline: mainframe
-Notes: Per-viewport base speed persistence, mic re-request robustness, UI sanitization and minor stability fixes
+1.7.5
+ANVIL build: 2025-11-16 00:00
+Baseline: v1.7.x
+Notes: Rehearsal UX and preroll plumbing. Camera toggle spinner, tp:preroll:done event, auto-scroll defers to preroll, clean mode-switch preroll (no auto-record), block switching into Rehearsal while Speech is running, and auto-enable auto-scroll after leaving Rehearsal.
