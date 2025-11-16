@@ -126,12 +126,14 @@ import * as Mic from './adapters/mic.js';
 import { bus } from './core/bus.js';
 import * as Core from './core/state.js';
 import * as Auto from './features/autoscroll.js';
+// Scroll router (install modes: timed, wpm, hybrid, etc.)
 import * as Eggs from './features/eggs.js';
 import { initHotkeys } from './features/hotkeys.js';
 import { initPersistence } from './features/persistence.js';
 import { initScroll } from './features/scroll.js';
 import { installSpeech } from './features/speech-loader.js';
 import { initTelemetry } from './features/telemetry.js';
+import { installScrollModes, setMode as scrollRouterSetMode, start as scrollRouterStart } from './scroll/router.js';
 import './state/app-store.js';
 // Ensure inline formatter is present (provides window.formatInlineMarkup)
 import '../ui/format.js';
@@ -974,6 +976,20 @@ async function boot() {
   try { window.__tp_init_done = true; } catch (e) {}
   console.log('[src/index] boot completed');
     try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch (e) {}
+    // Install scroll modes & start router (enables timed/wpm/hybrid movement)
+    try {
+      installScrollModes && installScrollModes();
+      scrollRouterStart && scrollRouterStart();
+      // Adopt current select value if present (#scrollMode) for legacy/pro pages
+      const modeSel = document.getElementById('scrollMode');
+      if (modeSel && modeSel.value) { try { scrollRouterSetMode && scrollRouterSetMode(modeSel.value); } catch(e){} }
+      // Keep router mode in sync when user changes select
+      if (modeSel && !modeSel.__tpModeSync) {
+        modeSel.__tpModeSync = true;
+        modeSel.addEventListener('change', () => { try { scrollRouterSetMode && scrollRouterSetMode(modeSel.value); } catch(e){} });
+      }
+    } catch (e) { try { console.warn('[scroll] router init failed', e); } catch(_){} }
+
     // Ensure Settings Scripts Folder card is available (JS path)
     try { ensureSettingsFolderControls(); } catch (e) {}
     try { ensureSettingsFolderControlsAsync(6000); } catch (e2) {}

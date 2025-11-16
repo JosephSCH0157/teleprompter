@@ -38,6 +38,15 @@ function loop() {
     const dt = (now - last) / 1000;
     last = now;
     try {
+      // Gate during pre-roll countdown (overlay visible) → skip movement but continue scheduling frames.
+      try {
+        const ov = document.getElementById('countOverlay');
+        if (ov) {
+          const cs = getComputedStyle(ov);
+          const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !ov.classList.contains('hidden');
+          if (visible) { raf = requestAnimationFrame(step); return; }
+        }
+      } catch {}
       // Accumulate fractional sub-pixel deltas so very low speeds still advance consistently
       const delta = speed * dt + _fracCarry;
       const whole = (delta >= 0) ? Math.floor(delta) : Math.ceil(delta);

@@ -87,6 +87,7 @@
       if (__startingCam) return; // prevent double-fire
       if (isCamActive()) return; // already live
       __startingCam = true;
+      try { window.dispatchEvent(new CustomEvent('tp:camera:starting')); } catch {}
       try {
       // Ensure any previous stream is fully stopped before starting
       if (camStream) { try { camStream.getTracks().forEach(t=>t.stop()); } catch {} camStream = null; }
@@ -179,9 +180,15 @@
         }
       } catch {}
       try { if (window.__tpMic) window.__tpMic.populateDevices && window.__tpMic.populateDevices(); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:camera:started', { detail: { label: activeTrackLabel(stream) } })); } catch {}
       return true;
       } finally { __startingCam = false; }
-    } catch (e) { console.warn('startCamera failed', e); throw e; }
+    } catch (e) {
+      console.warn('startCamera failed', e);
+      try { window.dispatchEvent(new CustomEvent('tp:camera:error', { detail: { message: String(e && e.message || e) } })); } catch {}
+      try { (window.toast && window.toast('Camera failed: ' + (e && e.message || 'Unknown error'), { type: 'error' })) || console.error('Camera failed'); } catch {}
+      throw e;
+    }
   }
 
   function stopCamera() {
