@@ -341,6 +341,14 @@
  <div class="row" id="sidebarMediaHint">
    <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings ▶ Recording/Media</span>
  </div>
+<!-- Add a visible, labeled OBS toggle in the sidebar for quick access -->
+<div class="row obs-row">
+  <label>
+    <input type="checkbox" id="enableObs" />
+    <span>Enable OBS</span>
+  </label>
+  <span class="chip obs-status" id="obsStatus" aria-live="polite">OBS: idle</span>
+</div>
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
 <div class="row">
