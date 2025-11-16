@@ -299,6 +299,7 @@
 <div class="row">
 <button id="openDisplayBtn" class="chip">Open Display</button>
 <button disabled="" id="closeDisplayBtn" class="chip">Close Display</button>
+<button id="displayToggleBtn" class="chip" type="button" aria-pressed="false">Display: Closed</button>
 </div>
 <div class="row">
 <button id="micBtn">Request mic</button>
@@ -330,6 +331,7 @@
 <div class="row">
 <button id="startCam">Start camera</button>
 <button disabled="" id="stopCam">Stop camera</button>
+<button id="cameraToggleBtn" class="chip" type="button" aria-pressed="false">Camera: Off</button>
 </div>
 <div class="row">
 <label>Size (%) <input id="camSize" max="60" min="15" step="1" type="number" value="28"/></label>
@@ -519,6 +521,61 @@
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
 
   <!-- First-time helper: show a topbar "Load Demo Script" CTA when script is empty -->
+  <script>
+  (function(){
+    // Display + Camera toggle wiring: mirrors legacy button pairs without changing existing IDs
+    try {
+      var tog = document.getElementById('displayToggleBtn');
+      if (tog) {
+        var openBtn = document.getElementById('openDisplayBtn');
+        var closeBtn = document.getElementById('closeDisplayBtn');
+        var setState = function(open){
+          try{
+            tog.dataset.state = open ? 'open' : 'closed';
+            tog.textContent = open ? 'Display: Open' : 'Display: Closed';
+            tog.setAttribute('aria-pressed', open ? 'true' : 'false');
+          }catch(e){}
+        };
+        setState(false);
+        tog.addEventListener('click', function(){
+          try{
+            var isOpen = tog.dataset.state === 'open';
+            if (isOpen) { if (closeBtn && typeof closeBtn.click==='function') closeBtn.click(); setState(false); }
+            else { if (openBtn && typeof openBtn.click==='function') openBtn.click(); setState(true); }
+          }catch(e){}
+        });
+        if (openBtn) openBtn.addEventListener('click', function(){ try{ setState(true); }catch(e){} });
+        if (closeBtn) closeBtn.addEventListener('click', function(){ try{ setState(false); }catch(e){} });
+        document.addEventListener('tp:display:opened', function(){ try{ setState(true); }catch(e){} });
+        document.addEventListener('tp:display:closed', function(){ try{ setState(false); }catch(e){} });
+      }
+      var camTog = document.getElementById('cameraToggleBtn');
+      if (camTog) {
+        var startCamBtn = document.getElementById('startCam');
+        var stopCamBtn = document.getElementById('stopCam');
+        var setCam = function(on){
+          try{
+            camTog.dataset.state = on ? 'on' : 'off';
+            camTog.textContent = on ? 'Camera: On' : 'Camera: Off';
+            camTog.setAttribute('aria-pressed', on ? 'true' : 'false');
+          }catch(e){}
+        };
+        setCam(false);
+        camTog.addEventListener('click', function(){
+          try{
+            var isOn = camTog.dataset.state === 'on';
+            if (isOn) { if (stopCamBtn && typeof stopCamBtn.click==='function') stopCamBtn.click(); setCam(false); }
+            else { if (startCamBtn && typeof startCamBtn.click==='function') startCamBtn.click(); setCam(true); }
+          }catch(e){}
+        });
+        if (startCamBtn) startCamBtn.addEventListener('click', function(){ try{ setCam(true); }catch(e){} });
+        if (stopCamBtn) stopCamBtn.addEventListener('click', function(){ try{ setCam(false); }catch(e){} });
+        document.addEventListener('tp:camera:started', function(){ try{ setCam(true); }catch(e){} });
+        document.addEventListener('tp:camera:stopped', function(){ try{ setCam(false); }catch(e){} });
+      }
+    } catch (e) {}
+  })();
+  </script>
   <script>
   (function(){
     try{
