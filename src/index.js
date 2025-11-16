@@ -1013,6 +1013,94 @@ async function boot() {
           } catch (e) {}
         }
 
+        // Persist and restore directory handle via IndexedDB so the menu survives reloads
+        const IDB_NAME = 'tp_fs_v1';
+        const IDB_STORE = 'handles';
+        function idbOpen() {
+          return new Promise((resolve) => {
+            try {
+              const req = indexedDB.open(IDB_NAME, 1);
+              req.onupgradeneeded = () => {
+                try { req.result.createObjectStore(IDB_STORE); } catch { /* noop */ }
+              };
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = () => resolve(null);
+            } catch { resolve(null); }
+          });
+        }
+        async function saveDirHandle(handle) {
+          try {
+            const db = await idbOpen(); if (!db) return false;
+            await new Promise((res) => {
+              try {
+                const tx = db.transaction(IDB_STORE, 'readwrite');
+                tx.objectStore(IDB_STORE).put(handle, 'dir');
+                tx.oncomplete = () => res(true);
+                tx.onerror = () => res(false);
+              } catch { res(false); }
+            });
+            return true;
+          } catch { return false; }
+        }
+        async function getDirHandle() {
+          try {
+            const db = await idbOpen(); if (!db) return null;
+            return await new Promise((res) => {
+              try {
+                const tx = db.transaction(IDB_STORE, 'readonly');
+                const req = tx.objectStore(IDB_STORE).get('dir');
+                req.onsuccess = () => res(req.result || null);
+                req.onerror = () => res(null);
+              } catch { res(null); }
+            });
+          } catch { return null; }
+        }
+        async function ensurePerm(handle) {
+          try {
+            if (!handle) return false;
+            const qp = await handle.queryPermission?.({ mode: 'read' });
+            if (qp === 'granted') return true;
+            if (qp === 'prompt') {
+              const rp = await handle.requestPermission?.({ mode: 'read' });
+              return rp === 'granted';
+            }
+            // Some browsers don't implement queryPermission; attempt request
+            const rp2 = await handle.requestPermission?.({ mode: 'read' });
+            return rp2 === 'granted';
+          } catch { return false; }
+        }
+        async function listDirNames(dirHandle) {
+          const out = [];
+          try {
+            const it = dirHandle?.values?.();
+            if (!it) return out;
+            // Avoid `for await` for broader compatibility
+            while (true) {
+              let step; try { step = await it.next(); } catch { step = { done: true }; }
+              if (!step || step.done) break;
+              const entry = step.value;
+              try { if (entry && entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) out.push(entry.name); } catch { /* noop */ }
+            }
+          } catch { /* noop */ }
+          return out;
+        }
+        async function tryRestorePersistedDir() {
+          try {
+            const h = await getDirHandle();
+            if (!h) return false;
+            const ok = await ensurePerm(h);
+            if (!ok) return false;
+            try { window.__tpFolderHandle = h; } catch {}
+            const names = await listDirNames(h);
+            if (names && names.length) {
+              populate(names);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch {}
+              return true;
+            }
+          } catch { /* noop */ }
+          return false;
+        }
+
         async function pickFolder() {
           try {
             btn.disabled = true; btn.textContent = 'Choosing…';
@@ -1021,6 +1109,7 @@ async function boot() {
               try {
                 const dirHandle = await window.showDirectoryPicker();
                 try { window.__tpFolderHandle = dirHandle; } catch (e) {}
+                try { await saveDirHandle(dirHandle); } catch (e) { void e; }
                 // New native selection replaces any prior fallback file map
                 try { if (window.__tpFolderFilesMap && window.__tpFolderFilesMap.clear) window.__tpFolderFilesMap.clear(); } catch (e) {}
                 // Avoid `for await ... of` for wider runtime compatibility
@@ -1096,18 +1185,24 @@ async function boot() {
           } catch (e) {}
         });
 
-        // Do not auto-populate from stored if mock folder flag active (avoid parity mismatch)
-        if (!useMock) {
+        // Attempt to restore persisted directory handle first; fall back to last-known names
+        (async () => {
           try {
-            const raw = localStorage.getItem('tp_last_folder_scripts');
-            if (raw) {
-              const arr = JSON.parse(raw) || [];
-              if (Array.isArray(arr) && arr.length && (!sel || !sel.options || sel.options.length === 0)) {
-                populate(arr);
+            let restored = false;
+            if (!useMock) {
+              restored = await tryRestorePersistedDir();
+            }
+            if (!restored && !useMock) {
+              const raw = localStorage.getItem('tp_last_folder_scripts');
+              if (raw) {
+                const arr = JSON.parse(raw) || [];
+                if (Array.isArray(arr) && arr.length && (!sel || !sel.options || sel.options.length === 0)) {
+                  populate(arr);
+                }
               }
             }
-          } catch (e) {}
-        }
+          } catch (e) { void e; }
+        })();
       } catch (e) {}
     }
     try { window.__bindMappedFolderUI = __bindMappedFolderUI; } catch (e) {}
