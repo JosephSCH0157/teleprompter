@@ -942,6 +942,7 @@ async function boot() {
         let speechActiveLatest = false;
         window.addEventListener('tp:speech-state', (ev) => {
           const isRunning = !!(ev && ev.detail && ev.detail.running);
+          try { window.__tpSpeechRunning = isRunning; } catch (e) {}
           speechActiveLatest = isRunning;
           try {
             if (isRunning) {
@@ -989,8 +990,89 @@ async function boot() {
       // Keep router mode in sync when user changes select
       if (modeSel && !modeSel.__tpModeSync) {
         modeSel.__tpModeSync = true;
-        modeSel.addEventListener('change', () => { try { scrollRouterSetMode && scrollRouterSetMode(modeSel.value); } catch(e){} });
+        try { modeSel.dataset.prev = String(modeSel.value || ''); } catch(e){}
+        modeSel.addEventListener('change', () => {
+          try {
+            const val = String(modeSel.value || '').toLowerCase();
+            const speechOn = !!window.__tpSpeechRunning;
+            if (val === 'rehearsal' && speechOn) {
+              // Block switching into Rehearsal mid-session while speech is running
+              try {
+                const prev = modeSel.dataset.prev || '';
+                if (prev) modeSel.value = prev;
+              } catch(e){}
+              try {
+                if (window.toast) window.toast('Stop Speech to enter Rehearsal mode.', { type:'warn' });
+                else console.warn('[mode] Stop Speech to enter Rehearsal mode.');
+              } catch(e){}
+              return; // do not apply mode change
+            }
+            // Apply mode change for allowed cases
+            try { scrollRouterSetMode && scrollRouterSetMode(val); } catch(e){}
+            try { modeSel.dataset.prev = String(val); } catch(e){}
+            try { __syncRehearsalUI(); } catch(_){}
+          } catch(e){}
+        });
       }
+
+      // Rehearsal UI sync: gray auto chip, lock controls, and toggle watermark class
+      function __syncRehearsalUI(){
+        try {
+          const store = window.__tpStore;
+          const curMode = (store && store.get) ? String(store.get('scrollMode') || store.get('mode') || '') : '';
+          const viaSel = (!curMode && modeSel && modeSel.value) ? String(modeSel.value) : curMode;
+          const isReh = (viaSel || '').toLowerCase() === 'rehearsal';
+          try { document.body && document.body.classList && document.body.classList.toggle('mode-rehearsal', !!isReh); } catch(e){}
+          // Topbar auto chip
+          try {
+            const chip = document.getElementById('autoChip');
+            if (chip) {
+              if (isReh) {
+                chip.textContent = 'Auto: Manual Only';
+                chip.classList.remove('on','paused');
+                chip.classList.add('manual');
+                chip.title = 'Rehearsal mode: auto-scroll disabled';
+              } else {
+                // Reflect current Auto state when not in rehearsal
+                const st = (Auto && typeof Auto.getState === 'function') ? Auto.getState() : null;
+                if (st) {
+                  chip.textContent = st.enabled ? 'Auto: On' : 'Auto: Manual';
+                  chip.classList.toggle('on', !!st.enabled);
+                  chip.classList.toggle('manual', !st.enabled);
+                  chip.classList.remove('paused');
+                }
+                chip.title = 'Auto scroll status';
+              }
+            }
+          } catch(e){}
+          // Controls (speed input + toggle button)
+          try {
+            const speed = document.getElementById('autoSpeed');
+            if (speed) speed.disabled = !!isReh;
+          } catch(e){}
+          try {
+            const btn = document.getElementById('autoToggle');
+            if (btn) {
+              if (isReh) {
+                btn.disabled = true;
+                btn.textContent = 'Manual Only';
+                btn.title = 'Rehearsal mode: manual scrolling only';
+              } else {
+                btn.disabled = false;
+                const st = (Auto && typeof Auto.getState === 'function') ? Auto.getState() : null;
+                if (st) {
+                  const sFmt = (Math.round((Number(st.speed || 0)) * 10) / 10).toFixed(1);
+                  btn.textContent = st.enabled ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
+                } else {
+                  btn.textContent = 'Auto-scroll: Off';
+                }
+                btn.title = 'Toggle auto-scroll';
+              }
+            }
+          } catch(e){}
+        } catch(e){}
+      }
+      try { __syncRehearsalUI(); } catch(e){}
     } catch (e) { try { console.warn('[scroll] router init failed', e); } catch(_){} }
 
     // Ensure Settings Scripts Folder card is available (JS path)
