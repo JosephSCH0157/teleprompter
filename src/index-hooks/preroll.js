@@ -23,6 +23,7 @@
       // Autoscroll start (Hybrid/WPM/Timed) — defer actual movement until preroll completes
       try {
         if (!isRehearsal()) {
+          try { if (window.Auto && typeof window.Auto.setEnabled === 'function') window.Auto.setEnabled(true); } catch{}
           if (!window.__tpScrollRouterStarted && typeof window.scrollRouterStart === 'function') {
             window.scrollRouterStart();
             window.__tpScrollRouterStarted = true;
@@ -37,7 +38,9 @@
         if (store && auto && typeof auto.start === 'function') {
           const autoEnabled = !!store.get?.('autoRecord');
           const scrollMode = store.get?.('scrollMode');
-          if (autoEnabled && scrollMode !== 'rehearsal') {
+          const src = ev && ev.detail && ev.detail.source;
+          // Only start auto-record when preroll is from Speech start, not mode-switch
+          if (autoEnabled && scrollMode !== 'rehearsal' && src === 'speech') {
             try { auto.start(); } catch(err){ console.error('[auto-record] start after preroll failed', err); }
           }
         }

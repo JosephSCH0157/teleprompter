@@ -1013,19 +1013,44 @@ async function boot() {
             try {
               const prev = (modeSel.dataset.prev || '').toLowerCase();
               if (prev === 'rehearsal' && val !== 'rehearsal') {
-                try { Auto.setEnabled && Auto.setEnabled(true); } catch(_){ }
-                try {
-                  if (typeof window.scrollRouterStart === 'function' && !window.__tpScrollRouterStarted) {
-                    window.scrollRouterStart();
-                    window.__tpScrollRouterStarted = true;
-                  }
-                } catch(_){}
+                // Run a preroll before enabling auto movement on mode switch
+                const S = window.__tpStore;
+                const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
+                try { __runPreroll(sec, 'mode-switch'); } catch(_){ }
               }
             } catch(_){}
             try { modeSel.dataset.prev = String(val); } catch(e){}
             try { __syncRehearsalUI(); } catch(_){}
           } catch(e){}
         });
+      }
+
+      // Lightweight local preroll runner for mode switches
+      function __runPreroll(sec, source){
+        try {
+          const s = Number(sec) || 0;
+          const overlay = document.getElementById('countOverlay');
+          const num = document.getElementById('countNum');
+          const show = (n) => { try { if (overlay) overlay.style.display = 'flex'; if (num) num.textContent = String(n); } catch{} };
+          const hide = () => { try { if (overlay) overlay.style.display = 'none'; } catch{} };
+          if (s <= 0){
+            hide();
+            try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail: { seconds: s, source } })); } catch{}
+            return;
+          }
+          let i = s;
+          show(i);
+          const timer = setInterval(() => {
+            i -= 1;
+            if (i <= 0){
+              clearInterval(timer);
+              hide();
+              try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail: { seconds: s, source } })); } catch{}
+            } else {
+              show(i);
+            }
+          }, 1000);
+        } catch{}
       }
 
       // Rehearsal UI sync: gray auto chip, lock controls, and toggle watermark class
