@@ -41,7 +41,8 @@
     "watch:hud": "node tools/esbuild-hud.mjs --watch",
     "gate:clean": "node tools/gate_clean.js",
     "postversion": "node tools/bump_html_version.js && git add teleprompter_pro.html && git commit -m \"chore(html): bump visible version\" || true",
-    "test": "jest --config jest.config.cjs"
+    "test": "jest --config jest.config.cjs",
+    "ci-local": "npm ci && npm run check && npm run smoke:strict"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",

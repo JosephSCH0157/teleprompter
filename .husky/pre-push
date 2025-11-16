@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "husky(pre-push): running local CI mirror (ci-local)"
+npm run ci-local
+status=$?
+if [ $status -ne 0 ]; then
+  echo "husky(pre-push): ci-local failed (exit $status) — aborting push"
+  exit $status
+fi
+echo "husky(pre-push): ok"
