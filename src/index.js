@@ -1,3 +1,4 @@
+/* eslint no-unused-vars: ["warn", { "caughtErrors": "none", "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }] */
 // --- Hard dup-boot guard (very top of module) ---
 if (window.__tpBooted) {
   console.warn('[src/index] duplicate boot blocked; first =', window.__tpBooted);
@@ -6,7 +7,7 @@ if (window.__tpBooted) {
 window.__tpBooted = 'index.module';
 window.__tpBootCount = (window.__tpBootCount || 0) + 1;
 // Camera SSOT — TS owns the camera stack.
-try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
+try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch (e) { void e; }
 
 // --- HUD SSOT (dev) ---
 (() => {
@@ -27,7 +28,7 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
           document.body.appendChild(r);
         }
         return r;
-      } catch { return null; }
+      } catch (e) { void e; return null; }
     }
 
     const root = ensureHudRoot();
@@ -38,13 +39,13 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
       enabled: false,
       root,
       bus: {
-        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch {} },
+        emit: (type, detail) => { try { hudBus.dispatchEvent(new CustomEvent(type, { detail })); } catch (e) { void e; } },
         on: (type, fn) => {
           try {
-            const h = (e) => { try { fn(e.detail); } catch {} };
+            const h = (e) => { try { fn(e.detail); } catch (e2) { void e2; } };
             hudBus.addEventListener(type, h);
-            return () => { try { hudBus.removeEventListener(type, h); } catch {} };
-          } catch {}
+            return () => { try { hudBus.removeEventListener(type, h); } catch (e3) { void e3; } };
+          } catch (e) { void e; }
         },
       },
       setEnabled(on) {
@@ -60,9 +61,9 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
               this.root.setAttribute('inert', '');
             }
           }
-          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch {}
-          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch {}
-        } catch {}
+          try { localStorage.setItem(HUD_FLAG, on ? '1' : '0'); } catch (e) { void e; }
+          try { document.dispatchEvent(new CustomEvent('hud:toggled', { detail: { on: !!on } })); } catch (e2) { void e2; }
+        } catch (e) { void e; }
       },
       log(...args) {
         try {
@@ -70,18 +71,18 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
           const pre = document.createElement('pre');
           pre.className = 'hud-line';
           pre.textContent = args.map(a => {
-            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch { return String(a); }
+            try { return (typeof a === 'string') ? a : JSON.stringify(a); } catch (e) { void e; return String(a); }
           }).join(' ');
           this.root.appendChild(pre);
           this.root.scrollTop = this.root.scrollHeight;
-        } catch {}
+        } catch (e) { void e; }
       },
     };
 
     // Hydrate from storage
-    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch {}
+    try { api.setEnabled(localStorage.getItem(HUD_FLAG) === '1'); } catch (e) { void e; }
     // Unify legacy HUD log calls to the SSOT
-    try { if (!window.HUD) window.HUD = api; } catch {}
+    try { if (!window.HUD) window.HUD = api; } catch (e) { void e; }
     
     // Listen to new typed transcript and state events (both captions and legacy speech)
     try {
@@ -108,11 +109,11 @@ try { window.__tpCamSSOT = 'ts'; window.__tpCamWireActive = true; } catch {}
       // Legacy speech events (for backwards compatibility)
       window.addEventListener('tp:speech:transcript', (e) => logTx(e.detail));
       window.addEventListener('tp:speech:state', (e) => logState(e.detail));
-    } catch {}
+    } catch (e) { void e; }
     
     // Announce readiness
-    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
-  } catch {}
+    try { document.dispatchEvent(new CustomEvent('hud:ready')); } catch (e) { void e; }
+  } catch (e) { void e; }
 })();
 
 // Minimal bootstrap for the new `src/` modular layout.
@@ -161,10 +162,10 @@ import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from 
 // Single-source mic adapter facade for legacy callers
 try {
   window.__tpMic = {
-    requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
-    releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
+    requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch (e) { void e; } },
+    releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch (e) { void e; } },
   };
-} catch {}
+} catch (e) { void e; }
 
 // Feature-level idempotence helper (belt & suspenders)
 function initOnce(name, fn) {
@@ -174,7 +175,7 @@ function initOnce(name, fn) {
     window.__tpInit[name] = 1;
     return fn();
   } catch (e) {
-    try { console.warn(`[init:${name}] failed`, e); } catch {}
+    try { console.warn(`[init:${name}] failed`, e); } catch (e2) { void e2; }
   }
 }
 
@@ -199,7 +200,7 @@ async function loadLegacyPiecesAsModules() {
   await Promise.all(mods.map(async (m) => {
     try {
       await import(m);
-      try { window.__tpRegisterInit && window.__tpRegisterInit('import:'+m); } catch {}
+      try { window.__tpRegisterInit && window.__tpRegisterInit('import:'+m); } catch (e) { void e; }
     } catch (err) {
       console.error(`[src/index] Failed to import ${m}:`, err);
       if (window && window.__TP_IMPORT_ERRORS) {
@@ -220,7 +221,7 @@ async function boot() {
     try {
       // Ensure HUD installer exists (load fallback if not already present)
       if (typeof window.__tpInstallHUD !== 'function') {
-        try { await import('../debug-tools.js'); } catch {}
+        try { await import('../debug-tools.js'); } catch (e) { void e; }
       }
       const needHudInstall = (typeof window.__tpInstallHUD === 'function') && (
         !window.__tpHud || (typeof window.__tpHud.toggle !== 'function' && typeof window.__tpHud.show !== 'function')
@@ -235,9 +236,9 @@ async function boot() {
             r.removeAttribute && r.removeAttribute('aria-hidden');
             r.removeAttribute && r.removeAttribute('inert');
           }
-        } catch {}
+        } catch (e) { void e; }
         // Auto-show HUD in dev sessions for visibility
-        try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch {}
+        try { if (window.__TP_DEV && window.__tpHud?.show) window.__tpHud.show(); } catch (e) { void e; }
       }
       // Expose a tiny ensureHud() poke for dev; prefer full HUD toggle, else fallback
       if (typeof window.ensureHud !== 'function') {
@@ -248,8 +249,8 @@ async function boot() {
             );
             if (need) { window.__tpHud = window.__tpInstallHUD({ hotkey: '~' }); }
             if (window.__tpHud?.toggle) { window.__tpHud.toggle(); return; }
-          } catch {}
-          try { window.toggleHud?.(); } catch {}
+          } catch (e) { void e; }
+          try { window.toggleHud?.(); } catch (e2) { void e2; }
         };
       }
       // HUD safety hook: lightweight overlay + global toggleHotkey
@@ -262,7 +263,7 @@ async function boot() {
               const shown = !!window.__tpHud?.isVisible?.();
               return shown ? void window.__tpHud.hide?.() : void window.__tpHud.show?.();
             }
-          } catch {}
+          } catch (e) { void e; }
           // Fallback: tiny in-page pill (bottom-right, capture-safe)
           try {
             let el = document.getElementById('tp-hud-lite');
@@ -274,7 +275,7 @@ async function boot() {
               document.body.appendChild(el);
             }
             el.hidden = !el.hidden;
-          } catch {}
+          } catch (e) { void e; }
         };
       }
       if (!window.__tpHudSafetyHookInstalled) {
@@ -288,12 +289,12 @@ async function boot() {
               e.preventDefault();
               window.toggleHud?.();
             }
-          } catch {}
+          } catch (e) { void e; }
         }, { capture: true });
       }
       // If HUD is present, mirror speech gates to it for visibility
       try {
-        const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch {} };
+        const logHud = (tag, payload) => { try { (window.HUD?.log || window.__tpHud?.log)?.(tag, payload); } catch (e) { void e; } };
         // Throttled dB logger → emits speech:db event and (optionally) HUD log
         const logDb = (() => {
           let lastDb = -Infinity, lastTs = 0;
@@ -304,14 +305,14 @@ async function boot() {
               if (Math.abs(db - lastDb) >= 2 || (now - lastTs) >= 150) {
                 lastDb = db; lastTs = now;
                 // Always fire an event for listeners
-                try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch {}
+                try { window.dispatchEvent(new CustomEvent('speech:db', { detail: { db } })); } catch (e) { void e; }
                 // HUD breadcrumb only if not muted
                 try {
                   const off = localStorage.getItem('tp_hud_quiet_db') === '1';
                   if (!off && !window.__TP_QUIET) logHud('speech:db', { db });
-                } catch {}
+                } catch (e) { void e; }
               }
-            } catch {}
+            } catch (e) { void e; }
           };
         })();
         const __vadState = { speaking: false };
@@ -321,31 +322,31 @@ async function boot() {
             if (db == null) return;
             // Always send the throttled db event; HUD log is internally muted or throttled
             logDb(db);
-          } catch {}
+          } catch (e) { void e; }
         });
         window.addEventListener('tp:vad', (ev) => {
           try {
             const speaking = !!(ev && ev.detail && ev.detail.speaking);
             __vadState.speaking = speaking;
             logHud('speech:vad', { speaking });
-          } catch {}
+          } catch (e) { void e; }
         });
         // Small helper to toggle HUD dB logs at runtime (persists in localStorage)
         try {
           if (!window.setHudQuietDb) {
             window.setHudQuietDb = (on) => {
-              try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch {}
-              try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch {}
+              try { localStorage.setItem('tp_hud_quiet_db', on ? '1' : '0'); } catch (e) { void e; }
+              try { console.info('[HUD] dB logs', on ? 'muted' : 'unmuted'); } catch (e2) { void e2; }
             };
           }
-        } catch {}
-      } catch {}
-    } catch {}
-    try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch {}
+        } catch (e) { void e; }
+      } catch (e) { void e; }
+    } catch (e) { void e; }
+    try { window.__tpRegisterInit && window.__tpRegisterInit('boot:start'); } catch (e) { void e; }
     console.log('[src/index] boot()');
-    try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch {}
+    try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot start' }); } catch (e) { void e; }
     // Dev-only parity guard: verifies key UI elements and wiring exist
-    try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch {}
+    try { if (window?.__TP_BOOT_INFO?.isDev) import('./dev/parity-guard.js').catch(() => {}); } catch (e) { void e; }
     await Core.init();
 
     // Default: mute HUD dB breadcrumbs in dev unless explicitly enabled
@@ -355,26 +356,26 @@ async function boot() {
         const has = localStorage.getItem(k);
         if (has == null) localStorage.setItem(k, '1');
       }
-    } catch {}
+    } catch (e) { void e; }
 
     // Pre-seed a wider default script column if user hasn't set one yet
     try {
       const KEY = 'tp_typography_v1';
-      let st; try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { st = {}; }
+      let st; try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { void e; st = {}; }
       const existing = st && st.main && st.main.maxLineWidthCh;
       if (!(typeof existing === 'number' && isFinite(existing))) {
         document.documentElement.style.setProperty('--tp-maxch', '95');
         st.main = { ...(st.main || {}), maxLineWidthCh: 95 };
-        try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {}
-        try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch {}
+        try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { void e; }
+        try { window.dispatchEvent(new Event('tp:lineMetricsDirty')); } catch (e2) { void e2; }
         // Best-effort broadcast to display so it aligns if already open
         try {
           const payload = { kind: 'tp:typography', source: 'main', display: 'display', t: { maxLineWidthCh: 95 } };
-          try { new BroadcastChannel('tp_display').postMessage(payload); } catch {}
-          try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch {}
-        } catch {}
+          try { new BroadcastChannel('tp_display').postMessage(payload); } catch (e) { void e; }
+          try { const w = window.__tpDisplayWindow; if (w && !w.closed) w.postMessage(payload, '*'); } catch (e2) { void e2; }
+        } catch (e) { void e; }
       }
-    } catch {}
+    } catch (e) { void e; }
 
     // One-time migration: tp_vad_profile_v1 -> tp_asr_profiles_v1 (unified ASR store)
     try {
@@ -419,56 +420,56 @@ async function boot() {
             };
             // Upsert into unified store (localStorage)
             let asrState;
-            try { asrState = JSON.parse(localStorage.getItem(NEW_KEY) || '{}') || {}; } catch { asrState = {}; }
+            try { asrState = JSON.parse(localStorage.getItem(NEW_KEY) || '{}') || {}; } catch (e) { void e; asrState = {}; }
             asrState.profiles = asrState.profiles || {};
             asrState.profiles[unified.id] = unified;
             if (!asrState.activeProfileId) asrState.activeProfileId = unified.id;
-            try { localStorage.setItem(NEW_KEY, JSON.stringify(asrState)); } catch {}
+            try { localStorage.setItem(NEW_KEY, JSON.stringify(asrState)); } catch (e) { void e; }
             // Cleanup old key and mark migrated
-            try { localStorage.removeItem(OLD_KEY); } catch {}
-            try { localStorage.setItem(MIG_FLAG, '1'); } catch {}
-          } catch {}
+            try { localStorage.removeItem(OLD_KEY); } catch (e) { void e; }
+            try { localStorage.setItem(MIG_FLAG, '1'); } catch (e2) { void e2; }
+          } catch (e) { void e; }
         }
       }
-    } catch {}
+    } catch (e) { void e; }
   UI.bindStaticDom();
-  try { window.__tpRegisterInit && window.__tpRegisterInit('ui:bindStaticDom'); } catch {}
+  try { window.__tpRegisterInit && window.__tpRegisterInit('ui:bindStaticDom'); } catch (e) { void e; }
   // Choose and expose the active scroll root so legacy/TS controllers agree (main vs display)
   try {
     function getScrollRoot(){
       try {
         const disp = (window && window.__tpDisplayViewerEl) || null;
         if (disp && disp.isConnected) return disp;
-      } catch {}
+      } catch (e) { void e; }
       try {
         const inPage = document.getElementById('viewer') || document.querySelector('[data-role="viewer"]');
         return inPage || (document.scrollingElement || document.documentElement);
-      } catch {}
+      } catch (e) { void e; }
       return document.documentElement;
     }
     const root = getScrollRoot();
-    try { window.__tpScrollRoot = root; } catch {}
-  } catch {}
+    try { window.__tpScrollRoot = root; } catch (e) {}
+  } catch (e) {}
   // Ensure autoscroll engine is initialized before wiring router/UI
-  try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch {}
+  try { Auto.initAutoScroll && Auto.initAutoScroll(); } catch (e) {}
   // Force engine OFF at boot; app shouldn't scroll until user starts speech sync or manually toggles.
-  try { Auto.setEnabled && Auto.setEnabled(false); } catch {}
-  try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch {}
+  try { Auto.setEnabled && Auto.setEnabled(false); } catch (e) {}
+  try { window.__tpRegisterInit && window.__tpRegisterInit('auto:init'); } catch (e2) { void e2; }
 
   // Provide a minimal global scroll controller facade for dev/CI bridges and diagnostics.
   // This delegates to the single authoritative Auto engine to avoid double-ownership.
   try {
     if (!window.__scrollCtl) {
       window.__scrollCtl = {
-        start: () => { try { Auto.setEnabled(true); } catch {} },
-        stop: () => { try { Auto.setEnabled(false); } catch {} },
-        setSpeed: (s) => { try { Auto.setSpeed(s); } catch {} },
+        start: () => { try { Auto.setEnabled(true); } catch (e) {} },
+        stop: () => { try { Auto.setEnabled(false); } catch (e) {} },
+        setSpeed: (s) => { try { Auto.setSpeed(s); } catch (e) {} },
         isActive: () => {
-          try { const st = (typeof Auto.getState === 'function') ? Auto.getState() : null; return !!(st && st.enabled); } catch { return false; }
+          try { const st = (typeof Auto.getState === 'function') ? Auto.getState() : null; return !!(st && st.enabled); } catch (e) { return false; }
         },
       };
     }
-  } catch {}
+  } catch (e) {}
 
   // Centralized Settings mic button delegation (capture so we win races) — bind once
   try {
@@ -488,30 +489,30 @@ async function boot() {
           ev.preventDefault();
           ev.stopImmediatePropagation();
           if (el.matches('#settingsRequestMicBtn,[data-action="settings-request-mic"]')) {
-            try { Mic.requestMic?.(); } catch {}
+            try { Mic.requestMic?.(); } catch (e) {}
           } else if (el.matches('#settingsReleaseMicBtn,[data-action="settings-release-mic"]')) {
-            try { Mic.releaseMic?.(); } catch {}
+            try { Mic.releaseMic?.(); } catch (e) {}
           }
-        } catch {}
+        } catch (e) {}
       }, true);
     }
-  } catch {}
+  } catch (e) {}
 
   // Party-mode eggs (UI + bus triggers)
-  try { Eggs.install({ bus }); } catch {}
+  try { Eggs.install({ bus }); } catch (e) {}
 
     // Easter eggs (party mode on dB meter, Konami theme, etc.)
     try {
       const eggs = await import('../eggs.js');
-      try { eggs.installEasterEggs && eggs.installEasterEggs(); } catch {}
-      try { eggs.installCKEgg && eggs.installCKEgg(); } catch {}
-      try { eggs.installAboutPopover && eggs.installAboutPopover(); } catch {}
+      try { eggs.installEasterEggs && eggs.installEasterEggs(); } catch (e) {}
+      try { eggs.installCKEgg && eggs.installCKEgg(); } catch (e2) { void e2; }
+      try { eggs.installAboutPopover && eggs.installAboutPopover(); } catch (e3) { void e3; }
     } catch (e) { console.warn('[src/index] eggs init failed', e); }
 
     // Help UI (ensure Normalize/Validate buttons in Help overlay)
     try {
       const help = await import('../help.js');
-      try { help.ensureHelpUI && help.ensureHelpUI(); } catch {}
+      try { help.ensureHelpUI && help.ensureHelpUI(); } catch (e) {}
     } catch (e) { console.warn('[src/index] help init failed', e); }
 
     // Script tools: expose normalize/validate globals for buttons and Help actions
@@ -526,7 +527,7 @@ async function boot() {
     // Make camera overlay draggable (top-right by default; drag to reposition; dblclick to reset)
     try {
       const cam = await import('../ui/cam-draggable.js');
-      try { (cam && (cam.initCamDraggable || cam.default?.initCamDraggable))?.(); } catch {}
+      try { (cam && (cam.initCamDraggable || cam.default?.initCamDraggable))?.(); } catch (e) {}
     } catch (e) { console.warn('[src/index] cam-draggable init failed', e); }
 
     // Legacy matcher constants for parity (dev only)
@@ -538,7 +539,7 @@ async function boot() {
         if (typeof window.STRICT_FORWARD_SIM !== 'number') window.STRICT_FORWARD_SIM = 0.6;
         if (typeof window.MAX_JUMP_AHEAD_WORDS !== 'number') window.MAX_JUMP_AHEAD_WORDS = 40;
       }
-    } catch {}
+    } catch (e) {}
 
     // Initialize adapters (best-effort)
     try { await (Adapters.obsAdapter?.init?.() ?? Promise.resolve()); } catch (e) { console.warn('[src/index] obsAdapter.init failed', e); }
@@ -558,11 +559,11 @@ async function boot() {
           (!window.__tpMic || typeof window.__tpMic.requestMic !== 'function' || typeof window.__tpMic.releaseMic !== 'function')
         ) {
           window.__tpMic = {
-            requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch {} },
-            releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch {} },
+            requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch (e) {} },
+            releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch (e) {} },
           };
         }
-      } catch {}
+      } catch (e) {}
       if (!window.__tpRecorder && Adapters.recorderAdapter?.create) {
         window.__tpRecorder = Adapters.recorderAdapter.create();
       }
@@ -572,36 +573,36 @@ async function boot() {
           window.__recorder.getAdapter = (id) => id === 'obs' ? window.__tpOBS : null;
           window.__recorder.get = (id) => id === 'obs' ? window.__tpOBS : null;
         }
-      } catch {}
-    } catch {}
+      } catch (e) {}
+    } catch (e) {}
 
     // Initialize features (idempotent)
-    initOnce('persistence', () => { try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch {} } catch (e) { console.warn('[src/index] initPersistence failed', e); } });
-    initOnce('telemetry',   () => { try { initTelemetry();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch {} } catch (e) { console.warn('[src/index] initTelemetry failed', e); } });
+    initOnce('persistence', () => { try { initPersistence(); try { window.__tpRegisterInit && window.__tpRegisterInit('feature:persistence'); } catch (e2) { void e2; } } catch (e) { console.warn('[src/index] initPersistence failed', e); } });
+    initOnce('telemetry',   () => { try { initTelemetry();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:telemetry'); } catch (e2) { void e2; } } catch (e) { console.warn('[src/index] initTelemetry failed', e); } });
     try { if (typeof window.initToastContainer === 'function') window.initToastContainer(); } catch (e) { console.warn('[src/index] initToastContainer failed', e); }
-    initOnce('scroll',      () => { try { initScroll();      try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch {} } catch (e) { console.warn('[src/index] initScroll failed', e); } });
-    initOnce('hotkeys',     () => { try { initHotkeys();     try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch {} } catch (e) { console.warn('[src/index] initHotkeys failed', e); } });
+    initOnce('scroll',      () => { try { initScroll();      try { window.__tpRegisterInit && window.__tpRegisterInit('feature:scroll'); } catch (e2) { void e2; } } catch (e) { console.warn('[src/index] initScroll failed', e); } });
+    initOnce('hotkeys',     () => { try { initHotkeys();     try { window.__tpRegisterInit && window.__tpRegisterInit('feature:hotkeys'); } catch (e2) { void e2; } } catch (e) { console.warn('[src/index] initHotkeys failed', e); } });
 
     // Install speech start/stop delegator
-    initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch {} } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
+    initOnce('speech',      () => { try { installSpeech();   try { window.__tpRegisterInit && window.__tpRegisterInit('feature:speech'); } catch (e2) { void e2; } } catch (e) { console.warn('[src/index] installSpeech failed', e); } });
 
     // Ensure local auto-recorder surface exists (camera+mic → WebM)
-    try { await import('./recording/local-auto.js'); } catch (e) { try { console.warn('[src/index] local-auto import failed', e); } catch {} }
+    try { await import('./recording/local-auto.js'); } catch (e) { try { console.warn('[src/index] local-auto import failed', e); } catch (e2) { void e2; } }
 
     // Bind core UI (present/settings/help) for JS boot path so smoke harness sees dataset.uiBound
     try {
       const core = await import('./wiring/ui-binds.js').catch(() => null);
       if (core && typeof core.bindCoreUI === 'function') {
-        try { core.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+        try { core.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch (e) {}
       }
-    } catch {}
+    } catch (e) {}
 
     // Try to install ASR feature (probe before import to avoid noisy 404s)
     try {
       // Tiny helper: HEAD probe without caching
       const headOk = async (url) => {
         try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return !!(r && r.ok); }
-        catch { return false; }
+        catch (e) { return false; }
       };
 
       // Prefer dist bundle; allow a flat dist fallback; allow dev JS from src
@@ -625,10 +626,10 @@ async function boot() {
           const fallback = '/src/index-hooks/asr.js';
           const mod = await import(fallback);
           const init = (mod && (mod.initAsrFeature || mod.default));
-          if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch {} }
-          else { try { console.warn('[ASR] fallback missing initAsrFeature', fallback); } catch {} }
-        } catch {
-          try { console.info('[ASR] no module found, skipping init'); } catch {}
+          if (typeof init === 'function') { init(); try { console.info('[ASR] initialized from fallback', fallback); } catch (e) {} }
+          else { try { console.warn('[ASR] fallback missing initAsrFeature', fallback); } catch (e2) { void e2; } }
+        } catch (e3) {
+          try { console.info('[ASR] no module found, skipping init'); } catch (e4) { void e4; }
         }
       } else {
         try {
@@ -636,9 +637,9 @@ async function boot() {
           const init = (mod && (mod.initAsrFeature || mod.default));
           if (typeof init === 'function') {
             init();
-            try { console.info('[ASR] initialized from', asrEntry); } catch {}
+            try { console.info('[ASR] initialized from', asrEntry); } catch (e) {}
           } else {
-            try { console.warn('[ASR] module missing initAsrFeature', asrEntry); } catch {}
+            try { console.warn('[ASR] module missing initAsrFeature', asrEntry); } catch (e2) { void e2; }
           }
         } catch (e) {
           console.warn('[ASR] failed to init', asrEntry, e);
@@ -655,11 +656,11 @@ async function boot() {
           try {
             const m = await import(spec);
             if (m) {
-              try { flag && (window[flag] = true); } catch {}
+              try { flag && (window[flag] = true); } catch (e) {}
               return m;
             }
           } catch (err) {
-            try { console.warn('[router] import failed', spec, err && err.message); } catch {}
+            try { console.warn('[router] import failed', spec, err && err.message); } catch (e) {}
           }
           return null;
         }
@@ -679,15 +680,15 @@ async function boot() {
             const s = document.createElement('script');
             s.src = './teleprompter_pro.js';
             s.defer = true;
-            s.onload = () => { try { console.info('[router] legacy script loaded'); } catch {} };
+            s.onload = () => { try { console.info('[router] legacy script loaded'); } catch (e) {} };
             document.head.appendChild(s);
-          } catch {}
+          } catch (e) {}
         } else {
           // Pass the Auto API to the router so it can drive the engine.
           try {
             if (typeof mod.installScrollRouter === 'function') {
               mod.installScrollRouter({ auto: Auto });
-              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch {}
+              try { window.__tpRegisterInit && window.__tpRegisterInit('feature:router'); } catch (e) {}
             } else {
               console.warn('[router] installScrollRouter not found on module');
             }
@@ -707,98 +708,100 @@ async function boot() {
             chip.setAttribute('aria-live','polite');
             chip.setAttribute('aria-atomic','true');
           }
-        } catch {}
+        } catch (e) {}
       };
       // Let the Scroll Router own #autoToggle behavior to avoid double-ownership.
       // We still delegate clicks for speed +/- and mic buttons.
       document.addEventListener('click', (e) => {
         const t = e && e.target;
         // Load button → trigger mapped-folder select change to load the chosen script
-        try {
-          const loadHit = t?.closest?.('#scriptLoadBtn,[data-action="load"]');
-          if (loadHit) {
-            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
-            // Helper: quick file picker fallback
-            const pickFile = async () => {
-              return await new Promise((res) => {
-                try {
-                  const inp = document.createElement('input');
-                  inp.type = 'file';
-                  inp.accept = '.txt,.md,.rtf,.docx';
-                  inp.style.position = 'fixed';
-                  inp.style.left = '-9999px';
-                  inp.addEventListener('change', async () => {
-                    try {
-                      const f = (inp.files && inp.files[0]) || null;
-                      res(f || null);
-                    } catch { res(null); }
-                    try { inp.remove(); } catch {}
-                  }, { once: true });
-                  document.body.appendChild(inp);
-                  inp.click();
-                  setTimeout(() => { try { inp.remove(); } catch {} }, 15000);
-                } catch { res(null); }
-              });
-            };
-            const render = async (file) => {
-              try {
-                if (!file) return;
-                let text = '';
-                if (file.name.toLowerCase().endsWith('.docx') && window.docxToText) {
-                  try { text = await window.docxToText(file); } catch { text = await file.text(); }
-                } else {
-                  text = await file.text();
-                }
-                const ed = document.getElementById('editor');
-                if (ed && 'value' in ed) {
-                  ed.value = text;
-                  try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-                }
-                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: file.name, text } })); } catch {}
-              } catch {}
-            };
-            try {
-              // Prefer main select so the mapped-folder loader reads via folder handle
-              const main = document.querySelector('#scriptSelect');
-              const side = document.querySelector('#scriptSelectSidebar');
-              const sel = (main || side);
-              if (sel) {
-                const name = (sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent) || '';
-                const hasDir = !!(window.__tpFolderHandle);
-                const hasMapEntry = (() => { try { return !!(window.__tpFolderFilesMap && window.__tpFolderFilesMap.get && name && window.__tpFolderFilesMap.get(String(name))); } catch { return false; } })();
-                if (hasDir || hasMapEntry) {
-                  // If sidebar exists and main exists, mirror selection to main before dispatch
+          try {
+            const loadHit = t?.closest?.('#scriptLoadBtn,[data-action="load"]');
+            if (loadHit) {
+              try { e.preventDefault(); e.stopImmediatePropagation(); } catch (e2) { void e2; }
+              // Helper: quick file picker fallback
+              const pickFile = async () => {
+                return await new Promise((res) => {
                   try {
-                    if (main && side && side.value && main.value !== side.value) { main.value = side.value; }
-                  } catch {}
-                  (main || side).dispatchEvent(new Event('change', { bubbles: true }));
-                } else {
-                  // No backing source; prompt user to pick a file now.
-                  const f = await pickFile();
-                  await render(f);
-                }
-              } else {
-                // No select exists; prompt for a file directly.
-                const f = await pickFile();
-                await render(f);
-              }
-            } catch {}
-            return;
-          }
-        } catch {}
+                    const inp = document.createElement('input');
+                    inp.type = 'file';
+                    inp.accept = '.txt,.md,.rtf,.docx';
+                    inp.style.position = 'fixed';
+                    inp.style.left = '-9999px';
+                    inp.addEventListener('change', async () => {
+                      try {
+                        const f = (inp.files && inp.files[0]) || null;
+                        res(f || null);
+                      } catch (e) { res(null); }
+                      try { inp.remove(); } catch (e2) { void e2; }
+                    }, { once: true });
+                    document.body.appendChild(inp);
+                    inp.click();
+                    setTimeout(() => { try { inp.remove(); } catch (e3) { void e3; } }, 15000);
+                  } catch (e) { res(null); }
+                });
+              };
+              const render = async (file) => {
+                try {
+                  if (!file) return;
+                  let text = '';
+                  if (file.name.toLowerCase().endsWith('.docx') && window.docxToText) {
+                    try { text = await window.docxToText(file); } catch (e) { text = await file.text(); }
+                  } else {
+                    text = await file.text();
+                  }
+                  const ed = document.getElementById('editor');
+                  if (ed && 'value' in ed) {
+                    ed.value = text;
+                    try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+                  }
+                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: file.name, text } })); } catch (e) {}
+                } catch (e) {}
+              };
+              (async () => {
+                try {
+                  // Prefer main select so the mapped-folder loader reads via folder handle
+                  const main = document.querySelector('#scriptSelect');
+                  const side = document.querySelector('#scriptSelectSidebar');
+                  const sel = (main || side);
+                  if (sel) {
+                    const name = (sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent) || '';
+                    const hasDir = !!(window.__tpFolderHandle);
+                    const hasMapEntry = (() => { try { return !!(window.__tpFolderFilesMap && window.__tpFolderFilesMap.get && name && window.__tpFolderFilesMap.get(String(name))); } catch (e) { return false; } })();
+                    if (hasDir || hasMapEntry) {
+                      // If sidebar exists and main exists, mirror selection to main before dispatch
+                      try {
+                        if (main && side && side.value && main.value !== side.value) { main.value = side.value; }
+                      } catch (e) {}
+                      (main || side).dispatchEvent(new Event('change', { bubbles: true }));
+                    } else {
+                      // No backing source; prompt user to pick a file now.
+                      const f = await pickFile();
+                      await render(f);
+                    }
+                  } else {
+                    // No select exists; prompt for a file directly.
+                    const f = await pickFile();
+                    await render(f);
+                  }
+                } catch (e) {}
+              })();
+              return;
+            }
+          } catch (e) {}
         // If the new TS Scroll Router is active, it owns auto +/- and intent controls
         try { if (window.__tpScrollRouterTsActive) { /* delegate to TS router */ } else {
-          try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch {}
-          try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch {}
-        } } catch {}
-        try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch {}
-        try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch {}
+          try { if (t?.closest?.('#autoInc'))    return Auto.inc(); } catch (e) {}
+          try { if (t?.closest?.('#autoDec'))    return Auto.dec(); } catch (e2) { void e2; }
+        } } catch (e3) { void e3; }
+        try { if (t?.closest?.('#micBtn'))         return Mic.requestMic(); } catch (e) {}
+        try { if (t?.closest?.('#releaseMicBtn'))  return Mic.releaseMic(); } catch (e2) { void e2; }
         // Unified single-button mic toggle (JS path)
         try {
           const btn = t?.closest?.('#micToggleBtn');
           if (btn) {
             // Prevent other handlers from racing; we own this button
-            try { e.preventDefault(); e.stopImmediatePropagation(); } catch {}
+            try { e.preventDefault(); e.stopImmediatePropagation(); } catch (e2) { void e2; }
             const mic = window.__tpMic || window.ASR || window.__tpAsrImpl;
             const isActive = btn.classList?.contains?.('mic-active');
             const sync = (on) => {
@@ -812,16 +815,16 @@ async function boot() {
                   btn.classList.remove('mic-active');
                   btn.classList.add('mic-idle');
                 }
-              } catch {}
+              } catch (e) {}
             };
             // Try adapter first; fall back to best-effort UI toggle
             try {
               if (!isActive) { (mic && mic.requestMic) ? mic.requestMic() : null; sync(true); }
               else { (mic && mic.releaseMic) ? mic.releaseMic() : null; sync(false); }
-            } catch { sync(!isActive); }
+            } catch (e) { sync(!isActive); }
             return;
           }
-        } catch {}
+        } catch (e) {}
       }, { capture: true });
 
       // Ctrl/Cmd+O → Load selected script (capture early to beat browser default)
@@ -841,7 +844,7 @@ async function boot() {
               const main = document.querySelector('#scriptSelect');
               const side = document.querySelector('#scriptSelectSidebar');
               if (main || side) {
-                try { if (main && side && side.value && main.value !== side.value) main.value = side.value; } catch {}
+                try { if (main && side && side.value && main.value !== side.value) main.value = side.value; } catch (e) {}
                 (main || side).dispatchEvent(new Event('change', { bubbles: true }));
                 return;
               }
@@ -855,17 +858,17 @@ async function boot() {
                   if (!f) return;
                   const text = f.name.toLowerCase().endsWith('.docx') && window.docxToText ? await window.docxToText(f) : await f.text();
                   const ed = document.getElementById('editor');
-                  if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: f.name, text } })); } catch {}
-                } catch {}
-                try { inp.remove(); } catch {}
+                  if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
+                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: f.name, text } })); } catch (e2) { void e2; }
+                } catch (e3) { void e3; }
+                try { inp.remove(); } catch (e4) { void e4; }
               }, { once: true });
               document.body.appendChild(inp); inp.click();
-              setTimeout(() => { try { inp.remove(); } catch {} }, 15000);
-            } catch {}
+              setTimeout(() => { try { inp.remove(); } catch (e) {} }, 15000);
+            } catch (e2) { void e2; }
           }, { capture: true });
         }
-      } catch {}
+      } catch (e) {}
 
       // Reflect mic state changes to the single-button UI if events are emitted
       try {
@@ -885,10 +888,10 @@ async function boot() {
                 btn.classList.remove('mic-active');
                 btn.classList.add('mic-idle');
               }
-            } catch {}
+            } catch (e) { void e; }
           });
         }
-      } catch {}
+      } catch (e) { void e; }
 
       // Unified auto-speed input + wheel handling (resilient delegation)
       try {
@@ -899,7 +902,7 @@ async function boot() {
             if (t?.id === 'autoSpeed') {
               Auto.setSpeed(t.value);
             }
-          } catch {}
+          } catch (e) {}
         }, { capture: true });
 
         document.addEventListener('change', (ev) => {
@@ -908,7 +911,7 @@ async function boot() {
             if (t?.id === 'autoSpeed') {
               Auto.setSpeed(t.value);
             }
-          } catch {}
+          } catch (e) { void e; }
         }, { capture: true });
 
         // Wheel on speed input adjusts ±0.5 (Shift: ±5), rounded to one decimal
@@ -924,12 +927,12 @@ async function boot() {
             const next = Math.max(5, Math.min(200, Math.round((cur + dir * step) * 10) / 10));
             t.value = String(next);
             Auto.setSpeed(next);
-          } catch {}
+          } catch (e) { void e; }
         }, { passive: false, capture: true });
-      } catch {}
+      } catch (e) { void e; }
 
   // Ensure OBS persistent UI is wired and boot-restore applied (idempotent)
-  try { wireObsPersistentUI && wireObsPersistentUI(); } catch {}
+  try { wireObsPersistentUI && wireObsPersistentUI(); } catch (e) {}
 
       // Stop autoscroll with a short buffer after speech stops to avoid abrupt cutoffs
       try {
@@ -943,13 +946,13 @@ async function boot() {
               if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
               return;
             }
-          } catch {}
+          } catch (e) {}
           // Delay stop by 2.5s to allow natural sentence tails
-          if (autoStopTimer) { try { clearTimeout(autoStopTimer); } catch {} }
+          if (autoStopTimer) { try { clearTimeout(autoStopTimer); } catch (e) {} }
           autoStopTimer = setTimeout(() => {
-            try { window.__scrollCtl?.stop?.(); } catch {}
-            try { Auto.setEnabled(false); } catch {}
-            try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch {}
+            try { window.__scrollCtl?.stop?.(); } catch (e) {}
+            try { Auto.setEnabled(false); } catch (e2) { void e2; }
+            try { clearInterval(window.__autoFallbackTimer); window.__autoFallbackTimer = null; } catch (e3) { void e3; }
             autoStopTimer = null;
           }, 2500);
         });
@@ -960,27 +963,27 @@ async function boot() {
             if (!speechActiveLatest) {
               Auto.setEnabled?.(false);
             }
-          } catch {}
+          } catch (e) {}
         });
-      } catch {}
+      } catch (e) {}
     } catch (e) { console.warn('[src/index] auto-scroll wiring failed', e); }
 
     // Typography bridge is installed via './ui/typography-bridge.js'
 
   // Mark init as complete for headless checks/smoke tests
-  try { window.__tp_init_done = true; } catch {}
+  try { window.__tp_init_done = true; } catch (e) {}
   console.log('[src/index] boot completed');
-    try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch {}
+    try { window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot completed' }); } catch (e) {}
     // Ensure Settings Scripts Folder card is available (JS path)
-    try { ensureSettingsFolderControls(); } catch {}
-    try { ensureSettingsFolderControlsAsync(6000); } catch {}
+    try { ensureSettingsFolderControls(); } catch (e) {}
+    try { ensureSettingsFolderControlsAsync(6000); } catch (e2) {}
 
     // Wire native folder picker + fallback, deferring to our binder if already present
     function wireMappedFolderNative() {
-      try { window.__bindMappedFolderUI?.(); } catch {}
+      try { window.__bindMappedFolderUI?.(); } catch (e) {}
     }
-    try { wireMappedFolderNative(); } catch {}
-    try { document.addEventListener('DOMContentLoaded', () => { try { wireMappedFolderNative(); } catch {} }); } catch {}
+    try { wireMappedFolderNative(); } catch (e) {}
+    try { document.addEventListener('DOMContentLoaded', () => { try { wireMappedFolderNative(); } catch (e2) { void e2; } }); } catch (e3) { void e3; }
 
     // Binder for Scripts Folder (JS path) – minimal parity with TS binder
     function __bindMappedFolderUI() {
@@ -991,10 +994,10 @@ async function boot() {
         const sel = document.getElementById('scriptSelect');
         const fallback = document.getElementById('folderFallback');
         // Session-only map of files when using the fallback directory input
-        try { if (!window.__tpFolderFilesMap) window.__tpFolderFilesMap = new Map(); } catch {}
-        const useMock = (() => { try { const Q = new URLSearchParams(location.search||''); return Q.has('mockFolder'); } catch { return false; } })();
+        try { if (!window.__tpFolderFilesMap) window.__tpFolderFilesMap = new Map(); } catch (e) {}
+        const useMock = (() => { try { const Q = new URLSearchParams(location.search||''); return Q.has('mockFolder'); } catch (e) { return false; } })();
         btn.dataset.mappedFolderWired = '1';
-        try { btn.disabled = false; } catch {}
+        try { btn.disabled = false; } catch (e) {}
 
         function populate(names) {
           try {
@@ -1006,8 +1009,8 @@ async function boot() {
             sel.setAttribute('aria-busy','false');
             sel.disabled = filtered.length === 0;
             sel.dataset.count = String(filtered.length);
-            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: filtered.length } })); } catch {}
-          } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: filtered.length } })); } catch (e) {}
+          } catch (e) {}
         }
 
         async function pickFolder() {
@@ -1017,43 +1020,43 @@ async function boot() {
             if (window.showDirectoryPicker) {
               try {
                 const dirHandle = await window.showDirectoryPicker();
-                try { window.__tpFolderHandle = dirHandle; } catch {}
+                try { window.__tpFolderHandle = dirHandle; } catch (e) {}
                 // New native selection replaces any prior fallback file map
-                try { if (window.__tpFolderFilesMap && window.__tpFolderFilesMap.clear) window.__tpFolderFilesMap.clear(); } catch {}
+                try { if (window.__tpFolderFilesMap && window.__tpFolderFilesMap.clear) window.__tpFolderFilesMap.clear(); } catch (e) {}
                 // Avoid `for await ... of` for wider runtime compatibility
                 try {
                   const it = dirHandle.values();
                   while (true) {
                     let step;
-                    try { step = await it.next(); } catch { step = { done: true }; }
+                    try { step = await it.next(); } catch (e) { step = { done: true }; }
                     if (!step || step.done) break;
                     const entry = step.value;
                     try {
                       if (entry && entry.kind === 'file' && /\.(txt|md|docx)$/i.test(entry.name)) {
                         scriptNames.push(entry.name);
                       }
-                    } catch {}
+                    } catch (e) {}
                   }
-                } catch {}
+                } catch (e) {}
               } catch (e) {
                 // user cancel → fall back to input
                 if (e && e.name !== 'AbortError') console.warn('[folder] picker err', e);
                 if (!fallback) return;
-                try { fallback.click(); } catch {}
+                try { fallback.click(); } catch (e2) {}
                 return;
               }
             } else if (fallback) {
               // Use hidden directory input (webkitdirectory) – user picks then change event populates
-              try { fallback.click(); } catch {}
+              try { fallback.click(); } catch (e) {}
               return;
             }
             if (scriptNames.length) {
               populate(scriptNames);
-              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(scriptNames)); } catch {}
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(scriptNames)); } catch (e) {}
             }
           } catch (e) { console.warn('[folder] pickFolder failed', e); }
           finally {
-            try { btn.disabled = false; btn.textContent = 'Choose Folder'; } catch {}
+            try { btn.disabled = false; btn.textContent = 'Choose Folder'; } catch (e) {}
           }
         }
 
@@ -1065,32 +1068,32 @@ async function boot() {
                 const files = Array.from(fallback.files || []);
                 const names = files.map(f => f && f.name).filter(Boolean);
                 // Reset any native handle since we're using the fallback source now
-                try { window.__tpFolderHandle = null; } catch {}
+                try { window.__tpFolderHandle = null; } catch (e) {}
                 // Store File objects in a session map for on-demand loads
                 try {
                   if (!window.__tpFolderFilesMap) window.__tpFolderFilesMap = new Map();
                   window.__tpFolderFilesMap.clear();
                   for (const f of files) { if (f && f.name) window.__tpFolderFilesMap.set(f.name, f); }
-                } catch {}
+                } catch (e) {}
                 if (names.length) {
                   populate(names);
-                  try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch {}
+                  try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch (e) {}
                 }
-              } catch {}
+              } catch (e) {}
             });
           }
-        } catch {}
+        } catch (e) {}
 
-        btn.addEventListener('click', (ev) => { try { ev.stopImmediatePropagation(); } catch {}; pickFolder(); });
+        btn.addEventListener('click', (ev) => { try { ev.stopImmediatePropagation(); } catch (e) {}; pickFolder(); });
         recheckBtn?.addEventListener('click', (ev) => {
-          try { ev.stopImmediatePropagation(); } catch {}
+          try { ev.stopImmediatePropagation(); } catch (e) {}
           try {
             const raw = localStorage.getItem('tp_last_folder_scripts');
             if (raw) {
               const arr = JSON.parse(raw) || [];
               if (Array.isArray(arr) && arr.length) populate(arr);
             }
-          } catch {}
+          } catch (e) {}
         });
 
         // Do not auto-populate from stored if mock folder flag active (avoid parity mismatch)
@@ -1103,12 +1106,12 @@ async function boot() {
                 populate(arr);
               }
             }
-          } catch {}
+          } catch (e) {}
         }
-      } catch {}
+      } catch (e) {}
     }
-    try { window.__bindMappedFolderUI = __bindMappedFolderUI; } catch {}
-    try { __bindMappedFolderUI(); } catch {}
+    try { window.__bindMappedFolderUI = __bindMappedFolderUI; } catch (e) {}
+    try { __bindMappedFolderUI(); } catch (e2) {}
 
     // Sidebar mirror: keep #scriptSelectSidebar in sync with Settings #scriptSelect (JS path)
     (function ensureSidebarMirror(){
@@ -1127,36 +1130,36 @@ async function boot() {
             side.disabled = true;
             side.innerHTML = '';
             for (const o of opts) {
-              try { const n = document.createElement('option'); n.value = o.value; n.textContent = o.textContent || ''; side.appendChild(n); } catch {}
+              try { const n = document.createElement('option'); n.value = o.value; n.textContent = o.textContent || ''; side.appendChild(n); } catch (e) {}
             }
             // reflect value if present
-            try { side.value = main.value; } catch {}
+            try { side.value = main.value; } catch (e) {}
             side.setAttribute('aria-busy','false');
             side.disabled = side.options.length === 0;
             side.dataset.count = String(side.options.length || 0);
-          } catch {}
+          } catch (e) {}
         }
 
         // One-time sync attempt (handles case when population already happened)
-        try { copyOptionsFromMain(); } catch {}
+        try { copyOptionsFromMain(); } catch (e) {}
 
         // Refresh mirror whenever folder scripts are (re)populated
         try {
-          window.addEventListener('tp:folderScripts:populated', () => { try { copyOptionsFromMain(); } catch {} });
-        } catch {}
+          window.addEventListener('tp:folderScripts:populated', () => { try { copyOptionsFromMain(); } catch (e) {} });
+        } catch (e) {}
 
         // Keep selection in sync both ways
         try {
           const main = getMain(); const side = getSide();
           if (main && !main.__mirrorSel) {
             main.__mirrorSel = true;
-            main.addEventListener('change', () => { try { const s = getSide(); if (s) s.value = main.value; } catch {} });
+            main.addEventListener('change', () => { try { const s = getSide(); if (s) s.value = main.value; } catch (e) {} });
           }
           if (side && !side.__mirrorSel) {
             side.__mirrorSel = true;
-            side.addEventListener('change', () => { try { const m = getMain(); if (m) m.value = side.value; } catch {} });
+            side.addEventListener('change', () => { try { const m = getMain(); if (m) m.value = side.value; } catch (e) {} });
           }
-        } catch {}
+        } catch (e) {}
 
         // If either select is not present yet, observe briefly and retry
         try {
@@ -1164,16 +1167,16 @@ async function boot() {
             const mo = new MutationObserver(() => {
               try {
                 if (getMain() && getSide()) {
-                  try { copyOptionsFromMain(); } catch {}
-                  try { mo.disconnect(); } catch {}
+                  try { copyOptionsFromMain(); } catch (e) {}
+                  try { mo.disconnect(); } catch (e2) {}
                 }
-              } catch {}
+              } catch (e) {}
             });
             mo.observe(document.documentElement, { childList: true, subtree: true });
-            setTimeout(() => { try { mo.disconnect(); } catch {} }, 20000);
+            setTimeout(() => { try { mo.disconnect(); } catch (e) {} }, 20000);
           }
-        } catch {}
-      } catch {}
+        } catch (e) {}
+      } catch (e) {}
     })();
 
     // Real FS operations: save, save-as, delete, rename, and load from folder if handle is available
@@ -1212,10 +1215,10 @@ async function boot() {
                   sel.dataset.count = String(sel.options.length || 0);
                 }
                 sel.disabled = (sel.options.length === 0);
-              } catch {}
+              } catch (e) { void e; }
             }
-            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch {}
-          } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch (e) { void e; }
+          } catch (e) { void e; }
         }
         function removeOptionEverywhere(name){
           try {
@@ -1227,10 +1230,10 @@ async function boot() {
                 if (opt) opt.remove();
                 sel.dataset.count = String(sel.options.length || 0);
                 sel.disabled = (sel.options.length === 0);
-              } catch {}
+              } catch (e) { void e; }
             }
-            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch {}
-          } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch (e) { void e; }
+          } catch (e) { void e; }
         }
         function renameOptionEverywhere(from, to){
           try {
@@ -1240,9 +1243,9 @@ async function boot() {
                 const sel = s; if (!sel) continue;
                 const opt = Array.from(sel.options || []).find(o => (o.textContent || '') === from);
                 if (opt) { opt.textContent = to; }
-              } catch {}
+              } catch (e) { void e; }
             }
-          } catch {}
+          } catch (e) { void e; }
         }
 
         // Save to existing selected name (if folder handle exists), else no-op; TS binder still did download
@@ -1254,7 +1257,7 @@ async function boot() {
             if (!name) return;
             const ok = await saveToFolder(String(name), getEditorText());
             if (ok) addOptionIfMissing(String(name));
-          } catch {}
+          } catch (e) { void e; }
         });
 
         // Save As → write new file and add option
@@ -1264,7 +1267,7 @@ async function boot() {
             const to = ev && ev.detail && ev.detail.to; if (!to) return;
             const ok = await saveToFolder(String(to), getEditorText());
             if (ok) addOptionIfMissing(String(to));
-          } catch {}
+          } catch (e) { void e; }
         });
 
         // Delete selected file by name
@@ -1273,10 +1276,10 @@ async function boot() {
             const dir = getDir();
             const name = ev && ev.detail && ev.detail.name; if (!name) return;
             if (dir && typeof dir.removeEntry === 'function') {
-              try { await dir.removeEntry(String(name)); } catch {}
+              try { await dir.removeEntry(String(name)); } catch (e) { void e; }
             }
             removeOptionEverywhere(String(name));
-          } catch {}
+          } catch (e) { void e; }
         });
 
         // Rename: copy to new, then delete old; update UI
@@ -1287,11 +1290,11 @@ async function boot() {
             if (!from || !to || from === to) return;
             const ok = await copyFile(dir, String(from), String(to));
             if (ok) {
-              try { await dir.removeEntry(String(from)); } catch {}
+              try { await dir.removeEntry(String(from)); } catch (e) { void e; }
               renameOptionEverywhere(String(from), String(to));
               addOptionIfMissing(String(to));
             }
-          } catch {}
+          } catch (e) { void e; }
         });
 
         // Load content on select change when folder handle exists or fallback files map is set
@@ -1309,10 +1312,10 @@ async function boot() {
                 const fh = await dir.getFileHandle(String(name), { create: false });
                 const file = await fh.getFile();
                 const text = await file.text();
-                try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} } } catch {}
-                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch {}
+                try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
+                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
                 return;
-              } catch {}
+              } catch (e) { void e; }
             }
             // Fallback: if we have a session files map from the fallback picker, use it
             try {
@@ -1321,14 +1324,14 @@ async function boot() {
                 const f = mp.get(String(name));
                 if (f) {
                   const text = await f.text();
-                  try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {} } } catch {}
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch {}
+                  try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
+                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
                 }
               }
-            } catch {}
-          } catch {}
+            } catch (e) { void e; }
+          } catch (e) { void e; }
         }, { capture: true });
-      } catch {}
+      } catch (e) { void e; }
     })();
 
     // Re-bind if card is re-injected (mutation observer)
@@ -1339,14 +1342,14 @@ async function boot() {
           try {
             const btn = document.getElementById('chooseFolderBtn');
             if (btn && btn.dataset.mappedFolderWired !== '1') {
-              try { window.__bindMappedFolderUI?.(); } catch {}
+              try { window.__bindMappedFolderUI?.(); } catch (e) { void e; }
             }
-          } catch {}
+          } catch (e) { void e; }
         });
         mo.observe(document.documentElement, { childList: true, subtree: true });
-        setTimeout(() => { try { mo.disconnect(); } catch {} }, 120000);
+        setTimeout(() => { try { mo.disconnect(); } catch (e) { void e; } }, 120000);
       }
-    } catch {}
+    } catch (e) { void e; }
 
     // Test-only mock folder population: enable with ?mockFolder=1
     try {
@@ -1361,7 +1364,7 @@ async function boot() {
             if (!main) return false;
             const targets = [main, mirror].filter(Boolean);
             for (const sel of targets) {
-              try { sel.setAttribute('aria-busy','true'); sel.disabled = true; } catch {}
+              try { sel.setAttribute('aria-busy','true'); sel.disabled = true; } catch (e) { void e; }
             }
             const items = NAMES.filter(n => /\.(txt|docx)$/i.test(n));
             for (const sel of targets) {
@@ -1376,28 +1379,28 @@ async function boot() {
                 sel.setAttribute('aria-busy','false');
                 sel.disabled = items.length === 0;
                 sel.dataset.count = String(items.length);
-              } catch {}
+              } catch (e) { void e; }
             }
-            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: items.length } })); } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: items.length } })); } catch (e) { void e; }
             // minimal sync: when one changes, reflect value to the other
             try {
-              const sync = (a, b) => { try { if (a && b) b.value = a.value; } catch {} };
+              const sync = (a, b) => { try { if (a && b) b.value = a.value; } catch (e) { void e; } };
               if (main) main.addEventListener('change', () => sync(main, mirror));
               if (mirror) mirror.addEventListener('change', () => sync(mirror, main));
-            } catch {}
+            } catch (e) { void e; }
             return true;
-          } catch { return false; }
+          } catch (e) { void e; return false; }
         };
         // Try now; if selects not present yet, wait briefly
         // Defer a bit to allow injection of the Settings card
-        setTimeout(() => { try { populate(); } catch {} }, 50);
+        setTimeout(() => { try { populate(); } catch (e) { void e; } }, 50);
         if (!populate()) {
           let tries = 0; const iv = setInterval(() => {
-            tries++; if (populate() || tries > 30) { try { clearInterval(iv); } catch {} }
+            tries++; if (populate() || tries > 30) { try { clearInterval(iv); } catch (e) { void e; } }
           }, 50);
         }
       }
-    } catch {}
+    } catch (e) { void e; }
 
     // CI / uiMock auto sample + upload mock markers so smoke harness notes disappear.
     try {
@@ -1408,18 +1411,18 @@ async function boot() {
         const ed = document.getElementById('editor');
         if (ed && 'value' in ed && !String(ed.value||'').trim()) {
           ed.value = '[s1]\nSmoke Sample Auto‑Load.\nUse auto‑scroll or step to advance.\n[/s1]';
-          try { ed.dispatchEvent(new Event('input',{bubbles:true})); } catch {}
-          try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch {}
-          try { document.body && (document.body.dataset.smokeSample = 'loaded'); } catch {}
+          try { ed.dispatchEvent(new Event('input',{bubbles:true})); } catch (e) { void e; }
+          try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch (e) { void e; }
+          try { document.body && (document.body.dataset.smokeSample = 'loaded'); } catch (e) { void e; }
         }
         // Mark upload mock readiness (the harness will attempt an upload button click later)
-        try { document.body && (document.body.dataset.smokeUpload = 'ready'); } catch {}
-        try { window.dispatchEvent(new CustomEvent('tp:upload:mock', { detail: { ready: true } })); } catch {}
+        try { document.body && (document.body.dataset.smokeUpload = 'ready'); } catch (e) { void e; }
+        try { window.dispatchEvent(new CustomEvent('tp:upload:mock', { detail: { ready: true } })); } catch (e) { void e; }
       }
-    } catch {}
+    } catch (e) { void e; }
   } catch (err) {
     console.error('[src/index] boot failed', err);
-    try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch {}
+    try { window.__TP_BOOT_TRACE = window.__TP_BOOT_TRACE || []; window.__TP_BOOT_TRACE.push({ t: Date.now(), tag: 'src/index', msg: 'boot failed', error: String(err && err.message || err) }); } catch (e) { void e; }
   }
 }
 

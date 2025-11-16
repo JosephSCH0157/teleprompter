@@ -45,7 +45,7 @@
         var DEV = Q.has('dev') || (function(){try{return localStorage.getItem('tp_dev_mode')==='1'}catch(e){return false}})() || (location.hash||'').indexOf('dev')!==-1;
         if (DEV) document.documentElement.classList.add('tp-dev');
         window.__TP_DEV = DEV;
-      } catch {}
+      } catch (e) {}
     })();
   </script>
 
@@ -61,10 +61,10 @@
               var behavior = (typeof arg==='object'&&arg&&arg.behavior)?String(arg.behavior):'smooth';
               if (typeof window.scrollTo==='function') window.scrollTo({top,behavior});
               else (document.scrollingElement||document.documentElement||document.body).scrollTop = top;
-            } catch {}
+            } catch (e) {}
           };
         }
-      } catch {}
+      } catch (e) {}
     })();
   </script>
 
@@ -173,7 +173,7 @@
             }
           } catch (err) {
             pill.textContent = 'failed: ' + (err && (err.message||String(err)));
-            try { console.warn('[OBS test failed]', err); } catch {}
+            try { console.warn('[OBS test failed]', err); } catch (e) {}
           }
           return;
         }
@@ -200,37 +200,37 @@
         var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
         btn.textContent = isOn ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
         // Stop any previous fallback when toggling or when turning Off via speed buttons
-        try { clearInterval(window.__autoFallbackTimer); } catch {}
+        try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
         window.__autoFallbackTimer = null;
         if (isOn) {
           try {
             if (window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function') { window.__scrollCtl.setSpeed(window.__autoSpeed); }
             if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') { window.__scrollCtl.start(); }
-          } catch {}
+          } catch (e) {}
           if (!(window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function')) {
             var viewer = getViewer();
             // Immediate nudge to make movement detectable in short probes
-            try { viewer.scrollTop += Math.max(1, window.__autoSpeed / 5); } catch {}
+            try { viewer.scrollTop += Math.max(1, window.__autoSpeed / 5); } catch (e) {}
             window.__autoFallbackTimer = setInterval(function(){
               try {
                 // If the real engine becomes available, switch to it and stop fallback
                 if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') {
-                  try { clearInterval(window.__autoFallbackTimer); } catch {}
+                  try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
                   window.__autoFallbackTimer = null;
-                  try { window.__scrollCtl.setSpeed(window.__autoSpeed); } catch {}
-                  try { window.__scrollCtl.start(); } catch {}
+                  try { window.__scrollCtl.setSpeed(window.__autoSpeed); } catch (e) {}
+                  try { window.__scrollCtl.start(); } catch (e) {}
                   return;
                 }
                 viewer.scrollTop += window.__autoSpeed / 10;
-              } catch {}
+              } catch (e) {}
             }, 100);
           }
         }
-      } catch {}
+      } catch (e) {}
     }
     document.addEventListener('click', handler, true);
     document.addEventListener('click', handler, false);
-  } catch {}
+  } catch (e) {}
 })();
 </script>
 <div class="topbar">
@@ -577,13 +577,13 @@
         var el = document.getElementById('aboutVersion');
         if (!el) return;
         var v = '';
-        try { if (window.APP_VERSION) v = String(window.APP_VERSION); } catch {}
+        try { if (window.APP_VERSION) v = String(window.APP_VERSION); } catch (e) {}
         if (!v) {
           var av = document.getElementById('appVersion');
           if (av && av.textContent) v = av.textContent.trim();
         }
         if (v) el.textContent = v;
-      } catch {}
+      } catch (e) {}
     })();
   </script>
 </body>

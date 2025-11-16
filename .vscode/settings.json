@@ -25,6 +25,7 @@
   "git.confirmSync": true,
   "cSpell.words": [
     "booters",
+    "Dbfs",
     "idempotently",
     "keybd",
     "Keybinds",
@@ -35,11 +36,13 @@
     "loadsamplebtn",
     "loadsampletext",
     "LWIN",
+    "maxch",
     "navbutton",
     "OVERSEL",
     "preconnects",
     "saveas",
     "sels",
+    "SSOT",
     "topbar",
     "wscript"
   ]
