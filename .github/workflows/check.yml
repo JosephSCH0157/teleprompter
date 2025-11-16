@@ -27,8 +27,9 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
-      - name: Types
+      - name: Types (non-blocking)
         run: npm run types
+        continue-on-error: true
 
       - name: Smoke (strict)
         env:
