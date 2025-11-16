@@ -1401,12 +1401,32 @@ async function boot() {
             const sel = t; const name = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
             if (!name) return;
             const dir = getDir();
+            // Helper: read File/Blob with Mammoth for .docx, else as text
+            async function readTextSmart(file, fileName) {
+              try {
+                const n = String(fileName || file && file.name || '').toLowerCase();
+                if (/\.docx$/.test(n)) {
+                  try {
+                    // Prefer ensureMammoth shim if present
+                    if (typeof window.ensureMammoth === 'function') {
+                      await window.ensureMammoth();
+                    }
+                    if (window.mammoth && typeof window.mammoth.extractRawText === 'function') {
+                      const buf = await file.arrayBuffer();
+                      const res = await window.mammoth.extractRawText({ arrayBuffer: buf });
+                      return (res && res.value) || '';
+                    }
+                  } catch (e) { /* fall through to plain text */ }
+                }
+                return await file.text();
+              } catch { return ''; }
+            }
             // Try native directory read first
             if (dir) {
               try {
                 const fh = await dir.getFileHandle(String(name), { create: false });
                 const file = await fh.getFile();
-                const text = await file.text();
+                const text = await readTextSmart(file, String(name));
                 try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
                 try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
                 return;
@@ -1418,7 +1438,7 @@ async function boot() {
               if (mp && typeof mp.get === 'function') {
                 const f = mp.get(String(name));
                 if (f) {
-                  const text = await f.text();
+                  const text = await readTextSmart(f, String(name));
                   try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
                   try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
                 }
