@@ -146,7 +146,7 @@ import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { installScrollRouter } from './features/scroll-router';
-import { installStepScroll } from './features/step-scroll';
+import { installStepScroll } from './features/scroll/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
 import { onTypography } from './settings/typographyStore';
