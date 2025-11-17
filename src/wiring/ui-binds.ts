@@ -20,7 +20,7 @@ declare global {
   }
 
   interface Document {
-    // Older TS libs don't always include closest() on EventTarget in a type-safe way
+    // (Kept for lib compat; real members come from lib.dom.d.ts)
   }
 }
 
@@ -29,7 +29,8 @@ const SETTINGS_OPEN_SEL = '#settingsBtn, [data-action="settings-open"]';
 const SETTINGS_CLOSE_SEL = '#settingsClose, [data-action="settings-close"]';
 const HELP_OPEN_SEL =
   '#shortcutsBtn, [data-action="help-open"], #helpBtn';
-const HELP_CLOSE_SEL = '#shortcutsClose, [data-action="help-close"]';
+const HELP_CLOSE_SEL =
+  '#shortcutsClose, [data-action="help-close"]';
 
 let binderInstalled = false;
 
@@ -159,16 +160,18 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
         (ev: Event) => {
           try {
             const target = ev.target as HTMLElement | null;
-            if (!target || typeof (target as any).closest !== 'function') {
+            if (!target || typeof target.closest !== 'function') {
               return;
             }
-            const t = (target as any).closest(
+
+            const t = target.closest(
               `${openSel}, ${closeSel}`,
             ) as HTMLElement | null;
             if (!t) return;
 
             const isOpen = t.matches(openSel);
             const overlay = getOverlayEl(name);
+
             if (isOpen) {
               if (overlay) overlay.classList.remove('hidden');
               markOpen(name);
@@ -214,16 +217,3 @@ if (typeof document !== 'undefined') {
     if (
       document.readyState === 'complete' ||
       document.readyState === 'interactive'
-    ) {
-      bindCoreUI();
-    } else {
-      document.addEventListener(
-        'DOMContentLoaded',
-        () => bindCoreUI(),
-        { once: true },
-      );
-    }
-  } catch {
-    /* ignore */
-  }
-}
