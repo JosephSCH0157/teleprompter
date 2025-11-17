@@ -147,6 +147,7 @@ import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { installScrollRouter } from './features/scroll-router';
 import { createScrollModeRouter } from './features/scroll/mode-router';
+import { getAutoScrollApi } from './features/scroll/auto-adapter';
 import { installStepScroll } from './features/scroll/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
@@ -400,7 +401,8 @@ export async function boot() {
 						// Minimal typed router: syncs store ↔ step/rehearsal (auto can be added later)
 						try {
 							const store = (window as any).__tpStore || null;
-							const router = createScrollModeRouter({ store, step, rehearsal });
+							const auto = getAutoScrollApi();
+							const router = createScrollModeRouter({ store, step, rehearsal, auto });
 							(window as any).__tpScrollMode = router; // expose for dev/diagnostics
 						} catch {}
 						if (!(window as any).setScrollMode) {
