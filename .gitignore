@@ -31,3 +31,6 @@ adapters/obs.js
 # Env
 .env
 .env.*
+
+# Local Netlify folder
+.netlify
