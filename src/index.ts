@@ -172,6 +172,8 @@ const startScroll      = initOnce('scroll',      initScroll);
 const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import './hud/loader';
+// Tiny HUD chip that reflects current scroll mode
+import './features/scroll/mode-chip';
 // Mapped Folder (scripts directory) binder
 import { installGlobalIngestListener, installScriptIngest } from './features/script-ingest';
 import { pickMappedFolder } from './fs/mapped-folder';

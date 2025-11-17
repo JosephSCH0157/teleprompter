@@ -134,6 +134,24 @@ export function createScrollModeRouter(
     syncAuto(next);
     syncStep(next);
     syncRehearsal(next);
+
+    // Expose mode to DOM + listeners
+    try {
+      if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-scroll-mode', mode);
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('tp:scrollModeChange', { detail: { mode } }),
+        );
+      }
+    } catch {
+      // ignore
+    }
   }
 
   function setMode(next: ScrollMode): void {
