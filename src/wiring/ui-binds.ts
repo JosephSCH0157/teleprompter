@@ -230,3 +230,128 @@ if (typeof document !== 'undefined') {
     /* ignore */
   }
 }
+
+// ---- Test/dev helpers (exported) ----
+
+function __getOverlayEl(name: 'settings' | 'help'): HTMLElement | null {
+  try {
+    if (name === 'settings') {
+      return (
+        document.getElementById('settingsOverlay') ||
+        (document.querySelector('[data-overlay="settings"]') as HTMLElement | null)
+      );
+    }
+    return (
+      document.getElementById('shortcutsOverlay') ||
+      (document.querySelector('[data-overlay="help"]') as HTMLElement | null)
+    );
+  } catch { return null; }
+}
+
+export function toggleOverlay(name: 'settings' | 'help', want: boolean): void {
+  try {
+    let el = __getOverlayEl(name);
+    if (!el) {
+      try {
+        el = document.createElement('div');
+        el.id = name === 'settings' ? 'settingsOverlay' : 'shortcutsOverlay';
+        el.setAttribute('data-overlay', name);
+        document.body.appendChild(el);
+      } catch {}
+    }
+    if (want) {
+      if (el) {
+        try { el.classList.remove('hidden'); } catch {}
+        try { el.removeAttribute('hidden'); } catch {}
+      }
+      try { document.body.style.overflow = 'hidden'; } catch {}
+      try { document.body.setAttribute('data-smoke-open', name); } catch {}
+      try { window.dispatchEvent(new CustomEvent(`tp:${name}:open`)); } catch {}
+    } else {
+      if (el) {
+        try { el.classList.add('hidden'); } catch {}
+        try { el.setAttribute('hidden', ''); } catch {}
+      }
+      try { document.body.style.overflow = ''; } catch {}
+      try {
+        if (document.body.getAttribute('data-smoke-open') === name) {
+          document.body.removeAttribute('data-smoke-open');
+        }
+      } catch {}
+      try { window.dispatchEvent(new CustomEvent(`tp:${name}:close`)); } catch {}
+    }
+  } catch { /* ignore */ }
+}
+
+export function ensureSettingsTabsWiring(): void {
+  try {
+    const overlay = __getOverlayEl('settings');
+    if (!overlay) return;
+    const tablist = (overlay.querySelector('#settingsTabs') || overlay.querySelector('[role="tablist"]')) as HTMLElement | null;
+    if (!tablist) return;
+
+    const tabs = Array.from(overlay.querySelectorAll<HTMLElement>('.settings-tab'));
+    if (!tabs.length) return;
+
+    // Initialize tabs and panels
+    const names: string[] = [];
+    tabs.forEach((t, i) => {
+      const name = (t.dataset.tab || `tab${i}`).toString();
+      names.push(name);
+      if (!t.id) t.id = `tab-${name}`;
+      t.setAttribute('role', 'tab');
+      t.setAttribute('aria-selected', 'false');
+      t.setAttribute('tabindex', '-1');
+      t.setAttribute('aria-controls', `panel-${name}`);
+
+      const panel = overlay.querySelector<HTMLElement>(`.settings-card[data-tab="${name}"]`);
+      if (panel) {
+        panel.setAttribute('role', 'tabpanel');
+        panel.id = panel.id || `panel-${name}`;
+        panel.setAttribute('data-tabpanel', name);
+        panel.setAttribute('hidden', '');
+        panel.setAttribute('aria-labelledby', t.id);
+      }
+    });
+
+    const setActive = (name: string, focus = false) => {
+      try { (overlay as any).dataset.activeTab = name; } catch {}
+      tabs.forEach((t) => {
+        const is = (t.dataset.tab || '') === name;
+        t.classList.toggle('active', is);
+        t.setAttribute('aria-selected', is ? 'true' : 'false');
+        t.setAttribute('tabindex', is ? '0' : '-1');
+        if (is && focus) { try { t.focus(); } catch {} }
+      });
+      names.forEach((n) => {
+        const panel = overlay.querySelector<HTMLElement>(`#panel-${n}`) || overlay.querySelector<HTMLElement>(`.settings-card[data-tab="${n}"]`);
+        if (!panel) return;
+        if (n === name) { panel.removeAttribute('hidden'); }
+        else { panel.setAttribute('hidden', ''); }
+      });
+    };
+
+    // Default active: first tab or pre-set dataset
+    const initial = (overlay as any).dataset?.activeTab || names[0];
+    setActive(initial);
+
+    // Keyboard navigation on tablist
+    const onKey = (e: KeyboardEvent) => {
+      const key = e.key;
+      const cur = ((overlay as any).dataset?.activeTab || names[0]) as string;
+      let idx = Math.max(0, names.indexOf(cur));
+      if (key === 'ArrowRight') idx = (idx + 1) % names.length;
+      else if (key === 'ArrowLeft') idx = (idx - 1 + names.length) % names.length;
+      else if (key === 'Home') idx = 0;
+      else if (key === 'End') idx = names.length - 1;
+      else return;
+      e.preventDefault?.();
+      const next = names[idx];
+      setActive(next, true);
+    };
+
+    // Ensure role on container
+    tablist.setAttribute('role', 'tablist');
+    tablist.addEventListener('keydown', onKey, { capture: false });
+  } catch { /* ignore */ }
+}
