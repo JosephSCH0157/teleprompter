@@ -147,6 +147,7 @@ import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { installScrollRouter } from './features/scroll-router';
 import { installStepScroll } from './features/scroll/step-scroll';
+import { createScrollModeRouter } from './features/scroll/mode-router';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
 import { onTypography } from './settings/typographyStore';
@@ -396,6 +397,12 @@ export async function boot() {
 						const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
 						const rehearsal = installRehearsal();
 						try { resolveInitialRehearsal(); } catch {}
+						// Minimal typed router: syncs store ↔ step/rehearsal (auto can be added later)
+						try {
+							const store = (window as any).__tpStore || null;
+							const router = createScrollModeRouter({ store, step, rehearsal });
+							(window as any).__tpScrollMode = router; // expose for dev/diagnostics
+						} catch {}
 						if (!(window as any).setScrollMode) {
 							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
 								try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
