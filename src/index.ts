@@ -9,6 +9,7 @@ import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
+import './wiring/ui-binds';
 
 import { bootstrap } from './boot/boot';
 
