@@ -404,6 +404,17 @@ export async function boot() {
 							const auto = getAutoScrollApi();
 							const router = createScrollModeRouter({ store, step, rehearsal, auto });
 							(window as any).__tpScrollMode = router; // expose for dev/diagnostics
+							// Dev helper: quick router poke from console
+							try {
+								(window as any).__tpSetMode = (mode: string) => {
+									try {
+										(window as any).__tpScrollMode?.setMode?.(mode as any);
+										console.info('[Anvil] scrollMode →', mode);
+									} catch (err) {
+										console.error('Failed to set scroll mode', err);
+									}
+								};
+							} catch {}
 						} catch {}
 						if (!(window as any).setScrollMode) {
 							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
