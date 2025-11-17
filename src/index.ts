@@ -9,6 +9,7 @@ import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
+import './wiring/ui-binds';
 
 import { bootstrap } from './boot/boot';
 
@@ -145,7 +146,7 @@ import * as Auto from './features/autoscroll.js';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { installScrollRouter } from './features/scroll-router';
-import { installStepScroll } from './features/step-scroll';
+import { installStepScroll } from './features/scroll/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
 import { onTypography } from './settings/typographyStore';
@@ -155,7 +156,7 @@ import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
-import { auditBindingsOnce, autoMarkActions, bindCoreUI, ensureSidebarMirror, installEmergencyBinder, installOverlayButtonWiringOnce } from './wiring/ui-binds';
+import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
 import { renderScript } from './render-script';
 // Side-effect debug / DOM helpers (legacy parity)
@@ -183,7 +184,9 @@ import './smoke/settings-mapped-folder.smoke.js';
 try {
 	const qs = String(location.search || '');
 	const isHarness = /[?&](ci=1|dev=1|uiMock=1|mockFolder=1)/i.test(qs) || (navigator as any).webdriver === true;
-	if (isHarness) installEmergencyBinder();
+	if (isHarness) {
+		// Emergency binder removed in favor of canonical bindCoreUI; legacy path no-op.
+	}
 } catch {}
 // Display mode: apply top-level class early for popup/display contexts
 try {
@@ -314,17 +317,12 @@ export async function boot() {
 						}
 					} catch {}
 					// Core UI binder (idempotent)
-								try { autoMarkActions(); } catch {}
-								try { bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
-								// Hot-fix explicit overlay button wiring (always run)
-								try { installOverlayButtonWiringOnce(); } catch {}
+								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Wire single mic toggle button if present
 								try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)
 								// Do not install unconditionally to avoid hijacking clicks in prod.
-								// (Emergency binder only installed above for harness contexts)
-								try { ensureSidebarMirror(); } catch {}
-								try { auditBindingsOnce(); } catch {}
+								// (Emergency binder removed; canonical binder is idempotent)
 								// Optional console noise filter: activate only when explicitly requested
 								try {
 									const params = new URLSearchParams(location.search || '');
