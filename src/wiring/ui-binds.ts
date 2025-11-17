@@ -217,3 +217,16 @@ if (typeof document !== 'undefined') {
     if (
       document.readyState === 'complete' ||
       document.readyState === 'interactive'
+    ) {
+      bindCoreUI();
+    } else {
+      document.addEventListener(
+        'DOMContentLoaded',
+        () => bindCoreUI(),
+        { once: true },
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+}
