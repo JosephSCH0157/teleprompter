@@ -35,6 +35,7 @@ bootstrap().catch(() => {});
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
+import mountSettingsOverlay from './ui/settings';
 import './ui/settings/asrWizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
@@ -322,6 +323,8 @@ export async function boot() {
 					} catch {}
 					// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+								// Ensure Settings overlay content uses TS builder (single source of truth)
+								try { mountSettingsOverlay(); } catch {}
 								// Wire single mic toggle button if present
 								try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)
