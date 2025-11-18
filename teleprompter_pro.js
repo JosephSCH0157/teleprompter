@@ -2569,6 +2569,26 @@ let _toast = function (msg, opts) {
     const obsUrlS = document.getElementById('settingsObsUrl');
     const obsPassS = document.getElementById('settingsObsPass');
     const obsTestS = document.getElementById('settingsObsTest');
+
+    // Ensure the sidebar toggle and Settings toggle mirror each other regardless of which one changed
+    (function mirrorSidebarToSettings() {
+      const mainEnable = document.getElementById('enableObs');
+      if (!mainEnable || !obsEnable) return;
+
+      const syncFromSidebar = () => {
+        if (obsEnable.checked !== mainEnable.checked) {
+          obsEnable.checked = mainEnable.checked;
+        }
+      };
+
+      // Align immediately so opening Settings reflects the current sidebar state
+      syncFromSidebar();
+
+      if (!mainEnable.__mirrorSettingsObs) {
+        mainEnable.addEventListener('change', syncFromSidebar);
+        mainEnable.__mirrorSettingsObs = true;
+      }
+    })();
     // Prevent accidental submit/reload of settings form (Enter key)
     obsForm?.addEventListener('submit', (ev) => {
       ev.preventDefault();
