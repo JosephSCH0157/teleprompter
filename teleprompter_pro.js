@@ -1948,6 +1948,19 @@ let _toast = function (msg, opts) {
   function _buildSettingsContent() {
     const body = document.getElementById('settingsBody');
     if (!body) return;
+    // Prefer modern TS/ESM settings overlay when available
+    try {
+      const api = window.__tp && window.__tp.settings;
+      if (api && typeof api.mount === 'function') {
+        api.mount(body);
+        _settingsBuilt = true;
+        try { syncSettingsValues(); } catch {}
+        try { setupSettingsTabs(); } catch {}
+        return;
+      }
+    } catch {}
+
+    // Legacy inline builder (fallback)
     // Idempotency guard: if cards already exist, treat as already-built and sync values.
     try {
       if (body.querySelector('.settings-card')) {
