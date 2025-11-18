@@ -5636,12 +5636,49 @@ let _toast = function (msg, opts) {
         const statusEl = document.getElementById('obsConnStatus');
         const updateStatus = async () => {
           try {
+            // If TS OBS wiring is active, trust its pill text as SSOT
+            try {
+              if (typeof window !== 'undefined' && window.__tpObsSSOT === 'ts') {
+                const pill =
+                  document.getElementById('obsStatusText') ||
+                  document.getElementById('obsStatus');
+                if (pill) {
+                  const raw = (pill.textContent || '').trim() || 'unknown';
+                  const normalized = raw.replace(/^OBS:\s*/i, '');
+                  let text = 'OBS: ' + normalized;
+                  let cls = '';
+
+                  if (/connected|ready/i.test(raw)) {
+                    cls = 'ok';
+                  } else if (/offline|fail|error|disconnect/i.test(raw)) {
+                    cls = 'error';
+                  }
+
+                  if (statusEl) {
+                    statusEl.textContent = text;
+                    statusEl.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
+                    if (cls === 'ok') {
+                      statusEl.classList.add('obs-connected');
+                    } else if (/offline|error|disconnect/i.test(text || '')) {
+                      statusEl.classList.add('obs-reconnecting');
+                    } else {
+                      statusEl.classList.add('idle');
+                    }
+                  }
+
+                  // TS wiring owns the pill text; don't overwrite it.
+                  return;
+                }
+              }
+            } catch {}
+
+            // Legacy / fallback path: probe bridges and adapters directly
             let text = 'OBS: unknown';
             let cls = '';
+
             // Prefer the new obsBridge if available
             if (typeof window !== 'undefined' && window.__obsBridge) {
               try {
-                // support sync or async isConnected() implementations
                 let ok = window.__obsBridge.isConnected();
                 if (ok && typeof ok.then === 'function') ok = await ok;
                 text = ok ? 'OBS: ready' : 'OBS: offline';
@@ -5663,18 +5700,26 @@ let _toast = function (msg, opts) {
                 }
               }
             }
+
             if (statusEl) {
               statusEl.textContent = text;
-              // map to semantic chip classes
               statusEl.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
               if (cls === 'ok') statusEl.classList.add('obs-connected');
-              else if (/offline|error|disconnect/i.test(text || ''))
-                statusEl.classList.add('obs-reconnecting');
+              else if (/offline|error|disconnect/i.test(text || '')) statusEl.classList.add('obs-reconnecting');
               else statusEl.classList.add('idle');
             }
+
+            // Only drive obsStatusText when TS is *not* SSOT
             try {
               const tEl = document.getElementById('obsStatusText');
-              if (tEl) tEl.textContent = (String(text || '') || 'unknown').replace(/^OBS:\s*/i, '');
+              if (
+                tEl &&
+                (typeof window === 'undefined' ||
+                  !window.__tpObsSSOT ||
+                  window.__tpObsSSOT !== 'ts')
+              ) {
+                tEl.textContent = (String(text || '') || 'unknown').replace(/^OBS:\s*/i, '');
+              }
             } catch {}
           } catch {}
         };
