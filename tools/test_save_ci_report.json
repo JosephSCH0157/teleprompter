@@ -1,13 +1,19 @@
 {
-  "ok": true,
-  "errors": [],
+  "ok": false,
+  "errors": [
+    {
+      "type": "fatal",
+      "message": "ProtocolError: Input.dispatchMouseEvent timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed.",
+      "stack": "ProtocolError: Input.dispatchMouseEvent timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed.\n    at <instance_members_initializer> (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Connection.js:49:14)\n    at new Callback (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Connection.js:53:16)\n    at CallbackRegistry.create (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Connection.js:93:26)\n    at Connection._rawSend (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Connection.js:207:26)\n    at CDPSessionImpl.send (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Connection.js:416:33)\n    at d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Input.js:338:33\n    at #withTransaction (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Input.js:251:19)\n    at CDPMouse.up (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Input.js:333:36)\n    at CDPMouse.click (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\Input.js:367:27)\n    at CDPElementHandle.click (d:\\teleprompter\\teleprompter\\tools\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\ElementHandle.js:253:32)"
+    }
+  ],
   "console": [
     {
       "type": "log",
       "text": "Live reload enabled.",
       "location": {
         "url": "http://127.0.0.1:8080/teleprompter_pro.html",
-        "lineNumber": 536,
+        "lineNumber": 835,
         "columnNumber": 11
       }
     },
@@ -33,8 +39,8 @@
       "type": "log",
       "text": "[src/index] module imports complete",
       "location": {
-        "url": "http://127.0.0.1:8080/src/index.js",
-        "lineNumber": 169,
+        "url": "http://127.0.0.1:8080/src/index.js?v=dev",
+        "lineNumber": 214,
         "columnNumber": 10
       }
     },
@@ -42,8 +48,8 @@
       "type": "log",
       "text": "[src/index] boot()",
       "location": {
-        "url": "http://127.0.0.1:8080/src/index.js",
-        "lineNumber": 302,
+        "url": "http://127.0.0.1:8080/src/index.js?v=dev",
+        "lineNumber": 346,
         "columnNumber": 12
       }
     },
@@ -52,17 +58,8 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:8080/src/ui/dom.js",
-        "lineNumber": 698,
+        "lineNumber": 786,
         "columnNumber": 10
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] speech:db JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:8080/debug-tools.js",
-        "lineNumber": 30,
-        "columnNumber": 17
       }
     },
     {
@@ -70,7 +67,7 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:8080/src/ui/dom.js",
-        "lineNumber": 848,
+        "lineNumber": 936,
         "columnNumber": 16
       }
     },
@@ -81,6 +78,15 @@
         "url": "http://127.0.0.1:8080/debug-tools.js",
         "lineNumber": 640,
         "columnNumber": 30
+      }
+    },
+    {
+      "type": "log",
+      "text": "%c[UI PARITY OK] color:#0a0",
+      "location": {
+        "url": "http://127.0.0.1:8080/src/dev/parity-guard.js",
+        "lineNumber": 70,
+        "columnNumber": 20
       }
     },
     {
@@ -142,16 +148,16 @@
       "text": "[ASR] dev initAsrFeature()",
       "location": {
         "url": "http://127.0.0.1:8080/src/index-hooks/asr.js",
-        "lineNumber": 17,
+        "lineNumber": 25,
         "columnNumber": 16
       }
     },
     {
       "type": "info",
-      "text": "[ASR] initialized from http://127.0.0.1:8080/src/index-hooks/asr.js",
+      "text": "[ASR] initialized from /src/index-hooks/asr.js",
       "location": {
-        "url": "http://127.0.0.1:8080/src/index.js",
-        "lineNumber": 585,
+        "url": "http://127.0.0.1:8080/src/index.js?v=dev",
+        "lineNumber": 639,
         "columnNumber": 26
       }
     },
@@ -159,9 +165,18 @@
       "type": "log",
       "text": "[src/index] boot completed",
       "location": {
-        "url": "http://127.0.0.1:8080/src/index.js",
-        "lineNumber": 708,
+        "url": "http://127.0.0.1:8080/src/index.js?v=dev",
+        "lineNumber": 973,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[HUD] settings:folder:injected JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:8080/debug-tools.js",
+        "lineNumber": 30,
+        "columnNumber": 17
       }
     },
     {
@@ -174,5 +189,5 @@
       }
     }
   ],
-  "saved": "[{\"id\":\"f095d600-ec71-4897-b8fa-aba62154272b\",\"title\":\"CI-test-mhngnstq\",\"content\":\"Test script content wyqgp3iq34a\",\"created\":\"2025-11-06T13:26:56.218Z\",\"updated\":\"2025-11-06T13:26:56.219Z\"}]"
+  "saved": null
 }
