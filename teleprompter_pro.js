@@ -5686,6 +5686,35 @@ let _toast = function (msg, opts) {
             } catch {}
           } catch {}
         };
+        // Event-driven updates from unified OBS state events
+        try {
+          if (!window.__tpObsStateWired) {
+            window.__tpObsStateWired = true;
+            window.addEventListener('tp:obs:state', (e) => {
+              try {
+                const s = (e && e.detail && e.detail.state) || 'unknown';
+                let txt = 'OBS: unknown';
+                let cls = '';
+                if (s === 'error') { txt = 'OBS: failed'; cls = 'error'; }
+                else if (s === 'identified') { txt = 'OBS: ready'; cls = 'ok'; }
+                else if (s === 'connected') { txt = 'OBS: connected'; cls = 'ok'; }
+                else if (s === 'connecting') { txt = 'OBS: connecting'; cls = 'reconnecting'; }
+                else if (s === 'disconnected') { txt = 'OBS: offline'; cls = 'reconnecting'; }
+                if (statusEl) {
+                  statusEl.textContent = txt;
+                  statusEl.classList.remove('obs-connected', 'obs-reconnecting', 'idle');
+                  if (cls === 'ok') statusEl.classList.add('obs-connected');
+                  else if (cls === 'reconnecting' || /offline|error|disconnect/i.test(txt)) statusEl.classList.add('obs-reconnecting');
+                  else statusEl.classList.add('idle');
+                }
+                try {
+                  const tEl = document.getElementById('obsStatusText');
+                  if (tEl) tEl.textContent = (txt || 'unknown').replace(/^OBS:\s*/i, '');
+                } catch {}
+              } catch {}
+            }, { passive: true });
+          }
+        } catch {}
         // Initial probe
         setTimeout(updateStatus, 120);
         // Poll for status updates for a short period so that late-loading recorder/bridge
