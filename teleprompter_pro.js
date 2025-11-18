@@ -1360,8 +1360,13 @@ let _toast = function (msg, opts) {
                     } catch {}
                   });
                 }
-                // publish minimal API
-                window.__tpScrollWrite = requestScrollTop;
+                // publish minimal API (stand down if TS already owns scrolling)
+                try {
+                  if (!window.__tpScrollSSOT || window.__tpScrollSSOT === 'js') {
+                    window.__tpScrollSSOT = 'js';
+                    window.__tpScrollWrite = requestScrollTop;
+                  }
+                } catch {}
                 // optional: wrap viewer.scrollTop writes
                 const sc = getScroller();
                 if (sc && !sc.__tpWriteWrapped) {
