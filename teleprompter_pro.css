@@ -285,6 +285,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     .camWrap{ position:fixed; right:16px; bottom:16px; width:280px; aspect-ratio:16/9; border:1px solid var(--edge); border-radius:12px; overflow:hidden; box-shadow:0 6px 22px rgba(0,0,0,.45); background:#000; opacity:1; z-index:20; display:none; }
     .camWrap.mirrored video{ transform: scaleX(-1); }
     .camWrap video{ width:100%; height:100%; object-fit:cover; display:block; aspect-ratio:16/9 }
+    .cam-rec-dot{position:absolute;top:12px;right:12px;width:16px;height:16px;background:#dc2626;border:2px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4);z-index:21;animation:cam-rec-pulse 1.5s ease-in-out infinite}
+    .cam-rec-dot.hidden{display:none}
+    @keyframes cam-rec-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(.95)}}
     .toolbar{display:flex;gap:6px;flex-wrap:wrap}
 .toolbar button{font-size:6px;padding:6px 8px}
 

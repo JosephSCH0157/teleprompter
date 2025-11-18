@@ -5616,6 +5616,21 @@ let _toast = function (msg, opts) {
         }, { passive: true });
       }
     } catch {}
+    // Camera recording dot indicator
+    try {
+      if (!window.__tpCamRecDotWired) {
+        window.__tpCamRecDotWired = true;
+        window.addEventListener('rec:state', (e) => {
+          try {
+            const dot = document.getElementById('camRecDot');
+            if (!dot) return;
+            const s = e && e.detail && e.detail.state;
+            if (s === 'recording') dot.classList.remove('hidden');
+            else dot.classList.add('hidden');
+          } catch {}
+        }, { passive: true });
+      }
+    } catch {}
     // OBS runtime flags (safe defaults)
     window.__obsConnected = false;
     window.__obsRecArmed = false;
