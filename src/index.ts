@@ -325,6 +325,8 @@ export async function boot() {
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
 								try { mountSettingsOverlay(); } catch {}
+								// Wire OBS UI once DOM nodes exist; idempotent if earlier init already ran
+								try { initObsUI(); } catch {}
 								// Wire single mic toggle button if present
 								try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)

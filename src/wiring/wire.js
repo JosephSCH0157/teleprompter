@@ -64,6 +64,12 @@ function defaultObsProbe(urlLike, pass) {
 
 export function initSettingsWiring() {
   try {
+    try {
+      if (window.__tpObsSSOT === 'ts') {
+        log('state', 'ts wiring owns OBS; legacy wire.js noop');
+        return;
+      }
+    } catch {}
     if (window.__tpObsWireActive) return; // idempotent
     window.__tpObsWireActive = true;
     // Claim OBS ownership so legacy settings wiring stands down

@@ -5,6 +5,7 @@
 // @ts-ignore - recorders.js is JS
 import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
+import { getSettings as getRecorderSettings, setSelected as setRecorderSelected } from '../recording/registry';
 
 // Optional: expose a dev console hook for quick OBS probes
 try { if (location.search.includes('dev=1')) { (window as any).__obsTestConnect = obsTestConnect; } } catch {}
@@ -46,6 +47,15 @@ export function initObsUI() {
   // UI checkbox reader is used to reflect state in the UI only; the engine relies on getObsEnabled()
   const readEnabledFromUI = () => !!(byId<HTMLInputElement>('settingsEnableObs')?.checked || byId<HTMLInputElement>('enableObs')?.checked);
   const writeEnabledToUI = (on: boolean) => {
+      const syncRegistrySelection = (on: boolean) => {
+        try {
+          const cfg = getRecorderSettings();
+          const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
+          if (on) next.add('obs'); else next.delete('obs');
+          setRecorderSelected(Array.from(next));
+        } catch {}
+      };
+
     try {
       const elA = byId<HTMLInputElement>('settingsEnableObs');
       const elB = byId<HTMLInputElement>('enableObs');
@@ -78,6 +88,7 @@ export function initObsUI() {
         const on = readEnabledFromUI();
         setObsEnabled(on);
         try { rec.setEnabled(on); } catch {}
+        syncRegistrySelection(on);
       }
       if (id === 'settingsObsUrl' || id === 'obsUrl' || id === 'settingsObsHost') {
         try { rec.reconfigure(parseWsUrl(readUrl(), readPass())); } catch {}
@@ -187,7 +198,14 @@ export function initObsUI() {
   try {
     const S = (window as any).__tpStore;
     if (S && typeof S.subscribe === 'function') {
-      try { S.subscribe('obsEnabled', (v: any) => { try { setObsEnabled(!!v); rec.setEnabled(!!v); } catch {} }); } catch {}
+      try {
+        S.subscribe('obsEnabled', (v: any) => {
+          const next = !!v;
+          try { setObsEnabled(next); } catch {}
+          try { rec.setEnabled(next); } catch {}
+          syncRegistrySelection(next);
+        });
+      } catch {}
       try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
       try { S.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
     }
@@ -197,6 +215,9 @@ export function initObsUI() {
   try {
     if (getObsEnabled()) {
       try { rec.setEnabled(true); } catch {}
+      syncRegistrySelection(true);
+    } else {
+      syncRegistrySelection(false);
     }
   } catch {}
   try {
