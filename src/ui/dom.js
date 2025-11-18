@@ -382,7 +382,7 @@ function wireScriptControls() {
     const clearBtn = document.getElementById('clearText');
     const resetBtn = document.getElementById('resetScriptBtn');
     const editor = document.getElementById('editor');
-    const title = document.getElementById('scriptTitle');
+    const _scriptTitleEl = document.getElementById('scriptTitle'); // unused (legacy wiring placeholder)
 
     if (clearBtn && !clearBtn.dataset.wired) {
       clearBtn.dataset.wired = '1';
