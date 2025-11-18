@@ -17,6 +17,8 @@
     "src/**/*.ts",
     "src/**/*.js",
     "recorders.ts",
+    "recorders-core.ts",
+    "recorders-bridge-compat.ts",
     "adapters/**/*.ts"
   ],
   "references": [

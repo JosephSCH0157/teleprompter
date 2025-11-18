@@ -7,7 +7,8 @@
   const OBS_PASSWORD_KEY = 'tp_obs_password';
   const OBS_SCENE_KEY = 'tp_obs_scene';
   const OBS_RECONNECT_KEY = 'tp_obs_reconnect';
-  const AUTO_RECORD_KEY = 'tp_auto_record';
+  const AUTO_RECORD_KEY = 'tp_auto_record_on_start_v1';
+  const LEGACY_AUTO_RECORD_KEY = 'tp_auto_record';
   const PREROLL_SEC_KEY = 'tp_preroll_seconds';
   const DEV_HUD_KEY = 'tp_dev_hud';
   const SETTINGS_TAB_KEY = 'tp_settings_tab';
@@ -60,7 +61,16 @@
     obsEnabled: (function(){ try { return localStorage.getItem(OBS_ENABLED_KEY) === '1'; } catch { return false; } })(),
   obsScene: (function(){ try { return localStorage.getItem(OBS_SCENE_KEY) || ''; } catch { return ''; } })(),
   obsReconnect: (function(){ try { return localStorage.getItem(OBS_RECONNECT_KEY) === '1'; } catch { return false; } })(),
-  autoRecord: (function(){ try { return localStorage.getItem(AUTO_RECORD_KEY) === '1'; } catch { return false; } })(),
+  autoRecord: (function(){
+    try {
+      const cur = localStorage.getItem(AUTO_RECORD_KEY);
+      if (cur === null || typeof cur === 'undefined') {
+        const legacy = localStorage.getItem(LEGACY_AUTO_RECORD_KEY);
+        if (legacy !== null) return legacy === '1';
+      }
+      return cur === '1';
+    } catch { return false; }
+  })(),
   prerollSeconds: (function(){ try { const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY)||'3',10); return isFinite(n) ? Math.max(0, Math.min(10, n)) : 3; } catch { return 3; } })(),
   devHud: (function(){ try { return localStorage.getItem(DEV_HUD_KEY) === '1'; } catch { return false; } })(),
   obsHost: (function(){ try { return localStorage.getItem(OBS_HOST_KEY) || ''; } catch { return ''; } })(),
@@ -115,6 +125,9 @@
           if (typeof value === 'boolean') localStorage.setItem(storageKey, value ? '1' : '0');
           else if (value === null || typeof value === 'undefined') localStorage.removeItem(storageKey);
           else localStorage.setItem(storageKey, String(value));
+          if (key === 'autoRecord') {
+            try { localStorage.removeItem(LEGACY_AUTO_RECORD_KEY); } catch {}
+          }
         }
       } catch {}
       notify(key, value);

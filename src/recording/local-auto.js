@@ -239,7 +239,34 @@ export { };
     if (_active) return; // already running
     try {
       const S = (window.__tpStore || null);
-      const armed = S && typeof S.get === 'function' ? !!S.get('autoRecord') : !!(localStorage.getItem('tp_auto_record') === '1');
+      let armed;
+      try {
+        if (S && typeof S.get === 'function') {
+          const val = S.get('autoRecord');
+          if (typeof val === 'boolean') armed = val;
+        }
+      } catch {}
+      if (typeof armed !== 'boolean') {
+        try {
+          if (window.__tpRecording && typeof window.__tpRecording.wantsAuto === 'function') {
+            const wants = window.__tpRecording.wantsAuto();
+            if (typeof wants !== 'undefined') armed = !!wants;
+          }
+        } catch {}
+      }
+      if (typeof armed !== 'boolean') {
+        try {
+          const cur = localStorage.getItem('tp_auto_record_on_start_v1');
+          if (cur === null || typeof cur === 'undefined') {
+            const legacy = localStorage.getItem('tp_auto_record');
+            armed = legacy === '1';
+          } else {
+            armed = cur === '1';
+          }
+        } catch {
+          armed = false;
+        }
+      }
       if (!armed) return; // feature disabled
       if (!allowedByMode()) { try { console.info('[auto-record] skip (rehearsal mode)'); } catch {} return; }
       _stream = await ensureStreams();

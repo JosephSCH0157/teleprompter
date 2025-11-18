@@ -17,6 +17,48 @@ let originalClampGuard = null;
 let guardInstalled = false;
 let keyListenerInstalled = false;
 let wiredSelectListeners = false;
+function readAutoRecordPref() {
+    try {
+        const store = window.__tpStore || null;
+        if (store && typeof store.get === 'function') {
+            const val = store.get('autoRecord');
+            if (typeof val === 'boolean')
+                return val;
+        }
+    }
+    catch { }
+    try {
+        const cur = localStorage.getItem('tp_auto_record_on_start_v1');
+        if (cur === null || typeof cur === 'undefined') {
+            const legacy = localStorage.getItem('tp_auto_record');
+            if (legacy !== null)
+                return legacy === '1';
+        }
+        return cur === '1';
+    }
+    catch {
+        return false;
+    }
+}
+function writeAutoRecordPref(next) {
+    const enabled = !!next;
+    try {
+        const store = window.__tpStore || null;
+        if (store && typeof store.set === 'function') {
+            store.set('autoRecord', enabled);
+            return;
+        }
+    }
+    catch { }
+    try {
+        localStorage.setItem('tp_auto_record_on_start_v1', enabled ? '1' : '0');
+    }
+    catch { }
+    try {
+        localStorage.removeItem('tp_auto_record');
+    }
+    catch { }
+}
 function toast(msg) {
     try {
         window.toasts?.show?.(msg);
@@ -142,7 +184,7 @@ function stopAllRecordingPaths() {
 }
 function capturePrev() {
     try {
-        prev.autoRecord = !!(localStorage.getItem('tp_auto_record_on_start_v1') === '1');
+        prev.autoRecord = readAutoRecordPref();
     }
     catch { }
     try {
@@ -152,10 +194,7 @@ function capturePrev() {
 }
 function restorePrev() {
     try {
-        if (prev.autoRecord)
-            localStorage.setItem('tp_auto_record_on_start_v1', '1');
-        else
-            localStorage.removeItem('tp_auto_record_on_start_v1');
+        writeAutoRecordPref(prev.autoRecord);
     }
     catch { }
     // OBS armed state is user-driven; do not auto-toggle it here (avoid side effects)

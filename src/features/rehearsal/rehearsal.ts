@@ -33,6 +33,51 @@ let guardInstalled = false;
 let keyListenerInstalled = false;
 let wiredSelectListeners = false;
 
+function readAutoRecordPref(): boolean {
+  try {
+    const store = (window as any).__tpStore || null;
+    if (store && typeof store.get === 'function') {
+      const val = store.get('autoRecord');
+      if (typeof val === 'boolean') return val;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const cur = localStorage.getItem('tp_auto_record_on_start_v1');
+    if (cur === null || typeof cur === 'undefined') {
+      const legacy = localStorage.getItem('tp_auto_record');
+      if (legacy !== null) return legacy === '1';
+    }
+    return cur === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeAutoRecordPref(next: boolean): void {
+  const enabled = !!next;
+  try {
+    const store = (window as any).__tpStore || null;
+    if (store && typeof store.set === 'function') {
+      store.set('autoRecord', enabled);
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.setItem('tp_auto_record_on_start_v1', enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem('tp_auto_record');
+  } catch {
+    /* ignore */
+  }
+}
+
 function toast(msg: string): void {
   try {
     (window as any).toasts?.show?.(msg);
@@ -185,8 +230,7 @@ function stopAllRecordingPaths(): void {
 
 function capturePrev(): void {
   try {
-    prev.autoRecord =
-      localStorage.getItem('tp_auto_record_on_start_v1') === '1';
+    prev.autoRecord = readAutoRecordPref();
   } catch {
     prev.autoRecord = false;
   }
@@ -199,11 +243,7 @@ function capturePrev(): void {
 
 function restorePrev(): void {
   try {
-    if (prev.autoRecord) {
-      localStorage.setItem('tp_auto_record_on_start_v1', '1');
-    } else {
-      localStorage.removeItem('tp_auto_record_on_start_v1');
-    }
+    writeAutoRecordPref(prev.autoRecord);
   } catch {
     /* ignore */
   }

@@ -2141,6 +2141,48 @@ let _toast = function (msg, opts) {
     __tpBootPush('after-buildSettingsContent-def');
   } catch {}
 
+  function readAutoRecordPref() {
+    try {
+      const store = window.__tpStore || null;
+      if (store && typeof store.get === 'function') {
+        const v = store.get('autoRecord');
+        if (typeof v === 'boolean') return v;
+      }
+    } catch {}
+    try {
+      if (window.__tpRecording && typeof window.__tpRecording.wantsAuto === 'function') {
+        return !!window.__tpRecording.wantsAuto();
+      }
+    } catch {}
+    try {
+      const cur = localStorage.getItem('tp_auto_record_on_start_v1');
+      if (cur === null || typeof cur === 'undefined') {
+        const legacy = localStorage.getItem('tp_auto_record');
+        if (legacy !== null) return legacy === '1';
+      }
+      return cur === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function writeAutoRecordPref(next) {
+    const enabled = !!next;
+    let handled = false;
+    try {
+      const store = window.__tpStore || null;
+      if (store && typeof store.set === 'function') {
+        store.set('autoRecord', enabled);
+        handled = true;
+      }
+    } catch {}
+    if (!handled) {
+      try { localStorage.setItem('tp_auto_record_on_start_v1', enabled ? '1' : '0'); } catch {}
+    }
+    try { localStorage.removeItem('tp_auto_record'); } catch {}
+    return enabled;
+  }
+
   function syncSettingsValues() {
     // Ensure OBS fields are hydrated from storage and persistence is wired before we mirror values
     try {
@@ -2195,20 +2237,35 @@ let _toast = function (msg, opts) {
     try {
       const autoRec = document.getElementById('autoRecordToggle');
       if (autoRec) {
-        try {
-          autoRec.checked = localStorage.getItem('tp_auto_record') === '1';
-        } catch {
-          void 0;
-        }
-        autoRec.addEventListener('change', () => {
+        const apply = (value) => {
           try {
-            localStorage.setItem('tp_auto_record', autoRec.checked ? '1' : '0');
-            // refresh obs status when toggling
-            try {
-              window.refreshObsStatus && window.refreshObsStatus();
-            } catch {}
+            const want = !!value;
+            if (autoRec.checked !== want) autoRec.checked = want;
           } catch {}
-        });
+        };
+        if (!autoRec.dataset.autoBound) {
+          autoRec.dataset.autoBound = '1';
+          try {
+            const store = window.__tpStore || null;
+            if (store && typeof store.subscribe === 'function') {
+              store.subscribe('autoRecord', (val) => { try { apply(val); } catch {} });
+            } else {
+              apply(readAutoRecordPref());
+            }
+          } catch {
+            apply(readAutoRecordPref());
+          }
+          autoRec.addEventListener('change', () => {
+            try {
+              writeAutoRecordPref(autoRec.checked);
+              try {
+                window.refreshObsStatus && window.refreshObsStatus();
+              } catch {}
+            } catch {}
+          });
+        } else {
+          apply(readAutoRecordPref());
+        }
       }
     } catch {}
     try {
@@ -2257,7 +2314,7 @@ let _toast = function (msg, opts) {
   // Getter for auto-record preference
   window.getAutoRecordEnabled = function () {
     try {
-      return localStorage.getItem('tp_auto_record') === '1';
+      return !!readAutoRecordPref();
     } catch {
       return false;
     }
