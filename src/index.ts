@@ -47,6 +47,7 @@ import { initScroll } from './features/scroll.js';
 import { initTelemetry } from './features/telemetry.js';
 
 // === UI Scroll Mode Router ===
+import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
 import { createScrollBrain } from './scroll/scroll-brain';
 
@@ -55,6 +56,10 @@ type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
 // Create and expose the scroll brain globally
 const scrollBrain = createScrollBrain();
 (window as any).__tpScrollBrain = scrollBrain;
+
+export function getScrollBrain() {
+	return scrollBrain;
+}
 
 function applyUiScrollMode(mode: UiScrollMode) {
   // Store the UI mode somewhere global so existing JS can still read it
@@ -219,6 +224,9 @@ try {
 		} catch (err) {
 			try { console.warn('[auto-scroll] wiring failed', err); } catch {}
 		}
+
+		// 3) Bridge legacy mode selectors into the TS scroll brain
+		try { initScrollModeBridge(); } catch {}
 	}, { once: true });
 } catch {}
 
