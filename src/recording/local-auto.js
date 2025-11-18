@@ -269,7 +269,26 @@ export { };
       const blob = new Blob(_chunks.slice(), { type: 'video/webm' });
       _chunks = [];
       const name = 'Teleprompter_' + nowStamp() + '.webm';
-      // Try File System Access API (save file prompt). If not allowed, fall back to download.
+      
+      // 1. Try mapped folder handle first (persistent auto-save folder)
+      try {
+        await import('../fs/recording-dir.js');
+        if (window.__tpRecDir && typeof window.__tpRecDir.init === 'function') { try { await window.__tpRecDir.init(); } catch {} }
+        const dir = window.__tpRecDir && typeof window.__tpRecDir.get === 'function' ? window.__tpRecDir.get() : null;
+        if (dir) {
+          const perm = (await dir.requestPermission?.({ mode: 'readwrite' })) || (await dir.queryPermission?.({ mode: 'readwrite' }));
+          if (perm === 'granted' || perm === 'prompt') {
+            const fh = await dir.getFileHandle(name, { create: true });
+            const w = await fh.createWritable(); await w.write(blob); await w.close();
+            try { (window.toast || ((m)=>console.debug('[toast]', m)))('Recording saved to folder: ' + name, { type: 'ok' }); } catch {}
+            return;
+          }
+        }
+      } catch (dirErr) {
+        try { console.debug('[auto-record] folder save failed, trying picker', dirErr); } catch {}
+      }
+      
+      // 2. Try File System Access API (save file prompt). If not allowed, fall back to download.
       const canPicker = !!(window.showSaveFilePicker);
       if (canPicker) {
         try {
@@ -282,7 +301,7 @@ export { };
           // User canceled or NotAllowed (no gesture) → fall back
         }
       }
-      // Download fallback
+      // 3. Download fallback
       try {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
