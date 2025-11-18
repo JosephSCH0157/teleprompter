@@ -47,15 +47,20 @@ import { initScroll } from './features/scroll.js';
 import { initTelemetry } from './features/telemetry.js';
 
 // === UI Scroll Mode Router ===
+import { installAsrScrollBridge } from './scroll/asr-bridge';
 import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
 import { createScrollBrain } from './scroll/scroll-brain';
+import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
 
 // Create and expose the scroll brain globally
 const scrollBrain = createScrollBrain();
 (window as any).__tpScrollBrain = scrollBrain;
+
+installWpmSpeedBridge(() => scrollBrain);
+installAsrScrollBridge(() => scrollBrain);
 
 export function getScrollBrain() {
 	return scrollBrain;
@@ -220,10 +225,30 @@ try {
 						try { (Auto as any).setSpeed?.(Number(autoSpeed.value)); } catch {}
 					});
 				}
+
+				const applySliderToBrain = () => {
+					try {
+						const val = Number(autoSpeed.value);
+						if (!Number.isFinite(val)) return;
+						scrollBrain.onManualSpeedAdjust(val);
+					} catch {}
+				};
+				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });
+				applySliderToBrain();
 			}
 		} catch (err) {
 			try { console.warn('[auto-scroll] wiring failed', err); } catch {}
 		}
+
+		try {
+			const handleAutoSpeedEvt = (ev: Event) => {
+				const detail = (ev as CustomEvent).detail || {};
+				const speed = Number(detail?.speed);
+				if (!Number.isFinite(speed)) return;
+				scrollBrain.onManualSpeedAdjust(speed);
+			};
+			document.addEventListener('tp:autoSpeed', handleAutoSpeedEvt as EventListener, { capture: true });
+		} catch {}
 
 		// 3) Bridge legacy mode selectors into the TS scroll brain
 		try { initScrollModeBridge(); } catch {}
