@@ -4,15 +4,6 @@ export async function init() {
   console.log('[src/adapters/obs] init');
 }
 
-// Unified OBS state notifications
-// ObsState = 'disconnected' | 'connecting' | 'connected' | 'identified' | 'error'
-let __obsState = 'disconnected';
-function setObsState(next, detail) {
-  try { __obsState = String(next || 'disconnected'); } catch {}
-  try { if (typeof window !== 'undefined' && window.__tpHUD && window.__tpHUD.log) window.__tpHUD.log('obs:state', { state: __obsState, detail }); } catch {}
-  try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tp:obs:state', { detail: { state: __obsState, detail } })); } catch {}
-}
-
 function createEmitter() {
   const handlers = Object.create(null);
   return {
@@ -84,7 +75,7 @@ export function connect(urlOrOpts, pass) {
   const pwd = Object.prototype.hasOwnProperty.call(options, 'password') ? options.password : pass;
 
   if (typeof WebSocket === 'undefined' || (!url && !host)) {
-    setTimeout(() => { emitter.emit('connecting'); setObsState('connecting'); emitter.emit('error', new Error('WebSocket not available or url missing')); setObsState('error', { reason: 'no-ws-or-url' }); emitter.emit('closed'); setObsState('disconnected'); }, 0);
+    setTimeout(() => { emitter.emit('connecting'); emitter.emit('error', new Error('WebSocket not available or url missing')); emitter.emit('closed'); }, 0);
     return Object.assign(emitter, { close: () => {}, request: async () => ({ ok:false, error:'no-ws' }) });
   }
 
@@ -129,7 +120,6 @@ export function connect(urlOrOpts, pass) {
     }
     if (op === 2) { // Identified
       identified = true;
-      setObsState('identified');
       emitter.emit('identified');
       try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'identified', authOK: true } })); } catch {}
       // Proactively fetch current scene to complete initial state snapshot
@@ -169,11 +159,7 @@ export function connect(urlOrOpts, pass) {
         if (entry) {
           pending.delete(id);
           if (status && status.result) entry.resolve({ ok: true, code: status.code, data: d?.responseData });
-          else {
-            // Surface RPC errors to unified state for UI clarity
-            try { setObsState('error', { code: status && status.code, comment: status && status.comment }); } catch {}
-            entry.resolve({ ok: false, code: status && status.code, error: (status && status.comment) || 'request-failed' });
-          }
+          else entry.resolve({ ok: false, code: status && status.code, error: (status && status.comment) || 'request-failed' });
         }
       } catch {}
     }
@@ -196,13 +182,12 @@ export function connect(urlOrOpts, pass) {
   const openSocket = () => {
     try {
       emitter.emit('connecting');
-      setObsState('connecting');
       try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'connecting' } })); } catch {}
       ws = new WebSocket(mkUrl());
-      ws.onopen = () => { emitter.emit('open'); retry = 0; setObsState('connected'); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'open', recording: false } })); } catch {} };
+      ws.onopen = () => { emitter.emit('open'); retry = 0; try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'open', recording: false } })); } catch {} };
       ws.onmessage = onMessage;
-      ws.onerror = () => { emitter.emit('error', new Error('WebSocket error')); setObsState('error', { reason: 'ws-error' }); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'error' } })); } catch {} };
-      ws.onclose = () => { emitter.emit('closed'); setObsState('disconnected'); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'closed', recording: false } })); } catch {} schedule(); };
+      ws.onerror = () => { emitter.emit('error', new Error('WebSocket error')); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'error' } })); } catch {} };
+      ws.onclose = () => { emitter.emit('closed'); try { window.dispatchEvent(new CustomEvent('tp:obs', { detail: { status: 'closed', recording: false } })); } catch {} schedule(); };
     } catch (err) { emitter.emit('error', err); }
   };
   setTimeout(() => { if (!closedByUser) openSocket(); }, 0);

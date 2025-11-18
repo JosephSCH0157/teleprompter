@@ -1070,13 +1070,6 @@
         const pickBtn = q('autoRecordPickBtn');
         const clearBtn = q('autoRecordClearBtn');
 
-        // HUD/event reporter for autosave folder status
-        function reportAutoSaveFolder(detail){
-          try { (window.__tpHUD && window.__tpHUD.log) && window.__tpHUD.log('autosave:folder', detail || {}); } catch {}
-          try { (window.__tpHud && window.__tpHud.log) && window.__tpHud.log('autosave:folder', detail || {}); } catch {}
-          try { window.dispatchEvent(new CustomEvent('tp:autosave:folder', { detail: { ...(detail||{}), ts: Date.now() } })); } catch {}
-        }
-
         async function renderFolder() {
           try {
             // lazy import helper; it attaches window.__tpRecDir
@@ -1086,14 +1079,12 @@
             if (folderNameEl) {
               if (dir) {
                 folderNameEl.textContent = dir.name || 'Selected';
-                try { reportAutoSaveFolder({ ok: true, name: dir && dir.name || 'Selected' }); } catch {}
               } else {
                 // Under smoke/CI mock we expose a deterministic folder label for assertions.
                 let mock = false; try { mock = new URLSearchParams(location.search||'').has('mockFolder'); } catch {}
                 folderNameEl.textContent = mock ? 'MockRecordings' : 'Not set';
                 // Also surface on parent span for harness substring match (defensive)
                 try { const wrap = folderNameEl.closest('[data-test-id="rec-folder-label"]'); if (wrap && mock) wrap.dataset.mockApplied = '1'; } catch {}
-                try { reportAutoSaveFolder({ ok: false, reason: mock ? 'mock' : 'not-set' }); } catch {}
               }
             }
           } catch {}
@@ -1104,33 +1095,19 @@
             await import('../fs/recording-dir.js');
             const supported = !!(window.__tpRecDir && window.__tpRecDir.supported && window.__tpRecDir.supported());
             if (!supported) {
-              try { reportAutoSaveFolder({ ok: false, reason: 'unsupported' }); } catch {}
               (window.toast || ((m)=>console.debug('[toast]', m)))('This browser will download recordings instead of saving to a folder.', { type: 'warn' });
               return true; // not an error; we just warn and proceed with downloads
             }
             const existing = window.__tpRecDir && window.__tpRecDir.get ? window.__tpRecDir.get() : null;
             if (existing) return true; // nothing to do
-            let dir = null;
-            try {
-              dir = await window.__tpRecDir.pick();
-            } catch (e) {
-              const name = (e && (e.name || e.code)) || 'Error';
-              try { reportAutoSaveFolder({ ok: false, reason: 'pick-error', error: name }); } catch {}
-              // Re-throw so outer catch handles generic flow
-              throw e;
-            }
+            const dir = await window.__tpRecDir.pick();
             if (!dir) {
-              try { reportAutoSaveFolder({ ok: false, reason: 'canceled' }); } catch {}
               (window.toast || ((m)=>console.debug('[toast]', m)))('Auto-save canceled — no folder selected.', { type: 'warn' });
               return false;
             }
-            try { reportAutoSaveFolder({ ok: true, name: dir && dir.name }); } catch {}
             await renderFolder();
             return true;
-          } catch (err) {
-            try { reportAutoSaveFolder({ ok: false, reason: 'error', error: (err && (err.name || err.code)) || String(err) }); } catch {}
-            return false;
-          }
+          } catch { return false; }
         }
 
         // On enabling auto-save, if supported and no folder yet: prompt; revert if canceled

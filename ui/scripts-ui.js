@@ -113,8 +113,11 @@ function setEditorContent(txt) {
 
 function getMappedFolderHandle() {
   try {
-    const folder = typeof window !== 'undefined' ? window.__tpFolder?.get?.() : null;
-    return folder || null;
+    if (typeof window === 'undefined') return null;
+    // Prefer direct handle exposed by the main app; fall back to older facade if present
+    const h1 = window.__tpFolderHandle || null;
+    const h2 = window.__tpFolder?.get?.() || null;
+    return h1 || h2 || null;
   } catch {
     return null;
   }
@@ -150,6 +153,14 @@ function stripExt(name) {
     return String(name || '').replace(/\.[^.]+$/, '');
   } catch {
     return 'Untitled';
+  }
+}
+function getExt(name, fallback = '.txt') {
+  try {
+    const m = String(name || '').match(/(\.[^.]+)$/);
+    return m ? m[1] : fallback;
+  } catch {
+    return fallback;
   }
 }
 function titleValue(fallback = 'Untitled') {
@@ -297,10 +308,31 @@ async function saveCurrent(text) {
 }
 async function saveAs(text) {
   try {
-    const suggested = titleValue(currentScript?.name || 'Untitled');
+    // Prefer suggesting a distinct name to avoid overwriting the selected file by default
+    const curName = currentScript?.name || '';
+    const baseTitle = stripExt(curName || titleValue('Untitled')) || 'Untitled';
+    const ext = getExt(curName || titleValue('Untitled')) || '.txt';
+    let suggested = `${baseTitle} (copy)`;
     const folder = getMappedFolderHandle();
     if (folder) {
       try {
+        // If a folder is available, attempt to generate a unique suggestion under that folder
+        async function existsInFolder(name) {
+          try { await folder.getFileHandle(name, { create: false }); return true; } catch { return false; }
+        }
+        async function uniqueSuggestion(base, extName) {
+          // Start with "Base (copy)" then increment
+          let idx = 0;
+          while (true) {
+            const candidate = idx === 0 ? `${base} (copy)${extName}` : `${base} (copy ${idx+1})${extName}`;
+            // Ensure we don't suggest the exact current selection
+            if (candidate !== ensureFileName(curName) && !(await existsInFolder(candidate))) return candidate;
+            idx += 1;
+            if (idx > 200) return `${base}-${Date.now()}${extName}`; // safety valve
+          }
+        }
+        suggested = await uniqueSuggestion(baseTitle, ext);
+
         if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
           const handle = await window.showSaveFilePicker({
             suggestedName: ensureFileName(suggested),
@@ -318,12 +350,31 @@ async function saveAs(text) {
           const toName = prompt('Save script as (File System):', ensureFileName(suggested));
           if (toName) {
             try {
-              const handle = await folder.getFileHandle(ensureFileName(toName), { create: true });
+              let finalName = ensureFileName(toName);
+              // Avoid overwriting the currently selected file name by default
+              if (curName && finalName === ensureFileName(curName)) {
+                // Choose a unique variant automatically
+                finalName = await (async () => {
+                  const b = stripExt(curName);
+                  const e = getExt(curName);
+                  return await (async function next(base){
+                    let i = 0;
+                    while (true) {
+                      const cand = i === 0 ? `${base} (copy)${e}` : `${base} (copy ${i+1})${e}`;
+                      try { await folder.getFileHandle(cand, { create: false }); i += 1; }
+                      catch { return cand; }
+                      if (i > 200) return `${base}-${Date.now()}${e}`;
+                    }
+                  })(b);
+                })();
+              }
+              const handle = await folder.getFileHandle(finalName, { create: true });
               const ok = await writeHandle(handle, text);
               if (ok) {
-                setCurrentScript({ id: null, name: handle.name || toName, backend: 'folder', handle });
-                updateTitleFromName(handle.name || toName);
-                upsertFolderOption(handle.name || toName, handle);
+                const nm = handle.name || finalName;
+                setCurrentScript({ id: null, name: nm, backend: 'folder', handle });
+                updateTitleFromName(nm);
+                upsertFolderOption(nm, handle);
                 toastFn('Script saved', { type: 'ok' });
                 return;
               }
@@ -342,6 +393,7 @@ async function saveAs(text) {
         // fall through to browser save for unexpected errors
       }
     }
+    // Browser storage fallback: avoid overwriting the current browser script by default
     const name = prompt('Save script as:', suggested);
     if (!name) return;
     const title = String(name);
@@ -420,8 +472,6 @@ try {
   scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
   scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
   scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
-  // Mark modern Scripts UI as wired so legacy handlers can opt-out
-  try { if (typeof window !== 'undefined') window.__tpScriptsUIWired = true; } catch {}
 } catch {
   console.debug('scripts-ui wiring');
 }
