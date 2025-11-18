@@ -205,75 +205,6 @@ const OBS_KEYS = {
   secure:  'obs.secure',
 };
 
-async function obsApplyEnabled(next) {
-  const enabled = !!next;
-  const persistBool = (key) => {
-    try { localStorage.setItem(key, enabled ? '1' : '0'); } catch {}
-  };
-  persistBool(OBS_KEYS.enabled);
-  persistBool('settings.obs.enabled');
-  persistBool('tp_obs_enabled');
-  persistBool('tp_obs_enabled_v1');
-  persistBool('tp_obs_enabled_v2');
-  try {
-    const store = window.__tpStore;
-    if (store && typeof store.set === 'function') {
-      store.set('obsEnabled', enabled);
-    }
-  } catch {}
-
-  const errors = [];
-  const capture = async (fn) => {
-    if (typeof fn !== 'function') return;
-    try {
-      await fn();
-    } catch (err) {
-      errors.push(err);
-    }
-  };
-
-  try { window.__tpObs?.setArmed?.(enabled); } catch (err) { errors.push(err); }
-  try { window.__obsBridge?.enableAutoReconnect?.(enabled); } catch (err) { errors.push(err); }
-
-  const rec = window.__recorder?.get?.('obs') || null;
-  if (rec && typeof rec.setEnabled === 'function') {
-    try { rec.setEnabled(enabled); } catch (err) { errors.push(err); }
-  }
-
-  if (enabled) {
-    await capture(() => window.__obsBridge?.maybeConnect?.());
-    if (!window.__obsBridge?.maybeConnect && window.__obsBridge?.connect) {
-      await capture(() => window.__obsBridge.connect());
-    }
-    if (rec && typeof rec.connect === 'function') {
-      await capture(() => rec.connect());
-    }
-  } else {
-    await capture(() => window.__obsBridge?.stop?.());
-    await capture(() => window.__obsBridge?.disconnect?.());
-    if (rec && typeof rec.disconnect === 'function') {
-      await capture(() => rec.disconnect());
-    }
-  }
-
-  const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
-  if (pill) {
-    try {
-      pill.textContent = enabled ? 'OBS: enabled' : 'OBS: disabled';
-      pill.dataset.state = enabled ? 'connected' : 'off';
-    } catch {}
-  }
-  try {
-    window.dispatchEvent(new CustomEvent('obs:enabled-change', { detail: { enabled } }));
-  } catch {}
-
-  if (errors.length) {
-    const err = new Error('Failed to toggle OBS');
-    err.causes = errors;
-    throw err;
-  }
-}
-
 function readObsSettingsFromUIorStorage() {
   const urlEl   = document.getElementById('obsUrl');
   const passEl  = document.getElementById('obsPass');
@@ -3350,34 +3281,13 @@ let _toast = function (msg, opts) {
     // Settings toggle
     const settingsEnableObs = document.getElementById('settingsEnableObs');
     if (!enableObsChk && !settingsEnableObs) return;
-    // Helper to sync both toggles
-    function syncToggles(val) {
-      if (enableObsChk) enableObsChk.checked = !!val;
-      if (settingsEnableObs) settingsEnableObs.checked = !!val;
-    }
     // Main handler for toggle changes
     async function onToggleChange(e) {
       const checked = e?.target?.checked ?? enableObsChk?.checked ?? settingsEnableObs?.checked;
-      syncToggles(checked);
-      const { bridge, adapter } = await robustLoadObs();
-      // Prefer bridge if available
-      if (bridge && typeof bridge.isConnected === 'function') {
-        try {
-          if (checked) {
-            if (!bridge.isConnected()) await bridge.start?.();
-          } else {
-            if (bridge.isConnected()) await bridge.stop?.();
-          }
-        } catch (err) {
-          window.HUD?.warn?.('obs:toggle_bridge_fail', String(err && err.message || err));
-        }
-      } else if (adapter) {
-        try {
-          if (checked) await adapter.connect?.();
-          else await adapter.disconnect?.();
-        } catch (err) {
-          window.HUD?.warn?.('obs:toggle_adapter_fail', String(err && err.message || err));
-        }
+      try {
+        await obsApplyEnabled(checked);
+      } catch (err) {
+        window.HUD?.warn?.('obs:toggle_apply_fail', String(err && err.message || err));
       }
     }
     // Wire both toggles
@@ -6686,6 +6596,113 @@ let _toast = function (msg, opts) {
       const pill = document.getElementById('obsStatusText');
       if (pill) pill.textContent = String(text || 'unknown');
     } catch {}
+  }
+
+  // Central helper: apply OBS enabled/disabled state everywhere (UI + recorder + bridge)
+  async function obsApplyEnabled(enabled) {
+    const on = !!enabled;
+
+    // 1. Persist the flag
+    try {
+      localStorage.setItem(OBS_ENABLED_KEY, on ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+
+    // 2. Mirror both toggles (main panel + Settings)
+    try {
+      const mainToggle = document.getElementById('enableObs');
+      const settingsToggle = document.getElementById('settingsEnableObs');
+      if (mainToggle && mainToggle.checked !== on) mainToggle.checked = on;
+      if (settingsToggle && settingsToggle.checked !== on) settingsToggle.checked = on;
+    } catch {
+      /* ignore */
+    }
+
+    // 3. Update status pill / text
+    const pillText = on ? 'enabled' : 'disabled';
+    try {
+      const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+      if (pill) pill.textContent = pillText;
+    } catch {
+      /* ignore */
+    }
+
+    // 4. Talk to the recorder adapter (preferred path)
+    try {
+      const reg = await (typeof loadRecorder === 'function' ? loadRecorder() : null);
+      const rec = reg && typeof reg.get === 'function' ? reg.get('obs') : null;
+
+      if (rec) {
+        // best-effort: let adapter know we're toggling
+        try {
+          if (typeof rec.setEnabled === 'function') {
+            await rec.setEnabled(on);
+          }
+        } catch {
+          /* ignore */
+        }
+
+        if (on) {
+          // init/connect if available
+          try {
+            if (typeof rec.init === 'function') {
+              await rec.init();
+            }
+          } catch {
+            /* ignore */
+          }
+          try {
+            if (typeof rec.connect === 'function') {
+              await rec.connect();
+            }
+          } catch {
+            /* ignore */
+          }
+        } else {
+          // disconnect/stop when disabling
+          try {
+            if (typeof rec.disconnect === 'function') {
+              await rec.disconnect();
+            } else if (typeof rec.stop === 'function') {
+              await rec.stop();
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } catch (err) {
+      // Surface a visible error if the adapter path blew up
+      try {
+        const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+        if (pill) pill.textContent = 'error';
+      } catch {/* ignore */}
+      console.warn('[OBS] obsApplyEnabled error', err);
+      throw err;
+    }
+
+    // 5. Keep simple runtime flags + event in sync for any listeners
+    try {
+      window.__obsRecArmed = !!on;
+    } catch {/* ignore */}
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent('obs:enabled-change', { detail: { enabled: on } }),
+      );
+    } catch {
+      /* ignore */
+    }
+
+    return on;
+  }
+
+  // Optional: expose on window for older call-sites that expect window.obsApplyEnabled
+  try {
+    window.obsApplyEnabled = obsApplyEnabled;
+  } catch {
+    /* ignore */
   }
 
   function validateHostPort(host, port) {
