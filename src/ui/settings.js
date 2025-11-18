@@ -1090,7 +1090,7 @@
           } catch {}
         }
 
-        async function pickFolderFlow() {
+        async function pickFolderFlow({ force } = {}) {
           try {
             await import('../fs/recording-dir.js');
             const supported = !!(window.__tpRecDir && window.__tpRecDir.supported && window.__tpRecDir.supported());
@@ -1099,7 +1099,7 @@
               return true; // not an error; we just warn and proceed with downloads
             }
             const existing = window.__tpRecDir && window.__tpRecDir.get ? window.__tpRecDir.get() : null;
-            if (existing) return true; // nothing to do
+            if (existing && !force) return true; // nothing to do unless forced (Change button)
             const dir = await window.__tpRecDir.pick();
             if (!dir) {
               (window.toast || ((m)=>console.debug('[toast]', m)))('Auto-save canceled — no folder selected.', { type: 'warn' });
@@ -1125,7 +1125,7 @@
 
         if (pickBtn && !pickBtn.dataset.wired) {
           pickBtn.dataset.wired = '1';
-          pickBtn.addEventListener('click', async () => { await pickFolderFlow(); });
+          pickBtn.addEventListener('click', async () => { await pickFolderFlow({ force: true }); });
         }
         if (clearBtn && !clearBtn.dataset.wired) {
           clearBtn.dataset.wired = '1';
