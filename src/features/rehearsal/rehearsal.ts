@@ -45,10 +45,6 @@ function readAutoRecordPref(): boolean {
   }
   try {
     const cur = localStorage.getItem('tp_auto_record_on_start_v1');
-    if (cur === null || typeof cur === 'undefined') {
-      const legacy = localStorage.getItem('tp_auto_record');
-      if (legacy !== null) return legacy === '1';
-    }
     return cur === '1';
   } catch {
     return false;
@@ -68,11 +64,6 @@ function writeAutoRecordPref(next: boolean): void {
   }
   try {
     localStorage.setItem('tp_auto_record_on_start_v1', enabled ? '1' : '0');
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.removeItem('tp_auto_record');
   } catch {
     /* ignore */
   }

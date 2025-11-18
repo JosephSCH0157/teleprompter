@@ -257,12 +257,7 @@ export { };
       if (typeof armed !== 'boolean') {
         try {
           const cur = localStorage.getItem('tp_auto_record_on_start_v1');
-          if (cur === null || typeof cur === 'undefined') {
-            const legacy = localStorage.getItem('tp_auto_record');
-            armed = legacy === '1';
-          } else {
-            armed = cur === '1';
-          }
+          armed = cur === '1';
         } catch {
           armed = false;
         }

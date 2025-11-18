@@ -54,6 +54,25 @@
     rehearsalResumeMs: REH_RESUME_KEY,
   };
 
+  function migrateAutoRecordFlag() {
+    try {
+      const current = localStorage.getItem(AUTO_RECORD_KEY);
+      if (current !== null && typeof current !== 'undefined') {
+        if (localStorage.getItem(LEGACY_AUTO_RECORD_KEY) !== null) {
+          try { localStorage.removeItem(LEGACY_AUTO_RECORD_KEY); } catch {}
+        }
+        return;
+      }
+      const legacy = localStorage.getItem(LEGACY_AUTO_RECORD_KEY);
+      if (legacy !== null && typeof legacy !== 'undefined') {
+        localStorage.setItem(AUTO_RECORD_KEY, legacy === '1' ? '1' : '0');
+        try { localStorage.removeItem(LEGACY_AUTO_RECORD_KEY); } catch {}
+      }
+    } catch {}
+  }
+
+  migrateAutoRecordFlag();
+
   const state = {
     // UI / Settings
     settingsTab: (function(){ try { return localStorage.getItem(SETTINGS_TAB_KEY) || 'general'; } catch { return 'general'; } })(),
@@ -61,16 +80,7 @@
     obsEnabled: (function(){ try { return localStorage.getItem(OBS_ENABLED_KEY) === '1'; } catch { return false; } })(),
   obsScene: (function(){ try { return localStorage.getItem(OBS_SCENE_KEY) || ''; } catch { return ''; } })(),
   obsReconnect: (function(){ try { return localStorage.getItem(OBS_RECONNECT_KEY) === '1'; } catch { return false; } })(),
-  autoRecord: (function(){
-    try {
-      const cur = localStorage.getItem(AUTO_RECORD_KEY);
-      if (cur === null || typeof cur === 'undefined') {
-        const legacy = localStorage.getItem(LEGACY_AUTO_RECORD_KEY);
-        if (legacy !== null) return legacy === '1';
-      }
-      return cur === '1';
-    } catch { return false; }
-  })(),
+  autoRecord: (function(){ try { return localStorage.getItem(AUTO_RECORD_KEY) === '1'; } catch { return false; } })(),
   prerollSeconds: (function(){ try { const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY)||'3',10); return isFinite(n) ? Math.max(0, Math.min(10, n)) : 3; } catch { return 3; } })(),
   devHud: (function(){ try { return localStorage.getItem(DEV_HUD_KEY) === '1'; } catch { return false; } })(),
   obsHost: (function(){ try { return localStorage.getItem(OBS_HOST_KEY) || ''; } catch { return ''; } })(),

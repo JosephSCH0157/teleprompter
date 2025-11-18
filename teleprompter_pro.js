@@ -2156,10 +2156,6 @@ let _toast = function (msg, opts) {
     } catch {}
     try {
       const cur = localStorage.getItem('tp_auto_record_on_start_v1');
-      if (cur === null || typeof cur === 'undefined') {
-        const legacy = localStorage.getItem('tp_auto_record');
-        if (legacy !== null) return legacy === '1';
-      }
       return cur === '1';
     } catch {
       return false;
@@ -2179,7 +2175,6 @@ let _toast = function (msg, opts) {
     if (!handled) {
       try { localStorage.setItem('tp_auto_record_on_start_v1', enabled ? '1' : '0'); } catch {}
     }
-    try { localStorage.removeItem('tp_auto_record'); } catch {}
     return enabled;
   }
 

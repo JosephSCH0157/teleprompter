@@ -364,7 +364,22 @@ export async function boot() {
 						(function autoRecordOnStart(){
 							const FLAG = 'tp_auto_record_on_start_v1';
 							let fired = false;
-							const wants = () => { try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } };
+							const wants = () => {
+								try {
+									const store = (window as any).__tpStore || null;
+									if (store && typeof store.get === 'function') {
+										const v = store.get('autoRecord');
+										if (typeof v === 'boolean') return v;
+									}
+								} catch {}
+								try {
+									const api = (window as any).__tpRecording;
+									if (api && typeof api.wantsAuto === 'function') return !!api.wantsAuto();
+								} catch {}
+								try {
+									return localStorage.getItem(FLAG) === '1';
+								} catch { return false; }
+							};
 							const maybe = async () => {
 								if (fired || !wants()) return;
 								try {

@@ -61,6 +61,23 @@ interface RecStats {
  * @property {(cfg: any) => void} [configure]  // pass settings in
  */
 
+function __tpReadAutoRecordPref(): boolean {
+  try {
+    if (typeof window !== 'undefined') {
+      const store = (window as any).__tpStore;
+      if (store && typeof store.get === 'function') {
+        const v = store.get('autoRecord');
+        if (typeof v === 'boolean') return v;
+      }
+    }
+  } catch {}
+  try {
+    return localStorage.getItem('tp_auto_record_on_start_v1') === '1';
+  } catch {
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------
  * SSOT Recording API — window.__tpRecording
  * One call: start()/stop() routes to OBS / Bridge / Premiere
@@ -98,7 +115,9 @@ interface RecStats {
           const cfg = getCfg();
           try { return (cfg.recording && cfg.recording.adapter) || localStorage.getItem(LS.recAdapter) || 'bridge'; } catch { return 'bridge'; }
         }
-        function wantsAuto(){ try { return localStorage.getItem(LS.autoStart) === '1'; } catch { return false; } }
+        function wantsAuto(){
+          return __tpReadAutoRecordPref();
+        }
 
         async function httpSend(url: string, body?: unknown){
           if (!url) throw new Error('Missing URL');
@@ -815,7 +834,7 @@ function ensureObsDisconnectFallback(){
       try {
         const state = _recState;
         const bridgeAdapter = registry.get('bridge');
-        const isAuto = (localStorage.getItem('tp_auto_record') === '1') || (localStorage.getItem('tp_auto_record_on_start_v1') === '1');
+        const isAuto = __tpReadAutoRecordPref();
         try { recStats.disconnects++; } catch {}
         if (state === 'starting') {
           await startObsWithConfirm({ timeoutMs: 900, retryDelayMs: 300 });
