@@ -205,6 +205,75 @@ const OBS_KEYS = {
   secure:  'obs.secure',
 };
 
+async function obsApplyEnabled(next) {
+  const enabled = !!next;
+  const persistBool = (key) => {
+    try { localStorage.setItem(key, enabled ? '1' : '0'); } catch {}
+  };
+  persistBool(OBS_KEYS.enabled);
+  persistBool('settings.obs.enabled');
+  persistBool('tp_obs_enabled');
+  persistBool('tp_obs_enabled_v1');
+  persistBool('tp_obs_enabled_v2');
+  try {
+    const store = window.__tpStore;
+    if (store && typeof store.set === 'function') {
+      store.set('obsEnabled', enabled);
+    }
+  } catch {}
+
+  const errors = [];
+  const capture = async (fn) => {
+    if (typeof fn !== 'function') return;
+    try {
+      await fn();
+    } catch (err) {
+      errors.push(err);
+    }
+  };
+
+  try { window.__tpObs?.setArmed?.(enabled); } catch (err) { errors.push(err); }
+  try { window.__obsBridge?.enableAutoReconnect?.(enabled); } catch (err) { errors.push(err); }
+
+  const rec = window.__recorder?.get?.('obs') || null;
+  if (rec && typeof rec.setEnabled === 'function') {
+    try { rec.setEnabled(enabled); } catch (err) { errors.push(err); }
+  }
+
+  if (enabled) {
+    await capture(() => window.__obsBridge?.maybeConnect?.());
+    if (!window.__obsBridge?.maybeConnect && window.__obsBridge?.connect) {
+      await capture(() => window.__obsBridge.connect());
+    }
+    if (rec && typeof rec.connect === 'function') {
+      await capture(() => rec.connect());
+    }
+  } else {
+    await capture(() => window.__obsBridge?.stop?.());
+    await capture(() => window.__obsBridge?.disconnect?.());
+    if (rec && typeof rec.disconnect === 'function') {
+      await capture(() => rec.disconnect());
+    }
+  }
+
+  const pill = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+  if (pill) {
+    try {
+      pill.textContent = enabled ? 'OBS: enabled' : 'OBS: disabled';
+      pill.dataset.state = enabled ? 'connected' : 'off';
+    } catch {}
+  }
+  try {
+    window.dispatchEvent(new CustomEvent('obs:enabled-change', { detail: { enabled } }));
+  } catch {}
+
+  if (errors.length) {
+    const err = new Error('Failed to toggle OBS');
+    err.causes = errors;
+    throw err;
+  }
+}
+
 function readObsSettingsFromUIorStorage() {
   const urlEl   = document.getElementById('obsUrl');
   const passEl  = document.getElementById('obsPass');
