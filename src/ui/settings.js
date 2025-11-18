@@ -2165,6 +2165,68 @@
             }); }
             }
           } catch {}
+          try {
+            // Auto-record folder picker wiring (post-mount so DOM exists)
+            const folderNameEl = q('autoRecordFolderName');
+            const pickBtn = q('autoRecordPickBtn');
+            const clearBtn = q('autoRecordClearBtn');
+
+            async function renderFolder() {
+              try {
+                await import('../fs/recording-dir.js');
+                if (window.__tpRecDir && typeof window.__tpRecDir.init === 'function') { try { await window.__tpRecDir.init(); } catch {} }
+                const dir = window.__tpRecDir && window.__tpRecDir.get ? window.__tpRecDir.get() : null;
+                if (folderNameEl) {
+                  if (dir) {
+                    folderNameEl.textContent = dir.name || 'Selected';
+                  } else {
+                    let mock = false; try { mock = new URLSearchParams(location.search||'').has('mockFolder'); } catch {}
+                    folderNameEl.textContent = mock ? 'MockRecordings' : 'Not set';
+                    try { const wrap = folderNameEl.closest('[data-test-id="rec-folder-label"]'); if (wrap && mock) wrap.dataset.mockApplied = '1'; } catch {}
+                  }
+                }
+              } catch {}
+            }
+
+            async function pickFolderFlow({ force } = {}) {
+              try {
+                await import('../fs/recording-dir.js');
+                const supported = !!(window.__tpRecDir && window.__tpRecDir.supported && window.__tpRecDir.supported());
+                if (!supported) {
+                  (window.toast || ((m)=>console.debug('[toast]', m)))('This browser will download recordings instead of saving to a folder.', { type: 'warn' });
+                  return true;
+                }
+                const existing = window.__tpRecDir && window.__tpRecDir.get ? window.__tpRecDir.get() : null;
+                if (existing && !force) return true;
+                const dir = await window.__tpRecDir.pick();
+                if (!dir) {
+                  (window.toast || ((m)=>console.debug('[toast]', m)))('Auto-save canceled – no folder selected.', { type: 'warn' });
+                  return false;
+                }
+                await renderFolder();
+                return true;
+              } catch (err) {
+                try {
+                  (window.toast || ((m)=>console.debug('[toast]', m)))('Unable to open folder picker. Use a supported browser/app and try again.', { type: 'warn' });
+                  console.warn('[auto-record] pick folder failed', err);
+                } catch {}
+                return false;
+              }
+            }
+
+            if (pickBtn && !pickBtn.dataset.wired) {
+              pickBtn.dataset.wired = '1';
+              pickBtn.addEventListener('click', async () => { await pickFolderFlow({ force: true }); });
+            }
+            if (clearBtn && !clearBtn.dataset.wired) {
+              clearBtn.dataset.wired = '1';
+              clearBtn.addEventListener('click', async () => {
+                try { await import('../fs/recording-dir.js'); await window.__tpRecDir?.clear?.(); await renderFolder(); } catch {}
+              });
+            }
+
+            try { renderFolder(); } catch {}
+          } catch {}
         } catch {}
       };
     }
