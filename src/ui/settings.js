@@ -1102,12 +1102,18 @@
             if (existing && !force) return true; // nothing to do unless forced (Change button)
             const dir = await window.__tpRecDir.pick();
             if (!dir) {
-              (window.toast || ((m)=>console.debug('[toast]', m)))('Auto-save canceled — no folder selected.', { type: 'warn' });
+              (window.toast || ((m)=>console.debug('[toast]', m)))('Auto-save canceled – no folder selected.', { type: 'warn' });
               return false;
             }
             await renderFolder();
             return true;
-          } catch { return false; }
+          } catch (err) {
+            try {
+              (window.toast || ((m)=>console.debug('[toast]', m)))('Unable to open folder picker. Use a supported browser/app and try again.', { type: 'warn' });
+              console.warn('[auto-record] pick folder failed', err);
+            } catch {}
+            return false;
+          }
         }
 
         // On enabling auto-save, if supported and no folder yet: prompt; revert if canceled
