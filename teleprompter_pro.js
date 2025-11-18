@@ -5601,6 +5601,21 @@ let _toast = function (msg, opts) {
         }, { passive: true });
       }
     } catch {}
+    // Recording indicator (beside pre-roll)
+    try {
+      if (!window.__tpRecIndicatorWired) {
+        window.__tpRecIndicatorWired = true;
+        window.addEventListener('rec:state', (e) => {
+          try {
+            const ind = document.getElementById('recIndicator');
+            if (!ind) return;
+            const s = e && e.detail && e.detail.state;
+            if (s === 'recording') ind.classList.remove('hidden');
+            else ind.classList.add('hidden');
+          } catch {}
+        }, { passive: true });
+      }
+    } catch {}
     // OBS runtime flags (safe defaults)
     window.__obsConnected = false;
     window.__obsRecArmed = false;

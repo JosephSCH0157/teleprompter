@@ -251,6 +251,7 @@ export { };
       _rec.onstop = () => { try { finalizeSave().catch(()=>{}); } catch {} };
       _rec.start();
       _active = true;
+      try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'local-auto', state: 'recording' } })); } catch {}
       try { (window.HUD?.log || console.debug)?.('[auto-record] start', { mime: mt }); } catch {}
     } catch (e) { try { console.warn('[auto-record] start failed', e); } catch {} }
   }
@@ -260,6 +261,7 @@ export { };
     try {
       const r = _rec; _rec = null; _active = false;
       if (r && r.state !== 'inactive') { try { r.stop(); } catch {} }
+      try { window.dispatchEvent(new CustomEvent('rec:state', { detail: { adapter: 'local-auto', state: 'idle' } })); } catch {}
     } catch {}
   }
 
