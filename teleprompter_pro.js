@@ -5487,29 +5487,37 @@ let _toast = function (msg, opts) {
       }
     }
 
-    // wire buttons if present
+    // wire buttons if present (skip if modern Scripts UI already wired)
     try {
-      scriptSaveBtn && scriptSaveBtn.addEventListener('click', onScriptSave);
-      scriptSaveAsBtn && scriptSaveAsBtn.addEventListener('click', onScriptSaveAs);
-      scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
-      scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
-      scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
-      if (scriptSlots)
-        scriptSlots.addEventListener('change', () => {
-          /* no-op: load via Load button */
-        });
+      const skipLegacyScriptsUI = (function(){ try { return !!(window && window.__tpScriptsUIWired); } catch { return false; } })();
+      if (!skipLegacyScriptsUI) {
+        scriptSaveBtn && scriptSaveBtn.addEventListener('click', onScriptSave);
+        scriptSaveAsBtn && scriptSaveAsBtn.addEventListener('click', onScriptSaveAs);
+        scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
+        scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
+        scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
+        if (scriptSlots)
+          scriptSlots.addEventListener('change', () => {
+            /* no-op: load via Load button */
+          });
+      }
     } catch {}
 
-    // autosave debounce (optional)
-    let _autosaveTimer = null;
-    if (editor) {
-      editor.addEventListener('input', () => {
-        clearTimeout(_autosaveTimer);
-        _autosaveTimer = setTimeout(() => {
-          if (currentScriptId) onScriptSave();
-        }, 1000);
-      });
-    }
+    // autosave debounce (optional) — disabled when modern Scripts UI is wired to avoid double-saves
+    try {
+      const skipLegacyAutosave = (function(){ try { return !!(window && window.__tpScriptsUIWired); } catch { return false; } })();
+      if (!skipLegacyAutosave) {
+        let _autosaveTimer = null;
+        if (editor) {
+          editor.addEventListener('input', () => {
+            clearTimeout(_autosaveTimer);
+            _autosaveTimer = setTimeout(() => {
+              if (currentScriptId) onScriptSave();
+            }, 1000);
+          });
+        }
+      }
+    } catch {}
 
     // initialize scripts UI after boot
     setTimeout(initScriptsUI, 200);

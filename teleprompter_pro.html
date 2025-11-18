@@ -121,7 +121,7 @@
     .viewer{background:transparent;padding:6px;min-height:calc(100vh - 92px);overflow:auto}
     textarea#editor{width:100%;height:36vh;min-height:160px;background:#07101a;color:var(--fg);border:1px solid rgba(255,255,255,0.03);padding:10px;box-sizing:border-box;font:inherit}
     .script .line{padding:6px 0;color:var(--fg)}
-    #dbMeterTop{width:86px;height:12px;background:linear-gradient(90deg,#18364a,#0b2a3a);border-radius:6px;margin-left:6px}
+    #dbMeterTop{display:flex;gap:2px;height:14px;align-items:flex-end;position:relative;padding:0 2px;border:1px solid var(--edge);border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#124,#124 5%,#135 5%,#135 20%,#145 20%,#145 40%,#254 40%,#352 60%,#542 80%,#731 90%,#921 95%,#b11);background-size:100% 100%;margin:0;}
     button.chip{border:0;background:transparent;color:var(--fg);cursor:pointer}
     @media (max-width:900px){.app{grid-template-columns:1fr;}.topbar{height:56px;padding:10px}}
     /* Extra tiny critical rules to stabilize first-paint for HUD and overlays */
@@ -283,8 +283,12 @@
 <span class="chip" id="scrollChip">Scroll: idle</span>
 <span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
 <span class="chip" id="camRtcChip">CamRTC: idle</span>
-<!-- dB Meter (top bar mini) -->
-<div id="dbMeterTop" title="Input level"></div>
+<!-- Mic level + calibration -->
+<div class="mic-block">
+  <span class="topbar-label">Mic level</span>
+  <div id="dbMeterTop" title="Input level"></div>
+  <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
+</div>
 <!-- Mode selector (compact) -->
 <label for="scrollMode" class="topbar-label">Mode</label>
 <select id="scrollMode" aria-label="Scroll Mode">
@@ -311,6 +315,26 @@
 </div>
 <div class="legend" id="legend"></div>
 </div>
+<script>
+  (function(){
+    try {
+      var btn = document.getElementById('micCalBtn');
+      if (btn && !btn.dataset.wired) {
+        btn.dataset.wired = '1';
+        btn.addEventListener('click', function(){
+          try {
+            var calBtn = document.getElementById('asrCalibBtn');
+            if (calBtn){ calBtn.click(); return; }
+            if (window.showCalibModal) window.showCalibModal();
+            var settingsBtn = document.getElementById('settingsBtn');
+            if (settingsBtn) settingsBtn.click();
+            setTimeout(function(){ try { document.getElementById('asrCalibBtn')?.click(); } catch(e){} }, 150);
+          } catch(e){}
+        });
+      }
+    } catch(e){}
+  })();
+</script>
 <div class="app">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>

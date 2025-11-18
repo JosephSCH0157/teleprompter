@@ -194,6 +194,29 @@ function wireMic() {
   const rel = $('releaseMicBtn');
   on(req, 'click', async () => { try { await window.__tpMic?.requestMic?.(); } catch {} });
   on(rel, 'click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} });
+  const cal = $('micCalBtn');
+  if (cal && !cal.dataset.wired) {
+    cal.dataset.wired = '1';
+    cal.addEventListener('click', () => {
+      try {
+        const runExisting = () => {
+          const btn = document.getElementById('asrCalibBtn');
+          if (btn) {
+            btn.click();
+            return true;
+          }
+          return false;
+        };
+        // Try immediate reuse of existing calibration control (Settings card)
+        if (runExisting()) return;
+        // Try showing calibration modal directly if exposed
+        try { window.showCalibModal && window.showCalibModal(); } catch {}
+        // Pop Settings to render the card, then reattempt shortly
+        try { document.getElementById('settingsBtn')?.click(); } catch {}
+        setTimeout(() => { try { runExisting(); } catch {} }, 150);
+      } catch {}
+    }, { capture: true });
+  }
 }
 
 function wireCamera() {

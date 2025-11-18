@@ -420,6 +420,8 @@ try {
   scriptLoadBtn && scriptLoadBtn.addEventListener('click', onScriptLoad);
   scriptDeleteBtn && scriptDeleteBtn.addEventListener('click', onScriptDelete);
   scriptRenameBtn && scriptRenameBtn.addEventListener('click', onScriptRename);
+  // Mark modern Scripts UI as wired so legacy handlers can opt-out
+  try { if (typeof window !== 'undefined') window.__tpScriptsUIWired = true; } catch {}
 } catch {
   console.debug('scripts-ui wiring');
 }
