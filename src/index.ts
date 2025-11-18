@@ -55,22 +55,25 @@ import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
 
-// Create and expose the scroll brain globally
-const scrollBrain = createScrollBrain();
-(window as any).__tpScrollBrain = scrollBrain;
+let scrollBrain: ScrollBrain | null = null;
 
-installWpmSpeedBridge(() => scrollBrain);
-installAsrScrollBridge(() => scrollBrain);
+function ensureScrollBrain(): ScrollBrain {
+	if (!scrollBrain) {
+		scrollBrain = createScrollBrain();
+		(window as any).__tpScrollBrain = scrollBrain;
+	}
+	return scrollBrain;
+}
 
 export function getScrollBrain() {
-	return scrollBrain;
+	return ensureScrollBrain();
 }
 
 function applyUiScrollMode(mode: UiScrollMode) {
   // Store the UI mode somewhere global so existing JS can still read it
   (window as any).__tpUiScrollMode = mode;
 
-  const brain = (window as any).__tpScrollBrain as ScrollBrain | undefined;
+	const brain = ensureScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
@@ -120,7 +123,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
       break;
 	}
   // Apply decisions
-  if (brain) brain.setMode(brainMode);
+	brain.setMode(brainMode);
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
   if (auto && typeof auto.setEnabled === 'function') auto.setEnabled(autoEnabled);
@@ -199,7 +202,10 @@ import './smoke/settings-mapped-folder.smoke.js';
 
 // Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
 try {
-	document.addEventListener('DOMContentLoaded', () => {
+			document.addEventListener('DOMContentLoaded', () => {
+				const brain = ensureScrollBrain();
+				installWpmSpeedBridge(() => brain);
+				installAsrScrollBridge(() => brain);
 		// 1) Install the TypeScript scheduler before any scroll writers run.
 		try {
 			installScheduler();
@@ -230,7 +236,7 @@ try {
 					try {
 						const val = Number(autoSpeed.value);
 						if (!Number.isFinite(val)) return;
-						scrollBrain.onManualSpeedAdjust(val);
+						brain.onManualSpeedAdjust(val);
 					} catch {}
 				};
 				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });
@@ -245,7 +251,7 @@ try {
 				const detail = (ev as CustomEvent).detail || {};
 				const speed = Number(detail?.speed);
 				if (!Number.isFinite(speed)) return;
-				scrollBrain.onManualSpeedAdjust(speed);
+				brain.onManualSpeedAdjust(speed);
 			};
 			document.addEventListener('tp:autoSpeed', handleAutoSpeedEvt as EventListener, { capture: true });
 		} catch {}
