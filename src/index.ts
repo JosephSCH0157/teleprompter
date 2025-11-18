@@ -9,6 +9,8 @@ import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
+import { installScheduler } from './boot/scheduler';
+import './scroll/adapter';
 import './wiring/ui-binds';
 
 import { bootstrap } from './boot/boot';
@@ -184,6 +186,41 @@ import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bin
 import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
+
+// Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
+try {
+	document.addEventListener('DOMContentLoaded', () => {
+		// 1) Install the TypeScript scheduler before any scroll writers run.
+		try {
+			installScheduler();
+		} catch (err) {
+			try { console.warn('[scheduler] install failed', err); } catch {}
+		}
+
+		// 2) Legacy/test auto-scroll wiring (temporary until router owns it fully)
+		try {
+			const viewer = document.getElementById('viewer') as HTMLElement | null;
+			const autoToggle = document.getElementById('autoScrollToggle') as HTMLButtonElement | null
+				|| document.getElementById('autoToggle') as HTMLButtonElement | null;
+			const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
+				|| document.getElementById('autoSpeed') as HTMLInputElement | null;
+
+			if (viewer && autoToggle && autoSpeed) {
+				const auto = (Auto as any).initAutoScroll?.(() => viewer);
+				if (auto && typeof auto.bindUI === 'function') {
+					auto.bindUI(autoToggle, autoSpeed);
+				} else {
+					autoToggle.addEventListener('click', () => { try { (Auto as any).toggle?.(); } catch {} });
+					autoSpeed.addEventListener('change', () => {
+						try { (Auto as any).setSpeed?.(Number(autoSpeed.value)); } catch {}
+					});
+				}
+			}
+		} catch (err) {
+			try { console.warn('[auto-scroll] wiring failed', err); } catch {}
+		}
+	}, { once: true });
+} catch {}
 
 // Install emergency binder only in dev/CI/headless harness contexts (to reduce double-binding risk in prod)
 try {
