@@ -322,6 +322,38 @@ function wireUpload() {
   });
 }
 
+// Reset run without clearing content: rewind to top, reset index/state, keep editor text.
+function resetRun() {
+  try { window.stopAutoScroll && window.stopAutoScroll(); } catch {}
+  try { window.__scrollCtl?.stopAutoCatchup?.(); } catch {}
+  try { window.resetTimer && window.resetTimer(); } catch {}
+
+  const editor = document.getElementById('editor');
+  const text = (editor && 'value' in editor) ? editor.value : '';
+  // Re-render to rebuild layout and anchors
+  try { if (typeof window.renderScript === 'function') window.renderScript(text); } catch {}
+
+  // Reset logical position + display mirror
+  try { window.currentIndex = 0; } catch {}
+  try { window.__lastScrollTarget = 0; } catch {}
+
+  // Scroll viewer to the top
+  try {
+    const scroller = document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+    if (scroller) scroller.scrollTop = 0;
+    try {
+      const max = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+      const ratio = max ? 0 : 0;
+      window.sendToDisplay && window.sendToDisplay({ type: 'scroll', top: 0, ratio });
+    } catch {}
+  } catch {}
+
+  // Notify listeners that the run was rewound
+  try { window.dispatchEvent(new CustomEvent('tp:script:reset', { detail: { at: Date.now() } })); } catch {}
+
+  try { (window.setStatus || (()=>{}))('Script reset to start'); } catch {}
+}
+
 function wireScriptControls() {
   try {
     const clearBtn = document.getElementById('clearText');
@@ -347,20 +379,7 @@ function wireScriptControls() {
       resetBtn.dataset.wired = '1';
       resetBtn.addEventListener('click', () => {
         try {
-          if (title && 'value' in title) title.value = '';
-          if (editor && 'value' in editor) {
-            editor.value = '';
-            try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-            try { if (typeof window.renderScript === 'function') window.renderScript(''); } catch {}
-          }
-          // Reset scroll position to the top for clarity
-          try {
-            const scroller = document.getElementById('viewer') || document.scrollingElement || document.documentElement;
-            if (scroller) scroller.scrollTop = 0;
-          } catch {}
-          // Refresh scripts dropdown (if exposed by scripts-ui)
-          try { if (typeof window.initScriptsUI === 'function') window.initScriptsUI(); } catch {}
-          try { (window.setStatus || (()=>{}))('Script reset'); } catch {}
+          resetRun();
         } catch {}
       });
     }
