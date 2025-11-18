@@ -566,9 +566,7 @@ function installScrollRouter(opts) {
       const chip = chipEl();
       const st = (btn && btn.getAttribute && btn.getAttribute("data-state")) || "";
       const gate = st === "on" ? "on" : st === "paused" ? "paused" : "manual";
-      const speed = (auto && typeof (auto.getState || {}).call === "function")
-        ? (auto.getState().speed)
-        : (function(){ try { return Number(localStorage.getItem("tp_auto_speed")||"0")||0; } catch { return 0; } })();
+      const speed = getCurrentSpeed();
       const payload = {
         intentOn: !!userEnabled,
         gate,
@@ -589,13 +587,36 @@ function installScrollRouter(opts) {
     el.setAttribute("data-state", state3);
     if (detail) el.title = detail;
   }
+  const AUTO_MIN = 5;
+  const AUTO_MAX = 200;
+  const AUTO_STEP_FINE = 1;
+  const AUTO_STEP_COARSE = 5;
   const getStoredSpeed = () => {
     try {
-      return Number(localStorage.getItem("tp_auto_speed") || "60") || 60;
+      const raw = localStorage.getItem("tp_auto_speed");
+      const v = raw != null ? parseFloat(raw) : NaN;
+      if (!Number.isFinite(v)) return 60;
+      return Math.min(AUTO_MAX, Math.max(AUTO_MIN, v));
     } catch {
       return 60;
     }
   };
+  const getCurrentSpeed = () => {
+    try {
+      const fromApi = auto?.getState?.().speed;
+      if (typeof fromApi === "number" && Number.isFinite(fromApi)) {
+        return Math.min(AUTO_MAX, Math.max(AUTO_MIN, fromApi));
+      }
+    } catch {}
+    return getStoredSpeed();
+  };
+  const setSpeed = (next) => {
+    const clamped = Math.min(AUTO_MAX, Math.max(AUTO_MIN, Number(next) || 0));
+    try { auto?.setSpeed?.(clamped); } catch {}
+    try { localStorage.setItem("tp_auto_speed", String(clamped)); } catch {}
+    return clamped;
+  };
+  const nudgeSpeed = (delta) => setSpeed(getCurrentSpeed() + delta);
   function applyGate() {
     if (state2.mode !== "hybrid") {
       if (silenceTimer) {
@@ -903,14 +924,9 @@ function installScrollRouter(opts) {
         const was = userEnabled;
         userEnabled = !userEnabled;
         if (!was && userEnabled) {
-          try {
-            auto.setSpeed?.(getStoredSpeed());
-          } catch {
-          }
-          try {
-            window.__scrollCtl?.setSpeed?.(getStoredSpeed());
-          } catch {
-          }
+          const cur = getStoredSpeed();
+          try { auto.setSpeed?.(cur); } catch {}
+          try { window.__scrollCtl?.setSpeed?.(cur); } catch {}
         }
         applyGate();
       }
@@ -979,9 +995,10 @@ function installScrollRouter(opts) {
         if (!wantUp && !wantDown) return;
         // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
-        const cur = Number(auto?.getState?.().speed) || getStoredSpeed();
-        const next = cur + (wantUp ? 5 : -5);
-        auto?.setSpeed?.(next);
+        const step = wantUp ? AUTO_STEP_FINE : -AUTO_STEP_FINE;
+        const delta = e.shiftKey ? step * AUTO_STEP_COARSE : step;
+        const next = nudgeSpeed(delta);
+        try { window.__scrollCtl?.setSpeed?.(next); } catch {}
         // Best-effort viewport nudge so hotkeys have visible effect even when auto is Off/paused
         try {
           const vp = document.getElementById("viewer") || document.scrollingElement || document.documentElement;
