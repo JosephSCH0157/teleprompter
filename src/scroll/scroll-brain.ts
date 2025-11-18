@@ -1,5 +1,5 @@
 // === Scroll Controller Core ===
-import { SpeedGovernor, type AdaptSample } from '../../controllers/adaptiveSpeed';
+import { SpeedGovernor, adaptSample, type AdaptSample } from '../controllers/adaptiveSpeed';
 import { createScrollerHelpers } from './scroll-helpers';
 
 export type ScrollMode = 'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal';
@@ -11,6 +11,20 @@ let scrollTimer: number | null = null;
 const CONSTANT_SPEED = 2.4;
 // Interpret that as a baseline px/sec (~144px/s)
 const DEFAULT_PX_PER_SEC = CONSTANT_SPEED * 60;
+
+const governor = new SpeedGovernor({
+  basePxPerSec: DEFAULT_PX_PER_SEC,
+  minPxPerSec: 20,
+  maxPxPerSec: 3000,
+  asrGain: 1,
+  smoothing: 0.5,
+});
+
+let governedSpeedPxPerSec = governor.getSpeedPxPerSec();
+
+function syncEngineSpeed() {
+  governedSpeedPxPerSec = governor.getSpeedPxPerSec();
+}
 
 let frameCount = 0;
 
@@ -27,13 +41,6 @@ const log = (msg: string) => {
     // silent
   }
 };
-
-// Governor drives px/sec adjustments for auto + hybrid
-const governor = new SpeedGovernor(DEFAULT_PX_PER_SEC, (tag, data) => {
-  try {
-    (window as any).HUD?.log?.('scroll-governor:' + tag, data || {});
-  } catch {}
-});
 
 let lastFrameTs = performance.now();
 
@@ -83,8 +90,7 @@ function scrollTick(now?: number) {
   frameCount++;
 
   if (scrollMode === 'auto' || scrollMode === 'hybrid') {
-    const vPxPerSec = governor.tick();
-    scrollBySpeedPxPerSec(vPxPerSec, dt);
+    scrollBySpeedPxPerSec(governedSpeedPxPerSec, dt);
   }
 
   if (frameCount % 10 === 0) {
@@ -105,15 +111,27 @@ function scrollTick(now?: number) {
 
 // --- Governor hooks ---
 function setBaseSpeedPx(pxPerSec: number) {
-  governor.setBase(pxPerSec);
+  const numeric = Number(pxPerSec);
+  if (!Number.isFinite(numeric) || numeric <= 0) return;
+  governor.setBaseSpeedPx(numeric);
+  syncEngineSpeed();
 }
 
 function onManualSpeedAdjust(pxPerSec: number) {
-  governor.onManualAdjust(pxPerSec);
+  const numeric = Number(pxPerSec);
+  if (!Number.isFinite(numeric) || numeric <= 0) return;
+  governor.setBaseSpeedPx(numeric);
+  syncEngineSpeed();
 }
 
 function onSpeechSample(sample: AdaptSample) {
-  governor.onSpeechSample(sample);
+  if (!sample) return;
+  const safe = {
+    errPx: Number(sample.errPx) || 0,
+    conf: typeof sample.conf === 'number' ? sample.conf : 1,
+  } satisfies AdaptSample;
+  const { speedPxPerSec } = adaptSample(governor, safe);
+  governedSpeedPxPerSec = speedPxPerSec;
 }
 
 // --- Public API ---
