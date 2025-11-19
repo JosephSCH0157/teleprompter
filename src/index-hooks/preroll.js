@@ -14,20 +14,41 @@
       } catch{}
     }
 
+    function getScrollMode(){
+      try {
+        const fromStore = window.__tpStore?.get?.('scrollMode') || window.__tpStore?.get?.('mode');
+        if (fromStore) return String(fromStore).toLowerCase();
+      } catch {}
+      try {
+        const sel = document.getElementById('scrollMode');
+        if (sel && typeof sel.value === 'string') return String(sel.value).toLowerCase();
+      } catch {}
+      return 'auto';
+    }
+
     function isRehearsal(){
-      try { return (window.__tpStore?.get?.('scrollMode') || window.__tpStore?.get?.('mode')) === 'rehearsal'; } catch { return false; }
+      try { return getScrollMode() === 'rehearsal'; } catch { return false; }
+    }
+
+    function isAutoCapable(mode){
+      const m = (mode || getScrollMode() || '').toLowerCase();
+      return m === 'auto' || m === 'timed' || m === 'hybrid' || m === 'asr' || m === 'wpm' || m === 'assist';
     }
 
     window.addEventListener('tp:preroll:done', (ev) => {
       hudLog('preroll:done', ev?.detail);
       // Autoscroll start (Hybrid/WPM/Timed) — defer actual movement until preroll completes
       try {
-        if (!isRehearsal()) {
+        const mode = getScrollMode();
+        if (!isRehearsal() && isAutoCapable(mode)) {
           try { if (window.Auto && typeof window.Auto.setEnabled === 'function') window.Auto.setEnabled(true); } catch{}
           if (!window.__tpScrollRouterStarted && typeof window.scrollRouterStart === 'function') {
             window.scrollRouterStart();
             window.__tpScrollRouterStarted = true;
           }
+          hudLog('preroll:auto:start', { mode });
+        } else {
+          hudLog('preroll:auto:skip', { mode });
         }
       } catch{}
 
