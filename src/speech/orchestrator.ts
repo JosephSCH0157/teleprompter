@@ -25,6 +25,15 @@ function dispatchAsrSilence(silent: boolean, ts: number): void {
   }
 }
 
+function emitSpeechState(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running } }));
+  } catch {
+    // non-fatal in case window is weird
+  }
+}
+
 function setSilenceState(nextSilent: boolean, ts: number): void {
   if (silenceActive === nextSilent) return;
   silenceActive = nextSilent;
@@ -164,6 +173,7 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
       matchBatch(text, isFinal);
       dispatchTranscript(text, isFinal);
     });
+    emitSpeechState(true);
   } catch (err) {
     try { console.warn('[TP] startRecognizer failed', err); } catch {}
     _rec = null;
@@ -177,6 +187,7 @@ export function stopRecognizer() {
     if (_rec) {
       try { _rec.stop(); } catch {}
       _rec = null;
+      emitSpeechState(false);
     }
   } finally {
     _cb = null;
