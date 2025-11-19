@@ -151,9 +151,9 @@ function installModeUi(){
   try{
     const topbar = document.querySelector('.topbar'); if (!topbar) return;
     // Mode select (left of Auto-scroll)
-    let sel = document.getElementById('scrollModeSelect');
+    let sel = document.getElementById('scrollMode');
     if (!sel){
-      sel = document.createElement('select'); sel.id='scrollModeSelect'; sel.className='select-sm';
+      sel = document.createElement('select'); sel.id='scrollMode'; sel.className='select-sm';
   ['Timed','WPM','Hybrid','ASR','Step','Rehearsal'].forEach((name)=>{ const opt = document.createElement('option'); opt.value = name.toLowerCase(); opt.textContent = name; sel.appendChild(opt); });
       const autoBtn = document.getElementById('autoToggle');
       if (autoBtn && autoBtn.parentNode) autoBtn.parentNode.insertBefore(sel, autoBtn);

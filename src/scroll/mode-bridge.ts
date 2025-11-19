@@ -39,9 +39,8 @@ export function initScrollModeBridge(): void {
     const brain = getScrollBrain();
     if (!brain) return;
 
-    const selectPrimary = document.getElementById('scrollModeSelect') as HTMLSelectElement | null;
-    const selectInline = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    const elements = [selectPrimary, selectInline].filter(Boolean) as HTMLSelectElement[];
+    const select = document.getElementById('scrollMode') as HTMLSelectElement | null;
+    const elements = select ? [select] : [];
 
     if (!elements.length) return;
 
