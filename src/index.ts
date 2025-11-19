@@ -9,6 +9,8 @@ import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
+import { installScheduler } from './boot/scheduler';
+import './scroll/adapter';
 import './wiring/ui-binds';
 
 import { bootstrap } from './boot/boot';
@@ -35,6 +37,7 @@ bootstrap().catch(() => {});
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
 // Settings → ASR wizard wiring (safe to import; guards on element presence)
+import mountSettingsOverlay from './ui/settings';
 import './ui/settings/asrWizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
@@ -44,20 +47,58 @@ import { initScroll } from './features/scroll.js';
 import { initTelemetry } from './features/telemetry.js';
 
 // === UI Scroll Mode Router ===
+import { installAsrScrollBridge } from './scroll/asr-bridge';
+import { setBrainBaseSpeed } from './scroll/brain-hooks.js';
+import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
 import { createScrollBrain } from './scroll/scroll-brain';
+import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
 
-// Create and expose the scroll brain globally
-const scrollBrain = createScrollBrain();
-(window as any).__tpScrollBrain = scrollBrain;
+let scrollBrain: ScrollBrain | null = null;
+
+function ensureScrollBrain(): ScrollBrain {
+	if (!scrollBrain) {
+		scrollBrain = createScrollBrain();
+		(window as any).__tpScrollBrain = scrollBrain;
+	}
+	return scrollBrain;
+}
+
+export function getScrollBrain() {
+	return ensureScrollBrain();
+}
+
+function bridgeLegacyScrollController() {
+	if (typeof window === 'undefined') return;
+	const w = window as any;
+	if (w.__tpScrollCtlBridgeActive) return;
+	w.__tpScrollCtlBridgeActive = true;
+	const tryPatch = () => {
+		const ctl = w.__scrollCtl;
+		if (!ctl || ctl.__tpBrainProxy) return false;
+		const original = typeof ctl.setSpeed === 'function' ? ctl.setSpeed.bind(ctl) : null;
+		if (!original) return false;
+		ctl.setSpeed = function patchedLegacySpeed(value: number) {
+			try { setBrainBaseSpeed(value); } catch {}
+			return original(value);
+		};
+		ctl.__tpBrainProxy = true;
+		return true;
+	};
+	if (tryPatch()) return;
+	const timer = setInterval(() => {
+		if (tryPatch()) clearInterval(timer);
+	}, 800);
+	setTimeout(() => clearInterval(timer), 10_000);
+}
 
 function applyUiScrollMode(mode: UiScrollMode) {
   // Store the UI mode somewhere global so existing JS can still read it
   (window as any).__tpUiScrollMode = mode;
 
-  const brain = (window as any).__tpScrollBrain as ScrollBrain | undefined;
+	const brain = ensureScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
@@ -107,7 +148,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
       break;
 	}
   // Apply decisions
-  if (brain) brain.setMode(brainMode);
+	brain.setMode(brainMode);
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
   if (auto && typeof auto.setEnabled === 'function') auto.setEnabled(autoEnabled);
@@ -183,6 +224,66 @@ import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bin
 import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
+
+// Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
+try {
+			document.addEventListener('DOMContentLoaded', () => {
+				const brain = ensureScrollBrain();
+				installWpmSpeedBridge({
+					api: {
+						setBaseSpeedPx: brain.setBaseSpeedPx,
+						onManualSpeedAdjust: brain.onManualSpeedAdjust,
+					},
+				});
+				installAsrScrollBridge({
+					onSpeechSample: brain.onSpeechSample,
+					reportSilence: brain.reportAsrSilence,
+				});
+				bridgeLegacyScrollController();
+		// 1) Install the TypeScript scheduler before any scroll writers run.
+		try {
+			installScheduler();
+		} catch (err) {
+			try { console.warn('[scheduler] install failed', err); } catch {}
+		}
+
+		// 2) Legacy/test auto-scroll wiring (temporary until router owns it fully)
+		try {
+			const viewer = document.getElementById('viewer') as HTMLElement | null;
+			const autoToggle = document.getElementById('autoScrollToggle') as HTMLButtonElement | null
+				|| document.getElementById('autoToggle') as HTMLButtonElement | null;
+			const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
+				|| document.getElementById('autoSpeed') as HTMLInputElement | null;
+
+			if (viewer && autoToggle && autoSpeed) {
+				const auto = (Auto as any).initAutoScroll?.(() => viewer);
+				if (auto && typeof auto.bindUI === 'function') {
+					auto.bindUI(autoToggle, autoSpeed);
+				} else {
+					autoToggle.addEventListener('click', () => { try { (Auto as any).toggle?.(); } catch {} });
+					autoSpeed.addEventListener('change', () => {
+						try { (Auto as any).setSpeed?.(Number(autoSpeed.value)); } catch {}
+					});
+				}
+
+					const applySliderToBrain = () => {
+					try {
+						const val = Number(autoSpeed.value);
+						if (!Number.isFinite(val)) return;
+							brain.setBaseSpeedPx(val);
+					} catch {}
+				};
+				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });
+				applySliderToBrain();
+			}
+		} catch (err) {
+			try { console.warn('[auto-scroll] wiring failed', err); } catch {}
+		}
+
+		// 3) Bridge legacy mode selectors into the TS scroll brain
+		try { initScrollModeBridge(); } catch {}
+	}, { once: true });
+} catch {}
 
 // Install emergency binder only in dev/CI/headless harness contexts (to reduce double-binding risk in prod)
 try {
@@ -322,6 +423,10 @@ export async function boot() {
 					} catch {}
 					// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+								// Ensure Settings overlay content uses TS builder (single source of truth)
+								try { mountSettingsOverlay(); } catch {}
+								// Wire OBS UI once DOM nodes exist; idempotent if earlier init already ran
+								try { initObsUI(); } catch {}
 								// Wire single mic toggle button if present
 								try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)
@@ -493,12 +598,16 @@ export async function boot() {
 							try { disableLegacyScriptsUI(); } catch {}
 							try { neuterLegacyScriptsInit(); } catch {}
 							try {
-								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' });
-								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' });
+								const rebindFolderControls = () => {
+									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' }); } catch {}
+									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' }); } catch {}
+								};
+								rebindFolderControls();
 								// If the sidebar select is created later, bind on readiness signal
 								window.addEventListener('tp:sidebar:ready', () => {
 									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' }); } catch {}
 								}, { once: true, capture: true });
+								window.addEventListener('tp:settings-folder:ready', () => { try { rebindFolderControls(); } catch {}; }, { capture: true });
 							} catch {}
 							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
 							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}

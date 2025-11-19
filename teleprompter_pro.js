@@ -1360,8 +1360,13 @@ let _toast = function (msg, opts) {
                     } catch {}
                   });
                 }
-                // publish minimal API
-                window.__tpScrollWrite = requestScrollTop;
+                // publish minimal API (stand down if TS already owns scrolling)
+                try {
+                  if (!window.__tpScrollSSOT || window.__tpScrollSSOT === 'js') {
+                    window.__tpScrollSSOT = 'js';
+                    window.__tpScrollWrite = requestScrollTop;
+                  }
+                } catch {}
                 // optional: wrap viewer.scrollTop writes
                 const sc = getScroller();
                 if (sc && !sc.__tpWriteWrapped) {
@@ -1948,6 +1953,19 @@ let _toast = function (msg, opts) {
   function _buildSettingsContent() {
     const body = document.getElementById('settingsBody');
     if (!body) return;
+    // Prefer modern TS/ESM settings overlay when available
+    try {
+      const api = window.__tp && window.__tp.settings;
+      if (api && typeof api.mount === 'function') {
+        api.mount(body);
+        _settingsBuilt = true;
+        try { syncSettingsValues(); } catch {}
+        try { setupSettingsTabs(); } catch {}
+        return;
+      }
+    } catch {}
+
+    // Legacy inline builder (fallback)
     // Idempotency guard: if cards already exist, treat as already-built and sync values.
     try {
       if (body.querySelector('.settings-card')) {
@@ -3025,7 +3043,7 @@ let _toast = function (msg, opts) {
           const name = nameRaw.toLowerCase();
           if (!allowed.has(name)) {
             unknownCount++;
-            addIssue(lineNum, `unsupported tag [${closing ? '\/' : ''}${nameRaw}]`, 'unsupported', {
+            addIssue(lineNum, `unsupported tag [${closing ? '/' : ''}${nameRaw}]`, 'unsupported', {
               tag: name,
             });
             continue;
@@ -12262,6 +12280,7 @@ let _toast = function (msg, opts) {
         panel.className = 'hidden';
         panel.style.cssText =
           'position:fixed; right:10px; top:44px; z-index:99999; max-width:420px; background:#0e141b; border:1px solid var(--edge); border-radius:12px; box-shadow:0 8px 28px rgba(0,0,0,.45); padding:10px; color:var(--fg); font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;';
+        panel.innerHTML =
           '<div style="margin:4px 0 6px; opacity:.8">Quick startup checks</div><div id="selfChecksList"></div>';
         document.body.appendChild(panel);
         document.addEventListener('click', (e) => {
@@ -12272,6 +12291,7 @@ let _toast = function (msg, opts) {
       }
 
       const list = panel.querySelector('#selfChecksList');
+      if (!list) return;
       list.innerHTML = '';
       for (const c of checks) {
         const row = document.createElement('div');

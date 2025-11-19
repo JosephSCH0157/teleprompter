@@ -31,6 +31,7 @@ export function ensureSettingsFolderControls() {
       </div>
     `;
     host.appendChild(card);
+    signalSettingsFolderReady('injected');
 
     // Test-only mock population for JS path (if ?mockFolder=1)
     try {
@@ -100,12 +101,23 @@ function startPersistenceWatcher() {
           const host = document.getElementById('settingsBody');
           if (host) {
             const ok = ensureSettingsFolderControls();
-            if (ok) { try { (window.HUD || window.__tpHud)?.log?.('settings:folder:reinjected', {}); } catch {} }
+            if (ok) {
+              try { (window.HUD || window.__tpHud)?.log?.('settings:folder:reinjected', {}); } catch {}
+              signalSettingsFolderReady('reinjected');
+            }
           }
         }
       } catch {}
     });
     mo.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(() => { try { mo.disconnect(); } catch {} }, WATCH_MS + 5000);
+  } catch {}
+}
+
+function signalSettingsFolderReady(reason) {
+  try {
+    window.dispatchEvent(new CustomEvent('tp:settings-folder:ready', {
+      detail: { reason, ts: Date.now() }
+    }));
   } catch {}
 }

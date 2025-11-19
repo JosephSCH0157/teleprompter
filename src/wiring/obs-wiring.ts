@@ -3,8 +3,23 @@
 // Uses the lightweight inline OBS v5 bridge in recorders.js
 
 // @ts-ignore - recorders.js is JS
+import { getSettings as getRecorderSettings, setSelected as setRecorderSelected } from '../../recorders';
 import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+function syncRegistrySelection(next: unknown): void {
+  const ids = toStringArray(next);
+  try {
+    setRecorderSelected(ids);
+  } catch (err) {
+    try { console.warn('[obs-wiring] syncRegistrySelection failed', err); } catch {}
+  }
+}
 
 // Optional: expose a dev console hook for quick OBS probes
 try { if (location.search.includes('dev=1')) { (window as any).__obsTestConnect = obsTestConnect; } } catch {}
@@ -78,6 +93,10 @@ export function initObsUI() {
         const on = readEnabledFromUI();
         setObsEnabled(on);
         try { rec.setEnabled(on); } catch {}
+        const cfg = getRecorderSettings();
+        const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
+        if (on) next.add('obs'); else next.delete('obs');
+        syncRegistrySelection(Array.from(next));
       }
       if (id === 'settingsObsUrl' || id === 'obsUrl' || id === 'settingsObsHost') {
         try { rec.reconfigure(parseWsUrl(readUrl(), readPass())); } catch {}
@@ -187,7 +206,22 @@ export function initObsUI() {
   try {
     const S = (window as any).__tpStore;
     if (S && typeof S.subscribe === 'function') {
-      try { S.subscribe('obsEnabled', (v: any) => { try { setObsEnabled(!!v); rec.setEnabled(!!v); } catch {} }); } catch {}
+      try {
+        S.subscribe('obsEnabled', (v: any) => {
+          const next = !!v;
+          try { setObsEnabled(next); } catch {}
+          try { rec.setEnabled(next); } catch {}
+          const cfg = getRecorderSettings();
+          const current = Array.isArray(cfg?.selected) ? cfg.selected : [];
+          const set = new Set(current);
+          if (next) {
+            set.add('obs');
+          } else {
+            set.delete('obs');
+          }
+          syncRegistrySelection(Array.from(set));
+        });
+      } catch {}
       try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
       try { S.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
     }
@@ -198,6 +232,8 @@ export function initObsUI() {
     if (getObsEnabled()) {
       try { rec.setEnabled(true); } catch {}
     }
+    const cfg = getRecorderSettings();
+    syncRegistrySelection(Array.isArray(cfg?.selected) ? cfg.selected : []);
   } catch {}
   try {
     window.addEventListener('beforeunload', () => { try { rec.setEnabled(false); } catch {} });

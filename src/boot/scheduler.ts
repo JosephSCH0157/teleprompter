@@ -75,6 +75,9 @@ declare global {
   }
 }
 
+// Alias requested by newer wiring code; keep both names until legacy boot stops using the old one.
+export const installScheduler = installScrollScheduler;
+
 try {
   if (typeof window !== 'undefined') {
     (window as any).__tpRequestWrite = requestWrite;

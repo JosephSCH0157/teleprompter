@@ -1119,6 +1119,9 @@ async function boot() {
     }
     try { wireMappedFolderNative(); } catch (e) {}
     try { document.addEventListener('DOMContentLoaded', () => { try { wireMappedFolderNative(); } catch (e2) { void e2; } }); } catch (e3) { void e3; }
+    try {
+      window.addEventListener('tp:settings-folder:ready', () => { try { wireMappedFolderNative(); } catch (err) {} }, { capture: true });
+    } catch (err) {}
 
     // Binder for Scripts Folder (JS path) – minimal parity with TS binder
     function __bindMappedFolderUI() {

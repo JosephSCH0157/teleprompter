@@ -133,10 +133,11 @@
   '  <div class="row">',
         '    <label><input type="checkbox" id="settingsEnableObs"/> Enable OBS</label>',
         '  </div>',
-  '  <div class="row">',
+  '  <form id="settingsObsCredsForm" class="row" autocomplete="off" novalidate onsubmit="return false;">',
   '    <label>IP/Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1"/></label>',
   '    <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>',
-  '  </div>',
+  '    <button type="submit" hidden aria-hidden="true"></button>',
+  '  </form>',
   '  <div class="row microcopy" style="color:#9fb4c9;font-size:12px">Port defaults to 4455; uses ws://</div>',
   '  <div class="row">',
         '    <label>Scene <input id="settingsObsScene" type="text" class="select-md" placeholder="Scene name"/></label>',
@@ -1008,18 +1009,21 @@
         } catch {}
       } catch {}
 
-      // OBS enabled toggle: central write path
+      const legacyObsAllowed = (() => { try { return window.__tpObsSSOT !== 'ts'; } catch { return true; } })();
+      // OBS enabled toggle: central write path (legacy-only; TS wiring is SSOT when __tpObsSSOT === 'ts')
       const settingsEnableObs = q('settingsEnableObs');
       const mainEnableObs = q('enableObs');
-      if (settingsEnableObs && hasStore) settingsEnableObs.addEventListener('change', () => S.set('obsEnabled', !!settingsEnableObs.checked));
-      if (mainEnableObs && hasStore) mainEnableObs.addEventListener('change', () => S.set('obsEnabled', !!mainEnableObs.checked));
-      if (hasStore && typeof S.subscribe === 'function') {
-        S.subscribe('obsEnabled', v => {
-          try {
-            if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v;
-            if (mainEnableObs && mainEnableObs.checked !== !!v) mainEnableObs.checked = !!v;
-          } catch {}
-        });
+      if (legacyObsAllowed) {
+        if (settingsEnableObs && hasStore) settingsEnableObs.addEventListener('change', () => S.set('obsEnabled', !!settingsEnableObs.checked));
+        if (mainEnableObs && hasStore) mainEnableObs.addEventListener('change', () => S.set('obsEnabled', !!mainEnableObs.checked));
+        if (hasStore && typeof S.subscribe === 'function') {
+          S.subscribe('obsEnabled', v => {
+            try {
+              if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v;
+              if (mainEnableObs && mainEnableObs.checked !== !!v) mainEnableObs.checked = !!v;
+            } catch {}
+          });
+        }
       }
 
       // Auto-record: Settings overlay control is source of truth (mirrors to any main control if present)
@@ -1384,7 +1388,7 @@
         });
       } catch {}
 
-      // Mirror OBS URL/password live between settings overlay and main panel via input events
+        // Mirror OBS URL/password live between settings overlay and main panel via input events
   const obsUrlS = q('settingsObsUrl');
   const mainUrl = q('obsUrl');
   const obsPassS = q('settingsObsPassword');
@@ -1396,8 +1400,8 @@
       const obsReconn = q('settingsObsReconnect');
       const obsTestBtn = q('settingsObsTest');
       const obsTestMsg = q('settingsObsTestMsg');
-      // Skip legacy OBS input mirroring when TS inline bridge owns OBS to avoid duplicate churn
-      if (!window.__tpObsInlineBridgeActive) {
+      // Skip legacy OBS input mirroring when TS inline bridge/TS SSOT owns OBS to avoid duplicate churn
+      if (legacyObsAllowed && !window.__tpObsInlineBridgeActive) {
         if (obsUrlS && mainUrl) {
           obsUrlS.addEventListener('input', () => { try { if (mainUrl.value !== obsUrlS.value) mainUrl.value = obsUrlS.value; } catch {} });
           mainUrl.addEventListener('input', () => { try { if (obsUrlS.value !== mainUrl.value) obsUrlS.value = mainUrl.value; } catch {} });
@@ -1478,41 +1482,43 @@
         });
       }
 
-      // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth and manage connection
-      function ensureObsConnection(){
-        if (window.__tpObsInlineBridgeActive) return; // TS inline bridge manages OBS; avoid double connections
-        try {
-          const enabled = hasStore ? !!S.get('obsEnabled') : false;
-          const host = hasStore ? String(S.get('obsHost')||'') : '';
-          const pass = hasStore ? String(S.get('obsPassword')||'') : '';
-          const shouldReconnect = hasStore ? !!S.get('obsReconnect') : true;
-          const statusEl = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
-          const setStatus = (txt) => { try { if (statusEl) statusEl.textContent = txt; } catch {} };
-          if (!enabled) {
-            if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
-            window.__tpObsConn = null; setStatus && setStatus('disabled'); return;
-          }
-          if (!host || !window.__tpOBS || typeof window.__tpOBS.connect !== 'function') return;
-          if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
+      // Wire OBS toggle wiring behavior to use S.set('obsEnabled') as source-of-truth and manage connection (legacy only)
+      if (legacyObsAllowed) {
+        function ensureObsConnection(){
+          if (window.__tpObsInlineBridgeActive) return; // TS inline bridge manages OBS; avoid double connections
           try {
-            const conn = window.__tpOBS.connect({ host, port: 4455, secure: false, password: pass, reconnect: shouldReconnect });
-            window.__tpObsConn = conn;
-            if (conn && conn.on) {
-              conn.on('connecting', () => setStatus('connecting'));
-              conn.on('open', () => setStatus('connected'));
-              conn.on('error', () => setStatus('error'));
-              conn.on('closed', () => setStatus('closed'));
+            const enabled = hasStore ? !!S.get('obsEnabled') : false;
+            const host = hasStore ? String(S.get('obsHost')||'') : '';
+            const pass = hasStore ? String(S.get('obsPassword')||'') : '';
+            const shouldReconnect = hasStore ? !!S.get('obsReconnect') : true;
+            const statusEl = document.getElementById('obsStatusText') || document.getElementById('obsStatus');
+            const setStatus = (txt) => { try { if (statusEl) statusEl.textContent = txt; } catch {} };
+            if (!enabled) {
+              if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
+              window.__tpObsConn = null; setStatus && setStatus('disabled'); return;
             }
+            if (!host || !window.__tpOBS || typeof window.__tpOBS.connect !== 'function') return;
+            if (window.__tpObsConn && window.__tpObsConn.close) { try { window.__tpObsConn.close(); } catch {} }
+            try {
+              const conn = window.__tpOBS.connect({ host, port: 4455, secure: false, password: pass, reconnect: shouldReconnect });
+              window.__tpObsConn = conn;
+              if (conn && conn.on) {
+                conn.on('connecting', () => setStatus('connecting'));
+                conn.on('open', () => setStatus('connected'));
+                conn.on('error', () => setStatus('error'));
+                conn.on('closed', () => setStatus('closed'));
+              }
+            } catch {}
           } catch {}
-        } catch {}
+        }
+        if (hasStore && typeof S.subscribe === 'function') {
+          S.subscribe('obsEnabled', (v) => { try { if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v; } catch {} try { window.__tpObs?.setArmed?.(!!v); } catch {} ensureObsConnection(); });
+          S.subscribe('obsHost', ensureObsConnection);
+          S.subscribe('obsPassword', ensureObsConnection);
+        }
+        // Initial connection attempt after mount
+        setTimeout(() => { try { window.__tpObs?.setArmed?.(!!(hasStore && S.get && S.get('obsEnabled'))); } catch {} ensureObsConnection(); }, 0);
       }
-      if (hasStore && typeof S.subscribe === 'function') {
-        S.subscribe('obsEnabled', (v) => { try { if (settingsEnableObs && settingsEnableObs.checked !== !!v) settingsEnableObs.checked = !!v; } catch {} try { window.__tpObs?.setArmed?.(!!v); } catch {} ensureObsConnection(); });
-        S.subscribe('obsHost', ensureObsConnection);
-        S.subscribe('obsPassword', ensureObsConnection);
-      }
-      // Initial connection attempt after mount
-      setTimeout(() => { try { window.__tpObs?.setArmed?.(!!(hasStore && S.get && S.get('obsEnabled'))); } catch {} ensureObsConnection(); }, 0);
 
       // --- Recording adapters picker ---
       initRecorderAdaptersUI();

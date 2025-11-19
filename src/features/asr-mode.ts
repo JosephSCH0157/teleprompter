@@ -8,6 +8,8 @@ import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { speechStore } from '../state/speech-store';
 
+const RESCUE_JUMPS_ENABLED = false; // temp gate: log rescues without forcing hard jumps
+
 export type AsrState = 'idle' | 'ready' | 'listening' | 'running' | 'error';
 
 export interface AsrModeOptions {
@@ -202,9 +204,12 @@ export class AsrMode {
       // Rescue attempt on weak finals: nudge by one to keep momentum
       this.rescueCount++;
       if (this.rescueCount <= 2) {
-        this.currentIdx = Math.min(this.currentIdx + 1, this.getAllLineEls().length - 1);
-        this.scrollToLine(this.currentIdx);
-        this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'weak-final' });
+        const rescueIdx = Math.min(this.currentIdx + 1, this.getAllLineEls().length - 1);
+        this.dispatch('asr:rescue', { index: rescueIdx, reason: 'weak-final' });
+        if (RESCUE_JUMPS_ENABLED) {
+          this.currentIdx = rescueIdx;
+          this.scrollToLine(this.currentIdx);
+        }
       }
     }
   }

@@ -1,3 +1,5 @@
+import { setBrainBaseSpeed } from '../scroll/brain-hooks.js';
+
 // src/features/autoscroll.js (authoritative controller)
 let enabled = false;
 let speed = 21;          // px/sec default
@@ -122,7 +124,9 @@ export function setSpeed(pxPerSec) {
   if (!Number.isFinite(v)) return;
   const clamped = Math.max(1, Math.min(200, v));
   if (clamped === speed) return; // No change, skip
+  const prev = speed;
   speed = clamped;
+  try { setBrainBaseSpeed(clamped); } catch {}
   // Persist and notify engine if present
   try { localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
   // Prevent recursion: only call __scrollCtl.setSpeed if not already inside it
@@ -135,7 +139,9 @@ export function setSpeed(pxPerSec) {
     }
   }
   // Tell listeners (router, UI) about speed change
-  try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail: { speed } })); } catch {}
+  const detail = { speed, deltaPx: clamped - prev };
+  try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
   // Reflect to numeric input, if present
   try { const inp = document.getElementById('autoSpeed'); if (inp) inp.value = String(speed); } catch {}
   // If UI is in 'on' state, reflect the current speed on the button

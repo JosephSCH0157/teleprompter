@@ -21,6 +21,7 @@ export const VAD_PARTIAL_GRACE_MS = 400;
 
 // Internal instance registry for tests/teardown
 const __asrInstances = new Set();
+const RESCUE_JUMPS_ENABLED = false; // temp gate: keep HUD telemetry but disable forced reposition
 
 export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
@@ -182,11 +183,14 @@ export function initAsrFeature() {
               let rescueIdx = Math.min(this.currentIdx + 1, all.length - 1);
               rescueIdx = this.nextSpokenFrom(rescueIdx);
               if (rescueIdx !== this.currentIdx) {
-                this.currentIdx = rescueIdx;
-                this.scrollToLine(rescueIdx);
-                this.dispatch('asr:rescue', { index: rescueIdx, reason: 'idle' });
+                const detail = { index: rescueIdx, reason: 'idle' };
+                this.dispatch('asr:rescue', detail);
                 try { (window.HUD?.log || console.debug)?.('asr:rescue (idle)', { index: rescueIdx }); } catch {}
-                this._lastCommitAt = now; // reset window
+                if (RESCUE_JUMPS_ENABLED) {
+                  this.currentIdx = rescueIdx;
+                  this.scrollToLine(rescueIdx);
+                }
+                this._lastCommitAt = now; // reset window even when we skip the jump
               }
             }
           }
@@ -506,10 +510,13 @@ export function initAsrFeature() {
               let rescueIdx = Math.min(newIdx + 1, this.getAllLineEls().length - 1);
               rescueIdx = this.nextSpokenFrom(rescueIdx);
               if (rescueIdx !== newIdx) {
-                this.currentIdx = rescueIdx;
-                this.scrollToLine(rescueIdx);
-                this.dispatch('asr:rescue', { index: rescueIdx, reason: 'same-index' });
+                const detail = { index: rescueIdx, reason: 'same-index' };
+                this.dispatch('asr:rescue', detail);
                 try { (window.HUD?.log || console.debug)?.('asr:rescue (same-index)', { from: newIdx, to: rescueIdx }); } catch {}
+                if (RESCUE_JUMPS_ENABLED) {
+                  this.currentIdx = rescueIdx;
+                  this.scrollToLine(rescueIdx);
+                }
               }
               this._stuckLastAt = now2; // reset window
             }
@@ -520,10 +527,13 @@ export function initAsrFeature() {
         if (this.rescueCount <= 2) {
           let rIdx = Math.min(this.currentIdx + 1, this.getAllLineEls().length - 1);
           rIdx = this.nextSpokenFrom(rIdx);
-          this.currentIdx = rIdx;
-          this.scrollToLine(this.currentIdx);
-          this.dispatch('asr:rescue', { index: this.currentIdx, reason: 'weak-final' });
-          try { (window.HUD?.log || console.debug)?.('asr:rescue', { index: this.currentIdx }); } catch {}
+          const detail = { index: rIdx, reason: 'weak-final' };
+          this.dispatch('asr:rescue', detail);
+          try { (window.HUD?.log || console.debug)?.('asr:rescue', { index: rIdx }); } catch {}
+          if (RESCUE_JUMPS_ENABLED) {
+            this.currentIdx = rIdx;
+            this.scrollToLine(this.currentIdx);
+          }
         }
       }
     }
