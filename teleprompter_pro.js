@@ -12033,6 +12033,7 @@ let _toast = function (msg, opts) {
     // if (autoTimer) stopAutoScroll();
 
     recog = new SR();
+    try { window.recog = recog; } catch {}
     recog.continuous = true;
     recog.interimResults = true;
     recog.lang = 'en-US';

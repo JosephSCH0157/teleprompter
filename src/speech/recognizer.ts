@@ -61,6 +61,11 @@ export class Recognizer {
     if (!SR) throw new Error('SpeechRecognition not available');
     try {
       this.recog = new SR();
+      try {
+        if (typeof window !== 'undefined') {
+          (window as any).recog = this.recog;
+        }
+      } catch {}
       this.shouldRun = true;
       this.clearRestartTimer();
       this.recog.continuous = true;
