@@ -83,6 +83,24 @@
     } catch {}
   }
 
+  function syncSelectToDevice(selectEl, deviceId, label) {
+    try {
+      if (!selectEl || !deviceId) return;
+      const options = Array.from(selectEl.options || []);
+      let opt = options.find((o) => o && o.value === deviceId);
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = deviceId;
+        opt.textContent = label || 'Camera';
+        selectEl.appendChild(opt);
+      } else if (label && !opt.textContent) {
+        opt.textContent = label;
+      }
+      if (label && opt) opt.textContent = label;
+      if (selectEl.value !== deviceId) selectEl.value = deviceId;
+    } catch {}
+  }
+
   async function startCamera() {
     try {
       if (__startingCam) return; // prevent double-fire
@@ -149,7 +167,7 @@
             }
           }
         } else {
-          // No explicit device → use default
+          // No explicit device → use default (let browser decide)
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
       const camVideo = document.getElementById('camVideo');
@@ -162,14 +180,26 @@
       camStream = stream;
       setCamButtons(true);
       applyCamSizing(); applyCamOpacity(); applyCamMirror();
+        const track = stream?.getVideoTracks?.()[0] || null;
+        const settings = track && typeof track.getSettings === 'function' ? track.getSettings() : null;
+        const detectedId = settings && settings.deviceId ? settings.deviceId : null;
+        const finalDeviceId = detectedId || id || null;
+        if ((!id || fellBackFromSaved || fellBackFromSelected) && finalDeviceId) {
+          id = finalDeviceId;
+        }
+        try {
+          window.__tpCamera = window.__tpCamera || {};
+          window.__tpCamera.currentDeviceId = finalDeviceId || null;
+        } catch {}
         // Persist + mirror only after successful start
         try {
-          if (id && !fellBackFromSaved && !fellBackFromSelected) {
-            localStorage.setItem('tp_camera_device_v1', id);
+          if (finalDeviceId) {
+            localStorage.setItem('tp_camera_device_v1', finalDeviceId);
             const mainSel = document.getElementById('camDevice');
             const setSel  = document.getElementById('settingsCamSel');
-            if (mainSel && mainSel.value !== id) mainSel.value = id;
-            if (setSel  && setSel.value  !== id) setSel.value  = id;
+            const label = activeTrackLabel(stream);
+            syncSelectToDevice(mainSel, finalDeviceId, label);
+            syncSelectToDevice(setSel, finalDeviceId, label);
           }
         } catch {}
       // Announce active camera label for visibility
