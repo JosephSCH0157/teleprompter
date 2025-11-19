@@ -126,6 +126,13 @@ function _getRuntimeScriptState() {
 
 export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult {
   try {
+    try {
+      console.log('[ASR] matchBatch', {
+        text,
+        isFinal,
+        len: typeof text === 'string' ? text.length : 0,
+      });
+    } catch {}
     const spokenTokens = matcher.normTokens(text || '');
     if (spokenTokens.length) {
       noteAsrSpeechActivity(text);
@@ -201,6 +208,7 @@ export function stopRecognizer() {
 (function attachShim() {
   try {
     const w: any = window as any;
+    try { console.log('[ASR] orchestrator global shim installing'); } catch {}
     w.__tpSpeech = w.__tpSpeech || {};
     w.__tpSpeech.startRecognizer = startRecognizer;
     w.__tpSpeech.stopRecognizer = stopRecognizer;
