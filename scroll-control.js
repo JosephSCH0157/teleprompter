@@ -22,7 +22,6 @@
  */
 export default function createScrollController(adapters = {}, telemetry) {
   // --- Anti-drift state ---
-  let bigErrStart = null; // timestamp when |err| > macro began
   // let lastErr = 0; // (unused)
   // let lastCommitTime = 0; // (unused)
   let lastTargetTop = 0;
@@ -81,9 +80,9 @@ export default function createScrollController(adapters = {}, telemetry) {
    * @param {number} params.yActive - Desired scroll position (target).
    * @param {number} params.yMarker - Current marker position (highlight).
    * @param {number} params.scrollTop - Current scroll position.
-   * @param {number} params.maxScrollTop - Maximum allowed scroll position.
-   * @param {number} params.now - Current time (optional, for future use).
-   * @returns {{targetTop:number, mode:'snap'|'ease'}|null}
+  * @param {number} params.maxScrollTop - Maximum allowed scroll position.
+  * @param {number} params.now - Current time (optional, for future use).
+  * @returns {{targetTop:number, mode:'ease'|'bottom'}|null}
    */
   function controlScroll({
     yActive,
@@ -109,22 +108,6 @@ export default function createScrollController(adapters = {}, telemetry) {
     prevErr = err;
     prevErrTs = nowTs;
 
-    // --- Hard resync on big error ---
-    if (absErr > macro) {
-      if (!bigErrStart) bigErrStart = nowTs;
-      if (nowTs - bigErrStart > 300) {
-        // Hard snap, skip easing/debouncers
-        // lastCommitTime = nowTs; // (removed, unused)
-        // lastErr = 0; // (removed, unused)
-        bigErrStart = null;
-        let snapTop = yActive - markerOffset;
-        snapTop = Math.max(0, Math.min(snapTop, maxScrollTop));
-        return { targetTop: snapTop, mode: 'snap' };
-      }
-    } else {
-      bigErrStart = null;
-    }
-
     // --- Calm mode bypass when behind or stalled ---
     let allowFastLane = absErr > macro || (stallFired && sim >= 0.85);
 
@@ -145,7 +128,7 @@ export default function createScrollController(adapters = {}, telemetry) {
       stepPx = Math.sign(delta) * Math.min(Math.abs(delta), maxSurgeStep);
       allowFastLane = true; // treat as snap mode
     } else {
-      // --- Large errors: snap closer in one go (clamped) ---
+      // --- Large errors: take a bigger corrective step (clamped) ---
       const step = allowFastLane ? Math.min(absErr, maxStep) : Math.ceil(absErr * 0.35);
       stepPx = Math.sign(err) * step;
     }
@@ -163,7 +146,7 @@ export default function createScrollController(adapters = {}, telemetry) {
       lastTargetTop = targetTop;
     }
 
-    return { targetTop, mode: allowFastLane ? 'snap' : 'ease' };
+    return { targetTop, mode: 'ease' };
   }
   const log = telemetry || (() => {});
 
@@ -236,11 +219,12 @@ export default function createScrollController(adapters = {}, telemetry) {
       now: t,
     });
     if (ctrl) {
-      if (ctrl.mode === 'snap') {
-        // Immediate set, no batching/debounce
+      if (ctrl.mode === 'bottom') {
         A.requestScroll(ctrl.targetTop);
-        log('scroll', { tag: 'scroll', top: ctrl.targetTop, mode: 'snap' });
-      } else {
+        log('scroll', { tag: 'scroll', top: ctrl.targetTop, mode: 'bottom' });
+        return;
+      }
+
         // Smooth path (existing logic)
         // Basic PD + feed‑forward controller
         const error = targetTop - viewerTop;
@@ -317,7 +301,6 @@ export default function createScrollController(adapters = {}, telemetry) {
         if (Math.abs(targetTop - nextTop) > WAKE_EPS) {
           pendingRaf = A.raf(step);
         }
-      }
     } else {
       // If ctrl is null, error is within micro threshold; do nothing
     }
@@ -425,8 +408,8 @@ export default function createScrollController(adapters = {}, telemetry) {
      * @param {number} params.yMarker - Current marker position (highlight).
      * @param {number} params.scrollTop - Current scroll position.
      * @param {number} params.maxScrollTop - Maximum allowed scroll position.
-     * @param {number} params.now - Current time (optional, for future use).
-     * @returns {{targetTop:number, mode:'snap'|'ease'}|null}
+    * @param {number} params.now - Current time (optional, for future use).
+    * @returns {{targetTop:number, mode:'ease'|'bottom'}|null}
      */
     controlScrollStep: controlScroll,
     /**
