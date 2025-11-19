@@ -10,7 +10,11 @@ import './boot/compat-ids';
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
 import { installScheduler } from './boot/scheduler';
+import { initRecorderBackends } from './recording/registerRecorders';
+import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
+import { getAppStore } from './state/appStore';
+import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
 
 import { bootstrap } from './boot/boot';
@@ -33,6 +37,10 @@ function initOnce<T extends (..._args: any[]) => any>(name: string, fn: T): T {
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
 bootstrap().catch(() => {});
+
+try {
+	initRecorderBackends();
+} catch {}
 
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
@@ -464,43 +472,57 @@ export async function boot() {
 						document.addEventListener('click', onClick, { capture: true });
 					} catch {}
 
-					// Auto-record one-shot
+					// Session recording auto-start wiring
 					try {
-						(function autoRecordOnStart(){
-							const FLAG = 'tp_auto_record_on_start_v1';
-							let fired = false;
-							const wants = () => {
+						const store = getAppStore();
+						const recording = createStartOnPlay(store);
+						const startEvents = ['tp:session:start', 'speech:start', 'autoscroll:start'];
+						startEvents.forEach((ev) => {
+							document.addEventListener(
+								ev as any,
+								() => {
+									recording.onSessionStart().catch((err) => {
+										console.warn('[recording] auto-start failed', err);
+									});
+								},
+								{ capture: true },
+							);
+						});
+
+						document.addEventListener(
+							'tp:speech-state',
+							(e: any) => {
 								try {
-									const store = (window as any).__tpStore || null;
-									if (store && typeof store.get === 'function') {
-										const v = store.get('autoRecord');
-										if (typeof v === 'boolean') return v;
+									if (e?.detail?.running === false) {
+										recording.onSessionStop().catch((err) => {
+											console.warn('[recording] auto-stop failed', err);
+										});
 									}
 								} catch {}
-								try {
-									const api = (window as any).__tpRecording;
-									if (api && typeof api.wantsAuto === 'function') return !!api.wantsAuto();
-								} catch {}
-								try {
-									return localStorage.getItem(FLAG) === '1';
-								} catch { return false; }
-							};
-							const maybe = async () => {
-								if (fired || !wants()) return;
-								try {
-									if ((window as any).__tpRecording?.getAdapter?.() === 'obs') {
-										if (!(window as any).__tpObs?.armed?.()) return;
-									}
-									fired = true;
-									await ((window as any).__tpRecording?.start?.() || Promise.resolve());
-								} catch (e) {
-									fired = false; try { console.warn('auto-record failed', e); } catch {}
-								}
-							};
-							['tp:session:start','speech:start','autoscroll:start'].forEach(ev => {
-								document.addEventListener(ev as any, () => { try { (maybe as any)(); } catch {} }, { capture: true });
-							});
-						})();
+							},
+							{ capture: true },
+						);
+
+						document.addEventListener(
+							'tp:session:stop',
+							() => {
+								recording.onSessionStop().catch((err) => {
+									console.warn('[recording] session stop failed', err);
+								});
+							},
+							{ capture: true },
+						);
+
+						const wireButtons = () => {
+							try { wireRecordButtons(store); } catch {}
+						};
+						if (typeof document !== 'undefined') {
+							if (document.readyState === 'loading') {
+								document.addEventListener('DOMContentLoaded', wireButtons, { once: true });
+							} else {
+								wireButtons();
+							}
+						}
 					} catch {}
 
 					// Scroll Router
