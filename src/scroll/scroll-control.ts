@@ -12,6 +12,34 @@ export type Adapters = Partial<{
 
 export type TelemetryFn = (_tag: string, _data?: any) => void;
 
+let lastSimScore = 1;
+let stallPulse = false;
+
+export type AsrScrollState = { sim?: number; stallFired?: boolean };
+
+export function updateAsrScrollState(state: AsrScrollState) {
+  if (state && typeof state.sim === 'number' && Number.isFinite(state.sim)) {
+    lastSimScore = Math.max(0, Math.min(1, state.sim));
+  }
+  if (state && typeof state.stallFired === 'boolean') {
+    stallPulse = state.stallFired;
+  } else if (state && 'stallFired' in state && state.stallFired == null) {
+    stallPulse = false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    (window as any).__tpUpdateAsrScrollState = updateAsrScrollState;
+  } catch {}
+}
+
+function consumeAsrScrollState() {
+  const res = { sim: lastSimScore, stallFired: stallPulse };
+  stallPulse = false;
+  return res;
+}
+
 export default function createScrollController(adapters: Adapters = {}, telemetry?: TelemetryFn) {
   let lastTargetTop = 0;
 
@@ -111,7 +139,16 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
 
     const viewerTop = A.getViewerTop();
     const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
-    const ctrl = controlScroll({ yActive: targetTop, yMarker: viewerTop, scrollTop: viewerTop, maxScrollTop, now: t });
+    const asrState = consumeAsrScrollState();
+    const ctrl = controlScroll({
+      yActive: targetTop,
+      yMarker: viewerTop,
+      scrollTop: viewerTop,
+      maxScrollTop,
+      now: t,
+      sim: asrState.sim,
+      stallFired: asrState.stallFired,
+    });
     if (ctrl) {
       if (ctrl.mode === 'bottom') {
         A.requestScroll(ctrl.targetTop);

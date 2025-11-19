@@ -4833,7 +4833,7 @@ let _toast = function (msg, opts) {
       let _lastRescueAt = 0;
       let _lastMidRescueAt = 0;
       // Similarity tracking for stall detection - now uses global simHistory
-      const LOW_SIM_THRESHOLD = 0.65; // sim_mean threshold for stall
+      const LOW_SIM_THRESHOLD = 0.55; // was 0.65 – more forgiving for real reads
 
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
@@ -5185,6 +5185,12 @@ let _toast = function (msg, opts) {
               docRatio,
               noCommitFor: Math.floor(noCommitFor),
             });
+            try {
+              const fn = typeof window.__tpUpdateAsrScrollState === 'function'
+                ? window.__tpUpdateAsrScrollState
+                : null;
+              fn?.({ stallFired: true });
+            } catch {}
           } catch {}
           _lastRescueAt = now;
           try {
@@ -5269,6 +5275,12 @@ let _toast = function (msg, opts) {
               docRatio,
               noCommitFor: Math.floor(noCommitFor),
             });
+            try {
+              const fn = typeof window.__tpUpdateAsrScrollState === 'function'
+                ? window.__tpUpdateAsrScrollState
+                : null;
+              fn?.({ stallFired: true });
+            } catch {}
           } catch {}
           _lastMidRescueAt = now;
           try {
@@ -9472,6 +9484,12 @@ let _toast = function (msg, opts) {
     const idxBefore = currentIndex; // for jitter metric
     try {
       window.__lastSimScore = Number(bestSim.toFixed(3));
+      try {
+        const fn = typeof window.__tpUpdateAsrScrollState === 'function'
+          ? window.__tpUpdateAsrScrollState
+          : null;
+        fn?.({ sim: window.__lastSimScore });
+      } catch {}
       if (typeof debug === 'function')
         debug({
           tag: 'match:sim',

@@ -20,6 +20,28 @@
  * @param {Partial<Adapters>} adapters
  * @param {(tag:string, data?:any) => void} [telemetry]
  */
+let lastSimScore = 1;
+let stallPulse = false;
+
+export function updateAsrScrollState(state = {}) {
+  try {
+    if (typeof state.sim === 'number' && Number.isFinite(state.sim)) {
+      lastSimScore = Math.max(0, Math.min(1, state.sim));
+    }
+    if (typeof state.stallFired === 'boolean') {
+      stallPulse = state.stallFired;
+    } else if ('stallFired' in state && state.stallFired == null) {
+      stallPulse = false;
+    }
+  } catch {}
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    window.__tpUpdateAsrScrollState = updateAsrScrollState;
+  } catch {}
+}
+
 export default function createScrollController(adapters = {}, telemetry) {
   // --- Anti-drift state ---
   // let lastErr = 0; // (unused)
@@ -217,7 +239,10 @@ export default function createScrollController(adapters = {}, telemetry) {
       scrollTop: viewerTop,
       maxScrollTop,
       now: t,
+      sim: lastSimScore,
+      stallFired: stallPulse,
     });
+    stallPulse = false;
     if (ctrl) {
       if (ctrl.mode === 'bottom') {
         A.requestScroll(ctrl.targetTop);
