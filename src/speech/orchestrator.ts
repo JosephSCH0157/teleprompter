@@ -170,6 +170,7 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
     _rec = createRecognizer(opts as any);
     _cb = cb;
     _rec.start((transcript: string, isFinal: boolean) => {
+      try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
       const text = transcript || '';
       matchBatch(text, isFinal);
       dispatchTranscript(text, isFinal);
