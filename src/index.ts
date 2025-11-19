@@ -339,11 +339,12 @@ try {
   } catch {}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
-function injectSpeechNotesHud(){
+		function injectSpeechNotesHud() {
 	try {
 		if (document.getElementById('tp-speech-notes-hud')) return; // already present
 		const s = document.createElement('script');
-		s.src = './hud/speech-notes-hud.js';
+				const isDevHud = !!(window.__TP_DEV || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search));
+				s.src = isDevHud ? './src/hud/speech-notes-hud.js' : './hud/speech-notes-hud.js';
 		s.async = true; // non-blocking
 		document.head.appendChild(s);
 	} catch {}
