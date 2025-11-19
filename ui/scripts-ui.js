@@ -123,6 +123,19 @@ function getMappedFolderHandle() {
   }
 }
 
+function requestFolderScriptsRefresh(reason) {
+  try {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent('tp:folderScripts:refresh', {
+        detail: { reason: reason || 'unknown', ts: Date.now() },
+      })
+    );
+  } catch {
+    void 0;
+  }
+}
+
 async function ensureHandleWritePermission(handle) {
   try {
     const state = await handle.queryPermission?.({ mode: 'readwrite' });
@@ -286,6 +299,7 @@ async function saveCurrent(text) {
     if (currentScript.backend === 'folder') {
       const ok = await writeHandle(currentScript.handle, text);
       if (!ok) throw new Error('write-failed');
+      requestFolderScriptsRefresh('saveCurrent');
       toastFn('Script saved', { type: 'ok' });
       return;
     }
@@ -343,6 +357,7 @@ async function saveAs(text) {
             setCurrentScript({ id: null, name: handle.name || suggested, backend: 'folder', handle });
             updateTitleFromName(handle.name || suggested);
             upsertFolderOption(handle.name || suggested, handle);
+            requestFolderScriptsRefresh('saveAs-picker');
             toastFn('Script saved', { type: 'ok' });
             return;
           }
@@ -375,6 +390,7 @@ async function saveAs(text) {
                 setCurrentScript({ id: null, name: nm, backend: 'folder', handle });
                 updateTitleFromName(nm);
                 upsertFolderOption(nm, handle);
+                requestFolderScriptsRefresh('saveAs-prompt');
                 toastFn('Script saved', { type: 'ok' });
                 return;
               }

@@ -1157,6 +1157,44 @@ async function boot() {
           } catch (e) {}
         }
 
+        let refreshInFlight = false;
+        async function refreshFromActiveSource(reason) {
+          if (refreshInFlight) return;
+          refreshInFlight = true;
+          try {
+            const dirHandle = (() => { try { return window.__tpFolderHandle || null; } catch (e) { return null; } })();
+            if (dirHandle) {
+              const names = await listDirNames(dirHandle);
+              populate(names);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch (e) {}
+              return;
+            }
+            const fallbackMap = (() => { try { return window.__tpFolderFilesMap || null; } catch (e) { return null; } })();
+            if (fallbackMap && typeof fallbackMap.keys === 'function') {
+              const names = Array.from(fallbackMap.keys()).filter(Boolean).sort((a,b) => String(a).localeCompare(String(b)));
+              populate(names);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch (e) {}
+              return;
+            }
+            try {
+              const raw = localStorage.getItem('tp_last_folder_scripts');
+              if (raw) {
+                const arr = JSON.parse(raw) || [];
+                if (Array.isArray(arr)) populate(arr);
+              }
+            } catch (e) {}
+          } catch (e) { void e; }
+          finally { refreshInFlight = false; }
+        }
+        try {
+          window.addEventListener('tp:folderScripts:refresh', (ev) => {
+            try {
+              const why = (ev && ev.detail && ev.detail.reason) || 'event';
+              refreshFromActiveSource(why);
+            } catch (e) { void e; }
+          }, { capture: true });
+        } catch (e) {}
+
         // Persist and restore directory handle via IndexedDB so the menu survives reloads
         const IDB_NAME = 'tp_fs_v1';
         const IDB_STORE = 'handles';
@@ -1424,6 +1462,11 @@ async function boot() {
         if (window.__tpFolderFsOpsInstalled) return; window.__tpFolderFsOpsInstalled = true;
         const getDir = () => { try { return window.__tpFolderHandle || null; } catch { return null; } };
         const getEditorText = () => { try { const ed = document.getElementById('editor'); return (ed && 'value' in ed) ? (ed.value || '') : ''; } catch { return ''; } };
+        function signalFolderListRefresh(reason){
+          try {
+            window.dispatchEvent(new CustomEvent('tp:folderScripts:refresh', { detail: { reason, ts: Date.now() } }));
+          } catch (e) { void e; }
+        }
         async function saveToFolder(name, text){
           try {
             const dir = getDir(); if (!dir || !name) return false;
@@ -1457,6 +1500,7 @@ async function boot() {
               } catch (e) { void e; }
             }
             try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch (e) { void e; }
+            signalFolderListRefresh('add');
           } catch (e) { void e; }
         }
         function removeOptionEverywhere(name){
@@ -1472,6 +1516,7 @@ async function boot() {
               } catch (e) { void e; }
             }
             try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch (e) { void e; }
+            signalFolderListRefresh('remove');
           } catch (e) { void e; }
         }
         function renameOptionEverywhere(from, to){
@@ -1484,6 +1529,7 @@ async function boot() {
                 if (opt) { opt.textContent = to; }
               } catch (e) { void e; }
             }
+            signalFolderListRefresh('rename');
           } catch (e) { void e; }
         }
 

@@ -99,8 +99,13 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   });
 
   const off = onMappedFolder(async () => { await refreshList(); });
+  const onRefresh: EventListener = () => { try { refreshList(); } catch {}; };
+  try { window.addEventListener('tp:folderScripts:refresh', onRefresh); } catch {}
   await refreshList();
-  return () => { try { off(); } catch {}; };
+  return () => {
+    try { off(); } catch {}
+    try { window.removeEventListener('tp:folderScripts:refresh', onRefresh); } catch {}
+  };
 
   async function refreshList() {
     try {
