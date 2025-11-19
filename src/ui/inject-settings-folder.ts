@@ -41,6 +41,7 @@ export function ensureSettingsFolderControls() {
   // Prefer inserting inside the General tab content container if present
   const generalContainer = document.querySelector('[data-tab-content="general"]') as HTMLElement | null;
   if (generalContainer) generalContainer.appendChild(card); else host.appendChild(card);
+  signalSettingsFolderReady('injected');
 
   // Ensure visibility tracks the active tab, even if injected after initial tab wiring.
   // If we managed to place it inside the General tab content, we don't need custom visibility wiring.
@@ -86,6 +87,7 @@ function startPersistenceWatcher() {
             const ok = ensureSettingsFolderControls();
             if (ok) {
               try { (window as any).HUD?.log?.('settings:folder:reinjected', {}); } catch {}
+              signalSettingsFolderReady('reinjected');
             }
           }
         }
@@ -93,5 +95,13 @@ function startPersistenceWatcher() {
     });
     mo.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(() => { try { mo.disconnect(); } catch {} }, WATCH_MS + 5000);
+  } catch {}
+}
+
+function signalSettingsFolderReady(reason: 'injected'|'reinjected') {
+  try {
+    window.dispatchEvent(new CustomEvent('tp:settings-folder:ready', {
+      detail: { reason, ts: Date.now() }
+    }));
   } catch {}
 }

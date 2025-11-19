@@ -597,12 +597,16 @@ export async function boot() {
 							try { disableLegacyScriptsUI(); } catch {}
 							try { neuterLegacyScriptsInit(); } catch {}
 							try {
-								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' });
-								bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' });
+								const rebindFolderControls = () => {
+									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' }); } catch {}
+									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' }); } catch {}
+								};
+								rebindFolderControls();
 								// If the sidebar select is created later, bind on readiness signal
 								window.addEventListener('tp:sidebar:ready', () => {
 									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' }); } catch {}
 								}, { once: true, capture: true });
+								window.addEventListener('tp:settings-folder:ready', () => { try { rebindFolderControls(); } catch {}; }, { capture: true });
 							} catch {}
 							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
 							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
