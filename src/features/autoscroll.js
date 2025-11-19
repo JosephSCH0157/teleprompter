@@ -1,4 +1,4 @@
-import { setBrainBaseSpeed } from '../scroll/brain-hooks';
+import { setBrainBaseSpeed } from '../scroll/brain-hooks.js';
 
 // src/features/autoscroll.js (authoritative controller)
 let enabled = false;
