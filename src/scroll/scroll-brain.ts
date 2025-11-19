@@ -130,6 +130,13 @@ function onSpeechSample(sample: AdaptSample) {
     errPx: Number(sample.errPx) || 0,
     conf: typeof sample.conf === 'number' ? sample.conf : 1,
   } satisfies AdaptSample;
+  try {
+    (window as any).__tpAsrDebug = {
+      lastErrPx: safe.errPx,
+      lastConf: safe.conf,
+      lastSpeedPx: governor.getSpeedPxPerSec(),
+    };
+  } catch {}
   const { speedPxPerSec } = adaptSample(governor, safe);
   governedSpeedPxPerSec = speedPxPerSec;
 }
@@ -141,6 +148,7 @@ export interface ScrollBrain {
   setBaseSpeedPx: (_pxPerSec: number) => void;
   onManualSpeedAdjust: (_deltaPxPerSec: number) => void;
   onSpeechSample: (_sample: AdaptSample) => void;
+  getCurrentSpeedPx: () => number;
 }
 
 export function createScrollBrain(): ScrollBrain {
@@ -150,6 +158,7 @@ export function createScrollBrain(): ScrollBrain {
     setBaseSpeedPx,
     onManualSpeedAdjust,
     onSpeechSample,
+    getCurrentSpeedPx: () => governor.getSpeedPxPerSec(),
   };
 }
 
