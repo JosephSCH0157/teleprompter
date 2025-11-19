@@ -113,6 +113,13 @@ export class SpeedGovernor {
 
     const normConf = Math.max(0, Math.min(1, conf));
 
+    // Ignore small, low-confidence corrections to reduce jitter.
+    const DEAD_ZONE_PX = 60;
+    const MIN_CONF_FOR_SMALL = 0.9;
+    if (Math.abs(rawErr) < DEAD_ZONE_PX && normConf < MIN_CONF_FOR_SMALL) {
+      return this.current;
+    }
+
     // Convert pixel error into a speed delta.
     // Cap the magnitude so one wild sample can't blow up the speed.
     const MAX_ERR = 800; // px
