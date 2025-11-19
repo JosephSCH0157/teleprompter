@@ -331,6 +331,22 @@
 <div class="app">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
+<section class="mode-card" id="scrollModeCard">
+  <div class="mode-card-head">
+    <span class="mode-chip" aria-hidden="true">Scroll Mode</span>
+    <span class="mode-pill" id="scrollModeStatus">Priority Control</span>
+  </div>
+  <label class="sr-only" for="scrollMode">Scroll Mode</label>
+  <select id="scrollMode" aria-label="Scroll Mode" aria-describedby="scrollModeHelpText">
+    <option value="timed">Timed</option>
+    <option value="wpm">WPM</option>
+    <option value="hybrid" selected>Hybrid</option>
+    <option value="asr">ASR</option>
+    <option value="step">Step</option>
+    <option value="rehearsal">Rehearsal</option>
+  </select>
+  <p class="mode-hint" id="scrollModeHelpText">Hybrid follows speech automatically. Switch anytime to lock in manual, ASR, or rehearsal modes.</p>
+</section>
 <div class="row">
 <button id="displayToggleBtn" class="chip" type="button" aria-pressed="false" data-action="display-toggle">Display: Closed</button>
 </div>
