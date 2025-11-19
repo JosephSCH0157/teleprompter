@@ -173,9 +173,15 @@ try {
 function initOnce(name, fn) {
   try {
     window.__tpInit = window.__tpInit || {};
+    window.__tpInitHandlers = window.__tpInitHandlers || {};
+    if (typeof fn === 'function') {
+      window.__tpInitHandlers[name] = fn;
+    }
     if (window.__tpInit[name]) return;
+    const handler = window.__tpInitHandlers[name];
+    if (typeof handler !== 'function') return;
     window.__tpInit[name] = 1;
-    return fn();
+    return handler();
   } catch (e) {
     try { console.warn(`[init:${name}] failed`, e); } catch (e2) { void e2; }
   }
@@ -1682,5 +1688,5 @@ async function boot() {
 // Auto-run boot when loaded as a module, but also export boot for manual invocation.
 boot();
 
-export { boot };
+export { boot, initOnce };
 
