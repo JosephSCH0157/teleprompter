@@ -102,6 +102,7 @@ function dispatchTranscript(text: string, final: boolean) {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
     const detail = { text, final, ts: Date.now(), sim };
+    try { console.log('[ASR] dispatchTranscript', detail); } catch {}
     window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
   } catch {}
 }
