@@ -1,6 +1,7 @@
 import * as matcher from './matcher';
 import type { Recognizer } from './recognizer';
 import { createRecognizer } from './recognizer';
+import { emitAsrSyncFromLineDelta } from './asrSync';
 
 export interface MatchEvent {
   idx: number;
@@ -62,6 +63,17 @@ export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult 
     const spokenTokens = matcher.normTokens(text || '');
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState();
     const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
+
+    // Convert line delta to px error so the adaptive governor can respond
+    try {
+      const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
+      if (deltaLines) {
+        const conf = Math.max(0, Math.min(1, res.bestSim || 0)) * (isFinal ? 1 : 0.6);
+        emitAsrSyncFromLineDelta(deltaLines, conf);
+      }
+    } catch {
+      // non-fatal; continue flow
+    }
 
     // notify consumer callback if present
     if (_cb) {

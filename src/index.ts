@@ -52,6 +52,7 @@ import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
 import { createScrollBrain } from './scroll/scroll-brain';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
+import { setBrainBaseSpeed } from './scroll/brain-hooks';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
 
@@ -67,6 +68,30 @@ function ensureScrollBrain(): ScrollBrain {
 
 export function getScrollBrain() {
 	return ensureScrollBrain();
+}
+
+function bridgeLegacyScrollController() {
+	if (typeof window === 'undefined') return;
+	const w = window as any;
+	if (w.__tpScrollCtlBridgeActive) return;
+	w.__tpScrollCtlBridgeActive = true;
+	const tryPatch = () => {
+		const ctl = w.__scrollCtl;
+		if (!ctl || ctl.__tpBrainProxy) return false;
+		const original = typeof ctl.setSpeed === 'function' ? ctl.setSpeed.bind(ctl) : null;
+		if (!original) return false;
+		ctl.setSpeed = function patchedLegacySpeed(value: number) {
+			try { setBrainBaseSpeed(value); } catch {}
+			return original(value);
+		};
+		ctl.__tpBrainProxy = true;
+		return true;
+	};
+	if (tryPatch()) return;
+	const timer = setInterval(() => {
+		if (tryPatch()) clearInterval(timer);
+	}, 800);
+	setTimeout(() => clearInterval(timer), 10_000);
 }
 
 function applyUiScrollMode(mode: UiScrollMode) {
@@ -213,6 +238,7 @@ try {
 				installAsrScrollBridge({
 					onSpeechSample: brain.onSpeechSample,
 				});
+				bridgeLegacyScrollController();
 		// 1) Install the TypeScript scheduler before any scroll writers run.
 		try {
 			installScheduler();
