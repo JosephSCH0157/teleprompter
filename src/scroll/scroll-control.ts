@@ -72,14 +72,12 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
   const MAX_STEP = 2000;
   const WAKE_EPS = 8;
 
-  function controlScroll({ yActive, yMarker, scrollTop, maxScrollTop, now, markerOffset = 0, sim = 1, stallFired = false }: any) {
+  function controlScroll({ yActive, yMarker, scrollTop, maxScrollTop, now: _now, markerOffset = 0, sim = 1, stallFired = false }: any) {
     const err = yActive - yMarker;
     const absErr = Math.abs(err);
   const micro = 12;
   const macro = 100; // snappier snap threshold (was ~120)
     const maxStep = 320;
-    const nowTs = now || (A.now ? A.now() : Date.now());
-
     let allowFastLane = absErr > macro || (stallFired && sim >= 0.85);
 
     if (scrollTop >= maxScrollTop - 2 && absErr > 0) {

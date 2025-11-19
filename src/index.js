@@ -1210,7 +1210,7 @@ async function boot() {
         }
 
         let refreshInFlight = false;
-        async function refreshFromActiveSource(reason) {
+        async function refreshFromActiveSource(_reason) {
           if (refreshInFlight) return;
           refreshInFlight = true;
           try {

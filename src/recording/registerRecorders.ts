@@ -1,4 +1,5 @@
-import { RecorderBackend, registerRecorders } from './recorderRegistry';
+import type { RecorderBackend } from './recorderRegistry';
+import { registerRecorders } from './recorderRegistry';
 
 declare const window: any;
 
