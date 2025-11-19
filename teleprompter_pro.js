@@ -3043,7 +3043,7 @@ let _toast = function (msg, opts) {
           const name = nameRaw.toLowerCase();
           if (!allowed.has(name)) {
             unknownCount++;
-            addIssue(lineNum, `unsupported tag [${closing ? '\/' : ''}${nameRaw}]`, 'unsupported', {
+            addIssue(lineNum, `unsupported tag [${closing ? '/' : ''}${nameRaw}]`, 'unsupported', {
               tag: name,
             });
             continue;
