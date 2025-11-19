@@ -14,25 +14,42 @@ async function coerceBoolean(value: unknown): Promise<boolean> {
   return !!value;
 }
 
+function resolveLegacyRecorder() {
+  try {
+    const api = window?.__tpRecording || window?.__recorder;
+    if (!api) return null;
+    if (typeof api.start !== 'function' || typeof api.stop !== 'function') return null;
+    return api;
+  } catch {
+    return null;
+  }
+}
+
 function createCoreRecorder(): RecorderBackend {
   return {
     id: 'core',
     label: 'Bridge / local recorder',
     async isAvailable() {
       try {
-        const bridge = window?.__tpBridge;
-        if (!bridge) return false;
-        const probe = typeof bridge.isAvailable === 'function' ? bridge.isAvailable() : bridge.isAvailable;
-        return coerceBoolean(probe);
+        const recorder = resolveLegacyRecorder();
+        if (!recorder) return false;
+        if (typeof recorder.isAvailable === 'function') {
+          return coerceBoolean(recorder.isAvailable());
+        }
+        return true; // start/stop exist; assume available
       } catch {
         return false;
       }
     },
     async start() {
-      await window?.__tpBridge?.startRecording?.();
+      const recorder = resolveLegacyRecorder();
+      if (!recorder) throw new Error('core recorder unavailable');
+      await recorder.start?.();
     },
     async stop() {
-      await window?.__tpBridge?.stopRecording?.();
+      const recorder = resolveLegacyRecorder();
+      if (!recorder) return;
+      await recorder.stop?.();
     },
   };
 }
