@@ -110,6 +110,21 @@
     _stopDbMeter();
   }
 
+  function isOpen() {
+    try {
+      if (!audioStream) return false;
+      if (typeof audioStream.getTracks === 'function') {
+        const tracks = audioStream.getTracks();
+        if (Array.isArray(tracks) && tracks.length) {
+          return tracks.some((track) => track && track.readyState === 'live');
+        }
+      }
+      return audioStream.active !== false;
+    } catch {
+      return !!audioStream;
+    }
+  }
+
   async function populateDevices() {
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -138,7 +153,14 @@
   }
 
   // expose
-  try { window.__tpMic = window.__tpMic || {}; window.__tpMic.requestMic = requestMic; window.__tpMic.releaseMic = releaseMic; window.__tpMic.populateDevices = populateDevices; window.__tpMic.startDbMeter = startDbMeter; } catch {}
+  try {
+    window.__tpMic = window.__tpMic || {};
+    window.__tpMic.requestMic = requestMic;
+    window.__tpMic.releaseMic = releaseMic;
+    window.__tpMic.populateDevices = populateDevices;
+    window.__tpMic.startDbMeter = startDbMeter;
+    window.__tpMic.isOpen = isOpen;
+  } catch {}
   // Attempt a safe populate once on boot
   try {
     if (document.readyState === 'loading') {

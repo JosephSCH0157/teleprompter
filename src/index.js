@@ -166,6 +166,14 @@ try {
   window.__tpMic = {
     requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch (e) { void e; } },
     releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch (e) { void e; } },
+    isOpen: (...a) => {
+      try {
+        return !!Mic.isOpen?.(...a);
+      } catch (e) {
+        void e;
+        return false;
+      }
+    },
   };
 } catch (e) { void e; }
 

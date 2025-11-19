@@ -20,6 +20,27 @@ function updateChip(state) {
   } catch {}
 }
 
+function hasLiveTracks() {
+  try {
+    if (!stream || typeof stream.getTracks !== 'function') return false;
+    const tracks = stream.getTracks();
+    if (!Array.isArray(tracks)) return false;
+    return tracks.some((t) => t && t.readyState === 'live');
+  } catch {
+    return false;
+  }
+}
+
+export function isOpen() {
+  try {
+    if (!stream) return false;
+    if (hasLiveTracks()) return true;
+    return stream.active !== false;
+  } catch {
+    return !!stream;
+  }
+}
+
 export async function requestMic() {
   try {
     const S = (typeof window !== 'undefined' && window.__tpStore) ? window.__tpStore : null;
