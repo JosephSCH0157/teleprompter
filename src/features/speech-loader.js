@@ -11,7 +11,19 @@ function inRehearsal() {
 
 // Scroll/mic state helpers for gating transcript capture
 function getScrollMode() {
-  try { return (window.__tpStore?.get?.('mode') ?? window.__tpScrollMode ?? '').toString().toLowerCase(); } catch { return ''; }
+  try {
+    const fromStore = window.__tpStore?.get?.('mode');
+    if (fromStore != null) return String(fromStore).toLowerCase();
+
+    const router = window.__tpScrollMode;
+    if (router && typeof router.getMode === 'function') {
+      const mode = router.getMode();
+      if (mode != null) return String(mode).toLowerCase();
+    }
+
+    if (typeof router === 'string') return router.toLowerCase();
+  } catch {}
+  return '';
 }
 function micActive() {
   try { return !!window.__tpMic?.isOpen?.(); } catch {}
