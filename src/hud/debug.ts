@@ -98,6 +98,26 @@ export function initDebugHUD(opts?: { aggressive?: boolean; devFlag?: boolean })
       } catch {}
     }
 
+    function installSpeechTranscriptLog() {
+      try {
+        const handler = (ev: Event) => {
+          try {
+            const detail = (ev as CustomEvent).detail || {};
+            const text = String(detail.text || detail.tail || '').trim();
+            if (!text) return;
+            log('speech:transcript', {
+              text: text.slice(0, 280),
+              final: !!detail.final,
+              conf: detail.confidence ?? detail.conf,
+              timestamp: detail.timestamp || Date.now(),
+            });
+          } catch {}
+        };
+        window.addEventListener('tp:captions:transcript', handler as EventListener);
+        window.addEventListener('tp:speech:transcript', handler as EventListener);
+      } catch {}
+    }
+
     function hookPostMessage() {
       try {
         window.addEventListener('message', (e) => {
@@ -145,6 +165,7 @@ export function initDebugHUD(opts?: { aggressive?: boolean; devFlag?: boolean })
       wrapKnown();
       interceptCurrentIndex();
       hookSpeech();
+      installSpeechTranscriptLog();
       hookPostMessage();
       installScrollDetectors();
       log('boot:seed-complete', { aggressive: !!(opts && opts.aggressive) });
