@@ -12280,6 +12280,7 @@ let _toast = function (msg, opts) {
         panel.className = 'hidden';
         panel.style.cssText =
           'position:fixed; right:10px; top:44px; z-index:99999; max-width:420px; background:#0e141b; border:1px solid var(--edge); border-radius:12px; box-shadow:0 8px 28px rgba(0,0,0,.45); padding:10px; color:var(--fg); font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;';
+        panel.innerHTML =
           '<div style="margin:4px 0 6px; opacity:.8">Quick startup checks</div><div id="selfChecksList"></div>';
         document.body.appendChild(panel);
         document.addEventListener('click', (e) => {
@@ -12290,6 +12291,7 @@ let _toast = function (msg, opts) {
       }
 
       const list = panel.querySelector('#selfChecksList');
+      if (!list) return;
       list.innerHTML = '';
       for (const c of checks) {
         const row = document.createElement('div');
