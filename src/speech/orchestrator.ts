@@ -168,6 +168,7 @@ export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult 
 }
 
 export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: string }) {
+  try { console.log('[ASR] startRecognizer invoked with opts:', opts); } catch {}
   if (_rec) {
     // already running; replace callback
     _cb = cb;
@@ -175,16 +176,30 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
   }
   try {
     _rec = createRecognizer(opts as any);
+    try {
+      console.log('[ASR] createRecognizer returned:', _rec ? 'ok' : 'null');
+    } catch {}
     _cb = cb;
-    _rec.start((transcript: string, isFinal: boolean) => {
-      try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
-      const text = transcript || '';
-      matchBatch(text, isFinal);
-      dispatchTranscript(text, isFinal);
-    });
+    if (!_rec) {
+      try { console.warn('[ASR] startRecognizer: recognizer is null; createRecognizer probably failed'); } catch {}
+      return;
+    }
+    try {
+      console.log('[ASR] calling recognizer.start()');
+      _rec.start((transcript: string, isFinal: boolean) => {
+        try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
+        const text = transcript || '';
+        matchBatch(text, isFinal);
+        dispatchTranscript(text, isFinal);
+      });
+      try { console.log('[ASR] recognizer.start() returned without throwing'); } catch {}
+    } catch (err) {
+      try { console.error('[ASR] recognizer.start() threw', err); } catch {}
+      throw err;
+    }
     emitSpeechState(true);
   } catch (err) {
-    try { console.warn('[TP] startRecognizer failed', err); } catch {}
+    try { console.error('[ASR] createRecognizer/startRecognizer failed', err); } catch {}
     _rec = null;
     _cb = null;
     throw err;
