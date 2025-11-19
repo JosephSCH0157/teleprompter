@@ -101,7 +101,13 @@ function dispatchTranscript(text: string, final: boolean) {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
-    const detail = { text, final, ts: Date.now(), sim };
+    const detail = {
+      text,
+      final,
+      timestamp: Date.now(),
+      sim,
+      source: 'orchestrator' as const,
+    };
     try { console.log('[ASR] dispatchTranscript', detail); } catch {}
     window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
   } catch {}

@@ -46,7 +46,12 @@ function shouldEmitTranscript() {
 function routeTranscript(text, isFinal) {
   try {
     if (!text) return;
-    const payload = { text, final: !!isFinal, t: performance.now() };
+    const payload = {
+      text,
+      final: !!isFinal,
+      timestamp: performance.now(),
+      source: 'speech-loader',
+    };
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)
     try { window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}

@@ -24,7 +24,14 @@ export function stopASRorVAD() {
 export function emitTranscript(text: string, isFinal = false) {
   try {
     if (_onTranscript) _onTranscript(text, isFinal);
-    window.dispatchEvent(new CustomEvent('asr:transcript', { detail: { text, isFinal } }));
+    const detail = {
+      text,
+      final: !!isFinal,
+      timestamp: Date.now(),
+      source: 'asr-shim' as const,
+    };
+    window.dispatchEvent(new CustomEvent('asr:transcript', { detail }));
+    window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
   } catch {}
 }
 
