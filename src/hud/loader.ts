@@ -5,6 +5,24 @@ type Note = { text: string; final: boolean; ts: number; sim?: number };
 let notes: Note[] = [];
 let filterMode: 'all' | 'finals' = 'all';
 
+function markHudWireActive() {
+  try {
+    if (!(window as any).__tpHudWireActive) {
+      (window as any).__tpHudWireActive = true;
+    }
+  } catch {}
+}
+
+function announceHudReady() {
+  try {
+    if ((window as any).__tpHudReadyOnce) return;
+    (window as any).__tpHudReadyOnce = true;
+    document.dispatchEvent(new CustomEvent('hud:ready'));
+  } catch {}
+}
+
+markHudWireActive();
+
 function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(notes.slice(-500))); } catch {} }
 function load() {
   try {
@@ -162,9 +180,11 @@ export function loadHudIfDev(){
     } catch {}
     
     render(notes);
+    announceHudReady();
   } catch {}
 }
 
 try { loadHudIfDev(); } catch {}
+try { announceHudReady(); } catch {}
 export { };
 

@@ -3,6 +3,20 @@ const LEGACY_LS_KEYS = ['tp_hud_speech_notes_v1']; // migrate on load
 const PROD_TOGGLE_KEY = 'tp_hud_prod';
 let notes = [];
 let filterMode = 'all';
+function markHudWireActive() { try {
+    if (!window.__tpHudWireActive) {
+        window.__tpHudWireActive = true;
+    }
+}
+catch { } }
+function announceHudReady() { try {
+    if (window.__tpHudReadyOnce)
+        return;
+    window.__tpHudReadyOnce = true;
+    document.dispatchEvent(new CustomEvent('hud:ready'));
+}
+catch { } }
+markHudWireActive();
 function save() { try {
     localStorage.setItem(LS_KEY, JSON.stringify(notes.slice(-500)));
 }
@@ -230,12 +244,15 @@ export function loadHudIfDev() {
                 bus.on('speech:final', (d) => {
                     if (!d || !d.text)
                         return;
+            announceHudReady();
                     if (statusEl)
                         statusEl.textContent = 'final';
                     addNote({ text: d.text, final: true, ts: d.t || performance.now(), sim: d.sim });
-                });
-            }
-        }
+
+        try { loadHudIfDev(); }
+        catch { }
+        try { announceHudReady(); }
+        catch { }
         catch { }
         render(notes);
     }
