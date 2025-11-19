@@ -25,7 +25,16 @@ export class AsrMode {
   private state: AsrState = 'idle';
   private opts: Required<AsrModeOptions>;
   private currentIdx = 0;
+  private visualIdx = 0;
+  private pendingTargetIdx = 0;
   private rescueCount = 0;
+  private scrollAnimTimer: number | null = null;
+  private readonly MAX_VISUAL_LEAP = 3;
+  private readonly SCROLL_ANIM_MS = 200;
+  private readonly SCROLL_ANIM_STEPS = 5;
+  private lastAdvanceAt = 0;
+  private readonly PROGRESS_TIMEOUT_MS = 8000;
+  private progressWatchTimer: number | null = null;
   
   // ASR feed-forward: track reading speed to lead the target
   private tokensPerSec = 0;
@@ -57,8 +66,13 @@ export class AsrMode {
 
   async start(): Promise<void> {
     const s = speechStore.get();
-  this.engine = createEngine(s.engine);
-  bindEngine(this.engine, (e: AsrEvent) => this.onEngineEvent(e));
+    this.engine = createEngine(s.engine);
+    bindEngine(this.engine, (e: AsrEvent) => this.onEngineEvent(e));
+
+    this.currentIdx = clamp(this.currentIdx, 0, this.getAllLineEls().length - 1);
+    this.visualIdx = this.currentIdx;
+    this.pendingTargetIdx = this.currentIdx;
+    this.cancelScrollAnimation();
 
     this.setState('ready');
     await this.engine.start({
@@ -71,8 +85,7 @@ export class AsrMode {
 
   async stop(): Promise<void> {
     await this.engine?.stop();
-    this.setState('idle');
-    this.dispatch('asr:state', { state: this.state });
+    this.setState('idle', 'manual-stop');
   }
 
   private onEngineEvent(e: AsrEvent) {
@@ -113,8 +126,7 @@ export class AsrMode {
     }
 
     if (e.type === 'error') {
-      this.setState('error');
-      this.emitAsrState('error', e.message);
+      this.setState('error', e.message);
       this.dispatch('asr:error', { code: e.code, message: e.message });
     }
     if (e.type === 'stopped') {
@@ -122,10 +134,18 @@ export class AsrMode {
     }
   }
 
-  private setState(next: AsrState) {
+  private setState(next: AsrState, reason?: string) {
     this.state = next;
-    this.dispatch('asr:state', { state: next });
-    this.emitAsrState(next);
+    this.dispatch('asr:state', { state: next, reason });
+    this.emitAsrState(next, reason);
+
+    if (next === 'running') {
+      this.lastAdvanceAt = performance.now();
+      this.startProgressWatchdog();
+    } else {
+      this.stopProgressWatchdog();
+      this.cancelScrollAnimation();
+    }
   }
 
   private prepareText(s: string): string {
@@ -197,7 +217,8 @@ export class AsrMode {
       
       if (newIdx >= this.currentIdx) {
         this.currentIdx = newIdx;
-        this.scrollToLine(newIdx);
+        this.markAdvance();
+        this.smoothScrollToLine(newIdx);
         this.dispatch('asr:advance', { index: newIdx, score: bestScore, lead: leadLines });
       }
     } else if (isFinal) {
@@ -208,7 +229,8 @@ export class AsrMode {
         this.dispatch('asr:rescue', { index: rescueIdx, reason: 'weak-final' });
         if (RESCUE_JUMPS_ENABLED) {
           this.currentIdx = rescueIdx;
-          this.scrollToLine(this.currentIdx);
+          this.markAdvance();
+          this.smoothScrollToLine(this.currentIdx);
         }
       }
     }
@@ -260,11 +282,98 @@ export class AsrMode {
     const top = elementTopRelativeTo(target, scroller) - marker;
     requestAnimationFrame(() => {
       if (scroller === document.scrollingElement || scroller === document.body) {
-        window.scrollTo({ top, behavior: 'smooth' });
+        window.scrollTo({ top, behavior: 'auto' });
       } else {
-        (scroller as HTMLElement).scrollTo({ top, behavior: 'smooth' });
+        (scroller as HTMLElement).scrollTo({ top, behavior: 'auto' });
       }
     });
+  }
+
+  private smoothScrollToLine(targetIdx: number) {
+    this.pendingTargetIdx = targetIdx;
+    if (this.scrollAnimTimer == null) {
+      this.runScrollAnimation();
+    }
+  }
+
+  private runScrollAnimation() {
+    const diff = this.pendingTargetIdx - this.visualIdx;
+    if (Math.abs(diff) < 0.05) {
+      this.visualIdx = this.pendingTargetIdx;
+      this.scrollToLine(Math.round(this.visualIdx));
+      return;
+    }
+
+    const segmentDelta = Math.abs(diff) > this.MAX_VISUAL_LEAP
+      ? Math.sign(diff) * this.MAX_VISUAL_LEAP
+      : diff;
+
+    const steps = this.SCROLL_ANIM_STEPS;
+    const stepMs = this.SCROLL_ANIM_MS / steps;
+    const start = this.visualIdx;
+    const end = start + segmentDelta;
+    let step = 0;
+    this.scrollAnimTimer = 0;
+
+    const tick = () => {
+      step++;
+      const progress = step / steps;
+      const nextIdx = step >= steps ? end : start + segmentDelta * progress;
+      this.visualIdx = nextIdx;
+      this.scrollToLine(Math.round(nextIdx));
+      if (step < steps) {
+        this.scrollAnimTimer = window.setTimeout(tick, stepMs);
+      } else {
+        this.scrollAnimTimer = null;
+        if (Math.abs(this.pendingTargetIdx - this.visualIdx) > 0.05) {
+          this.runScrollAnimation();
+        }
+      }
+    };
+
+    tick();
+  }
+
+  private cancelScrollAnimation() {
+    if (this.scrollAnimTimer != null) {
+      window.clearTimeout(this.scrollAnimTimer);
+      this.scrollAnimTimer = null;
+    }
+  }
+
+  private markAdvance() {
+    this.lastAdvanceAt = performance.now();
+  }
+
+  private startProgressWatchdog() {
+    if (this.progressWatchTimer != null) return;
+
+    const loop = () => {
+      if (this.state !== 'running') {
+        this.progressWatchTimer = null;
+        return;
+      }
+
+      const idleFor = performance.now() - this.lastAdvanceAt;
+      if (idleFor > this.PROGRESS_TIMEOUT_MS) {
+        this.progressWatchTimer = null;
+        try { this.engine?.stop(); } catch {}
+        this.dispatch('asr:warning', { type: 'no-progress', idleMs: idleFor });
+        this.setState('idle', 'no-progress');
+        return;
+      }
+
+      this.progressWatchTimer = window.setTimeout(loop, 1000);
+    };
+
+    this.progressWatchTimer = window.setTimeout(loop, 1000);
+  }
+
+  private stopProgressWatchdog() {
+    if (this.progressWatchTimer != null) {
+      window.clearTimeout(this.progressWatchTimer);
+      this.progressWatchTimer = null;
+    }
   }
 
   private dispatch(name: string, detail: any) {
