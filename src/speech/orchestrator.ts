@@ -3,6 +3,62 @@ import * as matcher from './matcher';
 import type { Recognizer } from './recognizer';
 import { createRecognizer } from './recognizer';
 
+const SILENCE_HOLD_MS = 1200;
+
+let lastAsrWordTs = 0;
+let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+let silenceActive = true;
+
+function nowMs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function dispatchAsrSilence(silent: boolean, ts: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('tp:asr:silence', { detail: { silent, ts } }));
+  } catch {
+    // swallow dispatch errors
+  }
+}
+
+function setSilenceState(nextSilent: boolean, ts: number): void {
+  if (silenceActive === nextSilent) return;
+  silenceActive = nextSilent;
+  dispatchAsrSilence(silenceActive, ts);
+}
+
+function scheduleSilenceCheck(): void {
+  if (silenceTimer) {
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+  }
+  silenceTimer = setTimeout(() => {
+    silenceTimer = null;
+    const now = nowMs();
+    if (!silenceActive && now - lastAsrWordTs >= SILENCE_HOLD_MS) {
+      setSilenceState(true, now);
+    }
+  }, SILENCE_HOLD_MS);
+}
+
+function noteAsrSpeechActivity(text: string): void {
+  if (!text || !text.trim()) return;
+  const now = nowMs();
+  lastAsrWordTs = now;
+  if (silenceActive) {
+    setSilenceState(false, now);
+  }
+  scheduleSilenceCheck();
+}
+
+if (typeof window !== 'undefined') {
+  dispatchAsrSilence(true, nowMs());
+}
+
 export interface MatchEvent {
   idx: number;
   sim: number;
@@ -61,6 +117,9 @@ function _getRuntimeScriptState() {
 export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult {
   try {
     const spokenTokens = matcher.normTokens(text || '');
+    if (spokenTokens.length) {
+      noteAsrSpeechActivity(text);
+    }
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState();
     const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
 

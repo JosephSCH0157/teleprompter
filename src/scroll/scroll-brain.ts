@@ -21,6 +21,21 @@ const governor = new SpeedGovernor({
 });
 
 let governedSpeedPxPerSec = governor.getSpeedPxPerSec();
+const silenceGate = {
+  active: true,
+  since: nowTs(),
+};
+
+function isHybridMode(): boolean {
+  return scrollMode === 'hybrid';
+}
+
+function effectiveSpeedPxPerSec(): number {
+  if (silenceGate.active && isHybridMode()) {
+    return 0;
+  }
+  return governedSpeedPxPerSec;
+}
 
 function syncEngineSpeed() {
   governedSpeedPxPerSec = governor.getSpeedPxPerSec();
@@ -33,6 +48,13 @@ const scroller = createScrollerHelpers(
   () => document.getElementById('viewer') as HTMLElement | null
 );
 
+function nowTs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
+}
+
 // Optional HUD logging
 const log = (msg: string) => {
   try {
@@ -42,7 +64,7 @@ const log = (msg: string) => {
   }
 };
 
-let lastFrameTs = performance.now();
+let lastFrameTs = nowTs();
 
 // --- Mode control ---
 function setScrollMode(mode: ScrollMode) {
@@ -60,7 +82,7 @@ function setScrollMode(mode: ScrollMode) {
 // --- Loop control ---
 function startScrollEngine() {
   if (scrollTimer !== null) return;
-  lastFrameTs = performance.now();
+  lastFrameTs = nowTs();
   scrollTimer = requestAnimationFrame(scrollTick);
 }
 
@@ -83,14 +105,14 @@ function scrollBySpeedPxPerSec(pxPerSec: number, dtSec: number) {
 }
 
 function scrollTick(now?: number) {
-  const ts = typeof now === 'number' ? now : performance.now();
+  const ts = typeof now === 'number' ? now : nowTs();
   const dt = Math.max(0.001, (ts - lastFrameTs) / 1000);
   lastFrameTs = ts;
 
   frameCount++;
 
   if (scrollMode === 'auto' || scrollMode === 'hybrid') {
-    scrollBySpeedPxPerSec(governedSpeedPxPerSec, dt);
+    scrollBySpeedPxPerSec(effectiveSpeedPxPerSec(), dt);
   }
 
   if (frameCount % 10 === 0) {
@@ -135,10 +157,29 @@ function onSpeechSample(sample: AdaptSample) {
       lastErrPx: safe.errPx,
       lastConf: safe.conf,
       lastSpeedPx: governor.getSpeedPxPerSec(),
+      silenceHold: silenceGate.active,
+      holdSince: silenceGate.since,
     };
   } catch {}
   const { speedPxPerSec } = adaptSample(governor, safe);
   governedSpeedPxPerSec = speedPxPerSec;
+}
+
+function reportAsrSilence(detail: { silent: boolean; ts?: number }) {
+  const next = !!(detail?.silent);
+  if (silenceGate.active === next) return;
+  silenceGate.active = next;
+  const ts = typeof detail?.ts === 'number' ? detail.ts : nowTs();
+  silenceGate.since = ts;
+  log(`ASR silence → ${next ? 'hold' : 'resume'}`);
+  try {
+    const prev = (window as any).__tpAsrDebug || {};
+    (window as any).__tpAsrDebug = {
+      ...prev,
+      silenceHold: silenceGate.active,
+      holdSince: silenceGate.since,
+    };
+  } catch {}
 }
 
 // --- Public API ---
@@ -148,6 +189,7 @@ export interface ScrollBrain {
   setBaseSpeedPx: (_pxPerSec: number) => void;
   onManualSpeedAdjust: (_deltaPxPerSec: number) => void;
   onSpeechSample: (_sample: AdaptSample) => void;
+  reportAsrSilence: (_detail: { silent: boolean; ts?: number }) => void;
   getCurrentSpeedPx: () => number;
 }
 
@@ -158,7 +200,8 @@ export function createScrollBrain(): ScrollBrain {
     setBaseSpeedPx,
     onManualSpeedAdjust,
     onSpeechSample,
-    getCurrentSpeedPx: () => governor.getSpeedPxPerSec(),
+    reportAsrSilence,
+    getCurrentSpeedPx: () => effectiveSpeedPxPerSec(),
   };
 }
 

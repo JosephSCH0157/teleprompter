@@ -237,6 +237,7 @@ try {
 				});
 				installAsrScrollBridge({
 					onSpeechSample: brain.onSpeechSample,
+					reportSilence: brain.reportAsrSilence,
 				});
 				bridgeLegacyScrollController();
 		// 1) Install the TypeScript scheduler before any scroll writers run.
