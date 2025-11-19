@@ -3,9 +3,23 @@
 // Uses the lightweight inline OBS v5 bridge in recorders.js
 
 // @ts-ignore - recorders.js is JS
+import { getSettings as getRecorderSettings, setSelected as setRecorderSelected } from '../../recorders';
 import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
-import { getSettings as getRecorderSettings, setSelected as setRecorderSelected } from '../recording/registry';
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+function syncRegistrySelection(next: unknown): void {
+  const ids = toStringArray(next);
+  try {
+    setRecorderSelected(ids);
+  } catch (err) {
+    try { console.warn('[obs-wiring] syncRegistrySelection failed', err); } catch {}
+  }
+}
 
 // Optional: expose a dev console hook for quick OBS probes
 try { if (location.search.includes('dev=1')) { (window as any).__obsTestConnect = obsTestConnect; } } catch {}
@@ -47,15 +61,6 @@ export function initObsUI() {
   // UI checkbox reader is used to reflect state in the UI only; the engine relies on getObsEnabled()
   const readEnabledFromUI = () => !!(byId<HTMLInputElement>('settingsEnableObs')?.checked || byId<HTMLInputElement>('enableObs')?.checked);
   const writeEnabledToUI = (on: boolean) => {
-      const syncRegistrySelection = (on: boolean) => {
-        try {
-          const cfg = getRecorderSettings();
-          const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
-          if (on) next.add('obs'); else next.delete('obs');
-          setRecorderSelected(Array.from(next));
-        } catch {}
-      };
-
     try {
       const elA = byId<HTMLInputElement>('settingsEnableObs');
       const elB = byId<HTMLInputElement>('enableObs');
@@ -88,7 +93,10 @@ export function initObsUI() {
         const on = readEnabledFromUI();
         setObsEnabled(on);
         try { rec.setEnabled(on); } catch {}
-        syncRegistrySelection(on);
+        const cfg = getRecorderSettings();
+        const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
+        if (on) next.add('obs'); else next.delete('obs');
+        syncRegistrySelection(Array.from(next));
       }
       if (id === 'settingsObsUrl' || id === 'obsUrl' || id === 'settingsObsHost') {
         try { rec.reconfigure(parseWsUrl(readUrl(), readPass())); } catch {}
@@ -203,7 +211,15 @@ export function initObsUI() {
           const next = !!v;
           try { setObsEnabled(next); } catch {}
           try { rec.setEnabled(next); } catch {}
-          syncRegistrySelection(next);
+          const cfg = getRecorderSettings();
+          const current = Array.isArray(cfg?.selected) ? cfg.selected : [];
+          const set = new Set(current);
+          if (next) {
+            set.add('obs');
+          } else {
+            set.delete('obs');
+          }
+          syncRegistrySelection(Array.from(set));
         });
       } catch {}
       try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
@@ -215,10 +231,9 @@ export function initObsUI() {
   try {
     if (getObsEnabled()) {
       try { rec.setEnabled(true); } catch {}
-      syncRegistrySelection(true);
-    } else {
-      syncRegistrySelection(false);
     }
+    const cfg = getRecorderSettings();
+    syncRegistrySelection(Array.isArray(cfg?.selected) ? cfg.selected : []);
   } catch {}
   try {
     window.addEventListener('beforeunload', () => { try { rec.setEnabled(false); } catch {} });
