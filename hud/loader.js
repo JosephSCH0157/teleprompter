@@ -146,6 +146,18 @@ export function loadHudIfDev() {
         catch { } notes.push(note); save(); render(notes); }
         window.__tpHudNotes = { addNote: (n) => addNote(n), list: () => notes.slice(), clear: () => { notes = []; save(); render(notes); }, setFilter: (m) => { filterMode = m; const cb = document.getElementById('hudFilterFinals'); if (cb)
                 cb.checked = (m === 'finals'); render(notes); }, copyAll, exportTxt };
+        try {
+            window.__tpSpeechNotesHud = {
+                addNote: (text, final = false) => addNote({ text, final, ts: Date.now() }),
+                dumpState: () => ({
+                    notes: notes.slice(),
+                    filterMode,
+                    hudVisible: !!document.getElementById('tp-dev-hud'),
+                    savingEnabled: true,
+                }),
+            };
+        }
+        catch { }
         const statusEl = document.getElementById('hudStatus');
         // Show current session id in the top bar and update on session start
         try {
