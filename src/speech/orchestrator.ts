@@ -1,7 +1,7 @@
+import { emitAsrSyncFromLineDelta } from './asrSync';
 import * as matcher from './matcher';
 import type { Recognizer } from './recognizer';
 import { createRecognizer } from './recognizer';
-import { emitAsrSyncFromLineDelta } from './asrSync';
 
 export interface MatchEvent {
   idx: number;

@@ -48,11 +48,11 @@ import { initTelemetry } from './features/telemetry.js';
 
 // === UI Scroll Mode Router ===
 import { installAsrScrollBridge } from './scroll/asr-bridge';
+import { setBrainBaseSpeed } from './scroll/brain-hooks';
 import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
 import { createScrollBrain } from './scroll/scroll-brain';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
-import { setBrainBaseSpeed } from './scroll/brain-hooks';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
 
