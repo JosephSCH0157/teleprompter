@@ -210,7 +210,9 @@ try {
 						onManualSpeedAdjust: brain.onManualSpeedAdjust,
 					},
 				});
-				installAsrScrollBridge(() => brain);
+				installAsrScrollBridge({
+					onSpeechSample: brain.onSpeechSample,
+				});
 		// 1) Install the TypeScript scheduler before any scroll writers run.
 		try {
 			installScheduler();
