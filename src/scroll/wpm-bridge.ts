@@ -1,9 +1,19 @@
-import type { ScrollBrain } from './scroll-brain';
 import { wpmToPxPerSec } from './wpmSpeed';
 
-type BrainGetter = () => ScrollBrain | undefined;
+export type ScrollSpeedApi = {
+  setBaseSpeedPx(pxPerSec: number): void;
+  onManualSpeedAdjust(deltaPxPerSec: number): void;
+};
 
-const INPUT_IDS = ['wpmTarget', 'settingsWpmTarget'] as const;
+export interface WpmBridgeOptions {
+  api: ScrollSpeedApi;
+  mainInputId?: string;
+  settingsInputId?: string;
+}
+
+const DEFAULT_MAIN_ID = 'wpmTarget';
+const DEFAULT_SETTINGS_ID = 'settingsWpmTarget';
+
 const wiredInputs = new WeakSet<HTMLInputElement>();
 let bridgeInstalled = false;
 
@@ -34,22 +44,20 @@ function clampWpm(wpm: number) {
   return Math.max(0, Math.min(400, Math.round(wpm)));
 }
 
-function bindInput(input: HTMLInputElement, getBrain: BrainGetter) {
+function bindInput(input: HTMLInputElement, api: ScrollSpeedApi) {
   if (wiredInputs.has(input)) return;
   const apply = () => {
-    const brain = getBrain();
-    if (!brain) return;
     const wpm = clampWpm(parseInt(input.value, 10));
     const pxPerSec = wpmToPxPerSec(wpm, 'main');
-    brain.setBaseSpeedPx(pxPerSec);
-    if (brain.getMode() === 'auto' || brain.getMode() === 'hybrid') {
-      brain.onManualSpeedAdjust(pxPerSec);
-    }
+    if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
+    api.setBaseSpeedPx(pxPerSec);
     if (wpm > 0) persistWpm(wpm);
   };
 
   input.addEventListener('input', apply, { passive: true });
-  window.addEventListener('tp:typographyChanged', apply);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('tp:typographyChanged', apply);
+  }
 
   try {
     if (input.value) {
@@ -68,30 +76,38 @@ function bindInput(input: HTMLInputElement, getBrain: BrainGetter) {
   wiredInputs.add(input);
 }
 
-function tryWireInputs(getBrain: BrainGetter) {
+function tryWireInputs(ids: string[], api: ScrollSpeedApi) {
   if (typeof document === 'undefined') return;
-  INPUT_IDS.forEach((id) => {
+  ids.forEach((id) => {
     const el = document.getElementById(id) as HTMLInputElement | null;
-    if (el) bindInput(el, getBrain);
+    if (el) bindInput(el, api);
   });
 }
 
-function seedFromStorage(getBrain: BrainGetter) {
-  const brain = getBrain();
-  if (!brain) return;
+function seedFromStorage(api: ScrollSpeedApi) {
   const stored = readStoredWpm();
   if (!stored || stored <= 0) return;
-  brain.setBaseSpeedPx(wpmToPxPerSec(stored, 'main'));
+  const pxPerSec = wpmToPxPerSec(stored, 'main');
+  if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
+  api.setBaseSpeedPx(pxPerSec);
 }
 
-export function installWpmSpeedBridge(getBrain: BrainGetter) {
+export function installWpmSpeedBridge(options: WpmBridgeOptions) {
   if (bridgeInstalled) return;
   bridgeInstalled = true;
 
-  seedFromStorage(getBrain);
+  const {
+    api,
+    mainInputId = DEFAULT_MAIN_ID,
+    settingsInputId = DEFAULT_SETTINGS_ID,
+  } = options;
+
+  const inputIds = [mainInputId, settingsInputId];
+
+  seedFromStorage(api);
 
   const schedule = () => {
-    tryWireInputs(getBrain);
+    tryWireInputs(inputIds, api);
   };
 
   if (typeof document !== 'undefined') {
@@ -102,9 +118,9 @@ export function installWpmSpeedBridge(getBrain: BrainGetter) {
     }
 
     const observer = new MutationObserver(() => {
-      tryWireInputs(getBrain);
-      const haveMain = document.getElementById('wpmTarget');
-      const haveSettings = document.getElementById('settingsWpmTarget');
+      tryWireInputs(inputIds, api);
+      const haveMain = document.getElementById(mainInputId);
+      const haveSettings = document.getElementById(settingsInputId);
       if (haveMain && haveSettings) {
         try { observer.disconnect(); } catch {}
       }
@@ -113,5 +129,17 @@ export function installWpmSpeedBridge(getBrain: BrainGetter) {
 
     window.addEventListener('tp:settings:open', schedule, { passive: true });
     document.addEventListener('tp:feature:init', schedule as EventListener, { capture: true });
+
+    const handleAutoSpeed = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail || {};
+      let delta = 0;
+      if (typeof detail.deltaPx === 'number') delta = detail.deltaPx;
+      else if (typeof detail.delta === 'number') delta = detail.delta;
+      else if (typeof detail.stepPx === 'number') delta = detail.stepPx;
+      if (!delta || !Number.isFinite(delta)) return;
+      api.onManualSpeedAdjust(delta);
+    };
+
+    window.addEventListener('tp:autoSpeed', handleAutoSpeed as EventListener, { passive: true });
   }
 }

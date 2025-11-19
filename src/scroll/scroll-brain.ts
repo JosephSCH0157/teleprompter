@@ -117,10 +117,10 @@ function setBaseSpeedPx(pxPerSec: number) {
   syncEngineSpeed();
 }
 
-function onManualSpeedAdjust(pxPerSec: number) {
-  const numeric = Number(pxPerSec);
-  if (!Number.isFinite(numeric) || numeric <= 0) return;
-  governor.setBaseSpeedPx(numeric);
+function onManualSpeedAdjust(deltaPxPerSec: number) {
+  const delta = Number(deltaPxPerSec);
+  if (!Number.isFinite(delta) || delta === 0) return;
+  governor.nudge(delta);
   syncEngineSpeed();
 }
 
@@ -139,7 +139,7 @@ export interface ScrollBrain {
   setMode: (_mode: ScrollMode) => void;
   getMode: () => ScrollMode;
   setBaseSpeedPx: (_pxPerSec: number) => void;
-  onManualSpeedAdjust: (_pxPerSec: number) => void;
+  onManualSpeedAdjust: (_deltaPxPerSec: number) => void;
   onSpeechSample: (_sample: AdaptSample) => void;
 }
 

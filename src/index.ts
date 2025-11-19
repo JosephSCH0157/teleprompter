@@ -204,7 +204,12 @@ import './smoke/settings-mapped-folder.smoke.js';
 try {
 			document.addEventListener('DOMContentLoaded', () => {
 				const brain = ensureScrollBrain();
-				installWpmSpeedBridge(() => brain);
+				installWpmSpeedBridge({
+					api: {
+						setBaseSpeedPx: brain.setBaseSpeedPx,
+						onManualSpeedAdjust: brain.onManualSpeedAdjust,
+					},
+				});
 				installAsrScrollBridge(() => brain);
 		// 1) Install the TypeScript scheduler before any scroll writers run.
 		try {
@@ -232,11 +237,11 @@ try {
 					});
 				}
 
-				const applySliderToBrain = () => {
+					const applySliderToBrain = () => {
 					try {
 						const val = Number(autoSpeed.value);
 						if (!Number.isFinite(val)) return;
-						brain.onManualSpeedAdjust(val);
+							brain.setBaseSpeedPx(val);
 					} catch {}
 				};
 				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });
@@ -245,16 +250,6 @@ try {
 		} catch (err) {
 			try { console.warn('[auto-scroll] wiring failed', err); } catch {}
 		}
-
-		try {
-			const handleAutoSpeedEvt = (ev: Event) => {
-				const detail = (ev as CustomEvent).detail || {};
-				const speed = Number(detail?.speed);
-				if (!Number.isFinite(speed)) return;
-				brain.onManualSpeedAdjust(speed);
-			};
-			document.addEventListener('tp:autoSpeed', handleAutoSpeedEvt as EventListener, { capture: true });
-		} catch {}
 
 		// 3) Bridge legacy mode selectors into the TS scroll brain
 		try { initScrollModeBridge(); } catch {}
