@@ -2,8 +2,31 @@ import { isSessionRecording, startSessionRecording, stopSessionRecording } from 
 import type { AppStore } from '../state/appStore';
 
 export interface WireRecordButtonsOptions {
-  startSelector?: string;
-  stopSelector?: string;
+  startSelector?: string | string[];
+  stopSelector?: string | string[];
+}
+
+const DEFAULT_START_SELECTORS = ['#startRecBtn', '[data-action="record-start"]'];
+const DEFAULT_STOP_SELECTORS = ['#stopRecBtn', '[data-action="record-stop"]'];
+
+function collectButtons(selector: string | string[] | undefined, fallbacks: string[]): HTMLButtonElement[] {
+  const selectors = Array.isArray(selector)
+    ? selector
+    : typeof selector === 'string' && selector.length > 0
+      ? [selector]
+      : fallbacks;
+
+  const seen = new Set<HTMLButtonElement>();
+  selectors.forEach((sel) => {
+    if (!sel) return;
+    try {
+      const nodes = document.querySelectorAll<HTMLButtonElement>(sel);
+      nodes.forEach((btn) => {
+        if (btn) seen.add(btn);
+      });
+    } catch {}
+  });
+  return Array.from(seen.values());
 }
 
 function readObsEnabled(store: AppStore | null | undefined): boolean {
@@ -28,16 +51,15 @@ function readObsEnabled(store: AppStore | null | undefined): boolean {
 export function wireRecordButtons(store?: AppStore | null, opts: WireRecordButtonsOptions = {}): void {
   if (typeof document === 'undefined') return;
 
-  const startSel = opts.startSelector || '#startRecBtn';
-  const stopSel = opts.stopSelector || '#stopRecBtn';
-  const startBtn = document.querySelector<HTMLButtonElement>(startSel);
-  const stopBtn = document.querySelector<HTMLButtonElement>(stopSel);
+  const startButtons = collectButtons(opts.startSelector, DEFAULT_START_SELECTORS);
+  const stopButtons = collectButtons(opts.stopSelector, DEFAULT_STOP_SELECTORS);
 
-  if (!startBtn && !stopBtn) return;
+  if (startButtons.length === 0 && stopButtons.length === 0) return;
 
   const getObsEnabled = () => readObsEnabled(store);
 
-  if (startBtn && !startBtn.dataset.recWired) {
+  startButtons.forEach((startBtn) => {
+    if (startBtn.dataset.recWired) return;
     startBtn.dataset.recWired = '1';
     startBtn.addEventListener('click', async () => {
       if (startBtn.disabled) return;
@@ -50,9 +72,10 @@ export function wireRecordButtons(store?: AppStore | null, opts: WireRecordButto
         startBtn.disabled = false;
       }
     });
-  }
+  });
 
-  if (stopBtn && !stopBtn.dataset.recWired) {
+  stopButtons.forEach((stopBtn) => {
+    if (stopBtn.dataset.recWired) return;
     stopBtn.dataset.recWired = '1';
     stopBtn.addEventListener('click', async () => {
       if (stopBtn.disabled) return;
@@ -67,5 +90,5 @@ export function wireRecordButtons(store?: AppStore | null, opts: WireRecordButto
         stopBtn.disabled = false;
       }
     });
-  }
+  });
 }
