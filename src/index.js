@@ -225,6 +225,65 @@ async function boot() {
   try {
     // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
     await loadLegacyPiecesAsModules();
+    let scriptNormalizeDepth = 0;
+    if (typeof window.__tpRequestScriptNormalization !== 'function') {
+      window.__tpRequestScriptNormalization = async function requestScriptNormalization(reason) {
+        try {
+          const w = window;
+          const pairs = [];
+          const add = (fn, ctx) => {
+            if (typeof fn === 'function') pairs.push([fn, ctx]);
+          };
+          add(w.normalizeScript, w);
+          add(w.normalizeCurrentScript, w);
+          add(w.applyScriptMarkup, w);
+          if (w.__tpScript && typeof w.__tpScript.normalize === 'function') add(w.__tpScript.normalize, w.__tpScript);
+          add(w.normalizeToStandard, w);
+          add(w.fallbackNormalize, w);
+          scriptNormalizeDepth++;
+          window.__tpNormalizingScript = true;
+          for (const [fn, ctx] of pairs) {
+            try {
+              const res = fn.call(ctx, reason);
+              if (res && typeof res.then === 'function') await res;
+              return true;
+            } catch (e) {
+              try { console.warn('[normalize] candidate failed', e); } catch (e2) { void e2; }
+            }
+          }
+        } catch (err) {
+          try { console.warn('[normalize] request failed', err); } catch (e3) { void e3; }
+        } finally {
+          scriptNormalizeDepth = Math.max(0, scriptNormalizeDepth - 1);
+          if (scriptNormalizeDepth === 0) window.__tpNormalizingScript = false;
+        }
+        return false;
+      };
+    }
+
+    const applyLoadedScriptText = async (name, text, reason) => {
+      try {
+        const ed = document.getElementById('editor');
+        if (ed && 'value' in ed) {
+          ed.value = text;
+          try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; }
+        }
+        try {
+          const runner = window.__tpRequestScriptNormalization;
+          if (typeof runner === 'function') await runner(reason || 'load');
+        } catch (e) { void e; }
+        let finalText = text;
+        try {
+          const editorEl = document.getElementById('editor');
+          if (editorEl && 'value' in editorEl) finalText = editorEl.value;
+        } catch (e) { void e; }
+        try {
+          window.dispatchEvent(new CustomEvent('tp:script-load', {
+            detail: { name, text: finalText, normalized: true, skipNormalize: true },
+          }));
+        } catch (e) { void e; }
+      } catch (e) { void e; }
+    };
     // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
     try {
       // Ensure HUD installer exists (load fallback if not already present)
@@ -756,12 +815,7 @@ async function boot() {
                   } else {
                     text = await file.text();
                   }
-                  const ed = document.getElementById('editor');
-                  if (ed && 'value' in ed) {
-                    ed.value = text;
-                    try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
-                  }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: file.name, text } })); } catch (e) {}
+                  await applyLoadedScriptText(file.name || 'Document', text, 'load-btn:file-picker');
                 } catch (e) {}
               };
               (async () => {
@@ -862,9 +916,7 @@ async function boot() {
                   const f = (inp.files && inp.files[0]) || null;
                   if (!f) return;
                   const text = f.name.toLowerCase().endsWith('.docx') && window.docxToText ? await window.docxToText(f) : await f.text();
-                  const ed = document.getElementById('editor');
-                  if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: f.name, text } })); } catch (e2) { void e2; }
+                  await applyLoadedScriptText(f.name || 'Document', text, 'hotkey:file-picker');
                 } catch (e3) { void e3; }
                 try { inp.remove(); } catch (e4) { void e4; }
               }, { once: true });
@@ -1617,8 +1669,7 @@ async function boot() {
                 const fh = await dir.getFileHandle(String(name), { create: false });
                 const file = await fh.getFile();
                 const text = await readTextSmart(file, String(name));
-                try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
-                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
+                await applyLoadedScriptText(String(name), text, 'folder:handle');
                 return;
               } catch (e) { void e; }
             }
@@ -1629,8 +1680,7 @@ async function boot() {
                 const f = mp.get(String(name));
                 if (f) {
                   const text = await readTextSmart(f, String(name));
-                  try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
+                  await applyLoadedScriptText(String(name), text, 'folder:fallback-map');
                 }
               }
             } catch (e) { void e; }

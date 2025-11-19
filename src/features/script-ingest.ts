@@ -209,6 +209,17 @@ export function installGlobalIngestListener() {
       // Mirror into editor (for DEV/tests)
       if (ed) { settingEditor = true; ed.value = text; settingEditor = false; }
 
+      // Apply normalization if available so any entry path produces standard markup
+      const skipNormalize = !!d?.skipNormalize;
+      if (!skipNormalize) {
+        try {
+          const runner = (window as any).__tpRequestScriptNormalization;
+          if (typeof runner === 'function') {
+            await runner('event:tp:script-load');
+          }
+        } catch {}
+      }
+
       try { (window as any).__tpCurrentName = name; } catch {}
 
       // Render locally
@@ -232,13 +243,15 @@ export function installGlobalIngestListener() {
       let tmr: any;
       ed.addEventListener('input', () => {
         try {
-          if (settingEditor) return;
+          if (settingEditor || (window as any).__tpNormalizingScript) return;
           clearTimeout(tmr);
           const text = ed.value || '';
           tmr = setTimeout(() => {
             try {
               // Treat editor input as local changes (do not set __isRemote)
-              window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: ((window as any).__tpCurrentName || 'Untitled'), text } }));
+              window.dispatchEvent(new CustomEvent('tp:script-load', {
+                detail: { name: ((window as any).__tpCurrentName || 'Untitled'), text, skipNormalize: true },
+              }));
             } catch {}
           }, 160);
         } catch {}

@@ -136,6 +136,39 @@ function requestFolderScriptsRefresh(reason) {
   }
 }
 
+async function requestScriptNormalization(reason = 'scripts-ui') {
+  try {
+    if (typeof window === 'undefined') return false;
+    const globalRunner = window.__tpRequestScriptNormalization;
+    if (typeof globalRunner === 'function') {
+      return await globalRunner(reason);
+    }
+    const w = window;
+    const pairs = [];
+    const add = (fn, ctx) => {
+      if (typeof fn === 'function') pairs.push([fn, ctx]);
+    };
+    add(w.normalizeScript, w);
+    add(w.normalizeCurrentScript, w);
+    add(w.applyScriptMarkup, w);
+    if (w.__tpScript && typeof w.__tpScript.normalize === 'function') add(w.__tpScript.normalize, w.__tpScript);
+    add(w.normalizeToStandard, w);
+    add(w.fallbackNormalize, w);
+    for (const [fn, ctx] of pairs) {
+      try {
+        const res = fn.call(ctx);
+        if (res && typeof res.then === 'function') await res;
+        return true;
+      } catch {
+        void 0;
+      }
+    }
+  } catch {
+    void 0;
+  }
+  return false;
+}
+
 async function ensureHandleWritePermission(handle) {
   try {
     const state = await handle.queryPermission?.({ mode: 'readwrite' });
@@ -425,7 +458,7 @@ async function saveAs(text) {
     toastFn('Save failed', { type: 'error' });
   }
 }
-function onScriptLoad() {
+async function onScriptLoad() {
   try {
     const id = scriptSlots && scriptSlots.value;
     if (!id) return;
@@ -441,6 +474,7 @@ function onScriptLoad() {
     } catch {
       console.debug('scripts-ui: trigger render failed');
     }
+    await requestScriptNormalization('scripts-ui:load');
     toastFn('Script loaded', { type: 'ok' });
   } catch {
     console.debug('onScriptLoad');

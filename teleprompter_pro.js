@@ -5413,6 +5413,42 @@ let _toast = function (msg, opts) {
       if (editor) editor.value = String(txt || '');
     }
 
+    let __tpLegacyNormalizeDepth = 0;
+    async function requestScriptNormalization(reason) {
+      try {
+        if (typeof window.__tpRequestScriptNormalization === 'function') {
+          return await window.__tpRequestScriptNormalization(reason || 'legacy');
+        }
+      } catch {}
+      __tpLegacyNormalizeDepth++;
+      window.__tpNormalizingScript = true;
+      try {
+        const w = window;
+        const pairs = [];
+        const add = (fn, ctx) => {
+          if (typeof fn === 'function') pairs.push([fn, ctx]);
+        };
+        add(w.normalizeScript, w);
+        add(w.normalizeCurrentScript, w);
+        add(w.applyScriptMarkup, w);
+        if (w.__tpScript && typeof w.__tpScript.normalize === 'function') add(w.__tpScript.normalize, w.__tpScript);
+        add(w.normalizeToStandard, w);
+        add(w.fallbackNormalize, w);
+        for (const [fn, ctx] of pairs) {
+          try {
+            const res = fn.call(ctx, reason);
+            if (res && typeof res.then === 'function') await res;
+            return true;
+          } catch {}
+        }
+      } catch {}
+      finally {
+        __tpLegacyNormalizeDepth = Math.max(0, __tpLegacyNormalizeDepth - 1);
+        if (__tpLegacyNormalizeDepth === 0) window.__tpNormalizingScript = false;
+      }
+      return false;
+    }
+
     async function initScriptsUI() {
       try {
   if (!ScriptsModule) {
@@ -5508,7 +5544,7 @@ let _toast = function (msg, opts) {
       await onScriptSave();
     }
 
-    function onScriptLoad() {
+    async function onScriptLoad() {
       try {
         if (!ScriptsModule) return;
         const id = scriptSlots && scriptSlots.value;
@@ -5518,6 +5554,7 @@ let _toast = function (msg, opts) {
         currentScriptId = s.id;
         if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
         setEditorContent(s.content || '');
+        await requestScriptNormalization('legacy:scripts-ui-load');
         _toast('Script loaded', { type: 'ok' });
       } catch {
         console.debug('Scripts.load error', e);
