@@ -12,8 +12,13 @@ function inRehearsal() {
 // Scroll/mic state helpers for gating transcript capture
 function getScrollMode() {
   try {
-    const fromStore = window.__tpStore?.get?.('mode');
-    if (fromStore != null) return String(fromStore).toLowerCase();
+    const store = window.__tpStore;
+    if (store && typeof store.get === 'function') {
+      const scrollMode = store.get('scrollMode');
+      if (scrollMode != null) return String(scrollMode).toLowerCase();
+      const legacyMode = store.get('mode');
+      if (legacyMode != null) return String(legacyMode).toLowerCase();
+    }
 
     const router = window.__tpScrollMode;
     if (router && typeof router.getMode === 'function') {
@@ -21,7 +26,7 @@ function getScrollMode() {
       if (mode != null) return String(mode).toLowerCase();
     }
 
-    if (typeof router === 'string') return router.toLowerCase();
+    if (router && typeof router === 'string') return router.toLowerCase();
   } catch {}
   return '';
 }
