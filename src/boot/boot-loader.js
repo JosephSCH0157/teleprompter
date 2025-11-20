@@ -78,33 +78,33 @@
         } catch {}
         return;
       }
-      // Prod or forced legacy: inject monolith/module as a last resort
-      try {
-        try { g.applyCamOpacity = g.applyCamOpacity || function(){ try { console.debug('[boot-loader] shim: applyCamOpacity'); } catch{} }; } catch {}
-        const s = document.createElement('script');
-        s.src = './teleprompter_pro.js';
-        // The current legacy build uses ESM import statements; load as a module
-        s.type = 'module';
-        s.defer = true;
-        s.onload = async () => {
-          push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
-          try {
-            // Augment legacy with minimal UI bindings and Settings Scripts card for smoke
-            const ui = await import('/src/wiring/ui-binds.js').catch(()=>null);
-            if (ui && typeof ui.bindCoreUI === 'function') {
-              try { ui.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
-            }
-          } catch {}
-          try {
-            const inj = await import('/src/ui/inject-settings-folder.js').catch(()=>null);
-            if (inj && typeof inj.ensureSettingsFolderControlsAsync === 'function') {
-              try { inj.ensureSettingsFolderControlsAsync(6000); } catch {}
-            }
-          } catch {}
-        };
-        s.onerror = () => push({ tag: 'boot-loader', msg: 'legacy failed', ok: false });
-        document.head.appendChild(s);
-      } catch {}
+      // Legacy loader is now gated off; only load teleprompter_pro.js if explicitly requested
+      if (false && (forceLegacy || relaxDevFallback)) {
+        try {
+          g.applyCamOpacity = g.applyCamOpacity || function(){ try { console.debug('[boot-loader] shim: applyCamOpacity'); } catch{} };
+          const s = document.createElement('script');
+          s.src = './teleprompter_pro.js';
+          s.type = 'module';
+          s.defer = true;
+          s.onload = async () => {
+            push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
+            try {
+              const ui = await import('/src/wiring/ui-binds.js').catch(()=>null);
+              if (ui && typeof ui.bindCoreUI === 'function') {
+                try { ui.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+              }
+            } catch {}
+            try {
+              const inj = await import('/src/ui/inject-settings-folder.js').catch(()=>null);
+              if (inj && typeof inj.ensureSettingsFolderControlsAsync === 'function') {
+                try { inj.ensureSettingsFolderControlsAsync(6000); } catch {}
+              }
+            } catch {}
+          };
+          s.onerror = () => push({ tag: 'boot-loader', msg: 'legacy failed', ok: false });
+          document.head.appendChild(s);
+        } catch {}
+      }
     }
   })();
 })(window);

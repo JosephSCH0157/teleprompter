@@ -126,6 +126,13 @@
 
   <!-- Single loader above; no additional booters here. -->
 
+  <!-- Manual legacy escape hatch: only loads teleprompter_pro.js if ?legacy=1 is present -->
+  <script>
+    if (location.search.includes('legacy=1')) {
+      document.write('<script type="module" src="/teleprompter_pro.js"><\/script>');
+    }
+  </script>
+
   <!-- Module runtime controls the page; legacy direct scripts removed to avoid double wiring -->
 
   <!-- Inline critical CSS (small, ~2KB): topbar, chips, basic app grid and first-screen editor/viewer -->
