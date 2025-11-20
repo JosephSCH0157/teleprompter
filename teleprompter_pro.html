@@ -40,6 +40,23 @@
   <!-- Modern TS boot loader (single entry) -->
   <script type="module" src="/src/boot/boot-loader.js"></script>
 
+  <!-- Preload the dist bundle for faster module resolution -->
+  <script>
+    (function(){
+      try {
+        var v = encodeURIComponent(window.__TP_ADDV || 'dev');
+        var href = './dist/index.js?v=' + v;
+        var link = document.createElement('link');
+        link.rel = 'modulepreload';
+        link.as = 'script';
+        link.href = href;
+        document.head.appendChild(link);
+      } catch (err) {
+        try { console.warn('[preload] unable to append modulepreload link', err); } catch {}
+      }
+    })();
+  </script>
+
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
