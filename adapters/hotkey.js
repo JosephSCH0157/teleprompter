@@ -2,35 +2,76 @@
 // Sends OS-level hotkeys by calling: GET {baseUrl}/send?keys=Ctrl+R
 // Config shape: { baseUrl?: string, startHotkey?: string, stopHotkey?: string }
 
+const configDefaults = {
+  baseUrl: '',
+  startHotkey: 'Ctrl+R',
+  stopHotkey: 'Ctrl+R',
+  label: 'Hotkey Bridge',
+};
+
+function normalizeBase(url) {
+  if (!url) return '';
+  return String(url).replace(/\/+$/, '');
+}
+
+function getKeys(primary, fallback) {
+  return String(primary || fallback || '');
+}
+
+async function send(url) {
+  if (!url) return false;
+  try {
+    await fetch(url, { method: 'GET', mode: 'no-cors' });
+    return true;
+  } catch (err) {
+    try { console.warn('[bridge] hotkey send failed', err); } catch {}
+    return false;
+  }
+}
+
 /**
  * @param {string} id
  * @param {string} label
  * @returns {import('../recorders.js').RecorderAdapter}
  */
-export function createHotkeyAdapter(id = 'hotkey', label = 'Hotkey') {
-  let cfg = { baseUrl: 'http://127.0.0.1:5723', startHotkey: 'Ctrl+R', stopHotkey: '' };
-  function configure(next) { cfg = { ...cfg, ...(next || {}) }; }
-  function urlFor(keys) {
-    const base = (cfg.baseUrl || 'http://127.0.0.1:5723').replace(/\/+$/, '');
-    return base + '/send?keys=' + encodeURIComponent(String(keys || cfg.startHotkey || 'Ctrl+R'));
-  }
-  async function ping(keys) {
-    try {
-      const u = urlFor(keys);
-      await fetch(u, { method: 'GET', mode: 'no-cors' });
-    } catch {}
-  }
-  return {
+export function createHotkeyAdapter(id = 'hotkey', label = 'Hotkey Bridge') {
+  let cfg = { ...configDefaults, label };
+
+  const adapter = {
     id,
-    label,
-    configure,
-    async isAvailable() {
-      // Best-effort: assume available to avoid accidental hotkey sends during probing.
-      // Users can hit "Test" in Settings to verify the helper is running.
-      return true;
+    label: cfg.label,
+    configure: (next) => {
+      cfg = { ...cfg, ...(next || {}) };
+      adapter.label = cfg.label || label;
     },
-    async start() { await ping(cfg.startHotkey); },
-    async stop() { const k = cfg.stopHotkey || cfg.startHotkey; if (k) await ping(k); },
-    async test() { await ping(cfg.startHotkey); },
+    async isAvailable() {
+      return !!normalizeBase(cfg.baseUrl);
+    },
+    async start() {
+      return tap(cfg.startHotkey);
+    },
+    async stop() {
+      const keys = cfg.stopHotkey || cfg.startHotkey;
+      if (!keys) return false;
+      return tap(keys);
+    },
+    async test() {
+      return tap(cfg.startHotkey);
+    },
   };
+
+  function urlFor(keys) {
+    const base = normalizeBase(cfg.baseUrl);
+    if (!base) return '';
+    const hotkey = getKeys(keys, cfg.startHotkey);
+    if (!hotkey) return '';
+    return base + '/send?keys=' + encodeURIComponent(hotkey);
+  }
+
+  async function tap(keys) {
+    const target = urlFor(keys);
+    return send(target);
+  }
+
+  return adapter;
 }
