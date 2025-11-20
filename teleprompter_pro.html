@@ -370,6 +370,27 @@
     <option value="step">Step</option>
     <option value="rehearsal">Rehearsal</option>
   </select>
+  <script>
+    (function(){
+      try {
+        var sel = document.getElementById('scrollMode');
+        if (!sel) return;
+        var saved = null;
+        try {
+          var ls = window.localStorage;
+          if (ls) saved = ls.getItem('tp_scroll_mode') || ls.getItem('scrollMode');
+        } catch {}
+        if (!saved && window.__tpStore && typeof window.__tpStore.get === 'function') {
+          try { saved = window.__tpStore.get('scrollMode'); } catch {}
+        }
+        if (!saved) return;
+        saved = String(saved || '').trim().toLowerCase();
+        if (!saved) return;
+        if (!sel.querySelector('option[value="' + saved + '"]')) return;
+        sel.value = saved;
+      } catch {}
+    })();
+  </script>
   <p class="mode-hint" id="scrollModeHelpText">Hybrid follows speech automatically. Switch anytime to lock in manual, ASR, or rehearsal modes.</p>
 </section>
 <div class="row">
