@@ -77,7 +77,6 @@
     if (!captureOn) return false;
     const m = currentMode();
     if (m !== 'asr' && m !== 'hybrid') return false;
-    if (!micActive()) return false;
     return true;
   }
   function captureGateReason() {
@@ -85,7 +84,6 @@
     if (!captureOn) return 'speech-idle';
     const m = currentMode();
     if (m !== 'asr' && m !== 'hybrid') return `mode-${m || 'unknown'}`;
-    if (!micActive()) return 'mic-closed';
     return 'ok';
   }
 
@@ -208,11 +206,13 @@
 
   // capture events (gated)
   window.addEventListener('tp:speech:transcript', (e) => {
+    const detail = e?.detail || {};
+    try { console.debug('[speech-notes] onTranscript', { text: detail.text, final: !!detail.final }); } catch {}
     if (canCapture()) {
-      addNote(e.detail || {});
+      addNote(detail);
     } else {
-      const detail = e?.detail || {};
       const reason = captureGateReason();
+      try { console.warn('[speech-notes] blocked', { reason, text: detail.text || '', final: !!detail.final }); } catch {}
       try {
         window.HUD?.log?.('speech-notes:gate', { reason, text: detail.text || '', final: !!detail.final });
       } catch {}

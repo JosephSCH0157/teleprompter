@@ -94,6 +94,7 @@ function __tpReadAutoRecordPref(): boolean {
 (function(){
       try {
         if (typeof window === 'undefined') return;
+        const DEFAULT_ADAPTER = 'recorder';
         const LS = {
           cfg: 'configs',                 // whole app config blob (optional)
           recAdapter: 'tp_rec_adapter',   // 'obs' | 'bridge' | 'premiere'
@@ -121,7 +122,13 @@ function __tpReadAutoRecordPref(): boolean {
         }
         function getSelectedAdapterId(){
           const cfg = getCfg();
-          try { return (cfg.recording && cfg.recording.adapter) || localStorage.getItem(LS.recAdapter) || 'bridge'; } catch { return 'bridge'; }
+          try {
+            return (cfg.recording && cfg.recording.adapter)
+              || localStorage.getItem(LS.recAdapter)
+              || DEFAULT_ADAPTER;
+          } catch {
+            return DEFAULT_ADAPTER;
+          }
         }
         function wantsAuto(){
           return __tpReadAutoRecordPref();
@@ -155,6 +162,39 @@ function __tpReadAutoRecordPref(): boolean {
             startUrl: cfg.startUrl || '',
             stopUrl: cfg.stopUrl || '',
           };
+        }
+
+        function getRecorderSurface(){
+          try {
+            const w = window as any;
+            return w.__tpRecorder || w.__recorder || null;
+          } catch {
+            return null;
+          }
+        }
+
+        async function recorderStart(){
+          const rec = getRecorderSurface();
+          if (!rec || typeof rec.start !== 'function') return true;
+          try {
+            await rec.start();
+            return true;
+          } catch (err) {
+            try { console.warn('[recorder] start failed', err); } catch {}
+            return false;
+          }
+        }
+
+        async function recorderStop(){
+          const rec = getRecorderSurface();
+          if (!rec || typeof rec.stop !== 'function') return true;
+          try {
+            await rec.stop();
+            return true;
+          } catch (err) {
+            try { console.warn('[recorder] stop failed', err); } catch {}
+            return false;
+          }
         }
 
         async function bridgeStart(){
@@ -228,6 +268,7 @@ function __tpReadAutoRecordPref(): boolean {
         async function start(){
           const a = getSelectedAdapterId();
           try { window.__tpHud?.log?.('[rec]', 'start', a); } catch {}
+          if (a === 'recorder') return recorderStart();
           if (a === 'obs') return obsStart();
           if (a === 'descript') return premStart();
           if (a === 'premiere') return premStart();
@@ -236,6 +277,7 @@ function __tpReadAutoRecordPref(): boolean {
         async function stop(){
           const a = getSelectedAdapterId();
           try { window.__tpHud?.log?.('[rec]', 'stop', a); } catch {}
+          if (a === 'recorder') return recorderStop();
           if (a === 'obs') return obsStop();
           if (a === 'descript') return premStop();
           if (a === 'premiere') return premStop();

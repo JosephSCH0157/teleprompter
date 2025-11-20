@@ -4,6 +4,14 @@
 
 let running = false;
 let rec = null; // SR instance or orchestrator handle
+let lastScrollMode = '';
+let lastResultTs = 0;
+let speechWatchdogTimer = null;
+let activeRecognizer = null;
+let pendingManualRestartCount = 0;
+
+const WATCHDOG_INTERVAL_MS = 5000;
+const WATCHDOG_THRESHOLD_MS = 15000;
 
 function inRehearsal() {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -30,6 +38,11 @@ function getScrollMode() {
   } catch {}
   return '';
 }
+function rememberMode(mode) {
+  if (typeof mode === 'string') {
+    lastScrollMode = mode;
+  }
+}
 function micActive() {
   try { return !!window.__tpMic?.isOpen?.(); } catch {}
   try { return !!window.__tpStore?.get?.('micEnabled'); } catch {}
@@ -38,20 +51,109 @@ function micActive() {
 function shouldEmitTranscript() {
   if (inRehearsal()) return false;
   const mode = getScrollMode();
+  rememberMode(mode);
   if (mode !== 'asr' && mode !== 'hybrid') return false;
-  return micActive();
+  if (!running) return false;
+  const micOpen = micActive();
+  if (!micOpen) {
+    try { window.__tpHud?.log?.('[speech-loader]', 'mic inactive (soft gate)'); } catch {}
+  }
+  return true;
 }
+
+function isAutoRestartEnabled() {
+  try {
+    const flag = window.recAutoRestart;
+    if (flag === undefined || flag === null) return true;
+    if (typeof flag === 'string') {
+      const normalized = flag.trim().toLowerCase();
+      if (normalized === 'false' || normalized === '0') return false;
+      if (normalized === 'true' || normalized === '1') return true;
+    }
+    return !!flag;
+  } catch {}
+  return true;
+}
+
+function emitTranscriptEvent(payload) {
+  try { window.__tpBus?.emit?.('tp:speech:transcript', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
+}
+
+function markResultTimestamp() {
+  lastResultTs = Date.now();
+}
+
+function stopSpeechWatchdog() {
+  if (speechWatchdogTimer != null) {
+    window.clearInterval(speechWatchdogTimer);
+    speechWatchdogTimer = null;
+  }
+}
+
+function startSpeechWatchdog() {
+  stopSpeechWatchdog();
+  speechWatchdogTimer = window.setInterval(() => {
+    if (!shouldAutoRestartSpeech()) return;
+    if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return;
+    const idleFor = Date.now() - (lastResultTs || 0);
+    if (lastResultTs && idleFor > WATCHDOG_THRESHOLD_MS) {
+      try { console.warn('[speech] watchdog: no results for', idleFor, 'ms – restarting recognition'); } catch {}
+      const restarted = requestRecognizerRestart('idle-watchdog');
+      if (!restarted) {
+        emitAsrState('idle', 'recognition-watchdog-failed');
+        running = false;
+        setActiveRecognizer(null);
+      }
+    }
+  }, WATCHDOG_INTERVAL_MS);
+}
+
+function setActiveRecognizer(instance) {
+  activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
+  pendingManualRestartCount = 0;
+  if (activeRecognizer) {
+    markResultTimestamp();
+    startSpeechWatchdog();
+  } else {
+    stopSpeechWatchdog();
+  }
+}
+
+function requestRecognizerRestart(reasonTag) {
+  if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return false;
+  pendingManualRestartCount += 1;
+  markResultTimestamp();
+  try { activeRecognizer.abort?.(); } catch {}
+  try {
+    activeRecognizer.start();
+    try { window.debug?.({ tag: 'speech:watchdog:restart', reason: reasonTag || 'watchdog', hasRecognizer: true }); } catch {}
+    try { console.log('[speech] watchdog: restarted recognition'); } catch {}
+    return true;
+  } catch (err) {
+    pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
+    try { console.warn('[speech] watchdog: restart failed', err); } catch {}
+    return false;
+  }
+}
+
+try {
+  window.__tpGetActiveRecognizer = () => activeRecognizer;
+} catch {}
 
 // Small router to bridge transcripts to both legacy and modern paths
 function routeTranscript(text, isFinal) {
   try {
     if (!text) return;
+    markResultTimestamp();
     const payload = {
       text,
       final: !!isFinal,
       timestamp: performance.now(),
       source: 'speech-loader',
+      mode: lastScrollMode || getScrollMode(),
     };
+    payload.isFinal = payload.final;
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)
     try { window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}
@@ -66,7 +168,8 @@ function routeTranscript(text, isFinal) {
     
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
-      try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
+      try { console.log('[speech-loader] emit tp:speech:transcript', payload); } catch {}
+      emitTranscriptEvent(payload);
     }
   } catch {}
 }
@@ -84,6 +187,8 @@ function _startWebSpeech() {
   r.continuous = true;
   r.interimResults = true;
   r.lang = 'en-US';
+  attachWebSpeechLifecycle(r);
+  setActiveRecognizer(r);
   r.onresult = (_e) => {
     // TODO: hook into your scroll matcher if desired
     // const last = e.results[e.results.length-1]?.[0]?.transcript;
@@ -230,6 +335,52 @@ function beginCountdownThen(sec, cb) {
   });
 }
 
+function emitAsrState(state, reason) {
+  try { window.__tpBus?.emit?.('tp:asr:state', { state, reason }); } catch {}
+}
+
+function shouldAutoRestartSpeech() {
+  const mode = lastScrollMode || getScrollMode();
+  rememberMode(mode);
+  return running && (mode === 'asr' || mode === 'hybrid') && isAutoRestartEnabled();
+}
+
+function attachWebSpeechLifecycle(sr) {
+  if (!sr) return;
+  sr.onend = (event) => {
+    try { console.log('[speech] onend', event); } catch {}
+    if (pendingManualRestartCount > 0) {
+      pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
+      return;
+    }
+    if (shouldAutoRestartSpeech()) {
+      try {
+        console.log('[speech] restarting recognition after onend');
+        sr.start();
+      } catch (err) {
+        try { console.warn('[speech] restart failed after onend', err); } catch {}
+        emitAsrState('idle', 'recognition-restart-error');
+      }
+    } else {
+      emitAsrState('idle', 'recognition-end');
+    }
+  };
+  sr.onerror = (event) => {
+    try { console.error('[speech] error', event); } catch {}
+    if (shouldAutoRestartSpeech()) {
+      try { sr.stop(); } catch {}
+      try {
+        sr.start();
+      } catch (err) {
+        try { console.warn('[speech] restart failed after error', err); } catch {}
+        emitAsrState('idle', 'recognition-error');
+      }
+    } else {
+      emitAsrState('idle', 'recognition-error');
+    }
+  };
+}
+
 export function installSpeech() {
   // Enable/disable the button based on browser support or orchestrator presence.
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
@@ -306,6 +457,8 @@ export function installSpeech() {
         const sr = new SR();
         sr.interimResults = true;
         sr.continuous = true;
+        attachWebSpeechLifecycle(sr);
+        setActiveRecognizer(sr);
         // Web Speech → route finals and throttled partials
         let _lastInterimAt = 0;
         sr.onresult = (e) => {
@@ -334,6 +487,7 @@ export function installSpeech() {
         if (btn) btn.disabled = true;
         try {
           running = true;
+          rememberMode(getScrollMode());
           // Flip UI + legacy speech gate immediately
           try { document.body.classList.add('listening'); } catch {}
           try { window.HUD?.bus?.emit('speech:toggle', true); } catch {}
@@ -349,12 +503,16 @@ export function installSpeech() {
             try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
             await startBackend();
             // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
-            try { await doAutoRecordStart(); } catch {}
+            try { await doAutoRecordStart(); }
+            catch (err) {
+              try { console.warn('[auto-record] start failed', err); } catch {}
+            }
             // Ensure mic stream is granted so Hybrid gates (dB/VAD) can open
             try { await window.__tpMic?.requestMic?.(); } catch {}
           });
         } catch (e) {
           running = false;
+          setActiveRecognizer(null);
           setListeningUi(false);
           setReadyUi();
           try { (HUD?.log || console.warn)?.('speech', { startError: String(e?.message || e) }); } catch {}
@@ -367,6 +525,7 @@ export function installSpeech() {
         if (btn) btn.disabled = true;
         try {
           try { rec?.stop?.(); } catch {}
+          setActiveRecognizer(null);
           running = false;
           try { document.body.classList.remove('listening'); } catch {}
           try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}

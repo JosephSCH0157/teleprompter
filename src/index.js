@@ -208,10 +208,7 @@ async function loadLegacyPiecesAsModules() {
     '../recorders.js',
     '../debug-tools.js',
     '../debug-seed.js',
-    '../io-anchor.js',
     '../help.js',
-    '../scroll-helpers.js',
-    '../scroll-control.js',
   ];
   await Promise.all(mods.map(async (m) => {
     try {

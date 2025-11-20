@@ -8,83 +8,10 @@ import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { speechStore } from '../state/speech-store';
 
-// --- ASR scroll smoothing adapter -------------------------------------------------
+// How many lines the viewport is allowed to jump per ASR advance
 const ASR_MAX_VISUAL_LEAP = 3;
-const ASR_SCROLL_ANIM_MS = 200;
-const ASR_SCROLL_STEPS = 5;
-
-type ScrollIndexFn = (index: number) => void;
-
-let scrollToIndexHard: ScrollIndexFn = () => {};
-let lastVisualIndex = 0;
-let scrollAnimHandle: number | null = null;
-
-function cancelAsrScrollAnimation() {
-  if (scrollAnimHandle != null && typeof window !== 'undefined') {
-    window.clearTimeout(scrollAnimHandle);
-  }
-  scrollAnimHandle = null;
-}
-
-export function installAsrScrollAdapter(fn: ScrollIndexFn, initialIndex = 0) {
-  scrollToIndexHard = typeof fn === 'function' ? fn : () => {};
-  lastVisualIndex = Number.isFinite(initialIndex) ? initialIndex : 0;
-  cancelAsrScrollAnimation();
-}
-
-export function resetAsrScrollAdapter(nextIndex?: number) {
-  cancelAsrScrollAnimation();
-  if (typeof nextIndex === 'number' && Number.isFinite(nextIndex)) {
-    lastVisualIndex = nextIndex;
-  }
-}
-
-export function smoothScrollToIndex(targetIndex: number) {
-  if (typeof window === 'undefined' || typeof scrollToIndexHard !== 'function') return;
-  const target = Number(targetIndex);
-  if (!Number.isFinite(target)) return;
-
-  cancelAsrScrollAnimation();
-
-  const start = lastVisualIndex;
-  const rawDelta = target - start;
-  if (Math.abs(rawDelta) < 0.01) {
-    lastVisualIndex = target;
-    scrollToIndexHard(Math.round(target));
-    return;
-  }
-
-  const clampedDelta = Math.abs(rawDelta) > ASR_MAX_VISUAL_LEAP
-    ? Math.sign(rawDelta) * ASR_MAX_VISUAL_LEAP
-    : rawDelta;
-  const visibleTarget = start + clampedDelta;
-  const stepDelta = (visibleTarget - start) / ASR_SCROLL_STEPS;
-  const stepDuration = ASR_SCROLL_ANIM_MS / ASR_SCROLL_STEPS;
-  let step = 0;
-
-  const tick = () => {
-    step += 1;
-    const finalStep = step >= ASR_SCROLL_STEPS;
-    const nextIndex = finalStep ? visibleTarget : start + stepDelta * step;
-    lastVisualIndex = nextIndex;
-    scrollToIndexHard(Math.round(nextIndex));
-
-    if (!finalStep) {
-      scrollAnimHandle = window.setTimeout(tick, stepDuration);
-    } else {
-      scrollAnimHandle = null;
-      if (Math.abs(target - visibleTarget) > 0.01) {
-        // Continue easing toward the real target in additional small hops.
-        window.setTimeout(() => smoothScrollToIndex(target), 0);
-      } else {
-        lastVisualIndex = target;
-        scrollToIndexHard(Math.round(target));
-      }
-    }
-  };
-
-  tick();
-}
+// Track which line the screen is currently showing as "active"
+let asrDisplayIndex = 0;
 
 const RESCUE_JUMPS_ENABLED = false; // temp gate: log rescues without forcing hard jumps
 
@@ -142,7 +69,7 @@ export class AsrMode {
     bindEngine(this.engine, (e: AsrEvent) => this.onEngineEvent(e));
 
     this.currentIdx = clamp(this.currentIdx, 0, this.getAllLineEls().length - 1);
-    installAsrScrollAdapter((idx) => this.scrollToLine(idx), this.currentIdx);
+    asrDisplayIndex = this.currentIdx;
 
     this.setState('ready');
     await this.engine.start({
@@ -214,7 +141,7 @@ export class AsrMode {
       this.startProgressWatchdog();
     } else {
       this.stopProgressWatchdog();
-      resetAsrScrollAdapter(this.currentIdx);
+      asrDisplayIndex = 0;
     }
   }
 
@@ -288,7 +215,7 @@ export class AsrMode {
       if (newIdx >= this.currentIdx) {
         this.currentIdx = newIdx;
         this.markAdvance();
-        smoothScrollToIndex(newIdx);
+        this.scrollWithClamp(newIdx);
         this.dispatch('asr:advance', { index: newIdx, score: bestScore, lead: leadLines });
       }
     } else if (isFinal) {
@@ -300,7 +227,7 @@ export class AsrMode {
         if (RESCUE_JUMPS_ENABLED) {
           this.currentIdx = rescueIdx;
           this.markAdvance();
-          smoothScrollToIndex(this.currentIdx);
+          this.scrollWithClamp(this.currentIdx);
         }
       }
     }
@@ -361,6 +288,20 @@ export class AsrMode {
 
   private markAdvance() {
     this.lastAdvanceAt = performance.now();
+  }
+
+  private scrollWithClamp(targetIdx: number) {
+    if (!Number.isFinite(targetIdx)) return;
+
+    if (asrDisplayIndex === 0) {
+      asrDisplayIndex = targetIdx;
+    }
+
+    const diff = targetIdx - asrDisplayIndex;
+    const clampedDiff = clamp(diff, -ASR_MAX_VISUAL_LEAP, ASR_MAX_VISUAL_LEAP);
+    asrDisplayIndex += clampedDiff;
+
+    this.scrollToLine(Math.round(asrDisplayIndex));
   }
 
   private startProgressWatchdog() {
