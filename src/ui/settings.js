@@ -1006,8 +1006,63 @@
     } catch {}
   }
 
+  function ensureInfoTabsAndCards() {
+    try {
+      const tabsRoot = document.getElementById('settingsTabs');
+      const body = document.getElementById('settingsBody');
+
+      if (!tabsRoot || !body) return;
+
+      const ensureTab = (tabId, label) => {
+        let btn = tabsRoot.querySelector('[data-tab="' + tabId + '"]');
+        if (!btn) {
+          btn = document.createElement('button');
+          btn.className = 'settings-tab';
+          btn.dataset.tab = tabId;
+          btn.textContent = label;
+          btn.type = 'button';
+          tabsRoot.appendChild(btn);
+        }
+      };
+
+      ensureTab('pricing', 'Pricing');
+      ensureTab('about', 'About');
+
+      const ensureCard = (tabId, html) => {
+        let card = body.querySelector('.settings-card[data-tab="' + tabId + '"]');
+        if (!card) {
+          card = document.createElement('section');
+          card.className = 'settings-card';
+          card.dataset.tab = tabId;
+          card.setAttribute('data-tab-content', tabId);
+          card.style.display = 'none';
+          card.innerHTML = html;
+          body.appendChild(card);
+        }
+      };
+
+      ensureCard('pricing', [
+        '<h4>Pricing</h4>',
+        '<p>During beta, Anvil is free for creators. Future pricing will be simple tiers for solo shows and teams.</p>'
+      ].join(''));
+
+      ensureCard('about', [
+        '<h4>About Anvil</h4>',
+        '<p id="aboutVersion">Anvil Teleprompter \u2022 build 1.7.5</p>',
+        '<ul>',
+          '<li>Smart scroll modes keep your delivery smooth and synced with speech.</li>',
+          '<li>Color and typography controls make every script comfortable to read.</li>',
+          '<li>Script tools help you import, normalize, and tag scripts from your mapped folders.</li>',
+          '<li>OBS integration lets you monitor and control recording without leaving Anvil.</li>',
+        '</ul>'
+      ].join(''));
+    } catch {}
+  }
+
   function init() {
     try {
+      ensureInfoTabsAndCards();
+
       // Bind settings tab persistence
       const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
       tabs.forEach(t => {
@@ -1911,6 +1966,7 @@
         try {
           const el = root || document.getElementById('settingsBody');
           buildSettingsContent(el);
+          ensureInfoTabsAndCards();
           // ensure latest devices are shown
           populateDevices();
           // Rewire auto-record checkboxes after dynamic content mounts
