@@ -8,6 +8,7 @@ let lastScrollMode = '';
 let lastResultTs = 0;
 let speechWatchdogTimer = null;
 let activeRecognizer = null;
+let pendingManualRestartCount = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
@@ -60,6 +61,20 @@ function shouldEmitTranscript() {
   return true;
 }
 
+function isAutoRestartEnabled() {
+  try {
+    const flag = window.recAutoRestart;
+    if (flag === undefined || flag === null) return true;
+    if (typeof flag === 'string') {
+      const normalized = flag.trim().toLowerCase();
+      if (normalized === 'false' || normalized === '0') return false;
+      if (normalized === 'true' || normalized === '1') return true;
+    }
+    return !!flag;
+  } catch {}
+  return true;
+}
+
 function emitTranscriptEvent(payload) {
   try { window.__tpBus?.emit?.('tp:speech:transcript', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
@@ -84,16 +99,11 @@ function startSpeechWatchdog() {
     const idleFor = Date.now() - (lastResultTs || 0);
     if (lastResultTs && idleFor > WATCHDOG_THRESHOLD_MS) {
       try { console.warn('[speech] watchdog: no results for', idleFor, 'ms – restarting recognition'); } catch {}
-      try { activeRecognizer.stop?.(); } catch (err) { try { console.warn('[speech] watchdog: stop failed', err); } catch {} }
-      markResultTimestamp();
-      try {
-        activeRecognizer.start();
-        try { console.log('[speech] watchdog: restarted recognition'); } catch {}
-      } catch (err) {
-        try { console.warn('[speech] watchdog: restart failed', err); } catch {}
+      const restarted = requestRecognizerRestart('idle-watchdog');
+      if (!restarted) {
         emitAsrState('idle', 'recognition-watchdog-failed');
         running = false;
-        stopSpeechWatchdog();
+        setActiveRecognizer(null);
       }
     }
   }, WATCHDOG_INTERVAL_MS);
@@ -101,6 +111,7 @@ function startSpeechWatchdog() {
 
 function setActiveRecognizer(instance) {
   activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
+  pendingManualRestartCount = 0;
   if (activeRecognizer) {
     markResultTimestamp();
     startSpeechWatchdog();
@@ -108,6 +119,27 @@ function setActiveRecognizer(instance) {
     stopSpeechWatchdog();
   }
 }
+
+function requestRecognizerRestart(reasonTag) {
+  if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return false;
+  pendingManualRestartCount += 1;
+  markResultTimestamp();
+  try { activeRecognizer.abort?.(); } catch {}
+  try {
+    activeRecognizer.start();
+    try { window.debug?.({ tag: 'speech:watchdog:restart', reason: reasonTag || 'watchdog', hasRecognizer: true }); } catch {}
+    try { console.log('[speech] watchdog: restarted recognition'); } catch {}
+    return true;
+  } catch (err) {
+    pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
+    try { console.warn('[speech] watchdog: restart failed', err); } catch {}
+    return false;
+  }
+}
+
+try {
+  window.__tpGetActiveRecognizer = () => activeRecognizer;
+} catch {}
 
 // Small router to bridge transcripts to both legacy and modern paths
 function routeTranscript(text, isFinal) {
@@ -310,13 +342,17 @@ function emitAsrState(state, reason) {
 function shouldAutoRestartSpeech() {
   const mode = lastScrollMode || getScrollMode();
   rememberMode(mode);
-  return running && (mode === 'asr' || mode === 'hybrid');
+  return running && (mode === 'asr' || mode === 'hybrid') && isAutoRestartEnabled();
 }
 
 function attachWebSpeechLifecycle(sr) {
   if (!sr) return;
   sr.onend = (event) => {
     try { console.log('[speech] onend', event); } catch {}
+    if (pendingManualRestartCount > 0) {
+      pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
+      return;
+    }
     if (shouldAutoRestartSpeech()) {
       try {
         console.log('[speech] restarting recognition after onend');
@@ -476,6 +512,7 @@ export function installSpeech() {
           });
         } catch (e) {
           running = false;
+          setActiveRecognizer(null);
           setListeningUi(false);
           setReadyUi();
           try { (HUD?.log || console.warn)?.('speech', { startError: String(e?.message || e) }); } catch {}
@@ -488,6 +525,7 @@ export function installSpeech() {
         if (btn) btn.disabled = true;
         try {
           try { rec?.stop?.(); } catch {}
+          setActiveRecognizer(null);
           running = false;
           try { document.body.classList.remove('listening'); } catch {}
           try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}
