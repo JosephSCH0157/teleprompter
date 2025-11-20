@@ -21,8 +21,6 @@ function announceHudReady() {
   } catch {}
 }
 
-markHudWireActive();
-
 function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(notes.slice(-500))); } catch {} }
 function load() {
   try {
@@ -48,7 +46,7 @@ function copyAll() {
 function exportTxt() {
   try { const body = notes.map(n=>`${new Date(n.ts).toISOString()}\t${n.final?'FINAL':'INT'}\t${(n.sim??0).toFixed(2)}\t${n.text}`).join('\n'); const blob=new Blob([body],{type:'text/plain'}); const a=document.createElement('a'); a.download=`captions-notes-${Date.now()}.txt`; a.href=URL.createObjectURL(blob); a.click(); setTimeout(()=>{ try{URL.revokeObjectURL(a.href);}catch{} },1200); } catch {}
 }
-function shouldShowHud(){
+export function shouldShowHud(){
   try {
     const isDev = (window as any).__TP_DEV === 1 || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search) || /#dev\b/.test(location.hash);
     const isProdOptIn = localStorage.getItem(PROD_TOGGLE_KEY) === '1';
@@ -59,6 +57,7 @@ function shouldShowHud(){
 export function loadHudIfDev(){
   try {
     if(!shouldShowHud()) { try { console.info('[HUD] Captions HUD is off. Enable dev mode or set tp_hud_prod=1.'); } catch {} return; }
+    markHudWireActive();
     if(document.getElementById('tp-dev-hud')) return;
     load();
     const el=document.createElement('div'); el.id='tp-dev-hud';
@@ -185,6 +184,5 @@ export function loadHudIfDev(){
 }
 
 try { loadHudIfDev(); } catch {}
-try { announceHudReady(); } catch {}
 export { };
 

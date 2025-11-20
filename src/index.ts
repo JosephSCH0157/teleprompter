@@ -220,7 +220,7 @@ const startTelemetry   = initOnce('telemetry',   initTelemetry);
 const startScroll      = initOnce('scroll',      initScroll);
 const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
-import './hud/loader';
+import { shouldShowHud } from './hud/loader';
 // Tiny HUD chip that reflects current scroll mode
 import './features/scroll/mode-chip';
 // Mapped Folder (scripts directory) binder
@@ -339,12 +339,20 @@ try {
   } catch {}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
+		function isDevHudSession(): boolean {
+	try {
+		return !!((window as any).__TP_DEV || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search) || /#dev\b/.test(location.hash));
+	} catch {
+		return false;
+	}
+}
 		function injectSpeechNotesHud() {
 	try {
+		if (!shouldShowHud()) return;
 		if (document.getElementById('tp-speech-notes-hud')) return; // already present
 		const s = document.createElement('script');
-				const isDevHud = !!(window.__TP_DEV || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search));
-				s.src = isDevHud ? './src/hud/speech-notes-hud.js' : './hud/speech-notes-hud.js';
+		const devLike = isDevHudSession();
+		s.src = devLike ? './src/hud/speech-notes-hud.js' : './hud/speech-notes-hud.js';
 		s.async = true; // non-blocking
 		document.head.appendChild(s);
 	} catch {}
