@@ -16,6 +16,101 @@
 
   function q(id) { return document.getElementById(id); }
 
+  function getStore(){
+    try { return window.__tpStore || null; } catch { return null; }
+  }
+
+  function onStoreReady(cb, opts){
+    try {
+      const store = getStore();
+      if (store && typeof store.subscribe === 'function' && typeof store.set === 'function') {
+        cb(store);
+        return;
+      }
+    } catch {}
+    const conf = opts || {};
+    const delay = Number(conf.delayMs || 50);
+    const maxAttempts = Number(conf.maxAttempts || 200);
+    let attempts = 0;
+    (function waitForStore(){
+      try {
+        const store = getStore();
+        if (store && typeof store.subscribe === 'function' && typeof store.set === 'function') {
+          cb(store);
+          return;
+        }
+      } catch {}
+      if (attempts++ >= maxAttempts) return;
+      setTimeout(waitForStore, delay);
+    })();
+  }
+
+  function writeAutoRecordState(next){
+    try {
+      const store = getStore();
+      if (store && typeof store.set === 'function') store.set('autoRecord', !!next);
+    } catch {}
+  }
+
+  let autoRecordStoreSub = null;
+  let autoRecordStorePending = false;
+
+  function handleAutoRecordStoreUpdate(v){
+    try {
+      const checked = !!v;
+      const settingsAutoRecEl = q('settingsAutoRecord');
+      const mainAutoRecEl = q('autoRecordToggle') || q('autoRecord');
+      if (settingsAutoRecEl && settingsAutoRecEl.checked !== checked) settingsAutoRecEl.checked = checked;
+      if (mainAutoRecEl && 'checked' in mainAutoRecEl && mainAutoRecEl.checked !== checked) mainAutoRecEl.checked = checked;
+      if (checked) {
+        try {
+          (async () => {
+            try {
+              const issues = await (window.__recorder?.preflight?.('obs') || Promise.resolve([]));
+              if (Array.isArray(issues) && issues.length) {
+                (window.toast || ((m)=>console.debug('[toast]', m)))('OBS preflight: ' + issues.join('; '), { type: 'warn' });
+              }
+            } catch {}
+          })();
+        } catch {}
+        try {
+          const params = new URLSearchParams(location.search || '');
+          const mock = params.get('mockFolder') === '1';
+          const nameEl = document.getElementById('autoRecordFolderName');
+          if (mock && nameEl) nameEl.textContent = 'MockRecordings';
+        } catch {}
+      } else {
+        try {
+          const nameEl = document.getElementById('autoRecordFolderName');
+          if (nameEl) nameEl.textContent = 'Not set';
+        } catch {}
+      }
+    } catch {}
+  }
+
+  function ensureAutoRecordStoreSubscription(){
+    if (autoRecordStoreSub || autoRecordStorePending) return;
+    autoRecordStorePending = true;
+    onStoreReady((store) => {
+      autoRecordStorePending = false;
+      if (autoRecordStoreSub || !store || typeof store.subscribe !== 'function') return;
+      autoRecordStoreSub = store.subscribe('autoRecord', (v) => { handleAutoRecordStoreUpdate(v); });
+    });
+  }
+
+  function wireAutoRecordControls(){
+    const settingsAutoRec = q('settingsAutoRecord');
+    const mainAutoRec = q('autoRecordToggle') || q('autoRecord');
+    const wire = (el) => {
+      if (!el || el.dataset.autoRecWired === '1') return;
+      el.dataset.autoRecWired = '1';
+      el.addEventListener('change', () => { writeAutoRecordState(!!el.checked); });
+    };
+    wire(settingsAutoRec);
+    wire(mainAutoRec);
+    ensureAutoRecordStoreSubscription();
+  }
+
   function showTab(tab){
     try {
       const tabs = Array.from(document.querySelectorAll('#settingsTabs .settings-tab'));
@@ -1026,45 +1121,8 @@
         }
       }
 
-      // Auto-record: Settings overlay control is source of truth (mirrors to any main control if present)
+      wireAutoRecordControls();
       const settingsAutoRec = q('settingsAutoRecord');
-      const mainAutoRec = q('autoRecordToggle') || q('autoRecord');
-      if (settingsAutoRec && hasStore) settingsAutoRec.addEventListener('change', () => S.set('autoRecord', !!settingsAutoRec.checked));
-      if (mainAutoRec && hasStore) mainAutoRec.addEventListener('change', () => S.set('autoRecord', !!mainAutoRec.checked));
-      if (hasStore && typeof S.subscribe === 'function') {
-        S.subscribe('autoRecord', v => {
-          try {
-            if (settingsAutoRec && settingsAutoRec.checked !== !!v) settingsAutoRec.checked = !!v;
-            if (mainAutoRec && mainAutoRec.checked !== !!v) mainAutoRec.checked = !!v;
-            // On enable, run a quick OBS preflight and surface early warnings
-            if (v) {
-              try {
-                (async () => {
-                  try {
-                    const issues = await (window.__recorder?.preflight?.('obs') || Promise.resolve([]));
-                    if (Array.isArray(issues) && issues.length) {
-                      (window.toast || ((m)=>console.debug('[toast]', m)))('OBS preflight: ' + issues.join('; '), { type: 'warn' });
-                    }
-                  } catch {}
-                })();
-              } catch {}
-              // When enabled under CI mock with no handle picked, show mock label immediately
-              try {
-                const params = new URLSearchParams(location.search || '');
-                const mock = params.get('mockFolder') === '1';
-                const nameEl = document.getElementById('autoRecordFolderName');
-                if (mock && nameEl) nameEl.textContent = 'MockRecordings';
-              } catch {}
-            } else {
-              // When disabled, reflect "Not set" in the visible label (do not clear stored handle)
-              try {
-                const nameEl = document.getElementById('autoRecordFolderName');
-                if (nameEl) nameEl.textContent = 'Not set';
-              } catch {}
-            }
-          } catch {}
-        });
-      }
 
       // --- Auto-record folder picker wiring ---
       try {
@@ -1119,13 +1177,15 @@
         }
 
         // On enabling auto-save, if supported and no folder yet: prompt; revert if canceled
-        if (settingsAutoRec && hasStore) {
+        if (settingsAutoRec && !settingsAutoRec.dataset.autoRecFolderPrompt) {
+          settingsAutoRec.dataset.autoRecFolderPrompt = '1';
           settingsAutoRec.addEventListener('change', async () => {
             try {
               if (!settingsAutoRec.checked) return;
               const ok = await pickFolderFlow();
               if (!ok) {
-                settingsAutoRec.checked = false; S.set('autoRecord', false);
+                settingsAutoRec.checked = false;
+                writeAutoRecordState(false);
               }
             } catch {}
           }, { capture: true });
@@ -1853,6 +1913,8 @@
           buildSettingsContent(el);
           // ensure latest devices are shown
           populateDevices();
+          // Rewire auto-record checkboxes after dynamic content mounts
+          try { wireAutoRecordControls(); } catch {}
           // After building, ensure tabs show active one
           const active = (document.querySelector('#settingsTabs .settings-tab.active')||null);
           showTab(active && active.getAttribute('data-tab') || 'general');
@@ -2216,6 +2278,21 @@
                 } catch {}
                 return false;
               }
+            }
+
+            const settingsAutoRec = q('settingsAutoRecord');
+            if (settingsAutoRec && !settingsAutoRec.dataset.autoRecFolderPrompt) {
+              settingsAutoRec.dataset.autoRecFolderPrompt = '1';
+              settingsAutoRec.addEventListener('change', async () => {
+                try {
+                  if (!settingsAutoRec.checked) return;
+                  const ok = await pickFolderFlow();
+                  if (!ok) {
+                    settingsAutoRec.checked = false;
+                    writeAutoRecordState(false);
+                  }
+                } catch {}
+              }, { capture: true });
             }
 
             if (pickBtn && !pickBtn.dataset.wired) {
