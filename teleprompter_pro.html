@@ -34,6 +34,9 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
+  <!-- Preload Mammoth so DOCX importer always sees window.mammoth -->
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
   <!-- Modern TS boot loader (single entry) -->
   <script type="module" src="/src/boot/boot-loader.js"></script>
 
@@ -289,16 +292,6 @@
   <div id="dbMeterTop" title="Input level"></div>
   <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
 </div>
-<!-- Mode selector (compact) -->
-<label for="scrollMode" class="topbar-label">Mode</label>
-<select id="scrollMode" aria-label="Scroll Mode">
-  <option value="timed">Timed</option>
-  <option value="wpm">WPM</option>
-  <option value="hybrid" selected>Hybrid</option>
-  <option value="asr">ASR</option>
-  <option value="step">Step</option>
-  <option value="rehearsal">Rehearsal</option>
-</select>
 <!-- Auto status chip (Hybrid/Auto state) -->
 <span id="autoChip" class="chip" aria-live="polite" aria-atomic="true" title="Auto scroll status">Auto: Manual</span>
 <!-- Right-side controls wrapper (ASR chip mounts here) -->
@@ -338,6 +331,22 @@
 <div class="app">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
+<section class="mode-card" id="scrollModeCard">
+  <div class="mode-card-head">
+    <span class="mode-chip" aria-hidden="true">Scroll Mode</span>
+    <span class="mode-pill" id="scrollModeStatus">Priority Control</span>
+  </div>
+  <label class="sr-only" for="scrollMode">Scroll Mode</label>
+  <select id="scrollMode" aria-label="Scroll Mode" aria-describedby="scrollModeHelpText">
+    <option value="timed">Timed</option>
+    <option value="wpm">WPM</option>
+    <option value="hybrid" selected>Hybrid</option>
+    <option value="asr">ASR</option>
+    <option value="step">Step</option>
+    <option value="rehearsal">Rehearsal</option>
+  </select>
+  <p class="mode-hint" id="scrollModeHelpText">Hybrid follows speech automatically. Switch anytime to lock in manual, ASR, or rehearsal modes.</p>
+</section>
 <div class="row">
 <button id="displayToggleBtn" class="chip" type="button" aria-pressed="false" data-action="display-toggle">Display: Closed</button>
 </div>

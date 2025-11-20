@@ -166,6 +166,14 @@ try {
   window.__tpMic = {
     requestMic: (...a) => { try { return Mic.requestMic?.(...a); } catch (e) { void e; } },
     releaseMic: (...a) => { try { return Mic.releaseMic?.(...a); } catch (e) { void e; } },
+    isOpen: (...a) => {
+      try {
+        return !!Mic.isOpen?.(...a);
+      } catch (e) {
+        void e;
+        return false;
+      }
+    },
   };
 } catch (e) { void e; }
 
@@ -173,9 +181,15 @@ try {
 function initOnce(name, fn) {
   try {
     window.__tpInit = window.__tpInit || {};
+    window.__tpInitHandlers = window.__tpInitHandlers || {};
+    if (typeof fn === 'function') {
+      window.__tpInitHandlers[name] = fn;
+    }
     if (window.__tpInit[name]) return;
+    const handler = window.__tpInitHandlers[name];
+    if (typeof handler !== 'function') return;
     window.__tpInit[name] = 1;
-    return fn();
+    return handler();
   } catch (e) {
     try { console.warn(`[init:${name}] failed`, e); } catch (e2) { void e2; }
   }
@@ -219,6 +233,65 @@ async function boot() {
   try {
     // Ensure legacy pieces are loaded before boot continues (no top-level await for lint compatibility)
     await loadLegacyPiecesAsModules();
+    let scriptNormalizeDepth = 0;
+    if (typeof window.__tpRequestScriptNormalization !== 'function') {
+      window.__tpRequestScriptNormalization = async function requestScriptNormalization(reason) {
+        try {
+          const w = window;
+          const pairs = [];
+          const add = (fn, ctx) => {
+            if (typeof fn === 'function') pairs.push([fn, ctx]);
+          };
+          add(w.normalizeScript, w);
+          add(w.normalizeCurrentScript, w);
+          add(w.applyScriptMarkup, w);
+          if (w.__tpScript && typeof w.__tpScript.normalize === 'function') add(w.__tpScript.normalize, w.__tpScript);
+          add(w.normalizeToStandard, w);
+          add(w.fallbackNormalize, w);
+          scriptNormalizeDepth++;
+          window.__tpNormalizingScript = true;
+          for (const [fn, ctx] of pairs) {
+            try {
+              const res = fn.call(ctx, reason);
+              if (res && typeof res.then === 'function') await res;
+              return true;
+            } catch (e) {
+              try { console.warn('[normalize] candidate failed', e); } catch (e2) { void e2; }
+            }
+          }
+        } catch (err) {
+          try { console.warn('[normalize] request failed', err); } catch (e3) { void e3; }
+        } finally {
+          scriptNormalizeDepth = Math.max(0, scriptNormalizeDepth - 1);
+          if (scriptNormalizeDepth === 0) window.__tpNormalizingScript = false;
+        }
+        return false;
+      };
+    }
+
+    const applyLoadedScriptText = async (name, text, reason) => {
+      try {
+        const ed = document.getElementById('editor');
+        if (ed && 'value' in ed) {
+          ed.value = text;
+          try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; }
+        }
+        try {
+          const runner = window.__tpRequestScriptNormalization;
+          if (typeof runner === 'function') await runner(reason || 'load');
+        } catch (e) { void e; }
+        let finalText = text;
+        try {
+          const editorEl = document.getElementById('editor');
+          if (editorEl && 'value' in editorEl) finalText = editorEl.value;
+        } catch (e) { void e; }
+        try {
+          window.dispatchEvent(new CustomEvent('tp:script-load', {
+            detail: { name, text: finalText, normalized: true, skipNormalize: true },
+          }));
+        } catch (e) { void e; }
+      } catch (e) { void e; }
+    };
     // Install Debug HUD (hidden by default) so the tilde hotkey works in module path too
     try {
       // Ensure HUD installer exists (load fallback if not already present)
@@ -750,12 +823,7 @@ async function boot() {
                   } else {
                     text = await file.text();
                   }
-                  const ed = document.getElementById('editor');
-                  if (ed && 'value' in ed) {
-                    ed.value = text;
-                    try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
-                  }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: file.name, text } })); } catch (e) {}
+                  await applyLoadedScriptText(file.name || 'Document', text, 'load-btn:file-picker');
                 } catch (e) {}
               };
               (async () => {
@@ -856,9 +924,7 @@ async function boot() {
                   const f = (inp.files && inp.files[0]) || null;
                   if (!f) return;
                   const text = f.name.toLowerCase().endsWith('.docx') && window.docxToText ? await window.docxToText(f) : await f.text();
-                  const ed = document.getElementById('editor');
-                  if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: f.name, text } })); } catch (e2) { void e2; }
+                  await applyLoadedScriptText(f.name || 'Document', text, 'hotkey:file-picker');
                 } catch (e3) { void e3; }
                 try { inp.remove(); } catch (e4) { void e4; }
               }, { once: true });
@@ -1151,6 +1217,44 @@ async function boot() {
           } catch (e) {}
         }
 
+        let refreshInFlight = false;
+        async function refreshFromActiveSource(_reason) {
+          if (refreshInFlight) return;
+          refreshInFlight = true;
+          try {
+            const dirHandle = (() => { try { return window.__tpFolderHandle || null; } catch (e) { return null; } })();
+            if (dirHandle) {
+              const names = await listDirNames(dirHandle);
+              populate(names);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch (e) {}
+              return;
+            }
+            const fallbackMap = (() => { try { return window.__tpFolderFilesMap || null; } catch (e) { return null; } })();
+            if (fallbackMap && typeof fallbackMap.keys === 'function') {
+              const names = Array.from(fallbackMap.keys()).filter(Boolean).sort((a,b) => String(a).localeCompare(String(b)));
+              populate(names);
+              try { localStorage.setItem('tp_last_folder_scripts', JSON.stringify(names)); } catch (e) {}
+              return;
+            }
+            try {
+              const raw = localStorage.getItem('tp_last_folder_scripts');
+              if (raw) {
+                const arr = JSON.parse(raw) || [];
+                if (Array.isArray(arr)) populate(arr);
+              }
+            } catch (e) {}
+          } catch (e) { void e; }
+          finally { refreshInFlight = false; }
+        }
+        try {
+          window.addEventListener('tp:folderScripts:refresh', (ev) => {
+            try {
+              const why = (ev && ev.detail && ev.detail.reason) || 'event';
+              refreshFromActiveSource(why);
+            } catch (e) { void e; }
+          }, { capture: true });
+        } catch (e) {}
+
         // Persist and restore directory handle via IndexedDB so the menu survives reloads
         const IDB_NAME = 'tp_fs_v1';
         const IDB_STORE = 'handles';
@@ -1418,6 +1522,11 @@ async function boot() {
         if (window.__tpFolderFsOpsInstalled) return; window.__tpFolderFsOpsInstalled = true;
         const getDir = () => { try { return window.__tpFolderHandle || null; } catch { return null; } };
         const getEditorText = () => { try { const ed = document.getElementById('editor'); return (ed && 'value' in ed) ? (ed.value || '') : ''; } catch { return ''; } };
+        function signalFolderListRefresh(reason){
+          try {
+            window.dispatchEvent(new CustomEvent('tp:folderScripts:refresh', { detail: { reason, ts: Date.now() } }));
+          } catch (e) { void e; }
+        }
         async function saveToFolder(name, text){
           try {
             const dir = getDir(); if (!dir || !name) return false;
@@ -1451,6 +1560,7 @@ async function boot() {
               } catch (e) { void e; }
             }
             try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch (e) { void e; }
+            signalFolderListRefresh('add');
           } catch (e) { void e; }
         }
         function removeOptionEverywhere(name){
@@ -1466,6 +1576,7 @@ async function boot() {
               } catch (e) { void e; }
             }
             try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: (document.getElementById('scriptSelectSidebar')?.options.length || 0) } })); } catch (e) { void e; }
+            signalFolderListRefresh('remove');
           } catch (e) { void e; }
         }
         function renameOptionEverywhere(from, to){
@@ -1478,6 +1589,7 @@ async function boot() {
                 if (opt) { opt.textContent = to; }
               } catch (e) { void e; }
             }
+            signalFolderListRefresh('rename');
           } catch (e) { void e; }
         }
 
@@ -1565,8 +1677,7 @@ async function boot() {
                 const fh = await dir.getFileHandle(String(name), { create: false });
                 const file = await fh.getFile();
                 const text = await readTextSmart(file, String(name));
-                try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
-                try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
+                await applyLoadedScriptText(String(name), text, 'folder:handle');
                 return;
               } catch (e) { void e; }
             }
@@ -1577,8 +1688,7 @@ async function boot() {
                 const f = mp.get(String(name));
                 if (f) {
                   const text = await readTextSmart(f, String(name));
-                  try { const ed = document.getElementById('editor'); if (ed && 'value' in ed) { ed.value = text; try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { void e; } } } catch (e) { void e; }
-                  try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: String(name), text } })); } catch (e) { void e; }
+                  await applyLoadedScriptText(String(name), text, 'folder:fallback-map');
                 }
               }
             } catch (e) { void e; }
@@ -1682,5 +1792,5 @@ async function boot() {
 // Auto-run boot when loaded as a module, but also export boot for manual invocation.
 boot();
 
-export { boot };
+export { boot, initOnce };
 

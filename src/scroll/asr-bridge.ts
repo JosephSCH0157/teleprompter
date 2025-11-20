@@ -31,7 +31,7 @@ export function installAsrScrollBridge(api: AsrScrollBridgeApi) {
     const sample: AdaptSample = {
       errPx,
       conf,
-      t: ts,
+      now: ts,
     };
 
     try {

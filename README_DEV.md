@@ -40,6 +40,9 @@ Quick QA checklist
     - Finals-only checkbox plus Copy / Export / Clear buttons. Stores last 500 entries in `localStorage` under `tp_hud_speech_notes_v1`.
     - Script auto-injects after the legacy HUD announces readiness (`hud:ready`) so the bus exists first.
     - To enable in production for an admin test: run `localStorage.setItem('tp_hud_prod','1')` in the console and reload.
+- Recording
+  - Open Settings ▶ Recording and use the Start/Stop recording buttons. Bridge + OBS (when enabled) should both follow the registry commands.
+  - Start Present mode or trigger Play/speech sync with `Auto Record` enabled in the store. Recording should auto-start and auto-stop on the same registry without needing legacy shims.
 
 Notes
 

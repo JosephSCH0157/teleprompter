@@ -72,6 +72,14 @@ function __tpReadAutoRecordPref(): boolean {
     }
   } catch {}
   try {
+    const doc = typeof document !== 'undefined' ? document : null;
+    if (doc) {
+      const el = (doc.getElementById('autoRecordToggle') as HTMLInputElement | null)
+        || (doc.getElementById('autoRecord') as HTMLInputElement | null);
+      if (el) return !!el.checked;
+    }
+  } catch {}
+  try {
     return localStorage.getItem('tp_auto_record_on_start_v1') === '1';
   } catch {
     return false;
@@ -111,12 +119,18 @@ function __tpReadAutoRecordPref(): boolean {
           if (a && a.recording) merged.recording = a.recording;
           return merged;
         }
-        function getAdapter(){
+        function getSelectedAdapterId(){
           const cfg = getCfg();
           try { return (cfg.recording && cfg.recording.adapter) || localStorage.getItem(LS.recAdapter) || 'bridge'; } catch { return 'bridge'; }
         }
         function wantsAuto(){
           return __tpReadAutoRecordPref();
+        }
+        function getAdapter(id?: string | null){
+          if (typeof id === 'string' && id.length > 0) {
+            try { return get(id); } catch { return undefined; }
+          }
+          return getSelectedAdapterId();
         }
 
         async function httpSend(url: string, body?: unknown){
@@ -212,7 +226,7 @@ function __tpReadAutoRecordPref(): boolean {
         }
 
         async function start(){
-          const a = getAdapter();
+          const a = getSelectedAdapterId();
           try { window.__tpHud?.log?.('[rec]', 'start', a); } catch {}
           if (a === 'obs') return obsStart();
           if (a === 'descript') return premStart();
@@ -220,7 +234,7 @@ function __tpReadAutoRecordPref(): boolean {
           return bridgeStart();
         }
         async function stop(){
-          const a = getAdapter();
+          const a = getSelectedAdapterId();
           try { window.__tpHud?.log?.('[rec]', 'stop', a); } catch {}
           if (a === 'obs') return obsStop();
           if (a === 'descript') return premStop();

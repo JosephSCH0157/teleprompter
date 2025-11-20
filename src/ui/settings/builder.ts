@@ -112,6 +112,15 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <small class="muted">OBS ➜ Tools ➜ WebSocket Server Settings (default port 4455). Use this host and password.</small>
       </div>
+
+      <div class="settings-card anim-in">
+        <h4>Manual session control</h4>
+        <div class="row gap">
+          <button id="startRecBtn" class="btn primary" type="button">Start recording</button>
+          <button id="stopRecBtn" class="btn" type="button">Stop recording</button>
+        </div>
+        <small class="muted">These buttons call the recorder registry so Bridge + OBS stay in sync.</small>
+      </div>
     </div>
 
     <div data-tab-content="advanced" style="display:none">

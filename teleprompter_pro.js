@@ -4833,7 +4833,7 @@ let _toast = function (msg, opts) {
       let _lastRescueAt = 0;
       let _lastMidRescueAt = 0;
       // Similarity tracking for stall detection - now uses global simHistory
-      const LOW_SIM_THRESHOLD = 0.65; // sim_mean threshold for stall
+      const LOW_SIM_THRESHOLD = 0.55; // was 0.65 – more forgiving for real reads
 
       // Initialize commit broker state if not already set
       window.__tpCommit = window.__tpCommit || { idx: 0, ts: 0 };
@@ -5185,6 +5185,12 @@ let _toast = function (msg, opts) {
               docRatio,
               noCommitFor: Math.floor(noCommitFor),
             });
+            try {
+              const fn = typeof window.__tpUpdateAsrScrollState === 'function'
+                ? window.__tpUpdateAsrScrollState
+                : null;
+              fn?.({ stallFired: true });
+            } catch {}
           } catch {}
           _lastRescueAt = now;
           try {
@@ -5269,6 +5275,12 @@ let _toast = function (msg, opts) {
               docRatio,
               noCommitFor: Math.floor(noCommitFor),
             });
+            try {
+              const fn = typeof window.__tpUpdateAsrScrollState === 'function'
+                ? window.__tpUpdateAsrScrollState
+                : null;
+              fn?.({ stallFired: true });
+            } catch {}
           } catch {}
           _lastMidRescueAt = now;
           try {
@@ -5413,6 +5425,42 @@ let _toast = function (msg, opts) {
       if (editor) editor.value = String(txt || '');
     }
 
+    let __tpLegacyNormalizeDepth = 0;
+    async function requestScriptNormalization(reason) {
+      try {
+        if (typeof window.__tpRequestScriptNormalization === 'function') {
+          return await window.__tpRequestScriptNormalization(reason || 'legacy');
+        }
+      } catch {}
+      __tpLegacyNormalizeDepth++;
+      window.__tpNormalizingScript = true;
+      try {
+        const w = window;
+        const pairs = [];
+        const add = (fn, ctx) => {
+          if (typeof fn === 'function') pairs.push([fn, ctx]);
+        };
+        add(w.normalizeScript, w);
+        add(w.normalizeCurrentScript, w);
+        add(w.applyScriptMarkup, w);
+        if (w.__tpScript && typeof w.__tpScript.normalize === 'function') add(w.__tpScript.normalize, w.__tpScript);
+        add(w.normalizeToStandard, w);
+        add(w.fallbackNormalize, w);
+        for (const [fn, ctx] of pairs) {
+          try {
+            const res = fn.call(ctx, reason);
+            if (res && typeof res.then === 'function') await res;
+            return true;
+          } catch {}
+        }
+      } catch {}
+      finally {
+        __tpLegacyNormalizeDepth = Math.max(0, __tpLegacyNormalizeDepth - 1);
+        if (__tpLegacyNormalizeDepth === 0) window.__tpNormalizingScript = false;
+      }
+      return false;
+    }
+
     async function initScriptsUI() {
       try {
   if (!ScriptsModule) {
@@ -5508,7 +5556,7 @@ let _toast = function (msg, opts) {
       await onScriptSave();
     }
 
-    function onScriptLoad() {
+    async function onScriptLoad() {
       try {
         if (!ScriptsModule) return;
         const id = scriptSlots && scriptSlots.value;
@@ -5518,6 +5566,7 @@ let _toast = function (msg, opts) {
         currentScriptId = s.id;
         if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
         setEditorContent(s.content || '');
+        await requestScriptNormalization('legacy:scripts-ui-load');
         _toast('Script loaded', { type: 'ok' });
       } catch {
         console.debug('Scripts.load error', e);
@@ -9435,6 +9484,12 @@ let _toast = function (msg, opts) {
     const idxBefore = currentIndex; // for jitter metric
     try {
       window.__lastSimScore = Number(bestSim.toFixed(3));
+      try {
+        const fn = typeof window.__tpUpdateAsrScrollState === 'function'
+          ? window.__tpUpdateAsrScrollState
+          : null;
+        fn?.({ sim: window.__lastSimScore });
+      } catch {}
       if (typeof debug === 'function')
         debug({
           tag: 'match:sim',
@@ -11978,6 +12033,7 @@ let _toast = function (msg, opts) {
     // if (autoTimer) stopAutoScroll();
 
     recog = new SR();
+    try { window.recog = recog; } catch {}
     recog.continuous = true;
     recog.interimResults = true;
     recog.lang = 'en-US';

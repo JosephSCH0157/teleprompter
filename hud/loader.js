@@ -3,6 +3,20 @@ const LEGACY_LS_KEYS = ['tp_hud_speech_notes_v1']; // migrate on load
 const PROD_TOGGLE_KEY = 'tp_hud_prod';
 let notes = [];
 let filterMode = 'all';
+function markHudWireActive() { try {
+    if (!window.__tpHudWireActive) {
+        window.__tpHudWireActive = true;
+    }
+}
+catch { } }
+function announceHudReady() { try {
+    if (window.__tpHudReadyOnce)
+        return;
+    window.__tpHudReadyOnce = true;
+    document.dispatchEvent(new CustomEvent('hud:ready'));
+}
+catch { } }
+markHudWireActive();
 function save() { try {
     localStorage.setItem(LS_KEY, JSON.stringify(notes.slice(-500)));
 }
@@ -146,6 +160,18 @@ export function loadHudIfDev() {
         catch { } notes.push(note); save(); render(notes); }
         window.__tpHudNotes = { addNote: (n) => addNote(n), list: () => notes.slice(), clear: () => { notes = []; save(); render(notes); }, setFilter: (m) => { filterMode = m; const cb = document.getElementById('hudFilterFinals'); if (cb)
                 cb.checked = (m === 'finals'); render(notes); }, copyAll, exportTxt };
+        try {
+            window.__tpSpeechNotesHud = {
+                addNote: (text, final = false) => addNote({ text, final, ts: Date.now() }),
+                dumpState: () => ({
+                    notes: notes.slice(),
+                    filterMode,
+                    hudVisible: !!document.getElementById('tp-dev-hud'),
+                    savingEnabled: true,
+                }),
+            };
+        }
+        catch { }
         const statusEl = document.getElementById('hudStatus');
         // Show current session id in the top bar and update on session start
         try {
@@ -218,6 +244,7 @@ export function loadHudIfDev() {
                 bus.on('speech:final', (d) => {
                     if (!d || !d.text)
                         return;
+                    announceHudReady();
                     if (statusEl)
                         statusEl.textContent = 'final';
                     addNote({ text: d.text, final: true, ts: d.t || performance.now(), sim: d.sim });

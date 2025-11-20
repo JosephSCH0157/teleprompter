@@ -12,8 +12,35 @@ export type Adapters = Partial<{
 
 export type TelemetryFn = (_tag: string, _data?: any) => void;
 
+let lastSimScore = 1;
+let stallPulse = false;
+
+export type AsrScrollState = { sim?: number; stallFired?: boolean };
+
+export function updateAsrScrollState(state: AsrScrollState) {
+  if (state && typeof state.sim === 'number' && Number.isFinite(state.sim)) {
+    lastSimScore = Math.max(0, Math.min(1, state.sim));
+  }
+  if (state && typeof state.stallFired === 'boolean') {
+    stallPulse = state.stallFired;
+  } else if (state && 'stallFired' in state && state.stallFired == null) {
+    stallPulse = false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    (window as any).__tpUpdateAsrScrollState = updateAsrScrollState;
+  } catch {}
+}
+
+function consumeAsrScrollState() {
+  const res = { sim: lastSimScore, stallFired: stallPulse };
+  stallPulse = false;
+  return res;
+}
+
 export default function createScrollController(adapters: Adapters = {}, telemetry?: TelemetryFn) {
-  let bigErrStart: number | null = null;
   let lastTargetTop = 0;
 
   const HYS_ENTER = 0;
@@ -73,26 +100,12 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
   const MAX_STEP = 2000;
   const WAKE_EPS = 8;
 
-  function controlScroll({ yActive, yMarker, scrollTop, maxScrollTop, now, markerOffset = 0, sim = 1, stallFired = false }: any) {
+  function controlScroll({ yActive, yMarker, scrollTop, maxScrollTop, now: _now, markerOffset = 0, sim = 1, stallFired = false }: any) {
     const err = yActive - yMarker;
     const absErr = Math.abs(err);
   const micro = 12;
   const macro = 100; // snappier snap threshold (was ~120)
     const maxStep = 320;
-    const nowTs = now || (A.now ? A.now() : Date.now());
-
-    if (absErr > macro) {
-      if (bigErrStart == null) bigErrStart = nowTs;
-      if (bigErrStart != null && nowTs - bigErrStart > 300) {
-        bigErrStart = null;
-        let snapTop = yActive - markerOffset;
-        snapTop = Math.max(0, Math.min(snapTop, maxScrollTop));
-        return { targetTop: snapTop, mode: 'snap' };
-      }
-    } else {
-      bigErrStart = null;
-    }
-
     let allowFastLane = absErr > macro || (stallFired && sim >= 0.85);
 
     if (scrollTop >= maxScrollTop - 2 && absErr > 0) {
@@ -113,7 +126,7 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
       lastTargetTop = targetTop;
     }
 
-    return { targetTop, mode: allowFastLane ? 'snap' : 'ease' } as any;
+    return { targetTop, mode: 'ease' } as any;
   }
 
   const log = telemetry || (() => {});
@@ -126,12 +139,22 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
 
     const viewerTop = A.getViewerTop();
     const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
-    const ctrl = controlScroll({ yActive: targetTop, yMarker: viewerTop, scrollTop: viewerTop, maxScrollTop, now: t });
+    const asrState = consumeAsrScrollState();
+    const ctrl = controlScroll({
+      yActive: targetTop,
+      yMarker: viewerTop,
+      scrollTop: viewerTop,
+      maxScrollTop,
+      now: t,
+      sim: asrState.sim,
+      stallFired: asrState.stallFired,
+    });
     if (ctrl) {
-      if (ctrl.mode === 'snap') {
+      if (ctrl.mode === 'bottom') {
         A.requestScroll(ctrl.targetTop);
-        log('scroll', { tag: 'scroll', top: ctrl.targetTop, mode: 'snap' });
-      } else {
+        log('scroll', { tag: 'scroll', top: ctrl.targetTop, mode: 'bottom' });
+        return;
+      }
         const error = targetTop - viewerTop;
         const topDelta = error;
 
@@ -192,7 +215,6 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
         if (Math.abs(targetTop - nextTop) > WAKE_EPS) {
           pendingRaf = A.raf(step);
         }
-      }
     }
   }
 

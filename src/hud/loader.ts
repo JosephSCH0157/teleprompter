@@ -5,6 +5,24 @@ type Note = { text: string; final: boolean; ts: number; sim?: number };
 let notes: Note[] = [];
 let filterMode: 'all' | 'finals' = 'all';
 
+function markHudWireActive() {
+  try {
+    if (!(window as any).__tpHudWireActive) {
+      (window as any).__tpHudWireActive = true;
+    }
+  } catch {}
+}
+
+function announceHudReady() {
+  try {
+    if ((window as any).__tpHudReadyOnce) return;
+    (window as any).__tpHudReadyOnce = true;
+    document.dispatchEvent(new CustomEvent('hud:ready'));
+  } catch {}
+}
+
+markHudWireActive();
+
 function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(notes.slice(-500))); } catch {} }
 function load() {
   try {
@@ -62,7 +80,7 @@ export function loadHudIfDev(){
       <div style="padding:.4rem .8rem;opacity:.55;font-size:10px">Tip: Dev mode or set <code>localStorage.setItem('${PROD_TOGGLE_KEY}','1')</code></div>
     `;
     document.body.appendChild(el);
-    const notesEl=document.getElementById('hudNotes');
+      const notesEl = document.getElementById('hudNotes');
     function render(list:Note[]){
       try{ if(!notesEl) return; notesEl.innerHTML=''; }catch{};
       const rows=list.filter(n=>filterMode==='all'||n.final);
@@ -96,6 +114,17 @@ export function loadHudIfDev(){
     }
     function addNote(note:Note){ try{ if(note.final && notes.length && notes[notes.length-1].final && notes[notes.length-1].text===note.text) return; }catch{} notes.push(note); save(); render(notes); }
     (window as any).__tpHudNotes={ addNote:(n:Note)=>addNote(n), list:()=>notes.slice(), clear:()=>{ notes=[]; save(); render(notes); }, setFilter:(m:'all'|'finals')=>{ filterMode=m; const cb=document.getElementById('hudFilterFinals') as HTMLInputElement; if(cb) cb.checked=(m==='finals'); render(notes); }, copyAll, exportTxt };
+        try {
+          (window as any).__tpSpeechNotesHud = {
+            addNote: (text: string, final = false) => addNote({ text, final, ts: Date.now() }),
+            dumpState: () => ({
+              notes: notes.slice(),
+              filterMode,
+              hudVisible: !!document.getElementById('tp-dev-hud'),
+              savingEnabled: true,
+            }),
+          };
+        } catch {}
     const statusEl=document.getElementById('hudStatus');
     // Show current session id in the top bar and update on session start
     try {
@@ -151,9 +180,11 @@ export function loadHudIfDev(){
     } catch {}
     
     render(notes);
+    announceHudReady();
   } catch {}
 }
 
 try { loadHudIfDev(); } catch {}
+try { announceHudReady(); } catch {}
 export { };
 

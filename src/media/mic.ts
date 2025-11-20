@@ -100,6 +100,21 @@ function releaseMic() {
   _stopDbMeter();
 }
 
+function isOpen() {
+  try {
+    if (!audioStream) return false;
+    if (typeof audioStream.getTracks === 'function') {
+      const tracks = audioStream.getTracks();
+      if (Array.isArray(tracks) && tracks.length) {
+        return tracks.some((track) => track && track.readyState === 'live');
+      }
+    }
+    return audioStream.active !== false;
+  } catch {
+    return !!audioStream;
+  }
+}
+
 async function populateDevices() {
   try {
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -143,6 +158,7 @@ try {
   (window as any).__tpMic.populateDevices = populateDevices;
   (window as any).__tpMic.startDbMeter = startDbMeter;
   (window as any).__tpMic.clearBars = clearBars;
+  (window as any).__tpMic.isOpen = isOpen;
 } catch {}
 
 // Attempt a safe populate once on boot (when DOM is ready)
@@ -154,5 +170,5 @@ try {
   }
 } catch {}
 
-export { clearBars, populateDevices, releaseMic, requestMic, startDbMeter };
+export { clearBars, isOpen, populateDevices, releaseMic, requestMic, startDbMeter };
 

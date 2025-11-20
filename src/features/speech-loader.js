@@ -12,8 +12,13 @@ function inRehearsal() {
 // Scroll/mic state helpers for gating transcript capture
 function getScrollMode() {
   try {
-    const fromStore = window.__tpStore?.get?.('mode');
-    if (fromStore != null) return String(fromStore).toLowerCase();
+    const store = window.__tpStore;
+    if (store && typeof store.get === 'function') {
+      const scrollMode = store.get('scrollMode');
+      if (scrollMode != null) return String(scrollMode).toLowerCase();
+      const legacyMode = store.get('mode');
+      if (legacyMode != null) return String(legacyMode).toLowerCase();
+    }
 
     const router = window.__tpScrollMode;
     if (router && typeof router.getMode === 'function') {
@@ -21,7 +26,7 @@ function getScrollMode() {
       if (mode != null) return String(mode).toLowerCase();
     }
 
-    if (typeof router === 'string') return router.toLowerCase();
+    if (router && typeof router === 'string') return router.toLowerCase();
   } catch {}
   return '';
 }
@@ -41,7 +46,12 @@ function shouldEmitTranscript() {
 function routeTranscript(text, isFinal) {
   try {
     if (!text) return;
-    const payload = { text, final: !!isFinal, t: performance.now() };
+    const payload = {
+      text,
+      final: !!isFinal,
+      timestamp: performance.now(),
+      source: 'speech-loader',
+    };
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)
     try { window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}

@@ -49,8 +49,13 @@
   }
   function currentMode() {
     try {
-      const fromStore = window.__tpStore?.get?.('mode');
-      if (fromStore != null) return String(fromStore).toLowerCase();
+      const store = window.__tpStore;
+      if (store && typeof store.get === 'function') {
+        const scrollMode = store.get('scrollMode');
+        if (scrollMode != null) return String(scrollMode).toLowerCase();
+        const legacyMode = store.get('mode');
+        if (legacyMode != null) return String(legacyMode).toLowerCase();
+      }
       const router = window.__tpScrollMode;
       if (router && typeof router.getMode === 'function') {
         const mode = router.getMode();
@@ -74,6 +79,14 @@
     if (m !== 'asr' && m !== 'hybrid') return false;
     if (!micActive()) return false;
     return true;
+  }
+  function captureGateReason() {
+    if (inRehearsal()) return 'rehearsal-mode';
+    if (!captureOn) return 'speech-idle';
+    const m = currentMode();
+    if (m !== 'asr' && m !== 'hybrid') return `mode-${m || 'unknown'}`;
+    if (!micActive()) return 'mic-closed';
+    return 'ok';
   }
 
   // --- Mount UI
@@ -194,11 +207,38 @@
   window.addEventListener('tp:scroll:mode', updateStatus, true);
 
   // capture events (gated)
-  window.addEventListener('tp:speech:transcript', (e) => { if (canCapture()) addNote(e.detail||{}); }, true);
+  window.addEventListener('tp:speech:transcript', (e) => {
+    if (canCapture()) {
+      addNote(e.detail || {});
+    } else {
+      const detail = e?.detail || {};
+      const reason = captureGateReason();
+      try {
+        window.HUD?.log?.('speech-notes:gate', { reason, text: detail.text || '', final: !!detail.final });
+      } catch {}
+    }
+  }, true);
   try {
     window.HUD?.bus?.on?.('speech:partial', (p)=>{ if (canCapture()) addNote(p); });
     window.HUD?.bus?.on?.('speech:final',   (p)=>{ if (canCapture()) addNote(p); });
   } catch {}
 
   render();
+
+  // Debug helpers for dev console (inspect capture state / force add notes)
+  try {
+    window.__tpSpeechNotesHud = {
+      canCapture,
+      captureGateReason,
+      dumpState: () => ({
+        captureOn,
+        mode: currentMode(),
+        micActive: micActive(),
+        rehearsal: inRehearsal(),
+        saving: savingEnabled(),
+        statusText: statusEl?.textContent || ''
+      }),
+      addNote: (text, final = false) => addNote({ text, final }),
+    };
+  } catch {}
 })();

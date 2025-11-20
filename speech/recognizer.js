@@ -9,7 +9,44 @@ var Recognizer = class {
     __publicField(this, "cb", null);
     __publicField(this, "opts");
     __publicField(this, "_lastInterimAt", 0);
+    __publicField(this, "shouldRun", false);
+    __publicField(this, "restartTimer", null);
     this.opts = Object.assign({ lang: "en-US", interimIntervalMs: 150, maxAlternatives: 2 }, opts);
+  }
+  logSpeechError(ev) {
+    try {
+      console.log("[speech] error", ev);
+    } catch {
+    }
+  }
+  clearRestartTimer() {
+    if (this.restartTimer !== null) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
+  }
+  scheduleRestart(delayMs, opts = {}) {
+    if (!this.shouldRun) return;
+    if (!this.recog || typeof this.recog.start !== "function") return;
+    const recognition = this.recog;
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      if (!this.shouldRun) return;
+      if (opts.stopFirst) {
+        try {
+          recognition.stop?.();
+        } catch {
+        }
+      }
+      try {
+        recognition.start?.();
+      } catch (err) {
+        try {
+          console.warn("[speech] restart failed", err);
+        } catch {
+        }
+      }
+    }, delayMs);
   }
   available() {
     return Boolean(globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition);
@@ -20,6 +57,8 @@ var Recognizer = class {
     if (!SR) throw new Error("SpeechRecognition not available");
     try {
       this.recog = new SR();
+      this.shouldRun = true;
+      this.clearRestartTimer();
       this.recog.continuous = true;
       this.recog.interimResults = true;
       this.recog.lang = this.opts.lang;
@@ -29,7 +68,17 @@ var Recognizer = class {
       }
       this.recog.onstart = () => {
       };
+      this.recog.onerror = (ev) => {
+        this.logSpeechError(ev);
+        if (!ev || ev.error !== "network") return;
+        if (!this.shouldRun) return;
+        this.clearRestartTimer();
+        this.scheduleRestart(800, { stopFirst: true });
+      };
       this.recog.onend = () => {
+        if (!this.shouldRun) return;
+        if (this.restartTimer !== null) return;
+        this.scheduleRestart(500);
       };
       this.recog.onresult = (e) => {
         let interim = "";
@@ -49,15 +98,19 @@ var Recognizer = class {
       try {
         this.recog.start();
       } catch (e) {
-        throw e;
+        this.logSpeechError(e);
       }
     } catch (err) {
+      this.shouldRun = false;
+      this.clearRestartTimer();
       this.recog = null;
       throw err;
     }
   }
   stop() {
     try {
+      this.shouldRun = false;
+      this.clearRestartTimer();
       if (this.recog) {
         try {
           this.recog.stop();

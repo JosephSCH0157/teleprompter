@@ -1,3 +1,5 @@
+import { initOnce } from '../index.js';
+
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
   let ready = false;
@@ -762,6 +764,11 @@ function installScrollRouter(opts) {
       const t = e.target;
       if (t?.id === "scrollMode") {
         const modeVal = t.value;
+        if (modeVal === "asr") {
+          try {
+            initOnce("speech");
+          } catch {}
+        }
         applyMode(modeVal);
         applyGate();
         ensureOrchestratorForMode();
@@ -1012,6 +1019,6 @@ function installScrollRouter(opts) {
   }
 }
 export {
-  installScrollRouter
+    installScrollRouter
 };
 
