@@ -14,6 +14,7 @@
   <meta name="theme-color" content="#0b0f19" />
   <!-- Enable standalone display mode for iOS when added to Home Screen (needed for status-bar-style below) -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <!-- Removed: <meta name="msapplication-navbutton-color" ...> (obsolete) -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="color-scheme" content="dark light" />
@@ -825,6 +826,32 @@
         // If app dispatches a custom event upon successful save, reflect that as well
         try { window.addEventListener('tp:script:saved', function(){ setSaved(); }); } catch(e){}
       } catch(e){}
+    })();
+  </script>
+  <script>
+    (function(){
+      function markPasswordField(el){
+        try {
+          if (el && el.getAttribute('autocomplete') !== 'current-password') {
+            el.setAttribute('autocomplete', 'current-password');
+          }
+        } catch (err) {}
+      }
+
+      function applyPasswordAutocomplete(){
+        try {
+          ['settingsObsPassword','obsPassword'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el) markPasswordField(el);
+          });
+        } catch (err) {}
+      }
+
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        applyPasswordAutocomplete();
+      } else {
+        document.addEventListener('DOMContentLoaded', applyPasswordAutocomplete, { once: true });
+      }
     })();
   </script>
   <script>
