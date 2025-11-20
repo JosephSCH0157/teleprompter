@@ -77,7 +77,6 @@
     if (!captureOn) return false;
     const m = currentMode();
     if (m !== 'asr' && m !== 'hybrid') return false;
-    if (!micActive()) return false;
     return true;
   }
   function captureGateReason() {
@@ -85,7 +84,6 @@
     if (!captureOn) return 'speech-idle';
     const m = currentMode();
     if (m !== 'asr' && m !== 'hybrid') return `mode-${m || 'unknown'}`;
-    if (!micActive()) return 'mic-closed';
     return 'ok';
   }
 

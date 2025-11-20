@@ -39,7 +39,12 @@ function shouldEmitTranscript() {
   if (inRehearsal()) return false;
   const mode = getScrollMode();
   if (mode !== 'asr' && mode !== 'hybrid') return false;
-  return micActive();
+  if (!running) return false;
+  const micOpen = micActive();
+  if (!micOpen) {
+    try { window.__tpHud?.log?.('[speech-loader]', 'mic inactive (soft gate)'); } catch {}
+  }
+  return true;
 }
 
 // Small router to bridge transcripts to both legacy and modern paths
@@ -349,7 +354,10 @@ export function installSpeech() {
             try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
             await startBackend();
             // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
-            try { await doAutoRecordStart(); } catch {}
+            try { await doAutoRecordStart(); }
+            catch (err) {
+              try { console.warn('[auto-record] start failed', err); } catch {}
+            }
             // Ensure mic stream is granted so Hybrid gates (dB/VAD) can open
             try { await window.__tpMic?.requestMic?.(); } catch {}
           });
