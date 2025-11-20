@@ -5,6 +5,12 @@
 let running = false;
 let rec = null; // SR instance or orchestrator handle
 let lastScrollMode = '';
+let lastResultTs = 0;
+let speechWatchdogTimer = null;
+let activeRecognizer = null;
+
+const WATCHDOG_INTERVAL_MS = 5000;
+const WATCHDOG_THRESHOLD_MS = 15000;
 
 function inRehearsal() {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -59,10 +65,55 @@ function emitTranscriptEvent(payload) {
   try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
 }
 
+function markResultTimestamp() {
+  lastResultTs = Date.now();
+}
+
+function stopSpeechWatchdog() {
+  if (speechWatchdogTimer != null) {
+    window.clearInterval(speechWatchdogTimer);
+    speechWatchdogTimer = null;
+  }
+}
+
+function startSpeechWatchdog() {
+  stopSpeechWatchdog();
+  speechWatchdogTimer = window.setInterval(() => {
+    if (!shouldAutoRestartSpeech()) return;
+    if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return;
+    const idleFor = Date.now() - (lastResultTs || 0);
+    if (lastResultTs && idleFor > WATCHDOG_THRESHOLD_MS) {
+      try { console.warn('[speech] watchdog: no results for', idleFor, 'ms – restarting recognition'); } catch {}
+      try { activeRecognizer.stop?.(); } catch (err) { try { console.warn('[speech] watchdog: stop failed', err); } catch {} }
+      markResultTimestamp();
+      try {
+        activeRecognizer.start();
+        try { console.log('[speech] watchdog: restarted recognition'); } catch {}
+      } catch (err) {
+        try { console.warn('[speech] watchdog: restart failed', err); } catch {}
+        emitAsrState('idle', 'recognition-watchdog-failed');
+        running = false;
+        stopSpeechWatchdog();
+      }
+    }
+  }, WATCHDOG_INTERVAL_MS);
+}
+
+function setActiveRecognizer(instance) {
+  activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
+  if (activeRecognizer) {
+    markResultTimestamp();
+    startSpeechWatchdog();
+  } else {
+    stopSpeechWatchdog();
+  }
+}
+
 // Small router to bridge transcripts to both legacy and modern paths
 function routeTranscript(text, isFinal) {
   try {
     if (!text) return;
+    markResultTimestamp();
     const payload = {
       text,
       final: !!isFinal,
@@ -70,6 +121,7 @@ function routeTranscript(text, isFinal) {
       source: 'speech-loader',
       mode: lastScrollMode || getScrollMode(),
     };
+    payload.isFinal = payload.final;
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)
     try { window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}
@@ -84,6 +136,7 @@ function routeTranscript(text, isFinal) {
     
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
+      try { console.log('[speech-loader] emit tp:speech:transcript', payload); } catch {}
       emitTranscriptEvent(payload);
     }
   } catch {}
@@ -103,6 +156,7 @@ function _startWebSpeech() {
   r.interimResults = true;
   r.lang = 'en-US';
   attachWebSpeechLifecycle(r);
+  setActiveRecognizer(r);
   r.onresult = (_e) => {
     // TODO: hook into your scroll matcher if desired
     // const last = e.results[e.results.length-1]?.[0]?.transcript;
@@ -368,6 +422,7 @@ export function installSpeech() {
         sr.interimResults = true;
         sr.continuous = true;
         attachWebSpeechLifecycle(sr);
+        setActiveRecognizer(sr);
         // Web Speech → route finals and throttled partials
         let _lastInterimAt = 0;
         sr.onresult = (e) => {
