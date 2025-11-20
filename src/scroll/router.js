@@ -5,6 +5,45 @@ import * as Auto from '../features/autoscroll.js';
 // Utilities
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const now = () => performance.now();
+const hasWindow = () => typeof window !== 'undefined';
+
+const SCROLL_MODE_STORAGE_KEY = 'tp_scroll_mode';
+
+function getStore(){
+  if (!hasWindow()) return null;
+  try { return window.__tpStore || null; } catch { return null; }
+}
+
+function persistScrollMode(mode){
+  const key = String(mode || '').toLowerCase();
+  if (!key) return;
+  try {
+    const store = getStore();
+    if (store) store.set('scrollMode', key);
+  } catch {}
+  if (!hasWindow()) return;
+  try {
+    const ls = window.localStorage;
+    if (ls) ls.setItem(SCROLL_MODE_STORAGE_KEY, key);
+  } catch {}
+}
+
+function restoreScrollMode(){
+  try {
+    const store = getStore();
+    if (store) {
+      const value = store.get('scrollMode');
+      if (value) return String(value);
+    }
+  } catch {}
+  if (!hasWindow()) return null;
+  try {
+    const ls = window.localStorage;
+    return ls ? ls.getItem(SCROLL_MODE_STORAGE_KEY) : null;
+  } catch {
+    return null;
+  }
+}
 
 // State
 let current = 'timed';
@@ -135,8 +174,7 @@ export function setMode(mode){
   if (running) { try { strategies[current].stop(); } catch{} }
   unsubscribers.forEach(fn=>{ try{ fn(); }catch{} }); unsubscribers = [];
   current = key; setModeChip({timed:'Timed', wpm:'WPM', hybrid:'Hybrid', asr:'ASR', step:'Step', rehearsal:'Rehearsal'}[key]||key);
-  // Persist selected mode if store is available
-  try { const S = (window && window.__tpStore) ? window.__tpStore : null; if (S) S.set('scrollMode', key); } catch {}
+  persistScrollMode(key);
   if (running) { try { strategies[current].start(); } catch{} }
 }
 
@@ -160,9 +198,11 @@ function installModeUi(){
       else topbar.appendChild(sel);
     }
   // adopt persisted mode if present
-  try { const S = (window && window.__tpStore) ? window.__tpStore : null; if (S){ const m = S.get('scrollMode'); if (m && strategies[m]) current = m; } } catch {}
+  const restored = restoreScrollMode();
+  if (restored && strategies[restored]) current = restored;
   sel.value = current;
-  sel.addEventListener('change', ()=> { try { const S = (window && window.__tpStore) ? window.__tpStore : null; if (S) S.set('scrollMode', sel.value); } catch {} setMode(sel.value); });
+  const handleModeChange = ()=>{ setMode(sel.value); updateHelp(); };
+  sel.addEventListener('change', handleModeChange);
 
     // Gear button opens a tiny inline settings panel
     let gear = document.getElementById('scrollModeSettings');
@@ -191,7 +231,7 @@ function installModeUi(){
       }
     } catch {}
   }
-  sel.addEventListener('change', ()=> { try { const S = (window && window.__tpStore) ? window.__tpStore : null; if (S) S.set('scrollMode', sel.value); } catch {} setMode(sel.value); updateHelp(); });
+  updateHelp();
 
     let panel = document.getElementById('scrollModePanel');
     if (!panel){ panel = document.createElement('div'); panel.id='scrollModePanel'; panel.className='overlay hidden'; panel.innerHTML = '<div class="sheet"><h4>Mode Settings</h4><div id="scrollModeBody"></div><div class="settings-footer"><button id="scrollModeClose" class="btn-chip">Close</button></div></div>';
@@ -269,9 +309,8 @@ export function installScrollModes(){
     Auto.initAutoScroll(); // ensure engine ready
     // Adopt persisted params from app store if present
     try {
-      const S = (window && window.__tpStore) ? window.__tpStore : null;
+      const S = getStore();
       if (S) {
-        const m = S.get('scrollMode'); if (m && strategies[m]) current = m;
         // timed
         const ts = S.get('timedSpeed'); if (ts != null) params.timed.speed = Number(ts) || params.timed.speed;
         // wpm
@@ -291,6 +330,8 @@ export function installScrollModes(){
         const rr = S.get('rehearsalResumeMs'); if (rr != null) params.rehearsal.resumeMs = Number(rr) || params.rehearsal.resumeMs;
       }
     } catch {}
+    const savedMode = restoreScrollMode();
+    if (savedMode && strategies[savedMode]) current = savedMode;
   installModeUi();
     setMode(current); setModeChip({timed:'Timed', wpm:'WPM', hybrid:'Hybrid', asr:'ASR', step:'Step', rehearsal:'Rehearsal'}[current]||current);
   } catch (e) { console.warn('[scroll/router] init failed', e); }
