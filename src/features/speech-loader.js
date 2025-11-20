@@ -4,6 +4,7 @@
 
 let running = false;
 let rec = null; // SR instance or orchestrator handle
+let lastScrollMode = '';
 
 function inRehearsal() {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -30,6 +31,11 @@ function getScrollMode() {
   } catch {}
   return '';
 }
+function rememberMode(mode) {
+  if (typeof mode === 'string') {
+    lastScrollMode = mode;
+  }
+}
 function micActive() {
   try { return !!window.__tpMic?.isOpen?.(); } catch {}
   try { return !!window.__tpStore?.get?.('micEnabled'); } catch {}
@@ -38,6 +44,7 @@ function micActive() {
 function shouldEmitTranscript() {
   if (inRehearsal()) return false;
   const mode = getScrollMode();
+  rememberMode(mode);
   if (mode !== 'asr' && mode !== 'hybrid') return false;
   if (!running) return false;
   const micOpen = micActive();
@@ -45,6 +52,11 @@ function shouldEmitTranscript() {
     try { window.__tpHud?.log?.('[speech-loader]', 'mic inactive (soft gate)'); } catch {}
   }
   return true;
+}
+
+function emitTranscriptEvent(payload) {
+  try { window.__tpBus?.emit?.('tp:speech:transcript', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
 }
 
 // Small router to bridge transcripts to both legacy and modern paths
@@ -56,6 +68,7 @@ function routeTranscript(text, isFinal) {
       final: !!isFinal,
       timestamp: performance.now(),
       source: 'speech-loader',
+      mode: lastScrollMode || getScrollMode(),
     };
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)
@@ -71,7 +84,7 @@ function routeTranscript(text, isFinal) {
     
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
-      try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
+      emitTranscriptEvent(payload);
     }
   } catch {}
 }
@@ -89,6 +102,7 @@ function _startWebSpeech() {
   r.continuous = true;
   r.interimResults = true;
   r.lang = 'en-US';
+  attachWebSpeechLifecycle(r);
   r.onresult = (_e) => {
     // TODO: hook into your scroll matcher if desired
     // const last = e.results[e.results.length-1]?.[0]?.transcript;
@@ -235,6 +249,48 @@ function beginCountdownThen(sec, cb) {
   });
 }
 
+function emitAsrState(state, reason) {
+  try { window.__tpBus?.emit?.('tp:asr:state', { state, reason }); } catch {}
+}
+
+function shouldAutoRestartSpeech() {
+  const mode = lastScrollMode || getScrollMode();
+  rememberMode(mode);
+  return running && (mode === 'asr' || mode === 'hybrid');
+}
+
+function attachWebSpeechLifecycle(sr) {
+  if (!sr) return;
+  sr.onend = (event) => {
+    try { console.log('[speech] onend', event); } catch {}
+    if (shouldAutoRestartSpeech()) {
+      try {
+        console.log('[speech] restarting recognition after onend');
+        sr.start();
+      } catch (err) {
+        try { console.warn('[speech] restart failed after onend', err); } catch {}
+        emitAsrState('idle', 'recognition-restart-error');
+      }
+    } else {
+      emitAsrState('idle', 'recognition-end');
+    }
+  };
+  sr.onerror = (event) => {
+    try { console.error('[speech] error', event); } catch {}
+    if (shouldAutoRestartSpeech()) {
+      try { sr.stop(); } catch {}
+      try {
+        sr.start();
+      } catch (err) {
+        try { console.warn('[speech] restart failed after error', err); } catch {}
+        emitAsrState('idle', 'recognition-error');
+      }
+    } else {
+      emitAsrState('idle', 'recognition-error');
+    }
+  };
+}
+
 export function installSpeech() {
   // Enable/disable the button based on browser support or orchestrator presence.
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
@@ -311,6 +367,7 @@ export function installSpeech() {
         const sr = new SR();
         sr.interimResults = true;
         sr.continuous = true;
+        attachWebSpeechLifecycle(sr);
         // Web Speech → route finals and throttled partials
         let _lastInterimAt = 0;
         sr.onresult = (e) => {
@@ -339,6 +396,7 @@ export function installSpeech() {
         if (btn) btn.disabled = true;
         try {
           running = true;
+          rememberMode(getScrollMode());
           // Flip UI + legacy speech gate immediately
           try { document.body.classList.add('listening'); } catch {}
           try { window.HUD?.bus?.emit('speech:toggle', true); } catch {}
