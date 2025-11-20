@@ -355,6 +355,46 @@ if ((window as any).__tpHudWireActive) { injectSpeechNotesHud(); }
 try { (window as any).ensureSettingsFolderControls = ensureSettingsFolderControls; } catch {}
 try { (window as any).ensureSettingsFolderControlsAsync = ensureSettingsFolderControlsAsync; } catch {}
 
+// Dev-only anchor observer: lazily load IO helper for diagnostics / HUDs
+try {
+	const search = String(location.search || '');
+	const wantsAnchors = Boolean((window as any).__TP_DEV || /[?&](?:dev=1|anchors=1)/i.test(search));
+	if (wantsAnchors) {
+		import('./io-anchor').then(({ createAnchorObserver }) => {
+			try {
+				const ctx = {
+					root: () => document.getElementById('viewer'),
+					script: () => document.querySelector('#viewer .script') || document.getElementById('script'),
+				};
+				const obs = createAnchorObserver(ctx.root, (el) => {
+					try {
+						window.dispatchEvent(new CustomEvent('tp:anchorChanged', { detail: { el } }));
+					} catch {}
+				});
+				(window as any).__anchorObs = obs;
+				const reobserve = () => {
+					try {
+						const scriptEl = ctx.script();
+						if (!scriptEl) return;
+						obs.observeAll(scriptEl.querySelectorAll('p'));
+					} catch {}
+				};
+				const start = () => {
+					obs.ensure();
+					reobserve();
+				};
+				if (document.readyState === 'loading') {
+					document.addEventListener('DOMContentLoaded', start, { once: true });
+				} else {
+					start();
+				}
+				window.addEventListener('tp:script:rendered', reobserve as any);
+				window.addEventListener('tp:script:updated', reobserve as any);
+			} catch {}
+		}).catch(() => {});
+	}
+} catch {}
+
 // Test-only mock population (deterministic CI) — mirrors legacy JS path behavior
 function __maybePopulateMockFolder() {
 	try {
