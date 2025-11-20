@@ -244,15 +244,13 @@ export function loadHudIfDev() {
                 bus.on('speech:final', (d) => {
                     if (!d || !d.text)
                         return;
-            announceHudReady();
+                    announceHudReady();
                     if (statusEl)
                         statusEl.textContent = 'final';
                     addNote({ text: d.text, final: true, ts: d.t || performance.now(), sim: d.sim });
-
-        try { loadHudIfDev(); }
-        catch { }
-        try { announceHudReady(); }
-        catch { }
+                });
+            }
+        }
         catch { }
         render(notes);
     }
