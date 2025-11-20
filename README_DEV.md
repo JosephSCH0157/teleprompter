@@ -44,6 +44,10 @@ Quick QA checklist
   - Open Settings ▶ Recording and use the Start/Stop recording buttons. Bridge + OBS (when enabled) should both follow the registry commands.
   - Start Present mode or trigger Play/speech sync with `Auto Record` enabled in the store. Recording should auto-start and auto-stop on the same registry without needing legacy shims.
 
+## Runtime notes
+
+- 1.7.6: Teleprompter Pro now boots solely through the TypeScript bundle (`dist/index.js`) via `boot-loader.js`. Legacy `teleprompter_pro.js` only loads when `?legacy=1` (or matching localStorage flags) is set, keeping production aligned with the TS runtime.
+
 Notes
 
 - The dev task in VS Code (`Serve (live-server)`) uses `npx live-server` to provide live-reload when files change.

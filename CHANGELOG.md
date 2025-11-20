@@ -2,6 +2,23 @@
 
 # Teleprompter Pro — Changelog
 
+## [1.7.6] - 2025-11-20
+
+Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.6
+
+### Changed
+
+- Switched the teleprompter HTML to load the bundled TypeScript runtime (`dist/index.js`) exclusively via the boot loader; no more implicit legacy fallbacks.
+- Version metadata now sources from `window.APP_VERSION = '1.7.6'`, keeping the title badge, telemetry, and HUD logs in sync.
+
+### Removed
+
+- Deleted the legacy monolithic scroll stack (`teleprompter_pro.js` entry path) from the default boot sequence so TS remains the only authoritative runtime.
+
+### Added
+
+- `io-anchor.ts` + dev-only guards keep anchor observers and HUD probes isolated to `?dev=1` or `tp_dev_mode` sessions; prod no longer downloads the HUD scripts without an explicit override.
+
 ## [1.7.5c] - 2025-11-16
 
 Release: https://github.com/JosephSCH0157/teleprompter/releases/tag/v1.7.5c
