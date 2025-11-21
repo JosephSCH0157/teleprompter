@@ -46,10 +46,27 @@
   }
 
   function writeAutoRecordState(next){
+    const val = !!next;
+    let handled = false;
     try {
-      const store = getStore();
-      if (store && typeof store.set === 'function') store.set('autoRecord', !!next);
+      if (typeof window.setAutoRecordEnabled === 'function') {
+        window.setAutoRecordEnabled(val);
+        handled = true;
+      }
     } catch {}
+    if (!handled) {
+      try {
+        const store = getStore();
+        if (store && typeof store.set === 'function') {
+          store.set('autoRecord', val);
+          handled = true;
+        }
+      } catch {}
+    }
+    if (!handled) {
+      try { localStorage.setItem('tp_auto_record', val ? '1' : '0'); } catch {}
+    }
+    return val;
   }
 
   let autoRecordStoreSub = null;
@@ -57,7 +74,10 @@
 
   function handleAutoRecordStoreUpdate(v){
     try {
-      const checked = !!v;
+      let checked = !!v;
+      if (typeof v !== 'boolean' && typeof window.getAutoRecordEnabled === 'function') {
+        try { checked = !!window.getAutoRecordEnabled(); } catch {}
+      }
       const settingsAutoRecEl = q('settingsAutoRecord');
       const mainAutoRecEl = q('autoRecordToggle') || q('autoRecord');
       if (settingsAutoRecEl && settingsAutoRecEl.checked !== checked) settingsAutoRecEl.checked = checked;
@@ -101,6 +121,13 @@
   function wireAutoRecordControls(){
     const settingsAutoRec = q('settingsAutoRecord');
     const mainAutoRec = q('autoRecordToggle') || q('autoRecord');
+    try {
+      const current = (typeof window.getAutoRecordEnabled === 'function') ? window.getAutoRecordEnabled() : undefined;
+      if (typeof current === 'boolean') {
+        if (settingsAutoRec && settingsAutoRec.checked !== current) settingsAutoRec.checked = current;
+        if (mainAutoRec && 'checked' in mainAutoRec && mainAutoRec.checked !== current) mainAutoRec.checked = current;
+      }
+    } catch {}
     const wire = (el) => {
       if (!el || el.dataset.autoRecWired === '1') return;
       el.dataset.autoRecWired = '1';

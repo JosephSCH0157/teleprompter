@@ -46,5 +46,6 @@
     "SSOT",
     "topbar",
     "wscript"
-  ]
+  ],
+  "chatgpt.runCodexInWindowsSubsystemForLinux": true
 }

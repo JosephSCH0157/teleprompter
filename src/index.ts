@@ -8,6 +8,8 @@ try { (window as any).__TP_TS_PRIMARY__ = true; } catch {}
 try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
+// Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
+import './state/auto-record-ssot';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';

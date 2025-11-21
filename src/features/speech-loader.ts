@@ -1,24 +1,74 @@
+type AnyFn = (...args: any[]) => any;
+type RecognizerLike = {
+  start?: AnyFn;
+  stop?: AnyFn;
+  abort?: AnyFn;
+  on?: AnyFn;
+  onend?: ((ev: Event) => void) | null;
+  onerror?: ((ev: Event) => void) | null;
+};
+
+type TranscriptPayload = {
+  text: string;
+  final: boolean;
+  timestamp: number;
+  source: string;
+  mode: string;
+  isFinal: boolean;
+};
+
+declare global {
+  interface Window {
+    __tpBus?: { emit?: AnyFn };
+    HUD?: { bus?: { emit?: AnyFn }; log?: AnyFn };
+    __tpHud?: { log?: AnyFn };
+    __tpStore?: { get?: AnyFn; set?: AnyFn };
+    __tpScrollMode?: { getMode?: () => unknown } | string;
+    __tpMic?: { isOpen?: () => boolean; requestMic?: () => Promise<MediaStream> } & Record<string, unknown>;
+    recAutoRestart?: unknown;
+    __tpRecording?: {
+      getAdapter?: () => unknown;
+      wantsAuto?: () => unknown;
+      setAuto?: (on: boolean) => unknown;
+      setWantsAuto?: (on: boolean) => unknown;
+    };
+    __tpObs?: { armed?: () => boolean };
+    __tpAutoRecord?: { start?: () => Promise<unknown> | unknown; stop?: () => Promise<unknown> | unknown };
+    __tpSpeechOrchestrator?: { start?: () => Promise<RecognizerLike | void> | RecognizerLike | void };
+    __tpSpeechCanDynImport?: boolean;
+    __tpEmitSpeech?: (t: string, final?: boolean) => void;
+    __tpSendToDisplay?: (payload: unknown) => void;
+    sendToDisplay?: (payload: unknown) => void;
+    __tpGetActiveRecognizer?: () => RecognizerLike | null;
+    SpeechRecognition?: { new (): SpeechRecognition };
+    webkitSpeechRecognition?: { new (): SpeechRecognition };
+    getAutoRecordEnabled?: () => boolean;
+    recAutoRestart?: unknown;
+    speechOn?: boolean;
+  }
+}
+
 // One entry point for speech. Uses Web Speech by default.
 // If /speech/orchestrator.js exists (built from TS), we load it instead.
 // Autoscroll is managed externally; buffered stop handled in index listener
 
 let running = false;
-let rec = null; // SR instance or orchestrator handle
+let rec: RecognizerLike | null = null; // SR instance or orchestrator handle
 let lastScrollMode = '';
 let lastResultTs = 0;
-let speechWatchdogTimer = null;
-let activeRecognizer = null;
+let speechWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+let activeRecognizer: RecognizerLike | null = null;
 let pendingManualRestartCount = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
 
-function inRehearsal() {
+function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
 }
 
 // Scroll/mic state helpers for gating transcript capture
-function getScrollMode() {
+function getScrollMode(): string {
   try {
     const store = window.__tpStore;
     if (store && typeof store.get === 'function') {
@@ -38,17 +88,17 @@ function getScrollMode() {
   } catch {}
   return '';
 }
-function rememberMode(mode) {
+function rememberMode(mode: string): void {
   if (typeof mode === 'string') {
     lastScrollMode = mode;
   }
 }
-function micActive() {
+function micActive(): boolean {
   try { return !!window.__tpMic?.isOpen?.(); } catch {}
   try { return !!window.__tpStore?.get?.('micEnabled'); } catch {}
   return false;
 }
-function shouldEmitTranscript() {
+function shouldEmitTranscript(): boolean {
   if (inRehearsal()) return false;
   const mode = getScrollMode();
   rememberMode(mode);
@@ -61,7 +111,7 @@ function shouldEmitTranscript() {
   return true;
 }
 
-function isAutoRestartEnabled() {
+function isAutoRestartEnabled(): boolean {
   try {
     const flag = window.recAutoRestart;
     if (flag === undefined || flag === null) return true;
@@ -75,23 +125,23 @@ function isAutoRestartEnabled() {
   return true;
 }
 
-function emitTranscriptEvent(payload) {
+function emitTranscriptEvent(payload: TranscriptPayload): void {
   try { window.__tpBus?.emit?.('tp:speech:transcript', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
 }
 
-function markResultTimestamp() {
+function markResultTimestamp(): void {
   lastResultTs = Date.now();
 }
 
-function stopSpeechWatchdog() {
+function stopSpeechWatchdog(): void {
   if (speechWatchdogTimer != null) {
     window.clearInterval(speechWatchdogTimer);
     speechWatchdogTimer = null;
   }
 }
 
-function startSpeechWatchdog() {
+function startSpeechWatchdog(): void {
   stopSpeechWatchdog();
   speechWatchdogTimer = window.setInterval(() => {
     if (!shouldAutoRestartSpeech()) return;
@@ -109,7 +159,7 @@ function startSpeechWatchdog() {
   }, WATCHDOG_INTERVAL_MS);
 }
 
-function setActiveRecognizer(instance) {
+function setActiveRecognizer(instance: RecognizerLike | null): void {
   activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
   pendingManualRestartCount = 0;
   if (activeRecognizer) {
@@ -120,7 +170,7 @@ function setActiveRecognizer(instance) {
   }
 }
 
-function requestRecognizerRestart(reasonTag) {
+function requestRecognizerRestart(reasonTag?: string): boolean {
   if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return false;
   pendingManualRestartCount += 1;
   markResultTimestamp();
@@ -142,7 +192,7 @@ try {
 } catch {}
 
 // Small router to bridge transcripts to both legacy and modern paths
-function routeTranscript(text, isFinal) {
+function routeTranscript(text: string, isFinal: boolean): void {
   try {
     if (!text) return;
     markResultTimestamp();
@@ -177,7 +227,7 @@ function routeTranscript(text, isFinal) {
 // (dynamic import of '/speech/orchestrator.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
-function _startWebSpeech() {
+function _startWebSpeech(): { stop: () => void } | null {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
     try { console.warn('[speech] Web Speech not available'); } catch {}
@@ -199,7 +249,7 @@ function _startWebSpeech() {
   return { stop: () => { try { r.stop(); } catch {} } };
 }
 
-function setReadyUi() {
+function setReadyUi(): void {
   try {
     const btn = document.getElementById('recBtn');
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
@@ -213,7 +263,7 @@ function setReadyUi() {
   } catch {}
 }
 
-function setUnsupportedUi() {
+function setUnsupportedUi(): void {
   try {
     const btn = document.getElementById('recBtn');
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
@@ -227,7 +277,7 @@ function setUnsupportedUi() {
 }
 
 // Update UI when speech is actively listening or stopped
-function setListeningUi(listening) {
+function setListeningUi(listening: boolean): void {
   try {
     const btn = document.getElementById('recBtn');
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
@@ -251,8 +301,12 @@ function setListeningUi(listening) {
 
 // Provide safe no-op wrappers for auto-record start/stop so callers can invoke them
 // without risking a ReferenceError if the feature is not present.
-async function doAutoRecordStart() {
+async function doAutoRecordStart(): Promise<void> {
   try {
+    const shouldAutoRecord = (typeof window.getAutoRecordEnabled === 'function')
+      ? !!window.getAutoRecordEnabled()
+      : true;
+    if (!shouldAutoRecord) return;
     // Respect OBS "Off": if primary adapter is OBS and it's disarmed, skip starting
     try {
       const a = (window.__tpRecording && typeof window.__tpRecording.getAdapter === 'function')
@@ -272,15 +326,19 @@ async function doAutoRecordStart() {
   } catch {}
 }
 
-async function doAutoRecordStop() {
+async function doAutoRecordStop(): Promise<void> {
   try {
+    const shouldAutoRecord = (typeof window.getAutoRecordEnabled === 'function')
+      ? !!window.getAutoRecordEnabled()
+      : true;
+    if (!shouldAutoRecord) return;
     if (window.__tpAutoRecord && typeof window.__tpAutoRecord.stop === 'function') {
       await window.__tpAutoRecord.stop();
     }
   } catch {}
 }
 
-function beginCountdownThen(sec, cb) {
+function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promise<void> {
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
   // Overlay helpers (local so they don't leak globals if loader is re-imported)
@@ -335,17 +393,17 @@ function beginCountdownThen(sec, cb) {
   });
 }
 
-function emitAsrState(state, reason) {
+function emitAsrState(state: string, reason?: string): void {
   try { window.__tpBus?.emit?.('tp:asr:state', { state, reason }); } catch {}
 }
 
-function shouldAutoRestartSpeech() {
+function shouldAutoRestartSpeech(): boolean {
   const mode = lastScrollMode || getScrollMode();
   rememberMode(mode);
   return running && (mode === 'asr' || mode === 'hybrid') && isAutoRestartEnabled();
 }
 
-function attachWebSpeechLifecycle(sr) {
+function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
   if (!sr) return;
   sr.onend = (event) => {
     try { console.log('[speech] onend', event); } catch {}
@@ -381,7 +439,7 @@ function attachWebSpeechLifecycle(sr) {
   };
 }
 
-export function installSpeech() {
+export function installSpeech(): void {
   // Enable/disable the button based on browser support or orchestrator presence.
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
   (async () => {
