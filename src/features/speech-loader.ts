@@ -239,12 +239,12 @@ function _startWebSpeech(): { stop: () => void } | null {
   r.lang = 'en-US';
   attachWebSpeechLifecycle(r);
   setActiveRecognizer(r);
-  r.onresult = (_e) => {
+  r.onresult = (_e: any) => {
     // TODO: hook into your scroll matcher if desired
     // const last = e.results[e.results.length-1]?.[0]?.transcript;
     // console.log('[speech] text:', last);
   };
-  r.onerror = (e) => { try { console.warn('[speech] error', e); } catch {} };
+  r.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
   try { r.start(); } catch {}
   return { stop: () => { try { r.stop(); } catch {} } };
 }
@@ -405,7 +405,7 @@ function shouldAutoRestartSpeech(): boolean {
 
 function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
   if (!sr) return;
-  sr.onend = (event) => {
+  sr.onend = (event: Event) => {
     try { console.log('[speech] onend', event); } catch {}
     if (pendingManualRestartCount > 0) {
       pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
@@ -423,7 +423,7 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
       emitAsrState('idle', 'recognition-end');
     }
   };
-  sr.onerror = (event) => {
+  sr.onerror = (event: Event) => {
     try { console.error('[speech] error', event); } catch {}
     if (shouldAutoRestartSpeech()) {
       try { sr.stop(); } catch {}
@@ -488,7 +488,7 @@ export function installSpeech(): void {
               try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
               try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
             }
-            try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
+            try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
             return;
           }
         } catch {}
@@ -504,7 +504,7 @@ export function installSpeech(): void {
                   try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
                 }
               } catch {}
-              try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
+              try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
               return;
             }
           }
@@ -519,7 +519,7 @@ export function installSpeech(): void {
         setActiveRecognizer(sr);
         // Web Speech → route finals and throttled partials
         let _lastInterimAt = 0;
-        sr.onresult = (e) => {
+        sr.onresult = (e: any) => {
           try {
             let interim = '', finals = '';
             for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -535,10 +535,10 @@ export function installSpeech(): void {
             }
           } catch {}
         };
-        sr.onerror = (e) => { try { console.warn('[speech] error', e); } catch {} };
+        sr.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
         try { sr.start(); } catch {}
         rec = { stop: () => { try { sr.stop(); } catch {} } };
-        try { window.__tpEmitSpeech = (t, final) => routeTranscript(String(t || ''), !!final); } catch {}
+        try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
       }
 
       async function startSpeech() {
