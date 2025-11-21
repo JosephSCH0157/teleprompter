@@ -51,9 +51,9 @@ import mountSettingsOverlay from './ui/settings';
 import './ui/settings/asrWizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
-import { initHotkeys } from './features/hotkeys.js';
-import { initPersistence } from './features/persistence.js';
-import { initScroll } from './features/scroll.js';
+import { initHotkeys } from './features/hotkeys';
+import { initPersistence } from './features/persistence';
+import { initScrollFeature } from './features/scroll';
 import { initTelemetry } from './features/telemetry.js';
 
 // === UI Scroll Mode Router ===
@@ -193,10 +193,10 @@ function applyUiScrollMode(mode: UiScrollMode) {
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
 import './asr/v2/prompts';
-import * as Auto from './features/autoscroll.js';
+import * as Auto from './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
-import { installScrollRouter } from './features/scroll-router';
+import { initScrollRouter } from './scroll/router';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
 import { createScrollModeRouter } from './features/scroll/mode-router';
 import { installStepScroll } from './features/scroll/step-scroll';
@@ -214,12 +214,10 @@ import { bindCoreUI } from './wiring/ui-binds';
 import { renderScript } from './render-script';
 // Side-effect debug / DOM helpers (legacy parity)
 import './ui/dom.js';
-// Feature initializers (legacy JS modules)
-// If/when these are migrated to TS, drop the .js extension and types will flow.
-// Create idempotent starters
+// Feature initializers (TS-owned)
 const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
-const startScroll      = initOnce('scroll',      initScroll);
+const startScroll      = initOnce('scroll',      initScrollFeature);
 const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import { shouldShowHud } from './hud/loader';
@@ -266,21 +264,17 @@ try {
 				|| document.getElementById('autoSpeed') as HTMLInputElement | null;
 
 			if (viewer && autoToggle && autoSpeed) {
-				const auto = (Auto as any).initAutoScroll?.(() => viewer);
-				if (auto && typeof auto.bindUI === 'function') {
-					auto.bindUI(autoToggle, autoSpeed);
-				} else {
-					autoToggle.addEventListener('click', () => { try { (Auto as any).toggle?.(); } catch {} });
-					autoSpeed.addEventListener('change', () => {
-						try { (Auto as any).setSpeed?.(Number(autoSpeed.value)); } catch {}
-					});
-				}
+				try { Auto.initAutoscrollFeature(); } catch {}
+				autoToggle.addEventListener('click', () => { try { Auto.toggle(); } catch {} });
+				autoSpeed.addEventListener('change', () => {
+					try { Auto.setSpeed(Number(autoSpeed.value)); } catch {}
+				});
 
-					const applySliderToBrain = () => {
+				const applySliderToBrain = () => {
 					try {
 						const val = Number(autoSpeed.value);
 						if (!Number.isFinite(val)) return;
-							brain.setBaseSpeedPx(val);
+						brain.setBaseSpeedPx(val);
 					} catch {}
 				};
 				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });
@@ -508,7 +502,10 @@ export async function boot() {
 									}
 								} catch {}
 					// Ensure autoscroll engine init
-					try { (Auto as any).initAutoScroll?.(); } catch {}
+					try { Auto.initAutoscrollFeature(); } catch {}
+					// TS scroll router + UI wiring
+					try { initScrollRouter(); } catch {}
+					try { initScrollFeature(); } catch {}
 
 					// Initialize features via idempotent wrappers
 					try { startPersistence(); } catch {}
