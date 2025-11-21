@@ -42,25 +42,26 @@
   <!-- Preload Mammoth so DOCX importer always sees window.mammoth -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
-  <!-- Modern TS boot loader (single entry) -->
-  <script type="module" src="/src/boot/boot-loader.js"></script>
-
-  <!-- Preload the dist bundle for faster module resolution -->
+  <!-- TS bundle preload + entry (single brain) -->
+  <link id="tp-dist-preload" rel="modulepreload" href="./dist/index.js?v=dev" as="script">
   <script>
     (function(){
       try {
-        var v = encodeURIComponent(window.__TP_ADDV || 'dev');
-        var href = './dist/index.js?v=' + v;
-        var link = document.createElement('link');
-        link.rel = 'modulepreload';
-        link.as = 'script';
-        link.href = href;
-        document.head.appendChild(link);
+        var dist = './dist/index.js';
+        var addv = (window).__TP_ADDV;
+        if (typeof addv === 'function') dist = addv(dist);
+        else if (addv) dist = dist + '?v=' + encodeURIComponent(addv);
+        else dist = dist + '?v=dev';
+        var preload = document.getElementById('tp-dist-preload');
+        if (preload) preload.href = dist;
+        var entry = document.getElementById('tp-dist-entry');
+        if (entry) entry.src = dist;
       } catch (err) {
-        try { console.warn('[preload] unable to append modulepreload link', err); } catch {}
+        try { console.warn('[preload] using default dist path', err); } catch {}
       }
     })();
   </script>
+  <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
 
   <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
   <script>
@@ -130,13 +131,6 @@
   <script src="ui-sanitize.js"></script>
 
   <!-- Single loader above; no additional booters here. -->
-
-  <!-- Manual legacy escape hatch: only loads teleprompter_pro.js if ?legacy=1 is present -->
-  <script>
-    if (location.search.includes('legacy=1')) {
-      document.write('<script type="module" src="/teleprompter_pro.js"><\/script>');
-    }
-  </script>
 
   <!-- Module runtime controls the page; legacy direct scripts removed to avoid double wiring -->
 

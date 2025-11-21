@@ -1,9 +1,11 @@
 // DEV: sanity marker so we know TS entry is live.
 ;(window as any).__tpBootPath = 'ts:index';
+const TS_BOOT_OWNER = 'ts:index';
 try { console.log('[TP-BOOT] TS index.ts booted'); } catch {}
 
 // Signal TS is primary so legacy preloaders can stand down
 try { (window as any).__TP_TS_PRIMARY__ = true; } catch {}
+try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 // Early dev console noise filter (benign extension async-response errors)
@@ -433,6 +435,15 @@ export async function boot() {
 		try {
 			// Count boot attempts (used by smoke to assert single boot)
 			try { (window as any).__tpBootsSeen = ((window as any).__tpBootsSeen || 0) + 1; } catch {}
+			// Single-owner guard: boot orchestration belongs to ts/index only
+			try {
+				const owner = (window as any).__TP_BOOT_OWNER;
+				if (owner && owner !== TS_BOOT_OWNER) {
+					try { console.warn('[TP-BOOT] ignoring secondary boot request from', owner); } catch {}
+					return;
+				}
+				(window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER;
+			} catch {}
 			if ((window as any).__tpTsBooted) return; // duplication guard
 			(window as any).__tpTsBooted = 1;
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
