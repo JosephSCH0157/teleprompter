@@ -25,14 +25,11 @@ function syncRegistrySelection(next: unknown): void {
 try { if (location.search.includes('dev=1')) { (window as any).__obsTestConnect = obsTestConnect; } } catch {}
 
 export function initObsUI() {
-  // Respect JS SSOT or existing wire.js ownership: bail out if another owner is active
+  // TS is the SSOT; mark ownership and proceed even if legacy markers are present
   try {
     const w = (window as any);
-    if (w.__tpObsWireActive || (w.__tpObsSSOT && w.__tpObsSSOT !== 'ts')) {
-      try { console.warn('[obs-wiring.ts] Skipping TS wiring: SSOT=', w.__tpObsSSOT || 'unknown', 'wireActive=', !!w.__tpObsWireActive); } catch {}
-      return;
-    }
     w.__tpObsSSOT = 'ts';
+    w.__tpObsWireActive = true;
   } catch {}
   try { (window as any).__tpObsInlineBridgeActive = true; } catch {}
   const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;

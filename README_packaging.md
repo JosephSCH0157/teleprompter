@@ -5,9 +5,10 @@ This guide shows how to run the teleprompter on a Windows laptop without install
 ## What’s included
 - start_server.bat — launches a local web server on port 5180
 - ps_static_server.ps1 — PowerShell static server fallback (no installs required)
-- teleprompter_pro.html / teleprompter_pro.js / teleprompter_pro.css
+- teleprompter_pro.html / teleprompter_pro.css
+- dist/index.js (compiled from TypeScript; current runtime entry)
 - display.html (external display)
-- adapters/ and other supporting JS files
+- adapters/ and other supporting JS files (recorders.js generated from TS; legacy teleprompter_pro.js kept for older bundles)
 
 ## Quick start (no installs)
 1) Copy the entire `teleprompter` folder to the laptop.

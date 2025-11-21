@@ -3,14 +3,14 @@ build: anvil-baseline-1.6.0
 commit: main
 date: 2025-10-12
 modules:
-	- teleprompter_pro.html
-	- teleprompter_pro.js
+	- teleprompter_pro.html (HTML shell; boots dist/index.js TS bundle)
 	- teleprompter_pro.css
+	- dist/index.js (generated from src/index.ts �?" current runtime SSOT)
+	- recorders.js (generated from TS; compatibility surface)
 	- display.html
-	- scroll-helpers.js
-	- scroll-control.js
-	- io-anchor.js
-	- recorders.js
+	- scroll-helpers.js (legacy artifact)
+	- scroll-control.js (legacy artifact)
+	- io-anchor.js (legacy artifact)
 	- debug-tools.js
 	- debug-seed.js
 ---
@@ -23,9 +23,9 @@ modules:
 
 ## Entry Points
 - App HTML: ./teleprompter_pro.html
-- Main script: ./teleprompter_pro.js
-- Scroll helpers: ./scroll-helpers.js
-- Speech/anchor: ./io-anchor.js
+- TS bundle (current runtime): ./dist/index.js (built from src/index.ts)
+- Recorders bridge: ./recorders.js (generated from TS)
+- Legacy artifacts (kept for pre-1.7.x bundles/docs): ./teleprompter_pro.js, ./scroll-helpers.js, ./scroll-control.js, ./io-anchor.js
 - HUD: ./debug-tools.js
 
 ## Flags & Storage

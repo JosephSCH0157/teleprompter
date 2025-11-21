@@ -54,7 +54,8 @@ import './ui/settings/asrWizard';
 import { initHotkeys } from './features/hotkeys';
 import { initPersistence } from './features/persistence';
 import { initScrollFeature } from './features/scroll';
-import { initTelemetry } from './features/telemetry.js';
+import { initTelemetry } from './features/telemetry';
+import { initToasts } from './features/toasts';
 
 // === UI Scroll Mode Router ===
 import { installAsrScrollBridge } from './scroll/asr-bridge';
@@ -340,6 +341,7 @@ const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
 const startScroll      = initOnce('scroll',      initScrollFeature);
 const startHotkeys     = initOnce('hotkeys',     initHotkeys);
+const startToasts      = initOnce('toasts',      initToasts);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
 import { shouldShowHud } from './hud/loader';
 // Tiny HUD chip that reflects current scroll mode
@@ -633,6 +635,7 @@ export async function boot() {
 					try { startTelemetry(); } catch {}
 					try { startScroll(); } catch {}
 					try { startHotkeys(); } catch {}
+					try { startToasts(); } catch {}
 
 					// Readiness summary for visibility and testability
 					try {
