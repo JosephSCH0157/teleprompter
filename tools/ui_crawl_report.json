@@ -278,7 +278,7 @@
       "type": "log",
       "text": "[src/index] module imports complete",
       "location": {
-        "url": "http://127.0.0.1:5180/src/index.js?v=dev",
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 220,
         "columnNumber": 10
       }
@@ -296,7 +296,7 @@
       "type": "log",
       "text": "[src/index] boot()",
       "location": {
-        "url": "http://127.0.0.1:5180/src/index.js?v=dev",
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 411,
         "columnNumber": 12
       }
@@ -467,7 +467,7 @@
       "type": "info",
       "text": "[ASR] initialized from /src/index-hooks/asr.js",
       "location": {
-        "url": "http://127.0.0.1:5180/src/index.js?v=dev",
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 704,
         "columnNumber": 26
       }
@@ -485,7 +485,7 @@
       "type": "log",
       "text": "[src/index] boot completed",
       "location": {
-        "url": "http://127.0.0.1:5180/src/index.js?v=dev",
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 1031,
         "columnNumber": 10
       }

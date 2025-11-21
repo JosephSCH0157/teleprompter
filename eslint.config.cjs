@@ -213,7 +213,7 @@ module.exports = [
   },
   // Entry files need preventDefault for precise wheel/zoom UX; allow it here only
   {
-    files: ['index.js', 'src/index.js'],
+    files: ['index.ts', 'src/index.ts'],
     rules: {
       'no-restricted-syntax': 'off',
     },
