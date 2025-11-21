@@ -1,4 +1,6 @@
 type AnyFn = (...args: any[]) => any;
+import { wantsAutoRecord } from '../recording/wantsAutoRecord';
+
 type RecognizerLike = {
   start?: AnyFn;
   stop?: AnyFn;
@@ -303,10 +305,7 @@ function setListeningUi(listening: boolean): void {
 // without risking a ReferenceError if the feature is not present.
 async function doAutoRecordStart(): Promise<void> {
   try {
-    const shouldAutoRecord = (typeof window.getAutoRecordEnabled === 'function')
-      ? !!window.getAutoRecordEnabled()
-      : true;
-    if (!shouldAutoRecord) return;
+    if (!wantsAutoRecord()) return;
     // Respect OBS "Off": if primary adapter is OBS and it's disarmed, skip starting
     try {
       const a = (window.__tpRecording && typeof window.__tpRecording.getAdapter === 'function')
@@ -328,10 +327,7 @@ async function doAutoRecordStart(): Promise<void> {
 
 async function doAutoRecordStop(): Promise<void> {
   try {
-    const shouldAutoRecord = (typeof window.getAutoRecordEnabled === 'function')
-      ? !!window.getAutoRecordEnabled()
-      : true;
-    if (!shouldAutoRecord) return;
+    if (!wantsAutoRecord()) return;
     if (window.__tpAutoRecord && typeof window.__tpAutoRecord.stop === 'function') {
       await window.__tpAutoRecord.stop();
     }

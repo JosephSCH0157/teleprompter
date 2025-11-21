@@ -57,7 +57,9 @@
         const store = window.__tpStore;
         const auto = window.__tpAutoRecord;
         if (store && auto && typeof auto.start === 'function') {
-          const autoEnabled = !!store.get?.('autoRecord');
+          const autoEnabled = typeof window.wantsAutoRecord === 'function'
+            ? !!window.wantsAutoRecord()
+            : !!store.get?.('autoRecord');
           const scrollMode = store.get?.('scrollMode');
           const src = ev && ev.detail && ev.detail.source;
           // Only start auto-record when preroll is from Speech start, not mode-switch

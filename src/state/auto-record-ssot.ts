@@ -1,3 +1,5 @@
+import { wantsAutoRecord } from '../recording/wantsAutoRecord';
+
 declare global {
   interface Window {
     __tpRecording?: {
@@ -31,24 +33,21 @@ function getStoreBoolean(): boolean | undefined {
 }
 
 export function getAutoRecordEnabled(): boolean {
-  // Prefer TS core if present
+  // Prefer store/SSOT value
+  const storeVal = getStoreBoolean();
+  if (typeof storeVal === 'boolean') return storeVal;
+
+  // Fallback to shared helper (covers snapshot/state/get)
+  try {
+    const wants = wantsAutoRecord();
+    if (typeof wants === 'boolean') return wants;
+  } catch {}
+
+  // Optional: ask TS core as a fallback
   try {
     const core = typeof window !== 'undefined' ? window.__tpRecording : null;
     if (core && typeof core.wantsAuto === 'function') {
       return !!core.wantsAuto();
-    }
-  } catch {}
-
-  // Next: store snapshot
-  const storeVal = getStoreBoolean();
-  if (typeof storeVal === 'boolean') return storeVal;
-
-  // Legacy localStorage flags
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const legacy = localStorage.getItem('tp_auto_record');
-      if (legacy === '1' || legacy === '0') return legacy === '1';
-      return localStorage.getItem('tp_auto_record_on_start_v1') === '1';
     }
   } catch {}
 
@@ -76,10 +75,6 @@ export function setAutoRecordEnabled(on: boolean): boolean {
       store.state.autoRecord = enabled;
     }
   } catch {}
-
-  // Persist legacy flags as fallback
-  try { if (typeof localStorage !== 'undefined') localStorage.setItem('tp_auto_record', enabled ? '1' : '0'); } catch {}
-  try { if (typeof localStorage !== 'undefined') localStorage.setItem('tp_auto_record_on_start_v1', enabled ? '1' : '0'); } catch {}
 
   return enabled;
 }

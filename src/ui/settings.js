@@ -63,9 +63,6 @@
         }
       } catch {}
     }
-    if (!handled) {
-      try { localStorage.setItem('tp_auto_record', val ? '1' : '0'); } catch {}
-    }
     return val;
   }
 

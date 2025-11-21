@@ -70,8 +70,12 @@
 
   async function start(){
     if (active) return;
-    if (mustSkipForMode()) { try { console.info('[auto-rec] skip in rehearsal mode'); } catch {}; return; }
     try {
+      const armed = (typeof window.wantsAutoRecord === 'function')
+        ? !!window.wantsAutoRecord()
+        : !!(window.__tpStore && window.__tpStore.get && window.__tpStore.get('autoRecord'));
+      if (!armed) return; // feature disabled
+      if (mustSkipForMode()) { try { console.info('[auto-rec] skip in rehearsal mode'); } catch {}; return; }
       const v = await getVideoStream();
       const a = await getAudioStream();
       const mix = new MediaStream();
@@ -238,30 +242,9 @@ export { };
   async function start() {
     if (_active) return; // already running
     try {
-      const S = (window.__tpStore || null);
-      let armed;
-      try {
-        if (S && typeof S.get === 'function') {
-          const val = S.get('autoRecord');
-          if (typeof val === 'boolean') armed = val;
-        }
-      } catch {}
-      if (typeof armed !== 'boolean') {
-        try {
-          if (window.__tpRecording && typeof window.__tpRecording.wantsAuto === 'function') {
-            const wants = window.__tpRecording.wantsAuto();
-            if (typeof wants !== 'undefined') armed = !!wants;
-          }
-        } catch {}
-      }
-      if (typeof armed !== 'boolean') {
-        try {
-          const cur = localStorage.getItem('tp_auto_record_on_start_v1');
-          armed = cur === '1';
-        } catch {
-          armed = false;
-        }
-      }
+      const armed = (typeof window.wantsAutoRecord === 'function')
+        ? !!window.wantsAutoRecord()
+        : !!(window.__tpStore && window.__tpStore.get && window.__tpStore.get('autoRecord'));
       if (!armed) return; // feature disabled
       if (!allowedByMode()) { try { console.info('[auto-record] skip (rehearsal mode)'); } catch {} return; }
       _stream = await ensureStreams();
