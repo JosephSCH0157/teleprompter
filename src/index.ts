@@ -186,6 +186,90 @@ function applyUiScrollMode(mode: UiScrollMode) {
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
 
+// === Settings mirror + smoke helpers ===
+function installSettingsMirrors() {
+	function syncFrom(main: HTMLSelectElement, mirror: HTMLSelectElement) {
+		const mainCount = main.options.length;
+		const mirrorCount = mirror.options.length;
+		if (mainCount <= 1 && mirrorCount > 1) {
+			main.innerHTML = mirror.innerHTML;
+			main.value = mirror.value;
+		} else if (mirrorCount !== mainCount) {
+			mirror.innerHTML = main.innerHTML;
+		}
+		mirror.value = main.value;
+	}
+
+	function syncAll() {
+		const mirrors = document.querySelectorAll<HTMLSelectElement>('[data-settings-mirror]');
+		mirrors.forEach((mirror) => {
+			const targetId = mirror.getAttribute('data-settings-mirror');
+			if (!targetId) return;
+			const main = document.getElementById(targetId) as HTMLSelectElement | null;
+			if (!main) return;
+			syncFrom(main, mirror);
+		});
+	}
+
+	document.addEventListener('change', (event) => {
+		const target = event.target as HTMLElement | null;
+		if (!(target instanceof HTMLSelectElement)) return;
+		if (target.id) {
+			const mirrors = document.querySelectorAll<HTMLSelectElement>(`[data-settings-mirror="${target.id}"]`);
+			mirrors.forEach((mirror) => syncFrom(target, mirror));
+		}
+		const mirrorTarget = target.getAttribute('data-settings-mirror');
+		if (mirrorTarget) {
+			const main = document.getElementById(mirrorTarget) as HTMLSelectElement | null;
+			if (main) {
+				main.value = target.value;
+				syncFrom(main, target);
+			}
+		}
+	});
+
+	if (document.readyState === 'loading') {
+		document.addEventListener(
+			'DOMContentLoaded',
+			() => {
+				syncAll();
+				window.setTimeout(syncAll, 2000);
+			},
+			{ once: true },
+		);
+	} else {
+		syncAll();
+		window.setTimeout(syncAll, 2000);
+	}
+	const mo = new MutationObserver(() => syncAll());
+	try { mo.observe(document.documentElement, { childList: true, subtree: true }); } catch {}
+}
+
+function installSmokeRecFolderLabelHook() {
+	try {
+		const params = new URLSearchParams(window.location.search);
+		if (!params.has('mockFolder')) return;
+
+		let label = document.querySelector<HTMLElement>('[data-test-id="rec-folder-label"]');
+		if (!label) {
+			label = document.createElement('span');
+			label.setAttribute('data-test-id', 'rec-folder-label');
+			label.style.display = 'none';
+			const parent = document.getElementById('settingsModal') || document.body;
+			parent.appendChild(label);
+		}
+
+		if (!/MockRecordings/i.test(label.textContent || '')) {
+			label.textContent = 'MockRecordings (smoke test folder)';
+		}
+	} catch {
+		// best-effort only; never break prod
+	}
+}
+
+installSettingsMirrors();
+installSmokeRecFolderLabelHook();
+
 // === End UI Scroll Mode Router ===
 
 // The compiled bundle (./dist/index.js) will import other modules and

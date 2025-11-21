@@ -360,7 +360,7 @@
     <span class="mode-pill" id="scrollModeStatus">Priority Control</span>
   </div>
   <label class="sr-only" for="scrollMode">Scroll Mode</label>
-  <select id="scrollMode" aria-label="Scroll Mode" aria-describedby="scrollModeHelpText">
+  <select id="scrollMode" aria-label="Scroll Mode" aria-describedby="scrollModeHelpText" aria-live="polite">
     <option value="timed">Timed</option>
     <option value="wpm">WPM</option>
     <option value="hybrid" selected>Hybrid</option>
@@ -539,7 +539,7 @@
 <!-- Scripts row: sidebar select for next-to-load + file ops; folder mapping lives in Settings → General -->
 <div class="row">
   <label>Scripts
-    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true"></select>
+    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true" data-settings-mirror="scriptSelect"></select>
   </label>
   <span class="chip sidebar-hint">Manage folder in Settings → General</span>
   <!-- Keep legacy title input hidden for compatibility with tests and legacy save paths -->
