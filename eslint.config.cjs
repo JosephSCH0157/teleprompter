@@ -211,6 +211,13 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
+  // Root legacy entry still uses wheel preventDefault; allow it
+  {
+    files: ['index.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
   // Entry files need preventDefault for precise wheel/zoom UX; allow it here only
   {
     files: ['index.ts', 'src/index.ts'],

@@ -189,7 +189,7 @@ export function setMode(mode: string) {
 
 export function start() { running = true; try { strategies[current].start(); } catch {} }
 export function stop() { running = false; try { strategies[current].stop(); } catch {} }
-export function onParams(p: unknown) { try { strategies[current].onParams && strategies[current].onParams(p); } catch {} }
+export function onParams(p: unknown) { try { strategies[current].onParams?.(p); } catch {} }
 export function getMode() { return current; }
 export function isRunning() { return !!running; }
 
@@ -301,7 +301,7 @@ function installModeUi() {
       }
       const bindNum = (id: string, key: string, parent: Record<string, any>) => {
         const el = document.getElementById(id) as HTMLInputElement | null;
-        if (el) el.addEventListener('input', () => { const v = Number(el.value); if (Number.isFinite(v)) { parent[key] = v; persistParam(mode as ScrollMode, key, v); strategies[mode as ScrollMode].onParams && strategies[mode as ScrollMode].onParams!({}); } });
+        if (el) el.addEventListener('input', () => { const v = Number(el.value); if (Number.isFinite(v)) { parent[key] = v; persistParam(mode as ScrollMode, key, v); strategies[mode as ScrollMode].onParams?.({}); } });
       };
       if (mode === 'timed') { bindNum('m_speed', 'speed', p); }
       if (mode === 'wpm') { bindNum('m_target', 'targetWpm', p); bindNum('m_base', 'basePx', p); bindNum('m_min', 'minPx', p); bindNum('m_max', 'maxPx', p); bindNum('m_ewma', 'ewmaSec', p); }

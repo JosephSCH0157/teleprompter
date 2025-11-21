@@ -582,18 +582,6 @@ export async function boot() {
 						}
 					} catch {}
 
-					// Scroll Router
-					try {
-						installScrollRouter({ auto: {
-							toggle: (Auto as any).toggle,
-							inc:    (Auto as any).inc,
-							dec:    (Auto as any).dec,
-							setEnabled: (Auto as any).setEnabled,
-							setSpeed: (Auto as any).setSpeed,
-							getState: (Auto as any).getState,
-						}});
-					} catch {}
-
 					// Step / Rehearsal
 					try {
 						const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
