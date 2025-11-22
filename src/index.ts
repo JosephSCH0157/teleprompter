@@ -24,6 +24,7 @@ import { getAppStore } from './state/appStore';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
+import { installSpeech } from './features/speech-loader';
 
 import { bootstrap } from './boot/boot';
 
@@ -630,6 +631,8 @@ export async function boot() {
                 }
 								// Wire OBS UI once DOM nodes exist; idempotent if earlier init already ran
 								try { initObsUI(); } catch {}
+                // Enable Speech Sync UI
+                try { installSpeech(); } catch {}
 								// Wire single mic toggle button if present
 								try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)

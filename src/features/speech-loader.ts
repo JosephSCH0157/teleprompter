@@ -53,7 +53,6 @@ declare global {
     __tpSpeechCanDynImport?: boolean;
     __tpEmitSpeech?: (t: string, final?: boolean) => void;
     __tpSendToDisplay?: (payload: unknown) => void;
-    sendToDisplay?: (payload: any) => void;
     __tpGetActiveRecognizer?: () => RecognizerLike | null;
     SpeechRecognition?: { new (): SpeechRecognition };
     webkitSpeechRecognition?: { new (): SpeechRecognition };

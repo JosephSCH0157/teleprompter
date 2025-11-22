@@ -22,7 +22,6 @@ declare global {
     __tpCamera?: any;
     openDisplay?: () => any;
     closeDisplay?: () => any;
-    sendToDisplay?: (p: any) => any;
     __tpHud?: { log?: AnyFn };
     __tpHudRecorderBtn?: HTMLElement | null;
     __tpTextStats?: any;
