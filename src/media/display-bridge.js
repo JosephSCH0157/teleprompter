@@ -17,6 +17,10 @@
         console.info('[display-bridge] openDisplay()');
       } catch {}
       displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
+      try {
+        window.__tpDisplayDebug = window.__tpDisplayDebug || [];
+        window.__tpDisplayDebug.push({ ts: Date.now(), msg: 'window.open returned', data: { ok: !!displayWin } });
+      } catch {}
       try { window.__tpDisplayWindow = displayWin || null; } catch {}
       if (!displayWin) { setStatus && setStatus('Pop-up blocked. Allow pop-ups and try again.'); document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: blocked'); return; }
       // Ensure typography bridge is present even if the display page is minimal
