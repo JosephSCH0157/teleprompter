@@ -139,6 +139,14 @@ function wireDisplayBridge() {
   const openBtn = $('openDisplayBtn');
   const closeBtn = $('closeDisplayBtn');
   const toggleBtn = document.querySelector('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
+  try {
+    console.info('[dom] wireDisplayBridge', {
+      openBtn: !!openBtn,
+      closeBtn: !!closeBtn,
+      toggleBtn: !!toggleBtn,
+      hasDisplay: !!(window.__tpDisplay),
+    });
+  } catch {}
   const updateToggleState = () => {
     try {
       const w = window.__tpDisplayWindow || null;
@@ -154,6 +162,15 @@ function wireDisplayBridge() {
   on(toggleBtn, 'click', () => {
     try {
       const win = window.__tpDisplayWindow || null;
+      try {
+        console.info('[dom] display toggle click', {
+          hasWindow: !!win,
+          closed: !!(win && win.closed),
+          hasDisplayApi: !!window.__tpDisplay,
+          hasOpenDisplay: typeof window.openDisplay === 'function',
+          hasCloseDisplay: typeof window.closeDisplay === 'function',
+        });
+      } catch {}
       if (win && !win.closed) { window.closeDisplay && window.closeDisplay(); }
       else { window.openDisplay && window.openDisplay(); }
     } catch {}
