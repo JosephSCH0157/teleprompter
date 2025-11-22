@@ -233,7 +233,7 @@ export async function initBuiltIns() {
       if (a) adapters.push(a);
     } catch {}
     try {
-      const m = await import((window as any).__TP_ADDV || ((p: string) => p)('./adapters/obs.js'));
+      const m = await import((window as any).__TP_ADDV || ((p: string) => p)('./adapters/obs'));
       const a = m?.createOBSAdapter?.();
       if (a) adapters.push(a);
     } catch {}

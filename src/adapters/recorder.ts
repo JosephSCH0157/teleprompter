@@ -1,12 +1,25 @@
-// Recorder adapter stub
-
-export async function init() {
+export async function init(): Promise<void> {
+  // eslint-disable-next-line no-console
   console.log('[src/adapters/recorder] init');
 }
 
+interface RecorderStatus {
+  running: boolean;
+}
+
+interface RecorderAdapter {
+  id: string;
+  label: string;
+  isAvailable(): Promise<boolean>;
+  start(): Promise<{ ok: boolean; already?: boolean }>;
+  stop(): Promise<{ ok: boolean; already?: boolean }>;
+  status(): Promise<RecorderStatus>;
+}
+
 // A minimal in-memory recorder stub that exposes start/stop/status promises.
-export function createRecorderAdapter() {
+export function createRecorderAdapter(): RecorderAdapter {
   let _running = false;
+
   return {
     id: 'recorder',
     label: 'Recorder (stub)',
@@ -16,7 +29,6 @@ export function createRecorderAdapter() {
     async start() {
       if (_running) return Promise.resolve({ ok: true, already: true });
       _running = true;
-      // simulate async startup
       await new Promise((r) => setTimeout(r, 20));
       return { ok: true };
     },
