@@ -104,8 +104,31 @@ function wireDisplayBridge() {
   // Buttons
   const openBtn = $('openDisplayBtn');
   const closeBtn = $('closeDisplayBtn');
+  const toggleBtn = document.querySelector('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
+  const updateToggleState = () => {
+    try {
+      const w = (window as any).__tpDisplayWindow || null;
+      const isOpen = !!(w && !w.closed);
+      if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        toggleBtn.textContent = isOpen ? 'Display: Open' : 'Display';
+      }
+    } catch {}
+  };
   on(openBtn, 'click', () => { try { window.openDisplay && window.openDisplay(); } catch {} });
   on(closeBtn, 'click', () => { try { window.closeDisplay && window.closeDisplay(); } catch {} });
+  on(toggleBtn, 'click', () => {
+    try {
+      const win = (window as any).__tpDisplayWindow || null;
+      if (win && !win.closed) { window.closeDisplay && window.closeDisplay(); }
+      else { window.openDisplay && window.openDisplay(); }
+    } catch {}
+  });
+  try {
+    window.addEventListener('tp:display:opened', updateToggleState);
+    window.addEventListener('tp:display:closed', updateToggleState);
+  } catch {}
+  updateToggleState();
 }
 
 // Mirror main window state to display: scroll position, typography, and content
