@@ -107,7 +107,7 @@ function wireDisplayBridge() {
   const toggleBtn = document.querySelector('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
   const updateToggleState = () => {
     try {
-      const w = (window as any).__tpDisplayWindow || null;
+      const w = window.__tpDisplayWindow || null;
       const isOpen = !!(w && !w.closed);
       if (toggleBtn) {
         toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -119,7 +119,7 @@ function wireDisplayBridge() {
   on(closeBtn, 'click', () => { try { window.closeDisplay && window.closeDisplay(); } catch {} });
   on(toggleBtn, 'click', () => {
     try {
-      const win = (window as any).__tpDisplayWindow || null;
+      const win = window.__tpDisplayWindow || null;
       if (win && !win.closed) { window.closeDisplay && window.closeDisplay(); }
       else { window.openDisplay && window.openDisplay(); }
     } catch {}
