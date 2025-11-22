@@ -435,7 +435,7 @@ try {
 
 		// 3) Bridge legacy mode selectors into the TS scroll brain
 		try { initScrollModeBridge(); } catch {}
-	}, { once: true });
+	});
 } catch {}
 
 // Install emergency binder only in dev/CI/headless harness contexts (to reduce double-binding risk in prod)
