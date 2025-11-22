@@ -686,39 +686,18 @@ async function main() {
         await clickIf('#startCameraBtn') || await clickIf('[data-action="start-camera"]');
         await clickIf('#pipBtn') || await clickIf('[data-action="pip"]');
 
+        // Speakers legend/key lives in the display window; main surface presence is optional.
         if (await clickIf('#speakersToggleBtn') || await clickIf('[data-action="speakers-toggle"]')) {
           await page.waitForFunction(() => {
             const p = document.querySelector('#speakersPanel') || document.querySelector('[data-panel="speakers"]');
             return p && !p.classList.contains('hidden');
           }, { timeout: 1500 }).catch(() => notes.push('speakers panel not visible'));
-          await clickIf('#speakersKeyBtn') || await clickIf('[data-action="speakers-key"]');
-          // Only require focus if a key input exists
           const hasKey = await page.evaluate(() => !!document.querySelector('#speakersKey,[data-speakers-key]'));
-          if (!hasKey) {
-            // No key field present in this build; skip focus assertion
-            notes.push('speakers key input missing (focus skip)');
+          if (hasKey) {
+            notes.push('speakers key present on main surface (legacy path)');
+          } else {
+            notes.push('no speakers key on main surface; legend lives in display window');
           }
-          const focused = await page.waitForFunction(() => {
-            const a = document.activeElement;
-            if (!a) return false;
-            return (a.id === 'speakersKey') || (a.matches && a.matches('[data-speakers-key]'));
-          }, { timeout: 1500 }).then(()=>true).catch(async () => {
-            // Fallback: try to focus programmatically
-            try {
-              await page.evaluate(() => {
-                const el = document.querySelector('#speakersKey,[data-speakers-key]');
-                if (el && typeof el.focus === 'function') { el.focus(); }
-              });
-            } catch {}
-            return await page.waitForFunction(() => {
-              const a = document.activeElement;
-              if (!a) return false;
-              const id = a.id || '';
-              const matches = a.matches ? a.matches('[data-speakers-key]') : false;
-              return id === 'speakersKey' || matches;
-            }, { timeout: 1000 }).then(()=>true).catch(()=>false);
-          });
-          if (hasKey && !focused) notes.push('speakers key not focused');
         } else {
           notes.push('speakers controls not found (skipped)');
         }
