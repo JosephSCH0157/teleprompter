@@ -37,7 +37,7 @@ async function wireAutoRecord(rootEl: HTMLElement) {
 
   async function ensureRecDirReady() {
     try {
-      await import('../../fs/recording-dir.js');
+    await import('../../fs/recording-dir');
     } catch {}
     try {
       await (window as any).__tpRecDir?.init?.();

@@ -146,7 +146,7 @@
 
   async function saveBlob(blob: Blob, name: string): Promise<boolean> {
     try {
-      await import('../fs/recording-dir.js');
+      await import('../fs/recording-dir');
       const dir = (window as any).__tpRecDir?.get?.() || null;
       if (dir && typeof dir.getFileHandle === 'function') {
         try {
