@@ -373,10 +373,18 @@ import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
+function onDomReady(fn: () => void): void {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fn, { once: true });
+  } else {
+    fn();
+  }
+}
+
 // Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
 try {
-			document.addEventListener('DOMContentLoaded', () => {
-        try { bindStaticDom(); } catch {}
+			onDomReady(() => {
+        try { bindStaticDom(); } catch (e) { try { console.warn('[index] bindStaticDom failed', e); } catch {} }
 				const brain = ensureScrollBrain();
 				installWpmSpeedBridge({
 					api: {

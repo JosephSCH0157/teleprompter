@@ -22,7 +22,7 @@ declare global {
     __tpCamera?: any;
     openDisplay?: () => any;
     closeDisplay?: () => any;
-    __tpDisplayDebug?: Array<{ ts: number; msg: string; data?: unknown }>;
+    __tpDisplayDebug?: Array<{ ts: number; tag: string; data?: unknown }>;
     __tpHud?: { log?: AnyFn };
     __tpHudRecorderBtn?: HTMLElement | null;
     __tpTextStats?: any;
@@ -46,12 +46,12 @@ function $(id) {
   try { return document.getElementById(id); } catch { return null; }
 }
 
-function logDisplayDebug(msg: string, data?: unknown) {
+function logDisplayDebug(tag: string, data?: unknown) {
   try {
-    window.__tpDisplayDebug = window.__tpDisplayDebug || [];
-    window.__tpDisplayDebug.push({ ts: Date.now(), msg, data });
-    if (window.__tpDisplayDebug.length > 50) window.__tpDisplayDebug.shift();
-    console.info('[display-debug]', msg, data);
+    const arr = (window.__tpDisplayDebug = window.__tpDisplayDebug || []);
+    arr.push({ ts: Date.now(), tag, data });
+    if (arr.length > 50) arr.shift();
+    console.debug('[display-debug]', tag, data);
   } catch {}
 }
 
@@ -885,6 +885,41 @@ export function bindStaticDom() {
     // one-time UI wiring guard to prevent duplicate listeners and chips
     if (document.documentElement.dataset.uiWired === '1') return;
     document.documentElement.dataset.uiWired = '1';
+
+    // Display toggle (guaranteed wiring + debug buffer)
+    try {
+      const btn = document.querySelector<HTMLButtonElement>('#displayToggleBtn,[data-action="display-toggle"]');
+      logDisplayDebug('bindStaticDom:display-btn', { found: !!btn });
+      if (btn && !btn.dataset.displayWired) {
+        btn.dataset.displayWired = '1';
+        btn.addEventListener('click', () => {
+          const win = window.__tpDisplayWindow || null;
+          const hasApi = typeof window.openDisplay === 'function' || typeof window.closeDisplay === 'function';
+          const isOpen = !!(win && !win.closed);
+          logDisplayDebug('display:click', {
+            hasApi,
+            isOpen,
+            openDisplay: typeof window.openDisplay === 'function',
+            closeDisplay: typeof window.closeDisplay === 'function',
+          });
+          if (!hasApi) return;
+          if (!isOpen && window.openDisplay) {
+            window.openDisplay();
+            btn.textContent = 'Display: Open';
+            btn.setAttribute('aria-pressed', 'true');
+          } else if (isOpen && window.closeDisplay) {
+            window.closeDisplay();
+            btn.textContent = 'Display: Closed';
+            btn.setAttribute('aria-pressed', 'false');
+            try {
+              if (window.__tpDisplayWindow && !window.__tpDisplayWindow.closed) {
+                window.__tpDisplayWindow.close();
+              }
+            } catch {}
+          }
+        });
+      }
+    } catch {}
 
     // core feature wiring
     wireDisplayBridge();
