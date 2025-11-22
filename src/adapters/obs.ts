@@ -14,12 +14,10 @@ interface ObsRequestResult {
 }
 
 export async function init(): Promise<void> {
-  // eslint-disable-next-line no-console
   console.log('[src/adapters/obs] init');
 }
 
 // Optional configure hook to stay compatible with existing imports
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function configure(_opts?: unknown): void {
   // no-op
 }
@@ -44,7 +42,6 @@ function createEmitter(): ObsEmitter {
           h(payload);
         } catch (err) {
           try {
-            // eslint-disable-next-line no-console
             console.warn('[obs] emitter handler error', err);
           } catch {
             // ignore
@@ -105,7 +102,6 @@ interface ObsConnectOptions {
   maxDelay?: number;
   password?: string;
   // catch-all for any extra config fields
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -147,7 +143,6 @@ export function connect(urlOrOpts: string | ObsConnectOptions, pass?: string): O
   let ws: WebSocket | null = null;
   let closedByUser = false;
   let identified = false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let hello: any = null;
   const pending = new Map<string, { resolve: (res: ObsRequestResult) => void }>();
   let rid = 1;
@@ -432,21 +427,15 @@ export function createOBSAdapter() {
   const adapter: {
     id: string;
     label: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     __testConn?: any;
     isAvailable(): Promise<boolean>;
     start(): Promise<void>;
     stop(): Promise<void>;
     connect: typeof connect;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     test(opts?: any): Promise<boolean>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     startStreaming(conn: any): Promise<ObsRequestResult | { ok: false }>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     stopStreaming(conn: any): Promise<ObsRequestResult | { ok: false }>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     startRecording(conn: any): Promise<ObsRequestResult | { ok: false }>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     stopRecording(conn: any): Promise<ObsRequestResult | { ok: false }>;
   } = {
     id: 'obs',
@@ -463,9 +452,7 @@ export function createOBSAdapter() {
     connect,
     async test(opts?: unknown): Promise<boolean> {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let conn: any = (adapter as any).__testConn;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cfg: any =
           (typeof window !== 'undefined' && (window as any).__OBS_CFG__) || {};
         const host = (opts as any)?.host || cfg.host || '127.0.0.1';
@@ -563,7 +550,6 @@ export function createOBSAdapter() {
       try {
         if (!conn || !conn.request) return { ok: false };
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const S: any =
             (typeof window !== 'undefined' && (window as any).__tpStore)
               ? (window as any).__tpStore
@@ -618,7 +604,6 @@ export function createOBSAdapter() {
   };
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     if (!w.__obsAdapter) w.__obsAdapter = adapter;
     w.__recorder =

@@ -1,5 +1,4 @@
 export async function init(): Promise<void> {
-  // eslint-disable-next-line no-console
   console.log('[src/adapters/recorder] init');
 }
 

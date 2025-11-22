@@ -69,7 +69,6 @@ export function isOpen(): boolean {
     if (!stream) return false;
     if (hasLiveTracks()) return true;
     // some browsers expose .active
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (stream as any).active !== false;
   } catch {
     return !!stream;
@@ -78,7 +77,6 @@ export function isOpen(): boolean {
 
 export async function requestMic(): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const S = (typeof window !== 'undefined' && (window as any).__tpStore) ? (window as any).__tpStore : null;
     const preferId = S && typeof S.get === 'function' ? (String(S.get('micDevice') || '') || '') : '';
 
@@ -136,7 +134,6 @@ export async function requestMic(): Promise<void> {
     updateChip('denied');
     stop();
     try {
-      // eslint-disable-next-line no-console
       console.warn('[mic] denied or failed:', e);
     } catch {
       // ignore
