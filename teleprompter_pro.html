@@ -564,6 +564,31 @@
 <button id="speakersToggleBtnAlias" data-action="speakers-toggle" class="hidden" type="button" aria-controls="speakersBody" hidden>Speakers</button>
 <!-- speakersKeyBtn already exists; add alias element for binder multi-selector without duplicate id -->
 <button id="speakersKeyBtnAlias" data-action="speakers-key" class="hidden" type="button" hidden>Focus Key</button>
+<script>
+  // Fallback wiring for speakers toggle (keeps panel usable even if main binder fails)
+  (function(){
+    try {
+      var btn = document.getElementById('toggleSpeakers');
+      var body = document.getElementById('speakersBody');
+      if (!btn || !body || btn.dataset.inlineWired === '1') return;
+      btn.dataset.inlineWired = '1';
+      var KEY = 'tp_speakers_visible';
+      var apply = function(vis){
+        try {
+          body.style.display = vis ? '' : 'none';
+          btn.textContent = vis ? 'Hide' : 'Show';
+          btn.setAttribute('aria-expanded', vis ? 'true' : 'false');
+          try { localStorage.setItem(KEY, vis ? '1' : '0'); } catch(e){}
+        } catch(e){}
+      };
+      var vis = true; try { vis = (localStorage.getItem(KEY) !== '0'); } catch(e){}
+      apply(vis);
+      btn.addEventListener('click', function(){
+        apply(!(body.style.display === '' || body.style.display === 'block' || body.style.display === null));
+      });
+    } catch(e){}
+  })();
+</script>
 <!-- Ensure help overlay root & settings overlay root exist early for binder wiring (already have #shortcutsOverlay & #settingsOverlay) -->
 <!-- Camera preview fallback (binder expects #cameraPreview) already present later; duplicate guarded by ID uniqueness -->
 <!-- cameraPreview already defined later with proper classes; avoid duplicate -->
