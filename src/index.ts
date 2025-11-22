@@ -16,6 +16,7 @@ import './state/auto-record-ssot';
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
 import { installScheduler } from './boot/scheduler';
+import './features/scripts-local';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
