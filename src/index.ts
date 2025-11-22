@@ -352,7 +352,7 @@ import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
 import { renderScript } from './render-script';
 // Side-effect debug / DOM helpers (legacy parity)
-import './ui/dom';
+import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
 const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
@@ -376,6 +376,7 @@ import './smoke/settings-mapped-folder.smoke.js';
 // Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
 try {
 			document.addEventListener('DOMContentLoaded', () => {
+        try { bindStaticDom(); } catch {}
 				const brain = ensureScrollBrain();
 				installWpmSpeedBridge({
 					api: {
