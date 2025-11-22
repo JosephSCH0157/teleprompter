@@ -75,7 +75,7 @@ import { initToasts } from './features/toasts';
 
 // === UI Scroll Mode Router ===
 import { installAsrScrollBridge } from './scroll/asr-bridge';
-import { setBrainBaseSpeed } from './scroll/brain-hooks.js';
+import { setBrainBaseSpeed } from './scroll/brain-hooks';
 import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
 import { createScrollBrain } from './scroll/scroll-brain';
