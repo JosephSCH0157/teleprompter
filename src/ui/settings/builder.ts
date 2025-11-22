@@ -95,6 +95,34 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
 
     <div data-tab-content="recording" style="display:none">
       <h4>Recording</h4>
+
+      <div class="settings-card anim-in">
+        <h4>Auto-record</h4>
+        <div class="row">
+          <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>
+        </div>
+        <div class="row" id="autoRecordFolderRow">
+          <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>
+          <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder…</button>
+          <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>
+        </div>
+      </div>
+
+      <div class="settings-card anim-in">
+        <h4>Recorder integrations</h4>
+        <div class="row settings-inline-row" id="recAdaptersRow">
+          <div class="rec-list" style="display:flex;flex-wrap:wrap;gap:10px">
+            <label class="tp-check"><input type="checkbox" id="recAdapterCore" checked/> Core recorder</label>
+            <label class="tp-check"><input type="checkbox" id="recAdapterObs"/> OBS (WebSocket)</label>
+          </div>
+        </div>
+        <div class="row settings-inline-row">
+          <label class="tp-check"><input type="checkbox" id="recModeSingle"/> Single mode (one adapter at a time)</label>
+          <button id="recAdaptersRefresh" class="chip btn-chip" type="button">Refresh status</button>
+          <span id="recAdaptersHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Pick which integrations to trigger when Auto-record is on.</span>
+        </div>
+      </div>
+
       <div class="settings-card anim-in">
         <h4>OBS (WebSocket)</h4>
         <div class="row">
@@ -126,6 +154,10 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
     <div data-tab-content="advanced" style="display:none">
       <h4>Advanced</h4>
       <div class="row">Advanced settings.</div>
+      <div class="row gap">
+        <button id="btnExportSettings" class="chip btn-chip" type="button">Export settings</button>
+        <button id="btnImportSettings" class="chip btn-chip" type="button">Import settings</button>
+      </div>
     </div>
   `;
 

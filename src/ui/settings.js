@@ -1,3 +1,4 @@
+// DEPRECATED: legacy settings overlay. Do not add new features here. Port to src/ui/settings.ts + src/ui/settings/* instead, then delete this file.
 (function(){
   // Settings UI centralization: binds overlay and main panel; tolerates no-store mode
   const S = window.__tpStore;
