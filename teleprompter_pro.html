@@ -628,7 +628,24 @@
       <button class="settings-tab" data-tab="about" type="button">About</button>
     </div>
     <div id="settingsBody" class="settings-body">
-      <div class="settings-card" data-tab="pricing">
+      <!-- Fallback placeholders; TS runtime replaces with full panels -->
+      <div class="settings-card" data-tab-content="general">
+        <h3>General</h3>
+        <p class="dim">Settings are loading...</p>
+      </div>
+      <div class="settings-card" data-tab-content="media" style="display:none">
+        <h3>Media</h3>
+        <p class="dim">Mic and camera controls load automatically.</p>
+      </div>
+      <div class="settings-card" data-tab-content="recording" style="display:none">
+        <h3>Recording</h3>
+        <p class="dim">Recorder settings load automatically.</p>
+      </div>
+      <div class="settings-card" data-tab-content="advanced" style="display:none">
+        <h3>Advanced</h3>
+        <p class="dim">Advanced options load automatically.</p>
+      </div>
+      <div class="settings-card" data-tab="pricing" data-tab-content="pricing" style="display:none">
         <h3>Pricing</h3>
         <p class="dim">
           Anvil starts with a free tier for solo creators. Paid plans unlock advanced features like
@@ -652,7 +669,7 @@
         </p>
       </div>
 
-      <div class="settings-card" data-tab="about">
+      <div class="settings-card" data-tab="about" data-tab-content="about" style="display:none">
         <h3>About Anvil</h3>
         <p class="dim">
           Anvil is the teleprompter built for working creators — podcasters, YouTubers, and anyone recording without a full studio team.
