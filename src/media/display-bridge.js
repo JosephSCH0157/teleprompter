@@ -11,7 +11,11 @@
 
   function openDisplay() {
     try {
-      try { console.info('[display-bridge] openDisplay()'); } catch {}
+      try {
+        window.__tpDisplayDebug = window.__tpDisplayDebug || [];
+        window.__tpDisplayDebug.push({ ts: Date.now(), msg: 'openDisplay()' });
+        console.info('[display-bridge] openDisplay()');
+      } catch {}
       displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
       try { window.__tpDisplayWindow = displayWin || null; } catch {}
       if (!displayWin) { setStatus && setStatus('Pop-up blocked. Allow pop-ups and try again.'); document.getElementById('displayChip') && (document.getElementById('displayChip').textContent = 'Display: blocked'); return; }

@@ -22,6 +22,7 @@ declare global {
     __tpCamera?: any;
     openDisplay?: () => any;
     closeDisplay?: () => any;
+    __tpDisplayDebug?: Array<{ ts: number; msg: string; data?: unknown }>;
     __tpHud?: { log?: AnyFn };
     __tpHudRecorderBtn?: HTMLElement | null;
     __tpTextStats?: any;
@@ -43,6 +44,15 @@ function on(el, ev, fn, opts) {
 
 function $(id) {
   try { return document.getElementById(id); } catch { return null; }
+}
+
+function logDisplayDebug(msg: string, data?: unknown) {
+  try {
+    window.__tpDisplayDebug = window.__tpDisplayDebug || [];
+    window.__tpDisplayDebug.push({ ts: Date.now(), msg, data });
+    if (window.__tpDisplayDebug.length > 50) window.__tpDisplayDebug.shift();
+    console.info('[display-debug]', msg, data);
+  } catch {}
 }
 
 // --- UI Hydration Contract ---------------------------------------------------
@@ -139,14 +149,14 @@ function wireDisplayBridge() {
   const openBtn = $('openDisplayBtn');
   const closeBtn = $('closeDisplayBtn');
   const toggleBtn = document.querySelector('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
-  try {
-    console.info('[dom] wireDisplayBridge', {
-      openBtn: !!openBtn,
-      closeBtn: !!closeBtn,
-      toggleBtn: !!toggleBtn,
-      hasDisplay: !!(window.__tpDisplay),
-    });
-  } catch {}
+  logDisplayDebug('wireDisplayBridge', {
+    openBtn: !!openBtn,
+    closeBtn: !!closeBtn,
+    toggleBtn: !!toggleBtn,
+    hasDisplay: !!window.__tpDisplay,
+    hasOpen: typeof window.openDisplay === 'function',
+    hasClose: typeof window.closeDisplay === 'function',
+  });
   const updateToggleState = () => {
     try {
       const w = window.__tpDisplayWindow || null;
@@ -162,15 +172,13 @@ function wireDisplayBridge() {
   on(toggleBtn, 'click', () => {
     try {
       const win = window.__tpDisplayWindow || null;
-      try {
-        console.info('[dom] display toggle click', {
-          hasWindow: !!win,
-          closed: !!(win && win.closed),
-          hasDisplayApi: !!window.__tpDisplay,
-          hasOpenDisplay: typeof window.openDisplay === 'function',
-          hasCloseDisplay: typeof window.closeDisplay === 'function',
-        });
-      } catch {}
+      logDisplayDebug('display toggle click', {
+        hasWindow: !!win,
+        closed: !!(win && win.closed),
+        hasDisplayApi: !!window.__tpDisplay,
+        hasOpenDisplay: typeof window.openDisplay === 'function',
+        hasCloseDisplay: typeof window.closeDisplay === 'function',
+      });
       if (win && !win.closed) { window.closeDisplay && window.closeDisplay(); }
       else { window.openDisplay && window.openDisplay(); }
     } catch {}
