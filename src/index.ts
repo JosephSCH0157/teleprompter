@@ -23,6 +23,7 @@ import './scroll/adapter';
 import { getAppStore } from './state/appStore';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
+import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 
 import { bootstrap } from './boot/boot';
 
@@ -38,6 +39,15 @@ function initOnce<T extends (..._args: any[]) => any>(name: string, fn: T): T {
 		try { document.dispatchEvent(new CustomEvent('tp:feature:init', { detail: { name } })); } catch {}
 		return res as any;
 	}) as T;
+}
+
+function isCiSmoke(): boolean {
+  try {
+    const search = window.location.search || '';
+    return search.includes('ci=1') || search.includes('mockFolder=1');
+  } catch {
+    return false;
+  }
 }
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
@@ -340,7 +350,7 @@ import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
 import { renderScript } from './render-script';
 // Side-effect debug / DOM helpers (legacy parity)
-import './ui/dom.js';
+import './ui/dom';
 // Feature initializers (TS-owned)
 const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
@@ -615,6 +625,9 @@ export async function boot() {
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
 								try { mountSettingsOverlay(); } catch {}
+                if (isCiSmoke()) {
+                  try { injectSettingsFolderForSmoke(); } catch {}
+                }
 								// Wire OBS UI once DOM nodes exist; idempotent if earlier init already ran
 								try { initObsUI(); } catch {}
 								// Wire single mic toggle button if present
