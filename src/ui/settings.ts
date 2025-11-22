@@ -61,12 +61,6 @@ function ensureInfoTabsAndCards() {
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null) {
   try {
-    // Prefer legacy in-file builder when present for safe migration
-    if (typeof (window as any).buildSettingsContent === 'function') {
-      // Call legacy builder to preserve existing panels, but continue to inject new cards
-      try { (window as any).buildSettingsContent(); } catch {}
-    }
-
     if (!rootEl) return;
     // Use the lightweight builder to prepare content (string or DOM insertion)
     try {
