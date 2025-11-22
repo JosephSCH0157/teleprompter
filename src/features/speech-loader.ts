@@ -10,6 +10,18 @@ type RecognizerLike = {
   onerror?: ((ev: Event) => void) | null;
 };
 
+type SpeechRecognition = {
+  start: AnyFn;
+  stop: AnyFn;
+  abort?: AnyFn;
+  continuous?: boolean;
+  interimResults?: boolean;
+  lang?: string;
+  onend?: ((ev: Event) => void) | null;
+  onerror?: ((ev: Event) => void) | null;
+  onresult?: AnyFn;
+};
+
 type TranscriptPayload = {
   text: string;
   final: boolean;
@@ -24,23 +36,24 @@ declare global {
     __tpBus?: { emit?: AnyFn };
     HUD?: { bus?: { emit?: AnyFn }; log?: AnyFn };
     __tpHud?: { log?: AnyFn };
-    __tpStore?: { get?: AnyFn; set?: AnyFn };
-    __tpScrollMode?: { getMode?: () => unknown } | string;
+    __tpStore?: { get?: (key: string) => unknown; set?: (key: string, value: unknown) => unknown; state?: Record<string, unknown> };
+    __tpScrollMode?: { getMode?: () => string };
     __tpMic?: { isOpen?: () => boolean; requestMic?: () => Promise<MediaStream> } & Record<string, unknown>;
-    recAutoRestart?: unknown;
     __tpRecording?: {
+      start?: () => unknown;
+      stop?: () => unknown;
       getAdapter?: () => unknown;
       wantsAuto?: () => unknown;
       setAuto?: (on: boolean) => unknown;
       setWantsAuto?: (on: boolean) => unknown;
     };
-    __tpObs?: { armed?: () => boolean };
+    __tpObs?: { armed?: () => boolean; ensureRecording?: (on: boolean) => Promise<unknown> | unknown };
     __tpAutoRecord?: { start?: () => Promise<unknown> | unknown; stop?: () => Promise<unknown> | unknown };
     __tpSpeechOrchestrator?: { start?: () => Promise<RecognizerLike | void> | RecognizerLike | void };
     __tpSpeechCanDynImport?: boolean;
     __tpEmitSpeech?: (t: string, final?: boolean) => void;
     __tpSendToDisplay?: (payload: unknown) => void;
-    sendToDisplay?: (payload: unknown) => void;
+    sendToDisplay?: (payload: any) => void;
     __tpGetActiveRecognizer?: () => RecognizerLike | null;
     SpeechRecognition?: { new (): SpeechRecognition };
     webkitSpeechRecognition?: { new (): SpeechRecognition };
@@ -58,7 +71,7 @@ let running = false;
 let rec: RecognizerLike | null = null; // SR instance or orchestrator handle
 let lastScrollMode = '';
 let lastResultTs = 0;
-let speechWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+let speechWatchdogTimer: number | null = null;
 let activeRecognizer: RecognizerLike | null = null;
 let pendingManualRestartCount = 0;
 
@@ -80,13 +93,13 @@ function getScrollMode(): string {
       if (legacyMode != null) return String(legacyMode).toLowerCase();
     }
 
-    const router = window.__tpScrollMode;
+    const router: any = window.__tpScrollMode;
     if (router && typeof router.getMode === 'function') {
       const mode = router.getMode();
       if (mode != null) return String(mode).toLowerCase();
     }
 
-    if (router && typeof router === 'string') return router.toLowerCase();
+  if (typeof router === 'string') return router.toLowerCase();
   } catch {}
   return '';
 }
@@ -198,17 +211,17 @@ function routeTranscript(text: string, isFinal: boolean): void {
   try {
     if (!text) return;
     markResultTimestamp();
-    const payload = {
+    const payload: TranscriptPayload = {
       text,
       final: !!isFinal,
+      isFinal: !!isFinal,
       timestamp: performance.now(),
       source: 'speech-loader',
       mode: lastScrollMode || getScrollMode(),
     };
-    payload.isFinal = payload.final;
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)
-    try { window.HUD?.bus?.emit(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}
+    try { window.HUD?.bus?.emit?.(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}
     
     // In rehearsal, never steer — only HUD logging
     if (inRehearsal()) return;
@@ -253,7 +266,7 @@ function _startWebSpeech(): { stop: () => void } | null {
 
 function setReadyUi(): void {
   try {
-    const btn = document.getElementById('recBtn');
+    const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
     if (btn) {
       btn.disabled = false;
@@ -267,7 +280,7 @@ function setReadyUi(): void {
 
 function setUnsupportedUi(): void {
   try {
-    const btn = document.getElementById('recBtn');
+    const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
     if (btn) {
       btn.disabled = true;
@@ -281,7 +294,7 @@ function setUnsupportedUi(): void {
 // Update UI when speech is actively listening or stopped
 function setListeningUi(listening: boolean): void {
   try {
-    const btn = document.getElementById('recBtn');
+    const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
     if (btn) {
       // Keep the button enabled/disabled state managed by callers; update labels
@@ -338,7 +351,7 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promis
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
   // Overlay helpers (local so they don't leak globals if loader is re-imported)
-  function showPreroll(n) {
+  function showPreroll(n: number) {
     try {
       const overlay = document.getElementById('countOverlay');
       const num = document.getElementById('countNum');
@@ -374,7 +387,7 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promis
         }
         for (let i = s; i > 0; i--) {
           showPreroll(i);
-          try { window.HUD?.bus?.emit('speech:countdown', { remaining: i }); } catch {}
+          try { window.HUD?.bus?.emit?.('speech:countdown', { remaining: i }); } catch {}
           await new Promise(r => setTimeout(r, 1000));
         }
         hidePreroll();
@@ -440,7 +453,7 @@ export function installSpeech(): void {
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
   (async () => {
     try {
-      const btn = document.getElementById('recBtn');
+      const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
       if (!btn) return;
 
       const SRAvail = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -479,10 +492,11 @@ export function installSpeech(): void {
         // Prefer orchestrator if available
         try {
           if (window.__tpSpeechOrchestrator?.start) {
-            rec = await window.__tpSpeechOrchestrator.start();
+            const started = await window.__tpSpeechOrchestrator.start();
+            rec = (started || null) as RecognizerLike | null;
             if (rec && typeof rec.on === 'function') {
-              try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
-              try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
+              try { rec.on('final', (t: any) => routeTranscript(String(t || ''), true)); } catch {}
+              try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
             }
             try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
             return;
@@ -491,13 +505,15 @@ export function installSpeech(): void {
         // Dynamic import if supported
         try {
           if (window.__tpSpeechCanDynImport) {
-            const mod = await import('/speech/orchestrator.js');
+            const orchUrl = '/speech/orchestrator.js';
+            const mod = await import(orchUrl);
             if (mod?.startOrchestrator) {
-              rec = await mod.startOrchestrator();
+              const started = await mod.startOrchestrator();
+              rec = (started || null) as RecognizerLike | null;
               try {
                 if (rec && typeof rec.on === 'function') {
-                  try { rec.on('final', (t) => routeTranscript(String(t || ''), true)); } catch {}
-                  try { rec.on('partial', (t) => routeTranscript(String(t || ''), false)); } catch {}
+                  try { rec.on('final', (t: any) => routeTranscript(String(t || ''), true)); } catch {}
+                  try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
                 }
               } catch {}
               try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
@@ -544,12 +560,12 @@ export function installSpeech(): void {
           rememberMode(getScrollMode());
           // Flip UI + legacy speech gate immediately
           try { document.body.classList.add('listening'); } catch {}
-          try { window.HUD?.bus?.emit('speech:toggle', true); } catch {}
+          try { window.HUD?.bus?.emit?.('speech:toggle', true); } catch {}
           try { window.speechOn = true; } catch {}
           setListeningUi(true);
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
           // NOTE: Do NOT start auto-scroll yet - wait for countdown to finish
-          try { (HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
+          try { (window.HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
           const S = window.__tpStore;
           const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
           await beginCountdownThen(sec, async () => {
@@ -569,7 +585,8 @@ export function installSpeech(): void {
           setActiveRecognizer(null);
           setListeningUi(false);
           setReadyUi();
-          try { (HUD?.log || console.warn)?.('speech', { startError: String(e?.message || e) }); } catch {}
+          const msg = e instanceof Error ? e.message : String(e);
+          try { (window.HUD?.log || console.warn)?.('speech', { startError: msg }); } catch {}
         } finally {
           if (btn) btn.disabled = false;
         }
@@ -582,7 +599,7 @@ export function installSpeech(): void {
           setActiveRecognizer(null);
           running = false;
           try { document.body.classList.remove('listening'); } catch {}
-          try { window.HUD?.bus?.emit('speech:toggle', false); } catch {}
+          try { window.HUD?.bus?.emit?.('speech:toggle', false); } catch {}
           try { window.speechOn = false; } catch {}
           setListeningUi(false);
           setReadyUi();
@@ -596,7 +613,7 @@ export function installSpeech(): void {
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
           // Optionally flip user intent OFF when speech stops
           try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
-          try { (HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
+          try { (window.HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
         } finally {
           if (btn) btn.disabled = false;
         }

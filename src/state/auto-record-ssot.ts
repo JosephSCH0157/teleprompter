@@ -3,6 +3,9 @@ import { wantsAutoRecord } from '../recording/wantsAutoRecord';
 declare global {
   interface Window {
     __tpRecording?: {
+      start?: () => unknown;
+      stop?: () => unknown;
+      getAdapter?: () => unknown;
       wantsAuto?: () => unknown;
       setAuto?: (on: boolean) => unknown;
       setWantsAuto?: (on: boolean) => unknown;
