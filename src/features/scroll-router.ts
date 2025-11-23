@@ -1,4 +1,7 @@
-import { initOnce } from '../index.js';
+// @ts-nocheck
+export {};
+
+import { initOnce } from '../index';
 
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
@@ -872,20 +875,17 @@ function installScrollRouter(opts) {
       // Always support PageUp/PageDown stepping one line for usability and CI probe,
       // even when not in explicit step mode.
       if (e.key === "PageDown") {
-        // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         stepOnce(1);
         return;
       }
       if (e.key === "PageUp") {
-        // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         stepOnce(-1);
         return;
       }
       // The press-and-hold creep behavior remains exclusive to step mode (Space bar)
       if (state2.mode === "step" && e.key === " ") {
-        // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         holdCreepStart(DEFAULTS.step.holdCreep, 1);
       }
@@ -894,7 +894,6 @@ function installScrollRouter(opts) {
       try { if (window.__TP_REHEARSAL) return; } catch {}
       if (state2.mode !== "step") return;
       if (e.key === " ") {
-        // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         holdCreepStop();
       }
@@ -1000,7 +999,6 @@ function installScrollRouter(opts) {
         const wantUp = e.key === "+" || e.code === "NumpadAdd" || e.key === "ArrowUp";
         const wantDown = e.key === "-" || e.code === "NumpadSubtract" || e.key === "ArrowDown";
         if (!wantUp && !wantDown) return;
-        // eslint-disable-next-line no-restricted-syntax
         e.preventDefault();
         const step = wantUp ? AUTO_STEP_FINE : -AUTO_STEP_FINE;
         const delta = e.shiftKey ? step * AUTO_STEP_COARSE : step;
