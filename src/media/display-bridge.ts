@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 (function(){
   // Display bridge: open/close display window and handle handshake; exposes window.__tpDisplay
   let displayWin = null;

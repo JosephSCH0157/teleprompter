@@ -333,7 +333,7 @@ ensureUiCrawlTargets();
 import './asr/v2/prompts';
 import * as Auto from './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
-import './media/display-bridge.js';
+import './media/display-bridge';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { initScrollRouter } from './scroll/router';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
