@@ -22,7 +22,7 @@ declare global {
     __tpCamera?: any;
     openDisplay?: () => any;
     closeDisplay?: () => any;
-    __tpDisplayDebug?: Array<{ ts: number; tag: string; data?: unknown }>;
+    __tpDisplayDebug?: Array<{ ts?: number; t?: number; tag: string; data?: unknown }>;
     __tpHud?: { log?: AnyFn };
     __tpHudRecorderBtn?: HTMLElement | null;
     __tpTextStats?: any;
@@ -49,9 +49,12 @@ function $(id) {
 function logDisplayDebug(tag: string, data?: unknown) {
   try {
     const arr = (window.__tpDisplayDebug = window.__tpDisplayDebug || []);
-    arr.push({ ts: Date.now(), tag, data });
+    const now = Date.now();
+    arr.push({ ts: now, t: now, tag, data });
     if (arr.length > 50) arr.shift();
-    console.debug('[display-debug]', tag, data);
+    try {
+      console.debug('[display-debug]', tag, data || {});
+    } catch {}
   } catch {}
 }
 
@@ -126,6 +129,44 @@ function once(key, fn) {
 
 // (legacy non-delegated overlay wiring removed; replaced by idempotent delegated wiring)
 
+function wireDisplayBridgeDelegated() {
+  if ((window as any).__tpDisplayDelegatedWired) return;
+  (window as any).__tpDisplayDelegatedWired = true;
+
+  const hasOpen = typeof window.openDisplay === 'function';
+  const hasClose = typeof window.closeDisplay === 'function';
+
+  logDisplayDebug('wireDisplayBridge', {
+    hasOpen,
+    hasClose,
+    toggleCount: document.querySelectorAll('#displayToggleBtn').length,
+  });
+
+  document.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+
+    const btn = target.closest('#displayToggleBtn') as HTMLButtonElement | null;
+    if (!btn) return;
+
+    const hasWindow = !!(window.__tpDisplayWindow && !window.__tpDisplayWindow.closed);
+
+    logDisplayDebug('display:click', {
+      hasOpen: typeof window.openDisplay === 'function',
+      hasClose: typeof window.closeDisplay === 'function',
+      hasWindow,
+    });
+
+    if (hasWindow && typeof window.closeDisplay === 'function') {
+      window.closeDisplay();
+    } else if (typeof window.openDisplay === 'function') {
+      window.openDisplay();
+    } else {
+      console.warn('[display-toggle] openDisplay() is not available');
+    }
+  });
+}
+
 function wireDisplayBridge() {
   // Bridge wrappers for legacy global API expected by some helpers/self-checks
   try {
@@ -148,19 +189,12 @@ function wireDisplayBridge() {
   // Buttons
   const openBtn = $('openDisplayBtn');
   const closeBtn = $('closeDisplayBtn');
-  const toggleBtn = document.querySelector('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
-  logDisplayDebug('wireDisplayBridge', {
-    openBtn: !!openBtn,
-    closeBtn: !!closeBtn,
-    toggleBtn: !!toggleBtn,
-    hasDisplay: !!window.__tpDisplay,
-    hasOpen: typeof window.openDisplay === 'function',
-    hasClose: typeof window.closeDisplay === 'function',
-  });
+  const getToggleBtn = () => document.querySelector<HTMLButtonElement>('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
   const updateToggleState = () => {
     try {
       const w = window.__tpDisplayWindow || null;
       const isOpen = !!(w && !w.closed);
+      const toggleBtn = getToggleBtn();
       if (toggleBtn) {
         toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         toggleBtn.textContent = isOpen ? 'Display: Open' : 'Display';
@@ -169,25 +203,12 @@ function wireDisplayBridge() {
   };
   on(openBtn, 'click', () => { try { window.openDisplay && window.openDisplay(); } catch {} });
   on(closeBtn, 'click', () => { try { window.closeDisplay && window.closeDisplay(); } catch {} });
-  on(toggleBtn, 'click', () => {
-    try {
-      const win = window.__tpDisplayWindow || null;
-      logDisplayDebug('display toggle click', {
-        hasWindow: !!win,
-        closed: !!(win && win.closed),
-        hasDisplayApi: !!window.__tpDisplay,
-        hasOpenDisplay: typeof window.openDisplay === 'function',
-        hasCloseDisplay: typeof window.closeDisplay === 'function',
-      });
-      if (win && !win.closed) { window.closeDisplay && window.closeDisplay(); }
-      else { window.openDisplay && window.openDisplay(); }
-    } catch {}
-  });
   try {
     window.addEventListener('tp:display:opened', updateToggleState);
     window.addEventListener('tp:display:closed', updateToggleState);
   } catch {}
   updateToggleState();
+  wireDisplayBridgeDelegated();
 }
 
 // Mirror main window state to display: scroll position, typography, and content
@@ -922,6 +943,11 @@ export function bindStaticDom() {
     } catch {}
 
     // core feature wiring
+    const toggleCount = document.querySelectorAll('#displayToggleBtn').length;
+    logDisplayDebug('bindStaticDom:display-btn', {
+      found: toggleCount > 0,
+      count: toggleCount,
+    });
     wireDisplayBridge();
   wireDisplayMirror();
     wireMic();
