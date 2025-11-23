@@ -38,12 +38,17 @@ declare global {
 // Broadcast channel for cross-window display sync (names/colors)
 let __bc = null; try { __bc = new BroadcastChannel('prompter'); } catch {}
 
-function on(el, ev, fn, opts) {
+export function on(
+  el: EventTarget | null | undefined,
+  ev: string,
+  fn: any,
+  opts?: boolean | AddEventListenerOptions,
+): void {
   try { if (el && typeof el.addEventListener === 'function') el.addEventListener(ev, fn, opts); } catch {}
 }
 
-function $(id) {
-  try { return document.getElementById(id); } catch { return null; }
+export function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
+  try { return document.getElementById(id) as T | null; } catch { return null; }
 }
 
 function logDisplayDebug(tag: string, data?: unknown) {
@@ -129,7 +134,7 @@ function once(key, fn) {
 
 // (legacy non-delegated overlay wiring removed; replaced by idempotent delegated wiring)
 
-function wireDisplayBridgeDelegated() {
+export function wireDisplayBridgeDelegated() {
   if ((window as any).__tpDisplayDelegatedWired) return;
   (window as any).__tpDisplayDelegatedWired = true;
 
@@ -167,7 +172,7 @@ function wireDisplayBridgeDelegated() {
   });
 }
 
-function wireDisplayBridge() {
+export function wireDisplayBridge() {
   // Bridge wrappers for legacy global API expected by some helpers/self-checks
   try {
     const disp = (window.__tpDisplay || {});
@@ -212,7 +217,7 @@ function wireDisplayBridge() {
 }
 
 // Mirror main window state to display: scroll position, typography, and content
-function wireDisplayMirror() {
+export function wireDisplayMirror() {
   try {
     if (document.documentElement.dataset.displayMirrorWired === '1') return;
     document.documentElement.dataset.displayMirrorWired = '1';
@@ -292,7 +297,7 @@ function wireDisplayMirror() {
   } catch {}
 }
 
-function wireMic() {
+export function wireMic() {
   const req = $('micBtn');
   const rel = $('releaseMicBtn');
   on(req, 'click', async () => { try { await window.__tpMic?.requestMic?.(); } catch {} });
@@ -322,7 +327,7 @@ function wireMic() {
   }
 }
 
-function wireCamera() {
+export function wireCamera() {
   const start = $('startCam') || $('StartCam');
   const stop = $('stopCam') || $('StopCam');
   const camSel= $('camDevice') || $('CamDevice');
@@ -375,7 +380,7 @@ function wireCamera() {
   on(mir, 'change', () => { try { window.__tpCamera?.applyCamMirror?.(); } catch {} });
 }
 
-function wireLoadSample() {
+export function wireLoadSample() {
   try {
     const btn = $('loadSample');
     const ed = $('editor');
@@ -412,7 +417,7 @@ function wireLoadSample() {
     });
   } catch {}
 }
-function wireUpload() {
+export function wireUpload() {
   const btn = $('uploadFileBtn');
   const inp = $('uploadFile');
   on(btn, 'click', () => { try { inp && inp.click && inp.click(); } catch {} });
@@ -480,7 +485,7 @@ function resetRun() {
   try { (window.setStatus || (()=>{}))('Script reset to start'); } catch {}
 }
 
-function wireScriptControls() {
+export function wireScriptControls() {
   try {
     const clearBtn = document.getElementById('clearText');
     const resetBtn = document.getElementById('resetScriptBtn');
@@ -512,7 +517,7 @@ function wireScriptControls() {
   } catch {}
 }
 
-function wirePresentMode() {
+export function wirePresentMode() {
   once('present', () => {
     const btn = $id('presentBtn');
     const exitBtn = $id('presentExitBtn');
@@ -675,7 +680,7 @@ function installObsChip() {
   });
 }
 
-function wireOverlays() {
+export function wireOverlays() {
   once('overlays', () => {
     try {
       const ensureHelpContents = () => {
