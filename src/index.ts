@@ -9,7 +9,7 @@ try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 // Global app store (single initializer for __tpStore)
-import './state/app-store.js';
+import './state/app-store';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
 // Early dev console noise filter (benign extension async-response errors)

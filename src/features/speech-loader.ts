@@ -1,5 +1,7 @@
-type AnyFn = (...args: any[]) => any;
 import { wantsAutoRecord } from '../recording/wantsAutoRecord';
+import type { AppStore } from '../state/app-store';
+
+type AnyFn = (...args: any[]) => any;
 
 type RecognizerLike = {
   start?: AnyFn;
@@ -36,7 +38,7 @@ declare global {
     __tpBus?: { emit?: AnyFn };
     HUD?: { bus?: { emit?: AnyFn }; log?: AnyFn };
     __tpHud?: { log?: AnyFn };
-    __tpStore?: { get?: (key: string) => unknown; set?: (key: string, value: unknown) => unknown; state?: Record<string, unknown> };
+    __tpStore?: AppStore;
     __tpScrollMode?: { getMode?: () => string };
     __tpMic?: { isOpen?: () => boolean; requestMic?: () => Promise<MediaStream> } & Record<string, unknown>;
     __tpRecording?: {

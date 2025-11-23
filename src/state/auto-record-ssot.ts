@@ -1,3 +1,4 @@
+import type { AppStore } from './app-store';
 import { wantsAutoRecord } from '../recording/wantsAutoRecord';
 
 declare global {
@@ -10,11 +11,7 @@ declare global {
       setAuto?: (on: boolean) => unknown;
       setWantsAuto?: (on: boolean) => unknown;
     };
-    __tpStore?: {
-      get?: (key: string) => unknown;
-      set?: (key: string, value: unknown) => unknown;
-      state?: Record<string, unknown>;
-    };
+    __tpStore?: AppStore;
     getAutoRecordEnabled?: () => boolean;
     setAutoRecordEnabled?: (on: boolean) => boolean;
   }
