@@ -645,76 +645,8 @@
   <button id="settingsClose" class="btn-chip" data-action="settings-close">Close</button>
     </header>
     <!-- Legacy tabs removed; TS builder handles tabs inside settingsBody -->
-    <div id="settingsBody" class="settings-body">
-      <!-- Fallback placeholders; TS runtime replaces with full panels -->
-      <div class="settings-card" data-tab-content="general">
-        <h3>General</h3>
-        <p class="dim">Settings are loading...</p>
-      </div>
-      <div class="settings-card" data-tab-content="media" style="display:none">
-        <h3>Media</h3>
-        <p class="dim">Mic and camera controls load automatically.</p>
-      </div>
-      <div class="settings-card" data-tab-content="recording" style="display:none">
-        <h3>Recording</h3>
-        <p class="dim">Recorder settings load automatically.</p>
-      </div>
-      <div class="settings-card" data-tab-content="advanced" style="display:none">
-        <h3>Advanced</h3>
-        <p class="dim">Advanced options load automatically.</p>
-      </div>
-      <div class="settings-card" data-tab="pricing" data-tab-content="pricing" style="display:none">
-        <h3>Pricing</h3>
-        <p class="dim">
-          Anvil starts with a free tier for solo creators. Paid plans unlock advanced features like
-          multi-recorder control, hybrid scroll tuning presets, and future Forge integrations.
-        </p>
-
-        <ul class="dim">
-          <li><strong>Free:</strong> Core teleprompter, script saving, basic OBS control.</li>
-          <li><strong>Creator:</strong> Auto-record presets, hybrid scroll profiles, priority fixes.</li>
-          <li><strong>Studio:</strong> Multi-seat, shared presets, dedicated support. (Coming soon)</li>
-        </ul>
-
-        <div class="hr"></div>
-
-        <p>
-          Want to keep Anvil’s hammer swinging while this all ships?
-          <br />
-          <a href="https://buymeacoffee.com/podcastersforge" target="_blank" rel="noopener noreferrer">
-            Buy me a coffee ☕
-          </a>
-        </p>
-      </div>
-
-      <div class="settings-card" data-tab="about" data-tab-content="about" style="display:none">
-        <h3>About Anvil</h3>
-        <p class="dim">
-          Anvil is the teleprompter built for working creators — podcasters, YouTubers, and anyone recording without a full studio team.
-          It keeps your script, timing, and on‑screen tools in one place so you can focus on the delivery, not the juggling act.
-        </p>
-
-        <p class="dim">
-          Anvil is part of the Podcaster’s Forge toolset, an all‑in‑one workflow for writing, reading, and shipping shows from a single browser tab instead of ten different apps.
-        </p>
-
-        <ul class="dim">
-          <li>Smart scrolling modes for live reads and rehearsals</li>
-          <li>Color‑coded speakers and notes for easier performance</li>
-          <li>Script loading from local files instead of cloud lock‑in</li>
-          <li>OBS‑friendly layout designed for recording days</li>
-        </ul>
-
-        <div class="hr"></div>
-
-        <p class="dim">
-          You’re currently using Anvil <span id="aboutVersion">v1.7.3</span>.<br />
-          Built by the Podcaster’s Forge project.
-        </p>
-      </div>
-    </div>
-    <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
-  </div>
+    <div id="settingsBody" class="settings-body"></div>
+</div>
 </div>
 <!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
 
@@ -928,3 +860,4 @@
   </script>
 </body>
 </html>
+
