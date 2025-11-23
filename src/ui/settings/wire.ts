@@ -29,6 +29,44 @@ function onStoreReady(cb: (store: any) => void, { delayMs = 50, maxAttempts = 20
   wait();
 }
 
+function wireSettingsTabs(root: HTMLElement): void {
+  try {
+    const tabButtons = Array.from(
+      root.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'),
+    );
+    const panels = Array.from(
+      root.querySelectorAll<HTMLElement>('[data-settings-panel]'),
+    );
+
+    if (!tabButtons.length || !panels.length) return;
+
+    const setActive = (id: string) => {
+      tabButtons.forEach((btn) => {
+        const active = btn.dataset.settingsTab === id;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      panels.forEach((panel) => {
+        const active = panel.dataset.settingsPanel === id;
+        panel.hidden = !active;
+      });
+    };
+
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        try {
+          ev.preventDefault();
+          const id = btn.dataset.settingsTab;
+          if (id) setActive(id);
+        } catch {}
+      });
+    });
+
+    const initial = tabButtons[0]?.dataset.settingsTab ?? 'general';
+    setActive(initial);
+  } catch {}
+}
+
 async function wireAutoRecord(rootEl: HTMLElement) {
   const chk = rootEl.querySelector('#settingsAutoRecord') as HTMLInputElement | null;
   const nameEl = rootEl.querySelector('#autoRecordFolderName') as HTMLElement | null;
@@ -193,6 +231,7 @@ function wireRecorderAdapters(rootEl: HTMLElement) {
 
 export function wireSettingsDynamic(rootEl: HTMLElement | null) {
   if (!rootEl) return;
+  try { wireSettingsTabs(rootEl); } catch {}
   // attach a minimal mutation observer to demonstrate wiring
   try {
     const obs = new MutationObserver(() => {});

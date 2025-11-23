@@ -4,8 +4,16 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
   // The media tab contains mic device selector and mic controls which
   // will be wired to the TS mic API via `wireSettingsDynamic`.
   const html = `
-    <div data-tab-content="general">
-      <h4>General</h4>
+    <div class="settings-tabs" role="tablist">
+      <button type="button" class="settings-tab active" data-settings-tab="general" aria-pressed="true">General</button>
+      <button type="button" class="settings-tab" data-settings-tab="media" aria-pressed="false">Media</button>
+      <button type="button" class="settings-tab" data-settings-tab="recording" aria-pressed="false">Recording</button>
+      <button type="button" class="settings-tab" data-settings-tab="advanced" aria-pressed="false">Advanced</button>
+    </div>
+
+    <div class="settings-panels">
+      <section class="settings-panel" data-settings-panel="general" data-tab-content="general">
+        <h4>General</h4>
       <div class="settings-grid">
         <div class="settings-card anim-in">
           <h4>Main Display Typography</h4>
@@ -56,10 +64,10 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
       </div>
       <div class="settings-small">Changes apply live to the selected display and are persisted.</div>
-    </div>
+      </section>
 
-    <div data-tab-content="media" style="display:none">
-      <h4>Microphone</h4>
+      <section class="settings-panel" data-settings-panel="media" data-tab-content="media" hidden>
+        <h4>Microphone</h4>
       <div class="row">
         <label>Input device
           <select id="settingsMicSel" class="select-md"></select>
@@ -91,10 +99,10 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </label>
         <a id="linkAsrSettings" href="#asrSettings" class="settings-link" style="margin-left:12px">ASR settings</a>
       </div>
-    </div>
+      </section>
 
-    <div data-tab-content="recording" style="display:none">
-      <h4>Recording</h4>
+      <section class="settings-panel" data-settings-panel="recording" data-tab-content="recording" hidden>
+        <h4>Recording</h4>
 
       <div class="settings-card anim-in">
         <h4>Auto-record</h4>
@@ -149,15 +157,16 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <small class="muted">These buttons call the recorder registry so Bridge + OBS stay in sync.</small>
       </div>
-    </div>
+      </section>
 
-    <div data-tab-content="advanced" style="display:none">
-      <h4>Advanced</h4>
+      <section class="settings-panel" data-settings-panel="advanced" data-tab-content="advanced" hidden>
+        <h4>Advanced</h4>
       <div class="row">Advanced settings.</div>
       <div class="row gap">
         <button id="btnExportSettings" class="chip btn-chip" type="button">Export settings</button>
         <button id="btnImportSettings" class="chip btn-chip" type="button">Import settings</button>
       </div>
+      </section>
     </div>
   `;
 
