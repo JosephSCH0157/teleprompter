@@ -9,6 +9,8 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
       <button type="button" class="settings-tab" data-settings-tab="media" aria-pressed="false">Media</button>
       <button type="button" class="settings-tab" data-settings-tab="recording" aria-pressed="false">Recording</button>
       <button type="button" class="settings-tab" data-settings-tab="advanced" aria-pressed="false">Advanced</button>
+      <button type="button" class="settings-tab" data-settings-tab="pricing" aria-pressed="false">Pricing</button>
+      <button type="button" class="settings-tab" data-settings-tab="about" aria-pressed="false">About</button>
     </div>
 
     <div class="settings-panels">
@@ -161,11 +163,39 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
 
       <section class="settings-panel" data-settings-panel="advanced" data-tab-content="advanced" hidden>
         <h4>Advanced</h4>
-      <div class="row">Advanced settings.</div>
-      <div class="row gap">
-        <button id="btnExportSettings" class="chip btn-chip" type="button">Export settings</button>
-        <button id="btnImportSettings" class="chip btn-chip" type="button">Import settings</button>
-      </div>
+        <div class="row">Advanced settings.</div>
+        <div class="row gap">
+          <button id="btnExportSettings" class="chip btn-chip" type="button">Export settings</button>
+          <button id="btnImportSettings" class="chip btn-chip" type="button">Import settings</button>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-panel="pricing" data-tab-content="pricing" hidden>
+        <h4>Pricing</h4>
+        <div class="settings-card anim-in">
+          <p class="muted">Teleprompter Pro is currently in open preview. Billing controls will land here soon.</p>
+          <ul class="muted" style="margin-left:16px">
+            <li>No charges are applied during preview.</li>
+            <li>All features remain available while we finalize plans.</li>
+            <li>Saved recordings and settings stay intact.</li>
+            <li>We’ll announce pricing before enabling billing.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-panel="about" data-tab-content="about" hidden>
+        <h4>About</h4>
+        <div class="settings-card anim-in">
+          <p class="muted">Teleprompter Pro is built for live presenters, rehearsal, and remote production.</p>
+          <ul class="muted" style="margin-left:16px">
+            <li>Built-in recorder (core) with OBS WebSocket integration.</li>
+            <li>Speech-driven scrolling with VAD/ASR hybrid modes.</li>
+            <li>Typography controls for main and external display, including color tuning.</li>
+            <li>HUD overlays for dB meter, speech notes, and recorder status.</li>
+            <li>Script ingest helpers and validation to keep your script clean.</li>
+          </ul>
+          <p class="muted">Questions? Open the Help overlay or reach out to the team.</p>
+        </div>
       </section>
     </div>
   `;
