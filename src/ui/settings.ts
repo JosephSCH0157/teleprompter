@@ -9,6 +9,10 @@ import { wireSettingsDynamic } from './settings/wire';
 export function mountSettings(rootEl: HTMLElement | null) {
   try {
     if (!rootEl) return;
+    // Clear any leftover legacy/fallback content before rebuilding
+    try {
+      rootEl.innerHTML = '';
+    } catch {}
     // Use the lightweight builder to prepare content (string or DOM insertion)
     try {
       const html = buildFromBuilder(rootEl) || '';
