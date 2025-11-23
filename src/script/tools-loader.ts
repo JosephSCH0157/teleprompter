@@ -1,5 +1,8 @@
-import { fallbackNormalizeText, normalizeToStandardText } from './normalize.js';
-import { validateStandardTagsText } from './validate.js';
+// @ts-nocheck
+export {};
+
+import { fallbackNormalizeText, normalizeToStandardText } from './normalize';
+import { validateStandardTagsText } from './validate';
 
 try {
   window.normalizeToStandardText = normalizeToStandardText;
@@ -13,8 +16,8 @@ try {
       const out = normalizeToStandardText(ta.value || '');
       ta.value = out;
       ta.dispatchEvent(new Event('input', { bubbles: true }));
-  try { if (typeof window.saveDraft === 'function') window.saveDraft(); } catch {}
-  try { if (typeof window.setStatus === 'function') window.setStatus('Normalized to standard.'); } catch {}
+      try { if (typeof window.saveDraft === 'function') window.saveDraft(); } catch {}
+      try { if (typeof window.setStatus === 'function') window.setStatus('Normalized to standard.'); } catch {}
     } catch {}
   };
   window.fallbackNormalize = function () {

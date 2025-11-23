@@ -1,4 +1,7 @@
-// src/script/validate.js
+// @ts-nocheck
+export {};
+
+// src/script/validate.ts
 // Minimal validator for standard tags; returns a structured report used by tools-loader.
 
 export function validateStandardTagsText(input = '') {
@@ -18,19 +21,27 @@ export function validateStandardTagsText(input = '') {
     problems.push('[note] blocks must be outside speaker sections.');
 
   // Balance with a simple stack
-  const re = /\[(\/?)(s1|s2|note)\]/gi;
   const stack = [];
+  const tagRe = /\[(\/)?(s1|s2|note)\]/gi;
   let m;
-  while ((m = re.exec(t))) {
-    const [, close, tag] = m;
-    if (!close) stack.push(tag);
-    else {
-      const top = stack.pop();
-      if (top !== tag) problems.push(`Mismatched closing [/${tag}] near index ${m.index}`);
+  while ((m = tagRe.exec(t))) {
+    const closing = !!m[1];
+    const tag = m[2].toLowerCase();
+    if (!closing) {
+      stack.push(tag);
+    } else {
+      if (!stack.length) {
+        problems.push(`Unexpected closing [/${tag}]`);
+        break;
+      }
+      const last = stack.pop();
+      if (last !== tag) {
+        problems.push(`Mismatched closing [/${tag}] (expected [/${last}])`);
+        break;
+      }
     }
   }
   if (stack.length) problems.push('Unclosed tag(s): ' + stack.join(', '));
 
-  const report = problems.length ? 'Markup issues:\n- ' + problems.join('\n- ') : 'Markup conforms to the standard.';
-  return { report };
+  return { ok: problems.length === 0, report: problems.join('\n'), problems };
 }
