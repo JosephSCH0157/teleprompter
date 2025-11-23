@@ -1,3 +1,24 @@
+// @ts-nocheck
+// src/media/camera.ts
+// Keep this as a JS-style module, but make TS happy about window
+// (we can tighten this later if we want).
+declare global {
+  interface Window {
+    __tpCamera?: any;
+    __tpEventBus?: {
+      on: (event: string, fn: (...args: any[]) => void) => void;
+      off?: (event: string, fn: (...args: any[]) => void) => void;
+      emit?: (event: string, ...args: any[]) => void;
+    };
+    __camApi?: any;
+    toast?: (msg: string, opts?: { type?: string }) => void;
+    sendToDisplay?: (payload: any) => void;
+  }
+}
+
+// Ensure this file is treated as a module
+export {};
+
 (function(){
   // Camera overlay helpers. Exposes window.__tpCamera
   let camStream = null;

@@ -314,7 +314,7 @@ function wireCamera() {
       try { e.stopImmediatePropagation(); e.preventDefault(); } catch {}
       try { if (window.toast) window.toast('Camera starting…'); } catch {}
       // Ensure camera module is loaded if not yet available
-      try { if (!window.__tpCamera || typeof window.__tpCamera.startCamera !== 'function') await import('../media/camera.js'); } catch {}
+      try { if (!window.__tpCamera || typeof window.__tpCamera.startCamera !== 'function') await import('../media/camera'); } catch {}
       try {
         await window.__tpCamera?.startCamera?.();
       } catch (err) {
