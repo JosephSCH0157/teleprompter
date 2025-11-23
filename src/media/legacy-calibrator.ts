@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 (function(){
   // Legacy mic calibration hook — inert unless #asrCalibBtn exists
   try {

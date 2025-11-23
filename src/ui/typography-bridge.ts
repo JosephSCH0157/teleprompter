@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 // Typography bridge for modular dev path
 // - Applies CSS variables for typography
 // - Bridges Settings (window.applyTypography)
