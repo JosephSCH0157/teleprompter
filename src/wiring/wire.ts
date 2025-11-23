@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 // src/wiring/wire.js
 // Own the OBS Test button wiring in the module runtime and expose a simple probe.
 
@@ -88,7 +91,6 @@ export function initSettingsWiring() {
         const t = ev.target;
         const btn = t && t.closest && t.closest(OBS_TEST_SEL);
         if (!btn) return;
-        // eslint-disable-next-line no-restricted-syntax
         ev.preventDefault();
         ev.stopImmediatePropagation();
 

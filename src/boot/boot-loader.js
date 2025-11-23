@@ -89,7 +89,7 @@
           s.onload = async () => {
             push({ tag: 'boot-loader', msg: 'legacy loaded', ok: true });
             try {
-              const ui = await import('/src/wiring/ui-binds.js').catch(()=>null);
+              const ui = await import('/src/wiring/ui-binds').catch(()=>null);
               if (ui && typeof ui.bindCoreUI === 'function') {
                 try { ui.bindCoreUI({ scrollModeSelect: '#scrollMode', presentBtn: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
               }

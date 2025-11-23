@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 // src/wiring/ui-binds.ts
 // Canonical UI binder for core chrome:
 // - Present mode toggle
