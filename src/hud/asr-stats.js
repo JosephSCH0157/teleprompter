@@ -1,3 +1,9 @@
+// LEGACY HUD/ASR ENDPOINT
+// This file is loaded directly as .js by script tags or dynamic imports.
+// Source-of-truth logic now lives in TypeScript modules (src/asr/v2/*.ts, src/hud/*).
+// DO NOT rename or remove this file without updating the HUD/ASR build pipeline
+// to emit a matching .js artifact at the same URL.
+
 // Dev-only ASR stats HUD line. Renders a compact status inside #hud-root.
 // Shows commits, avg score, p95 gap, tween avg, and suppressed counters.
 let __asrHudHandler = null;
