@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 // Lightweight ASR ride-along (JS build) — mirrors src/index-hooks/asr.ts behavior
 // Uses the Web Speech API directly to avoid TS build requirements in dev.
 

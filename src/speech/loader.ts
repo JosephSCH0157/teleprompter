@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 // Loader for speech recognizer/matcher. Attaches `window.__tpRecognizer` and `window.__tpMatcher`
 // factories to allow gradual adoption by the legacy runtime.
 (async function () {
