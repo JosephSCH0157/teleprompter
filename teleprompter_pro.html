@@ -330,6 +330,11 @@
   </span>
   
 </div>
+<nav class="page-tabs" id="pageTabs">
+  <button class="page-tab is-active" data-page-tab="run" aria-selected="true">Run</button>
+  <button class="page-tab" data-page-tab="scripts" aria-selected="false">Scripts</button>
+  <button class="page-tab" data-page-tab="hud" aria-selected="false">HUD</button>
+</nav>
 <div class="legend" id="legend"></div>
 </div>
 <script>
@@ -352,7 +357,7 @@
     } catch(e){}
   })();
 </script>
-<div class="app">
+<div class="app" data-page-panel="run">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
 <section class="mode-card" id="scrollModeCard">
@@ -637,6 +642,16 @@
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
 </div>
+<section class="page-panel" data-page-panel="scripts" hidden>
+  <h2>Scripts</h2>
+  <p>Script library view coming soon.</p>
+</section>
+
+<section class="page-panel" data-page-panel="hud" hidden>
+  <h2>HUD / Diagnostics</h2>
+  <p>HUD and advanced diagnostics will live here.</p>
+</section>
+
 <!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
 <div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings">
   <div class="sheet settings-sheet">

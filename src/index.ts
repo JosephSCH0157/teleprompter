@@ -25,6 +25,7 @@ import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
+import { ensurePageTabs, wirePageTabs } from './ui/page-tabs/wire';
 
 import { bootstrap } from './boot/boot';
 
@@ -632,6 +633,11 @@ export async function boot() {
 							}, 0);
 						}
 					} catch {}
+          // Ensure page tabs strip/panels are hydrated by the TS runtime
+          let pageStore: any = null;
+          try { pageStore = getAppStore(); } catch {}
+          try { ensurePageTabs(); } catch {}
+          try { wirePageTabs(document, pageStore || undefined); } catch {}
 					// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
