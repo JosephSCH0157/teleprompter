@@ -27,6 +27,7 @@ import { injectSettingsFolderForSmoke } from './features/inject-settings-folder'
 import { installSpeech } from './features/speech-loader';
 import { ensurePageTabs, wirePageTabs } from './ui/page-tabs/wire';
 import { wireScriptEditor } from './ui/script-editor';
+import { initSpeechBridge } from './asr/bridge-speech';
 
 import { bootstrap } from './boot/boot';
 
@@ -607,14 +608,17 @@ export async function boot() {
 			// OBS Settings wiring (Test connect button)
 			try { initObsUI(); } catch {}
 
-			// Load adapters via ESM imports (TS-controlled). Enable DEV hotkeys.
-			try {
-				const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
-				Promise.allSettled([
-					import('./adapters/obs').then(m => m.configure?.({})),
-					import('./adapters/hotkey').then(m => { if (DEV) m.enable?.(); })
-				]).catch(() => {});
-			} catch {}
+					// Load adapters via ESM imports (TS-controlled). Enable DEV hotkeys.
+					try {
+						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
+						Promise.allSettled([
+							import('./adapters/obs').then(m => m.configure?.({})),
+							import('./adapters/hotkey').then(m => { if (DEV) m.enable?.(); })
+						]).catch(() => {});
+					} catch {}
+
+          // ASR bridge: mirror legacy asr-bridge-speech.js (start/stop on speech events)
+          try { initSpeechBridge(); } catch {}
 
 			// The following block previously lived inside a DOMContentLoaded listener.
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.

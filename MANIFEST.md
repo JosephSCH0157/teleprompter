@@ -12,6 +12,8 @@ modules:
 	- scroll-control.js (legacy artifact; replaced by src/scroll/scroll-control.ts)
 	- io-anchor.js (legacy artifact)
 	- scroll/scroll-brain.js (legacy artifact; superseded by src/scroll/scroll-brain.ts)
+	- asr-bridge-speech.js (legacy artifact; superseded by src/asr/bridge-speech.ts)
+	- asr-types.js (legacy artifact; superseded by src/asr-types.ts)
 	- debug-tools.js
 	- debug-seed.js
 ---
@@ -26,7 +28,7 @@ modules:
 - App HTML: ./teleprompter_pro.html
 - TS bundle (current runtime): ./dist/index.js (built from src/index.ts)
 - Recorders bridge: ./recorders.js (generated from TS)
-- Legacy artifacts (kept for pre-1.7.x bundles/docs): ./teleprompter_pro.js, ./scroll-helpers.js (superseded by src/scroll/scroll-helpers.ts), ./scroll-control.js (superseded by src/scroll/scroll-control.ts), ./scroll/scroll-brain.js (superseded by src/scroll/scroll-brain.ts), ./io-anchor.js
+- Legacy artifacts (kept for pre-1.7.x bundles/docs): ./teleprompter_pro.js, ./scroll-helpers.js (superseded by src/scroll/scroll-helpers.ts), ./scroll-control.js (superseded by src/scroll/scroll-control.ts), ./scroll/scroll-brain.js (superseded by src/scroll/scroll-brain.ts), ./asr-bridge-speech.js (superseded by src/asr/bridge-speech.ts), ./asr-types.js (superseded by src/asr-types.ts), ./io-anchor.js
 - HUD: ./debug-tools.js
 
 ## Flags & Storage
