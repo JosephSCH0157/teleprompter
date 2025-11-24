@@ -80,6 +80,35 @@ export function wireScriptEditor(): void {
     }
   };
 
+  const loadFromStore = async (id: string | null | undefined) => {
+    if (!id) return false;
+    const mod = (await ensureScriptsModule()) || ((window as any).Scripts as ScriptsApi | null);
+    if (!mod) return false;
+    const rec = mod.get ? mod.get(id) : null;
+    if (!rec) return false;
+
+    if (scriptTitle) scriptTitle.value = rec.title || 'Untitled';
+    editor.value = rec.content || '';
+    applyEditorToViewer();
+    try {
+      window.dispatchEvent(
+        new CustomEvent('tp:script-load', {
+          detail: {
+            name: rec.title || 'Untitled',
+            text: rec.content || '',
+            skipNormalize: true,
+          },
+        }),
+      );
+    } catch {}
+    try {
+      (window as any)._toast?.('Script loaded', { type: 'ok' });
+    } catch {
+      /* noop */
+    }
+    return true;
+  };
+
   // Live typing → viewer
   editor.addEventListener('input', applyEditorToViewer);
 
@@ -118,32 +147,9 @@ export function wireScriptEditor(): void {
   if (scriptLoadBtn) {
     scriptLoadBtn.addEventListener('click', async () => {
       try {
-        const mod = (await ensureScriptsModule()) || ((window as any).Scripts as ScriptsApi | null);
-        if (mod && scriptSelect && scriptSelect.value) {
-          const id = scriptSelect.value;
-          const rec = mod.get ? mod.get(id) : null;
-          if (!rec) return;
-
-          if (scriptTitle) scriptTitle.value = rec.title || 'Untitled';
-          editor.value = rec.content || '';
-          applyEditorToViewer();
-          try {
-            window.dispatchEvent(
-              new CustomEvent('tp:script-load', {
-                detail: {
-                  name: rec.title || 'Untitled',
-                  text: rec.content || '',
-                  skipNormalize: true,
-                },
-              }),
-            );
-          } catch {}
-          try {
-            (window as any)._toast?.('Script loaded', { type: 'ok' });
-          } catch {
-            /* noop */
-          }
-          return;
+        if (scriptSelect && scriptSelect.value) {
+          const ok = await loadFromStore(scriptSelect.value);
+          if (ok) return;
         }
 
         // Fallback: last-unsaved script from localStorage
@@ -182,6 +188,16 @@ export function wireScriptEditor(): void {
         }
         (window as any)._toast?.('Load failed', { type: 'error' });
       }
+    });
+  }
+
+  // Load immediately when selection changes (if Scripts store is present)
+  if (scriptSelect) {
+    scriptSelect.addEventListener('change', () => {
+      try {
+        const id = scriptSelect.value;
+        void loadFromStore(id);
+      } catch {}
     });
   }
 
