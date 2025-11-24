@@ -164,9 +164,6 @@
     /* Chip state colorization for toggles */
     .chip[data-state="open"], .chip[data-state="on"]{background:rgba(60,180,75,0.18)}
     .chip[data-state="closed"], .chip[data-state="off"]{background:var(--chip-bg)}
-    /* Save chip states */
-    #saveChip[data-state="saved"]{background:rgba(60,180,75,0.18)}
-    #saveChip[data-state="dirty"]{background:rgba(234,179,8,0.22)}
     /* Dev-only controls hidden by default; shown only with ?dev=1 */
     .dev-only{display:none !important}
     html.dev1 .dev-only{display:inline-flex !important}
@@ -300,20 +297,16 @@
 })();
 </script>
 <div class="topbar">
-<strong>Anvil - Teleprompter</strong>
-<span id="appVersion" class="version-badge" aria-label="App version">v1.7.6</span>
-  <span class="chip" id="saveChip">Draft: —</span>
-  <span class="chip" id="permChip">Mic: unknown</span>
-  <span class="chip" id="displayChip">Display: closed</span>
-  <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
-  <!-- Mic level + calibration -->
-  <div class="mic-block">
-    <span class="topbar-label">Mic level</span>
-  <div id="dbMeterTop" title="Input level"></div>
-  <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
-</div>
-<!-- Auto status chip (Hybrid/Auto state) -->
-<span id="autoChip" class="chip" aria-live="polite" aria-atomic="true" title="Auto scroll status">Auto: Manual</span>
+  <strong>Anvil - Teleprompter</strong>
+  <span id="appVersion" class="version-badge" aria-label="App version">v1.7.6</span>
+    <span class="chip" id="permChip">Mic: unknown</span>
+    <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+    <!-- Mic level + calibration -->
+    <div class="mic-block">
+      <span class="topbar-label">Mic level</span>
+    <div id="dbMeterTop" title="Input level"></div>
+    <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
+  </div>
 <!-- Right-side controls wrapper (ASR chip mounts here) -->
 <div id="topbarRight" class="inl-1">
   <!-- ASR chip + button will mount here -->
@@ -321,7 +314,6 @@
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
-    <button id="hudBtn" class="chip" data-action="hud-toggle">HUD</button>
   <span id="selfChecksChip" class="chip chip-muted dev-only">
     Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
   </span>
@@ -765,6 +757,10 @@
   <button id="closeDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-close">Close Display (alias)</button>
   <!-- Hidden alias to preserve #speakerIndexChip for test/binders, removed from visible topbar -->
   <span id="speakerIndexChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-speakers">Speakers</span>
+  <!-- Hidden aliases for removed status chips -->
+  <span id="saveChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-save"></span>
+  <span id="displayChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-display"></span>
+  <span id="autoChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-auto"></span>
   <script>
     (function(){
       try{
@@ -773,60 +769,6 @@
         if (openAlias) openAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay==='function') window.__tpDisplay.openDisplay(); else window.open('display.html','TeleprompterDisplay','width=1000,height=700'); }catch(e){} });
         if (closeAlias) closeAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay==='function') window.__tpDisplay.closeDisplay(); else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close(); }catch(e){} });
       }catch(e){}
-    })();
-  </script>
-  <script>
-    (function(){
-      // Save status indicator wiring for #saveChip
-      try {
-        var saveChip = document.getElementById('saveChip');
-        if (!saveChip) return;
-
-        function setDirty(){
-          try {
-            saveChip.textContent = 'Draft: Modified';
-            saveChip.setAttribute('data-state','dirty');
-          } catch(e){}
-        }
-
-        function setSaved(){
-          try {
-            saveChip.textContent = 'Draft: Saved';
-            saveChip.setAttribute('data-state','saved');
-          } catch(e){}
-        }
-
-        // Initial state
-        try { saveChip.textContent = 'Draft: —'; saveChip.removeAttribute('data-state'); } catch(e){}
-
-        // Editor changes mark draft as modified
-        try {
-          var editor = document.getElementById('editor');
-          if (editor){ editor.addEventListener('input', setDirty, {passive:true}); }
-        } catch(e){}
-
-        // Title edits also mark as modified
-        try {
-          var title = document.getElementById('scriptTitle');
-          if (title){
-            title.addEventListener('input', setDirty, {passive:true});
-            title.addEventListener('change', setDirty, {passive:true});
-          }
-        } catch(e){}
-
-        // After user clicks Save / Save As, show Saved state
-        try {
-          var saveBtn = document.getElementById('scriptSaveBtn');
-          if (saveBtn){ saveBtn.addEventListener('click', function(){ setTimeout(setSaved, 0); }); }
-        } catch(e){}
-        try {
-          var saveAsBtn = document.getElementById('scriptSaveAsBtn');
-          if (saveAsBtn){ saveAsBtn.addEventListener('click', function(){ setTimeout(setSaved, 0); }); }
-        } catch(e){}
-
-        // If app dispatches a custom event upon successful save, reflect that as well
-        try { window.addEventListener('tp:script:saved', function(){ setSaved(); }); } catch(e){}
-      } catch(e){}
     })();
   </script>
   <script>
