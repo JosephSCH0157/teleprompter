@@ -18,6 +18,10 @@ modules:
 	- features/typography.js (legacy artifact; superseded by src/features/typography.ts)
 	- settings/typographyStore.js (legacy artifact; superseded by src/settings/typographyStore.ts)
 	- ui/typography-bridge.js (legacy artifact; superseded by src/ui/typography-bridge.ts)
+	- features/step-scroll.js (legacy artifact; superseded by src/features/scroll/step-scroll.ts)
+	- features/rehearsal.js (legacy artifact; superseded by src/features/rehearsal/rehearsal.ts)
+	- features/rehearsal-bus.js (legacy artifact; superseded by src/features/rehearsal/rehearsal-bus.ts)
+	- features/display-sync.js (legacy artifact; superseded by src/features/display-sync.ts)
 	- debug-tools.js
 	- debug-seed.js
 ---
@@ -32,7 +36,7 @@ modules:
 - App HTML: ./teleprompter_pro.html
 - TS bundle (current runtime): ./dist/index.js (built from src/index.ts)
 - Recorders bridge: ./recorders.js (generated from TS)
-- Legacy artifacts (kept for pre-1.7.x bundles/docs): ./teleprompter_pro.js, ./scroll-helpers.js (superseded by src/scroll/scroll-helpers.ts), ./scroll-control.js (superseded by src/scroll/scroll-control.ts), ./scroll/scroll-brain.js (superseded by src/scroll/scroll-brain.ts), ./asr-bridge-speech.js (superseded by src/asr/bridge-speech.ts), ./asr-types.js (superseded by src/asr-types.ts), ./typography-bridge.js (superseded by src/ui/typography-bridge.ts), ./features/typography.js (superseded by src/features/typography.ts), ./settings/typographyStore.js (superseded by src/settings/typographyStore.ts), ./ui/typography-bridge.js (superseded by src/ui/typography-bridge.ts), ./io-anchor.js
+- Legacy artifacts (kept for pre-1.7.x bundles/docs): ./teleprompter_pro.js, ./scroll-helpers.js (superseded by src/scroll/scroll-helpers.ts), ./scroll-control.js (superseded by src/scroll/scroll-control.ts), ./scroll/scroll-brain.js (superseded by src/scroll/scroll-brain.ts), ./asr-bridge-speech.js (superseded by src/asr/bridge-speech.ts), ./asr-types.js (superseded by src/asr-types.ts), ./typography-bridge.js (superseded by src/ui/typography-bridge.ts), ./features/typography.js (superseded by src/features/typography.ts), ./settings/typographyStore.js (superseded by src/settings/typographyStore.ts), ./ui/typography-bridge.js (superseded by src/ui/typography-bridge.ts), ./features/step-scroll.js (superseded by src/features/scroll/step-scroll.ts), ./features/rehearsal.js (superseded by src/features/rehearsal/rehearsal.ts), ./features/rehearsal-bus.js (superseded by src/features/rehearsal/rehearsal-bus.ts), ./features/display-sync.js (superseded by src/features/display-sync.ts), ./io-anchor.js
 - HUD: ./debug-tools.js
 
 ## Flags & Storage
