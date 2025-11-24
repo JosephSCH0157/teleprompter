@@ -76,6 +76,9 @@ export function wireScriptEditor(): void {
   const scriptLoadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
   if (!editor) return;
+  // Avoid duplicate listeners if called more than once.
+  if (scriptLoadBtn && scriptLoadBtn.dataset.tsWired === '1') return;
+  if (scriptLoadBtn) scriptLoadBtn.dataset.tsWired = '1';
 
   const renderScript = getRenderScript();
 
@@ -186,6 +189,22 @@ export function wireScriptEditor(): void {
 // Convenience: expose a global hook for any legacy callers
 try {
   (window as any).__tpWireScriptEditor = wireScriptEditor;
+} catch {
+  /* noop */
+}
+
+// Auto-wire on DOM ready as a safety net (in case boot misses it)
+try {
+  if (typeof document !== 'undefined') {
+    const run = () => {
+      try { wireScriptEditor(); } catch {}
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run, { once: true });
+    } else {
+      run();
+    }
+  }
 } catch {
   /* noop */
 }
