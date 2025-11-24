@@ -186,6 +186,12 @@ var Recognizer = class {
     if (!SR) throw new Error("SpeechRecognition not available");
     try {
       this.recog = new SR();
+      try {
+        if (typeof window !== "undefined") {
+          window.recog = this.recog;
+        }
+      } catch {
+      }
       this.shouldRun = true;
       this.clearRestartTimer();
       this.recog.continuous = true;
@@ -345,7 +351,13 @@ function dispatchTranscript(text, final) {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : void 0;
-    const detail = { text, final, ts: Date.now(), sim };
+    const detail = {
+      text,
+      final,
+      timestamp: Date.now(),
+      sim,
+      source: "orchestrator"
+    };
     try {
       console.log("[ASR] dispatchTranscript", detail);
     } catch {
