@@ -23,6 +23,7 @@ import './scroll/adapter';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
 import { initSpeechNotesHud } from './hud/speech-notes-hud';
+import { initAsrStatsHud } from './hud/asr-stats';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { ensurePageTabs, wirePageTabs } from './ui/page-tabs/wire';
@@ -502,6 +503,11 @@ try {
 		if (!shouldShowHud()) return;
 		if (document.getElementById('tp-speech-notes-hud')) return; // already present
 		initSpeechNotesHud({
+			bus: (window as any).HUD?.bus ?? null,
+			store: appStore,
+			root: document.getElementById('hud-root') || document.body,
+		});
+		initAsrStatsHud({
 			bus: (window as any).HUD?.bus ?? null,
 			store: appStore,
 			root: document.getElementById('hud-root') || document.body,
