@@ -37,33 +37,19 @@ function getRenderScript(): RenderScriptFn {
 }
 
 async function ensureScriptsModule(): Promise<ScriptsApi | null> {
-  // If a store is already on window (loaded via scriptsStore_fixed.js), use it immediately.
-  const win = window as any;
-  if (win.Scripts) {
-    scriptsModule = win.Scripts as ScriptsApi;
-    return scriptsModule;
-  }
-
-  if (scriptsModule) return scriptsModule;
-
-  // Try dynamic import first (legacy helper location)
+  // If a store is already on window (loaded via scriptsStore_fixed.js), use it.
   try {
-    const mod = await import('../scriptsStore_fixed.js');
-    scriptsModule = (mod && (mod.Scripts || mod.default)) as ScriptsApi | null;
-    if (scriptsModule) return scriptsModule;
-  } catch (impErr) {
-    try {
-      console.warn('[script-editor] scriptsStore_fixed import failed', impErr);
-    } catch {
-      /* noop */
+    const win = window as any;
+    if (win.Scripts && typeof win.Scripts.list === 'function') {
+      scriptsModule = win.Scripts as ScriptsApi;
+      return scriptsModule;
     }
+  } catch {
+    /* ignore */
   }
 
-  // Fallback: global Scripts (legacy)
-  if (win.Scripts) {
-    scriptsModule = win.Scripts as ScriptsApi;
-    return scriptsModule;
-  }
+  // No module available
+  if (scriptsModule) return scriptsModule;
 
   return null;
 }
@@ -165,6 +151,7 @@ export function wireScriptEditor(): void {
         }
 
         (window as any)._toast?.('No script available to load', { type: 'warn' });
+        try { console.warn('[script-editor] No script available to load'); } catch { /* noop */ }
       } catch (e) {
         try {
           console.error('[script-editor] Load failed', e);
