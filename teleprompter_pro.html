@@ -536,11 +536,11 @@
 <button id="uploadFileBtn" data-action="upload">Upload file</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
 </div>
-<!-- Scripts row: sidebar select for next-to-load + file ops; folder mapping lives in Settings → General -->
-<div class="row">
-  <label>Scripts
-    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true" data-settings-mirror="scriptSelect"></select>
-  </label>
+<!-- Scripts row: sidebar select for next-to-load + file ops; folder mapping lives in Settings → Recording / Media -->
+  <div class="row">
+    <label>Scripts
+      <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true" data-settings-mirror="scriptSelect"></select>
+    </label>
   <span class="chip sidebar-hint">Manage folder in Settings → General</span>
   <!-- Keep legacy title input hidden for compatibility with tests and legacy save paths -->
   <input id="scriptTitle" type="text" placeholder="Untitled" hidden />
