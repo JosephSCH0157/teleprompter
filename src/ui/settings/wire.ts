@@ -4,20 +4,13 @@ import {
   setMode as setRecorderMode,
   setSelected as setRecorderSelected,
 } from '../../../recorders';
+import type { AppStore } from '../../state/app-store';
 
-function getStore() {
-  try {
-    return (window as any).__tpStore || null;
-  } catch {
-    return null;
-  }
-}
-
-function onStoreReady(cb: (store: any) => void, { delayMs = 50, maxAttempts = 200 } = {}) {
+function onStoreReady(preferred: AppStore | null, cb: (store: AppStore) => void, { delayMs = 50, maxAttempts = 200 } = {}) {
   let attempts = 0;
   const wait = () => {
     try {
-      const s = getStore();
+      const s = preferred || ((window as any).__tpStore as AppStore | null);
       if (s && typeof s.subscribe === 'function' && typeof s.set === 'function') {
         cb(s);
         return;
@@ -29,7 +22,7 @@ function onStoreReady(cb: (store: any) => void, { delayMs = 50, maxAttempts = 20
   wait();
 }
 
-function wireSettingsTabs(root: HTMLElement): void {
+function wireSettingsTabs(root: HTMLElement, store?: AppStore | null): void {
   try {
     const tabButtons = Array.from(
       root.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'),
@@ -50,6 +43,7 @@ function wireSettingsTabs(root: HTMLElement): void {
         const active = panel.dataset.settingsPanel === id;
         panel.hidden = !active;
       });
+      try { store?.set?.('settingsTab', id); } catch {}
     };
 
     tabButtons.forEach((btn) => {
@@ -62,12 +56,15 @@ function wireSettingsTabs(root: HTMLElement): void {
       });
     });
 
-    const initial = tabButtons[0]?.dataset.settingsTab ?? 'general';
+    const fromStore = (() => {
+      try { return (store?.get?.('settingsTab') as string | null) || null; } catch { return null; }
+    })();
+    const initial = fromStore || tabButtons[0]?.dataset.settingsTab ?? 'general';
     setActive(initial);
   } catch {}
 }
 
-async function wireAutoRecord(rootEl: HTMLElement) {
+async function wireAutoRecord(rootEl: HTMLElement, store?: AppStore | null) {
   const chk = rootEl.querySelector('#settingsAutoRecord') as HTMLInputElement | null;
   const nameEl = rootEl.querySelector('#autoRecordFolderName') as HTMLElement | null;
   const pickBtn = rootEl.querySelector('#autoRecordPickBtn') as HTMLButtonElement | null;
@@ -126,7 +123,7 @@ async function pickFolder({ force }: { force?: boolean } = {}) {
   const apply = (on: boolean) => {
     setAutoRecordEnabled(on);
     try {
-      getStore()?.set?.('autoRecord', on);
+      store?.set?.('autoRecord', on);
     } catch {}
   };
 
@@ -148,9 +145,9 @@ async function pickFolder({ force }: { force?: boolean } = {}) {
     });
   }
 
-  onStoreReady((store) => {
-    if (!store || typeof store.subscribe !== 'function') return;
-    store.subscribe('autoRecord', (v: unknown) => {
+  onStoreReady(store || null, (s) => {
+    if (!s || typeof s.subscribe !== 'function') return;
+    s.subscribe('autoRecord', (v: unknown) => {
       try {
         const on = typeof v === 'boolean' ? v : getAutoRecordEnabled();
         if (chk && chk.checked !== !!on) chk.checked = !!on;
@@ -229,9 +226,9 @@ function wireRecorderAdapters(rootEl: HTMLElement) {
   syncFromSettings();
 }
 
-export function wireSettingsDynamic(rootEl: HTMLElement | null) {
+export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore | null) {
   if (!rootEl) return;
-  try { wireSettingsTabs(rootEl); } catch {}
+  try { wireSettingsTabs(rootEl, store); } catch {}
   // attach a minimal mutation observer to demonstrate wiring
   try {
     const obs = new MutationObserver(() => {});
@@ -319,7 +316,7 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null) {
     wireRecorderAdapters(rootEl);
   } catch {}
   try {
-    wireAutoRecord(rootEl);
+    wireAutoRecord(rootEl, store);
   } catch {}
 }
 

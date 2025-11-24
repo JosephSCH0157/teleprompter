@@ -9,7 +9,7 @@ try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 // Global app store (single initializer for __tpStore)
-import './state/app-store';
+import { createAppStore } from './state/app-store';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
 // Early dev console noise filter (benign extension async-response errors)
@@ -20,7 +20,6 @@ import './features/scripts-local';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
-import { getAppStore } from './state/appStore';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
@@ -54,6 +53,9 @@ function isCiSmoke(): boolean {
   }
 }
 
+// Single TS-owned store instance (used across UI + settings)
+const appStore = createAppStore();
+
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
@@ -65,8 +67,8 @@ try {
 
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
-// Settings → ASR wizard wiring (safe to import; guards on element presence)
-import mountSettingsOverlay from './ui/settings';
+// Settings + ASR wizard wiring (safe to import; guards on element presence)
+import wireSettings from './ui/settings';
 import './ui/settings/asrWizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
@@ -639,14 +641,13 @@ export async function boot() {
 						}
 					} catch {}
           // Ensure page tabs strip/panels are hydrated by the TS runtime
-          let pageStore: any = null;
-          try { pageStore = getAppStore(); } catch {}
+          let pageStore: any = appStore;
           try { ensurePageTabs(); } catch {}
           try { wirePageTabs(document, pageStore || undefined); } catch {}
 					// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
-								try { mountSettingsOverlay(); } catch {}
+								try { wireSettings({ store: appStore }); } catch {}
                 if (isCiSmoke()) {
                   try { injectSettingsFolderForSmoke(); } catch {}
                 }
@@ -699,7 +700,7 @@ export async function boot() {
 
 					// Session recording auto-start wiring
 					try {
-						const store = getAppStore();
+						const store = appStore;
 						const recording = createStartOnPlay(store);
 						const startEvents = ['tp:session:start', 'speech:start', 'autoscroll:start'];
 						startEvents.forEach((ev) => {

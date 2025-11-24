@@ -1,12 +1,23 @@
-import { ensureSettingsFolderControls } from './inject-settings-folder';
+import { ensureSettingsFolderControls } from '../inject-settings-folder';
 import { initAsrSettingsUI } from './settings/asrWizard';
 import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './settings/builder';
 import { bindHybridGateSetting } from './settings/hybridGate';
 import { bindTypographyPanel } from './settings/typographyPanel';
 import { wireSettingsDynamic } from './settings/wire';
+import { createAppStore, type AppStore } from '../../state/app-store';
+
+function getStore(store?: AppStore | null): AppStore | null {
+  if (store) return store;
+  try {
+    return (window as any).__tpStore || null;
+  } catch {
+    return null;
+  }
+}
 
 // Core mount function used internally
-export function mountSettings(rootEl: HTMLElement | null) {
+export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | null) {
+  const resolvedStore = getStore(store) || createAppStore();
   try {
     if (!rootEl) return;
     // Clear any leftover legacy/fallback content before rebuilding
@@ -18,7 +29,7 @@ export function mountSettings(rootEl: HTMLElement | null) {
       const html = buildFromBuilder(rootEl) || '';
       if (html) rootEl.innerHTML = html;
     } catch {}
-  try { wireSettingsDynamic(rootEl); } catch {}
+    try { wireSettingsDynamic(rootEl, resolvedStore); } catch {}
     // Bind new typography panels (main + display)
     try { bindTypographyPanel('main'); } catch {}
     try { bindTypographyPanel('display'); } catch {}
@@ -72,8 +83,8 @@ export function mountSettings(rootEl: HTMLElement | null) {
           } catch {}
         } catch {}
       };
-  if (fsS) fsS.addEventListener('input', applyFromSettings);
-  if (lhS) lhS.addEventListener('input', applyFromSettings);
+      if (fsS) fsS.addEventListener('input', applyFromSettings);
+      if (lhS) lhS.addEventListener('input', applyFromSettings);
       // Initial sync
       try {
         const storedFS = (() => { try { return localStorage.getItem('tp_font_size_v1'); } catch { return null; } })();
@@ -84,42 +95,42 @@ export function mountSettings(rootEl: HTMLElement | null) {
       } catch {}
     } catch {}
 
-      // Ensure device selects are populated (keeps new and legacy selects in sync)
-      try {
-        // use the mic API if available, else try a local implementation
-        const micApi = (window as any).__tpMic;
-        if (micApi && typeof micApi.populateDevices === 'function') {
-          try { micApi.populateDevices(); } catch {}
-        } else {
-          // fallback: minimal populate that tolerates legacy/new IDs
-          (async function populateDevicesFallback() {
-            try {
-              if (!navigator.mediaDevices?.enumerateDevices) return;
-              const devs = await navigator.mediaDevices.enumerateDevices();
-              const mics = devs.filter(d => d.kind === 'audioinput');
-              const cams = devs.filter(d => d.kind === 'videoinput');
-              const fill = (id: string, list: MediaDeviceInfo[]) => {
-                try {
-                  const el = (window.$id?.(id) ?? document.getElementById(id)) as HTMLSelectElement | null;
-                  if (!el) return;
-                  const prev = el.value;
-                  el.innerHTML = '';
-                  for (const d of list) {
-                    const opt = document.createElement('option');
-                    opt.value = d.deviceId;
-                    opt.textContent = d.label || (d.kind === 'audioinput' ? 'Microphone' : 'Camera');
-                    el.appendChild(opt);
-                  }
-                  try { if (prev && Array.from(el.options).some(o => o.value === prev)) el.value = prev; } catch {}
-                } catch {}
-              };
-              fill('settingsMicSel', mics);
-              fill('micDeviceSel', mics);
-              fill('settingsCamSel', cams);
-            } catch {}
-          })();
-        }
-      } catch {}
+    // Ensure device selects are populated (keeps new and legacy selects in sync)
+    try {
+      // use the mic API if available, else try a local implementation
+      const micApi = (window as any).__tpMic;
+      if (micApi && typeof micApi.populateDevices === 'function') {
+        try { micApi.populateDevices(); } catch {}
+      } else {
+        // fallback: minimal populate that tolerates legacy/new IDs
+        (async function populateDevicesFallback() {
+          try {
+            if (!navigator.mediaDevices?.enumerateDevices) return;
+            const devs = await navigator.mediaDevices.enumerateDevices();
+            const mics = devs.filter(d => d.kind === 'audioinput');
+            const cams = devs.filter(d => d.kind === 'videoinput');
+            const fill = (id: string, list: MediaDeviceInfo[]) => {
+              try {
+                const el = (window.$id?.(id) ?? document.getElementById(id)) as HTMLSelectElement | null;
+                if (!el) return;
+                const prev = el.value;
+                el.innerHTML = '';
+                for (const d of list) {
+                  const opt = document.createElement('option');
+                  opt.value = d.deviceId;
+                  opt.textContent = d.label || (d.kind === 'audioinput' ? 'Microphone' : 'Camera');
+                  el.appendChild(opt);
+                }
+                try { if (prev && Array.from(el.options).some(o => o.value === prev)) el.value = prev; } catch {}
+              } catch {}
+            };
+            fill('settingsMicSel', mics);
+            fill('micDeviceSel', mics);
+            fill('settingsCamSel', cams);
+          } catch {}
+        })();
+      }
+    } catch {}
 
     // Legacy-ID compatibility: alias legacy IDs used in monolith
     try {
@@ -145,34 +156,43 @@ export function mountSettings(rootEl: HTMLElement | null) {
   } catch {}
 }
 
-// Public API requested by the migration
-export function mountSettingsOverlay(root?: HTMLElement) {
-  const target = root || document.getElementById('settingsBody') || null;
-  mountSettings(target);
+export function wireSettings(options?: { root?: HTMLElement | null; store?: AppStore | null; force?: boolean }) {
+  const store = getStore(options?.store) || createAppStore();
+  const target = options?.root ?? document.getElementById('settingsBody') ?? null;
+  if ((window as any).__tpSettingsBootedByTs && !options?.force) {
+    return { root: target, store };
+  }
+  try { (window as any).__tpSettingsBootedByTs = true; } catch {}
+  mountSettings(target, store);
+  return { root: target, store };
 }
 
-export function openSettings() {
+export function mountSettingsOverlay(root?: HTMLElement, store?: AppStore | null) {
+  const target = root || document.getElementById('settingsBody') || null;
+  mountSettings(target, store);
+}
+
+export function openSettings(store?: AppStore | null) {
   try {
     const overlay = document.getElementById('settingsOverlay');
     const body = document.getElementById('settingsBody');
     if (!overlay || !body) return;
     overlay.classList.remove('hidden');
     overlay.style.display = '';
-    try { mountSettings(body); } catch {}
+    try { mountSettings(body, store); } catch {}
     // focus first tabbable inside overlay
     try { const first = body.querySelector('button, [href], input, select, textarea') as HTMLElement | null; if (first) first.focus(); } catch {}
   } catch {}
 }
 
-export function syncSettingsValues() {
+export function syncSettingsValues(store?: AppStore | null) {
+  const s = getStore(store);
   try {
     // Minimal sync: propagate known state values to UI elements
     try {
-      const S = (window as any).__tp && (window as any).__tp.store ? (window as any).__tp.store : null;
-      // example: mic device
-      const micVal = S && typeof S.get === 'function' ? S.get('micDevice') : null;
+      const micVal = s && typeof s.get === 'function' ? s.get('micDevice') : null;
       const settingsMic = document.getElementById('settingsMicSel') as HTMLSelectElement | null;
-      if (settingsMic && micVal != null) settingsMic.value = micVal;
+      if (settingsMic && micVal != null) settingsMic.value = String(micVal);
     } catch {}
   } catch {}
 }
@@ -184,8 +204,8 @@ try {
   if (typeof (window as any).__tp.settings.mount !== 'function') (window as any).__tp.settings.mount = mountSettingsOverlay;
   // also expose older helper name space
   (window as any).__tpSettings = (window as any).__tpSettings || {};
-  (window as any).__tpSettings.open = (window as any).__tpSettings.open || openSettings;
-  (window as any).__tpSettings.syncValues = (window as any).__tpSettings.syncValues || syncSettingsValues;
+  (window as any).__tpSettings.open = (window as any).__tpSettings.open || (() => openSettings());
+  (window as any).__tpSettings.syncValues = (window as any).__tpSettings.syncValues || (() => syncSettingsValues());
 } catch {}
 
-export default mountSettingsOverlay;
+export default wireSettings;

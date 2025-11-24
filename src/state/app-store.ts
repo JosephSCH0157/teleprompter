@@ -55,15 +55,54 @@ const persistMap: Record<string, string> = {
   rehearsalResumeMs: REH_RESUME_KEY,
 };
 
-type Subscriber = (value: unknown) => void;
-type SubscriptionMap = Record<string, Subscriber[]>;
+type Subscriber<T = unknown> = (value: T) => void;
+type SubscriptionMap = Record<string, Array<Subscriber<any>>>;
+
+export type AppStoreState = {
+  // UI / Settings
+  settingsTab: string;
+  micDevice: string;
+  obsEnabled: boolean;
+  obsScene: string;
+  obsReconnect: boolean;
+  obsHost: string;
+  obsPassword: string;
+  autoRecord: boolean;
+  prerollSeconds: number;
+  devHud: boolean;
+
+  // Scroll router (persisted)
+  scrollMode: string;
+  timedSpeed: number;
+  wpmTarget: number;
+  wpmBasePx: number;
+  wpmMinPx: number;
+  wpmMaxPx: number;
+  wpmEwmaSec: number;
+  hybridAttackMs: number;
+  hybridReleaseMs: number;
+  hybridIdleMs: number;
+  stepPx: number;
+  rehearsalPunct: string;
+  rehearsalResumeMs: number;
+
+  // transient session state (not persisted)
+  obsUrl: string;
+  obsPort: string;
+  obsSecure: boolean;
+
+  // fallthrough for any additional keys
+  [key: string]: unknown;
+};
 
 export interface AppStore {
-  get(key: string): unknown;
-  set(key: string, value: unknown): unknown;
-  subscribe(key: string, fn: Subscriber): () => void;
-  subscribeAll(map: Record<string, Subscriber>): () => void;
-  state?: Record<string, unknown>;
+  __tsOwned: true;
+  get<K extends keyof AppStoreState>(key: K): AppStoreState[K];
+  set<K extends keyof AppStoreState>(key: K, value: AppStoreState[K]): AppStoreState[K];
+  subscribe<K extends keyof AppStoreState>(key: K, fn: Subscriber<AppStoreState[K]>): () => void;
+  subscribeAll(map: Partial<Record<keyof AppStoreState, Subscriber<AppStoreState[keyof AppStoreState]>>>): () => void;
+  state: AppStoreState;
+  getSnapshot(): AppStoreState;
 }
 
 declare global {
@@ -95,278 +134,318 @@ function migrateAutoRecordFlag() {
 
 migrateAutoRecordFlag();
 
-const state: Record<string, unknown> = {
-  // UI / Settings
-  settingsTab: (() => {
-    try {
-      return localStorage.getItem(SETTINGS_TAB_KEY) || 'general';
-    } catch {
-      return 'general';
-    }
-  })(),
-  micDevice: (() => {
-    try {
-      return localStorage.getItem(DEVICE_KEY) || '';
-    } catch {
-      return '';
-    }
-  })(),
-  obsEnabled: (() => {
-    try {
-      return localStorage.getItem(OBS_ENABLED_KEY) === '1';
-    } catch {
-      return false;
-    }
-  })(),
-  obsScene: (() => {
-    try {
-      return localStorage.getItem(OBS_SCENE_KEY) || '';
-    } catch {
-      return '';
-    }
-  })(),
-  obsReconnect: (() => {
-    try {
-      return localStorage.getItem(OBS_RECONNECT_KEY) === '1';
-    } catch {
-      return false;
-    }
-  })(),
-  autoRecord: (() => {
-    try {
-      return localStorage.getItem(AUTO_RECORD_KEY) === '1';
-    } catch {
-      return false;
-    }
-  })(),
-  prerollSeconds: (() => {
-    try {
-      const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY) || '3', 10);
-      return isFinite(n) ? Math.max(0, Math.min(10, n)) : 3;
-    } catch {
-      return 3;
-    }
-  })(),
-  devHud: (() => {
-    try {
-      return localStorage.getItem(DEV_HUD_KEY) === '1';
-    } catch {
-      return false;
-    }
-  })(),
-  obsHost: (() => {
-    try {
-      return localStorage.getItem(OBS_HOST_KEY) || '';
-    } catch {
-      return '';
-    }
-  })(),
-  obsPassword: (() => {
-    try {
-      return localStorage.getItem(OBS_PASSWORD_KEY) || '';
-    } catch {
-      return '';
-    }
-  })(),
-
-  // Scroll router (persisted)
-  scrollMode: (() => {
-    try {
-      return localStorage.getItem(SCROLL_MODE_KEY) || 'timed';
-    } catch {
-      return 'timed';
-    }
-  })(),
-  timedSpeed: (() => {
-    try {
-      const v = parseFloat(localStorage.getItem(TIMED_SPEED_KEY) || '');
-      return isFinite(v) && v > 0 ? v : 25;
-    } catch {
-      return 25;
-    }
-  })(),
-  wpmTarget: (() => {
-    try {
-      const v = parseInt(localStorage.getItem(WPM_TARGET_KEY) || '');
-      return isFinite(v) && v >= 60 ? v : 180;
-    } catch {
-      return 180;
-    }
-  })(),
-  wpmBasePx: (() => {
-    try {
-      const v = parseFloat(localStorage.getItem(WPM_BASEPX_KEY) || '');
-      return isFinite(v) && v > 0 ? v : 25;
-    } catch {
-      return 25;
-    }
-  })(),
-  wpmMinPx: (() => {
-    try {
-      const v = parseFloat(localStorage.getItem(WPM_MINPX_KEY) || '');
-      return isFinite(v) && v > 0 ? v : 6;
-    } catch {
-      return 6;
-    }
-  })(),
-  wpmMaxPx: (() => {
-    try {
-      const v = parseFloat(localStorage.getItem(WPM_MAXPX_KEY) || '');
-      return isFinite(v) && v > 0 ? v : 200;
-    } catch {
-      return 200;
-    }
-  })(),
-  wpmEwmaSec: (() => {
-    try {
-      const v = parseFloat(localStorage.getItem(WPM_EWMA_KEY) || '');
-      return isFinite(v) && v > 0 ? v : 1.0;
-    } catch {
-      return 1.0;
-    }
-  })(),
-  hybridAttackMs: (() => {
-    try {
-      const v = parseInt(localStorage.getItem(HYB_ATTACK_KEY) || '');
-      return isFinite(v) && v >= 0 ? v : 120;
-    } catch {
-      return 120;
-    }
-  })(),
-  hybridReleaseMs: (() => {
-    try {
-      const v = parseInt(localStorage.getItem(HYB_RELEASE_KEY) || '');
-      return isFinite(v) && v >= 0 ? v : 250;
-    } catch {
-      return 250;
-    }
-  })(),
-  hybridIdleMs: (() => {
-    try {
-      const v = parseInt(localStorage.getItem(HYB_IDLE_KEY) || '');
-      return isFinite(v) && v >= 0 ? v : 1500;
-    } catch {
-      return 1500;
-    }
-  })(),
-  stepPx: (() => {
-    try {
-      const v = parseInt(localStorage.getItem(STEP_PX_KEY) || '');
-      return isFinite(v) && v > 0 ? v : 120;
-    } catch {
-      return 120;
-    }
-  })(),
-  rehearsalPunct: (() => {
-    try {
-      const v = localStorage.getItem(REH_PUNCT_KEY);
-      return v != null && v !== '' ? v : '.,;:?!';
-    } catch {
-      return '.,;:?!';
-    }
-  })(),
-  rehearsalResumeMs: (() => {
-    try {
-      const v = parseInt(localStorage.getItem(REH_RESUME_KEY) || '');
-      return isFinite(v) && v >= 100 ? v : 1000;
-    } catch {
-      return 1000;
-    }
-  })(),
-
-  // transient session state (not persisted)
-  obsUrl: '',
-  obsPort: '',
-  obsSecure: false,
-};
-
-const subs: SubscriptionMap = Object.create(null);
-
-function notify(key: string, value: unknown) {
-  try {
-    const fns = subs[key] || [];
-    for (let i = 0; i < fns.length; i++) {
+function buildInitialState(): AppStoreState {
+  return {
+    // UI / Settings
+    settingsTab: (() => {
       try {
-        fns[i](value);
+        return localStorage.getItem(SETTINGS_TAB_KEY) || 'general';
+      } catch {
+        return 'general';
+      }
+    })(),
+    micDevice: (() => {
+      try {
+        return localStorage.getItem(DEVICE_KEY) || '';
+      } catch {
+        return '';
+      }
+    })(),
+    obsEnabled: (() => {
+      try {
+        return localStorage.getItem(OBS_ENABLED_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    obsScene: (() => {
+      try {
+        return localStorage.getItem(OBS_SCENE_KEY) || '';
+      } catch {
+        return '';
+      }
+    })(),
+    obsReconnect: (() => {
+      try {
+        return localStorage.getItem(OBS_RECONNECT_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    autoRecord: (() => {
+      try {
+        return localStorage.getItem(AUTO_RECORD_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    prerollSeconds: (() => {
+      try {
+        const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY) || '3', 10);
+        return isFinite(n) ? Math.max(0, Math.min(10, n)) : 3;
+      } catch {
+        return 3;
+      }
+    })(),
+    devHud: (() => {
+      try {
+        return localStorage.getItem(DEV_HUD_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    obsHost: (() => {
+      try {
+        return localStorage.getItem(OBS_HOST_KEY) || '';
+      } catch {
+        return '';
+      }
+    })(),
+    obsPassword: (() => {
+      try {
+        return localStorage.getItem(OBS_PASSWORD_KEY) || '';
+      } catch {
+        return '';
+      }
+    })(),
+
+    // Scroll router (persisted)
+    scrollMode: (() => {
+      try {
+        return localStorage.getItem(SCROLL_MODE_KEY) || 'timed';
+      } catch {
+        return 'timed';
+      }
+    })(),
+    timedSpeed: (() => {
+      try {
+        const v = parseFloat(localStorage.getItem(TIMED_SPEED_KEY) || '');
+        return isFinite(v) && v > 0 ? v : 25;
+      } catch {
+        return 25;
+      }
+    })(),
+    wpmTarget: (() => {
+      try {
+        const v = parseInt(localStorage.getItem(WPM_TARGET_KEY) || '');
+        return isFinite(v) && v >= 60 ? v : 180;
+      } catch {
+        return 180;
+      }
+    })(),
+    wpmBasePx: (() => {
+      try {
+        const v = parseFloat(localStorage.getItem(WPM_BASEPX_KEY) || '');
+        return isFinite(v) && v > 0 ? v : 25;
+      } catch {
+        return 25;
+      }
+    })(),
+    wpmMinPx: (() => {
+      try {
+        const v = parseFloat(localStorage.getItem(WPM_MINPX_KEY) || '');
+        return isFinite(v) && v > 0 ? v : 6;
+      } catch {
+        return 6;
+      }
+    })(),
+    wpmMaxPx: (() => {
+      try {
+        const v = parseFloat(localStorage.getItem(WPM_MAXPX_KEY) || '');
+        return isFinite(v) && v > 0 ? v : 200;
+      } catch {
+        return 200;
+      }
+    })(),
+    wpmEwmaSec: (() => {
+      try {
+        const v = parseFloat(localStorage.getItem(WPM_EWMA_KEY) || '');
+        return isFinite(v) && v > 0 ? v : 1.0;
+      } catch {
+        return 1.0;
+      }
+    })(),
+    hybridAttackMs: (() => {
+      try {
+        const v = parseInt(localStorage.getItem(HYB_ATTACK_KEY) || '');
+        return isFinite(v) && v >= 0 ? v : 120;
+      } catch {
+        return 120;
+      }
+    })(),
+    hybridReleaseMs: (() => {
+      try {
+        const v = parseInt(localStorage.getItem(HYB_RELEASE_KEY) || '');
+        return isFinite(v) && v >= 0 ? v : 250;
+      } catch {
+        return 250;
+      }
+    })(),
+    hybridIdleMs: (() => {
+      try {
+        const v = parseInt(localStorage.getItem(HYB_IDLE_KEY) || '');
+        return isFinite(v) && v >= 0 ? v : 1500;
+      } catch {
+        return 1500;
+      }
+    })(),
+    stepPx: (() => {
+      try {
+        const v = parseInt(localStorage.getItem(STEP_PX_KEY) || '');
+        return isFinite(v) && v > 0 ? v : 120;
+      } catch {
+        return 120;
+      }
+    })(),
+    rehearsalPunct: (() => {
+      try {
+        const v = localStorage.getItem(REH_PUNCT_KEY);
+        return v != null && v !== '' ? v : '.,;:?!';
+      } catch {
+        return '.,;:?!';
+      }
+    })(),
+    rehearsalResumeMs: (() => {
+      try {
+        const v = parseInt(localStorage.getItem(REH_RESUME_KEY) || '');
+        return isFinite(v) && v >= 100 ? v : 1000;
+      } catch {
+        return 1000;
+      }
+    })(),
+
+    // transient session state (not persisted)
+    obsUrl: '',
+    obsPort: '',
+    obsSecure: false,
+  };
+}
+
+function ensureExistingState(): Partial<AppStoreState> {
+  try {
+    const existing = (window as any).__tpStore;
+    if (!existing || typeof existing !== 'object') return {};
+    const snapshot =
+      typeof existing.getSnapshot === 'function'
+        ? existing.getSnapshot()
+        : (existing.state as Partial<AppStoreState> | undefined);
+    if (snapshot && typeof snapshot === 'object') return snapshot;
+  } catch {}
+  return {};
+}
+
+export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
+  const subs: SubscriptionMap = Object.create(null);
+  const baseState = buildInitialState();
+  const state: AppStoreState = Object.assign(
+    {},
+    baseState,
+    ensureExistingState(),
+    initial || {},
+  );
+
+  function notify(key: keyof AppStoreState, value: AppStoreState[typeof key]) {
+    try {
+      const fns = subs[key] || [];
+      for (let i = 0; i < fns.length; i++) {
+        try {
+          fns[i](value);
+        } catch {}
+      }
+    } catch {}
+  }
+
+  function get<K extends keyof AppStoreState>(key: K): AppStoreState[K] {
+    try {
+      return state[key];
+    } catch {
+      return undefined as AppStoreState[K];
+    }
+  }
+
+  function set<K extends keyof AppStoreState>(key: K, value: AppStoreState[K]): AppStoreState[K] {
+    try {
+      const prev = state[key];
+      if (prev === value) return value;
+      state[key] = value;
+      try {
+        const storageKey = persistMap[key];
+        if (storageKey) {
+          if (typeof value === 'boolean') {
+            localStorage.setItem(storageKey, value ? '1' : '0');
+          } else if (value === null || typeof value === 'undefined') {
+            localStorage.removeItem(storageKey);
+          } else {
+            localStorage.setItem(storageKey, String(value));
+          }
+          if (key === 'autoRecord') {
+            try {
+              localStorage.removeItem(LEGACY_AUTO_RECORD_KEY);
+            } catch {}
+          }
+        }
       } catch {}
+      notify(key, value);
+      return value;
+    } catch {
+      return value;
     }
-  } catch {}
-}
-
-function get(key: string): unknown {
-  try {
-    return state[key];
-  } catch {
-    return undefined;
   }
-}
 
-function set(key: string, value: unknown): unknown {
-  try {
-    const prev = state[key];
-    // simple equality guard
-    if (prev === value) return value;
-    state[key] = value;
-    // persist if mapped
+  function subscribe<K extends keyof AppStoreState>(
+    key: K,
+    fn: Subscriber<AppStoreState[K]>,
+  ): () => void {
+    if (typeof fn !== 'function') return () => {};
+    subs[key] = subs[key] || [];
+    subs[key].push(fn);
     try {
-      const storageKey = persistMap[key];
-      if (storageKey) {
-        if (typeof value === 'boolean') {
-          localStorage.setItem(storageKey, value ? '1' : '0');
-        } else if (value === null || typeof value === 'undefined') {
-          localStorage.removeItem(storageKey);
-        } else {
-          localStorage.setItem(storageKey, String(value));
-        }
-        if (key === 'autoRecord') {
-          try {
-            localStorage.removeItem(LEGACY_AUTO_RECORD_KEY);
-          } catch {}
+      fn(state[key]);
+    } catch {}
+    return function unsubscribe() {
+      try {
+        subs[key] = (subs[key] || []).filter((x) => x !== fn);
+      } catch {}
+    };
+  }
+
+  function subscribeAll(
+    map: Partial<Record<keyof AppStoreState, Subscriber<AppStoreState[keyof AppStoreState]>>>,
+  ): () => void {
+    const unsubs: Array<() => void> = [];
+    try {
+      for (const k in map) {
+        if (Object.prototype.hasOwnProperty.call(map, k)) {
+          const key = k as keyof AppStoreState;
+          const fn = map[key];
+          if (fn) unsubs.push(subscribe(key, fn as any));
         }
       }
     } catch {}
-    notify(key, value);
-    return value;
-  } catch {
-    return undefined;
+    return function unsubscribeAll() {
+      unsubs.forEach((u) => u && u());
+    };
   }
-}
 
-function subscribe(key: string, fn: Subscriber): () => void {
-  if (typeof fn !== 'function') return () => {};
-  subs[key] = subs[key] || [];
-  subs[key].push(fn);
-  // immediately call with current value
-  try {
-    fn(state[key]);
-  } catch {}
-  return function unsubscribe() {
-    try {
-      subs[key] = (subs[key] || []).filter((x) => x !== fn);
-    } catch {}
+  const appStore: AppStore = {
+    __tsOwned: true,
+    get,
+    set,
+    subscribe,
+    subscribeAll,
+    state,
+    getSnapshot: () => ({ ...state }),
   };
-}
 
-// Small convenience: subscribe to many keys at once
-function subscribeAll(map: Record<string, Subscriber>): () => void {
-  const unsubs: Array<() => void> = [];
   try {
-    for (const k in map) {
-      if (Object.prototype.hasOwnProperty.call(map, k)) {
-        unsubs.push(subscribe(k, map[k]));
-      }
+    if (!((window as any).__tpStore && (window as any).__tpStore.__tsOwned)) {
+      (window as any).__tpStore = appStore;
     }
   } catch {}
-  return function unsubscribeAll() {
-    unsubs.forEach((u) => u && u());
-  };
+
+  return appStore;
 }
 
-const appStore: AppStore = { get, set, subscribe, subscribeAll, state };
-
-// Expose global store
-try {
-  window.__tpStore = window.__tpStore || appStore;
-} catch {}
-
-export {};
+// Create and expose a singleton by default so existing imports still work.
+const appStoreSingleton = createAppStore();
+export { appStoreSingleton as appStore };
