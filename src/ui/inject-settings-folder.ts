@@ -19,11 +19,11 @@ export function ensureSettingsFolderControls() {
     if (legacyRow) legacyRow.style.display = 'none';
   } catch {}
 
-  // Card wrapper (Settings overlay uses cards keyed by data-tab). Place under 'general' tab (primary visibility).
+  // Card wrapper (Settings overlay uses cards keyed by data-tab). Place under 'media' tab alongside recording controls.
   const card = document.createElement('div');
   card.className = 'settings-card settings-card--scripts';
   card.id = 'scriptsFolderCard';
-  (card as any).dataset.tab = 'general';
+  (card as any).dataset.tab = 'media';
 
   card.innerHTML = `
     <h4>Scripts Folder</h4>
@@ -38,9 +38,9 @@ export function ensureSettingsFolderControls() {
     </div>
   `;
 
-  // Prefer inserting inside the General tab content container if present
-  const generalContainer = document.querySelector('[data-tab-content="general"]') as HTMLElement | null;
-  if (generalContainer) generalContainer.appendChild(card); else host.appendChild(card);
+  // Prefer inserting inside the Media tab content container if present
+  const mediaContainer = document.querySelector('[data-tab-content="media"]') as HTMLElement | null;
+  if (mediaContainer) mediaContainer.appendChild(card); else host.appendChild(card);
   signalSettingsFolderReady('injected');
 
   // Ensure visibility tracks the active tab, even if injected after initial tab wiring.
