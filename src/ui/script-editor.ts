@@ -128,6 +128,17 @@ export function wireScriptEditor(): void {
           editor.value = rec.content || '';
           applyEditorToViewer();
           try {
+            window.dispatchEvent(
+              new CustomEvent('tp:script-load', {
+                detail: {
+                  name: rec.title || 'Untitled',
+                  text: rec.content || '',
+                  skipNormalize: true,
+                },
+              }),
+            );
+          } catch {}
+          try {
             (window as any)._toast?.('Script loaded', { type: 'ok' });
           } catch {
             /* noop */
@@ -143,6 +154,17 @@ export function wireScriptEditor(): void {
             if (scriptTitle && parsed?.title) scriptTitle.value = parsed.title;
             editor.value = parsed?.content || '';
             applyEditorToViewer();
+            try {
+              window.dispatchEvent(
+                new CustomEvent('tp:script-load', {
+                  detail: {
+                    name: parsed?.title || 'Untitled',
+                    text: parsed?.content || '',
+                    skipNormalize: true,
+                  },
+                }),
+              );
+            } catch {}
             (window as any)._toast?.('Loaded last unsaved script', { type: 'info' });
             return;
           }
