@@ -22,6 +22,7 @@ import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
+import { initSpeechNotesHud } from './hud/speech-notes-hud';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { ensurePageTabs, wirePageTabs } from './ui/page-tabs/wire';
@@ -500,11 +501,11 @@ try {
 	try {
 		if (!shouldShowHud()) return;
 		if (document.getElementById('tp-speech-notes-hud')) return; // already present
-		const s = document.createElement('script');
-		const devLike = isDevHudSession();
-		s.src = devLike ? './src/hud/speech-notes-hud.js' : './hud/speech-notes-hud.js';
-		s.async = true; // non-blocking
-		document.head.appendChild(s);
+		initSpeechNotesHud({
+			bus: (window as any).HUD?.bus ?? null,
+			store: appStore,
+			root: document.getElementById('hud-root') || document.body,
+		});
 	} catch {}
 }
 window.addEventListener('hud:ready', () => { injectSpeechNotesHud(); }, { once: true });
