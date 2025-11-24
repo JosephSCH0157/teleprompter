@@ -3,16 +3,19 @@
 
 type RenderScriptFn = (text: string) => void;
 
-type ScriptsModule = {
-  Scripts: {
-    init?: () => void;
-    list?: () => Array<{ id: string; title: string; updated: string }>;
-    get?: (id: string) => { id: string; title: string; content: string } | null;
-    save?: (data: { id?: string | null; title: string; content: string }) => string;
-  };
+type ScriptMeta = { id: string; title: string; updated: string };
+type ScriptRecord = { id: string; title: string; content: string; updated: string; created?: string };
+
+type ScriptsApi = {
+  init?: () => void;
+  list?: () => ScriptMeta[];
+  get?: (id: string) => ScriptRecord | null;
+  save?: (data: { id?: string | null; title: string; content: string }) => string;
+  rename?: (id: string, title: string) => void;
+  remove?: (id: string) => void;
 };
 
-let scriptsModule: ScriptsModule | null = null;
+let scriptsModule: ScriptsApi | null = null;
 
 function getRenderScript(): RenderScriptFn {
   const fn = (window as any).renderScript as RenderScriptFn | undefined;
@@ -24,7 +27,7 @@ function getRenderScript(): RenderScriptFn {
     if (!scriptEl) return;
     const lines = String(text || '').split(/\n+/).filter(Boolean);
     if (!lines.length) {
-      scriptEl.innerHTML = '<p><em>Paste text in the editor to begin…</em></p>';
+      scriptEl.innerHTML = '<p><em>Paste text in the editor to begin...</em></p>';
       return;
     }
     scriptEl.innerHTML = lines
@@ -33,12 +36,19 @@ function getRenderScript(): RenderScriptFn {
   };
 }
 
-async function ensureScriptsModule(): Promise<ScriptsModule | null> {
+async function ensureScriptsModule(): Promise<ScriptsApi | null> {
+  // If a store is already on window (loaded via scriptsStore_fixed.js), use it immediately.
+  const win = window as any;
+  if (win.Scripts) {
+    scriptsModule = win.Scripts as ScriptsApi;
+    return scriptsModule;
+  }
+
   if (scriptsModule) return scriptsModule;
 
   // Try dynamic import first (legacy helper location)
   try {
-    scriptsModule = (await import('../scriptsStore_fixed.js')) as unknown as ScriptsModule;
+    scriptsModule = (await import('../scriptsStore_fixed.js')) as unknown as ScriptsApi;
     return scriptsModule;
   } catch (impErr) {
     try {
@@ -49,9 +59,8 @@ async function ensureScriptsModule(): Promise<ScriptsModule | null> {
   }
 
   // Fallback: global Scripts (legacy)
-  const win = window as any;
   if (win.Scripts) {
-    scriptsModule = { Scripts: win.Scripts as ScriptsModule['Scripts'] };
+    scriptsModule = win.Scripts as ScriptsApi;
     return scriptsModule;
   }
 
@@ -60,8 +69,9 @@ async function ensureScriptsModule(): Promise<ScriptsModule | null> {
 
 export function wireScriptEditor(): void {
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
+  const scriptEl = document.getElementById('script') as HTMLDivElement | null;
   const scriptTitle = document.getElementById('scriptTitle') as HTMLInputElement | null;
-  const scriptSlots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
+  const scriptSelect = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
   const scriptLoadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
   if (!editor) return;
@@ -88,19 +98,44 @@ export function wireScriptEditor(): void {
     setTimeout(applyEditorToViewer, 0);
   });
 
+  // Populate dropdown from Scripts store (if present)
+  ensureScriptsModule()
+    .then((mod) => {
+      const S = mod || ((window as any).Scripts as ScriptsApi | undefined);
+      if (!S || !S.list || !scriptSelect) return;
+      try { S.init?.(); } catch {}
+      const entries = S.list() || [];
+      scriptSelect.innerHTML = '';
+      if (!entries.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No saved scripts';
+        opt.disabled = true;
+        opt.selected = true;
+        scriptSelect.appendChild(opt);
+      } else {
+        for (const s of entries) {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.title || 'Untitled';
+          scriptSelect.appendChild(opt);
+        }
+      }
+    })
+    .catch(() => {});
+
   // Load button wiring (uses Scripts module if available, else localStorage fallback)
   if (scriptLoadBtn) {
     scriptLoadBtn.addEventListener('click', async () => {
       try {
-        const mod = await ensureScriptsModule();
+        const mod = (await ensureScriptsModule()) || ((window as any).Scripts as ScriptsApi | null);
+        if (mod && scriptSelect && scriptSelect.value) {
+          const id = scriptSelect.value;
+          const rec = mod.get ? mod.get(id) : null;
+          if (!rec) return;
 
-        if (mod && scriptSlots && scriptSlots.value) {
-          const id = scriptSlots.value;
-          const s = mod.Scripts.get ? mod.Scripts.get(id) : null;
-          if (!s) return;
-
-          if (scriptTitle) scriptTitle.value = s.title || 'Untitled';
-          editor.value = s.content || '';
+          if (scriptTitle) scriptTitle.value = rec.title || 'Untitled';
+          editor.value = rec.content || '';
           applyEditorToViewer();
           try {
             (window as any)._toast?.('Script loaded', { type: 'ok' });
@@ -139,7 +174,6 @@ export function wireScriptEditor(): void {
 
   // Initial render if editor already has content and viewer is empty
   try {
-    const scriptEl = document.getElementById('script');
     if (scriptEl && !scriptEl.innerHTML.trim() && editor.value.trim()) {
       applyEditorToViewer();
     }

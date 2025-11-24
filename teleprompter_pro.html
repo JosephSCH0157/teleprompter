@@ -130,6 +130,9 @@
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
 
+  <!-- Local scripts store: provides window.Scripts and ESM export for TS wiring -->
+  <script type="module" src="scriptsStore_fixed.js"></script>
+
   <!-- Single loader above; no additional booters here. -->
 
   <!-- Module runtime controls the page; legacy direct scripts removed to avoid double wiring -->
