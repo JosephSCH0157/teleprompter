@@ -48,8 +48,9 @@ async function ensureScriptsModule(): Promise<ScriptsApi | null> {
 
   // Try dynamic import first (legacy helper location)
   try {
-    scriptsModule = (await import('../scriptsStore_fixed.js')) as unknown as ScriptsApi;
-    return scriptsModule;
+    const mod = await import('../scriptsStore_fixed.js');
+    scriptsModule = (mod && (mod.Scripts || mod.default)) as ScriptsApi | null;
+    if (scriptsModule) return scriptsModule;
   } catch (impErr) {
     try {
       console.warn('[script-editor] scriptsStore_fixed import failed', impErr);
