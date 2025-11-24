@@ -26,6 +26,7 @@ import './wiring/ui-binds';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { ensurePageTabs, wirePageTabs } from './ui/page-tabs/wire';
+import { wireScriptEditor } from './ui/script-editor';
 
 import { bootstrap } from './boot/boot';
 
@@ -594,10 +595,10 @@ export async function boot() {
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
 
 			// Early: folder card injection + async watcher (before any user opens Settings)
-			try { ensureSettingsFolderControls(); } catch {}
-			try { ensureSettingsFolderControlsAsync(6000); } catch {}
-			// Mock population for CI (after initial injection attempt)
-			__maybePopulateMockFolder();
+          try { ensureSettingsFolderControls(); } catch {}
+          try { ensureSettingsFolderControlsAsync(6000); } catch {}
+          // Mock population for CI (after initial injection attempt)
+          __maybePopulateMockFolder();
 
 			// Attempt OBS bridge claim early (non-blocking)
 			try { initObsBridgeClaim(); } catch {}
@@ -617,9 +618,9 @@ export async function boot() {
 
 			// The following block previously lived inside a DOMContentLoaded listener.
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.
-			const onReady = () => {
-				try {
-					// Load debug tools dynamically in dev only (non-blocking)
+          const onReady = () => {
+            try {
+              // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
 						if (DEV) {
@@ -655,17 +656,19 @@ export async function boot() {
 								// Do not install unconditionally to avoid hijacking clicks in prod.
 								// (Emergency binder removed; canonical binder is idempotent)
 								// Optional console noise filter: activate only when explicitly requested
-								try {
-									const params = new URLSearchParams(location.search || '');
-									if (params.has('muteExt')) {
-										import('./boot/console-noise-filter').then(m => m.installConsoleNoiseFilter?.({ debug: false })).catch(()=>{});
-									}
-								} catch {}
-					// Ensure autoscroll engine init
-					try { Auto.initAutoscrollFeature(); } catch {}
-					// TS scroll router + UI wiring
-					try { initScrollRouter(); } catch {}
-					try { initScrollFeature(); } catch {}
+          try {
+            const params = new URLSearchParams(location.search || '');
+            if (params.has('muteExt')) {
+              import('./boot/console-noise-filter').then(m => m.installConsoleNoiseFilter?.({ debug: false })).catch(()=>{});
+            }
+          } catch {}
+          // Ensure autoscroll engine init
+          try { Auto.initAutoscrollFeature(); } catch {}
+          // TS scroll router + UI wiring
+          try { initScrollRouter(); } catch {}
+          try { initScrollFeature(); } catch {}
+          // Script editor wiring: keep editor textarea in sync with rendered script/viewer
+          try { wireScriptEditor(); } catch {}
 
 					// Initialize features via idempotent wrappers
 					try { startPersistence(); } catch {}
