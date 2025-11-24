@@ -5,6 +5,24 @@
 (function () {
   'use strict';
 
+  // Dev guard: only install HUD when dev mode is enabled
+  var dev = false;
+  try {
+    dev =
+      !!window.__TP_DEV ||
+      (location.search + location.hash).indexOf('dev=1') !== -1 ||
+      (window.localStorage && localStorage.getItem('tp_dev_mode') === '1');
+  } catch (e) {}
+
+  if (!dev) {
+    // Provide safe no-ops so HUD.log calls don't explode
+    try {
+      window.HUD = window.HUD || { log: function () {} };
+      window.__tpInstallHUD = function () {};
+    } catch (e) {}
+    return;
+  }
+
   // Top of file: quiet flag + rate limiter
   window.__TP_QUIET = window.__TP_QUIET ?? false; // set true to silence info/debug
   window.__TP_LOG_MIN_MS = window.__TP_LOG_MIN_MS ?? 250; // throttle info/debug to at most 4/sec
@@ -196,6 +214,54 @@
     } else {
       document.body.appendChild(hud);
     }
+
+    // Make HUD draggable via its header
+    (function makeHudDraggable() {
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+      let startLeft = 0;
+      let startTop = 0;
+
+      head.style.cursor = 'move';
+      hud.style.right = 'auto';
+      hud.style.bottom = 'auto';
+
+      function onPointerDown(ev) {
+        if (ev.button !== undefined && ev.button !== 0) return;
+        dragging = true;
+        const rect = hud.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        startX = ev.clientX;
+        startY = ev.clientY;
+        hud.style.position = 'fixed';
+        hud.style.left = startLeft + 'px';
+        hud.style.top = startTop + 'px';
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
+        try { ev.preventDefault(); } catch (e) {}
+      }
+
+      function onPointerMove(ev) {
+        if (!dragging) return;
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        hud.style.left = startLeft + dx + 'px';
+        hud.style.top = startTop + dy + 'px';
+      }
+
+      function onPointerUp() {
+        if (!dragging) return;
+        dragging = false;
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+      }
+
+      head.addEventListener('pointerdown', onPointerDown);
+    })();
 
     // State
     let paused = false;
