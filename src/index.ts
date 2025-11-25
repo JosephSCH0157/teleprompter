@@ -27,7 +27,7 @@ import { initAsrStatsHud } from './hud/asr-stats';
 import { initRecStatsHud } from './hud/rec-stats';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
-import { ensurePageTabs, wirePageTabs } from './ui/page-tabs/wire';
+import { ensurePageTabs, wirePageTabs } from './ui/page-tabs';
 import { wireScriptEditor } from './ui/script-editor';
 import { initSpeechBridge } from './asr/bridge-speech';
 

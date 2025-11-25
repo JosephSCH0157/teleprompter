@@ -315,17 +315,18 @@
   <!-- ASR chip + button will mount here -->
     <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
-    <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
-    <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
+    <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open" data-page-tab="settings">Settings</button>
+    <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open" data-page-tab="help">Help</button>
   <span id="selfChecksChip" class="chip chip-muted dev-only">
     Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
   </span>
   
 </div>
 <nav class="page-tabs" id="pageTabs">
-  <button class="page-tab is-active" data-page-tab="run" aria-selected="true">Run</button>
-  <button class="page-tab" data-page-tab="scripts" aria-selected="false">Scripts</button>
-  <button class="page-tab" data-page-tab="hud" aria-selected="false">HUD</button>
+  <button class="page-tab is-active" data-page-tab="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
+  <button class="page-tab" data-page-tab="settings" aria-pressed="false" aria-selected="false">Settings</button>
+  <button class="page-tab" data-page-tab="help" aria-pressed="false" aria-selected="false">Help</button>
+  <button class="page-tab" data-page-tab="hud" aria-pressed="false" aria-selected="false">HUD</button>
 </nav>
 <div class="legend" id="legend"></div>
 </div>
@@ -349,7 +350,7 @@
     } catch(e){}
   })();
 </script>
-<div class="app" data-page-panel="run">
+<div class="app page-panel" data-page="scripts">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
 <section class="mode-card" id="scrollModeCard">
@@ -612,7 +613,7 @@
 </div>
 </div>
 <!-- Near the end of <body> -->
-<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help">
+<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help" data-page="help" hidden>
   <div class="sheet">
     <header>
       <h3 id="shortcutsTitle">Shortcuts</h3>
@@ -634,18 +635,13 @@
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
 </div>
-<section class="page-panel" data-page-panel="scripts" hidden>
-  <h2>Scripts</h2>
-  <p>Script library view coming soon.</p>
-</section>
-
-<section class="page-panel" data-page-panel="hud" hidden>
+<section class="page-panel" data-page="hud" hidden>
   <h2>HUD / Diagnostics</h2>
   <p>HUD and advanced diagnostics will live here.</p>
 </section>
 
 <!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
-<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings">
+<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings" data-page="settings" hidden>
   <div class="sheet settings-sheet">
     <header class="sheet-head">
       <h3 id="settingsTitle" class="settings-title">Settings</h3>
