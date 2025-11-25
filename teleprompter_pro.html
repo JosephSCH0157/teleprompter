@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Anvil v1.7.6</title>
-  <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="description" content="Anvil Teleprompter Pro G�� speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
@@ -63,7 +63,7 @@
   </script>
   <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
 
-  <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
+  <!-- Dev flag G�� add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
       try {
@@ -232,7 +232,7 @@
         // OBS Test connection
         if (t.matches && t.matches(selTest)) {
           if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
-          var pill = ensurePill(t); pill.textContent = 'testing…';
+          var pill = ensurePill(t); pill.textContent = 'testingGǪ';
           try {
             var url  = (q('#settingsObsUrl,#obsUrl') && q('#settingsObsUrl,#obsUrl').value && q('#settingsObsUrl,#obsUrl').value.trim()) || 'ws://127.0.0.1:4455';
             var pass = (q('#settingsObsPassword,#obsPassword') && q('#settingsObsPassword,#obsPassword').value) || '';
@@ -270,7 +270,7 @@
         }
         var isOn = btn.dataset.state === 'on';
         var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
-        btn.textContent = isOn ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
+        btn.textContent = isOn ? ('Auto-scroll: On G�� ' + sFmt + ' px/s') : 'Auto-scroll: Off';
         // Stop any previous fallback when toggling or when turning Off via speed buttons
         try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
         window.__autoFallbackTimer = null;
@@ -324,7 +324,7 @@
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
   <span id="selfChecksChip" class="chip chip-muted dev-only">
-    Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
+    Self-checks: <strong id="selfChecksText">6/6 G��</strong> <em>(click)</em>
   </span>
   
 </div>
@@ -397,14 +397,14 @@
 <button id="displayToggleBtn" class="chip" type="button" aria-pressed="false" data-action="display-toggle">Display: Closed</button>
 </div>
 <div class="row">
-<button id="micToggleBtn" class="chip mic-idle" type="button">Request Mic</button>
+<button id="micToggleBtn" class="chip mic-idle" type="button" data-tp-request-mic="sidebar">Request Mic</button>
 <button disabled="" id="recBtn" class="btn-primary btn-start" data-action="start-speech">Start speech sync</button>
 </div>
 <div class="row">
   <label>Auto-scroll (px/s)
     <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
   </label>
-  <button id="autoDec" class="chip" title="–1 (Shift: –5)">–</button>
+  <button id="autoDec" class="chip" title="G��1 (Shift: G��5)">G��</button>
   <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
   <button id="autoToggle">Auto-scroll: Off</button>
 </div>
@@ -412,13 +412,13 @@
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
   </label>
-  <span class="chip" id="wpmPx">≈ — px/s</span>
+  <span class="chip" id="wpmPx">G�� G�� px/s</span>
   
 </div>
 <!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
 <select id="micDeviceSel" class="select-md" hidden></select>
  <div class="row" id="sidebarMediaHint">
-   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings ▶ Recording/Media</span>
+   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings G�� Recording/Media</span>
  </div>
 <!-- Add a visible, labeled OBS toggle in the sidebar for quick access -->
 <div class="row obs-row">
@@ -452,7 +452,7 @@
 <div class="row">
 <label>Pre-roll (sec)
           <input id="preroll" max="10" min="0" step="1" type="number" value="3"/>
-          <span id="recIndicator" class="rec-indicator hidden" title="Recording in progress">● REC</span>
+          <span id="recIndicator" class="rec-indicator hidden" title="Recording in progress">G�� REC</span>
 </label>
 </div>
 <div class="row">
@@ -493,22 +493,22 @@
   <div class="row">
     <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
     <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
-    <button id="wrap-s1">Wrap ➜ S1</button>
+    <button id="wrap-s1">Wrap GP� S1</button>
   </div>
   <div class="row">
     <label>Name <input id="name-s2" type="text" placeholder="Speaker 2"></label>
     <label>Color <input id="color-s2" type="color" value="#facc15"></label>
-    <button id="wrap-s2">Wrap ➜ S2</button>
+    <button id="wrap-s2">Wrap GP� S2</button>
   </div>
   <div class="row">
     <label>Name <input id="name-g1" type="text" placeholder="Guest 1"></label>
     <label>Color <input id="color-g1" type="color" value="#34d399"></label>
-    <button id="wrap-g1">Wrap ➜ G1</button>
+    <button id="wrap-g1">Wrap GP� G1</button>
   </div>
   <div class="row">
     <label>Name <input id="name-g2" type="text" placeholder="Guest 2"></label>
     <label>Color <input id="color-g2" type="color" value="#f472b6"></label>
-    <button id="wrap-g2">Wrap ➜ G2</button>
+    <button id="wrap-g2">Wrap GP� G2</button>
   </div>
 
   <div class="row toolbar">
@@ -516,13 +516,13 @@
     <button id="wrap-italic"><i>I</i></button>
     <button id="wrap-underline"><span class="u">U</span></button>
     <button id="wrap-note">Note</button>
-    <button id="wrap-color">Color…</button>
-    <button id="wrap-bg">BG…</button>
+    <button id="wrap-color">ColorGǪ</button>
+    <button id="wrap-bg">BGGǪ</button>
     <button id="autoTagBtn">Smart Tag</button>
-    <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
+    <span class="chip">(use tags like [s1]GǪ[/s1], [color=#ff0]GǪ[/color])</span>
   </div>
   <div class="row">
-    <button id="speakersKeyBtn" data-action="speakers-key" class="chip">Key…</button>
+    <button id="speakersKeyBtn" data-action="speakers-key" class="chip">KeyGǪ</button>
     <input id="speakersKey" type="text" placeholder="Type a key for speaker toggle" />
   </div>
 </div>
@@ -561,7 +561,7 @@
 </div>
 <p class="status" id="status"></p>
 <h2>Script</h2>
-<textarea id="editor" data-editor placeholder="Use tags: [s1]�[/s1], [s2]�[/s2], [g1]�[/g1], [g2]�[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>`n<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin�</em></p>
+<textarea id="editor" data-editor placeholder="Use tags: [s1]�[/s1], [s2]�[/s2], [g1]�[/g1], [g2]�[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>`n<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin�</em></p>
 <!-- Injected fallback speakers toggle & key buttons (ensure binder selectors always resolve even before JS mutates visibility) -->
 <!-- speakersToggleBtn already present as #toggleSpeakers; provide data-action alias without duplicate id -->
 <button id="speakersToggleBtnAlias" data-action="speakers-toggle" class="hidden" type="button" aria-controls="speakersBody" hidden>Speakers</button>
@@ -627,9 +627,9 @@
 
     <div class="shortcuts-grid">
       <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-      <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed (±1)</div>
-      <div><strong>Shift + ↑ / ↓</strong></div><div>Adjust by ±5</div>
-      <div><strong>Mouse-wheel on speed field</strong></div><div>±1 (Shift: ±5)</div>
+      <div><strong>G�� / G��</strong></div><div>Adjust Auto-scroll speed (-�1)</div>
+      <div><strong>Shift + G�� / G��</strong></div><div>Adjust by -�5</div>
+      <div><strong>Mouse-wheel on speed field</strong></div><div>-�1 (Shift: -�5)</div>
       <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
       <div><strong>Shift + ?</strong></div><div>Open Help</div>
       <div><strong>Ctrl/Cmd + O</strong></div><div>Load selected script from mapped folder</div>
@@ -668,7 +668,7 @@
 
 <!-- Build label -->
 <div id="anvil-build-label">
-  ANVIL build 2025-10-15 00:00 • baseline: mainframe • HUD wired
+  ANVIL build 2025-10-15 00:00 G�� baseline: mainframe G�� HUD wired
 </div>
 
 <!-- HUD mount -->

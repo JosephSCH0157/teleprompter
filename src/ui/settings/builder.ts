@@ -76,7 +76,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </label>
       </div>
       <div class="row">
-        <button id="settingsRequestMicBtn" class="chip">Request mic</button>
+        <button id="settingsRequestMicBtn" class="chip" data-tp-request-mic="settings">Request mic</button>
         <button id="settingsReleaseMicBtn" class="chip">Release mic</button>
         <button id="settingsStartDbBtn" class="chip">Start dB meter</button>
         <button id="settingsStopDbBtn" class="chip">Stop dB meter</button>
