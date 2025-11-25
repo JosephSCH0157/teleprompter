@@ -473,9 +473,7 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
   };
 
   try {
-    if (!((window as any).__tpStore && (window as any).__tpStore.__tsOwned)) {
-      (window as any).__tpStore = appStore;
-    }
+    (window as any).__tpStore = appStore;
     ensurePageTabs(appStore);
   } catch {}
 
