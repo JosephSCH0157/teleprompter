@@ -1,6 +1,8 @@
 // src/ui/inject-settings-folder.ts
 // Ensures the mapped-folder controls exist inside the Settings panel.
 // Creates a compact row with: Choose Folder, Recheck, Scripts <select>, hidden fallback input.
+let hasLoggedMissingMedia = false;
+
 export function ensureSettingsFolderControls() {
   // Host resolution: prefer the Media settings panel; bail if it isn't present yet.
   const settingsBody = document.getElementById('settingsBody') as HTMLElement | null;
@@ -11,7 +13,27 @@ export function ensureSettingsFolderControls() {
 
   if (!mediaPanel) {
     try {
-      console.warn('[settings] Media panel not found; cannot attach Scripts Folder card.');
+      // In CI/smoke runs, the Settings overlay may never open; avoid noisy warnings there.
+      const isCi = (() => { try { return /[?&]ci=1/i.test(location.search || ''); } catch { return false; } })();
+      const isDev = (() => {
+        try {
+          const search = location.search || '';
+          return !!((window as any).__TP_DEV
+            || localStorage.getItem('tp_dev_mode') === '1'
+            || /[?&]dev=1/i.test(search)
+            || /#dev\b/i.test(location.hash || ''));
+        } catch {
+          return false;
+        }
+      })();
+      if (!isCi) {
+        if (isDev && !hasLoggedMissingMedia) {
+          console.warn('[settings] Media panel not found; cannot attach Scripts Folder card.');
+          hasLoggedMissingMedia = true;
+        } else {
+          try { console.debug('[settings] Media panel not found; skipping Scripts Folder card.'); } catch {}
+        }
+      }
     } catch {}
     return false;
   }
