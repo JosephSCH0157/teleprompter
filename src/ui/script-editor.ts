@@ -177,7 +177,9 @@ export function wireScriptEditor(): void {
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const scriptEl = document.getElementById('script') as HTMLDivElement | null;
   const scriptTitle = document.getElementById('scriptTitle') as HTMLInputElement | null;
-  const scriptSelect = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const scriptSelect =
+    (document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null)
+    || (document.getElementById('scriptSlots') as HTMLSelectElement | null);
   const scriptLoadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
   const scriptRefreshBtn = document.getElementById('scriptRefreshBtn') as HTMLButtonElement | null;
 
@@ -185,11 +187,23 @@ export function wireScriptEditor(): void {
   if (editor.dataset.tsScriptWired === '1') return;
   editor.dataset.tsScriptWired = '1';
 
+  const store = (() => {
+    try { return (window as any).__tpStore as { get?: (_k: string) => unknown; set?: (_k: string, _v: unknown) => void } | null; } catch { return null; }
+  })();
+
   const renderScript = getRenderScript();
+
+  let renderTimer: number | null = null;
+  let autosaveTimer: number | null = null;
+
+  const syncStoreText = (text: string) => {
+    try { store?.set?.('scriptText', text); } catch {}
+  };
 
   const applyEditorToViewer = () => {
     try {
       renderScript(editor.value || '');
+      syncStoreText(editor.value || '');
     } catch (e) {
       try {
         console.warn('[script-editor] renderScript failed, using fallback', e);
@@ -205,9 +219,29 @@ export function wireScriptEditor(): void {
     }
   };
 
+  const scheduleRender = () => {
+    if (renderTimer !== null) window.clearTimeout(renderTimer);
+    renderTimer = window.setTimeout(applyEditorToViewer, 120);
+  };
+
+  const scheduleAutosave = () => {
+    if (autosaveTimer !== null) window.clearTimeout(autosaveTimer);
+    autosaveTimer = window.setTimeout(() => {
+      try {
+        localStorage.setItem('tp_last_unsaved_script', JSON.stringify({
+          title: scriptTitle?.value || 'Untitled',
+          content: editor.value || '',
+        }));
+      } catch {
+        /* ignore */
+      }
+    }, 800);
+  };
+
   // Live typing + viewer
   editor.addEventListener('input', () => {
-    applyEditorToViewer();
+    scheduleRender();
+    scheduleAutosave();
     try {
       localStorage.setItem('tp_last_unsaved_script', editor.value || '');
       if (scriptTitle?.value) {
@@ -220,7 +254,7 @@ export function wireScriptEditor(): void {
 
   // Paste + re-render on next tick
   editor.addEventListener('paste', () => {
-    setTimeout(applyEditorToViewer, 0);
+    setTimeout(scheduleRender, 0);
   });
 
   if (scriptSelect) {
@@ -272,6 +306,7 @@ export function wireScriptEditor(): void {
       }
 
       applyEditorToViewer();
+      syncStoreText(editor.value || '');
 
       try {
         localStorage.setItem('tp_last_unsaved_script', editor.value || '');
@@ -286,6 +321,8 @@ export function wireScriptEditor(): void {
 
   // Initial render if editor already has content and viewer is empty
   try {
+    const storedText = (() => { try { return store?.get?.('scriptText') as string | null; } catch { return null; } })();
+    if (storedText && editor.value !== storedText) editor.value = storedText;
     if (scriptEl && !scriptEl.innerHTML.trim() && editor.value.trim()) {
       applyEditorToViewer();
     }
