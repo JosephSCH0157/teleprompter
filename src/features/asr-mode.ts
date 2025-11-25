@@ -65,7 +65,7 @@ export class AsrMode {
 
   async start(): Promise<void> {
     const s = speechStore.get();
-    this.engine = createEngine(s.engine);
+    this.engine = createEngine(s.engine as AsrEngineName);
     bindEngine(this.engine, (e: AsrEvent) => this.onEngineEvent(e));
 
     this.currentIdx = clamp(this.currentIdx, 0, this.getAllLineEls().length - 1);
