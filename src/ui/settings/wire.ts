@@ -38,10 +38,19 @@ function wireSettingsTabs(root: HTMLElement, store?: AppStore | null): void {
         const active = btn.dataset.settingsTab === id;
         btn.classList.toggle('active', active);
         btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        btn.tabIndex = active ? 0 : -1;
       });
       panels.forEach((panel) => {
         const active = panel.dataset.settingsPanel === id;
         panel.hidden = !active;
+        if (active) {
+          panel.classList.add('is-active');
+          panel.removeAttribute('hidden');
+        } else {
+          panel.classList.remove('is-active');
+          panel.setAttribute('hidden', '');
+        }
       });
       try { store?.set?.('settingsTab', id); } catch {}
     };

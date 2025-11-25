@@ -12,29 +12,6 @@ export function ensureSettingsFolderControls() {
     || document.querySelector<HTMLElement>('[data-tab-content="media"]');
 
   if (!mediaPanel) {
-    try {
-      // In CI/smoke runs, the Settings overlay may never open; avoid noisy warnings there.
-      const isCi = (() => { try { return /[?&]ci=1/i.test(location.search || ''); } catch { return false; } })();
-      const isDev = (() => {
-        try {
-          const search = location.search || '';
-          return !!((window as any).__TP_DEV
-            || localStorage.getItem('tp_dev_mode') === '1'
-            || /[?&]dev=1/i.test(search)
-            || /#dev\b/i.test(location.hash || ''));
-        } catch {
-          return false;
-        }
-      })();
-      if (!isCi) {
-        if (isDev && !hasLoggedMissingMedia) {
-          console.warn('[settings] Media panel not found; cannot attach Scripts Folder card.');
-          hasLoggedMissingMedia = true;
-        } else {
-          try { console.debug('[settings] Media panel not found; skipping Scripts Folder card.'); } catch {}
-        }
-      }
-    } catch {}
     return false;
   }
 
