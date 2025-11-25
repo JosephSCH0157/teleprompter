@@ -1,8 +1,6 @@
 // src/ui/inject-settings-folder.ts
 // Ensures the mapped-folder controls exist inside the Settings panel.
 // Creates a compact row with: Choose Folder, Recheck, Scripts <select>, hidden fallback input.
-let hasLoggedMissingMedia = false;
-
 export function ensureSettingsFolderControls() {
   // Host resolution: prefer the Media settings panel; bail if it isn't present yet.
   const settingsBody = document.getElementById('settingsBody') as HTMLElement | null;
