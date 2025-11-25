@@ -120,7 +120,7 @@
     })();
   </script>
 
-  <!-- Third-party: mammoth will be loaded lazily by ui/upload.js when needed -->
+  <!-- Third-party: mammoth will be loaded lazily by TS upload pipeline when needed -->
 
   <!-- (helpers loaded from modules in dev via src/index.js) -->
 
@@ -537,8 +537,8 @@
   </select>
   </label>
 <button id="downloadFile">Download</button>
-<button id="uploadFileBtn" data-action="upload">Upload file</button>
-<input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
+<button id="uploadFileBtn" type="button" data-action="upload" data-tp-script-upload-btn>Upload file</button>
+<input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden data-tp-script-upload-input>
 </div>
 <!-- Scripts row: saved scripts dropdown + file ops; folder mapping lives in Settings -> Media -->
   <div class="row">
@@ -664,7 +664,7 @@
     <div id="settingsBody" class="settings-body"></div>
 </div>
 </div>
-<!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
+  <!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
 
 <!-- Build label -->
 <div id="anvil-build-label">

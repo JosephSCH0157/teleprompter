@@ -1,123 +1,106 @@
-// Typed script upload pipeline: supports .txt and .docx (via Mammoth) and updates editor + render.
+// src/ui/upload.ts
+//
+// Typed script upload helper.
+// - Wires the upload button and file input
+// - Reads text content and pushes it into the store/editor
+// - Exposes window.initScriptUpload for legacy hooks
 
-export type ScriptRenderFn = (text: string) => void;
+import { getAppStore } from '../state/appStore';
+import { showToast } from './toasts';
 
-export interface UploadDeps {
-  editor: HTMLTextAreaElement;
-  renderScript?: ScriptRenderFn;
-  normalize?: () => void | Promise<void>;
-  setStatus?: (msg: string) => void;
+const FILE_INPUT_SELECTOR = '[data-tp-script-upload-input]';
+const BUTTON_SELECTOR = '[data-tp-script-upload-btn]';
+
+async function readTextFile(file: File): Promise<string> {
+  // Plain text for now; can extend to DOCX via Mammoth later.
+  return file.text();
 }
 
-async function ensureMammoth(): Promise<any | null> {
-  if (typeof window === 'undefined') return null;
-  const win = window as any;
-
-  if (win.mammoth) return win.mammoth;
-
+function pushScriptText(text: string): void {
+  const store = getAppStore();
   try {
-    const s = document.createElement('script');
-    s.src = 'https://unpkg.com/mammoth/mammoth.browser.min.js';
-    s.async = true;
-    document.head.appendChild(s);
-
-    await new Promise<void>((resolve, reject) => {
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('mammoth load failed'));
-    });
-
-    return win.mammoth || null;
+    if (store && typeof store.set === 'function') {
+      store.set('scriptText', text);
+    }
   } catch {
-    return null;
+    // ignore store failures; fall back to DOM
   }
-}
-
-async function readFileAsText(file: File): Promise<string> {
-  const lower = (file.name || '').toLowerCase();
-  const isDocx =
-    lower.endsWith('.docx') ||
-    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-  if (!isDocx) {
-    return file.text();
-  }
-
-  const mammoth = await ensureMammoth();
-  if (!mammoth) {
-    throw new Error('mammoth not available');
-  }
-
-  const buf = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buf });
-  const value = String(result?.value || '');
-
-  return value
-    .replace(/\r\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-export async function uploadFromFile(file: File, deps: UploadDeps): Promise<void> {
-  const { editor, renderScript, normalize, setStatus } = deps;
 
   try {
-    const text = await readFileAsText(file);
-
-    // Push into editor
-    editor.value = text;
-
-    // Normalize if available
-    try {
-      await normalize?.();
-    } catch {
-      // ignore
+    const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
+    if (editor) {
+      editor.value = text;
+      try {
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch {
+        // ignore
+      }
     }
-
-    // Render into viewer/display
-    try {
-      renderScript?.(text);
-    } catch {
-      // ignore
-    }
-
-    try {
-      setStatus?.(`Loaded "${file.name}"`);
-    } catch {
-      // ignore
-    }
-  } catch (err) {
-    try {
-      setStatus?.('Upload failed.');
-    } catch {
-      // ignore
-    }
-    try {
-      console.error('[uploadFromFile] failed', err);
-    } catch {
-      // ignore
-    }
+  } catch {
+    // ignore
   }
 }
 
-/**
- * Convenience helper to wire an <input type="file"> and optional button trigger.
- * Does not hard-code element IDs; caller passes real elements.
- */
-export function wireUpload(
-  fileInput: HTMLInputElement,
-  deps: UploadDeps,
-  trigger?: HTMLButtonElement | null,
-): void {
-  const handleFiles = (files: FileList | null) => {
-    if (!files || !files.length) return;
-    void uploadFromFile(files[0], deps);
-  };
+export function initScriptUpload(): void {
+  const input = document.querySelector<HTMLInputElement>(FILE_INPUT_SELECTOR);
+  const btn = document.querySelector<HTMLButtonElement>(BUTTON_SELECTOR);
 
-  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+  if (!input && !btn) return;
 
-  if (trigger) {
-    trigger.addEventListener('click', () => {
-      try { fileInput.click(); } catch {}
+  if (btn && input && !btn.dataset.tpUploadWired) {
+    btn.dataset.tpUploadWired = '1';
+    btn.addEventListener('click', (e) => {
+      try { e.preventDefault(); } catch {}
+      input.click();
     });
   }
+
+  if (input && !input.dataset.tpUploadWired) {
+    input.dataset.tpUploadWired = '1';
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+
+      try {
+        const text = await readTextFile(file);
+        if (!text || !text.trim()) {
+          showToast?.('File contained no readable text.', { type: 'warning' });
+          return;
+        }
+        pushScriptText(text);
+        showToast?.(`Loaded script: ${file.name}`, { type: 'success' });
+      } catch (err) {
+        try { console.error('[upload] failed to load script', err); } catch {}
+        showToast?.('Could not load script.', { type: 'error' });
+      } finally {
+        try { input.value = ''; } catch {}
+      }
+    });
+  }
+}
+
+// Auto-init
+(function autoInit() {
+  try {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        try { initScriptUpload(); } catch (e) { try { console.error('[upload] init failed', e); } catch {} }
+      });
+    } else {
+      try { initScriptUpload(); } catch (e) { try { console.error('[upload] init failed', e); } catch {} }
+    }
+  } catch {
+    // ignore
+  }
+})();
+
+// Optional global for legacy
+declare global {
+  interface Window {
+    initScriptUpload?: () => void;
+  }
+}
+
+if (typeof window !== 'undefined' && !window.initScriptUpload) {
+  window.initScriptUpload = initScriptUpload;
 }

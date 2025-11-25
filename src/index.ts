@@ -375,6 +375,8 @@ import { initObsBridge } from './wiring/obs-bridge';
 import { initObsUI } from './wiring/obs-wiring';
 import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
+import './ui/camera-drag'; // installs camera drag + persistence
+import './ui/upload'; // installs script upload wiring
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers

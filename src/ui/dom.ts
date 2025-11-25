@@ -1,7 +1,6 @@
 // @ts-nocheck
 // Minimal DOM helpers for the UI layer
 
-import { wireUpload as wireUploadInputs } from './upload';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -419,36 +418,6 @@ export function wireLoadSample() {
     });
   } catch {}
 }
-export function wireUpload() {
-  const btn = $('uploadFileBtn') as HTMLButtonElement | null;
-  const inp = $('uploadFile') as HTMLInputElement | null;
-  const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
-  if (!inp || !editor) return;
-  if (inp.dataset.uploadWired === '1') return;
-  inp.dataset.uploadWired = '1';
-
-  const normalize = (() => {
-    const win = window as any;
-    const n1 = win.normalizeToStandard;
-    const n2 = win.fallbackNormalize;
-    if (typeof n1 === 'function') return () => n1();
-    if (typeof n2 === 'function') return () => n2();
-    return undefined;
-  })();
-
-  const renderScript = (() => {
-    const fn = (window as any).renderScript;
-    return typeof fn === 'function' ? (fn as any) : undefined;
-  })();
-
-  const setStatus = (() => {
-    const fn = (window as any).setStatus;
-    return typeof fn === 'function' ? (fn as any) : undefined;
-  })();
-
-  wireUploadInputs(inp, { editor, renderScript, normalize, setStatus }, btn);
-}
-
 // Reset run without clearing content: rewind to top, reset index/state, keep editor text.
 function resetRun() {
   try { window.stopAutoScroll && window.stopAutoScroll(); } catch {}
@@ -919,7 +888,6 @@ export function bindStaticDom() {
   wireDisplayMirror();
     wireMic();
     wireCamera();
-    wireUpload();
     wireScriptControls();
   wireLoadSample();
     installSpeakerIndex();
