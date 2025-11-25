@@ -504,9 +504,10 @@ try {
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 		function shouldShowHud(): boolean {
 	try {
-		const dev = !!((window as any).__TP_DEV || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search) || /#dev\b/.test(location.hash));
-		const prodOpt = localStorage.getItem('tp_hud_prod') === '1';
-		return dev || prodOpt;
+		const snap = typeof appStore.getSnapshot === 'function' ? appStore.getSnapshot() : (appStore as any).state || {};
+		const supported = !!(snap && (snap as any).hudSupported);
+		const enabled = !!(snap && (snap as any).hudEnabledByUser);
+		return supported && enabled;
 	} catch {
 		return false;
 	}
@@ -651,6 +652,10 @@ export async function boot() {
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.
           const onReady = () => {
             try {
+              try {
+                const hasHudRoot = !!document.getElementById('hud-root') || !!document.getElementById('tp-speech-notes-hud');
+                appStore.set?.('hudSupported', hasHudRoot);
+              } catch {}
               // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
