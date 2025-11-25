@@ -27,6 +27,7 @@ const HYB_IDLE_KEY = 'tp_scroll_hybrid_idle_v1';
 const STEP_PX_KEY = 'tp_scroll_step_px_v1';
 const REH_PUNCT_KEY = 'tp_scroll_reh_punct_v1';
 const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
+const PAGE_KEY = 'tp_page_v1';
 
 const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   settingsTab: SETTINGS_TAB_KEY,
@@ -39,6 +40,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   autoRecord: AUTO_RECORD_KEY,
   prerollSeconds: PREROLL_SEC_KEY,
   devHud: DEV_HUD_KEY,
+  page: PAGE_KEY,
   // Scroll router persistence
   scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
@@ -70,6 +72,7 @@ export type AppStoreState = {
   autoRecord: boolean;
   prerollSeconds: number;
   devHud: boolean;
+  page: string;
 
   // Scroll router (persisted)
   scrollMode: string;
@@ -192,6 +195,13 @@ function buildInitialState(): AppStoreState {
         return localStorage.getItem(DEV_HUD_KEY) === '1';
       } catch {
         return false;
+      }
+    })(),
+    page: (() => {
+      try {
+        return localStorage.getItem(PAGE_KEY) || 'scripts';
+      } catch {
+        return 'scripts';
       }
     })(),
     obsHost: (() => {
