@@ -517,34 +517,32 @@ export function wirePresentMode() {
   once('present', () => {
     const btn = $id('presentBtn');
     const exitBtn = $id('presentExitBtn');
-    const root = document.documentElement;
     const KEY = 'tp_present';
 
-    const apply = (on) => {
+    const flipHudPref = (next?: boolean) => {
       try {
-        root.classList.toggle('tp-present', !!on);
-        if (btn) btn.textContent = on ? 'Exit Present' : 'Present Mode';
-        if (exitBtn) {
-          exitBtn.style.display = '';
-          exitBtn.textContent = 'Exit Present (Esc)';
-        }
-        try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}
+        const store = (window as any).__tpStore || null;
+        if (!store || typeof store.getSnapshot !== 'function' || typeof store.set !== 'function') return;
+        const snap = store.getSnapshot() as any;
+        const val = typeof next === 'boolean' ? next : !snap.hudEnabledByUser;
+        store.set('hudEnabledByUser', val);
+        try { localStorage.setItem(KEY, val ? '1' : '0'); } catch {}
       } catch {}
     };
 
     // restore on load
-    try { apply(localStorage.getItem(KEY) === '1'); } catch {}
+    try { flipHudPref(localStorage.getItem(KEY) === '1'); } catch {}
 
   // main toggle
-  on(btn, 'click', () => apply(!root.classList.contains('tp-present')));
+  on(btn, 'click', () => flipHudPref());
 
     // guaranteed escape routes
-    on(exitBtn, 'click', () => apply(false));
+    on(exitBtn, 'click', () => flipHudPref(false));
     on(document, 'keydown', (e) => {
       try {
-        if (e.key === 'Escape' && root.classList.contains('tp-present')) apply(false);
+        if (e.key === 'Escape') flipHudPref(false);
         if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-          apply(!root.classList.contains('tp-present'));
+          flipHudPref();
         }
       } catch {}
     });
