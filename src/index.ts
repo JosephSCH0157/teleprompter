@@ -377,6 +377,7 @@ import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
 import './ui/camera-drag'; // installs camera drag + persistence
 import './ui/upload'; // installs script upload wiring
+import './utils/safe-dom'; // installs window.safeDOM for legacy callers
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
