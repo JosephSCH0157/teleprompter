@@ -672,10 +672,11 @@
 </div>
 
 <!-- HUD mount -->
-<div id="hud-root" data-role="hud-root" data-tp-hud></div>
-
+<div data-tp-hud>
+  <div id="hud-root" data-role="hud-root"></div>
   <!-- Present Mode exit button (visible only in Present Mode) -->
   <button id="presentExitBtn" class="present-exit" type="button" data-tp-toggle-hud>Exit Present (Esc)</button>
+</div>
 
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
 
