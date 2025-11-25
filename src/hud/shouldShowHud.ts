@@ -1,13 +1,6 @@
 import type { AppStoreState } from '../state/app-store';
 
-export function shouldShowHud(state: AppStoreState): boolean {
-  const hudSupported = !!state?.hudSupported;
-  const hudEnabledByUser = !!state?.hudEnabledByUser;
-  const page = state?.page || 'scripts';
-
-  if (!hudSupported) return false;
-  if (!hudEnabledByUser) return false;
-  if (page !== 'scripts') return false;
-
-  return true;
+export function shouldShowHud(_state: AppStoreState): boolean {
+  // TODO: Re-enable HUD once root/ui is fully migrated to TS layout
+  return false;
 }
