@@ -513,42 +513,6 @@ export function wireScriptControls() {
   } catch {}
 }
 
-export function wirePresentMode() {
-  once('present', () => {
-    const btn = $id('presentBtn');
-    const exitBtn = $id('presentExitBtn');
-    const KEY = 'tp_present';
-
-    const flipHudPref = (next?: boolean) => {
-      try {
-        const store = (window as any).__tpStore || null;
-        if (!store || typeof store.getSnapshot !== 'function' || typeof store.set !== 'function') return;
-        const snap = store.getSnapshot() as any;
-        const val = typeof next === 'boolean' ? next : !snap.hudEnabledByUser;
-        store.set('hudEnabledByUser', val);
-        try { localStorage.setItem(KEY, val ? '1' : '0'); } catch {}
-      } catch {}
-    };
-
-    // restore on load
-    try { flipHudPref(localStorage.getItem(KEY) === '1'); } catch {}
-
-  // main toggle
-  on(btn, 'click', () => flipHudPref());
-
-    // guaranteed escape routes
-    on(exitBtn, 'click', () => flipHudPref(false));
-    on(document, 'keydown', (e) => {
-      try {
-        if (e.key === 'Escape') flipHudPref(false);
-        if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-          flipHudPref();
-        }
-      } catch {}
-    });
-  });
-}
-
 function installSpeakerIndex() {
   try {
     const host = $('speakerIndexChip');
@@ -896,7 +860,6 @@ function hydrateUI() {
   IS_HYDRATING = true;
   try {
     wireOverlays();
-    wirePresentMode();
     updateLegend();
     ensureEmptyBanner();
   } finally {

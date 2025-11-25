@@ -1,29 +1,59 @@
 import { getAppStore } from '../state/appStore';
 
-function flipHudEnabled() {
-  const store = getAppStore();
-  if (!store || typeof store.getSnapshot !== 'function' || typeof store.set !== 'function') return;
+function readHudEnabled(store: any): boolean {
   try {
-    const snap = store.getSnapshot() as any;
-    const next = !snap.hudEnabledByUser;
+    if (store && typeof store.getSnapshot === 'function') {
+      const snap = store.getSnapshot() as any;
+      if (snap && typeof snap.hudEnabledByUser === 'boolean') return snap.hudEnabledByUser;
+    }
+    if (store && typeof store.get === 'function') {
+      const val = store.get('hudEnabledByUser');
+      if (typeof val === 'boolean') return val;
+    }
+  } catch {}
+  try { return !!store?.state?.hudEnabledByUser; } catch {}
+  return false;
+}
+
+function toggleHudEnabled() {
+  const store = getAppStore();
+  if (!store || typeof store.set !== 'function') return;
+  try {
+    const next = !readHudEnabled(store);
     store.set('hudEnabledByUser', next);
   } catch {}
 }
 
-export function wireHudToggle(): void {
-  const btn = document.querySelector<HTMLElement>('[data-tp-toggle-hud]');
-  if (btn && !btn.dataset.hudToggleWired) {
+function wireButtons() {
+  const buttons = Array.from(document.querySelectorAll<HTMLElement>('[data-tp-toggle-hud]'));
+  buttons.forEach((btn) => {
+    if (btn.dataset.hudToggleWired === '1') return;
     btn.dataset.hudToggleWired = '1';
-    btn.addEventListener('click', () => flipHudEnabled());
-  }
+    btn.addEventListener('click', (e) => {
+      try { e.preventDefault(); } catch {}
+      toggleHudEnabled();
+    });
+  });
+}
 
-  // Hotkey: tilde/backtick toggles HUD preference
+function wireHotkeys() {
   try {
     document.addEventListener('keydown', (e) => {
-      if (e.key === '`' || e.key === '~') {
-        e.preventDefault();
-        flipHudEnabled();
-      }
+      const key = e.key || '';
+      const lower = key.toLowerCase();
+      const isToggleKey =
+        key === 'Escape' ||
+        key === '`' ||
+        key === '~' ||
+        (e.ctrlKey && lower === 'p');
+      if (!isToggleKey) return;
+      try { e.preventDefault(); } catch {}
+      toggleHudEnabled();
     });
   } catch {}
+}
+
+export function wireHudToggle(): void {
+  wireButtons();
+  wireHotkeys();
 }
