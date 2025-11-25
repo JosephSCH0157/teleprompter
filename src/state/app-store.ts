@@ -473,7 +473,20 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
   };
 
   try {
-    (window as any).__tpStore = appStore;
+    const w = window as any;
+    const existing = w.__tpStore;
+    if (!existing || !existing.__tsOwned) {
+      try {
+        Object.defineProperty(w, '__tpStore', {
+          value: appStore,
+          writable: false,
+          configurable: false,
+          enumerable: true,
+        });
+      } catch {
+        w.__tpStore = appStore;
+      }
+    }
     ensurePageTabs(appStore);
   } catch {}
 
