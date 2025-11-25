@@ -17,6 +17,47 @@ type ScriptsApi = {
 
 let scriptsModule: ScriptsApi | null = null;
 
+function resolveScriptsModule(): ScriptsApi | null {
+  if (scriptsModule) return scriptsModule;
+
+  try {
+    const win = window as any;
+    const S = win.Scripts as ScriptsApi | undefined;
+    if (S && typeof S.list === 'function') {
+      try { S.init?.(); } catch {}
+      scriptsModule = S;
+      return scriptsModule;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+// Keep async signature so existing callers using `await ensureScriptsModule()` still work
+async function ensureScriptsModule(): Promise<ScriptsApi | null> {
+  return resolveScriptsModule();
+}
+
+// --- Scripts dropdown polling state ---
+let scriptsPollTimer: number | null = null;
+let lastScriptsSnapshot: string | null = null;
+
+function snapshotScripts(entries: ScriptMeta[]): string {
+  return JSON.stringify(
+    entries.map((e) => ({
+      id: e.id,
+      title: e.title,
+      updated: e.updated,
+    })),
+  );
+}
+
+type RefreshOptions = {
+  preserveSelection?: boolean;
+  quiet?: boolean;
+};
+
 function getRenderScript(): RenderScriptFn {
   const fn = (window as any).renderScript as RenderScriptFn | undefined;
   if (typeof fn === 'function') return fn;
@@ -36,22 +77,100 @@ function getRenderScript(): RenderScriptFn {
   };
 }
 
-async function ensureScriptsModule(): Promise<ScriptsApi | null> {
-  // If a store is already on window (loaded via scriptsStore_fixed.js), use it.
+async function refreshScriptsDropdown(
+  scriptSelect: HTMLSelectElement,
+  opts: RefreshOptions = {},
+): Promise<void> {
+  const { preserveSelection = true, quiet = false } = opts;
+  const prevSelected = scriptSelect.value;
+
+  let api: ScriptsApi | null = null;
   try {
-    const win = window as any;
-    if (win.Scripts && typeof win.Scripts.list === 'function') {
-      scriptsModule = win.Scripts as ScriptsApi;
-      return scriptsModule;
-    }
+    api = await ensureScriptsModule();
   } catch {
-    /* ignore */
+    api = null;
   }
 
-  // No module available
-  if (scriptsModule) return scriptsModule;
+  if (!api || typeof api.list !== 'function') {
+    scriptSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No Scripts folder found';
+    opt.disabled = true;
+    opt.selected = true;
+    scriptSelect.appendChild(opt);
+    lastScriptsSnapshot = null;
+    if (!quiet) {
+      (window as any)._toast?.('No Scripts folder yet. Map a Scripts folder in Settings -> Media.', {
+        type: 'warn',
+      });
+    }
+    return;
+  }
 
-  return null;
+  let entries: ScriptMeta[] = [];
+  try {
+    entries = api.list?.() || [];
+  } catch (err) {
+    try { console.warn('[script-editor] scripts list failed', err); } catch {}
+    scriptSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Scripts folder unavailable';
+    opt.disabled = true;
+    opt.selected = true;
+    scriptSelect.appendChild(opt);
+    lastScriptsSnapshot = null;
+    if (!quiet) {
+      (window as any)._toast?.(
+        'Scripts folder unavailable. Check the mapped folder in Settings -> Media.',
+        { type: 'error' },
+      );
+    }
+    return;
+  }
+
+  const snapshot = snapshotScripts(entries);
+  if (snapshot === lastScriptsSnapshot && preserveSelection) {
+    return;
+  }
+  lastScriptsSnapshot = snapshot;
+
+  scriptSelect.innerHTML = '';
+
+  if (!entries.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No scripts in folder';
+    opt.disabled = true;
+    opt.selected = true;
+    scriptSelect.appendChild(opt);
+    return;
+  }
+
+  for (const s of entries) {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.title || 'Untitled';
+    scriptSelect.appendChild(opt);
+  }
+
+  if (preserveSelection && prevSelected && scriptSelect.querySelector(`option[value="${prevSelected}"]`)) {
+    scriptSelect.value = prevSelected;
+  } else {
+    scriptSelect.selectedIndex = 0;
+  }
+}
+
+function startScriptsPolling(scriptSelect: HTMLSelectElement): void {
+  if (scriptsPollTimer !== null) {
+    window.clearInterval(scriptsPollTimer);
+    scriptsPollTimer = null;
+  }
+  void refreshScriptsDropdown(scriptSelect, { preserveSelection: false, quiet: false });
+  scriptsPollTimer = window.setInterval(() => {
+    void refreshScriptsDropdown(scriptSelect, { preserveSelection: true, quiet: true });
+  }, 3000);
 }
 
 export function wireScriptEditor(): void {
@@ -60,11 +179,11 @@ export function wireScriptEditor(): void {
   const scriptTitle = document.getElementById('scriptTitle') as HTMLInputElement | null;
   const scriptSelect = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
   const scriptLoadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
+  const scriptRefreshBtn = document.getElementById('scriptRefreshBtn') as HTMLButtonElement | null;
 
   if (!editor) return;
-  // Avoid duplicate listeners if called more than once.
-  if (scriptLoadBtn && scriptLoadBtn.dataset.tsWired === '1') return;
-  if (scriptLoadBtn) scriptLoadBtn.dataset.tsWired = '1';
+  if (editor.dataset.tsScriptWired === '1') return;
+  editor.dataset.tsScriptWired = '1';
 
   const renderScript = getRenderScript();
 
@@ -73,131 +192,95 @@ export function wireScriptEditor(): void {
       renderScript(editor.value || '');
     } catch (e) {
       try {
-        console.error('[script-editor] renderScript failed', e);
+        console.warn('[script-editor] renderScript failed, using fallback', e);
       } catch {
         /* noop */
+      }
+      try {
+        const fallback = getRenderScript();
+        fallback(editor.value || '');
+      } catch {
+        /* ignore */
       }
     }
   };
 
-  const loadFromStore = async (id: string | null | undefined) => {
-    if (!id) return false;
-    const mod = (await ensureScriptsModule()) || ((window as any).Scripts as ScriptsApi | null);
-    if (!mod) return false;
-    const rec = mod.get ? mod.get(id) : null;
-    if (!rec) return false;
-
-    if (scriptTitle) scriptTitle.value = rec.title || 'Untitled';
-    editor.value = rec.content || '';
+  // Live typing + viewer
+  editor.addEventListener('input', () => {
     applyEditorToViewer();
     try {
-      window.dispatchEvent(
-        new CustomEvent('tp:script-load', {
-          detail: {
-            name: rec.title || 'Untitled',
-            text: rec.content || '',
-            skipNormalize: true,
-          },
-        }),
-      );
-    } catch {}
-    try {
-      (window as any)._toast?.('Script loaded', { type: 'ok' });
+      localStorage.setItem('tp_last_unsaved_script', editor.value || '');
+      if (scriptTitle?.value) {
+        localStorage.setItem('tp_last_script_title', scriptTitle.value);
+      }
     } catch {
-      /* noop */
+      /* ignore */
     }
-    return true;
-  };
+  });
 
-  // Live typing → viewer
-  editor.addEventListener('input', applyEditorToViewer);
-
-  // Paste → re-render on next tick
+  // Paste + re-render on next tick
   editor.addEventListener('paste', () => {
     setTimeout(applyEditorToViewer, 0);
   });
 
-  // Populate dropdown from Scripts store (if present)
-  ensureScriptsModule()
-    .then((mod) => {
-      const S = mod || ((window as any).Scripts as ScriptsApi | undefined);
-      if (!S || !S.list || !scriptSelect) return;
-      try { S.init?.(); } catch {}
-      const entries = S.list() || [];
-      scriptSelect.innerHTML = '';
-      if (!entries.length) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = 'No saved scripts';
-        opt.disabled = true;
-        opt.selected = true;
-        scriptSelect.appendChild(opt);
-      } else {
-        for (const s of entries) {
-          const opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.title || 'Untitled';
-          scriptSelect.appendChild(opt);
-        }
-      }
-    })
-    .catch(() => {});
+  if (scriptSelect) {
+    startScriptsPolling(scriptSelect);
+  }
 
-  // Load button wiring (uses Scripts module if available, else localStorage fallback)
-  if (scriptLoadBtn) {
-    scriptLoadBtn.addEventListener('click', async () => {
-      try {
-        if (scriptSelect && scriptSelect.value) {
-          const ok = await loadFromStore(scriptSelect.value);
-          if (ok) return;
-        }
-
-        // Fallback: last-unsaved script from localStorage
-        try {
-          const raw = window.localStorage?.getItem('tp_last_unsaved_script');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (scriptTitle && parsed?.title) scriptTitle.value = parsed.title;
-            editor.value = parsed?.content || '';
-            applyEditorToViewer();
-            try {
-              window.dispatchEvent(
-                new CustomEvent('tp:script-load', {
-                  detail: {
-                    name: parsed?.title || 'Untitled',
-                    text: parsed?.content || '',
-                    skipNormalize: true,
-                  },
-                }),
-              );
-            } catch {}
-            (window as any)._toast?.('Loaded last unsaved script', { type: 'info' });
-            return;
-          }
-        } catch {
-          /* ignore */
-        }
-
-        (window as any)._toast?.('No script available to load', { type: 'warn' });
-        try { console.warn('[script-editor] No script available to load'); } catch { /* noop */ }
-      } catch (e) {
-        try {
-          console.error('[script-editor] Load failed', e);
-        } catch {
-          /* noop */
-        }
-        (window as any)._toast?.('Load failed', { type: 'error' });
-      }
+  if (scriptRefreshBtn && scriptSelect) {
+    scriptRefreshBtn.addEventListener('click', () => {
+      void refreshScriptsDropdown(scriptSelect, { preserveSelection: true, quiet: false });
     });
   }
 
-  // Load immediately when selection changes (if Scripts store is present)
-  if (scriptSelect) {
-    scriptSelect.addEventListener('change', () => {
+  if (scriptLoadBtn && scriptSelect) {
+    scriptLoadBtn.addEventListener('click', async () => {
+      const id = scriptSelect.value;
+      if (!id) {
+        (window as any)._toast?.('No script selected to load', { type: 'warn' });
+        return;
+      }
+
+      const api = await ensureScriptsModule();
+      if (!api || typeof api.get !== 'function') {
+        (window as any)._toast?.(
+          'Scripts folder unavailable. Check the mapped folder in Settings -> Media.',
+          { type: 'error' },
+        );
+        return;
+      }
+
+      let rec: ScriptRecord | null = null;
       try {
-        const id = scriptSelect.value;
-        void loadFromStore(id);
-      } catch {}
+        rec = api.get(id);
+      } catch (err) {
+        try { console.warn('[script-editor] scripts get failed', err); } catch {}
+        rec = null;
+      }
+
+      if (!rec) {
+        (window as any)._toast?.(
+          'Couldn\'t load script. It may have been moved or deleted from the Scripts folder.',
+          { type: 'error' },
+        );
+        return;
+      }
+
+      editor.value = rec.content || '';
+      if (scriptTitle) {
+        scriptTitle.value = rec.title || '';
+      }
+
+      applyEditorToViewer();
+
+      try {
+        localStorage.setItem('tp_last_unsaved_script', editor.value || '');
+        if (scriptTitle?.value) {
+          localStorage.setItem('tp_last_script_title', scriptTitle.value);
+        }
+      } catch {
+        /* ignore */
+      }
     });
   }
 

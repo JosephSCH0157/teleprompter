@@ -537,20 +537,22 @@
 <button id="uploadFileBtn" data-action="upload">Upload file</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
 </div>
-<!-- Scripts row: sidebar select for next-to-load + file ops; folder mapping lives in Settings → Recording / Media -->
+<!-- Scripts row: saved scripts dropdown + file ops; folder mapping lives in Settings -> Media -->
   <div class="row">
-    <label>Scripts
-      <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true" data-settings-mirror="scriptSelect"></select>
+    <label>Saved Scripts
+      <select id="scriptSelectSidebar" class="select-md" aria-label="Saved scripts" aria-busy="true" data-settings-mirror="scriptSelect"></select>
     </label>
-  <span class="chip sidebar-hint">Manage folder in Settings → General</span>
-  <!-- Keep legacy title input hidden for compatibility with tests and legacy save paths -->
-  <input id="scriptTitle" type="text" placeholder="Untitled" hidden />
-  <button id="scriptSaveBtn">Save</button>
-  <button id="scriptSaveAsBtn">Save As</button>
-  <button id="scriptLoadBtn">Load</button>
-  <button id="scriptDeleteBtn">Delete</button>
-  <button id="scriptRenameBtn">Rename</button>
-</div>
+    <button id="scriptRefreshBtn" title="Refresh Scripts list">Refresh</button>
+    <span class="chip sidebar-hint">Manage folder in Settings -> Media</span>
+  </div>
+  <div class="row">
+    <label>Title <input id="scriptTitle" type="text" placeholder="Untitled" /></label>
+    <button id="scriptSaveBtn">Save</button>
+    <button id="scriptSaveAsBtn">Save As</button>
+    <button id="scriptLoadBtn">Load</button>
+    <button id="scriptDeleteBtn">Delete</button>
+    <button id="scriptRenameBtn">Rename</button>
+  </div>
 <div class="row">
 <button id="resetScriptBtn">Reset Script</button>
 </div>
