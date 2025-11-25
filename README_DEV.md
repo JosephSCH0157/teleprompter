@@ -73,3 +73,14 @@ npm run dev
 ```powershell
 npm run smoke
 ```
+## UI runtime (v1.7.x+)
+
+- The teleprompter UI is now **TypeScript-only**.
+- All shipping UI behavior lives under `src/` and is bundled into `dist/index.js`.
+- The old `ui/*.js` helpers (micMenu, upload, toasts, typography-bridge, scripts-ui, normalize, etc.) have been removed.
+- `teleprompter_pro.html` no longer loads any `ui/*.js` scripts; it only bootstraps the TS bundle (plus the legacy `teleprompter_pro.js` as a nomodule fallback).
+- If you need new UI behavior:
+  - Add a module under `src/ui/*` (or `src/features/*` / `src/hud/*`).
+  - Wire it via `import './ui/your-module'` in `src/index.ts`.
+  - Use `data-*` hooks in the HTML instead of inline JS.
+- Any future "lab" or experimental helpers should live under a dedicated directory (e.g. `lab/`), not `ui/`, and must **not** be wired into `teleprompter_pro.html` unless they’re part of the real product.
