@@ -809,19 +809,6 @@ function ensureEmptyBanner() {
   } catch {}
 }
 
-function ensurePasteScriptHint() {
-  try {
-    const scriptEl = document.getElementById('script');
-    if (!scriptEl) return;
-    const text = (scriptEl.textContent || '').trim();
-    const html = (scriptEl.innerHTML || '').trim();
-    if (text && !/paste text in the editor to begin/i.test(text)) return;
-    if (/tp-paste-hint/.test(html)) return;
-    scriptEl.innerHTML = '<p class="tp-paste-hint"><em>Paste text in the editor to begin…</em></p>';
-  } catch {}
-}
-
-ensurePasteScriptHint();
 
 // === Master hydrator: run now and whenever DOM changes ===
 function hydrateUI() {
@@ -895,7 +882,6 @@ export function bindStaticDom() {
     installObsChip();
   initSelfChecksChip();
       // Keep empty script area informative before real content loads
-      ensurePasteScriptHint();
     // Speakers section toggle (show/hide panel body)
     try {
       const btn = document.getElementById('toggleSpeakers');

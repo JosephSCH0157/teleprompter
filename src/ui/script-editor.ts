@@ -200,10 +200,22 @@ export function wireScriptEditor(): void {
     try { store?.set?.('scriptText', text); } catch {}
   };
 
+  const applyPasteHint = (text: string) => {
+    try {
+      const hint = document.querySelector<HTMLElement>('[data-tp-paste-hint]');
+      if (!hint) return;
+      const empty = !text || !text.trim();
+      hint.hidden = !empty;
+    } catch {
+      // ignore
+    }
+  };
+
   const applyEditorToViewer = () => {
     try {
       renderScript(editor.value || '');
       syncStoreText(editor.value || '');
+      applyPasteHint(editor.value || '');
     } catch (e) {
       try {
         console.warn('[script-editor] renderScript failed, using fallback', e);
@@ -326,6 +338,7 @@ export function wireScriptEditor(): void {
     if (scriptEl && !scriptEl.innerHTML.trim() && editor.value.trim()) {
       applyEditorToViewer();
     }
+    applyPasteHint(editor.value || '');
   } catch {
     /* noop */
   }
