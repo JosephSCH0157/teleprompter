@@ -27,6 +27,7 @@ import { initAsrStatsHud } from './hud/asr-stats';
 import { initRecStatsHud } from './hud/rec-stats';
 import { initOverlays } from './ui/overlays';
 import { initHudController } from './hud/controller';
+import { wireHudToggle } from './hud/toggle';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { wireScriptEditor } from './ui/script-editor';
@@ -650,6 +651,8 @@ export async function boot() {
                 appStore.set?.('hudSupported', hasHudRoot);
               } catch {}
           try { initOverlays(); } catch {}
+          try { initHudController(); } catch {}
+          try { wireHudToggle(); } catch {}
           try { initHudController(); } catch {}
           // Load debug tools dynamically in dev only (non-blocking)
 					try {
