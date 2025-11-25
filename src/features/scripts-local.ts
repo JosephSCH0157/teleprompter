@@ -39,16 +39,6 @@ function getText(): string {
   return '';
 }
 
-function setText(text: string): void {
-  const ed = getEditor();
-  if (!ed) return;
-  if ('value' in ed) {
-    (ed as HTMLInputElement).value = text;
-  } else {
-    ed.textContent = text;
-  }
-}
-
 function dispatchLoad(name: string, text: string): void {
   try {
     window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
@@ -76,31 +66,6 @@ function saveScript(name: string | null | undefined): void {
     /* ignore */
   }
   dispatchLoad(title, text);
-}
-
-function loadMostRecent(): void {
-  const list = readList();
-  if (!list.length) return;
-  let title: string | null = null;
-  try {
-    title = localStorage.getItem(TITLE_KEY);
-  } catch {
-    /* ignore */
-  }
-  let entry = title ? list.find((s) => s.title === title) || null : null;
-  if (!entry) {
-    entry = list.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0] || null;
-  }
-  if (!entry) return;
-  setText(entry.text || '');
-  const t = getTitleInput();
-  if (t) t.value = entry.title || '';
-  try {
-    localStorage.setItem(TITLE_KEY, entry.title || '');
-  } catch {
-    /* ignore */
-  }
-  dispatchLoad(entry.title, entry.text);
 }
 
 function deleteCurrent(): void {
@@ -163,7 +128,6 @@ function initScriptsLocal(): void {
       saveScript(nm);
     }
   });
-  wireButton('scriptLoadBtn', () => loadMostRecent());
   wireButton('scriptDeleteBtn', () => deleteCurrent());
   wireButton('scriptRenameBtn', () => renameCurrent());
 }

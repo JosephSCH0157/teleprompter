@@ -25,5 +25,6 @@ export function renderScript(text: string) {
 
   try { (root as any).dataset.lineCount = String(lines.length); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:render:done', { detail: { lineCount: lines.length } })); } catch {}
-  try { (document.scrollingElement as any)?.scrollTo?.(0, 0); } catch {}
+  // Keep script container at the top without yanking the whole page
+  try { (root as any).scrollTop = 0; } catch {}
 }
