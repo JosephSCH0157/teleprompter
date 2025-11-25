@@ -378,6 +378,7 @@ import './ui/typography'; // installs window.applyTypography + wheel zoom handli
 import './ui/camera-drag'; // installs camera drag + persistence
 import './ui/upload'; // installs script upload wiring
 import './utils/safe-dom'; // installs window.safeDOM for legacy callers
+import './ui/step-visibility'; // hides step-only controls unless scrollMode === 'step'
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
