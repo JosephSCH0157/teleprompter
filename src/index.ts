@@ -26,10 +26,12 @@ import { initSpeechNotesHud } from './hud/speech-notes-hud';
 import { initAsrStatsHud } from './hud/asr-stats';
 import { initRecStatsHud } from './hud/rec-stats';
 import { initOverlays } from './ui/overlays';
+import { initHudController } from './hud/controller';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { wireScriptEditor } from './ui/script-editor';
 import { initSpeechBridge } from './asr/bridge-speech';
+import { shouldShowHud } from './hud/shouldShowHud';
 
 import { bootstrap } from './boot/boot';
 
@@ -503,19 +505,9 @@ try {
   } catch {}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
-		function shouldShowHud(): boolean {
-	try {
-		const snap = typeof appStore.getSnapshot === 'function' ? appStore.getSnapshot() : (appStore as any).state || {};
-		const supported = !!(snap && (snap as any).hudSupported);
-		const enabled = !!(snap && (snap as any).hudEnabledByUser);
-		return supported && enabled;
-	} catch {
-		return false;
-	}
-}
 		function injectSpeechNotesHud() {
 	try {
-		if (!shouldShowHud()) return;
+		if (!shouldShowHud(appStore.getSnapshot())) return;
 		if (document.getElementById('tp-speech-notes-hud')) return; // already present
 		initSpeechNotesHud({
 			bus: (window as any).HUD?.bus ?? null,
@@ -658,7 +650,8 @@ export async function boot() {
                 appStore.set?.('hudSupported', hasHudRoot);
               } catch {}
           try { initOverlays(); } catch {}
-              // Load debug tools dynamically in dev only (non-blocking)
+          try { initHudController(); } catch {}
+          // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
 						if (DEV) {
