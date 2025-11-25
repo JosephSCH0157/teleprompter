@@ -319,7 +319,7 @@
 <!-- Right-side controls wrapper (ASR chip mounts here) -->
 <div id="topbarRight" class="inl-1">
   <!-- ASR chip + button will mount here -->
-    <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
+    <button class="chip" id="presentBtn" data-action="present-toggle" data-tp-toggle-hud>Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open" data-page-tab="settings">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open" data-page-tab="help">Help</button>
@@ -329,10 +329,7 @@
   
 </div>
 <nav class="page-tabs" id="pageTabs">
-  <button class="page-tab is-active" data-page-tab="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
-  <button class="page-tab" data-page-tab="settings" aria-pressed="false" aria-selected="false">Settings</button>
-  <button class="page-tab" data-page-tab="help" aria-pressed="false" aria-selected="false">Help</button>
-  <button class="page-tab" data-page-tab="hud" aria-pressed="false" aria-selected="false">HUD</button>
+  <button class="page-tab is-active" data-tp-page="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
 </nav>
 <div class="legend" id="legend"></div>
 </div>
@@ -356,7 +353,7 @@
     } catch(e){}
   })();
 </script>
-<div class="app page-panel" data-page-panel="scripts">
+<div class="app page-panel" data-tp-panel="scripts">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
 <section class="mode-card" id="scrollModeCard">
@@ -643,15 +640,15 @@
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
 </div>
-<section class="page-panel" data-page-panel="settings" hidden>
+<section class="page-panel" data-tp-panel="settings" hidden>
   <h2>Settings</h2>
   <p>Open the Settings overlay to configure media, typography, and recording.</p>
 </section>
-<section class="page-panel" data-page-panel="help" hidden>
+<section class="page-panel" data-tp-panel="help" hidden>
   <h2>Help &amp; Shortcuts</h2>
   <p>Open the Help overlay to view keyboard shortcuts and tips.</p>
 </section>
-<section class="page-panel" data-page-panel="hud" hidden>
+<section class="page-panel" data-tp-panel="hud" hidden>
   <h2>HUD / Diagnostics</h2>
   <p>HUD and advanced diagnostics will live here.</p>
 </section>

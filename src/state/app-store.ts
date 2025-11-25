@@ -1,6 +1,5 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
-import type { PageStore } from '../features/page-tabs';
 import { initPageTabs } from '../features/page-tabs';
 
 const DEVICE_KEY = 'tp_mic_device_v1';
@@ -63,10 +62,11 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   rehearsalResumeMs: REH_RESUME_KEY,
 };
 
-export type PageName = 'scripts' | 'settings' | 'help' | 'hud';
+export type PageName = string;
 
 type Subscriber<T = unknown> = (value: T) => void;
 type SubscriptionMap = Record<string, Array<Subscriber<any>>>;
+type PageStore = AppStore;
 
 export type AppStoreState = {
   // UI / Settings
@@ -158,8 +158,8 @@ function ensurePageTabs(store: PageStore) {
     try {
       // Make sure the global stays attached in case something cleared it.
       try { (window as any).__tpStore = (window as any).__tpStore || store; } catch {}
-      const hasPanels = !!document.querySelector('[data-page-panel]');
-      const hasTabs = !!document.querySelector('[data-page-tab]');
+      const hasPanels = !!document.querySelector('[data-tp-panel]');
+      const hasTabs = !!document.querySelector('[data-tp-page]');
       if (!hasPanels || !hasTabs) return false;
       initPageTabs(store);
       pageTabsWired = true;

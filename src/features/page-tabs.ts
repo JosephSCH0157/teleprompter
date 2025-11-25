@@ -1,79 +1,63 @@
 // Top-level page routing: Scripts / Settings / Help / HUD
 
-import type { AppStore } from '../state/app-store';
+import type { AppStore, PageName } from '../state/app-store';
 
-type PageName = 'scripts' | 'settings' | 'help' | 'hud';
-
-// Minimal shape of the central store we care about
-export interface PageStore {
-  get?(key: string): unknown;
-  set(key: string, value: unknown): void;
-  subscribe(key: string, fn: (value: any) => void): () => void;
-}
-
-const DEFAULT_PAGE: PageName = 'scripts';
-
-function coercePage(v: unknown): PageName {
-  if (v === 'settings' || v === 'help' || v === 'hud' || v === 'scripts') return v;
-  return DEFAULT_PAGE;
-}
+type PageStore = AppStore;
 
 export function initPageTabs(store?: PageStore) {
-  const S = (store || (window as any).__tpStore) as (PageStore | AppStore | undefined);
+  const S = store || ((window as any).__tpStore as AppStore | undefined);
   if (!S) {
     try { console.warn('[page-tabs] __tpStore not ready; skipping init'); } catch {}
     return;
   }
 
-  const tabButtons = Array.from(
-    document.querySelectorAll<HTMLElement>('[data-page-tab]'),
+  const buttons = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-tp-page]'),
   );
   const panels = Array.from(
-    document.querySelectorAll<HTMLElement>('[data-page-panel]'),
+    document.querySelectorAll<HTMLElement>('[data-tp-panel]'),
   );
 
-  if (!tabButtons.length || !panels.length) {
+  if (!buttons.length || !panels.length) {
     try { console.warn('[page-tabs] no page tabs/panels found'); } catch {}
     return;
   }
 
-  function apply(page: PageName) {
-    for (const btn of tabButtons) {
-      const name = coercePage(btn.dataset.pageTab);
-      const active = name === page;
+  const coerce = (v: unknown): PageName => (v === 'settings' || v === 'help' || v === 'hud' || v === 'scripts') ? v : 'scripts';
+
+  const apply = (page: PageName) => {
+    const p = coerce(page);
+    buttons.forEach((btn) => {
+      const name = coerce(btn.dataset.tpPage);
+      const active = name === p;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
-    }
-    for (const panel of panels) {
-      const name = coercePage(panel.dataset.pagePanel);
-      const visible = name === page;
+      btn.tabIndex = active ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      const name = coerce(panel.dataset.tpPanel);
+      const visible = name === p;
       panel.classList.toggle('is-active', visible);
       panel.hidden = !visible;
-    }
-  }
-
-  for (const btn of tabButtons) {
-    const name = coercePage(btn.dataset.pageTab);
-    btn.addEventListener('click', () => {
-      try {
-        S.set('page', name);
-      } catch (e) {
-        try { console.warn('[page-tabs] failed to set page', e); } catch {}
-      }
+      panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
     });
-  }
+  };
 
-  const stored = (S.get && S.get('page')) as PageName | undefined;
-  const initial = coercePage(stored);
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tpPage;
+      if (!target) return;
+      try { S.set('page', target); } catch {}
+    });
+  });
+
+  const stored = (() => { try { return S.get?.('page') as PageName | undefined; } catch { return undefined; } })();
+  const initial = coerce(stored);
   if (!stored) {
     try { S.set('page', initial); } catch {}
   }
   apply(initial);
 
-  try {
-    S.subscribe('page', (value) => {
-      apply(coercePage(value));
-    });
-  } catch {}
+  try { S.subscribe('page', (v: PageName) => apply(coerce(v))); } catch {}
 }
