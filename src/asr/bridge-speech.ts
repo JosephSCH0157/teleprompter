@@ -6,7 +6,12 @@ import { AsrMode } from '../features/asr-mode';
 declare global {
   interface Window {
     __asrBridge?: { start: () => void; stop: () => void };
-    __tpAuto?: { set?: (on: boolean) => void };
+    __tpAuto?: {
+      set?: (on: boolean) => void;
+      setEnabled?: (on: boolean) => void;
+      setMode?: (mode: string) => void;
+      setStepPx?: (px: number) => void;
+    };
   }
 }
 

@@ -368,7 +368,6 @@ const startScroll      = initOnce('scroll',      initScrollFeature);
 const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 const startToasts      = initOnce('toasts',      initToasts);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
-import { shouldShowHud } from './hud/loader';
 // Tiny HUD chip that reflects current scroll mode
 import './features/scroll/mode-chip';
 // Mapped Folder (scripts directory) binder
@@ -492,9 +491,11 @@ try {
   } catch {}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
-		function isDevHudSession(): boolean {
+		function shouldShowHud(): boolean {
 	try {
-		return !!((window as any).__TP_DEV || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search) || /#dev\b/.test(location.hash));
+		const dev = !!((window as any).__TP_DEV || localStorage.getItem('tp_dev_mode') === '1' || /(?:[?&])dev=1/.test(location.search) || /#dev\b/.test(location.hash));
+		const prodOpt = localStorage.getItem('tp_hud_prod') === '1';
+		return dev || prodOpt;
 	} catch {
 		return false;
 	}

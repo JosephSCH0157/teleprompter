@@ -8,8 +8,10 @@ import type { AutoScrollAPI } from './mode-router';
 declare global {
 	interface Window {
 		__tpAuto?: {
+			set?: (on: boolean) => void;
 			setEnabled?: (on: boolean) => void;
-			setMode?: (mode: 'auto' | 'hybrid' | string) => void;
+			setMode?: (mode: string) => void;
+			setStepPx?: (px: number) => void;
 		};
 	}
 }

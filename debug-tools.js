@@ -12,14 +12,14 @@
       !!window.__TP_DEV ||
       (location.search + location.hash).indexOf('dev=1') !== -1 ||
       (window.localStorage && localStorage.getItem('tp_dev_mode') === '1');
-  } catch (e) {}
+  } catch (_e) {}
 
   if (!dev) {
     // Provide safe no-ops so HUD.log calls don't explode
     try {
       window.HUD = window.HUD || { log: function () {} };
       window.__tpInstallHUD = function () {};
-    } catch (e) {}
+    } catch (_e) {}
     return;
   }
 
@@ -241,7 +241,7 @@
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
         window.addEventListener('pointercancel', onPointerUp);
-        try { ev.preventDefault(); } catch (e) {}
+        try { ev.preventDefault(); } catch (_e) {}
       }
 
       function onPointerMove(ev) {

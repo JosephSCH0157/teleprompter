@@ -59,7 +59,7 @@ function wireSettingsTabs(root: HTMLElement, store?: AppStore | null): void {
     const fromStore = (() => {
       try { return (store?.get?.('settingsTab') as string | null) || null; } catch { return null; }
     })();
-    const initial = fromStore || tabButtons[0]?.dataset.settingsTab ?? 'general';
+    const initial = (fromStore ?? tabButtons[0]?.dataset.settingsTab) ?? 'general';
     setActive(initial);
   } catch {}
 }

@@ -7,21 +7,21 @@ function isDevSession() {
     const sp = new URLSearchParams(location.search);
     if (sp.get("dev") === "1") return true;
     if (/#dev\b/i.test(location.hash)) return true;
-  } catch (e) {
+  } catch {
   }
   return false;
 }
 function savingEnabled() {
   try {
     return localStorage.getItem("tp_hud_save") === "1";
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 function prodHudOptIn() {
   try {
     return localStorage.getItem("tp_hud_prod") === "1";
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -32,7 +32,7 @@ function redactPII(s) {
 function inRehearsal() {
   try {
     return !!document.body.classList.contains("mode-rehearsal");
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -51,19 +51,18 @@ function currentMode(store) {
       if (mode != null) return String(mode).toLowerCase();
     }
     if (typeof router === "string") return router.toLowerCase();
-  } catch (e) {
+  } catch {
   }
   return "";
 }
 function micActive(store) {
-  var _a, _b, _c, _d;
   try {
-    return !!((_b = (_a = window.__tpMic) == null ? void 0 : _a.isOpen) == null ? void 0 : _b.call(_a));
-  } catch (e) {
+    return !!window.__tpMic?.isOpen?.();
+  } catch {
   }
   try {
-    return !!((_d = (_c = store || window.__tpStore) == null ? void 0 : _c.get) == null ? void 0 : _d.call(_c, "micEnabled"));
-  } catch (e) {
+    return !!(store || window.__tpStore)?.get?.("micEnabled");
+  } catch {
   }
   return false;
 }
@@ -115,7 +114,7 @@ function initSpeechNotesHud(options = {}) {
   let notes = [];
   try {
     notes = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
-  } catch (e) {
+  } catch {
     notes = [];
   }
   if (!savingEnabled()) notes = [];
@@ -123,7 +122,7 @@ function initSpeechNotesHud(options = {}) {
     if (!savingEnabled()) return;
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(notes));
-    } catch (e) {
+    } catch {
     }
   };
   const render = () => {
@@ -144,7 +143,7 @@ function initSpeechNotesHud(options = {}) {
     listEl.scrollTop = listEl.scrollHeight;
   };
   const addNote = (payload) => {
-    let text = String((payload == null ? void 0 : payload.text) || "").trim();
+    let text = String(payload?.text || "").trim();
     if (!text) return;
     text = redactPII(text);
     const item = { text, final: !!payload.final, ts: Date.now(), sim: payload.sim };
@@ -160,16 +159,13 @@ function initSpeechNotesHud(options = {}) {
     save();
     render();
   };
-  const buildExportBody = (finalsOnly) => notes.filter((n) => finalsOnly ? n.final : true).map((n) => {
-    var _a;
-    return `${new Date(n.ts).toISOString()}	${n.final ? "final" : "interim"}	${(_a = n.sim) != null ? _a : ""}	${redactPII(n.text)}`;
-  }).join("\n");
+  const buildExportBody = (finalsOnly) => notes.filter((n) => finalsOnly ? n.final : true).map((n) => `${new Date(n.ts).toISOString()}	${n.final ? "final" : "interim"}	${n.sim ?? ""}	${redactPII(n.text)}`).join("\n");
   const copyAll = () => {
     const finalsOnly = !!(finalsChk && finalsChk.checked);
     const body = buildExportBody(finalsOnly);
     try {
       navigator.clipboard.writeText(body);
-    } catch (e) {
+    } catch {
     }
   };
   const exportTxt = () => {
@@ -214,16 +210,15 @@ function initSpeechNotesHud(options = {}) {
   if (closeBtn) closeBtn.onclick = () => panel.remove();
   if (finalsChk) finalsChk.onchange = render;
   const onSpeechState = (e) => {
-    const detail = (e == null ? void 0 : e.detail) || {};
+    const detail = e?.detail || {};
     captureOn = !!detail.running;
     updateStatus();
   };
   const onTranscript = (e) => {
-    var _a;
-    const detail = (e == null ? void 0 : e.detail) || {};
+    const detail = e?.detail || {};
     try {
       console.debug("[speech-notes] onTranscript", { text: detail.text, final: !!detail.final });
-    } catch (e2) {
+    } catch {
     }
     if (canCapture()) {
       addNote(detail);
@@ -231,11 +226,11 @@ function initSpeechNotesHud(options = {}) {
       const reason = captureGateReason();
       try {
         console.warn("[speech-notes] blocked", { reason, text: detail.text || "", final: !!detail.final });
-      } catch (e2) {
+      } catch {
       }
       try {
-        (_a = bus == null ? void 0 : bus.log) == null ? void 0 : _a.call(bus, "speech-notes:gate", { reason, text: detail.text || "", final: !!detail.final });
-      } catch (e2) {
+        bus?.log?.("speech-notes:gate", { reason, text: detail.text || "", final: !!detail.final });
+      } catch {
       }
     }
   };
@@ -253,10 +248,10 @@ function initSpeechNotesHud(options = {}) {
     updateStatus();
   };
   try {
-    bus == null ? void 0 : bus.on("speech:toggle", onSpeechToggle);
-    bus == null ? void 0 : bus.on("speech:partial", onPartial);
-    bus == null ? void 0 : bus.on("speech:final", onFinal);
-  } catch (e) {
+    bus?.on("speech:toggle", onSpeechToggle);
+    bus?.on("speech:partial", onPartial);
+    bus?.on("speech:final", onFinal);
+  } catch {
   }
   render();
   updateStatus();
@@ -270,16 +265,15 @@ function initSpeechNotesHud(options = {}) {
     panel.style.display = panel.style.display === "none" ? "" : "none";
   };
   const destroy = () => {
-    var _a, _b, _c;
     hide();
     window.removeEventListener("tp:speech-state", onSpeechState, true);
     window.removeEventListener("tp:scroll:mode", updateStatus, true);
     window.removeEventListener("tp:speech:transcript", onTranscript, true);
     try {
-      (_a = bus == null ? void 0 : bus.off) == null ? void 0 : _a.call(bus, "speech:toggle", onSpeechToggle);
-      (_b = bus == null ? void 0 : bus.off) == null ? void 0 : _b.call(bus, "speech:partial", onPartial);
-      (_c = bus == null ? void 0 : bus.off) == null ? void 0 : _c.call(bus, "speech:final", onFinal);
-    } catch (e) {
+      bus?.off?.("speech:toggle", onSpeechToggle);
+      bus?.off?.("speech:partial", onPartial);
+      bus?.off?.("speech:final", onFinal);
+    } catch {
     }
   };
   try {
@@ -292,14 +286,14 @@ function initSpeechNotesHud(options = {}) {
         micActive: micActive(store),
         rehearsal: inRehearsal(),
         saving: savingEnabled(),
-        statusText: (statusEl == null ? void 0 : statusEl.textContent) || ""
+        statusText: statusEl?.textContent || ""
       }),
       addNote: (text, final = false) => addNote({ text, final }),
       show,
       hide,
       toggle
     };
-  } catch (e) {
+  } catch {
   }
   return { show, hide, toggle, destroy };
 }

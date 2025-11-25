@@ -1,4 +1,4 @@
-import type { AppStore } from '../state/appStore';
+import type { AppStore } from '../state/app-store';
 import { isSessionRecording, startSessionRecording, stopSessionRecording } from './recorderRegistry';
 
 function readStoreBoolean(store: AppStore | null | undefined, key: 'autoRecord' | 'obsEnabled'): boolean {

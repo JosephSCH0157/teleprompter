@@ -1,9 +1,9 @@
 import { ensureSettingsFolderControls } from '../inject-settings-folder';
-import { initAsrSettingsUI } from './settings/asrWizard';
-import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './settings/builder';
-import { bindHybridGateSetting } from './settings/hybridGate';
-import { bindTypographyPanel } from './settings/typographyPanel';
-import { wireSettingsDynamic } from './settings/wire';
+import { initAsrSettingsUI } from './asrWizard';
+import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './builder';
+import { bindHybridGateSetting } from './hybridGate';
+import { bindTypographyPanel } from './typographyPanel';
+import { wireSettingsDynamic } from './wire';
 import { createAppStore, type AppStore } from '../../state/app-store';
 
 function getStore(store?: AppStore | null): AppStore | null {

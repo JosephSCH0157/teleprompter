@@ -28,7 +28,7 @@ const STEP_PX_KEY = 'tp_scroll_step_px_v1';
 const REH_PUNCT_KEY = 'tp_scroll_reh_punct_v1';
 const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
 
-const persistMap: Record<string, string> = {
+const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   settingsTab: SETTINGS_TAB_KEY,
   micDevice: DEVICE_KEY,
   obsEnabled: OBS_ENABLED_KEY,
@@ -346,7 +346,8 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
 
   function notify(key: keyof AppStoreState, value: AppStoreState[typeof key]) {
     try {
-      const fns = subs[key] || [];
+      const k = String(key);
+      const fns = subs[k] || [];
       for (let i = 0; i < fns.length; i++) {
         try {
           fns[i](value);
@@ -397,14 +398,15 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
     fn: Subscriber<AppStoreState[K]>,
   ): () => void {
     if (typeof fn !== 'function') return () => {};
-    subs[key] = subs[key] || [];
-    subs[key].push(fn);
+    const k = String(key);
+    subs[k] = subs[k] || [];
+    subs[k].push(fn);
     try {
       fn(state[key]);
     } catch {}
     return function unsubscribe() {
       try {
-        subs[key] = (subs[key] || []).filter((x) => x !== fn);
+        subs[k] = (subs[k] || []).filter((x: Subscriber<AppStoreState[K]>) => x !== fn);
       } catch {}
     };
   }

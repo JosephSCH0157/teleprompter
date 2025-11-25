@@ -1,5 +1,5 @@
-import type { AppStore } from '../state/appStore';
-import { getAppStore } from '../state/appStore';
+import type { AppStore } from '../state/app-store';
+import { appStore as appStoreSingleton } from '../state/app-store';
 
 function readBool(val: unknown): boolean | undefined {
   return typeof val === 'boolean' ? val : undefined;
@@ -28,7 +28,7 @@ function readStore(store: AppStore | null | undefined): boolean | undefined {
 }
 
 export function wantsAutoRecord(store?: AppStore | null): boolean {
-  const s = store ?? getAppStore();
+  const s = store ?? appStoreSingleton;
   const val = readStore(s);
   return val === true;
 }

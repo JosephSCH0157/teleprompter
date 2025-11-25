@@ -38,15 +38,15 @@ function checkParity() {
   try {
     const ed = document.getElementById('editor');
     const hint = document.getElementById('emptyHint');
-    const banner = document.querySelector('.empty-msg');
-    const scriptHint = document.querySelector('.tp-paste-hint');
+    const banner = document.querySelector<HTMLElement>('.empty-msg');
+    const scriptHint = document.querySelector<HTMLElement>('.tp-paste-hint');
     const ok =
       !!hint ||
       !!banner ||
       !!scriptHint ||
       (!!ed && 'placeholder' in ed && /\bpaste\b/i.test((ed as HTMLTextAreaElement).placeholder || '')) ||
-      (!!banner && /\bpaste\b/i.test(String(banner.textContent || ''))) ||
-      (!!scriptHint && /\bpaste\b/i.test(String(scriptHint.textContent || '')));
+      (!!banner && /\bpaste\b/i.test(String((banner as any)?.textContent || ''))) ||
+      (!!scriptHint && /\bpaste\b/i.test(String((scriptHint as any)?.textContent || '')));
     if (!ok) fails.push('paste-script hint missing');
   } catch {
     /* ignore */
