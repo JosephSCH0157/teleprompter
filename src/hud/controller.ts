@@ -1,3 +1,4 @@
+import type { AppStoreState } from '../state/app-store';
 import { getAppStore } from '../state/appStore';
 import { shouldShowHud } from './shouldShowHud';
 
@@ -10,13 +11,13 @@ export function initHudController(): void {
 
   const apply = () => {
     try {
-      const snap = store.getSnapshot();
+      const snap = store.getSnapshot() as AppStoreState;
       const visible = shouldShowHud(snap);
       try {
         console.log('[HUD-CTRL] apply', {
-          hudEnabledByUser: (snap as any)?.hudEnabledByUser,
-          hudSupported: (snap as any)?.hudSupported,
-          page: (snap as any)?.page,
+          hudEnabledByUser: snap?.hudEnabledByUser,
+          hudSupported: snap?.hudSupported,
+          page: snap?.page,
           visible,
         });
       } catch {}
@@ -26,10 +27,9 @@ export function initHudController(): void {
   };
 
   try {
-    store.subscribeAll({
-      hudSupported: apply,
-      hudEnabledByUser: apply,
-      page: apply,
+    const keys: Array<keyof AppStoreState> = ['page', 'hudSupported', 'hudEnabledByUser'];
+    keys.forEach((key) => {
+      try { store.subscribe(key as any, apply); } catch {}
     });
   } catch {}
 
