@@ -3,6 +3,7 @@ import { getAsrState, setActiveProfile } from '../asr/store';
 
 function openSettingsToAsr(startWizard?: boolean) {
   try {
+    try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
     // Open overlay
     (window as any).__tpSettings?.open?.();
     // Switch to Media tab

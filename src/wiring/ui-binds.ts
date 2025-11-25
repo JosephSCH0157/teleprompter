@@ -113,6 +113,7 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
   // --- Overlay helpers (settings/help) ---
 
   function markOpen(name: 'settings' | 'help'): void {
+    try { (window as any).__tpStore?.set?.('page', name); } catch {}
     try {
       document.body.setAttribute('data-smoke-open', name);
     } catch {

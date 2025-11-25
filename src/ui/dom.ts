@@ -743,10 +743,14 @@ export function wireOverlays() {
       document.addEventListener('click', (e) => {
         try {
           const t = e.target;
-          if (t && t.closest && t.closest('#shortcutsBtn, [data-action="help-open"]')) return open('shortcuts');
+          if (t && t.closest && t.closest('#shortcutsBtn, [data-action="help-open"]')) {
+            try { (window as any).__tpStore?.set?.('page', 'help'); } catch {}
+            return open('shortcuts');
+          }
           if (t && t.closest && t.closest('#settingsBtn, [data-action="settings-open"]')) {
             // Ensure Scripts Folder card injected before/after opening
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+            try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
             open('settings');
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
             return;
