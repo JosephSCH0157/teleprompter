@@ -89,7 +89,7 @@ try {
 import './vendor/mammoth';
 // Settings + ASR wizard wiring (safe to import; guards on element presence)
 import wireSettings from './ui/settings';
-import './ui/settings/asrWizard';
+import './ui/settings/asr-wizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
 import { initHotkeys } from './features/hotkeys';

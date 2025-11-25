@@ -1,5 +1,5 @@
 import { ensureSettingsFolderControls } from '../inject-settings-folder';
-import { initAsrSettingsUI } from './asrWizard';
+import { initAsrSettingsUI } from './asr-wizard';
 import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './builder';
 import { bindHybridGateSetting } from './hybridGate';
 import { bindTypographyPanel } from './typographyPanel';

@@ -1,0 +1,265 @@
+// src/ui/settings/asr-wizard.ts
+import { runCalibration } from '../../asr/calibration';
+import { getAsrState, setActiveProfile, upsertProfile } from '../../asr/store';
+import type { AsrProfile } from '../../asr/schema';
+import { showToast } from '../toasts';
+
+type CalibrationSession = {
+  profile: AsrProfile;
+  preview: (stop?: boolean) => void;
+};
+
+let current: CalibrationSession | null = null;
+
+function $(id: string): HTMLElement | null {
+  return document.getElementById(id);
+}
+
+function toast(msg: string): void {
+  try {
+    showToast(msg);
+  } catch {
+    try {
+      console.log('[ASR]', msg);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+// --- Mic select / device handling ------------------------------------------
+
+async function populateMicSelect(): Promise<void> {
+  try {
+    const sel = $('asrDevice') as HTMLSelectElement | null;
+    if (!sel || !navigator.mediaDevices?.enumerateDevices) return;
+
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const mics = devs.filter((d) => d.kind === 'audioinput');
+
+    sel.innerHTML = '';
+
+    mics.forEach((d, i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId || '';
+      o.textContent = d.label || `Microphone ${i + 1}`;
+      sel.appendChild(o);
+    });
+
+    try {
+      const s = getAsrState();
+      const devId = s.activeProfileId
+        ? s.profiles[s.activeProfileId]?.capture.deviceId
+        : undefined;
+      if (devId) sel.value = devId;
+    } catch {
+      // ignore
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function ensureMicAccess(): Promise<void> {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast('This browser does not support direct microphone access.');
+      return;
+    }
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    toast('Mic access denied. You can still calibrate with generic names.');
+  }
+
+  await populateMicSelect();
+}
+
+// --- Meter + derived values -----------------------------------------------
+
+function mapDbToPct(db: number): number {
+  const clamped = Math.max(-80, Math.min(0, db));
+  return ((clamped + 80) / 80) * 100;
+}
+
+function setMeterMarker(
+  db: number,
+  ton?: number,
+  toff?: number,
+  gate?: boolean,
+): void {
+  const meter = $('asrMeter') as HTMLElement | null;
+  if (!meter) return;
+
+  const pct = mapDbToPct(db);
+  meter.style.setProperty('--asr-level', pct.toFixed(1) + '%');
+  (meter.dataset as any).gate = gate ? '1' : '0';
+
+  if (typeof ton === 'number') {
+    meter.style.setProperty('--asr-ton', mapDbToPct(ton).toFixed(1) + '%');
+  }
+  if (typeof toff === 'number') {
+    meter.style.setProperty('--asr-toff', mapDbToPct(toff).toFixed(1) + '%');
+  }
+}
+
+export function updateMeter(
+  rmsDbfs: number,
+  ton?: number,
+  toff?: number,
+  gate?: boolean,
+): void {
+  setMeterMarker(rmsDbfs, ton, toff, gate);
+
+  const noiseEl = $('asrNoise');
+  const speechEl = $('asrSpeech');
+  const snrEl = $('asrSnr');
+
+  try {
+    if (
+      snrEl &&
+      typeof snrEl.textContent === 'string' &&
+      typeof ton === 'number' &&
+      typeof toff === 'number'
+    ) {
+      const p = current?.profile;
+      if (p) {
+        if (noiseEl)
+          noiseEl.textContent = `${p.cal.noiseRmsDbfs.toFixed(1)} dBFS`;
+        if (speechEl)
+          speechEl.textContent = `${p.cal.speechRmsDbfs.toFixed(1)} dBFS`;
+        if (snrEl) snrEl.textContent = `${p.cal.snrDb.toFixed(1)} dB`;
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function renderDerived(profile: AsrProfile): void {
+  try {
+    const noiseEl = $('asrNoise');
+    const speechEl = $('asrSpeech');
+    const snrEl = $('asrSnr');
+
+    if (noiseEl)
+      noiseEl.textContent = `${profile.cal.noiseRmsDbfs.toFixed(1)} dBFS`;
+    if (speechEl)
+      speechEl.textContent = `${profile.cal.speechRmsDbfs.toFixed(1)} dBFS`;
+    if (snrEl) snrEl.textContent = `${profile.cal.snrDb.toFixed(1)} dB`;
+
+    if (profile.cal.snrDb < 15) {
+      toast('Increase mic gain or move closer. (SNR < 15 dB)');
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// --- Wizard actions --------------------------------------------------------
+
+export async function startAsrWizard(): Promise<void> {
+  try {
+    const deviceSel = $('asrDevice') as HTMLSelectElement | null;
+    const labelInput = $('asrLabel') as HTMLInputElement | null;
+
+    const deviceId = deviceSel?.value || '';
+    const label = labelInput?.value || 'Desk • default';
+
+    const flags = {
+      echoCancellation: !!( $('asrAEC') as HTMLInputElement | null )?.checked,
+      noiseSuppression: !!( $('asrNS') as HTMLInputElement | null )?.checked,
+      autoGainControl: !!( $('asrAGC') as HTMLInputElement | null )?.checked,
+    };
+
+    current = await runCalibration({ deviceId, label, flags });
+    renderDerived(current.profile);
+  } catch (e) {
+    console.warn('[ASR] startAsrWizard failed', e);
+  }
+}
+
+// --- Wiring into the Settings UI ------------------------------------------
+
+function wire(): void {
+  try {
+    const startBtn = $('asrStartBtn');
+    startBtn?.addEventListener('click', () => startAsrWizard());
+
+    $('asrPreviewBtn')?.addEventListener('click', () => current?.preview());
+    $('asrPreviewStop')?.addEventListener('click', () => current?.preview(true));
+
+    $('asrSaveBtn')?.addEventListener('click', () => {
+      try {
+        if (!current) return;
+        upsertProfile(current.profile);
+        setActiveProfile(current.profile.id);
+        toast('ASR profile saved and activated.');
+      } catch {
+        // ignore
+      }
+    });
+
+    const updateFlagsBadge = () => {
+      try {
+        const badge = $('asrFlagsBadge') as HTMLElement | null;
+        if (!badge) return;
+
+        const ns = !!( $('asrNS') as HTMLInputElement | null )?.checked;
+        const ag = !!( $('asrAGC') as HTMLInputElement | null )?.checked;
+
+        if (ns || ag) {
+          badge.style.display = 'inline-block';
+          const parts = [ns && 'NS', ag && 'AGC']
+            .filter(Boolean)
+            .join(' + ');
+          badge.textContent = `Timing may vary: ${parts}`;
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    ['asrNS', 'asrAGC'].forEach((id) => {
+      try {
+        ($(id) as HTMLInputElement | null)?.addEventListener(
+          'change',
+          updateFlagsBadge,
+        );
+      } catch {
+        // ignore
+      }
+    });
+
+    updateFlagsBadge();
+  } catch {
+    // ignore
+  }
+}
+
+export async function initAsrSettingsUI(): Promise<void> {
+  try {
+    await ensureMicAccess();
+
+    try {
+      $('asrAEC')?.removeAttribute('checked');
+    } catch {
+      // ignore
+    }
+    try {
+      $('asrNS')?.removeAttribute('checked');
+    } catch {
+      // ignore
+    }
+    try {
+      $('asrAGC')?.removeAttribute('checked');
+    } catch {
+      // ignore
+    }
+
+    wire();
+  } catch {
+    // ignore
+  }
+}
