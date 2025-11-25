@@ -1,5 +1,7 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
+import type { PageStore } from '../features/page-tabs';
+import { initPageTabs } from '../features/page-tabs';
 
 const DEVICE_KEY = 'tp_mic_device_v1';
 const OBS_ENABLED_KEY = 'tp_obs_enabled';
@@ -57,6 +59,8 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   rehearsalResumeMs: REH_RESUME_KEY,
 };
 
+export type PageName = 'scripts' | 'settings' | 'help' | 'hud';
+
 type Subscriber<T = unknown> = (value: T) => void;
 type SubscriptionMap = Record<string, Array<Subscriber<any>>>;
 
@@ -72,7 +76,7 @@ export type AppStoreState = {
   autoRecord: boolean;
   prerollSeconds: number;
   devHud: boolean;
-  page: string;
+  page: PageName;
 
   // Scroll router (persisted)
   scrollMode: string;
@@ -137,6 +141,24 @@ function migrateAutoRecordFlag() {
 
 migrateAutoRecordFlag();
 
+let pageTabsWired = false;
+function ensurePageTabs(store: PageStore) {
+  if (pageTabsWired) return;
+  const run = () => {
+    if (pageTabsWired) return;
+    try {
+      initPageTabs(store);
+      pageTabsWired = true;
+    } catch {}
+  };
+  if (typeof document === 'undefined') return;
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
+  } else {
+    run();
+  }
+}
+
 function buildInitialState(): AppStoreState {
   return {
     // UI / Settings
@@ -199,7 +221,8 @@ function buildInitialState(): AppStoreState {
     })(),
     page: (() => {
       try {
-        return localStorage.getItem(PAGE_KEY) || 'scripts';
+        const v = localStorage.getItem(PAGE_KEY) || 'scripts';
+        return (v === 'scripts' || v === 'settings' || v === 'help' || v === 'hud') ? v as PageName : 'scripts';
       } catch {
         return 'scripts';
       }
@@ -453,6 +476,7 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
     if (!((window as any).__tpStore && (window as any).__tpStore.__tsOwned)) {
       (window as any).__tpStore = appStore;
     }
+    ensurePageTabs(appStore);
   } catch {}
 
   return appStore;

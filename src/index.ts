@@ -27,7 +27,6 @@ import { initAsrStatsHud } from './hud/asr-stats';
 import { initRecStatsHud } from './hud/rec-stats';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
-import { initPageTabs } from './features/page-tabs';
 import { wireScriptEditor } from './ui/script-editor';
 import { initSpeechBridge } from './asr/bridge-speech';
 
@@ -654,8 +653,6 @@ export async function boot() {
 							}, 0);
 						}
 					} catch {}
-          // Ensure page tabs strip/panels are hydrated by the TS runtime
-          try { initPageTabs(appStore); } catch {}
 					// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
