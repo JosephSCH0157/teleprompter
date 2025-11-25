@@ -1,8 +1,10 @@
 // src/ui/settings/asr-wizard.ts
 import { runCalibration } from '../../asr/calibration';
 import { getAsrState, setActiveProfile, upsertProfile } from '../../asr/store';
-import type { AsrProfile } from '../../asr/schema';
+import type { AsrProfile as SchemaAsrProfile } from '../../asr/schema';
 import { showToast } from '../toasts';
+
+export type AsrProfile = SchemaAsrProfile;
 
 type CalibrationSession = {
   profile: AsrProfile;
@@ -60,17 +62,17 @@ async function populateMicSelect(): Promise<void> {
   }
 }
 
-async function ensureMicAccess(): Promise<void> {
+async function grantMicLabels(): Promise<void> {
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
       toast('This browser does not support direct microphone access.');
       return;
     }
     await navigator.mediaDevices.getUserMedia({ audio: true });
+    toast('Mic access granted — device names unlocked.');
   } catch {
     toast('Mic access denied. You can still calibrate with generic names.');
   }
-
   await populateMicSelect();
 }
 
@@ -233,6 +235,9 @@ function wire(): void {
     });
 
     updateFlagsBadge();
+
+    $('asrRefreshDevs')?.addEventListener('click', () => { void populateMicSelect(); });
+    $('asrGrantPerm')?.addEventListener('click', () => { void grantMicLabels(); });
   } catch {
     // ignore
   }
@@ -240,7 +245,7 @@ function wire(): void {
 
 export async function initAsrSettingsUI(): Promise<void> {
   try {
-    await ensureMicAccess();
+    await populateMicSelect();
 
     try {
       $('asrAEC')?.removeAttribute('checked');
