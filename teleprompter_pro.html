@@ -129,6 +129,12 @@
 
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
   <script src="ui-sanitize.js"></script>
+  <!-- Legacy guard: ensure no old app-store script runs (TS bundle owns __tpStore) -->
+  <script>
+    try {
+      document.querySelectorAll('script[src*="state/app-store.js"]').forEach((s) => s.remove());
+    } catch {}
+  </script>
 
   <!-- Local scripts store: provides window.Scripts and ESM export for TS wiring -->
   <script type="module" src="archive/scriptsStore_fixed.js"></script>
