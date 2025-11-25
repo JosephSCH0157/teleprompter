@@ -25,6 +25,7 @@ import './wiring/ui-binds';
 import { initSpeechNotesHud } from './hud/speech-notes-hud';
 import { initAsrStatsHud } from './hud/asr-stats';
 import { initRecStatsHud } from './hud/rec-stats';
+import { initOverlays } from './ui/overlays';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { wireScriptEditor } from './ui/script-editor';
@@ -656,6 +657,7 @@ export async function boot() {
                 const hasHudRoot = !!document.getElementById('hud-root') || !!document.getElementById('tp-speech-notes-hud');
                 appStore.set?.('hudSupported', hasHudRoot);
               } catch {}
+          try { initOverlays(); } catch {}
               // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
