@@ -12,6 +12,14 @@ export function initHudController(): void {
     try {
       const snap = store.getSnapshot();
       const visible = shouldShowHud(snap);
+      try {
+        console.log('[HUD-CTRL] apply', {
+          hudEnabledByUser: (snap as any)?.hudEnabledByUser,
+          hudSupported: (snap as any)?.hudSupported,
+          page: (snap as any)?.page,
+          visible,
+        });
+      } catch {}
       hudRoot.classList.toggle('hidden', !visible);
       hudRoot.setAttribute('aria-hidden', visible ? 'false' : 'true');
     } catch {}
