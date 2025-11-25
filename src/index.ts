@@ -58,6 +58,17 @@ function isCiSmoke(): boolean {
 // Single TS-owned store instance (used across UI + settings)
 const appStore = createAppStore();
 try { (window as any).__tpStore = appStore; } catch {}
+// Safety net: if any script clears __tpStore, restore it during early boot.
+try {
+  const restoreStore = () => {
+    try {
+      if (!(window as any).__tpStore) (window as any).__tpStore = appStore;
+    } catch {}
+  };
+  restoreStore();
+  setTimeout(restoreStore, 0);
+  setTimeout(restoreStore, 500);
+} catch {}
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
