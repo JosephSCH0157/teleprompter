@@ -321,8 +321,8 @@
   <!-- ASR chip + button will mount here -->
     <button class="chip" id="presentBtn" data-action="present-toggle" data-tp-toggle-hud>Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
-    <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open" data-page-tab="settings">Settings</button>
-    <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open" data-page-tab="help">Help</button>
+    <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
+    <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
   <span id="selfChecksChip" class="chip chip-muted dev-only">
     Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
   </span>
@@ -423,7 +423,7 @@
 <!-- Add a visible, labeled OBS toggle in the sidebar for quick access -->
 <div class="row obs-row">
   <label>
-    <input type="checkbox" id="enableObs" />
+    <input type="checkbox" id="enableObs" data-tp-obs-toggle />
     <span>Enable OBS</span>
   </label>
   <span class="chip obs-status" id="obsStatus" aria-live="polite">OBS: idle</span>
@@ -618,7 +618,7 @@
 </div>
 </div>
 <!-- Near the end of <body> -->
-<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help" data-page="help" hidden>
+<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help" hidden>
   <div class="sheet">
     <header>
       <h3 id="shortcutsTitle">Shortcuts</h3>
@@ -654,7 +654,7 @@
 </section>
 
 <!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
-<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings" data-page="settings" hidden>
+<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings" hidden>
   <div class="sheet settings-sheet">
     <header class="sheet-head">
       <h3 id="settingsTitle" class="settings-title">Settings</h3>

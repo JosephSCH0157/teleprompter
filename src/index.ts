@@ -28,6 +28,7 @@ import { initRecStatsHud } from './hud/rec-stats';
 import { initOverlays } from './ui/overlays';
 import { initHudController } from './hud/controller';
 import { wireHudToggle } from './hud/toggle';
+import { initObsToggle } from './ui/obs-toggle';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { wireScriptEditor } from './ui/script-editor';
@@ -73,6 +74,7 @@ try {
   setTimeout(restoreStore, 0);
   setTimeout(restoreStore, 500);
 } catch {}
+try { initObsBridge(appStore); } catch {}
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
@@ -369,6 +371,7 @@ import { getUiPrefs } from './settings/uiPrefs';
 import { wireMicToggle } from './ui/mic-toggle';
 import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
+import { initObsBridge } from './wiring/obs-bridge';
 import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
@@ -654,6 +657,7 @@ export async function boot() {
           try { initHudController(); } catch {}
           try { wireHudToggle(); } catch {}
           try { initHudController(); } catch {}
+          try { initObsToggle(appStore); } catch {}
           // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();

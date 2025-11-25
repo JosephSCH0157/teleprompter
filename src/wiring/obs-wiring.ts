@@ -6,6 +6,7 @@
 import { getSettings as getRecorderSettings, setSelected as setRecorderSelected } from '../../recorders';
 import * as rec from '../../recorders.js';
 import { obsTestConnect } from '../dev/obs-probe';
+import type { AppStore } from '../state/app-store';
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -36,13 +37,49 @@ export function initObsUI() {
   const pillEl = () => (byId<HTMLElement>('obsStatusText') || byId<HTMLElement>('obsStatus'));
   const testMsgEl = () => byId<HTMLElement>('settingsObsTestMsg');
 
+  const store: AppStore | null = (() => {
+    try { return (window as any).__tpStore || null; } catch { return null; }
+  })();
+
   // Persistent Enable OBS flag (UI-independent), drives connection and reconnection
   const OBS_EN_KEY = 'tp_obs_enabled_v1';
-  let obsEnabled = (() => { try { return localStorage.getItem(OBS_EN_KEY) === '1'; } catch { return false; } })();
-  const getObsEnabled = () => obsEnabled;
-  const setObsEnabled = (on: boolean) => {
+  const readStoredEnabled = () => {
+    try {
+      if (store && typeof store.get === 'function') {
+        const val = store.get('obsEnabled');
+        if (typeof val === 'boolean') return val;
+      }
+    } catch {}
+    try { return localStorage.getItem(OBS_EN_KEY) === '1'; } catch { return false; }
+  };
+  let obsEnabled = readStoredEnabled();
+  const getObsEnabled = () => {
+    try {
+      if (store && typeof store.get === 'function') {
+        const val = store.get('obsEnabled');
+        if (typeof val === 'boolean') return val;
+      }
+    } catch {}
+    return obsEnabled;
+  };
+  const applyEnabled = (on: boolean, { persistLegacy = false }: { persistLegacy?: boolean } = {}) => {
     obsEnabled = !!on;
-    try { localStorage.setItem(OBS_EN_KEY, obsEnabled ? '1' : '0'); } catch {}
+    writeEnabledToUI(obsEnabled);
+    if (persistLegacy) {
+      try { localStorage.setItem(OBS_EN_KEY, obsEnabled ? '1' : '0'); } catch {}
+    }
+    try { rec.setEnabled(obsEnabled); } catch {}
+    const cfg = getRecorderSettings();
+    const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
+    if (obsEnabled) next.add('obs'); else next.delete('obs');
+    syncRegistrySelection(Array.from(next));
+  };
+  const pushObsEnabled = (on: boolean) => {
+    const next = !!on;
+    if (store && typeof store.set === 'function') {
+      try { store.set('obsEnabled', next); return; } catch {}
+    }
+    applyEnabled(next, { persistLegacy: true });
   };
 
   const readUrl = () => {
@@ -56,13 +93,30 @@ export function initObsUI() {
   };
   const readPass = () => (byId<HTMLInputElement>('settingsObsPassword')?.value ?? byId<HTMLInputElement>('obsPassword')?.value ?? '');
   // UI checkbox reader is used to reflect state in the UI only; the engine relies on getObsEnabled()
-  const readEnabledFromUI = () => !!(byId<HTMLInputElement>('settingsEnableObs')?.checked || byId<HTMLInputElement>('enableObs')?.checked);
+  const readEnabledFromUI = () => {
+    const els = [
+      byId<HTMLInputElement>('settingsEnableObs'),
+      byId<HTMLInputElement>('enableObs'),
+      document.querySelector<HTMLInputElement>('[data-tp-obs-toggle]'),
+    ];
+    for (const el of els) {
+      if (el) return !!el.checked;
+    }
+    return getObsEnabled();
+  };
   const writeEnabledToUI = (on: boolean) => {
     try {
-      const elA = byId<HTMLInputElement>('settingsEnableObs');
-      const elB = byId<HTMLInputElement>('enableObs');
-      if (elA) elA.checked = !!on;
-      if (elB) elB.checked = !!on;
+      const els = [
+        byId<HTMLInputElement>('settingsEnableObs'),
+        byId<HTMLInputElement>('enableObs'),
+        document.querySelector<HTMLInputElement>('[data-tp-obs-toggle]'),
+      ];
+      els.forEach((el) => {
+        if (!el) return;
+        el.checked = !!on;
+        el.setAttribute('aria-pressed', on ? 'true' : 'false');
+        (el as HTMLElement).dataset.state = on ? 'on' : 'off';
+      });
     } catch {}
   };
 
@@ -85,15 +139,9 @@ export function initObsUI() {
     document.addEventListener('change', (e) => {
       const t = e.target as HTMLElement | null;
       const id = (t as any)?.id || '';
-      if (id === 'settingsEnableObs' || id === 'enableObs') {
-        // Persist and apply immediately
-        const on = readEnabledFromUI();
-        setObsEnabled(on);
-        try { rec.setEnabled(on); } catch {}
-        const cfg = getRecorderSettings();
-        const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
-        if (on) next.add('obs'); else next.delete('obs');
-        syncRegistrySelection(Array.from(next));
+      const hasObsToggleAttr = !!(t && t.hasAttribute && t.hasAttribute('data-tp-obs-toggle'));
+      if (id === 'settingsEnableObs' || id === 'enableObs' || hasObsToggleAttr) {
+        pushObsEnabled(readEnabledFromUI());
       }
       if (id === 'settingsObsUrl' || id === 'obsUrl' || id === 'settingsObsHost') {
         try { rec.reconfigure(parseWsUrl(readUrl(), readPass())); } catch {}
@@ -108,7 +156,10 @@ export function initObsUI() {
   try {
     const mo = new MutationObserver(() => {
       try {
-        const el = byId<HTMLInputElement>('settingsEnableObs') || byId<HTMLInputElement>('enableObs');
+        const el =
+          byId<HTMLInputElement>('settingsEnableObs') ||
+          byId<HTMLInputElement>('enableObs') ||
+          document.querySelector<HTMLInputElement>('[data-tp-obs-toggle]');
         if (el) writeEnabledToUI(getObsEnabled());
       } catch {}
     });
@@ -201,36 +252,18 @@ export function initObsUI() {
 
   // Bridge to central store if present, so toggles from Settings drive the bridge too
   try {
-    const S = (window as any).__tpStore;
-    if (S && typeof S.subscribe === 'function') {
+    if (store && typeof store.subscribe === 'function') {
       try {
-        S.subscribe('obsEnabled', (v: any) => {
-          const next = !!v;
-          try { setObsEnabled(next); } catch {}
-          try { rec.setEnabled(next); } catch {}
-          const cfg = getRecorderSettings();
-          const current = Array.isArray(cfg?.selected) ? cfg.selected : [];
-          const set = new Set(current);
-          if (next) {
-            set.add('obs');
-          } else {
-            set.delete('obs');
-          }
-          syncRegistrySelection(Array.from(set));
-        });
+        store.subscribe('obsEnabled', (v: any) => applyEnabled(!!v, { persistLegacy: true }));
       } catch {}
-      try { S.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
-      try { S.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
+      try { store.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
+      try { store.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
     }
   } catch {}
 
   // On load: apply persisted state (connect if enabled), and ensure clean disconnect on page close
   try {
-    if (getObsEnabled()) {
-      try { rec.setEnabled(true); } catch {}
-    }
-    const cfg = getRecorderSettings();
-    syncRegistrySelection(Array.isArray(cfg?.selected) ? cfg.selected : []);
+    applyEnabled(getObsEnabled(), { persistLegacy: true });
   } catch {}
   try {
     window.addEventListener('beforeunload', () => { try { rec.setEnabled(false); } catch {} });
