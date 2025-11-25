@@ -98,7 +98,6 @@ export function showToast(message: string, opts: ToastOptions = {}): void {
   } catch (err) {
     // Last-ditch logging; never throw from a toast.
     try {
-      // eslint-disable-next-line no-console
       console.debug('[toast] failed to render', message, opts, err);
     } catch {
       // ignore

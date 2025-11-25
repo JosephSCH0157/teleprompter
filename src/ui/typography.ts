@@ -55,7 +55,7 @@ function writeStore(st: TypographyStore): void {
 
 function getCurrentPreset(): TypographyPreset {
   const st = readStore();
-  const preset = (DISPLAY_ID === 'display' ? st.display : st.main) || {};
+  const preset = (DISPLAY_ID === 'display' ? st.display : st.main) || ({} as TypographyPreset);
   const size = typeof preset.fontSizePx === 'number' ? preset.fontSizePx : DEFAULT_SIZE;
   const lh = typeof preset.lineHeight === 'number' ? preset.lineHeight : DEFAULT_LINE_HEIGHT;
   return {

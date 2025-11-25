@@ -41,7 +41,7 @@ function savePos(x: number, y: number): void {
 }
 
 export function initCamDraggable(): void {
-  const el = document.getElementById('camWrap') as HTMLElement | null;
+  const el = document.getElementById('camWrap');
   if (!el) return;
 
   el.style.touchAction = 'none'; // allow pointer drag
@@ -62,7 +62,7 @@ export function initCamDraggable(): void {
   let origLeft = 0;
   let origTop = 0;
 
-  function toPos(pageX: number, pageY: number): CamPos {
+  const toPos = (pageX: number, pageY: number): CamPos => {
     const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
     const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
     const rect = el.getBoundingClientRect();
@@ -72,9 +72,9 @@ export function initCamDraggable(): void {
     const x = clamp(pageX - startX + origLeft, 8, maxLeft);
     const y = clamp(pageY - startY + origTop, 8, maxTop);
     return { x, y };
-  }
+  };
 
-  function onPointerDown(ev: PointerEvent): void {
+  const onPointerDown = (ev: PointerEvent): void => {
     try {
       ev.preventDefault();
     } catch {
@@ -94,18 +94,18 @@ export function initCamDraggable(): void {
     startY = ev.pageY;
     origLeft = rect.left;
     origTop = rect.top;
-  }
+  };
 
-  function onPointerMove(ev: PointerEvent): void {
+  const onPointerMove = (ev: PointerEvent): void => {
     if (!dragging) return;
     const { x, y } = toPos(ev.pageX, ev.pageY);
     el.style.right = 'auto';
     el.style.left = `${x}px`;
     el.style.bottom = 'auto';
     el.style.top = `${y}px`;
-  }
+  };
 
-  function onPointerUp(ev: PointerEvent): void {
+  const onPointerUp = (ev: PointerEvent): void => {
     if (!dragging) return;
     dragging = false;
     el.style.cursor = 'grab';
@@ -118,9 +118,9 @@ export function initCamDraggable(): void {
 
     const rect = el.getBoundingClientRect();
     savePos(rect.left, rect.top);
-  }
+  };
 
-  function onDblClick(): void {
+  const onDblClick = (): void => {
     // Reset to default corner (right-bottom)
     el.style.left = 'auto';
     el.style.top = 'auto';
@@ -131,7 +131,7 @@ export function initCamDraggable(): void {
     } catch {
       // ignore
     }
-  }
+  };
 
   el.addEventListener('pointerdown', onPointerDown, { capture: true });
   // With pointer capture, move/up events are delivered to the element
