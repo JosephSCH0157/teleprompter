@@ -2,16 +2,19 @@
 // Ensures the mapped-folder controls exist inside the Settings panel.
 // Creates a compact row with: Choose Folder, Recheck, Scripts <select>, hidden fallback input.
 export function ensureSettingsFolderControls() {
-  // Host resolution: try Settings overlay body first (#settingsBody), then legacy panel fallbacks.
+  // Host resolution: prefer the Media settings panel; bail if it isn't present yet.
   const settingsBody = document.getElementById('settingsBody') as HTMLElement | null;
-  const host = settingsBody || (document.querySelector('#settings, #settingsPanel, [data-panel="settings"], aside.settings, .settings-panel') as HTMLElement | null)
-    || (document.querySelector('#menu, #sidebar, [data-role="settings"]') as HTMLElement | null);
   const mediaPanel =
     (settingsBody?.querySelector<HTMLElement>('[data-settings-panel="media"]')
       ?? document.querySelector<HTMLElement>('[data-settings-panel="media"]'))
     || document.querySelector<HTMLElement>('[data-tab-content="media"]');
 
-  if (!host && !mediaPanel) return false;
+  if (!mediaPanel) {
+    try {
+      console.warn('[settings] Media panel not found; cannot attach Scripts Folder card.');
+    } catch {}
+    return false;
+  }
 
   // If legacy external scripts row exists in sidebar, hide it (will be relocated here).
   try {
@@ -50,9 +53,8 @@ export function ensureSettingsFolderControls() {
     (card as any).dataset.tab = 'media';
   }
 
-  // Prefer inserting inside the Media panel; fall back to the settings host only if the panel is missing
-  const target = mediaPanel || host;
-  if (card.parentElement !== target) target.appendChild(card);
+  // Always insert inside the Media panel (Recording/Media tab)
+  if (card.parentElement !== mediaPanel) mediaPanel.appendChild(card);
   signalSettingsFolderReady('injected');
 
   // Ensure visibility tracks the active tab, even if injected after initial tab wiring.
