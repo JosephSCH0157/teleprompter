@@ -373,6 +373,7 @@ import './ui/micMenu';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
 import { initObsBridge } from './wiring/obs-bridge';
 import { initObsUI } from './wiring/obs-wiring';
+import './ui/toasts'; // installs window.toast + container wiring
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
