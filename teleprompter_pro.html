@@ -484,9 +484,10 @@
 <button id="clearText">Clear</button>
 </div>
 <!-- Sidebar quick Scripts select moved into Title row below -->
+<div data-tp-speakers-panel>
 <h2 class="section-title">
   Speakers
-  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody" data-action="speakers-toggle" data-ci="speakers-toggle" title="Show or hide speaker controls">Hide</button>
+  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody" data-tp-toggle-speakers title="Show or hide speaker controls">Hide</button>
 </h2>
 
 <div id="speakersBody" data-panel="speakers">
@@ -521,10 +522,8 @@
     <button id="autoTagBtn">Smart Tag</button>
     <span class="chip">(use tags like [s1]GǪ[/s1], [color=#ff0]GǪ[/color])</span>
   </div>
-  <div class="row">
-    <button id="speakersKeyBtn" data-action="speakers-key" class="chip">KeyGǪ</button>
-    <input id="speakersKey" type="text" placeholder="Type a key for speaker toggle" />
-  </div>
+  <p class="chip tp-speakers-hotkeys">Speaker hotkeys: S1 / S2 / G1 / G2</p>
+</div>
 </div>
 <div class="row">
 <label>Format
@@ -561,38 +560,8 @@
 </div>
 <p class="status" id="status"></p>
 <h2>Script</h2>
-<textarea id="editor" data-editor placeholder="Use tags: [s1]�[/s1], [s2]�[/s2], [g1]�[/g1], [g2]�[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>`n<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin�</em></p>
-<!-- Injected fallback speakers toggle & key buttons (ensure binder selectors always resolve even before JS mutates visibility) -->
-<!-- speakersToggleBtn already present as #toggleSpeakers; provide data-action alias without duplicate id -->
-<button id="speakersToggleBtnAlias" data-action="speakers-toggle" class="hidden" type="button" aria-controls="speakersBody" hidden>Speakers</button>
-<!-- speakersKeyBtn already exists; add alias element for binder multi-selector without duplicate id -->
-<button id="speakersKeyBtnAlias" data-action="speakers-key" class="hidden" type="button" hidden>Focus Key</button>
-<script>
-  // Fallback wiring for speakers toggle (keeps panel usable even if main binder fails)
-  (function(){
-    try {
-      var btn = document.getElementById('toggleSpeakers');
-      var body = document.getElementById('speakersBody');
-      if (!btn || !body || btn.dataset.inlineWired === '1') return;
-      btn.dataset.inlineWired = '1';
-      var KEY = 'tp_speakers_visible';
-      var apply = function(vis){
-        try {
-          body.style.display = vis ? '' : 'none';
-          btn.textContent = vis ? 'Hide' : 'Show';
-          btn.setAttribute('aria-expanded', vis ? 'true' : 'false');
-          try { localStorage.setItem(KEY, vis ? '1' : '0'); } catch(e){}
-        } catch(e){}
-      };
-      var vis = true; try { vis = (localStorage.getItem(KEY) !== '0'); } catch(e){}
-      apply(vis);
-      btn.addEventListener('click', function(){
-        apply(!(body.style.display === '' || body.style.display === 'block' || body.style.display === null));
-      });
-    } catch(e){}
-  })();
-</script>
-<!-- Ensure help overlay root & settings overlay root exist early for binder wiring (already have #shortcutsOverlay & #settingsOverlay) -->
+<textarea id="editor" data-editor placeholder="Use tags: [s1]?[/s1], [s2]?[/s2], [g1]?[/g1], [g2]?[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin…</em></p>
 <!-- Camera preview fallback (binder expects #cameraPreview) already present later; duplicate guarded by ID uniqueness -->
 <!-- cameraPreview already defined later with proper classes; avoid duplicate -->
 <!-- (Removed legacy External Scripts + settings export/import UI: now injected into Settings overlay) -->
@@ -827,5 +796,7 @@
   </script>
 </body>
 </html>
+
+
 
 

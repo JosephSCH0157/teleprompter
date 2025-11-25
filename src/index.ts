@@ -378,6 +378,7 @@ import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
 import './ui/camera-drag'; // installs camera drag + persistence
 import './ui/upload'; // installs script upload wiring
+import './ui/speakers-panel'; // toggles Speakers panel visibility
 import './utils/safe-dom'; // installs window.safeDOM for legacy callers
 import './ui/step-visibility'; // hides step-only controls unless scrollMode === 'step'
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
