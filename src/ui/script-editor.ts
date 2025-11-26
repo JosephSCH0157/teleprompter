@@ -232,13 +232,21 @@ export function wireScriptEditor(): void {
     }
   };
 
+  const resolveSelect = (): HTMLSelectElement | null => {
+    return (
+      (document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null) ||
+      (document.getElementById('scriptSelect') as HTMLSelectElement | null) ||
+      (document.getElementById('scriptSlots') as HTMLSelectElement | null) ||
+      null
+    );
+  };
+
   const loadScriptById = async (id: string) => {
     const trimmed = (id || '').trim();
     if (!trimmed) {
       (window as any)._toast?.('No script selected to load', { type: 'warn' });
       return;
     }
-    if (trimmed === lastLoadedId) return;
 
     let api: ScriptsApi | null = null;
     try {
@@ -287,6 +295,26 @@ export function wireScriptEditor(): void {
       }
     } catch {
       /* ignore */
+    }
+  };
+
+  const doLoad = async (id: string | null) => {
+    try { console.debug('[SCRIPT-EDITOR] doLoad', { id, lastLoadedId }); } catch {}
+    if (!id) {
+      try { console.warn('[SCRIPT-EDITOR] no script id selected'); } catch {}
+      return;
+    }
+    if (id === lastLoadedId) {
+      try { console.debug('[SCRIPT-EDITOR] same id, skipping reload'); } catch {}
+      return;
+    }
+    lastLoadedId = id;
+    try {
+      try { console.debug('[SCRIPT-EDITOR] loadScriptById() start', { id }); } catch {}
+      await loadScriptById(id);
+      try { console.debug('[SCRIPT-EDITOR] loadScriptById() done', { id }); } catch {}
+    } catch (err) {
+      try { console.error('[SCRIPT-EDITOR] loadScriptById() failed', { id, err }); } catch {}
     }
   };
 
@@ -348,20 +376,26 @@ export function wireScriptEditor(): void {
     setTimeout(scheduleRender, 0);
   });
 
+  // Delegate wiring to tolerate select/button replacements
+  document.addEventListener('click', (ev) => {
+    const t = ev.target as HTMLElement | null;
+    if (!t || t.id !== 'scriptLoadBtn') return;
+    try { ev.preventDefault(); } catch {}
+    try { console.debug('[SCRIPT-EDITOR] Load button click'); } catch {}
+    const sel = resolveSelect();
+    const id = sel ? sel.value : null;
+    void doLoad(id);
+  }, { capture: true });
+
+  document.addEventListener('change', (ev) => {
+    const t = ev.target as HTMLSelectElement | null;
+    if (!t) return;
+    if (t.id !== 'scriptSelectSidebar' && t.id !== 'scriptSelect' && t.id !== 'scriptSlots') return;
+    try { console.debug('[SCRIPT-EDITOR] select change', { value: t.value }); } catch {}
+    void doLoad(t.value);
+  }, { capture: true });
+
   if (scriptSelect) {
-    scriptSelect.onchange = () => {
-      try { console.debug('[SCRIPT-EDITOR] select change', { value: scriptSelect.value }); } catch {}
-      void loadScriptById(scriptSelect.value);
-    };
-
-    if (scriptLoadBtn) {
-      scriptLoadBtn.onclick = (ev) => {
-        try { ev.preventDefault(); } catch {}
-        try { console.debug('[SCRIPT-EDITOR] Load button click'); } catch {}
-        void loadScriptById(scriptSelect.value);
-      };
-    }
-
     if (scriptRefreshBtn) {
       scriptRefreshBtn.onclick = () => {
         try { console.debug('[SCRIPT-EDITOR] refresh click'); } catch {}
