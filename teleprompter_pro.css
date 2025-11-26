@@ -110,8 +110,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inl-9{font-size:14px;color:#96a0aa}
 .inl-10{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
 
-
-        :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; 
+:root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; 
             /* Typography tokens (runtime-updated via CSS variables) */
             --tp-font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
             --tp-font-size: 56px;
@@ -806,3 +805,16 @@ html.tp-present .present-exit { display: inline-flex; }
     display: none !important;
     pointer-events: none !important;
 }
+
+/* Teleprompter viewer speaker styling */
+[data-script-view] .line{padding:2px 0;}
+[data-script-view] .line.speaker-s1,
+.speaker-s1{color:var(--s1-color,#4fc3f7);font-weight:600;}
+[data-script-view] .line.speaker-s2,
+.speaker-s2{color:var(--s2-color,#ffb74d);font-weight:600;}
+[data-script-view] .line.speaker-guest1,
+.speaker-guest1{color:#aed581;font-weight:600;}
+[data-script-view] .line.speaker-guest2,
+.speaker-guest2{color:#ce93d8;font-weight:600;}
+[data-script-view] .speaker-tag{text-transform:uppercase;letter-spacing:0.08em;font-size:0.8em;opacity:.8;margin-right:0.5rem;}
+[data-script-view] .line.line-empty{min-height:1.2em;}

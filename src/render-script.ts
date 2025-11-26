@@ -88,23 +88,25 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       continue;
     }
 
-    const open = trimmed.match(/^\[(s1|s2|guest1|guest2)\]$/i);
+    const open = trimmed.match(/^\[\s*(s1|s2|guest1|guest2|g1|g2)\s*\]$/i);
     if (open) {
-      currentSpeaker = open[1].toLowerCase() as SpeakerKey;
+      const key = open[1].toLowerCase();
+      currentSpeaker =
+        key === 'g1' ? 'guest1' : key === 'g2' ? 'guest2' : (key as SpeakerKey);
       continue;
     }
 
-    const close = trimmed.match(/^\[\/(s1|s2|guest1|guest2)\]$/i);
+    const close = trimmed.match(/^\[\/\s*(s1|s2|guest1|guest2|g1|g2)\s*\]$/i);
     if (close) {
       currentSpeaker = null;
       continue;
     }
 
-    if (/^\[note\]$/i.test(trimmed)) {
+    if (/^\[\s*(note|pause|beat|reflective pause)\s*\]$/i.test(trimmed)) {
       inNote = true;
       continue;
     }
-    if (/^\[\/note\]$/i.test(trimmed)) {
+    if (/^\[\/\s*(note|pause|beat|reflective pause)\s*\]$/i.test(trimmed)) {
       inNote = false;
       continue;
     }
