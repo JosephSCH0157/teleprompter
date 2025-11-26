@@ -250,6 +250,7 @@ export function addAsrWizardCard(root: HTMLElement) {
         <button id="asrPreviewStop" class="btn">Stop preview</button>
         <button id="asrSaveBtn" class="btn success">Save profile</button>
       </div>
+      <small class="muted">Step 1: Stay quiet for a few seconds so we can measure background noise. Step 2: Speak in your normal voice so we can set speech level.</small>
       <small class="muted">Tip: Use headphones; leave NS/AGC off for best timing. Enable AEC only if using speakers.</small>
     `;
     container.appendChild(sec);

@@ -12,6 +12,7 @@ type CalibrationSession = {
 };
 
 let current: CalibrationSession | null = null;
+let previewListenerWired = false;
 
 function $(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -157,6 +158,35 @@ function renderDerived(profile: AsrProfile): void {
   }
 }
 
+type AsrPreviewDetail = {
+  rmsDbfs?: number;
+  gate?: boolean;
+  ton?: number;
+  toff?: number;
+};
+
+function wirePreviewListener(): void {
+  if (previewListenerWired) return;
+  previewListenerWired = true;
+  try {
+    window.addEventListener(
+      'tp:asrPreview',
+      (e: Event) => {
+        try {
+          const detail = (e as CustomEvent<AsrPreviewDetail>).detail || {};
+          const { rmsDbfs = -80, gate, ton, toff } = detail;
+          updateMeter(rmsDbfs, ton, toff, gate);
+        } catch {
+          // ignore
+        }
+      },
+      { passive: true },
+    );
+  } catch {
+    // ignore
+  }
+}
+
 // --- Wizard actions --------------------------------------------------------
 
 export async function startAsrWizard(): Promise<void> {
@@ -264,6 +294,7 @@ export async function initAsrSettingsUI(): Promise<void> {
     }
 
     wire();
+    wirePreviewListener();
   } catch {
     // ignore
   }
