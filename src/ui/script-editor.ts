@@ -316,6 +316,10 @@ export function wireScriptEditor(): void {
     }
 
     lastLoadedId = trimmed;
+    const sel = resolveSelect();
+    if (sel && sel.value !== trimmed) {
+      try { sel.value = trimmed; } catch {}
+    }
     editor.value = content;
     if (scriptTitle) {
       scriptTitle.value = title || '';
