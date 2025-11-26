@@ -1,4 +1,4 @@
-// Wires the plain textarea editor to the rendered script view (and display) via renderScript.
+﻿// Wires the plain textarea editor to the rendered script view (and display) via renderScript.
 // Keeps legacy renderScript behavior if available; otherwise falls back to a simple line renderer.
 
 type RenderScriptFn = (text: string) => void;
@@ -192,6 +192,7 @@ function startScriptsPolling(scriptSelect: HTMLSelectElement): void {
 }
 
 export function wireScriptEditor(): void {
+  try { console.debug('[SCRIPT-EDITOR] wireScriptEditor() called'); } catch {}
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const scriptEl = document.getElementById('script') as HTMLDivElement | null;
   const scriptTitle = document.getElementById('scriptTitle') as HTMLInputElement | null;
@@ -200,6 +201,8 @@ export function wireScriptEditor(): void {
     || (document.getElementById('scriptSlots') as HTMLSelectElement | null);
   const scriptLoadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
   const scriptRefreshBtn = document.getElementById('scriptRefreshBtn') as HTMLButtonElement | null;
+
+  try { console.debug('[SCRIPT-EDITOR] elements', { editor, scriptEl, scriptTitle, scriptSelect, scriptLoadBtn, scriptRefreshBtn }); } catch {}
 
   if (!editor) return;
   if (editor.dataset.tsScriptWired === '1') return;
@@ -346,20 +349,24 @@ export function wireScriptEditor(): void {
   });
 
   if (scriptSelect) {
-    scriptSelect.addEventListener('change', () => {
+    scriptSelect.onchange = () => {
+      try { console.debug('[SCRIPT-EDITOR] select change', { value: scriptSelect.value }); } catch {}
       void loadScriptById(scriptSelect.value);
-    });
+    };
 
     if (scriptLoadBtn) {
-      scriptLoadBtn.addEventListener('click', () => {
+      scriptLoadBtn.onclick = (ev) => {
+        try { ev.preventDefault(); } catch {}
+        try { console.debug('[SCRIPT-EDITOR] Load button click'); } catch {}
         void loadScriptById(scriptSelect.value);
-      });
+      };
     }
 
     if (scriptRefreshBtn) {
-      scriptRefreshBtn.addEventListener('click', () => {
+      scriptRefreshBtn.onclick = () => {
+        try { console.debug('[SCRIPT-EDITOR] refresh click'); } catch {}
         void refreshScriptsDropdown(scriptSelect, { preserveSelection: true, quiet: false });
-      });
+      };
     }
 
     startScriptsPolling(scriptSelect);
@@ -373,6 +380,7 @@ export function wireScriptEditor(): void {
       applyEditorToViewer();
     }
     applyPasteHint(editor.value || '');
+    try { console.debug('[SCRIPT-EDITOR] wiring complete'); } catch {}
   } catch {
     /* noop */
   }
