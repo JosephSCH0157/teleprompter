@@ -1,5 +1,5 @@
 // Mic pill popover menu for quick ASR access
-import { getAsrState, setActiveProfile } from '../asr/store';
+import { getAsrState, onAsr, setActiveProfile } from '../asr/store';
 import { getAppStore } from '../state/appStore';
 import { showToast } from './toasts';
 
@@ -131,6 +131,24 @@ function initMicPillMenu() {
   try {
     const pill = document.querySelector<HTMLElement>(MIC_PILL_SELECTOR);
     if (!pill) return;
+    const applyState = () => {
+      try {
+        const s = getAsrState();
+        const profId = s?.activeProfileId;
+        const prof = profId ? (s.profiles as any)?.[profId] : null;
+        if (prof) {
+          pill.classList.add('is-active');
+          pill.textContent = prof.label || 'Mic active';
+        } else {
+          pill.classList.remove('is-active');
+          pill.textContent = 'Mic';
+        }
+      } catch {
+        // ignore
+      }
+    };
+    applyState();
+    try { onAsr(applyState); } catch {}
     pill.style.cursor = 'pointer';
     pill.title = 'Microphone menu';
     pill.addEventListener('click', () => {
