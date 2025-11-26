@@ -179,6 +179,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       } catch {}
       sel.append(opt);
     }
+      try { console.debug('[MAPPED-FOLDER] syncing mapped entries', { count: mappedEntries.length }); } catch {}
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
       // Preselect last used script if present
       try {
@@ -245,6 +246,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       } catch {}
       sel.append(opt);
     }
+      try { console.debug('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length }); } catch {}
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
       try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
       // Preselect last used script if present (fallback path) + maybe auto-load
