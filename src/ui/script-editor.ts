@@ -163,6 +163,10 @@ export function wireScriptEditor(): void {
     }
   };
 
+  const onScriptsUpdated = () => {
+    try { refreshDropdown(); } catch {}
+  };
+
   const loadById = async (id: string | null) => {
     const trimmed = (id || '').trim();
     if (!trimmed) {
@@ -373,6 +377,7 @@ export function wireScriptEditor(): void {
 
   // Initial dropdown + initial load
   refreshDropdown();
+  try { window.addEventListener('tp:scripts-updated', onScriptsUpdated); } catch {}
 
   if (slots && slots.value && slots.value.trim()) {
     // Auto-load the first/selected script
