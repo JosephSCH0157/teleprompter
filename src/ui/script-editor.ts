@@ -43,6 +43,7 @@ async function ensureScriptsModule(): Promise<ScriptsApi | null> {
 let scriptsPollTimer: number | null = null;
 let lastScriptsSnapshot: string | null = null;
 let hasLoadedInitialScript = false;
+let lastLoadedId: string | null = null;
 
 function snapshotScripts(entries: ScriptMeta[]): string {
   return JSON.stringify(
@@ -136,6 +137,8 @@ async function refreshScriptsDropdown(
     return;
   }
   lastScriptsSnapshot = snapshot;
+  lastLoadedId = null;
+  hasLoadedInitialScript = false;
 
   scriptSelect.innerHTML = '';
 
@@ -232,6 +235,7 @@ export function wireScriptEditor(): void {
       (window as any)._toast?.('No script selected to load', { type: 'warn' });
       return;
     }
+    if (trimmed === lastLoadedId) return;
 
     let api: ScriptsApi | null = null;
     try {
@@ -264,6 +268,7 @@ export function wireScriptEditor(): void {
       return;
     }
 
+    lastLoadedId = trimmed;
     editor.value = rec.content || '';
     if (scriptTitle) {
       scriptTitle.value = rec.title || '';
