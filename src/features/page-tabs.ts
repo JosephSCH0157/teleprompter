@@ -51,6 +51,15 @@ export function initPageTabs(store?: PageStore) {
       try { S.set('page', target); } catch {}
     });
   });
+  // If user focuses inside the Scripts panel (e.g., dropdown), ensure page state flips to scripts
+  try {
+    const scriptsPanel = panels.find((p) => coerce(p.dataset.tpPanel) === 'scripts');
+    scriptsPanel?.addEventListener('focusin', () => {
+      try { S.set('page', 'scripts' as PageName); } catch {}
+    });
+  } catch {
+    // ignore
+  }
 
   const stored = (() => { try { return S.get?.('page') as PageName | undefined; } catch { return undefined; } })();
   const initial = coerce(stored);
