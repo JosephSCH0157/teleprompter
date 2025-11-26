@@ -341,10 +341,6 @@ export function wireScriptEditor(): void {
       try { console.warn('[SCRIPT-EDITOR] no script id selected'); } catch {}
       return;
     }
-    if (id === lastLoadedId) {
-      try { console.debug('[SCRIPT-EDITOR] same id, skipping reload'); } catch {}
-      return;
-    }
     lastLoadedId = id;
     try {
       try { console.debug('[SCRIPT-EDITOR] loadScriptById() start', { id }); } catch {}
