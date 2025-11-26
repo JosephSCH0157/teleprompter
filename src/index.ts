@@ -233,16 +233,42 @@ function applyUiScrollMode(mode: UiScrollMode) {
 
 // === Settings mirror + smoke helpers ===
 function installSettingsMirrors() {
+	function cloneOptionWithProps(src: HTMLOptionElement): HTMLOptionElement {
+		const clone = src.cloneNode(true) as HTMLOptionElement;
+		const anySrc = src as any;
+		const anyClone = clone as any;
+		['__file', '_file', '__fileHandle', '_handle'].forEach((k) => {
+			if (anySrc && anySrc[k]) anyClone[k] = anySrc[k];
+		});
+		return clone;
+	}
+
 	function syncFrom(main: HTMLSelectElement, mirror: HTMLSelectElement) {
 		const mainCount = main.options.length;
 		const mirrorCount = mirror.options.length;
+
+		// If main is empty but mirror has content, copy mirror back to main.
 		if (mainCount <= 1 && mirrorCount > 1) {
-			main.innerHTML = mirror.innerHTML;
+			main.innerHTML = '';
+			Array.from(mirror.options).forEach((opt) => {
+				main.append(cloneOptionWithProps(opt));
+			});
 			main.value = mirror.value;
-		} else if (mirrorCount !== mainCount) {
-			mirror.innerHTML = main.innerHTML;
+			return;
 		}
-		mirror.value = main.value;
+
+		// Otherwise copy main into mirror, preserving expando properties on options.
+		if (mirrorCount !== mainCount) {
+			const prevValue = mirror.value;
+			mirror.innerHTML = '';
+			Array.from(main.options).forEach((opt) => {
+				mirror.append(cloneOptionWithProps(opt));
+			});
+			// Try to restore selection; fall back to main's value.
+			mirror.value = prevValue || main.value;
+		} else {
+			mirror.value = main.value;
+		}
 	}
 
 	function syncAll() {

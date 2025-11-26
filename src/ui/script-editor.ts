@@ -61,6 +61,20 @@ type RefreshOptions = {
 };
 
 let scriptEditorWired = false;
+
+// Optional script normalizer — prefers a TS export but falls back to global if present.
+function normalizeScriptText(raw: string): string {
+  try {
+    const anyWin = window as any;
+    if (typeof anyWin.normalizeToStandard === 'function') {
+      const out = anyWin.normalizeToStandard(raw);
+      if (typeof out === 'string' && out.trim()) return out;
+    }
+  } catch {
+    // ignore normalize failures
+  }
+  return raw;
+}
 async function readFileAsScriptText(file: File): Promise<string> {
   try {
     const name = (file && file.name || '').toLowerCase();
@@ -440,9 +454,11 @@ export function wireScriptEditor(): void {
 
   const applyEditorToViewer = () => {
     try {
-      renderScript(editor.value || '');
-      syncStoreText(editor.value || '');
-      applyPasteHint(editor.value || '');
+      const normalized = normalizeScriptText(editor.value || '');
+      editor.value = normalized;
+      renderScript(normalized);
+      syncStoreText(normalized);
+      applyPasteHint(normalized);
     } catch (e) {
       try {
         console.warn('[script-editor] renderScript failed, using fallback', e);

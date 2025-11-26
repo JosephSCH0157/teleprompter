@@ -13,6 +13,7 @@ type CalibrationSession = {
 
 let current: CalibrationSession | null = null;
 let previewListenerWired = false;
+let calibrating = false;
 
 function $(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -27,6 +28,19 @@ function toast(msg: string): void {
     } catch {
       // ignore
     }
+  }
+}
+
+function setCalStatus(text: string): void {
+  try {
+    const el =
+      document.querySelector<HTMLElement>('[data-calibration-status]') ||
+      $('asrCalStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+  } catch {
+    // ignore
   }
 }
 
@@ -191,11 +205,17 @@ function wirePreviewListener(): void {
 
 export async function startAsrWizard(): Promise<void> {
   try {
+    if (calibrating) return;
+    calibrating = true;
+    setCalStatus("Calibrating… Step 1: stay quiet, then speak in your normal voice.");
+    const startBtn = $('asrStartBtn') as HTMLButtonElement | null;
+    if (startBtn) startBtn.disabled = true;
+
     const deviceSel = $('asrDevice') as HTMLSelectElement | null;
     const labelInput = $('asrLabel') as HTMLInputElement | null;
 
     const deviceId = deviceSel?.value || '';
-    const label = labelInput?.value || 'Desk â€¢ default';
+    const label = labelInput?.value || 'Desk - default';
 
     const flags = {
       echoCancellation: !!( $('asrAEC') as HTMLInputElement | null )?.checked,
@@ -207,6 +227,20 @@ export async function startAsrWizard(): Promise<void> {
     renderDerived(current.profile);
   } catch (e) {
     console.warn('[ASR] startAsrWizard failed', e);
+    setCalStatus('Calibration failed. Check mic and try again.');
+  } finally {
+    if (current) {
+      setCalStatus(
+        "Calibration done. Noise " + current.profile.cal.noiseRmsDbfs.toFixed(1) + " dBFS, speech " + current.profile.cal.speechRmsDbfs.toFixed(1) + " dBFS, SNR " + current.profile.cal.snrDb.toFixed(1) + " dB",
+      );
+    }
+    calibrating = false;
+    try {
+      const startBtn = $('asrStartBtn') as HTMLButtonElement | null;
+      if (startBtn) startBtn.disabled = false;
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -299,3 +333,4 @@ export async function initAsrSettingsUI(): Promise<void> {
     // ignore
   }
 }
+
