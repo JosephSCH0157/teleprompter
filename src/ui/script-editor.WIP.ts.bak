@@ -1,4 +1,4 @@
-﻿// Simple script editor wiring:
+// Simple script editor wiring:
 //
 // - Uses window.Scripts as the source of truth (mapped folder + local scripts)
 // - Drives #scriptSlots dropdown + Load/Save/Save As/Delete/Rename
@@ -226,7 +226,7 @@ export function wireScriptEditor(): void {
       const ev = new CustomEvent('tp:script-load', {
         detail: { id: rec.id, title: rec.title, text: normalized },
       });
-      document.dispatchEvent(ev);
+      window.dispatchEvent(ev);
     } catch {
       // ignore
     }
@@ -387,7 +387,7 @@ export function wireScriptEditor(): void {
       } catch (err) {
         try {
           console.error('[SCRIPT-EDITOR] Scripts.rename failed', err);
-          (window as any)._toast?.('Rename failed', { type: 'error' }); 
+          (window as any)._toast?.('Rename failed', { type: 'error' });
         } catch {
           // ignore
         }
