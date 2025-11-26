@@ -242,6 +242,7 @@ export function wireScriptEditor(): void {
   };
 
   const loadScriptById = async (id: string) => {
+    try { console.debug('[SCRIPT-EDITOR] loadScriptById called', { id }); } catch {}
     const trimmed = (id || '').trim();
     if (!trimmed) {
       (window as any)._toast?.('No script selected to load', { type: 'warn' });
@@ -286,6 +287,7 @@ export function wireScriptEditor(): void {
     }
 
     applyEditorToViewer();
+    try { console.debug('[SCRIPT-EDITOR] render applied', { id }); } catch {}
     syncStoreText(editor.value || '');
 
     try {
