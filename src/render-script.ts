@@ -1,6 +1,8 @@
 // src/render-script.ts
-function escapeHtml(str: string): string {
-  return String(str || '')
+import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
+
+function escapeHtml(input: string): string {
+  return String(input || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -10,35 +12,51 @@ function escapeHtml(str: string): string {
 
 function formatInline(line: string): string {
   let html = escapeHtml(line);
-  // Basic inline tags
-  html = html.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>');
-  html = html.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>');
-  html = html.replace(/\[u\](.*?)\[\/u\]/gi, '<span class="u">$1</span>');
 
-  // Note blocks
-  html = html.replace(/\[note\](.*?)\[\/note\]/gi, '<span class="note">$1</span>');
+  const replacements: Array<[RegExp, string]> = [
+    [/\[b\](.+?)\[\/b\]/gi, '<strong>$1</strong>'],
+    [/\[i\](.+?)\[\/i\]/gi, '<em>$1</em>'],
+    [/\[u\](.+?)\[\/u\]/gi, '<span class="u">$1</span>'],
+    [/\[note\](.+?)\[\/note\]/gi, '<span class="tp-note-inline">$1</span>'],
+    [/\[color=([^\]]+)\](.+?)\[\/color\]/gi, '<span class="tp-inline fg" data-color="$1">$2</span>'],
+    [/\[bg=([^\]]+)\](.+?)\[\/bg\]/gi, '<span class="tp-inline bg" data-color="$1">$2</span>'],
+  ];
 
-  // Speaker tags
-  html = html.replace(/\[s1\](.*?)\[\/s1\]/gi, '<span class="speaker s1">$1</span>');
-  html = html.replace(/\[s2\](.*?)\[\/s2\]/gi, '<span class="speaker s2">$1</span>');
-  html = html.replace(/\[g1\](.*?)\[\/g1\]/gi, '<span class="speaker g1">$1</span>');
-  html = html.replace(/\[g2\](.*?)\[\/g2\]/gi, '<span class="speaker g2">$1</span>');
-
-  // Color tags
-  html = html.replace(
-    /\[color=([^\]]+)\](.*?)\[\/color\]/gi,
-    '<span class="color" style="color:$1">$2</span>',
-  );
-  html = html.replace(
-    /\[bg=([^\]]+)\](.*?)\[\/bg\]/gi,
-    '<span class="bg" style="background:$1">$2</span>',
-  );
+  for (const [pattern, replacement] of replacements) {
+    html = html.replace(pattern, replacement);
+  }
 
   return html;
 }
 
-export function renderScript(text: string) {
+type SpeakerKey = 's1' | 's2' | 'guest1' | 'guest2';
+
+const SPEAKER_CLASS: Record<SpeakerKey, string> = {
+  s1: 'speaker-s1',
+  s2: 'speaker-s2',
+  guest1: 'speaker-guest1',
+  guest2: 'speaker-guest2',
+};
+
+function normalizeScript(raw: string): string {
+  try {
+    const txt = normalizeToStandardText(raw);
+    if (txt) return txt;
+  } catch {
+    // ignore
+  }
+  try {
+    const txt = fallbackNormalizeText(raw);
+    if (txt) return txt;
+  } catch {
+    // ignore
+  }
+  return String(raw || '');
+}
+
+export function renderScript(text: string, container?: HTMLElement | null): void {
   const root =
+    container ||
     (document.querySelector('[data-script-view]') as HTMLElement | null) ||
     (document.querySelector('#script') as HTMLElement | null) ||
     (document.querySelector('.script') as HTMLElement | null);
@@ -48,22 +66,73 @@ export function renderScript(text: string) {
     return;
   }
 
-  const lines = String(text ?? '').replace(/\r/g, '').split('\n');
+  const normalized = normalizeScript(text ?? '').replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
   const frag = document.createDocumentFragment();
 
-  // clear & (re)build
+  let currentSpeaker: SpeakerKey | null = null;
+  let inNote = false;
+
   try { root.textContent = ''; } catch {}
+
   for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i] ?? '';
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      const div = document.createElement('div');
+      div.className = 'line line-empty';
+      div.innerHTML = '&nbsp;';
+      (div as any).dataset.i = String(i);
+      frag.appendChild(div);
+      continue;
+    }
+
+    const open = trimmed.match(/^\[(s1|s2|guest1|guest2)\]$/i);
+    if (open) {
+      currentSpeaker = open[1].toLowerCase() as SpeakerKey;
+      continue;
+    }
+
+    const close = trimmed.match(/^\[\/(s1|s2|guest1|guest2)\]$/i);
+    if (close) {
+      currentSpeaker = null;
+      continue;
+    }
+
+    if (/^\[note\]$/i.test(trimmed)) {
+      inNote = true;
+      continue;
+    }
+    if (/^\[\/note\]$/i.test(trimmed)) {
+      inNote = false;
+      continue;
+    }
+    if (inNote) {
+      continue;
+    }
+
     const div = document.createElement('div');
     div.className = 'line';
     (div as any).dataset.i = String(i);
-    div.innerHTML = formatInline(lines[i]);
+
+    if (currentSpeaker) {
+      div.className += ` ${SPEAKER_CLASS[currentSpeaker]}`;
+    }
+
+    const html = formatInline(rawLine);
+    div.innerHTML = html || '&nbsp;';
     frag.appendChild(div);
   }
-  try { root.appendChild(frag); } catch {}
 
+  try { root.appendChild(frag); } catch {}
   try { (root as any).dataset.lineCount = String(lines.length); } catch {}
-  try { document.dispatchEvent(new CustomEvent('tp:render:done', { detail: { lineCount: lines.length } })); } catch {}
-  // Keep script container at the top without yanking the whole page
-  try { (root as any).scrollTop = 0; } catch {}
+  try { root.scrollTop = 0; } catch {}
+  try {
+    const evt = new CustomEvent('tp:render:done', { detail: { lineCount: lines.length } });
+    root.dispatchEvent(evt);
+    document.dispatchEvent(evt);
+  } catch {
+    // ignore
+  }
 }
