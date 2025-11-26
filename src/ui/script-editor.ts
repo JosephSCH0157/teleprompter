@@ -43,33 +43,9 @@ function getScriptsApi(): ScriptsApi | null {
 }
 
 function normalizeScriptText(raw: string): string {
-  const text = String(raw ?? '');
-
-  try {
-    const s = normalizeToStandardText(text);
-    if (s && s.trim()) return s;
-  } catch {
-    // ignore
-  }
-
-  try {
-    const s = fallbackNormalizeText(text);
-    if (s && s.trim()) return s;
-  } catch {
-    // ignore
-  }
-
-  try {
-    const anyWin = window as any;
-    if (typeof anyWin.normalizeToStandard === 'function') {
-      const s = anyWin.normalizeToStandard(text);
-      if (typeof s === 'string' && s.trim()) return s;
-    }
-  } catch {
-    // ignore
-  }
-
-  return text;
+  // TEMP: bypass heavy normalization so letters stop getting mangled.
+  // Let the TS renderer do its own cleaning.
+  return String(raw ?? '');
 }
 
 function getRenderScript(): RenderScriptFn {
@@ -434,3 +410,4 @@ try {
 } catch {
   // ignore
 }
+
