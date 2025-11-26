@@ -18,6 +18,7 @@ import './state/auto-record-ssot';
 // import './boot/console-noise-filter';
 import { installScheduler } from './boot/scheduler';
 import './features/scripts-local';
+import { ScriptStore, type ScriptMeta, type ScriptRecord } from './features/scripts-store';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
@@ -78,6 +79,16 @@ try {
 } catch {}
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
+
+try {
+	window.Scripts = {
+		list: () => ScriptStore.list(),
+		get: (id: string) => ScriptStore.get(id),
+		save: (data) => ScriptStore.save(data),
+		rename: (id, title) => ScriptStore.rename(id, title),
+		remove: (id) => ScriptStore.remove(id),
+	};
+} catch {}
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
@@ -434,6 +445,18 @@ import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bin
 import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
+
+declare global {
+	interface Window {
+		Scripts?: {
+			list: () => ScriptMeta[];
+			get: (id: string) => Promise<ScriptRecord | null> | ScriptRecord | null;
+			save: (data: { id?: string | null; title: string; content: string }) => string;
+			rename: (id: string, title: string) => void;
+			remove: (id: string) => void;
+		};
+	}
+}
 
 function onDomReady(fn: () => void): void {
   if (document.readyState === 'loading') {

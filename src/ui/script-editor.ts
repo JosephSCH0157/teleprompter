@@ -25,7 +25,7 @@ type ScriptRecord = {
 
 type ScriptsApi = {
   list?: () => ScriptMeta[];
-  get?: (id: string) => ScriptRecord | null;
+  get?: (id: string) => ScriptRecord | Promise<ScriptRecord | null> | null;
   save?: (data: { id?: string | null; title: string; content: string }) => string;
   rename?: (id: string, title: string) => void;
   remove?: (id: string) => void;
@@ -163,7 +163,7 @@ export function wireScriptEditor(): void {
     }
   };
 
-  const loadById = (id: string | null) => {
+  const loadById = async (id: string | null) => {
     const trimmed = (id || '').trim();
     if (!trimmed) {
       try { (window as any)._toast?.('No script selected to load', { type: 'warn' }); } catch {}
@@ -178,7 +178,7 @@ export function wireScriptEditor(): void {
 
     let rec: ScriptRecord | null = null;
     try {
-      rec = api.get(trimmed);
+      rec = await Promise.resolve(api.get(trimmed));
     } catch (err) {
       try { console.warn('[SCRIPT-EDITOR] Scripts.get failed', err); } catch {}
       rec = null;
@@ -226,7 +226,7 @@ export function wireScriptEditor(): void {
   // Sidebar dropdown: change = load immediately
   if (slots) {
     slots.addEventListener('change', () => {
-      loadById(slots.value || null);
+      void loadById(slots.value || null);
     });
   }
 
@@ -234,7 +234,7 @@ export function wireScriptEditor(): void {
   if (loadBtn && slots) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
-      loadById(slots.value || null);
+      void loadById(slots.value || null);
     });
   }
 
@@ -376,7 +376,7 @@ export function wireScriptEditor(): void {
 
   if (slots && slots.value && slots.value.trim()) {
     // Auto-load the first/selected script
-    loadById(slots.value);
+    void loadById(slots.value);
   } else {
     // No saved script yet – still render whatever is in the editor
     if (editor.value.trim()) {

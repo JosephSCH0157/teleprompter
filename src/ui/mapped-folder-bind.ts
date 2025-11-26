@@ -1,8 +1,9 @@
-// src/ui/mapped-folder-bind.ts
+﻿// src/ui/mapped-folder-bind.ts
 // Bind Choose Folder button + Scripts <select> to mapped-folder SSOT.
 // Safe no-op if elements are missing.
 
 import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
+import { ScriptStore } from '../features/scripts-store';
 
 type BindOpts = {
   button: string | HTMLElement; // Choose Folder button selector or element
@@ -138,18 +139,20 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
   try {
     sel.innerHTML = '';
+    const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
     try { sel.setAttribute('aria-busy','true'); } catch {}
       if (!entries.length) {
         // Sidebar gets a Settings link placeholder instead of disabled select
         if (sel.id === 'scriptSelectSidebar') {
           sel.disabled = false;
-          const opt = new Option('Map script folder…', '__OPEN_SETTINGS__');
+          const opt = new Option('Map script folder...', '__OPEN_SETTINGS__');
           (opt as any).dataset.settingsLink = '1';
           sel.append(opt);
         } else {
           sel.disabled = true;
           sel.append(new Option('(No scripts found)', '', true, false));
         }
+        try { ScriptStore.syncMapped([]); } catch {}
         try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
@@ -165,6 +168,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       };
       try { opt._handle = e.handle; } catch {}
       try { opt.__fileHandle = e.handle; } catch {}
+      try { mappedEntries.push({ id: e.name, title: e.name, handle: e.handle }); } catch {}
       try {
         console.debug('[MAPPED-FOLDER] option created', {
           id: e.name,
@@ -175,6 +179,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       } catch {}
       sel.append(opt);
     }
+      try { ScriptStore.syncMapped(mappedEntries); } catch {}
       // Preselect last used script if present
       try {
         const last = getLastScriptName();
@@ -190,7 +195,6 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { sel.setAttribute('aria-busy','false'); } catch {}
     } catch {}
   }
-
   function populateSelectFromFiles(files: File[]) {
     try {
       const mockMode = !!(window as any).__tpMockFolderMode;
@@ -201,12 +205,14 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         return;
       }
       sel.innerHTML = '';
+      const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
       try { sel.setAttribute('aria-busy','true'); } catch {}
-      const filtered = files.filter(f => /\.(txt|docx|md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
+      const filtered = files.filter(f => /(\.txt|\.docx|\.md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
+        try { ScriptStore.syncMapped([]); } catch {}
         if (sel.id === 'scriptSelectSidebar') {
           sel.disabled = false;
-          const opt = new Option('Map script folder…', '__OPEN_SETTINGS__');
+          const opt = new Option('Map script folder...', '__OPEN_SETTINGS__');
           (opt as any).dataset.settingsLink = '1';
           sel.append(opt);
         } else {
@@ -228,6 +234,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       };
       try { opt._file = f; } catch {}
       try { opt.__file = f; } catch {}
+      try { mappedEntries.push({ id: f.name, title: f.name, handle: f as any }); } catch {}
       try {
         console.debug('[MAPPED-FOLDER] option created', {
           id: f.name,
@@ -238,6 +245,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       } catch {}
       sel.append(opt);
     }
+      try { ScriptStore.syncMapped(mappedEntries); } catch {}
       try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
       // Preselect last used script if present (fallback path) + maybe auto-load
       try {
@@ -254,7 +262,6 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { sel.setAttribute('aria-busy','false'); } catch {}
     } catch {}
   }
-
   function announceCount(n: number) {
     try {
       // Ensure a small aria-live polite status next to the select
@@ -363,3 +370,7 @@ function maybeAutoLoad(sel: HTMLSelectElement) {
     }
   } catch {}
 }
+
+
+
+
