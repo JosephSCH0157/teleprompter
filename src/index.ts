@@ -32,7 +32,8 @@ import { initObsToggle } from './ui/obs-toggle';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
 import { wireScriptEditor } from './ui/script-editor';
-import { initSpeechBridge } from './asr/bridge-speech';
+import { initSpeechBridge } from './asr/v2/bridge-speech';
+import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { shouldShowHud } from './hud/shouldShowHud';
 
 import { bootstrap } from './boot/boot';
@@ -74,6 +75,7 @@ try {
   setTimeout(restoreStore, 0);
   setTimeout(restoreStore, 500);
 } catch {}
+try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
