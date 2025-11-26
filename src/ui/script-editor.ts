@@ -60,6 +60,30 @@ type RefreshOptions = {
   quiet?: boolean;
 };
 
+async function readOptionText(opt: HTMLOptionElement): Promise<{ name: string; text: string } | null> {
+  try {
+    const handle = (opt as any)._handle as FileSystemFileHandle | undefined;
+    const file = (opt as any)._file as File | undefined;
+    const src = handle || file;
+    if (!src) return null;
+    let maybeFile: File | null = null;
+    try {
+      if (handle && typeof (handle as any).getFile === 'function') {
+        maybeFile = await (handle as any).getFile();
+      }
+    } catch {
+      maybeFile = null;
+    }
+    const f = (maybeFile as File | null) || file || null;
+    if (!f) return null;
+    const raw = await f.text();
+    return { name: f.name || opt.value, text: raw || '' };
+  } catch (err) {
+    try { console.warn('[script-editor] readOptionText failed', err); } catch {}
+    return null;
+  }
+}
+
 function getRenderScript(): RenderScriptFn {
   const fn = (window as any).renderScript as RenderScriptFn | undefined;
   if (typeof fn === 'function') return fn;
@@ -273,11 +297,25 @@ export function wireScriptEditor(): void {
     }
 
     if (!rec) {
-      (window as any)._toast?.(
-        'Couldn\'t load script. It may have been moved or deleted from the Scripts folder.',
-        { type: 'error' },
-      );
-      return;
+      // Fallback: try to read from the mapped-folder select option handles/files directly
+      const sel = resolveSelect();
+      const opt = sel ? Array.from(sel.options).find((o) => o.value === trimmed) : null;
+      if (!opt) {
+        (window as any)._toast?.(
+          'Couldn\'t load script. It may have been moved or deleted from the Scripts folder.',
+          { type: 'error' },
+        );
+        return;
+      }
+      const read = await readOptionText(opt);
+      if (!read) {
+        (window as any)._toast?.(
+          'Couldn\'t load script. It may have been moved or deleted from the Scripts folder.',
+          { type: 'error' },
+        );
+        return;
+      }
+      rec = { id: trimmed, title: read.name, content: read.text, updated: '' };
     }
 
     lastLoadedId = trimmed;
