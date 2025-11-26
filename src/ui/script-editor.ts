@@ -60,28 +60,49 @@ type RefreshOptions = {
   quiet?: boolean;
 };
 
-async function readOptionText(opt: HTMLOptionElement): Promise<{ name: string; text: string } | null> {
+async function readOptionTextFromDropdown(id: string): Promise<string | null> {
   try {
-    const handle = (opt as any)._handle as FileSystemFileHandle | undefined;
-    const file = (opt as any)._file as File | undefined;
-    const src = handle || file;
-    if (!src) return null;
-    let maybeFile: File | null = null;
-    try {
-      if (handle && typeof (handle as any).getFile === 'function') {
-        maybeFile = await (handle as any).getFile();
-      }
-    } catch {
-      maybeFile = null;
+    const select =
+      (document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null) ||
+      (document.getElementById('scriptSelect') as HTMLSelectElement | null);
+    if (!select) {
+      try { console.debug('[SCRIPT-EDITOR] readOptionText: no select element'); } catch {}
+      return null;
     }
-    const f = (maybeFile as File | null) || file || null;
-    if (!f) return null;
-    const raw = await f.text();
-    return { name: f.name || opt.value, text: raw || '' };
+    const option = Array.from(select.options).find((opt) => opt.value === id) as (HTMLOptionElement & {
+      __fileHandle?: FileSystemFileHandle;
+      __file?: File;
+      _handle?: FileSystemFileHandle;
+      _file?: File;
+    }) | undefined;
+    if (!option) {
+      try { console.debug('[SCRIPT-EDITOR] readOptionText: no option for id', { id }); } catch {}
+      return null;
+    }
+    const anyOpt = option as any;
+    const file = anyOpt.__file || anyOpt._file;
+    if (file instanceof File) {
+      const text = await file.text();
+      try { console.debug('[SCRIPT-EDITOR] readOptionText: read from file', { id, length: text.length }); } catch {}
+      return text;
+    }
+    const handle = anyOpt.__fileHandle || anyOpt._handle;
+    if (handle && typeof handle.getFile === 'function') {
+      const f: File = await handle.getFile();
+      const text = await f.text();
+      try { console.debug('[SCRIPT-EDITOR] readOptionText: read from handle', { id, length: text.length }); } catch {}
+      return text;
+    }
+    try {
+      console.debug('[SCRIPT-EDITOR] readOptionText: option has no file handle', {
+        id,
+        keys: Object.keys(anyOpt || {}),
+      });
+    } catch {}
   } catch (err) {
-    try { console.warn('[script-editor] readOptionText failed', err); } catch {}
-    return null;
+    try { console.warn('[SCRIPT-EDITOR] readOptionText failed', err); } catch {}
   }
+  return null;
 }
 
 function getRenderScript(): RenderScriptFn {
@@ -293,25 +314,15 @@ export function wireScriptEditor(): void {
     let title = rec?.title || trimmed;
     let content = rec?.content || '';
 
-    // Fallback: try to read from the mapped-folder select option handles/files directly
     if (!content) {
-      const sel = resolveSelect();
-      const opt = sel ? Array.from(sel.options).find((o) => o.value === trimmed) : null;
-      if (opt) {
-        const read = await readOptionText(opt);
-        if (read) {
-          title = read.name || title;
-          content = read.text || content;
-        }
-      }
+      const fallbackText = await readOptionTextFromDropdown(trimmed);
+      if (fallbackText) content = fallbackText;
     }
 
     try { console.debug('[SCRIPT-EDITOR] loaded script text length', { id: trimmed, length: content.length }); } catch {}
     if (!content) {
-      (window as any)._toast?.(
-        'Couldn\'t load script text. It may have been moved or is empty.',
-        { type: 'error' },
-      );
+      try { window.toast && window.toast('That script appears to be empty or could not be read.', { type: 'error' }); } catch {}
+      try { console.warn('[SCRIPT-EDITOR] loadScriptById: empty text after all fallbacks', { id: trimmed }); } catch {}
       return;
     }
 
