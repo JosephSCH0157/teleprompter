@@ -124,6 +124,23 @@ export function wireScriptEditor(): void {
     }
   };
 
+  // Listen for tp:script-load events (emitted by mapped-folder pipeline) and render
+  if (editor) {
+    window.addEventListener('tp:script-load', (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
+        const raw = detail.text || '';
+        if (!raw) return;
+        const normalized = normalizeScriptText(raw);
+        editor.value = normalized;
+        if (titleInput && detail.name) titleInput.value = detail.name;
+        applyToViewer(normalized);
+      } catch (err) {
+        try { console.warn('[SCRIPT-EDITOR] tp:script-load handler failed', err); } catch {}
+      }
+    });
+  }
+
   const refreshDropdown = () => {
     if (!slots) return;
 
