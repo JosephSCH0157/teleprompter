@@ -91,30 +91,43 @@ async function readFileAsScriptText(file: File): Promise<string> {
 
 async function readOptionTextFromDropdown(id: string): Promise<string | null> {
   try {
-    const select =
-      (document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null) ||
-      (document.getElementById('scriptSelect') as HTMLSelectElement | null);
-    if (!select) {
-      try { console.debug('[SCRIPT-EDITOR] readOptionText: no select element'); } catch {}
-      return null;
+    const selects: (HTMLSelectElement | null)[] = [
+      document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null,
+      document.getElementById('scriptSelect') as HTMLSelectElement | null,
+      document.getElementById('scriptSlots') as HTMLSelectElement | null,
+    ];
+
+    let optionWithHandle: HTMLOptionElement | null = null;
+    let firstOption: HTMLOptionElement | null = null;
+
+    for (const sel of selects) {
+      if (!sel) continue;
+      const opt = Array.from(sel.options).find((o) => o.value === id) as HTMLOptionElement | undefined;
+      if (!opt) continue;
+
+      if (!firstOption) firstOption = opt;
+
+      const anyOpt = opt as any;
+      if (anyOpt.__file || anyOpt._file || anyOpt.__fileHandle || anyOpt._handle) {
+        optionWithHandle = opt;
+        break;
+      }
     }
-    const option = Array.from(select.options).find((opt) => opt.value === id) as (HTMLOptionElement & {
-      __fileHandle?: FileSystemFileHandle;
-      __file?: File;
-      _handle?: FileSystemFileHandle;
-      _file?: File;
-    }) | undefined;
-    if (!option) {
+
+    const target = optionWithHandle || firstOption;
+    if (!target) {
       try { console.debug('[SCRIPT-EDITOR] readOptionText: no option for id', { id }); } catch {}
       return null;
     }
-    const anyOpt = option as any;
-    const file = anyOpt.__file || anyOpt._file;
-    if (file instanceof File) {
+
+    const anyOpt = target as any;
+    if (anyOpt.__file instanceof File || anyOpt._file instanceof File) {
+      const file = (anyOpt.__file || anyOpt._file) as File;
       const text = await readFileAsScriptText(file);
-      try { console.debug('[SCRIPT-EDITOR] readOptionText: read from file', { id, length: text.length }); } catch {}
+      try { console.debug('[SCRIPT-EDITOR] readOptionText: read from __file/_file', { id, length: text.length }); } catch {}
       return text;
     }
+
     const handle = anyOpt.__fileHandle || anyOpt._handle;
     if (handle && typeof handle.getFile === 'function') {
       const f: File = await handle.getFile();
@@ -122,6 +135,7 @@ async function readOptionTextFromDropdown(id: string): Promise<string | null> {
       try { console.debug('[SCRIPT-EDITOR] readOptionText: read from handle', { id, length: text.length }); } catch {}
       return text;
     }
+
     try {
       console.debug('[SCRIPT-EDITOR] readOptionText: option has no file handle', {
         id,
