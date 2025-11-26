@@ -127,6 +127,7 @@ export {};
       if (__startingCam) return; // prevent double-fire
       if (isCamActive()) return; // already live
       __startingCam = true;
+      try { console.debug('[CAM] startCamera click → request'); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:camera:starting')); } catch {}
       try {
       // Ensure any previous stream is fully stopped before starting
@@ -197,6 +198,7 @@ export {};
       camVideo.muted = true; camVideo.autoplay = true; camVideo.playsInline = true; camVideo.controls = false;
       camVideo.srcObject = stream;
       try { await camVideo.play(); } catch {}
+      try { console.debug('[CAM] getUserMedia ok', { label: activeTrackLabel(stream) }); } catch {}
       camWrap.style.display = 'block';
       camStream = stream;
       setCamButtons(true);
@@ -236,8 +238,10 @@ export {};
       return true;
       } finally { __startingCam = false; }
     } catch (e) {
+      try { console.debug('[CAM] getUserMedia error', e); } catch {}
       console.warn('startCamera failed', e);
       try { window.dispatchEvent(new CustomEvent('tp:camera:error', { detail: { message: String(e && e.message || e) } })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:camera:stopped')); } catch {}
       try { (window.toast && window.toast('Camera failed: ' + (e && e.message || 'Unknown error'), { type: 'error' })) || console.error('Camera failed'); } catch {}
       throw e;
     }
@@ -246,6 +250,7 @@ export {};
   function stopCamera() {
     try {
   _wantCamRTC = false;
+      try { console.debug('[CAM] stopCamera invoked'); } catch {}
       const camVideo = document.getElementById('camVideo');
       const camWrap = document.getElementById('camWrap');
       if (camStream) camStream.getTracks().forEach(t=>t.stop());
@@ -255,6 +260,7 @@ export {};
       setCamButtons(false);
       try { window.sendToDisplay && window.sendToDisplay({ type: 'webrtc-stop' }); } catch {}
       if (camPC) { try { camPC.close(); } catch {} camPC = null; }
+      try { window.dispatchEvent(new CustomEvent('tp:camera:stopped')); } catch {}
     } catch (e) { console.warn('stopCamera failed', e); }
   }
 
@@ -350,6 +356,7 @@ export {};
       if (state.starting) return; // ignore parallel calls
       if (state.stream) { emit('tp:camera:started', { resumed: true }); return; }
       state.starting = true; emit('tp:camera:starting');
+      try { console.debug('[CAM] hardened start → request'); } catch {}
       try {
         const constraints = { video: true, audio: false };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -363,10 +370,12 @@ export {};
             const wrap = document.getElementById('camWrap'); if (wrap) wrap.style.display = 'block';
           } catch{}
         }
+        try { console.debug('[CAM] hardened getUserMedia ok', { label: (stream.getVideoTracks?.()[0]?.label)||'' }); } catch {}
         emit('tp:camera:started', { label: (stream.getVideoTracks?.()[0]?.label)||'' });
       } catch(err) {
         try { console.error('[camera] start failed', err); } catch{}
         emit('tp:camera:error', { message: String(err && err.message || err) });
+        emit('tp:camera:stopped', {});
         try { (window.toast && window.toast('Camera failed: ' + (err && err.message || 'Unknown'), { type:'error' })); } catch{}
         throw err; // allow callers to handle
       } finally { state.starting = false; }
