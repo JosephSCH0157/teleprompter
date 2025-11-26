@@ -420,6 +420,26 @@ export function wireScriptEditor(): void {
   } catch {
     /* noop */
   }
+
+  // Also honor tp:script-load events (e.g., from mapped-folder fallback) as a data source.
+  try {
+    window.addEventListener('tp:script-load', (e: Event) => {
+      try {
+        const detail = (e as CustomEvent<{ name?: string; text?: string }>).detail || {};
+        const text = detail.text || '';
+        const name = detail.name || '';
+        console.debug('[SCRIPT-EDITOR] tp:script-load event', { name, textLen: text.length });
+        editor.value = text;
+        if (scriptTitle) scriptTitle.value = name;
+        lastLoadedId = null; // allow dropdown load to reapply after external events
+        applyEditorToViewer();
+      } catch (err) {
+        console.warn('[SCRIPT-EDITOR] tp:script-load handler failed', err);
+      }
+    });
+  } catch {
+    // ignore
+  }
 }
 
 // Convenience: expose a global hook for any legacy callers
