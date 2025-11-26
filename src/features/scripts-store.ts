@@ -93,6 +93,7 @@ export const ScriptStore = {
   },
 
   syncMapped(entries: { id: string; title: string; handle: FileSystemHandle }[]): void {
+    try { console.debug('[SCRIPT-STORE] syncMapped entries', entries); } catch {}
     mappedHandles.clear();
 
     for (const e of entries) {
@@ -103,9 +104,9 @@ export const ScriptStore = {
         id: e.id,
         title: e.title,
         content: existing?.content || '',
-        created: existing?.created,
+        created: existing?.created || new Date().toISOString(),
         updated: existing?.updated,
-        source: existing?.source || 'mapped',
+        source: existing?.source ?? 'mapped',
       });
     }
   },
