@@ -136,6 +136,30 @@ async function readOptionTextFromDropdown(id: string): Promise<string | null> {
       return text;
     }
 
+    // As a last resort, search all options in the document for this id and prefer one with a handle/file.
+    if (!optionWithHandle) {
+      const allOpts = Array.from(document.querySelectorAll('option')) as any[];
+      const matches = allOpts.filter((o) => (o && o.value) === id);
+      const withHandle = matches.find((o) => o.__file || o._file || o.__fileHandle || o._handle);
+      const fallback = withHandle || matches[0];
+      if (withHandle || fallback) {
+        const anyTarget = (withHandle || fallback) as any;
+        if (anyTarget.__file instanceof File || anyTarget._file instanceof File) {
+          const file = (anyTarget.__file || anyTarget._file) as File;
+          const text = await readFileAsScriptText(file);
+          try { console.debug('[SCRIPT-EDITOR] readOptionText: doc-wide match from file', { id, length: text.length }); } catch {}
+          return text;
+        }
+        const h = anyTarget.__fileHandle || anyTarget._handle;
+        if (h && typeof h.getFile === 'function') {
+          const f: File = await h.getFile();
+          const text = await readFileAsScriptText(f);
+          try { console.debug('[SCRIPT-EDITOR] readOptionText: doc-wide match from handle', { id, length: text.length }); } catch {}
+          return text;
+        }
+      }
+    }
+
     try {
       console.debug('[SCRIPT-EDITOR] readOptionText: option has no file handle', {
         id,
