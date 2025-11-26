@@ -189,6 +189,7 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
   const enableF = cfg.enableFKeys ?? true;
 
   let mode: 'on' | 'off' = 'off';
+  let uiWrap: HTMLElement | null = null;
 
   const root =
     (document.getElementById('script') as HTMLElement | null) ||
@@ -294,12 +295,22 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     if (mode === 'on') return;
     mode = 'on';
     document.addEventListener('keydown', onKey, { capture: true });
+    try {
+      if (uiWrap) uiWrap.style.display = '';
+    } catch {
+      // ignore
+    }
   }
 
   function disable(): void {
     if (mode === 'off') return;
     mode = 'off';
     document.removeEventListener('keydown', onKey, { capture: true });
+    try {
+      if (uiWrap) uiWrap.style.display = 'none';
+    } catch {
+      // ignore
+    }
   }
 
   // Optional tiny UI chips if host page doesn’t add them
@@ -315,6 +326,8 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
       wrap.setAttribute('data-step-ui', '1');
       wrap.style.cssText =
         'display:inline-flex;gap:.4rem;margin-left:.5rem;';
+      uiWrap = wrap;
+      uiWrap.style.display = 'none';
 
       const mkBtn = (label: string, dir: 1 | -1) => {
         const b = document.createElement('button');
