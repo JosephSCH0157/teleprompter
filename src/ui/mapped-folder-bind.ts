@@ -159,6 +159,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       for (const e of entries) {
         const opt = new Option(e.name, e.name);
         (opt as any)._handle = e.handle;
+        try { (opt as any).__fileHandle = e.handle; } catch {}
         sel.append(opt);
       }
       // Preselect last used script if present
@@ -208,6 +209,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       for (const f of filtered) {
         const opt = new Option(f.name, f.name);
         (opt as any)._file = f;
+        try { (opt as any).__file = f; } catch {}
         sel.append(opt);
       }
       try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}

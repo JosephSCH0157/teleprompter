@@ -61,6 +61,34 @@ type RefreshOptions = {
 };
 
 let scriptEditorWired = false;
+async function readFileAsScriptText(file: File): Promise<string> {
+  try {
+    const name = (file && file.name || '').toLowerCase();
+    if (name.endsWith('.docx')) {
+      try {
+        const ensure = (window as any).ensureMammoth as undefined | (() => Promise<any>);
+        const mod = ensure ? await ensure() : null;
+        const mammoth = (mod && (mod.mammoth || mod.default)) || (window as any).mammoth || null;
+        if (!mammoth) throw new Error('mammoth not available');
+        const buf = await file.arrayBuffer();
+        const res = await (mammoth.extractRawText ? mammoth.extractRawText({ arrayBuffer: buf }) : mammoth.convertToHtml({ arrayBuffer: buf }));
+        const raw = (res && (res.value || res.text || '')) || '';
+        const text = String(raw).replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        try { console.debug('[SCRIPT-EDITOR] mammoth converted DOCX', { length: text.length }); } catch {}
+        return text;
+      } catch (err) {
+        try { console.error('[SCRIPT-EDITOR] DOCX conversion failed', err); } catch {}
+        return '';
+      }
+    }
+    const txt = await file.text();
+    try { console.debug('[SCRIPT-EDITOR] read plain text file', { length: txt.length }); } catch {}
+    return txt;
+  } catch {
+    return '';
+  }
+}
+
 async function readOptionTextFromDropdown(id: string): Promise<string | null> {
   try {
     const select =
@@ -83,14 +111,14 @@ async function readOptionTextFromDropdown(id: string): Promise<string | null> {
     const anyOpt = option as any;
     const file = anyOpt.__file || anyOpt._file;
     if (file instanceof File) {
-      const text = await file.text();
+      const text = await readFileAsScriptText(file);
       try { console.debug('[SCRIPT-EDITOR] readOptionText: read from file', { id, length: text.length }); } catch {}
       return text;
     }
     const handle = anyOpt.__fileHandle || anyOpt._handle;
     if (handle && typeof handle.getFile === 'function') {
       const f: File = await handle.getFile();
-      const text = await f.text();
+      const text = await readFileAsScriptText(f);
       try { console.debug('[SCRIPT-EDITOR] readOptionText: read from handle', { id, length: text.length }); } catch {}
       return text;
     }
