@@ -22,11 +22,17 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     return () => {};
   }
 
-  await initMappedFolder();
+  let didInit = false;
+  const ensureInit = async () => {
+    if (didInit) return;
+    didInit = true;
+    await initMappedFolder();
+  };
 
   try { (btn as any).dataset.mappedFolderWired = '1'; } catch {}
   btn.addEventListener('click', async () => {
     try {
+      await ensureInit();
       if ('showDirectoryPicker' in window) {
         try {
           const ok = await pickMappedFolder();
@@ -109,6 +115,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   async function refreshList() {
     try {
+      await ensureInit();
       // In deterministic CI mock mode, preserve pre-populated options (avoid wiping to "(No scripts found)")
       const mockMode = !!(window as any).__tpMockFolderMode;
       const hasPreMock = mockMode && sel && sel.options && sel.options.length > 1 && !(window as any).__tpFolder?.get?.();
