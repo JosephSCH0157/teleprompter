@@ -1,3 +1,6 @@
+/* eslint-disable */
+// Legacy entrypoint — superseded by TypeScript under src/.
+// Kept for reference only; not used by current runtime.
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import { bootstrap } from './boot/boot';
 import './boot/compat-ids';

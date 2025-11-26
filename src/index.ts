@@ -3,6 +3,7 @@
 const TS_BOOT_OWNER = 'ts:index';
 try { console.log('[TP-BOOT] TS index.ts booted'); } catch {}
 
+// Thin conductor: this file only orchestrates boot. Feature logic lives in their modules.
 // Signal TS is primary so legacy preloaders can stand down
 try { (window as any).__TP_TS_PRIMARY__ = true; } catch {}
 try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
