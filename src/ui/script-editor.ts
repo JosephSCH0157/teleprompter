@@ -61,19 +61,6 @@ type RefreshOptions = {
 };
 
 let scriptEditorWired = false;
-let lastScriptFingerprint: string | null = null;
-
-function fingerprintScriptFromDetail(detail: any): string {
-  try {
-    const id = detail?.id ?? detail?.scriptId ?? 'no-id';
-    const title = detail?.title ?? '';
-    const text: string = typeof detail?.text === 'string' ? detail.text : '';
-    return `${id}::${title}::${text.length}`;
-  } catch {
-    return 'fingerprint-error';
-  }
-}
-
 async function readOptionTextFromDropdown(id: string): Promise<string | null> {
   try {
     const select =
@@ -495,16 +482,15 @@ export function wireScriptEditor(): void {
         const text: string = typeof detail.text === 'string' ? detail.text : '';
         const id = detail.id ?? detail.scriptId ?? undefined;
         const title = detail.title ?? detail.name ?? 'Untitled';
-        const fp = fingerprintScriptFromDetail(detail);
-        if (fp === lastScriptFingerprint) {
-          try { console.debug('[SCRIPT-EDITOR] tp:script-load duplicate, skipping', { id, title, length: text.length }); } catch {}
+
+        const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
+        const current = editor?.value ?? '';
+        if (current === text) {
+          try { console.debug('[SCRIPT-EDITOR] tp:script-load duplicate (same editor text), skipping', { id, title, length: text.length }); } catch {}
           return;
         }
-        lastScriptFingerprint = fp;
         console.debug('[SCRIPT-EDITOR] tp:script-load', { id, title, length: text.length });
-        if (editor) {
-          editor.value = text;
-        }
+        if (editor) editor.value = text;
         if (scriptTitle) {
           scriptTitle.value = title;
         }
