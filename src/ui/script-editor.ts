@@ -280,48 +280,45 @@ export function wireScriptEditor(): void {
       api = null;
     }
 
-    if (!api || typeof api.get !== 'function') {
+    let rec: ScriptRecord | null = null;
+    if (api && typeof api.get === 'function') {
+      try {
+        rec = api.get(trimmed);
+      } catch (err) {
+        try { console.warn('[script-editor] scripts get failed', err); } catch {}
+        rec = null;
+      }
+    }
+
+    let title = rec?.title || trimmed;
+    let content = rec?.content || '';
+
+    // Fallback: try to read from the mapped-folder select option handles/files directly
+    if (!content) {
+      const sel = resolveSelect();
+      const opt = sel ? Array.from(sel.options).find((o) => o.value === trimmed) : null;
+      if (opt) {
+        const read = await readOptionText(opt);
+        if (read) {
+          title = read.name || title;
+          content = read.text || content;
+        }
+      }
+    }
+
+    try { console.debug('[SCRIPT-EDITOR] loaded script text length', { id: trimmed, length: content.length }); } catch {}
+    if (!content) {
       (window as any)._toast?.(
-        'Scripts folder unavailable. Check the mapped folder in Settings -> Media.',
+        'Couldn\'t load script text. It may have been moved or is empty.',
         { type: 'error' },
       );
       return;
     }
 
-    let rec: ScriptRecord | null = null;
-    try {
-      rec = api.get(trimmed);
-    } catch (err) {
-      try { console.warn('[script-editor] scripts get failed', err); } catch {}
-      rec = null;
-    }
-
-    if (!rec) {
-      // Fallback: try to read from the mapped-folder select option handles/files directly
-      const sel = resolveSelect();
-      const opt = sel ? Array.from(sel.options).find((o) => o.value === trimmed) : null;
-      if (!opt) {
-        (window as any)._toast?.(
-          'Couldn\'t load script. It may have been moved or deleted from the Scripts folder.',
-          { type: 'error' },
-        );
-        return;
-      }
-      const read = await readOptionText(opt);
-      if (!read) {
-        (window as any)._toast?.(
-          'Couldn\'t load script. It may have been moved or deleted from the Scripts folder.',
-          { type: 'error' },
-        );
-        return;
-      }
-      rec = { id: trimmed, title: read.name, content: read.text, updated: '' };
-    }
-
     lastLoadedId = trimmed;
-    editor.value = rec.content || '';
+    editor.value = content;
     if (scriptTitle) {
-      scriptTitle.value = rec.title || '';
+      scriptTitle.value = title || '';
     }
 
     applyEditorToViewer();
