@@ -89,6 +89,79 @@ function normalizeScriptText(raw: string): string {
   }
   return raw;
 }
+
+function wrapSelectionWithBlockTags(
+  editor: HTMLTextAreaElement,
+  tag: 's1' | 's2' | 'guest1' | 'guest2',
+): void {
+  const value = editor.value || '';
+  const start = editor.selectionStart ?? 0;
+  const end = editor.selectionEnd ?? 0;
+
+  const before = value.slice(0, start);
+  const selected = value.slice(start, end);
+  const after = value.slice(end);
+
+  const openTag = `[${tag}]`;
+  const closeTag = `[/${tag}]`;
+
+  const needsLeadingNewline = before.length > 0 && !before.endsWith('\n');
+  const needsTrailingNewline = after.length > 0 && !after.startsWith('\n');
+
+  const prefix = needsLeadingNewline ? '\n' : '';
+  const suffix = needsTrailingNewline ? '\n' : '';
+
+  let wrapped = '';
+
+  if (selected && selected.trim().length > 0) {
+    wrapped = `${prefix}${openTag}\n${selected}\n${closeTag}${suffix}`;
+  } else {
+    wrapped = `${prefix}${openTag}\n\n${closeTag}${suffix}`;
+  }
+
+  const newText = before + wrapped + after;
+  editor.value = newText;
+
+  if (!selected || selected.trim().length === 0) {
+    const caretPos = (before + prefix + openTag + '\n').length;
+    editor.selectionStart = editor.selectionEnd = caretPos;
+  } else {
+    const newStart = (before + prefix + openTag + '\n').length;
+    const newEnd = newStart + selected.length;
+    editor.selectionStart = newStart;
+    editor.selectionEnd = newEnd;
+  }
+
+  // Fire input so existing handlers (store sync, render) run
+  try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+}
+
+function wireSpeakerTagButtons(
+  editor: HTMLTextAreaElement,
+  onChange?: () => void,
+): void {
+  const map: Record<string, 's1' | 's2' | 'guest1' | 'guest2'> = {
+    'wrap-s1': 's1',
+    'wrap-s2': 's2',
+    'wrap-g1': 'guest1',
+    'wrap-g2': 'guest2',
+  };
+
+  Object.entries(map).forEach(([btnId, tag]) => {
+    const btn = document.getElementById(btnId) as HTMLButtonElement | null;
+    if (!btn) return;
+
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (document.activeElement !== editor) {
+        editor.focus();
+      }
+      wrapSelectionWithBlockTags(editor, tag);
+      try { onChange?.(); } catch {}
+    });
+  });
+}
 async function readFileAsScriptText(file: File): Promise<string> {
   try {
     const name = (file && file.name || '').toLowerCase();
@@ -544,6 +617,9 @@ export function wireScriptEditor(): void {
     try { console.debug('[SCRIPT-EDITOR] select change', { value: t.value }); } catch {}
     void doLoad(t.value);
   }, { capture: true });
+
+  // Speaker tag wrap buttons
+  wireSpeakerTagButtons(editor, applyEditorToViewer);
 
   if (scriptSelect) {
     if (scriptRefreshBtn) {
