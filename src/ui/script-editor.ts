@@ -658,7 +658,6 @@ export function wireScriptEditor(): void {
         const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
         const current = editor?.value ?? '';
         if (current === text) {
-          try { console.debug('[SCRIPT-EDITOR] tp:script-load duplicate (same editor text), skipping', { id, title, length: text.length }); } catch {}
           return;
         }
         console.debug('[SCRIPT-EDITOR] tp:script-load', { id, title, length: text.length });
