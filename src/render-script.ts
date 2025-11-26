@@ -1,6 +1,7 @@
 // src/render-script.ts
 export function renderScript(text: string) {
   const root =
+    (document.querySelector('[data-script-view]') as HTMLElement | null) ||
     (document.querySelector('#script') as HTMLElement | null) ||
     (document.querySelector('.script') as HTMLElement | null);
 

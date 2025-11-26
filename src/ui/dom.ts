@@ -435,7 +435,9 @@ function resetRun() {
 
   // Scroll viewer to the top
   try {
-    const scroller = document.getElementById('viewer') || document.scrollingElement || document.documentElement;
+    const scroller =
+      (document.querySelector('[data-script-view]') as HTMLElement | null) ||
+      document.getElementById('viewer');
     if (scroller) scroller.scrollTop = 0;
     try {
       const max = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
