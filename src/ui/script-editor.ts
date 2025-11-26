@@ -136,7 +136,10 @@ function wrapSelectionWithBlockTags(
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function insertInlineTag(editor: HTMLTextAreaElement, tag: 'note' | 'b' | 'i' | 'u'): void {
+function insertInlineTag(
+  editor: HTMLTextAreaElement,
+  tag: 'note' | 'b' | 'i' | 'u',
+): void {
   const value = editor.value || '';
   const start = editor.selectionStart ?? 0;
   const end = editor.selectionEnd ?? 0;
@@ -159,7 +162,11 @@ function insertInlineTag(editor: HTMLTextAreaElement, tag: 'note' | 'b' | 'i' | 
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function insertColorTag(editor: HTMLTextAreaElement, kind: 'color' | 'bg', value: string): void {
+function insertColorTag(
+  editor: HTMLTextAreaElement,
+  kind: 'color' | 'bg',
+  value: string,
+): void {
   const text = editor.value || '';
   const start = editor.selectionStart ?? 0;
   const end = editor.selectionEnd ?? 0;
@@ -248,6 +255,7 @@ async function refreshScriptsDropdown(
 
   const snap = snapshotScripts(entries);
   if (snap === lastScriptsSnapshot && !quiet) {
+    // No changes; keep as-is
     return;
   }
   lastScriptsSnapshot = snap;
@@ -272,6 +280,7 @@ async function refreshScriptsDropdown(
   if (preserveSelection && prevSelected && entries.some((e) => e.id === prevSelected)) {
     scriptSelect.value = prevSelected;
   } else if (!hasLoadedInitialScript && entries.length === 1) {
+    // Auto-select the single script on first poll
     scriptSelect.value = entries[0].id;
   } else if (!scriptSelect.value && entries.length) {
     scriptSelect.value = entries[0].id;
@@ -308,7 +317,13 @@ async function loadScriptById(id: string): Promise<void> {
   scriptSelect.value = id;
   lastLoadedId = id;
 
+  // Fire input to sync viewer & any autosave
   editor.dispatchEvent(new Event('input', { bubbles: true }));
+
+  console.debug('[SCRIPT-EDITOR] loaded script text length', {
+    id: record.id,
+    length: normalized.length,
+  });
 
   try {
     const ev = new CustomEvent('tp:script-load', {
@@ -334,6 +349,7 @@ function startScriptsPolling(scriptSelect: HTMLSelectElement): void {
     }
   };
 
+  // Initial refresh
   void poll();
 
   scriptsPollTimer = window.setInterval(() => {
@@ -594,8 +610,10 @@ function setupScriptEditorBindings(): void {
     });
   }
 
+  // Initial render
   applyEditorToViewer();
 
+  // Listen for external script load events (e.g., from other parts of the app)
   try {
     document.addEventListener('tp:script-load', (ev: Event) => {
       const detail = (ev as CustomEvent).detail as { id?: string; title?: string } | undefined;
@@ -630,6 +648,7 @@ export function wireScriptEditor(): void {
   }
 }
 
+// Convenience: expose a global hook for any legacy callers
 try {
   (window as any).__tpWireScriptEditor = wireScriptEditor;
 } catch {
