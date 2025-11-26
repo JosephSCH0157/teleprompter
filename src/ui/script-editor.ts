@@ -1,4 +1,5 @@
 // Simple script editor wiring:
+//
 // - Uses window.Scripts as the source of truth (mapped folder + local scripts)
 // - Drives #scriptSlots dropdown + Load/Save/Save As/Delete/Rename
 // - Pushes text into #editor and renders via the TS tag-aware renderer into #script
@@ -8,8 +9,19 @@ import { normalizeToStandardText, fallbackNormalizeText } from '../script/normal
 
 type RenderScriptFn = (text: string) => void;
 
-type ScriptMeta = { id: string; title: string; updated?: string };
-type ScriptRecord = { id: string; title: string; content: string; updated?: string; created?: string };
+type ScriptMeta = {
+  id: string;
+  title: string;
+  updated?: string;
+};
+
+type ScriptRecord = {
+  id: string;
+  title: string;
+  content: string;
+  updated?: string;
+  created?: string;
+};
 
 type ScriptsApi = {
   list?: () => ScriptMeta[];
@@ -61,16 +73,18 @@ function normalizeScriptText(raw: string): string {
 }
 
 function getRenderScript(): RenderScriptFn {
-  // Prefer TS renderer
+  // 1) Prefer the TypeScript renderer (full tag-aware rendering)
   if (typeof tsRenderScript === 'function') {
     return tsRenderScript;
   }
 
-  // Fallback: any legacy global renderer
+  // 2) Fallback: any legacy global renderer (JS bundle / tests)
   const maybe = (window as any).renderScript as RenderScriptFn | undefined;
-  if (typeof maybe === 'function') return maybe;
+  if (typeof maybe === 'function') {
+    return maybe;
+  }
 
-  // Last-ditch: super simple line renderer
+  // 3) Last-ditch: minimal renderer, so the UI never explodes
   return (text: string) => {
     const scriptEl = document.getElementById('script') as HTMLElement | null;
     if (!scriptEl) return;
@@ -107,7 +121,6 @@ export function wireScriptEditor(): void {
 
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const scriptEl = document.getElementById('script') as HTMLElement | null;
-
   const slots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
   const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
 
@@ -118,7 +131,9 @@ export function wireScriptEditor(): void {
   const renameBtn = document.getElementById('scriptRenameBtn') as HTMLButtonElement | null;
 
   if (!editor || !scriptEl) {
-    try { console.warn('[SCRIPT-EDITOR] editor or script element missing'); } catch {}
+    try {
+      console.warn('[SCRIPT-EDITOR] editor or script element missing', { editor: !!editor, scriptEl: !!scriptEl });
+    } catch {}
     return;
   }
 
@@ -241,14 +256,16 @@ export function wireScriptEditor(): void {
 
   // Load button: explicit load of current dropdown selection
   if (loadBtn && slots) {
-    loadBtn.addEventListener('click', () => {
+    loadBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
       loadById(slots.value || null);
     });
   }
 
   // Save existing script (or create if no id yet)
   if (saveBtn) {
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
       const api = getScriptsApi();
       if (!api || typeof api.save !== 'function') {
         try { console.warn('[SCRIPT-EDITOR] Scripts.save not available'); } catch {}
@@ -280,7 +297,8 @@ export function wireScriptEditor(): void {
 
   // Save As: always prompt for new name and create a new script
   if (saveAsBtn) {
-    saveAsBtn.addEventListener('click', () => {
+    saveAsBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
       const api = getScriptsApi();
       if (!api || typeof api.save !== 'function') {
         try { console.warn('[SCRIPT-EDITOR] Scripts.save not available for Save As'); } catch {}
@@ -315,7 +333,8 @@ export function wireScriptEditor(): void {
 
   // Delete current script
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', () => {
+    deleteBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
       const api = getScriptsApi();
       if (!api || typeof api.remove !== 'function') {
         try { console.warn('[SCRIPT-EDITOR] Scripts.remove not available'); } catch {}
@@ -346,7 +365,8 @@ export function wireScriptEditor(): void {
 
   // Rename current script
   if (renameBtn) {
-    renameBtn.addEventListener('click', () => {
+    renameBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
       const api = getScriptsApi();
       if (!api || typeof api.rename !== 'function') {
         try { console.warn('[SCRIPT-EDITOR] Scripts.rename not available'); } catch {}
@@ -367,7 +387,7 @@ export function wireScriptEditor(): void {
       } catch (err) {
         try {
           console.error('[SCRIPT-EDITOR] Scripts.rename failed', err);
-          (window as any)._toast?.('Rename failed', { type: 'error' }); 
+          (window as any)._toast?.('Rename failed', { type: 'error' });
         } catch {
           // ignore
         }
@@ -386,7 +406,7 @@ export function wireScriptEditor(): void {
     if (editor.value.trim()) {
       applyToViewer(editor.value);
     } else {
-      applyToViewer(''); // minimal placeholder
+      applyToViewer('');
     }
   }
 
