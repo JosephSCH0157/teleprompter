@@ -135,10 +135,10 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   }
 
-  function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
-    try {
-      sel.innerHTML = '';
-      try { sel.setAttribute('aria-busy','true'); } catch {}
+function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
+  try {
+    sel.innerHTML = '';
+    try { sel.setAttribute('aria-busy','true'); } catch {}
       if (!entries.length) {
         // Sidebar gets a Settings link placeholder instead of disabled select
         if (sel.id === 'scriptSelectSidebar') {
@@ -155,13 +155,26 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         try { announceCount(0); } catch {}
         return;
       }
-      sel.disabled = false;
-      for (const e of entries) {
-        const opt = new Option(e.name, e.name);
-        (opt as any)._handle = e.handle;
-        try { (opt as any).__fileHandle = e.handle; } catch {}
-        sel.append(opt);
-      }
+    sel.disabled = false;
+    for (const e of entries) {
+      const opt = new Option(e.name, e.name) as HTMLOptionElement & {
+        __fileHandle?: FileSystemFileHandle;
+        __file?: File;
+        _handle?: FileSystemFileHandle;
+        _file?: File;
+      };
+      try { opt._handle = e.handle; } catch {}
+      try { opt.__fileHandle = e.handle; } catch {}
+      try {
+        console.debug('[MAPPED-FOLDER] option created', {
+          id: e.name,
+          label: e.name,
+          hasHandle: !!e.handle,
+          hasFile: false,
+        });
+      } catch {}
+      sel.append(opt);
+    }
       // Preselect last used script if present
       try {
         const last = getLastScriptName();
@@ -205,13 +218,26 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         try { announceCount(0); } catch {}
         return;
       }
-      sel.disabled = false;
-      for (const f of filtered) {
-        const opt = new Option(f.name, f.name);
-        (opt as any)._file = f;
-        try { (opt as any).__file = f; } catch {}
-        sel.append(opt);
-      }
+    sel.disabled = false;
+    for (const f of filtered) {
+      const opt = new Option(f.name, f.name) as HTMLOptionElement & {
+        __fileHandle?: FileSystemFileHandle;
+        __file?: File;
+        _handle?: FileSystemFileHandle;
+        _file?: File;
+      };
+      try { opt._file = f; } catch {}
+      try { opt.__file = f; } catch {}
+      try {
+        console.debug('[MAPPED-FOLDER] option created', {
+          id: f.name,
+          label: f.name,
+          hasHandle: false,
+          hasFile: true,
+        });
+      } catch {}
+      sel.append(opt);
+    }
       try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
       // Preselect last used script if present (fallback path) + maybe auto-load
       try {
