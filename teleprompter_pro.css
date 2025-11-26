@@ -809,12 +809,16 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Teleprompter viewer speaker styling */
 [data-script-view] .line{padding:2px 0;}
 [data-script-view] .line.speaker-s1,
+[data-script-view] .line[data-speaker="s1"],
 .speaker-s1{color:var(--s1-color,#4fc3f7);font-weight:600;}
 [data-script-view] .line.speaker-s2,
+[data-script-view] .line[data-speaker="s2"],
 .speaker-s2{color:var(--s2-color,#ffb74d);font-weight:600;}
 [data-script-view] .line.speaker-guest1,
+[data-script-view] .line[data-speaker="guest1"],
 .speaker-guest1{color:#aed581;font-weight:600;}
 [data-script-view] .line.speaker-guest2,
+[data-script-view] .line[data-speaker="guest2"],
 .speaker-guest2{color:#ce93d8;font-weight:600;}
 [data-script-view] .speaker-tag{text-transform:uppercase;letter-spacing:0.08em;font-size:0.8em;opacity:.8;margin-right:0.5rem;}
 [data-script-view] .line.line-empty{min-height:1.2em;}
