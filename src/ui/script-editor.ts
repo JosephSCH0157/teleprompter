@@ -463,11 +463,12 @@ export function wireScriptEditor(): void {
         const detail = (e as CustomEvent<{ name?: string; text?: string }>).detail || {};
         const text = detail.text || '';
         const name = detail.name || '';
-        console.debug('[SCRIPT-EDITOR] tp:script-load event', { name, textLen: text.length });
+        console.debug('[SCRIPT-EDITOR] tp:script-load', { id: detail && (detail as any).id, title: name, length: text.length });
         editor.value = text;
         if (scriptTitle) scriptTitle.value = name;
         lastLoadedId = null; // allow dropdown load to reapply after external events
         applyEditorToViewer();
+        console.debug('[SCRIPT-EDITOR] render applied from tp:script-load', { id: detail && (detail as any).id, length: text.length });
       } catch (err) {
         console.warn('[SCRIPT-EDITOR] tp:script-load handler failed', err);
       }
