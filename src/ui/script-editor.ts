@@ -60,6 +60,20 @@ type RefreshOptions = {
   quiet?: boolean;
 };
 
+let scriptEditorWired = false;
+let lastScriptFingerprint: string | null = null;
+
+function fingerprintScriptFromDetail(detail: any): string {
+  try {
+    const id = detail?.id ?? detail?.scriptId ?? 'no-id';
+    const title = detail?.title ?? '';
+    const text: string = typeof detail?.text === 'string' ? detail.text : '';
+    return `${id}::${title}::${text.length}`;
+  } catch {
+    return 'fingerprint-error';
+  }
+}
+
 async function readOptionTextFromDropdown(id: string): Promise<string | null> {
   try {
     const select =
@@ -237,6 +251,11 @@ function startScriptsPolling(scriptSelect: HTMLSelectElement): void {
 }
 
 export function wireScriptEditor(): void {
+  if (scriptEditorWired) {
+    try { console.debug('[SCRIPT-EDITOR] wireScriptEditor() already wired, skipping'); } catch {}
+    return;
+  }
+  scriptEditorWired = true;
   try { console.debug('[SCRIPT-EDITOR] wireScriptEditor() called'); } catch {}
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const scriptEl = document.getElementById('script') as HTMLDivElement | null;
@@ -471,15 +490,27 @@ export function wireScriptEditor(): void {
   try {
     window.addEventListener('tp:script-load', (e: Event) => {
       try {
-        const detail = (e as CustomEvent<{ name?: string; text?: string }>).detail || {};
-        const text = detail.text || '';
-        const name = detail.name || '';
-        console.debug('[SCRIPT-EDITOR] tp:script-load', { id: detail && (detail as any).id, title: name, length: text.length });
-        editor.value = text;
-        if (scriptTitle) scriptTitle.value = name;
+        const ce = e as CustomEvent<any>;
+        const detail = ce.detail || {};
+        const text: string = typeof detail.text === 'string' ? detail.text : '';
+        const id = detail.id ?? detail.scriptId ?? undefined;
+        const title = detail.title ?? detail.name ?? 'Untitled';
+        const fp = fingerprintScriptFromDetail(detail);
+        if (fp === lastScriptFingerprint) {
+          try { console.debug('[SCRIPT-EDITOR] tp:script-load duplicate, skipping', { id, title, length: text.length }); } catch {}
+          return;
+        }
+        lastScriptFingerprint = fp;
+        console.debug('[SCRIPT-EDITOR] tp:script-load', { id, title, length: text.length });
+        if (editor) {
+          editor.value = text;
+        }
+        if (scriptTitle) {
+          scriptTitle.value = title;
+        }
         lastLoadedId = null; // allow dropdown load to reapply after external events
         applyEditorToViewer();
-        console.debug('[SCRIPT-EDITOR] render applied from tp:script-load', { id: detail && (detail as any).id, length: text.length });
+        console.debug('[SCRIPT-EDITOR] render applied from tp:script-load', { id, title, length: text.length });
       } catch (err) {
         console.warn('[SCRIPT-EDITOR] tp:script-load handler failed', err);
       }
