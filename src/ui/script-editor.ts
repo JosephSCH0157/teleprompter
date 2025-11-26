@@ -60,10 +60,24 @@ type RefreshOptions = {
   quiet?: boolean;
 };
 
+import { normalizeToStandardText, fallbackNormalizeText } from '../script/normalize';
+
 let scriptEditorWired = false;
 
-// Optional script normalizer — prefers a TS export but falls back to global if present.
+// Optional script normalizer — prefers TS export; falls back to global if present.
 function normalizeScriptText(raw: string): string {
+  try {
+    const normalized = normalizeToStandardText(raw);
+    if (normalized && normalized.trim()) return normalized;
+  } catch {
+    // ignore
+  }
+  try {
+    const gentle = fallbackNormalizeText(raw);
+    if (gentle && gentle.trim()) return gentle;
+  } catch {
+    // ignore
+  }
   try {
     const anyWin = window as any;
     if (typeof anyWin.normalizeToStandard === 'function') {
