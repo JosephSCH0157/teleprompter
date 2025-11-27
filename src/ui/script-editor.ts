@@ -1,4 +1,4 @@
-// src/ui/script-editor.ts
+﻿// src/ui/script-editor.ts
 // Minimal wiring so the sidebar + mapped-folder pipeline drive the TS renderer.
 //
 // - Listens for `tp:script-load` (emitted by mapped-folder/docx loader)
@@ -76,13 +76,15 @@ export function wireScriptEditor(): void {
   });
 
   // When mapped-folder/docx loader fires tp:script-load, update UI + render
-  window.addEventListener('tp:script-load', (ev) => {
+  const handleTpScriptLoad = (ev: Event) => {
     const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
     const rawText = detail.text ?? '';
+    const rawName = detail.name ?? '';
+    const name = typeof rawName === 'string' ? rawName : '';
 
     try {
       console.debug('[SCRIPT-EDITOR] tp:script-load received', {
-        name: detail.name,
+        name,
         length: rawText ? String(rawText).length : 0,
       });
     } catch {}
@@ -91,24 +93,29 @@ export function wireScriptEditor(): void {
 
     applyToEditorAndViewer(String(rawText));
 
-    if (titleInput && detail.name) {
-      titleInput.value = detail.name;
+    if (titleInput && name) {
+      titleInput.value = name;
     }
 
-    if (sidebarSelect && detail.name) {
+    if (sidebarSelect && name) {
       // Try to keep sidebar selection in sync with loaded script
       const options = Array.from(sidebarSelect.options);
       const match =
-        options.find((o) => o.value === detail.name) ||
-        options.find((o) => o.text === detail.name);
+        options.find((o) => o.value === name) ||
+        options.find((o) => o.text === name);
       if (match) {
         sidebarSelect.value = match.value;
       }
     }
-  });
+  };
+
+  try {
+    window.addEventListener('tp:script-load', handleTpScriptLoad as EventListener);
+    document.addEventListener('tp:script-load', handleTpScriptLoad as EventListener);
+  } catch {}
 
   // Load button: just re-fire the sidebar select's change handler so the
-  // mapped-folder pipeline does its normal docx → text → tp:script-load flow.
+  // mapped-folder pipeline does its normal docx â†’ text â†’ tp:script-load flow.
   if (loadBtn && sidebarSelect) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
@@ -156,3 +163,4 @@ try {
 } catch {
   // ignore
 }
+
