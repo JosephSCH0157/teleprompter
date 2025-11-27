@@ -727,6 +727,30 @@ async function main() {
       try { smoke.notes.push('script selection content not observed'); } catch {}
     }
 
+    // Drive sidebar Saved Scripts select if present
+    try {
+      const sidebarWorked = await page.evaluate(() => {
+        try {
+          const side = document.getElementById('scriptSlots') || document.getElementById('scriptSelectSidebar');
+          if (!side || !side.options || side.options.length === 0) return false;
+          side.selectedIndex = Math.max(0, side.options.length - 1);
+          side.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        } catch { return false; }
+      });
+      if (sidebarWorked) {
+        await page.waitForFunction(() => {
+          const ed = document.getElementById('editor');
+          if (ed && 'value' in ed) return (ed).value.length > 5;
+          return false;
+        }, { timeout: 2500 });
+      } else {
+        try { smoke.notes.push('sidebar scripts select missing or empty'); } catch {}
+      }
+    } catch (e) {
+      try { smoke.notes.push('sidebar script selection failed'); } catch {}
+    }
+
     // Assert that content appears in #editor (or any script input) after selection (secondary safeguard)
     try {
       await page.waitForFunction(() => {
