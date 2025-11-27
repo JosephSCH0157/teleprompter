@@ -1,275 +1,166 @@
 ﻿// src/ui/script-editor.ts
-// Minimal wiring so the sidebar + mapped-folder pipeline drive the TS renderer.
-//
-// - Listens for `tp:script-load` (emitted by mapped-folder/docx loader)
-// - Updates the sidebar title + textarea
-// - Renders via the TypeScript tag-aware renderer into #script
-// - Wires the Load button to re-fire the sidebar <select> change event
-//
-// This deliberately does NOT use window.Scripts / ScriptStore yet.
+// Script editor driven by window.Scripts SSOT.
 
-import { renderScript as tsRenderScript } from '../render-script';
-import { normalizeToStandardText } from '../script/normalize';
+import { renderScript } from '../render-script';
 
-type RenderFn = (text: string) => void;
-
-type ScriptMeta = { id: string; title: string };
-type ScriptRecord = { id: string; title: string; content: string };
+type ScriptMeta = { id: string; title: string; updated?: string };
+type ScriptRecord = { id: string; title: string; content: string; updated?: string; created?: string };
 
 type ScriptsApi = {
-  list?: () => ScriptMeta[];
-  get?: (id: string) => Promise<ScriptRecord | null> | ScriptRecord | null;
+  list(): ScriptMeta[];
+  get(id: string): Promise<ScriptRecord | null> | ScriptRecord | null;
 };
-
-function getScriptsApi(): ScriptsApi | null {
-  try {
-    const api = (window as any).Scripts as ScriptsApi | undefined;
-    if (!api) return null;
-    return api;
-  } catch {
-    return null;
-  }
-}
-
-function getRenderFn(): RenderFn {
-  // Prefer TS renderer
-  if (typeof tsRenderScript === 'function') {
-    return tsRenderScript;
-  }
-
-  // Fallback to any legacy global renderer if present
-  const legacy = (window as any).renderScript as RenderFn | undefined;
-  if (typeof legacy === 'function') {
-    return legacy;
-  }
-
-  // Last-ditch: plain text into #script so UI never explodes
-  return (text: string) => {
-    const el = document.getElementById('script') as HTMLElement | null;
-    if (!el) return;
-    el.textContent = text ?? '';
-  };
-}
-
-let wired = false;
-let lastLoadName = '';
-let lastLoadText = '';
-let lastPayloadKey: string | null = null;
 
 declare global {
   interface Window {
     __tpScriptEditorBound?: boolean;
+    Scripts?: ScriptsApi;
+    getScriptsApi?: () => ScriptsApi;
+    __tpCurrentName?: string;
   }
 }
 
+function resolveScriptsApi(): ScriptsApi | null {
+  const w = window as any;
+  const fromGlobal = w.Scripts;
+  if (fromGlobal && typeof fromGlobal.list === 'function' && typeof fromGlobal.get === 'function') {
+    return fromGlobal as ScriptsApi;
+  }
+  if (typeof w.getScriptsApi === 'function') {
+    try {
+      const api = w.getScriptsApi();
+      if (api && typeof api.list === 'function' && typeof api.get === 'function') {
+        return api as ScriptsApi;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function normalizeScriptText(raw: string): string {
+  return String(raw ?? '').replace(/\r\n/g, '\n');
+}
+
 export function wireScriptEditor(): void {
-  if (wired || (typeof window !== 'undefined' && window.__tpScriptEditorBound)) {
+  if (typeof document === 'undefined') return;
+  if ((window as any).__tpScriptEditorBound) {
     try { console.debug('[SCRIPT-EDITOR] already wired'); } catch {}
     return;
   }
-  wired = true;
-  try { (window as any).__tpScriptEditorBound = true; } catch {}
+  (window as any).__tpScriptEditorBound = true;
 
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
-  const viewer = document.getElementById('script') as HTMLElement | null;
-  const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
-  const sidebarSlots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
-  const sidebarSelect = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-  const settingsSelect = document.getElementById('scriptSelect') as HTMLSelectElement | null;
-  const selects = [sidebarSlots, sidebarSelect, settingsSelect].filter(Boolean) as HTMLSelectElement[];
-  const primarySelect = sidebarSlots || sidebarSelect || settingsSelect;
+  const slots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
+  const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
+  const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
 
-  if (!editor || !viewer) {
-    try {
-      console.warn('[SCRIPT-EDITOR] missing editor or script element', {
-        hasEditor: !!editor,
-        hasViewer: !!viewer,
-      });
-    } catch {}
-    return;
+  const selects = [slots, sidebar, settings].filter(Boolean) as HTMLSelectElement[];
+  const primary = slots || sidebar || settings;
+
+  const api = resolveScriptsApi();
+  if (!api) {
+    try { console.warn('[SCRIPT-EDITOR] Scripts API not available; script dropdown will be inert'); } catch {}
   }
 
-  const render = getRenderFn();
-
-  const applyToEditorAndViewer = (raw: string) => {
-    const text = normalizeToStandardText(raw ?? '');
-    editor.value = text;
-    try {
-      render(text);
-    } catch (err) {
-      try { console.error('[SCRIPT-EDITOR] render failed', err); } catch {}
-    }
-  };
-
-  // Live typing: keep viewer updated as you edit
-  editor.addEventListener('input', () => {
-    applyToEditorAndViewer(editor.value || '');
-  });
-
-  const attachTpScriptLoadHandler = (
-    ed: HTMLTextAreaElement,
-    scriptTitleEl: HTMLInputElement | null,
-    sidebar: HTMLSelectElement | null,
-    sidebarLegacy: HTMLSelectElement | null,
-  ) => {
-    let handling = false;
-    const handler = (ev: Event) => {
-      if (handling) return;
-      const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
-      const rawText = detail.text ?? '';
-      const rawName = detail.name ?? '';
-      const name = typeof rawName === 'string' ? rawName : '';
-      const textStr = typeof rawText === 'string' ? rawText : '';
-      const payloadKey = JSON.stringify({ name, textStr });
-      if (payloadKey === lastPayloadKey) return;
-      lastPayloadKey = payloadKey;
-
-      try {
-        console.debug('[SCRIPT-EDITOR] tp:script-load received', {
-          name,
-          length: textStr ? String(textStr).length : 0,
-        });
-      } catch {}
-
-      if (!textStr) return;
-      // Avoid loops if some other listener echoes the same payload back
-      if (lastLoadName === name && lastLoadText === textStr) return;
-      lastLoadName = name;
-      lastLoadText = textStr;
-
-      handling = true;
-      applyToEditorAndViewer(textStr);
-      handling = false;
-
-      if (scriptTitleEl && name) {
-        scriptTitleEl.value = name;
-      }
-
-      const syncSelect = (sel: HTMLSelectElement | null) => {
-        if (!sel || !name) return;
-        const options = Array.from(sel.options);
-        const match =
-          options.find((o) => o.value === name) ||
-          options.find((o) => o.text === name);
-        if (match) {
-          sel.value = match.value;
-        }
-      };
-
-      syncSelect(sidebar);
-      syncSelect(sidebarLegacy);
-    };
-
-    try {
-      window.addEventListener('tp:script-load', handler as EventListener);
-      document.addEventListener('tp:script-load', handler as EventListener);
-    } catch {}
-  };
-
-  // When mapped-folder/docx loader fires tp:script-load, update UI + render
-  attachTpScriptLoadHandler(editor, titleInput, primarySelect, sidebarSelect);
-
-  const refreshDropdowns = () => {
-    const api = getScriptsApi();
-    const entries: ScriptMeta[] = api && typeof api.list === 'function' ? (api.list() || []) : [];
-    if (!selects.length) return;
+  const refreshDropdown = () => {
+    if (!selects.length || !api) return;
+    const metas = (() => {
+      try { return api.list() || []; } catch { return []; }
+    })();
     selects.forEach((sel) => {
       const prev = sel.value;
       sel.innerHTML = '';
-      if (!entries.length) {
+      if (!metas.length) {
         const opt = new Option('(No saved scripts)', '', true, true);
         opt.disabled = true;
         sel.append(opt);
         return;
       }
-      entries.forEach((e) => {
-        const opt = new Option(e.title || e.id, e.id);
-        sel.append(opt);
+      metas.forEach((m) => {
+        if (!m || !m.id) return;
+        sel.append(new Option(m.title || m.id, m.id));
       });
-      if (prev && entries.some((e) => e.id === prev)) {
+      if (prev && metas.some((m) => m.id === prev)) {
         sel.value = prev;
       } else {
-        sel.value = entries[0].id;
+        sel.value = metas[0].id;
       }
     });
   };
 
-  const loadById = async (id: string | null) => {
-    const trimmed = (id || '').trim();
-    if (!trimmed) return;
-    const api = getScriptsApi();
-    const rec = api && typeof api.get === 'function' ? await Promise.resolve(api.get(trimmed)) : null;
-    if (!rec || typeof rec.content !== 'string') return;
-    applyToEditorAndViewer(rec.content);
-    if (titleInput) titleInput.value = rec.title || rec.id;
-    lastLoadName = rec.id;
-    lastLoadText = rec.content;
+  let isApplying = false;
+
+  const applyRecord = (rec: ScriptRecord) => {
+    const text = normalizeScriptText(rec.content || '');
+    const name = rec.title || rec.id;
+    isApplying = true;
+    if (editor) editor.value = text;
+    try { renderScript(text); } catch {}
+    if (titleInput) titleInput.value = name;
+    try { window.__tpCurrentName = name; } catch {}
     try {
       window.dispatchEvent(new CustomEvent('tp:script-load', {
-        detail: { id: rec.id, name: rec.title || rec.id, text: rec.content, skipNormalize: true },
+        detail: { id: rec.id, name, text, skipNormalize: true },
       }));
     } catch {}
+    isApplying = false;
+  };
+
+  const loadSelected = async () => {
+    if (!primary || !api) return;
+    const id = (primary.value || '').trim();
+    if (!id) return;
+    let rec: ScriptRecord | null = null;
+    try {
+      const res = api.get(id);
+      rec = res instanceof Promise ? await res : res;
+    } catch {}
+    if (rec && typeof rec.content === 'string') {
+      applyRecord(rec);
+    } else {
+      try { console.warn('[SCRIPT-EDITOR] no content for id', id); } catch {}
+    }
   };
 
   selects.forEach((sel) => {
-    sel.addEventListener('change', () => {
-      void loadById(sel.value || null);
-    });
+    sel.addEventListener('change', () => { void loadSelected(); });
   });
 
-  // Load button: just re-fire the sidebar select's change handler so the
-  // mapped-folder pipeline does its normal docx â†’ text â†’ tp:script-load flow.
-  if (loadBtn && primarySelect) {
+  if (loadBtn && primary) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
-      try {
-        console.debug('[SCRIPT-EDITOR] Load button click', {
-          activeSelectValue: primarySelect.value,
-        });
-      } catch {}
-
-      void loadById(primarySelect.value || null);
+      void loadSelected();
     });
+  }
+
+  if (editor && !(editor as any).__tpEchoWired) {
+    try { (editor as any).__tpEchoWired = 1; } catch {}
+    editor.addEventListener('input', () => {
+      if (isApplying) return;
+      try { renderScript(editor.value || ''); } catch {}
+    });
+  }
+
+  try { window.addEventListener('tp:scripts-updated', refreshDropdown); } catch {}
+  refreshDropdown();
+  if (primary && primary.value) {
+    void loadSelected();
+  }
+
+  try { console.debug('[SCRIPT-EDITOR] SSOT wiring complete'); } catch {}
+}
+
+// Auto-wire on DOM ready
+if (typeof document !== 'undefined') {
+  const run = () => { try { wireScriptEditor(); } catch {} };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
   } else {
-    try {
-      console.warn('[SCRIPT-EDITOR] Load wiring incomplete', {
-        hasLoadBtn: !!loadBtn,
-        hasSidebarSelect: !!sidebarSelect,
-      });
-    } catch {}
+    run();
   }
-
-  try { window.addEventListener('tp:scripts-updated', refreshDropdowns); } catch {}
-  refreshDropdowns();
-  if (primarySelect && primarySelect.value) {
-    void loadById(primarySelect.value);
-  }
-
-  try { console.debug('[SCRIPT-EDITOR] minimal wiring complete'); } catch {}
-}
-
-// Auto-wire on DOM ready as a safety net
-try {
-  (window as any).__tpWireScriptEditor = wireScriptEditor;
-} catch {
-  // ignore
-}
-
-try {
-  if (typeof document !== 'undefined') {
-    const run = () => {
-      try { wireScriptEditor(); } catch (err) {
-        try { console.error('[SCRIPT-EDITOR] auto-wire failed', err); } catch {}
-      }
-    };
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', run, { once: true });
-    } else {
-      run();
-    }
-  }
-} catch {
-  // ignore
 }
 

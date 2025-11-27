@@ -172,13 +172,19 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       }
     sel.disabled = false;
     for (const e of entries) {
+      try {
+        console.debug('[MAPPED-FOLDER] seen entry', {
+          name: e.name,
+          allowed: isSupportedScriptName(e.name),
+        });
+      } catch {}
+      if (!isSupportedScriptName(e.name)) continue;
       const opt = new Option(e.name, e.name) as HTMLOptionElement & {
         __fileHandle?: FileSystemFileHandle;
         __file?: File;
         _handle?: FileSystemFileHandle;
         _file?: File;
       };
-      if (!isSupportedScriptName(e.name)) continue;
       try { opt._handle = e.handle; } catch {}
       try { opt.__fileHandle = e.handle; } catch {}
       try { mappedEntries.push({ id: e.name, title: e.name, handle: e.handle }); } catch {}
@@ -222,7 +228,12 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       sel.innerHTML = '';
       const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
       try { sel.setAttribute('aria-busy','true'); } catch {}
-      const filtered = files.filter(f => isSupportedScriptName(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
+      const filtered = files.filter(f => {
+        try {
+          console.debug('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
+        } catch {}
+        return isSupportedScriptName(f.name);
+      }).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
         try { ScriptStore.syncMapped([]); } catch {}
         if (sel.id === 'scriptSelectSidebar') {
