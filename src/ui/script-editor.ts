@@ -36,13 +36,21 @@ function getRenderFn(): RenderFn {
 let wired = false;
 let lastLoadName = '';
 let lastLoadText = '';
+let lastPayloadKey: string | null = null;
+
+declare global {
+  interface Window {
+    __tpScriptEditorBound?: boolean;
+  }
+}
 
 export function wireScriptEditor(): void {
-  if (wired) {
+  if (wired || (typeof window !== 'undefined' && window.__tpScriptEditorBound)) {
     try { console.debug('[SCRIPT-EDITOR] already wired'); } catch {}
     return;
   }
   wired = true;
+  try { (window as any).__tpScriptEditorBound = true; } catch {}
 
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const viewer = document.getElementById('script') as HTMLElement | null;
@@ -90,6 +98,9 @@ export function wireScriptEditor(): void {
       const rawName = detail.name ?? '';
       const name = typeof rawName === 'string' ? rawName : '';
       const textStr = typeof rawText === 'string' ? rawText : '';
+      const payloadKey = JSON.stringify({ name, textStr });
+      if (payloadKey === lastPayloadKey) return;
+      lastPayloadKey = payloadKey;
 
       try {
         console.debug('[SCRIPT-EDITOR] tp:script-load received', {
