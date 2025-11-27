@@ -35,7 +35,9 @@ function emitScriptsUpdated(): void {
 
 export const ScriptStore = {
   list(): ScriptMeta[] {
-    return Array.from(scriptsById.values()).map((rec) => ({
+    const all = Array.from(scriptsById.values());
+    try { console.debug('[SCRIPT-STORE] list size', all.length, all.map((r) => r.id)); } catch {}
+    return all.map((rec) => ({
       id: rec.id,
       title: rec.title,
       updated: rec.updated,
@@ -120,6 +122,7 @@ export const ScriptStore = {
         source: existing?.source ?? 'mapped',
       });
     }
+    try { console.debug('[SCRIPT-STORE] scriptsById size after sync', scriptsById.size, Array.from(scriptsById.keys())); } catch {}
     emitScriptsUpdated();
   },
 };
