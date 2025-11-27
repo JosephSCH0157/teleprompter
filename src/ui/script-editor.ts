@@ -13,6 +13,24 @@ import { normalizeToStandardText } from '../script/normalize';
 
 type RenderFn = (text: string) => void;
 
+type ScriptMeta = { id: string; title: string };
+type ScriptRecord = { id: string; title: string; content: string };
+
+type ScriptsApi = {
+  list?: () => ScriptMeta[];
+  get?: (id: string) => Promise<ScriptRecord | null> | ScriptRecord | null;
+};
+
+function getScriptsApi(): ScriptsApi | null {
+  try {
+    const api = (window as any).Scripts as ScriptsApi | undefined;
+    if (!api) return null;
+    return api;
+  } catch {
+    return null;
+  }
+}
+
 function getRenderFn(): RenderFn {
   // Prefer TS renderer
   if (typeof tsRenderScript === 'function') {
@@ -57,7 +75,9 @@ export function wireScriptEditor(): void {
   const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
   const sidebarSlots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
   const sidebarSelect = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-  const primarySelect = sidebarSlots || sidebarSelect;
+  const settingsSelect = document.getElementById('scriptSelect') as HTMLSelectElement | null;
+  const selects = [sidebarSlots, sidebarSelect, settingsSelect].filter(Boolean) as HTMLSelectElement[];
+  const primarySelect = sidebarSlots || sidebarSelect || settingsSelect;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
   if (!editor || !viewer) {
@@ -150,6 +170,54 @@ export function wireScriptEditor(): void {
   // When mapped-folder/docx loader fires tp:script-load, update UI + render
   attachTpScriptLoadHandler(editor, titleInput, primarySelect, sidebarSelect);
 
+  const refreshDropdowns = () => {
+    const api = getScriptsApi();
+    const entries: ScriptMeta[] = api && typeof api.list === 'function' ? (api.list() || []) : [];
+    if (!selects.length) return;
+    selects.forEach((sel) => {
+      const prev = sel.value;
+      sel.innerHTML = '';
+      if (!entries.length) {
+        const opt = new Option('(No saved scripts)', '', true, true);
+        opt.disabled = true;
+        sel.append(opt);
+        return;
+      }
+      entries.forEach((e) => {
+        const opt = new Option(e.title || e.id, e.id);
+        sel.append(opt);
+      });
+      if (prev && entries.some((e) => e.id === prev)) {
+        sel.value = prev;
+      } else {
+        sel.value = entries[0].id;
+      }
+    });
+  };
+
+  const loadById = async (id: string | null) => {
+    const trimmed = (id || '').trim();
+    if (!trimmed) return;
+    const api = getScriptsApi();
+    const rec = api && typeof api.get === 'function' ? await Promise.resolve(api.get(trimmed)) : null;
+    if (!rec || typeof rec.content !== 'string') return;
+    applyToEditorAndViewer(rec.content);
+    if (titleInput) titleInput.value = rec.title || rec.id;
+    lastLoadName = rec.id;
+    lastLoadText = rec.content;
+    try {
+      window.dispatchEvent(new CustomEvent('tp:script-load', {
+        detail: { id: rec.id, name: rec.title || rec.id, text: rec.content, skipNormalize: true },
+      }));
+    } catch {}
+  };
+
+  selects.forEach((sel) => {
+    sel.addEventListener('change', () => {
+      void loadById(sel.value || null);
+    });
+  });
+
   // Load button: just re-fire the sidebar select's change handler so the
   // mapped-folder pipeline does its normal docx â†’ text â†’ tp:script-load flow.
   if (loadBtn && primarySelect) {
@@ -161,8 +229,7 @@ export function wireScriptEditor(): void {
         });
       } catch {}
 
-      const evt = new Event('change', { bubbles: true });
-      primarySelect.dispatchEvent(evt);
+      void loadById(primarySelect.value || null);
     });
   } else {
     try {
@@ -171,6 +238,12 @@ export function wireScriptEditor(): void {
         hasSidebarSelect: !!sidebarSelect,
       });
     } catch {}
+  }
+
+  try { window.addEventListener('tp:scripts-updated', refreshDropdowns); } catch {}
+  refreshDropdowns();
+  if (primarySelect && primarySelect.value) {
+    void loadById(primarySelect.value);
   }
 
   try { console.debug('[SCRIPT-EDITOR] minimal wiring complete'); } catch {}
