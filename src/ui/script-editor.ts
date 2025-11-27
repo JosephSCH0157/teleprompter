@@ -37,11 +37,6 @@ export function wireScriptEditor(): void {
     try { renderScript(text); } catch {}
     if (titleInput) titleInput.value = name;
     try { window.__tpCurrentName = name; } catch {}
-    try {
-      window.dispatchEvent(new CustomEvent('tp:script-load', {
-        detail: { id: rec.id, name, text, skipNormalize: true },
-      }));
-    } catch {}
     isApplying = false;
   };
 
@@ -49,6 +44,7 @@ export function wireScriptEditor(): void {
   try {
     window.addEventListener('tp:script-load', (ev: Event) => {
       const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
+      if ((detail as any)?.skipNormalize) return;
       const text = typeof detail.text === 'string' ? detail.text : '';
       const name = typeof detail.name === 'string' ? detail.name : '';
       if (!text) return;
