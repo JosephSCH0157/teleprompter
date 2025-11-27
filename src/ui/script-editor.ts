@@ -3,7 +3,19 @@
 
 import { renderScript } from '../render-script';
 
+type ScriptMeta = { id: string; title: string; updated?: string };
 type ScriptRecord = { id: string; title: string; content: string; updated?: string; created?: string };
+type ScriptsApi = {
+  list: () => ScriptMeta[];
+  get: (id: string) => Promise<ScriptRecord | null> | ScriptRecord | null;
+};
+
+function resolveScriptsApi(): ScriptsApi | null {
+  const w = window as any;
+  const api = w.Scripts || (typeof w.getScriptsApi === 'function' ? w.getScriptsApi() : null);
+  if (api && typeof api.list === 'function' && typeof api.get === 'function') return api as ScriptsApi;
+  return null;
+}
 
 function normalizeScriptText(raw: string): string {
   return String(raw ?? '').replace(/\r\n/g, '\n');
@@ -26,6 +38,32 @@ export function wireScriptEditor(): void {
 
   const selects = [slots, sidebar, settings].filter(Boolean) as HTMLSelectElement[];
   const primary = slots || sidebar || settings;
+  const api = resolveScriptsApi();
+
+  const refreshDropdowns = () => {
+    if (!api || !selects.length) return;
+    let metas: ScriptMeta[] = [];
+    try { metas = api.list() || []; } catch {}
+    selects.forEach((sel) => {
+      const prev = sel.value;
+      sel.innerHTML = '';
+      if (!metas.length) {
+        const opt = new Option('(No saved scripts)', '', true, true);
+        opt.disabled = true;
+        sel.append(opt);
+        return;
+      }
+      metas.forEach((m) => {
+        if (!m || !m.id) return;
+        sel.append(new Option(m.title || m.id, m.id));
+      });
+      if (prev && metas.some((m) => m.id === prev)) {
+        sel.value = prev;
+      } else {
+        sel.value = metas[0].id;
+      }
+    });
+  };
 
   let isApplying = false;
 
@@ -58,14 +96,30 @@ export function wireScriptEditor(): void {
     });
   } catch {}
 
+  // Direct load via SSOT for sidebar/settings selects
+  const loadSelected = async () => {
+    if (!api || !primary) return;
+    const id = (primary.value || '').trim();
+    if (!id) return;
+    let rec: ScriptRecord | null = null;
+    try {
+      const res = api.get(id);
+      rec = res instanceof Promise ? await res : res;
+    } catch {}
+    if (rec && typeof rec.content === 'string') {
+      applyRecord(rec);
+    }
+  };
+
+  selects.forEach((sel) => {
+    sel.addEventListener('change', () => { void loadSelected(); });
+  });
+
   // Sidebar/select changes are handled by mapped-folder binder; Load button should trigger the same change
   if (loadBtn && primary) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
-      try {
-        const evt = new Event('change', { bubbles: true });
-        primary.dispatchEvent(evt);
-      } catch {}
+      void loadSelected();
     });
   }
 
@@ -75,6 +129,12 @@ export function wireScriptEditor(): void {
       if (isApplying) return;
       try { renderScript(editor.value || ''); } catch {}
     });
+  }
+
+  try { window.addEventListener('tp:scripts-updated', refreshDropdowns); } catch {}
+  refreshDropdowns();
+  if (primary && primary.value) {
+    void loadSelected();
   }
 
   try { console.debug('[SCRIPT-EDITOR] event wiring complete'); } catch {}
