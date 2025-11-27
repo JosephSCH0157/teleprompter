@@ -156,6 +156,10 @@ export function installScriptIngest(opts: IngestOpts = {}) {
     window.addEventListener('tp:script-load', (e: any) => {
       try {
         const d = e?.detail;
+        // Ignore already-normalized echoes to avoid ingest loops
+        if (d && d.skipNormalize) {
+          return;
+        }
         // Support both { name, text } payloads and File/Handle payloads
         if (d && typeof d.text === 'string') {
           const name = typeof d.name === 'string' ? d.name : (function(){ try { return localStorage.getItem('tp_last_script_name') || 'Script.txt'; } catch { return 'Script.txt'; } })();
