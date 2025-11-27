@@ -66,36 +66,6 @@ export function wireScriptEditor(): void {
   const selects = [slots, sidebar, settings].filter(Boolean) as HTMLSelectElement[];
   const primary = slots || sidebar || settings;
 
-  const refreshDropdown = () => {
-    const api = resolveScriptsApi();
-    if (!selects.length || !api) {
-      try { console.warn('[SCRIPT-EDITOR] refreshDropdown: missing selects or Scripts API'); } catch {}
-      return;
-    }
-    const metas = (() => {
-      try { return api.list() || []; } catch { return []; }
-    })();
-    selects.forEach((sel) => {
-      const prev = sel.value;
-      sel.innerHTML = '';
-      if (!metas.length) {
-        const opt = new Option('(No saved scripts)', '', true, true);
-        opt.disabled = true;
-        sel.append(opt);
-        return;
-      }
-      metas.forEach((m) => {
-        if (!m || !m.id) return;
-        sel.append(new Option(m.title || m.id, m.id));
-      });
-      if (prev && metas.some((m) => m.id === prev)) {
-        sel.value = prev;
-      } else {
-        sel.value = metas[0].id;
-      }
-    });
-  };
-
   let isApplying = false;
 
   const applyRecord = (rec: ScriptRecord) => {
@@ -114,38 +84,31 @@ export function wireScriptEditor(): void {
     isApplying = false;
   };
 
-  const loadSelected = async () => {
-    const api = resolveScriptsApi();
-    if (!primary || !api) {
-      try { console.warn('[SCRIPT-EDITOR] loadSelected: missing primary select or Scripts API'); } catch {}
-      return;
-    }
-    const id = (primary.value || '').trim();
-    if (!id) {
-      try { console.warn('[SCRIPT-EDITOR] loadSelected: no id selected'); } catch {}
-      return;
-    }
-    let rec: ScriptRecord | null = null;
-    try {
-      const res = api.get(id);
-      rec = res instanceof Promise ? await res : res;
-    } catch {}
-    try { console.debug('[SCRIPT-EDITOR] loadSelected', { id, got: !!rec, hasContent: typeof rec?.content === 'string' }); } catch {}
-    if (rec && typeof rec.content === 'string') {
-      applyRecord(rec);
-    } else {
-      try { console.warn('[SCRIPT-EDITOR] no content for id', id); } catch {}
-    }
-  };
+  // Apply tp:script-load events emitted by mapped-folder binder/settings
+  try {
+    window.addEventListener('tp:script-load', (ev: Event) => {
+      const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
+      const text = typeof detail.text === 'string' ? detail.text : '';
+      const name = typeof detail.name === 'string' ? detail.name : '';
+      if (!text) return;
+      applyRecord({ id: name || 'Untitled', title: name || 'Untitled', content: text });
+      // Keep selects in sync with loaded script name
+      selects.forEach((sel) => {
+        if (!sel || !name) return;
+        const match = Array.from(sel.options).find((o) => o.value === name || o.text === name);
+        if (match) sel.value = match.value;
+      });
+    });
+  } catch {}
 
-  selects.forEach((sel) => {
-    sel.addEventListener('change', () => { void loadSelected(); });
-  });
-
+  // Sidebar/select changes are handled by mapped-folder binder; Load button should trigger the same change
   if (loadBtn && primary) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
-      void loadSelected();
+      try {
+        const evt = new Event('change', { bubbles: true });
+        primary.dispatchEvent(evt);
+      } catch {}
     });
   }
 
@@ -157,13 +120,7 @@ export function wireScriptEditor(): void {
     });
   }
 
-  try { window.addEventListener('tp:scripts-updated', refreshDropdown); } catch {}
-  refreshDropdown();
-  if (primary && primary.value) {
-    void loadSelected();
-  }
-
-  try { console.debug('[SCRIPT-EDITOR] SSOT wiring complete'); } catch {}
+  try { console.debug('[SCRIPT-EDITOR] event wiring complete'); } catch {}
 }
 
 // Auto-wire on DOM ready
