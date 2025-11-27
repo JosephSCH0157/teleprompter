@@ -33,7 +33,6 @@ import { wireHudToggle } from './hud/toggle';
 import { initObsToggle } from './ui/obs-toggle';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import { installSpeech } from './features/speech-loader';
-import { wireScriptEditor } from './ui/script-editor';
 import { initSpeechBridge } from './asr/v2/bridge-speech';
 import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { shouldShowHud } from './hud/shouldShowHud';
@@ -763,11 +762,8 @@ export async function boot() {
           // TS scroll router + UI wiring
           try { initScrollRouter(); } catch {}
           try { initScrollFeature(); } catch {}
-          // Script editor wiring: keep editor textarea in sync with rendered script/viewer
-          try { wireScriptEditor(); } catch {}
-
-					// Initialize features via idempotent wrappers
-					try { startPersistence(); } catch {}
+          // Initialize features via idempotent wrappers
+          try { startPersistence(); } catch {}
 					try { startTelemetry(); } catch {}
 					try { startScroll(); } catch {}
 					try { startHotkeys(); } catch {}
