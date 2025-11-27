@@ -80,7 +80,9 @@ export function wireScriptEditor(): void {
     scriptTitleEl: HTMLInputElement | null,
     sidebar: HTMLSelectElement | null,
   ) => {
+    let handling = false;
     const handler = (ev: Event) => {
+      if (handling) return;
       const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
       const rawText = detail.text ?? '';
       const rawName = detail.name ?? '';
@@ -98,7 +100,9 @@ export function wireScriptEditor(): void {
       const current = ed.value ?? '';
       if (current === rawText) return;
 
+      handling = true;
       applyToEditorAndViewer(String(rawText));
+      handling = false;
 
       if (scriptTitleEl && name) {
         scriptTitleEl.value = name;
