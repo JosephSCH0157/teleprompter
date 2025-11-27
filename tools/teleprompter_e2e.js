@@ -16,8 +16,8 @@ async function main() {
     return a ? a.split('=')[1] : d;
   };
 
-  const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke');
   const RUN_CRAWL = flag('--crawl');
+  const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke') || RUN_CRAWL;
   const USE_DIST = flag('--useDist') || flag('--usedist');
   const STUB_OBS = flag('--stubObs') || flag('--stubobs');
   const SHIM_RECORDER = flag('--shimRecorder') || flag('--shimrecorder');
