@@ -2,6 +2,7 @@
 // Script editor driven by window.Scripts SSOT.
 
 import { renderScript } from '../render-script';
+import { ScriptStore } from '../features/scripts-store';
 
 type ScriptMeta = { id: string; title: string; updated?: string };
 type ScriptRecord = { id: string; title: string; content: string; updated?: string; created?: string };
@@ -36,6 +37,10 @@ function resolveScriptsApi(): ScriptsApi | null {
       /* ignore */
     }
   }
+  // Fallback to module singleton
+  if (ScriptStore && typeof ScriptStore.list === 'function' && typeof ScriptStore.get === 'function') {
+    return ScriptStore as ScriptsApi;
+  }
   return null;
 }
 
@@ -61,12 +66,8 @@ export function wireScriptEditor(): void {
   const selects = [slots, sidebar, settings].filter(Boolean) as HTMLSelectElement[];
   const primary = slots || sidebar || settings;
 
-  const api = resolveScriptsApi();
-  if (!api) {
-    try { console.warn('[SCRIPT-EDITOR] Scripts API not available; script dropdown will be inert'); } catch {}
-  }
-
   const refreshDropdown = () => {
+    const api = resolveScriptsApi();
     if (!selects.length || !api) return;
     const metas = (() => {
       try { return api.list() || []; } catch { return []; }
@@ -111,6 +112,7 @@ export function wireScriptEditor(): void {
   };
 
   const loadSelected = async () => {
+    const api = resolveScriptsApi();
     if (!primary || !api) return;
     const id = (primary.value || '').trim();
     if (!id) return;
