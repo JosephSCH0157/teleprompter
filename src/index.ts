@@ -921,11 +921,12 @@ export async function boot() {
 							try { ensureSettingsFolderControls(); } catch {}
 							try { ensureSettingsFolderControlsAsync(6000); } catch {}
 							try { disableLegacyScriptsUI(); } catch {}
-							try { neuterLegacyScriptsInit(); } catch {}
+								try { neuterLegacyScriptsInit(); } catch {}
 							try {
 								const rebindFolderControls = () => {
 									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' }); } catch {}
 									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelectSidebar', fallbackInput: '#folderFallback' }); } catch {}
+									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSlots', fallbackInput: '#folderFallback' }); } catch {}
 								};
 								rebindFolderControls();
 								// If the sidebar select is created later, bind on readiness signal
