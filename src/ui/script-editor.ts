@@ -94,6 +94,9 @@ export function wireScriptEditor(): void {
       } catch {}
 
       if (!rawText) return;
+      // Avoid loops if some other listener echoes the same text back
+      const current = ed.value ?? '';
+      if (current === rawText) return;
 
       applyToEditorAndViewer(String(rawText));
 
