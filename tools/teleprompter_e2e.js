@@ -17,6 +17,7 @@ async function main() {
   };
 
   const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke');
+  const RUN_CRAWL = flag('--crawl');
   const USE_DIST = flag('--useDist') || flag('--usedist');
   const STUB_OBS = flag('--stubObs') || flag('--stubobs');
   const SHIM_RECORDER = flag('--shimRecorder') || flag('--shimrecorder');
@@ -768,8 +769,18 @@ async function main() {
       smoke.ci = { sha: _sha, ref: _ref, runner: 'teleprompter_e2e.js' };
       // Print a canonical single-line JSON report useful for CI parsing
       console.log('[SMOKE-REPORT]', JSON.stringify(smoke));
+      if (RUN_CRAWL) {
+        try { await browser.close(); } catch {}
+        try { server.close(); } catch {}
+        process.exit(smoke.ok ? 0 : 1);
+      }
     } catch {
       console.log('[SMOKE-REPORT] {}');
+      if (RUN_CRAWL) {
+        try { await browser.close(); } catch {}
+        try { server.close(); } catch {}
+        process.exit(1);
+      }
 
       // Settings tabs/content assertions: Pricing and About should render
       try {
