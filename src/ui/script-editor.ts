@@ -1,11 +1,15 @@
 // src/ui/script-editor.ts
-// Thin bridge: sidebar + Load button proxy into the working Settings loader.
-// Script ingest (src/features/script-ingest.ts) remains the source of truth
-// for applying tp:script-load into #editor + renderScript.
+// Sidebar + Load button wiring:
+// - Reads from ScriptStore (fed by mapped-folder-sync)
+// - Dispatches tp:script-load with { name, text } so script-ingest applies it
+// - Does NOT listen to tp:script-load (avoids loops)
+
+import { ScriptStore } from '../features/scripts-store';
 
 declare global {
   interface Window {
     __tpScriptEditorBound?: boolean;
+    __tpCurrentName?: string;
   }
 }
 
@@ -21,78 +25,82 @@ function installScriptEditor(): void {
 
   const slots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
   const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-  const settingsSelect = document.getElementById('scriptSelect') as HTMLSelectElement | null;
+  const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
-  let lastPayloadKey: string | null = null;
+  function getActiveSelect(): HTMLSelectElement | null {
+    if (sidebar && sidebar.options.length > 0) return sidebar;
+    if (slots && slots.options.length > 0) return slots;
+    return sidebar || slots;
+  }
 
-  // Optional: observe tp:script-load without changing behavior.
-  // script-ingest already applies text to #editor + renderScript.
-  try {
-    window.addEventListener('tp:script-load', (ev: Event) => {
-      try {
-        const e = ev as CustomEvent<any>;
-        const d = e.detail || {};
-        const name = typeof d.name === 'string' ? d.name : 'Untitled';
-        const txt = typeof d.text === 'string' ? String(d.text) : '';
-        const key = `${name}|${txt.length}`;
-        if (key === lastPayloadKey) return;
-        lastPayloadKey = key;
-        console.debug('[SCRIPT-EDITOR] tp:script-load received', { name, length: txt.length });
-      } catch (err) {
-        try { console.warn('[SCRIPT-EDITOR] tp:script-load handler failed', err); } catch {}
-      }
-    });
-  } catch {}
-
-  function proxyToSettingsSelect(targetId: string | null): void {
-    if (!settingsSelect) {
-      try { console.warn('[SCRIPT-EDITOR] proxyToSettingsSelect: no #scriptSelect present'); } catch {}
+  async function loadById(id: string | null): Promise<void> {
+    if (!id) {
+      try { console.debug('[SCRIPT-EDITOR] loadById: no id'); } catch {}
       return;
     }
 
-    if (targetId) {
-      settingsSelect.value = targetId;
-    }
+    try {
+      const rec = await ScriptStore.get(id);
+      if (!rec) {
+        try { console.warn('[SCRIPT-EDITOR] loadById: no record for id', id); } catch {}
+        return;
+      }
 
-    const ev = new Event('change', { bubbles: true });
-    settingsSelect.dispatchEvent(ev);
+      const name = rec.title || rec.id || 'Untitled';
+      const text = rec.content || '';
+
+      if (titleInput) {
+        titleInput.value = name;
+      }
+      try { (window as any).__tpCurrentName = name; } catch {}
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('tp:script-load', {
+            detail: { name, text },
+          }),
+        );
+        try { console.debug('[SCRIPT-EDITOR] dispatched tp:script-load', { name, length: text.length }); } catch {}
+      } catch (err) {
+        try { console.warn('[SCRIPT-EDITOR] dispatch tp:script-load failed', err); } catch {}
+      }
+    } catch (err) {
+      try { console.warn('[SCRIPT-EDITOR] loadById error', err); } catch {}
+    }
   }
 
-  // When the sidebar Saved Scripts select changes, mirror it into Settings
-  // so the mapped-folder binder on #scriptSelect does the actual load.
-  if (sidebar && !(sidebar as any).__tpSidebarProxyWired) {
-    (sidebar as any).__tpSidebarProxyWired = true;
-    sidebar.addEventListener('change', () => {
-      const id = sidebar.value || null;
-      try { console.debug('[SCRIPT-EDITOR] sidebar change → proxyToSettingsSelect', { id }); } catch {}
-      proxyToSettingsSelect(id);
+  function wireSelect(sel: HTMLSelectElement | null): void {
+    if (!sel) return;
+    if ((sel as any).__tpScriptSelectWired) return;
+    (sel as any).__tpScriptSelectWired = true;
+
+    sel.addEventListener('change', () => {
+      const id = sel.value || null;
+      try { console.debug('[SCRIPT-EDITOR] select change → loadById', { id, from: sel.id }); } catch {}
+      void loadById(id);
     });
   }
 
-  // Load button: use the current sidebar selection if available, otherwise
-  // fall back to Settings, otherwise (legacy) scriptSlots.
-  if (loadBtn && !(loadBtn as any).__tpSidebarLoadWired) {
-    (loadBtn as any).__tpSidebarLoadWired = true;
-    loadBtn.addEventListener('click', () => {
-      const id =
-        (sidebar && sidebar.value) ||
-        (settingsSelect && settingsSelect.value) ||
-        (slots && slots.value) ||
-        null;
+  wireSelect(slots);
+  wireSelect(sidebar);
 
-      try { console.debug('[SCRIPT-EDITOR] Load button click → proxyToSettingsSelect', { id }); } catch {}
-      proxyToSettingsSelect(id);
+  if (loadBtn && !(loadBtn as any).__tpScriptLoadBtnWired) {
+    (loadBtn as any).__tpScriptLoadBtnWired = true;
+    loadBtn.addEventListener('click', () => {
+      const sel = getActiveSelect();
+      const id = sel ? sel.value || null : null;
+      try { console.debug('[SCRIPT-EDITOR] Load button click → loadById', { id }); } catch {}
+      void loadById(id);
     });
   }
 
   try { console.debug('[SCRIPT-EDITOR] minimal wiring complete'); } catch {}
 }
 
-// Auto-install
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installScriptEditor, { once: true });
+    document.addEventListener('DOMContentLoaded', () => installScriptEditor(), { once: true });
   } else {
     installScriptEditor();
   }
