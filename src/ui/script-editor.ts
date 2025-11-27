@@ -2,47 +2,8 @@
 // Script editor driven by window.Scripts SSOT.
 
 import { renderScript } from '../render-script';
-import { ScriptStore } from '../features/scripts-store';
 
-type ScriptMeta = { id: string; title: string; updated?: string };
 type ScriptRecord = { id: string; title: string; content: string; updated?: string; created?: string };
-
-type ScriptsApi = {
-  list(): ScriptMeta[];
-  get(id: string): Promise<ScriptRecord | null> | ScriptRecord | null;
-};
-
-declare global {
-  interface Window {
-    __tpScriptEditorBound?: boolean;
-    Scripts?: ScriptsApi;
-    getScriptsApi?: () => ScriptsApi;
-    __tpCurrentName?: string;
-  }
-}
-
-function resolveScriptsApi(): ScriptsApi | null {
-  const w = window as any;
-  const fromGlobal = w.Scripts;
-  if (fromGlobal && typeof fromGlobal.list === 'function' && typeof fromGlobal.get === 'function') {
-    return fromGlobal as ScriptsApi;
-  }
-  if (typeof w.getScriptsApi === 'function') {
-    try {
-      const api = w.getScriptsApi();
-      if (api && typeof api.list === 'function' && typeof api.get === 'function') {
-        return api as ScriptsApi;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  // Fallback to module singleton
-  if (ScriptStore && typeof ScriptStore.list === 'function' && typeof ScriptStore.get === 'function') {
-    return ScriptStore as ScriptsApi;
-  }
-  return null;
-}
 
 function normalizeScriptText(raw: string): string {
   return String(raw ?? '').replace(/\r\n/g, '\n');

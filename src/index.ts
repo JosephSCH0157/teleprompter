@@ -87,6 +87,7 @@ try {
 		save: (data) => ScriptStore.save(data),
 		rename: (id, title) => ScriptStore.rename(id, title),
 		remove: (id) => ScriptStore.remove(id),
+		syncMapped: (entries) => ScriptStore.syncMapped(entries),
 	};
 } catch {}
 
@@ -446,17 +447,18 @@ import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
-declare global {
-	interface Window {
+	declare global {
+		interface Window {
 		Scripts?: {
 			list: () => ScriptMeta[];
-			get: (id: string) => Promise<ScriptRecord | null> | ScriptRecord | null;
+			get: (id: string) => Promise<ScriptRecord | null>;
 			save: (data: { id?: string | null; title: string; content: string }) => string;
 			rename: (id: string, title: string) => void;
 			remove: (id: string) => void;
+			syncMapped: (entries: { id: string; title: string; handle: FileSystemHandle }[]) => void;
 		};
+		}
 	}
-}
 
 function onDomReady(fn: () => void): void {
   if (document.readyState === 'loading') {
