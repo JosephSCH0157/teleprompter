@@ -7,13 +7,16 @@ import { ScriptStore } from '../features/scripts-store';
 
 const SUPPORTED_EXT = /\.(docx|doc|txt|md)$/i;
 function isSupportedScriptName(name: string): boolean {
-  const lower = (name || '').toLowerCase();
+  const lower = (name || '').toLowerCase().trim();
+  if (!lower) return false;
   if (lower.startsWith('~$')) return false; // temp Office files
   if (lower.startsWith('.')) return false;  // hidden/system
   if (lower === 'thumbs.db') return false;
   if (SUPPORTED_EXT.test(lower)) return true;
   // Allow extensionless names (treat as plain text scripts)
   if (!lower.includes('.')) return true;
+  const lastDot = lower.lastIndexOf('.');
+  if (lastDot === 0) return false;
   return false;
 }
 

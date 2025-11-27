@@ -25,6 +25,14 @@ export type MappedHandle = {
 const scriptsById = new Map<string, ScriptRecord>();
 const mappedHandles = new Map<string, MappedHandle>();
 
+function emitScriptsUpdated(): void {
+  try {
+    window.dispatchEvent(new CustomEvent('tp:scripts-updated'));
+  } catch {
+    // ignore
+  }
+}
+
 export const ScriptStore = {
   list(): ScriptMeta[] {
     return Array.from(scriptsById.values()).map((rec) => ({
@@ -76,6 +84,7 @@ export const ScriptStore = {
     };
 
     scriptsById.set(id, rec);
+    emitScriptsUpdated();
     return id;
   },
 
@@ -85,11 +94,13 @@ export const ScriptStore = {
     rec.title = title;
     rec.updated = new Date().toISOString();
     scriptsById.set(id, rec);
+    emitScriptsUpdated();
   },
 
   remove(id: string): void {
     scriptsById.delete(id);
     mappedHandles.delete(id);
+    emitScriptsUpdated();
   },
 
   syncMapped(entries: { id: string; title: string; handle: FileSystemHandle }[]): void {
@@ -109,6 +120,7 @@ export const ScriptStore = {
         source: existing?.source ?? 'mapped',
       });
     }
+    emitScriptsUpdated();
   },
 };
 
@@ -141,4 +153,18 @@ async function extractDocxText(buf: ArrayBuffer): Promise<string> {
     try { console.warn('[scripts-store] docx parse failed', err); } catch {}
     return '';
   }
+}
+
+declare global {
+  interface Window {
+    Scripts?: typeof ScriptStore;
+    getScriptsApi?: () => typeof ScriptStore;
+  }
+}
+
+try {
+  (window as any).Scripts = ScriptStore;
+  (window as any).getScriptsApi = () => ScriptStore;
+} catch {
+  // ignore if window not available
 }
