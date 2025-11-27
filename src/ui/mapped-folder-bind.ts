@@ -5,6 +5,18 @@
 import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
 import { ScriptStore } from '../features/scripts-store';
 
+const SUPPORTED_EXT = /\.(docx|doc|txt|md)$/i;
+function isSupportedScriptName(name: string): boolean {
+  const lower = (name || '').toLowerCase();
+  if (lower.startsWith('~$')) return false; // temp Office files
+  if (lower.startsWith('.')) return false;  // hidden/system
+  if (lower === 'thumbs.db') return false;
+  if (SUPPORTED_EXT.test(lower)) return true;
+  // Allow extensionless names (treat as plain text scripts)
+  if (!lower.includes('.')) return true;
+  return false;
+}
+
 type BindOpts = {
   button: string | HTMLElement; // Choose Folder button selector or element
   select: string | HTMLSelectElement; // Scripts dropdown selector or element
@@ -166,6 +178,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         _handle?: FileSystemFileHandle;
         _file?: File;
       };
+      if (!isSupportedScriptName(e.name)) continue;
       try { opt._handle = e.handle; } catch {}
       try { opt.__fileHandle = e.handle; } catch {}
       try { mappedEntries.push({ id: e.name, title: e.name, handle: e.handle }); } catch {}
@@ -209,7 +222,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       sel.innerHTML = '';
       const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
       try { sel.setAttribute('aria-busy','true'); } catch {}
-      const filtered = files.filter(f => /(\.txt|\.docx|\.md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
+      const filtered = files.filter(f => isSupportedScriptName(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
         try { ScriptStore.syncMapped([]); } catch {}
         if (sel.id === 'scriptSelectSidebar') {
