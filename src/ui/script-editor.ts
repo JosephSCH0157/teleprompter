@@ -55,7 +55,9 @@ export function wireScriptEditor(): void {
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const viewer = document.getElementById('script') as HTMLElement | null;
   const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
+  const sidebarSlots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
   const sidebarSelect = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const primarySelect = sidebarSlots || sidebarSelect;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
   if (!editor || !viewer) {
@@ -89,6 +91,7 @@ export function wireScriptEditor(): void {
     ed: HTMLTextAreaElement,
     scriptTitleEl: HTMLInputElement | null,
     sidebar: HTMLSelectElement | null,
+    sidebarLegacy: HTMLSelectElement | null,
   ) => {
     let handling = false;
     const handler = (ev: Event) => {
@@ -123,16 +126,19 @@ export function wireScriptEditor(): void {
         scriptTitleEl.value = name;
       }
 
-      if (sidebar && name) {
-        // Try to keep sidebar selection in sync with loaded script
-        const options = Array.from(sidebar.options);
+      const syncSelect = (sel: HTMLSelectElement | null) => {
+        if (!sel || !name) return;
+        const options = Array.from(sel.options);
         const match =
           options.find((o) => o.value === name) ||
           options.find((o) => o.text === name);
         if (match) {
-          sidebar.value = match.value;
+          sel.value = match.value;
         }
-      }
+      };
+
+      syncSelect(sidebar);
+      syncSelect(sidebarLegacy);
     };
 
     try {
@@ -142,21 +148,21 @@ export function wireScriptEditor(): void {
   };
 
   // When mapped-folder/docx loader fires tp:script-load, update UI + render
-  attachTpScriptLoadHandler(editor, titleInput, sidebarSelect);
+  attachTpScriptLoadHandler(editor, titleInput, primarySelect, sidebarSelect);
 
   // Load button: just re-fire the sidebar select's change handler so the
   // mapped-folder pipeline does its normal docx â†’ text â†’ tp:script-load flow.
-  if (loadBtn && sidebarSelect) {
+  if (loadBtn && primarySelect) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
       try {
         console.debug('[SCRIPT-EDITOR] Load button click', {
-          activeSelectValue: sidebarSelect.value,
+          activeSelectValue: primarySelect.value,
         });
       } catch {}
 
       const evt = new Event('change', { bubbles: true });
-      sidebarSelect.dispatchEvent(evt);
+      primarySelect.dispatchEvent(evt);
     });
   } else {
     try {
