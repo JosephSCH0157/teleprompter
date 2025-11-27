@@ -98,6 +98,8 @@ export function wireScriptEditor(): void {
   const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
   const scriptEl = document.getElementById('script') as HTMLElement | null;
   const slots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
+  const scriptSelectSidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const scriptSelect = document.getElementById('scriptSelect') as HTMLSelectElement | null;
   const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
 
   const saveBtn = document.getElementById('scriptSaveBtn') as HTMLButtonElement | null;
@@ -140,6 +142,18 @@ export function wireScriptEditor(): void {
       }
     });
   }
+
+  const resolveSelect = (): HTMLSelectElement | null => {
+    const doc = document;
+    const slotsEl = doc.getElementById('scriptSlots') as HTMLSelectElement | null;
+    if (slotsEl && slotsEl.options.length) return slotsEl;
+
+    const sidebar = doc.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+    if (sidebar && sidebar.options.length) return sidebar;
+
+    const settings = doc.getElementById('scriptSelect') as HTMLSelectElement | null;
+    return settings;
+  };
 
   const refreshDropdown = () => {
     if (!slots) return;
@@ -239,23 +253,44 @@ export function wireScriptEditor(): void {
     }
   };
 
+  const doLoad = async () => {
+    const sel = resolveSelect();
+    if (!sel) {
+      try { (window as any)._toast?.('No script selector found', { type: 'warn' }); } catch {}
+      return;
+    }
+    const v = (sel.value || '').trim();
+    if (!v) {
+      try { (window as any)._toast?.('No script selected to load', { type: 'warn' }); } catch {}
+      return;
+    }
+    try { console.debug('[SCRIPT-EDITOR] doLoad', { id: v }); } catch {}
+    void loadById(v);
+  };
+
   // Live typing should update the viewer using the TS renderer
   editor.addEventListener('input', () => {
     applyToViewer(editor.value || '');
   });
 
-  // Sidebar dropdown: change = load immediately
+  // --- Sidebar "Saved Scripts" wiring ---
   if (slots) {
     slots.addEventListener('change', () => {
-      void loadById(slots.value || null);
+      try { console.debug('[SCRIPT-EDITOR] scriptSlots change', { value: slots.value }); } catch {}
+      void doLoad();
     });
   }
 
   // Load button: explicit load of current dropdown selection
-  if (loadBtn && slots) {
+  if (loadBtn) {
     loadBtn.addEventListener('click', (ev) => {
       try { ev.preventDefault(); } catch {}
-      void loadById(slots.value || null);
+      try {
+        console.debug('[SCRIPT-EDITOR] Load button click', {
+          activeSelectValue: slots?.value,
+        });
+      } catch {}
+      void doLoad();
     });
   }
 
@@ -396,11 +431,12 @@ export function wireScriptEditor(): void {
   refreshDropdown();
   try { window.addEventListener('tp:scripts-updated', onScriptsUpdated); } catch {}
 
-  if (slots && slots.value && slots.value.trim()) {
+  const initialSel = resolveSelect();
+  if (initialSel && initialSel.value && initialSel.value.trim()) {
     // Auto-load the first/selected script
-    void loadById(slots.value);
+    void loadById(initialSel.value);
   } else {
-    // No saved script yet – still render whatever is in the editor
+    // No saved script yet - still render whatever is in the editor
     if (editor.value.trim()) {
       applyToViewer(editor.value);
     } else {
