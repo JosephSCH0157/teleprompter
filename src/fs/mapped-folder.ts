@@ -145,7 +145,9 @@ export async function listScripts(extensions = ['.txt', '.docx', '.md']): Promis
       if (entry?.kind === 'file') {
         const name: string = entry.name || '';
         const lower = name.toLowerCase();
-        if (extensions.some(ext => lower.endsWith(ext))) out.push({ name, handle: entry, kind: 'file' });
+        const hasExt = extensions.some(ext => lower.endsWith(ext));
+        const noExt = !lower.includes('.');
+        if (hasExt || noExt) out.push({ name, handle: entry, kind: 'file' });
       }
     }
   } catch {}
