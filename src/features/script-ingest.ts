@@ -211,14 +211,13 @@ export function installGlobalIngestListener() {
 
       // Apply normalization if available so any entry path produces standard markup
       const skipNormalize = !!d?.skipNormalize;
-      if (!skipNormalize) {
-        try {
-          const runner = (window as any).__tpRequestScriptNormalization;
-          if (typeof runner === 'function') {
-            await runner('event:tp:script-load');
-          }
-        } catch {}
-      }
+      if (skipNormalize) return;
+      try {
+        const runner = (window as any).__tpRequestScriptNormalization;
+        if (typeof runner === 'function') {
+          await runner('event:tp:script-load');
+        }
+      } catch {}
 
       try { (window as any).__tpCurrentName = name; } catch {}
 
