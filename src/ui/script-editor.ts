@@ -34,6 +34,8 @@ function getRenderFn(): RenderFn {
 }
 
 let wired = false;
+let lastLoadName = '';
+let lastLoadText = '';
 
 export function wireScriptEditor(): void {
   if (wired) {
@@ -87,21 +89,23 @@ export function wireScriptEditor(): void {
       const rawText = detail.text ?? '';
       const rawName = detail.name ?? '';
       const name = typeof rawName === 'string' ? rawName : '';
+      const textStr = typeof rawText === 'string' ? rawText : '';
 
       try {
         console.debug('[SCRIPT-EDITOR] tp:script-load received', {
           name,
-          length: rawText ? String(rawText).length : 0,
+          length: textStr ? String(textStr).length : 0,
         });
       } catch {}
 
-      if (!rawText) return;
-      // Avoid loops if some other listener echoes the same text back
-      const current = ed.value ?? '';
-      if (current === rawText) return;
+      if (!textStr) return;
+      // Avoid loops if some other listener echoes the same payload back
+      if (lastLoadName === name && lastLoadText === textStr) return;
+      lastLoadName = name;
+      lastLoadText = textStr;
 
       handling = true;
-      applyToEditorAndViewer(String(rawText));
+      applyToEditorAndViewer(textStr);
       handling = false;
 
       if (scriptTitleEl && name) {
