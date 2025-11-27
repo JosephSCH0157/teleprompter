@@ -75,44 +75,52 @@ export function wireScriptEditor(): void {
     applyToEditorAndViewer(editor.value || '');
   });
 
-  // When mapped-folder/docx loader fires tp:script-load, update UI + render
-  const handleTpScriptLoad = (ev: Event) => {
-    const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
-    const rawText = detail.text ?? '';
-    const rawName = detail.name ?? '';
-    const name = typeof rawName === 'string' ? rawName : '';
+  const attachTpScriptLoadHandler = (
+    ed: HTMLTextAreaElement,
+    scriptTitleEl: HTMLInputElement | null,
+    sidebar: HTMLSelectElement | null,
+  ) => {
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ name?: string; text?: string }>).detail || {};
+      const rawText = detail.text ?? '';
+      const rawName = detail.name ?? '';
+      const name = typeof rawName === 'string' ? rawName : '';
+
+      try {
+        console.debug('[SCRIPT-EDITOR] tp:script-load received', {
+          name,
+          length: rawText ? String(rawText).length : 0,
+        });
+      } catch {}
+
+      if (!rawText) return;
+
+      applyToEditorAndViewer(String(rawText));
+
+      if (scriptTitleEl && name) {
+        scriptTitleEl.value = name;
+      }
+
+      if (sidebar && name) {
+        // Try to keep sidebar selection in sync with loaded script
+        const options = Array.from(sidebar.options);
+        const match =
+          options.find((o) => o.value === name) ||
+          options.find((o) => o.text === name);
+        if (match) {
+          sidebar.value = match.value;
+        }
+      }
+    };
 
     try {
-      console.debug('[SCRIPT-EDITOR] tp:script-load received', {
-        name,
-        length: rawText ? String(rawText).length : 0,
-      });
+      window.addEventListener('tp:script-load', handler as EventListener);
+      document.addEventListener('tp:script-load', handler as EventListener);
     } catch {}
-
-    if (!rawText) return;
-
-    applyToEditorAndViewer(String(rawText));
-
-    if (titleInput && name) {
-      titleInput.value = name;
-    }
-
-    if (sidebarSelect && name) {
-      // Try to keep sidebar selection in sync with loaded script
-      const options = Array.from(sidebarSelect.options);
-      const match =
-        options.find((o) => o.value === name) ||
-        options.find((o) => o.text === name);
-      if (match) {
-        sidebarSelect.value = match.value;
-      }
-    }
   };
 
-  try {
-    window.addEventListener('tp:script-load', handleTpScriptLoad as EventListener);
-    document.addEventListener('tp:script-load', handleTpScriptLoad as EventListener);
-  } catch {}
+  // When mapped-folder/docx loader fires tp:script-load, update UI + render
+  attachTpScriptLoadHandler(editor, titleInput, sidebarSelect);
 
   // Load button: just re-fire the sidebar select's change handler so the
   // mapped-folder pipeline does its normal docx â†’ text â†’ tp:script-load flow.
