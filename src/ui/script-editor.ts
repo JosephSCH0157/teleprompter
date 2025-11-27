@@ -68,7 +68,10 @@ export function wireScriptEditor(): void {
 
   const refreshDropdown = () => {
     const api = resolveScriptsApi();
-    if (!selects.length || !api) return;
+    if (!selects.length || !api) {
+      try { console.warn('[SCRIPT-EDITOR] refreshDropdown: missing selects or Scripts API'); } catch {}
+      return;
+    }
     const metas = (() => {
       try { return api.list() || []; } catch { return []; }
     })();
@@ -113,14 +116,21 @@ export function wireScriptEditor(): void {
 
   const loadSelected = async () => {
     const api = resolveScriptsApi();
-    if (!primary || !api) return;
+    if (!primary || !api) {
+      try { console.warn('[SCRIPT-EDITOR] loadSelected: missing primary select or Scripts API'); } catch {}
+      return;
+    }
     const id = (primary.value || '').trim();
-    if (!id) return;
+    if (!id) {
+      try { console.warn('[SCRIPT-EDITOR] loadSelected: no id selected'); } catch {}
+      return;
+    }
     let rec: ScriptRecord | null = null;
     try {
       const res = api.get(id);
       rec = res instanceof Promise ? await res : res;
     } catch {}
+    try { console.debug('[SCRIPT-EDITOR] loadSelected', { id, got: !!rec, hasContent: typeof rec?.content === 'string' }); } catch {}
     if (rec && typeof rec.content === 'string') {
       applyRecord(rec);
     } else {
