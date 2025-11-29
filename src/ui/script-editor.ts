@@ -1,10 +1,11 @@
 // src/ui/script-editor.ts
-// Minimal script editor wiring:
-// - Does NOT load scripts itself
-// - Does NOT dispatch tp:script-load
-// - Lets mapped-folder-bind.ts own the dropdowns
-// - Owns only the Load button and re-fires change on the active select
-// - Looks up the selects fresh on each click so it never holds stale references
+// Sidebar + Load button wiring, piggybacking on the mapped-folder binder.
+//
+// Design:
+// - #scriptSelect (Settings) is the *only* select bound to bindMappedFolderUI.
+// - This file mirrors its options into #scriptSelectSidebar.
+// - Changing the sidebar select updates #scriptSelect and fires "change" on it.
+// - Clicking Load re-fires "change" on the active select (prefer sidebar if populated).
 
 declare global {
   interface Window {
@@ -13,81 +14,99 @@ declare global {
 }
 
 function installScriptEditor(): void {
-  if (typeof document === 'undefined') return;
-  const w = window as any;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  if (w.__tpScriptEditorBound) {
-    try { console.debug('[SCRIPT-EDITOR] already wired'); } catch {}
+  if ((window as any).__tpScriptEditorBound) {
+    try {
+      console.debug('[SCRIPT-EDITOR] already wired');
+    } catch {}
     return;
   }
-  w.__tpScriptEditorBound = true;
+  (window as any).__tpScriptEditorBound = true;
 
+  const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
-  function forwardChange(sel: HTMLSelectElement | null): void {
-    if (!sel) return;
+  function syncSidebarFromSettings() {
+    if (!sidebar || !settings) return;
+
+    sidebar.innerHTML = settings.innerHTML;
+    sidebar.selectedIndex = settings.selectedIndex;
+
     try {
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-      try {
-        console.debug('[SCRIPT-EDITOR] forwardChange', {
-          id: sel.id,
-          value: sel.value,
-          options: sel.options.length,
-        });
-      } catch {}
-    } catch (err) {
-      try { console.warn('[SCRIPT-EDITOR] forwardChange failed', err); } catch {}
-    }
+      console.debug('[SCRIPT-EDITOR] syncSidebarFromSettings', {
+        settingsOptions: settings.options.length,
+        sidebarOptions: sidebar.options.length,
+        value: settings.value,
+      });
+    } catch {}
   }
 
-  if (loadBtn && !(loadBtn as any).__tpScriptLoadBtnWired) {
-    (loadBtn as any).__tpScriptLoadBtnWired = true;
+  window.addEventListener('tp:folderScripts:populated' as any, () => {
+    syncSidebarFromSettings();
+  });
 
-    loadBtn.addEventListener('click', () => {
-      const sidebar  = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-      const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
-      const slots    = document.getElementById('scriptSlots') as HTMLSelectElement | null;
+  if (settings) {
+    settings.addEventListener('change', () => {
+      syncSidebarFromSettings();
+    });
+  }
+
+  if (sidebar && settings) {
+    sidebar.addEventListener('change', () => {
+      settings.value = sidebar.value;
 
       try {
-        console.debug('[SCRIPT-EDITOR] Load click DOM snapshot', {
-          hasSidebar: !!sidebar,
-          sidebarOptions: sidebar?.options.length ?? 0,
-          sidebarValue: sidebar?.value,
-          hasSettings: !!settings,
-          settingsOptions: settings?.options.length ?? 0,
-          settingsValue: settings?.value,
-          hasSlots: !!slots,
-          slotsOptions: slots?.options.length ?? 0,
-          slotsValue: slots?.value,
+        console.debug('[SCRIPT-EDITOR] sidebar change → settings change', {
+          value: sidebar.value,
+          options: sidebar.options.length,
         });
       } catch {}
 
+      settings.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  if (loadBtn) {
+    loadBtn.addEventListener('click', () => {
       const active =
-        (sidebar && sidebar.options.length > 0 && sidebar.value && sidebar.value !== '__OPEN_SETTINGS__'
-          ? sidebar
-          : null) ||
-        (settings && settings.options.length > 0 ? settings : null) ||
-        (slots && slots.options.length > 0 ? slots : null);
+        (sidebar && sidebar.options.length > 0 ? sidebar : null) ||
+        (settings && settings.options.length > 0 ? settings : null);
 
       if (!active) {
-        try { console.debug('[SCRIPT-EDITOR] Load click: no active select with options (post-snapshot)'); } catch {}
+        try {
+          console.debug('[SCRIPT-EDITOR] Load click: no active select with options');
+        } catch {}
         return;
       }
 
-      forwardChange(active);
+      try {
+        console.debug('[SCRIPT-EDITOR] Load click: firing change on', {
+          id: active.id,
+          value: active.value,
+          options: active.options.length,
+        });
+      } catch {}
+
+      active.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
 
   try {
-    console.debug('[SCRIPT-EDITOR] wiring complete (minimal)', {
-      hasLoadBtn: !!loadBtn,
-    });
+    console.debug('[SCRIPT-EDITOR] wiring complete');
   } catch {}
 }
 
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => installScriptEditor(), { once: true });
+    document.addEventListener(
+      'DOMContentLoaded',
+      () => {
+        installScriptEditor();
+      },
+      { once: true },
+    );
   } else {
     installScriptEditor();
   }
