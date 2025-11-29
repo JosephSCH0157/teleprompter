@@ -72,6 +72,11 @@ function installScriptEditor(): void {
 
   function wireSelect(sel: HTMLSelectElement | null): void {
     if (!sel) return;
+    // Let mapped-folder binder own mapped-folder-driven selects.
+    if (sel.id === 'scriptSelectSidebar' || sel.id === 'scriptSelect') {
+      try { console.debug('[SCRIPT-EDITOR] skipping change wiring for mapped-folder select', { id: sel.id }); } catch {}
+      return;
+    }
     if ((sel as any).__tpScriptSelectWired) return;
     (sel as any).__tpScriptSelectWired = true;
 
