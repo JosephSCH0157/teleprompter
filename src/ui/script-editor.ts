@@ -25,8 +25,32 @@ function installScriptEditor(): void {
 
   const slots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
   const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
   const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
+
+  // Mirror Settings scripts into Sidebar and propagate selection back
+  const syncSidebarFromSettings = () => {
+    if (!sidebar || !settings) return;
+
+    sidebar.innerHTML = '';
+    const opts = Array.from(settings.options || []);
+    for (const opt of opts) {
+      const clone = opt.cloneNode(true) as HTMLOptionElement;
+      sidebar.appendChild(clone);
+    }
+    sidebar.value = settings.value;
+  };
+
+  if (settings && sidebar) {
+    setTimeout(() => { try { syncSidebarFromSettings(); } catch {} }, 0);
+    settings.addEventListener('change', () => { try { syncSidebarFromSettings(); } catch {} });
+    sidebar.addEventListener('change', () => {
+      if (!settings) return;
+      settings.value = sidebar.value;
+      settings.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
 
   function getActiveSelect(): HTMLSelectElement | null {
     if (sidebar && sidebar.options.length > 0) return sidebar;
