@@ -1,7 +1,5 @@
 // src/ui/script-editor.ts
-// Dumb bridge between Settings scripts select and sidebar + Load button.
-// - Mapped-folder owns loading (via #scriptSelect change).
-// - This file just mirrors options and forwards user actions.
+// Minimal bridge: Settings owns mapped folder; sidebar + Load just forward to it.
 
 declare global {
   interface Window {
@@ -9,135 +7,123 @@ declare global {
   }
 }
 
-(function installScriptEditor() {
-  if ((window as any).__tpScriptEditorBound) return;
-  (window as any).__tpScriptEditorBound = true;
-
-  function getSidebarSelect(): HTMLSelectElement | null {
-    return document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+function installScriptEditorBridge() {
+  if (window.__tpScriptEditorBound) {
+    try { console.debug('[SCRIPT-EDITOR] already installed'); } catch {}
+    return;
   }
+  window.__tpScriptEditorBound = true;
 
-  function getSettingsSelect(): HTMLSelectElement | null {
-    return document.getElementById('scriptSelect') as HTMLSelectElement | null;
-  }
+  const doc = window.document;
+  const settings = doc.getElementById('scriptSelect') as HTMLSelectElement | null;
+  const sidebar = doc.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const loadBtn = doc.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
-  function logDebug(msg: string, payload?: any) {
-    try {
-      console.debug('[SCRIPT-EDITOR]', msg, payload || {});
-    } catch {
-      // ignore
-    }
-  }
-
-  function syncSidebarFromSettings() {
-    const settings = getSettingsSelect();
-    const sidebar = getSidebarSelect();
-
-    if (!settings || !sidebar) {
-      logDebug('syncSidebarFromSettings skipped', {
-        hasSettings: !!settings,
-        hasSidebar: !!sidebar,
-      });
-      return;
-    }
-
-    sidebar.innerHTML = '';
-    for (const opt of Array.from(settings.options)) {
-      const clone = opt.cloneNode(true) as HTMLOptionElement;
-      sidebar.appendChild(clone);
-    }
-    sidebar.selectedIndex = settings.selectedIndex;
-
-    logDebug('syncSidebarFromSettings applied', {
-      count: sidebar.options.length,
-      selectedIndex: sidebar.selectedIndex,
+  try {
+    console.debug('[SCRIPT-EDITOR] install bridge', {
+      hasSettings: !!settings,
+      hasSidebar: !!sidebar,
+      hasLoadBtn: !!loadBtn,
     });
+  } catch {}
+
+  if (!settings) {
+    // If Settings isn’t there, nothing to do.
+    return;
   }
 
-  window.addEventListener('tp:folderScripts:populated' as any, () => {
+  // Clone Settings options into sidebar
+  const syncSidebarFromSettings = () => {
+    if (!sidebar) return;
+    try {
+      const opts = Array.from(settings.options || []);
+      sidebar.innerHTML = '';
+      for (const opt of opts) {
+        const clone = opt.cloneNode(true) as HTMLOptionElement;
+        sidebar.appendChild(clone);
+      }
+      sidebar.value = settings.value;
+      try {
+        console.debug('[SCRIPT-EDITOR] syncSidebarFromSettings', {
+          settingsValue: settings.value,
+          settingsOptions: settings.options.length,
+          sidebarOptions: sidebar.options.length,
+        });
+      } catch {}
+    } catch (err) {
+      try { console.warn('[SCRIPT-EDITOR] syncSidebarFromSettings failed', err); } catch {}
+    }
+  };
+
+  // Initial sync – in case mapped folder already populated Settings
+  syncSidebarFromSettings();
+  // Fallback syncs to catch async folder mapping
+  setTimeout(syncSidebarFromSettings, 250);
+  setTimeout(syncSidebarFromSettings, 1000);
+
+  // When Settings changes (user picks script or mapped-folder fires change),
+  // resync the sidebar.
+  settings.addEventListener('change', () => {
     syncSidebarFromSettings();
   });
 
-  document.addEventListener('change', (ev) => {
-    const target = ev.target as HTMLElement | null;
-    if (!target) return;
+  // When sidebar changes, drive Settings + its mapped-folder handler.
+  if (sidebar) {
+    sidebar.addEventListener('change', () => {
+      try {
+        if (!sidebar.value) return;
+        settings.value = sidebar.value;
+        try {
+          console.debug('[SCRIPT-EDITOR] sidebar change → settings change', {
+            value: sidebar.value,
+          });
+        } catch {}
+        settings.dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
+      } catch (err) {
+        try { console.warn('[SCRIPT-EDITOR] sidebar change handler failed', err); } catch {}
+      }
+    });
+  }
 
-    const sidebar = getSidebarSelect();
-    const settings = getSettingsSelect();
-    if (!sidebar || !settings) return;
+  // Load button just re-fires change on the active select
+  if (loadBtn) {
+    loadBtn.addEventListener('click', () => {
+      const active: HTMLSelectElement | null =
+        (sidebar && sidebar.options.length > 0 ? sidebar : settings);
 
-    if (target === settings) {
-      logDebug('settings change → syncSidebarFromSettings', {
-        value: settings.value,
-      });
-      syncSidebarFromSettings();
-    } else if (target === sidebar) {
-      settings.value = sidebar.value;
-      logDebug('sidebar change → forward to settings', {
-        value: settings.value,
-      });
-      settings.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+      const hasOptions = !!(active && active.options && active.options.length);
+
+      try {
+        console.debug('[SCRIPT-EDITOR] Load click', {
+          useSidebar: !!sidebar && sidebar.options.length > 0,
+          activeId: active && active.id,
+          activeOptions: active && active.options && active.options.length,
+        });
+      } catch {}
+
+      if (!active || !hasOptions) {
+        try { console.warn('[SCRIPT-EDITOR] Load click: no active select with options'); } catch {}
+        return;
+      }
+
+      // Re-fire change on whichever select we decided is active
+      active.dispatchEvent(
+        new Event('change', { bubbles: true })
+      );
+    });
+  }
+}
+
+// Make sure we install once DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    installScriptEditorBridge();
   });
-
-  function handleLoadClick() {
-    const sidebar = getSidebarSelect();
-    const settings = getSettingsSelect();
-
-    const sidebarHasOptions =
-      !!sidebar && sidebar.options && sidebar.options.length > 0 && !!sidebar.value;
-    const settingsHasOptions =
-      !!settings && settings.options && settings.options.length > 0 && !!settings.value;
-
-    const active: HTMLSelectElement | null = sidebarHasOptions
-      ? sidebar!
-      : settingsHasOptions
-      ? settings!
-      : null;
-
-    if (!active) {
-      logDebug('Load click: no active select with options', {
-        hasSidebar: !!sidebar,
-        sidebarOptions: sidebar?.options.length || 0,
-        hasSettings: !!settings,
-        settingsOptions: settings?.options.length || 0,
-      });
-      return;
-    }
-
-    logDebug('Load click → refire change', {
-      id: active.id,
-      value: active.value,
-    });
-
-    active.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function wireLoadButton() {
-    const btn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
-    if (!btn) {
-      logDebug('no scriptLoadBtn found');
-      return;
-    }
-
-    btn.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      handleLoadClick();
-    });
-
-    logDebug('load button wired');
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      wireLoadButton();
-    }, { once: true });
-  } else {
-    wireLoadButton();
-  }
-
-  logDebug('installed');
-})();
+} else {
+  installScriptEditorBridge();
+}
 
 export {};
 
