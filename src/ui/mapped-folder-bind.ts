@@ -89,6 +89,9 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   sel.addEventListener('change', async () => {
     try {
+      console.debug('[MAPPED-FOLDER] change', { id: sel.id, value: sel.value });
+    } catch {}
+    try {
       const opt = sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : sel.options[sel.selectedIndex];
       if (!opt) return;
       sel.setAttribute('aria-busy','true');

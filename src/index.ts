@@ -111,6 +111,7 @@ import { initPersistence } from './features/persistence';
 import { initScrollFeature } from './features/scroll';
 import { initTelemetry } from './features/telemetry';
 import { initToasts } from './features/toasts';
+import './ui/script-editor';
 
 // === UI Scroll Mode Router ===
 import { installAsrScrollBridge } from './scroll/asr-bridge';
@@ -390,6 +391,53 @@ function ensureUiCrawlTargets() {
 ensureUiCrawlTargets();
 
 // === End UI Scroll Mode Router ===
+
+// Unified Load button wiring: route through mapped-folder select change so TS owns load flow.
+function wireScriptLoadButton(): void {
+	if (typeof document === 'undefined') return;
+	const w = window as any;
+	if (w.__tpScriptLoadBtnBound) {
+		try { console.debug('[SCRIPT-LOAD] scriptLoadBtn already wired'); } catch {}
+		return;
+	}
+	w.__tpScriptLoadBtnBound = true;
+
+	const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
+	if (!loadBtn) {
+		try { console.warn('[SCRIPT-LOAD] scriptLoadBtn not found'); } catch {}
+		return;
+	}
+
+	const pickActiveSelect = (): HTMLSelectElement | null => {
+		const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+		const slots = document.getElementById('scriptSlots') as HTMLSelectElement | null;
+		const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
+		const candidates: (HTMLSelectElement | null)[] = [sidebar, slots, settings];
+		for (const sel of candidates) {
+			if (!sel || !sel.options?.length || !sel.value) continue;
+			return sel;
+		}
+		return null;
+	};
+
+	loadBtn.addEventListener('click', (ev) => {
+		try {
+			ev.preventDefault();
+			ev.stopPropagation();
+			(ev as any).stopImmediatePropagation?.();
+		} catch {}
+
+		const sel = pickActiveSelect();
+		if (!sel) {
+			try { console.warn('[SCRIPT-LOAD] No active select with a value'); } catch {}
+			return;
+		}
+		try { console.debug('[SCRIPT-LOAD] firing change on', { id: sel.id, value: sel.value }); } catch {}
+		sel.dispatchEvent(new Event('change', { bubbles: true }));
+	}, { capture: true });
+
+	try { console.debug('[SCRIPT-LOAD] scriptLoadBtn wired (index.ts)'); } catch {}
+}
 
 // The compiled bundle (./dist/index.js) will import other modules and
 // eventually assign window.__tpRealCore or resolve the _initCore waiter.
@@ -943,6 +991,7 @@ export async function boot() {
 					// Script ingest
 					try { installScriptIngest({}); } catch {}
 					try { installGlobalIngestListener(); } catch {}
+					try { wireScriptLoadButton(); } catch {}
 
 					// Open Settings scroll into scripts card when sidebar button clicked
 					try {
