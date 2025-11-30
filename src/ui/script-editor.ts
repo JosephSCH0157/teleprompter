@@ -1,9 +1,10 @@
 // src/ui/script-editor.ts
-// Sidebar <-> Settings bridge for scripts.
+// Goal: Keep this file stupid-simple.
 //
-// - #scriptSelect  : the real mapped-folder select (Settings).
-// - #scriptSelectSidebar : sidebar mirror (does NOT own data).
-// - #scriptLoadBtn : Load button that re-fires change on active select.
+// - Only #scriptSelect (Settings) is bound to mapped-folder.
+// - Sidebar #scriptSelectSidebar is just a visual mirror.
+// - Load button just re-fires a change on whichever select is active.
+// - No ScriptStore, no tp:script-load handlers, no extra brains.
 
 declare global {
   interface Window {
@@ -13,90 +14,124 @@ declare global {
 
 function installScriptEditor(): void {
   if (typeof document === 'undefined') return;
-
-  const w = window as any;
-  if (w.__tpScriptEditorBound) {
-    try { console.debug('[SCRIPT-EDITOR] already wired'); } catch {}
+  if ((window as any).__tpScriptEditorBound) {
+    try { console.debug('[SCRIPT-EDITOR] already bound'); } catch {}
     return;
   }
-  w.__tpScriptEditorBound = true;
+  (window as any).__tpScriptEditorBound = true;
 
-  const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
   const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  const settings = document.getElementById('scriptSelect') as HTMLSelectElement | null;
   const loadBtn = document.getElementById('scriptLoadBtn') as HTMLButtonElement | null;
 
-  function copyOptions(from: HTMLSelectElement, to: HTMLSelectElement) {
-    if (!from || !to) return;
-    while (to.firstChild) to.removeChild(to.firstChild);
-    for (let i = 0; i < from.options.length; i++) {
-      const src = from.options[i];
-      const opt = document.createElement('option');
-      opt.value = src.value;
-      opt.textContent = src.textContent;
-      opt.selected = src.selected;
-      to.appendChild(opt);
+  try {
+    console.debug('[SCRIPT-EDITOR] wiring', {
+      hasSidebar: !!sidebar,
+      hasSettings: !!settings,
+      hasLoadBtn: !!loadBtn,
+    });
+  } catch {}
+
+  if (!sidebar && !settings && !loadBtn) return;
+
+  // --- helpers --------------------------------------------------------------
+
+  function syncSidebarFromSettings(): void {
+    if (!sidebar || !settings) return;
+    // Clear sidebar
+    while (sidebar.firstChild) sidebar.removeChild(sidebar.firstChild);
+
+    // Clone options from Settings into sidebar
+    const opts = Array.from(settings.options);
+    for (const opt of opts) {
+      const clone = opt.cloneNode(true) as HTMLOptionElement;
+      sidebar.appendChild(clone);
     }
+
+    // Mirror selected index
+    sidebar.selectedIndex = settings.selectedIndex;
+
     try {
       console.debug('[SCRIPT-EDITOR] syncSidebarFromSettings', {
-        settingsOptions: from.options.length,
-        sidebarOptions: to.options.length,
-        value: from.value,
+        settingsOptions: settings.options.length,
+        sidebarOptions: sidebar.options.length,
+        selectedIndex: settings.selectedIndex,
       });
     } catch {}
   }
 
-  function syncSidebarFromSettings() {
-    if (!settings || !sidebar) return;
-    copyOptions(settings, sidebar);
+  function getActiveSelect(): HTMLSelectElement | null {
+    // Prefer sidebar if it exists and has options
+    if (sidebar && sidebar.options.length > 0) return sidebar;
+    if (settings && settings.options.length > 0) return settings;
+    return null;
   }
 
-  window.addEventListener('tp:folderScripts:populated' as any, () => {
-    syncSidebarFromSettings();
-  });
+  function forwardSidebarChange(): void {
+    if (!sidebar || !settings) return;
+    if (!sidebar.value) return;
 
+    // Push sidebar’s chosen value into Settings and fire change
+    settings.value = sidebar.value;
+    try {
+      console.debug('[SCRIPT-EDITOR] sidebar → settings', {
+        sidebarValue: sidebar.value,
+        settingsValue: settings.value,
+      });
+    } catch {}
+
+    const ev = new Event('change', { bubbles: true });
+    settings.dispatchEvent(ev);
+  }
+
+  function handleLoadClick(): void {
+    const active = getActiveSelect();
+    try {
+      console.debug('[SCRIPT-EDITOR] Load click', {
+        activeId: active?.id || null,
+        activeValue: active?.value || null,
+        sidebarOptions: sidebar?.options.length ?? 0,
+        settingsOptions: settings?.options.length ?? 0,
+      });
+    } catch {}
+
+    if (!active) return;
+
+    const ev = new Event('change', { bubbles: true });
+    active.dispatchEvent(ev);
+  }
+
+  // --- event wiring ---------------------------------------------------------
+
+  // When mapped-folder populates scripts, Settings’ select gets options.
+  // We mirror from Settings into sidebar on that signal and on Settings change.
   if (settings && sidebar) {
+    // Initial sync (in case Settings is already populated)
+    syncSidebarFromSettings();
+
+    // Settings changed (either value or options)
     settings.addEventListener('change', () => {
-      for (let i = 0; i < sidebar.options.length; i++) {
-        sidebar.options[i].selected = (sidebar.options[i].value === settings.value);
-      }
+      syncSidebarFromSettings();
     });
-  }
 
-  if (sidebar && settings) {
+    // Folder-populated signal from mapped-folder-bind.ts
+    window.addEventListener('tp:folderScripts:populated' as any, () => {
+      syncSidebarFromSettings();
+    });
+
+    // Sidebar change: drive Settings + mapped-folder load
     sidebar.addEventListener('change', () => {
-      settings.value = sidebar.value;
-      try {
-        console.debug('[SCRIPT-EDITOR] forwardChange', {
-          from: 'sidebar',
-          value: settings.value,
-          options: settings.options.length,
-        });
-      } catch {}
-      settings.dispatchEvent(new Event('change', { bubbles: true }));
+      forwardSidebarChange();
     });
   }
 
+  // Load button: fire change on whichever select is active
   if (loadBtn) {
-    loadBtn.addEventListener('click', () => {
-      const active =
-        sidebar && sidebar.options.length > 0
-          ? sidebar
-          : settings;
-
-      try {
-        console.debug('[SCRIPT-EDITOR] Load click', {
-          activeId: active && active.id,
-          options: active && active.options.length,
-          value: active && active.value,
-        });
-      } catch {}
-
-      if (!active || active.options.length === 0) return;
-      active.dispatchEvent(new Event('change', { bubbles: true }));
+    loadBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
+      handleLoadClick();
     });
   }
-
-  syncSidebarFromSettings();
 
   try { console.debug('[SCRIPT-EDITOR] wiring complete'); } catch {}
 }
@@ -110,4 +145,3 @@ if (typeof document !== 'undefined') {
 }
 
 export {};
-
