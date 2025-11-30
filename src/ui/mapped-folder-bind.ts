@@ -175,7 +175,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
         return;
-      }
+    }
     sel.disabled = false;
     for (const e of entries) {
       try {
@@ -206,6 +206,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
     }
       try { console.debug('[MAPPED-FOLDER] syncing mapped entries', { count: mappedEntries.length }); } catch {}
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: mappedEntries.length, selectId: sel.id } })); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
       // Preselect last used script if present
       try {
