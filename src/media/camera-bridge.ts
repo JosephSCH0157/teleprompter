@@ -2,270 +2,263 @@
 //
 // Sidebar camera is SSOT:
 // - Start/stop comes from #startCam / #stopCam in the sidebar.
-// - Device comes from a single "camera device" <select> (Settings or sidebar).
-//   If both exist, we mirror them.
-//
-// This module owns the getUserMedia stream in the TS path and exposes
-// a minimal window.__tpCamera API for any legacy/test callers.
+// - Device comes from a single camera select (sidebar or settings), mirrored if both exist.
+// - Exposes window.__tpCamera / window.__camApi for legacy/test callers.
 
 type Maybe<T> = T | null;
 
-interface CameraApi {
-  start(deviceId?: string): Promise<void>;
-  stop(): void;
-  isRunning(): boolean;
-  setSize(percent: number): void;
-  setOpacity(opacity: number): void;
-  setMirror(mirror: boolean): void;
-  togglePiP(): Promise<void>;
-}
+type CameraAPI = {
+  start: () => Promise<boolean>;
+  stop: () => void;
+  setDevice: (id: string | null) => Promise<boolean> | boolean;
+  setSize: (pct: number) => void;
+  setOpacity: (opacity: number) => void;
+  setMirror: (on: boolean) => void;
+  isActive: () => boolean;
+  startCamera?: () => Promise<boolean>;
+  stopCamera?: () => void;
+  switchCamera?: (id: string) => Promise<boolean> | boolean;
+  applyCamSizing?: () => void;
+  applyCamOpacity?: () => void;
+  applyCamMirror?: () => void;
+  currentDeviceId?: string | null;
+};
 
 declare global {
   interface Window {
-    __tpCamera?: CameraApi;
+    __tpCamera?: CameraAPI;
+    __camApi?: CameraAPI;
   }
 }
 
-function qs<T extends HTMLElement = HTMLElement>(id: string): Maybe<T> {
+let bound = false;
+
+function q<T extends HTMLElement = HTMLElement>(id: string): Maybe<T> {
   return document.getElementById(id) as Maybe<T>;
 }
 
 export function bindCameraUI(): void {
-  // Sidebar controls (SSOT for start/stop)
-  const startBtn = qs<HTMLButtonElement>('startCam');
-  const stopBtn = qs<HTMLButtonElement>('stopCam');
-  const sidebarDeviceSel = qs<HTMLSelectElement>('camDevice');
-  const sizeInput = qs<HTMLInputElement>('camSize');
-  const opacityInput = qs<HTMLInputElement>('camOpacity');
-  const mirrorCheckbox = qs<HTMLInputElement>('camMirror');
-  const pipBtn = qs<HTMLButtonElement>('camPiP');
+  if (bound) return;
+  bound = true;
 
-  const camWrap = qs<HTMLDivElement>('camWrap');
-  const camVideo = qs<HTMLVideoElement>('camVideo');
-  const camRtcChip = qs<HTMLElement>('camRtcChip');
+  const startBtn = q<HTMLButtonElement>('startCam');
+  const stopBtn = q<HTMLButtonElement>('stopCam');
+  const camWrap = q<HTMLDivElement>('camWrap');
+  const camVideo = q<HTMLVideoElement>('camVideo');
 
-  // Settings camera device select (adjust selector if needed)
-  const settingsDeviceSel =
-    (document.querySelector('[data-role="cam-device"]') as Maybe<HTMLSelectElement>) ||
-    qs<HTMLSelectElement>('settingsCamDevice') ||
-    null;
+  const sidebarDevice = q<HTMLSelectElement>('camDevice');
+  const settingsDevice =
+    (q<HTMLSelectElement>('settingsCamDevice') ||
+      q<HTMLSelectElement>('settingsCamSel')) as HTMLSelectElement | null;
 
-  // Only bail if the core sidebar controls are missing.
+  const sizeInput = q<HTMLInputElement>('camSize');
+  const opacityInput = q<HTMLInputElement>('camOpacity');
+  const mirrorInput = q<HTMLInputElement>('camMirror');
+  const pipBtn = q<HTMLButtonElement>('camPiP');
+  const camRtcChip = q<HTMLElement>('camRtcChip');
+
   if (!startBtn || !stopBtn || !camWrap || !camVideo) {
-    try { console.warn('[CAMERA] core DOM elements missing; camera bridge not bound'); } catch {}
-    return; // no engine without these
+    try { console.warn('[CAM] sidebar camera UI not found; skipping bindCameraUI'); } catch {}
+    return;
   }
 
-  let stream: MediaStream | null = null;
-  let running = false;
+  const deviceSelects: HTMLSelectElement[] = [];
+  if (sidebarDevice) deviceSelects.push(sidebarDevice);
+  if (settingsDevice && settingsDevice !== sidebarDevice) deviceSelects.push(settingsDevice);
+
+  let currentStream: MediaStream | null = null;
+  let currentDeviceId: string | null = null;
+  let isStarting = false;
 
   function updateChip(text: string): void {
     if (camRtcChip) camRtcChip.textContent = text;
   }
 
-  function setButtonsForState(isRunning: boolean): void {
-    startBtn.disabled = isRunning;
-    stopBtn.disabled = !isRunning;
-  }
-
-  function getActiveDeviceId(): string | undefined {
-    const sel = settingsDeviceSel || sidebarDeviceSel;
-    if (!sel) return undefined;
-    const value = sel.value;
-    return value || undefined;
-  }
-
-  async function populateDevices(): Promise<void> {
-    const sel = settingsDeviceSel || sidebarDeviceSel;
-    if (!sel || !navigator.mediaDevices?.enumerateDevices) return;
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
-      const preserved = Array.from(sel.options).filter((o) => !o.value);
-      sel.innerHTML = '';
-      preserved.forEach((o) => sel.add(o));
-      for (const d of videoInputs) {
-        const opt = document.createElement('option');
-        opt.value = d.deviceId;
-        opt.textContent = d.label || `Camera ${sel.options.length + 1}`;
-        sel.add(opt);
-      }
-      if (settingsDeviceSel && sidebarDeviceSel && sel === settingsDeviceSel) {
-        sidebarDeviceSel.innerHTML = sel.innerHTML;
-        sidebarDeviceSel.value = sel.value;
-      }
-    } catch (err) {
-      try { console.warn('[CAMERA] enumerateDevices failed', err); } catch {}
+  function setButtons(active: boolean, pending = false): void {
+    if (pending) {
+      startBtn.disabled = true;
+      stopBtn.disabled = true;
+      updateChip('CamRTC: starting…');
+      return;
     }
+    startBtn.disabled = active;
+    stopBtn.disabled = !active;
+    updateChip(active ? 'CamRTC: live' : 'CamRTC: idle');
   }
 
-  async function start(deviceId?: string): Promise<void> {
-    if (running && !deviceId) return;
-    if (stream) {
-      for (const track of stream.getTracks()) track.stop();
-      stream = null;
-    }
-
-    updateChip('CamRTC: starting…');
-    setButtonsForState(true);
-
-    const constraints: MediaStreamConstraints = {
-      video: deviceId ? { deviceId: { exact: deviceId } } : true,
-      audio: false,
-    };
-
-    try {
-      const media = await navigator.mediaDevices.getUserMedia(constraints);
-      stream = media;
-
-      camVideo.srcObject = media;
-      camVideo.muted = true;
-      camVideo.playsInline = true;
-      camWrap.style.display = 'block';
-
-      applySize();
-      applyOpacity();
-      applyMirror();
-
-      try {
-        await camVideo.play();
-      } catch (playErr) {
-        try { console.warn('[CAMERA] autoplay blocked; waiting for user gesture', playErr); } catch {}
-        updateChip('Tap camera to start playback');
-        const onTap = async () => {
-          try {
-            await camVideo.play();
-            updateChip('CamRTC: live');
-            camVideo.removeEventListener('click', onTap);
-          } catch {}
-        };
-        camVideo.addEventListener('click', onTap, { once: true });
-      }
-
-      running = true;
-      updateChip('CamRTC: live');
-    } catch (err) {
-      try { console.error('[CAMERA] getUserMedia failed', err); } catch {}
-      updateChip('CamRTC: error');
-      setButtonsForState(false);
-      camWrap.style.display = 'none';
-      running = false;
-      stream = null;
-    }
-  }
-
-  function stop(): void {
-    if (stream) {
-      for (const track of stream.getTracks()) track.stop();
-      stream = null;
-    }
-    camVideo.srcObject = null;
-    camWrap.style.display = 'none';
-    running = false;
-    setButtonsForState(false);
-    updateChip('CamRTC: idle');
-  }
-
-  function applySize(): void {
+  function applyCamSizing(): void {
     if (!camWrap || !sizeInput) return;
-    const value = Number(sizeInput.value || sizeInput.getAttribute('value') || 100);
-    const clamped = Math.max(10, Math.min(100, value));
-    camWrap.style.width = `${clamped}%`;
-    camWrap.style.height = 'auto';
+    const pct = Math.max(15, Math.min(60, Number(sizeInput.value) || 28));
+    camWrap.style.width = `${pct}%`;
   }
 
-  function applyOpacity(): void {
+  function applyCamOpacity(): void {
     if (!camWrap || !opacityInput) return;
-    const raw = Number(opacityInput.value || opacityInput.getAttribute('value') || 100);
-    const clamped = Math.max(10, Math.min(100, raw));
-    camWrap.style.opacity = String(clamped / 100);
+    const pct = Math.max(20, Math.min(100, Number(opacityInput.value) || 100));
+    camWrap.style.opacity = String(pct / 100);
   }
 
-  function applyMirror(): void {
-    if (!camWrap || !camVideo || !mirrorCheckbox) return;
-    const mirrored = mirrorCheckbox.checked;
-    if (mirrored) camWrap.classList.add('mirrored');
-    else camWrap.classList.remove('mirrored');
+  function applyCamMirror(): void {
+    if (!camVideo || !mirrorInput) return;
+    camVideo.style.transform = mirrorInput.checked ? 'scaleX(-1)' : 'none';
   }
 
   async function togglePiP(): Promise<void> {
-    if (!document.pictureInPictureEnabled || !camVideo) return;
+    if (!camVideo || !('pictureInPictureEnabled' in document)) return;
     try {
+      // @ts-expect-error PiP not in all lib targets
       if (document.pictureInPictureElement === camVideo) {
+        // @ts-expect-error
         await document.exitPictureInPicture();
-      } else {
-        if (!running) {
-          await start(getActiveDeviceId());
-        }
+      } else if (camVideo.readyState >= 2) {
+        // @ts-expect-error
         await camVideo.requestPictureInPicture();
       }
     } catch (err) {
-      try { console.warn('[CAMERA] PiP failed', err); } catch {}
+      try { console.warn('[CAM] PiP toggle failed', err); } catch {}
     }
   }
 
-  // Expose global API for legacy/test callers
-  const api: CameraApi = {
-    start: (deviceId?: string) => start(deviceId),
-    stop,
-    isRunning: () => running,
-    setSize: (percent: number) => {
-      if (sizeInput) sizeInput.value = String(percent);
-      applySize();
-    },
-    setOpacity: (opacity: number) => {
-      if (opacityInput) opacityInput.value = String(opacity);
-      applyOpacity();
-    },
-    setMirror: (mirror: boolean) => {
-      if (mirrorCheckbox) mirrorCheckbox.checked = mirror;
-      applyMirror();
-    },
-    togglePiP,
-  };
+  async function refreshDevices(): Promise<void> {
+    if (!navigator.mediaDevices?.enumerateDevices || deviceSelects.length === 0) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+      const firstSel = deviceSelects[0];
 
-  (window as any).__tpCamera = api;
+      deviceSelects.forEach((sel) => {
+        const prev = sel.value;
+        sel.innerHTML = '';
+        videoDevices.forEach((dev, idx) => {
+          const opt = document.createElement('option');
+          opt.value = dev.deviceId || dev.label || `camera-${idx}`;
+          opt.textContent = dev.label || `Camera ${idx + 1}`;
+          sel.appendChild(opt);
+        });
 
-  // Wire sidebar start/stop
-  startBtn.addEventListener('click', () => {
-    const deviceId = getActiveDeviceId();
-    void start(deviceId);
+        if (currentDeviceId && videoDevices.some((d) => d.deviceId === currentDeviceId)) {
+          sel.value = currentDeviceId;
+        } else if (prev && videoDevices.some((d) => d.deviceId === prev)) {
+          sel.value = prev;
+        } else if (videoDevices[0]) {
+          sel.value = videoDevices[0].deviceId || sel.value;
+        }
+      });
+
+      currentDeviceId = firstSel?.value || null;
+      if (window.__tpCamera) window.__tpCamera.currentDeviceId = currentDeviceId;
+    } catch (err) {
+      try { console.warn('[CAM] enumerateDevices failed', err); } catch {}
+    }
+  }
+
+  async function doStart(): Promise<boolean> {
+    if (isStarting) return false;
+    if (currentStream) return true;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      try { console.warn('[CAM] getUserMedia not supported'); } catch {}
+      updateChip('CamRTC: unsupported');
+      return false;
+    }
+    isStarting = true;
+    setButtons(false, true);
+    try {
+      const id =
+        currentDeviceId ||
+        (deviceSelects[0] && deviceSelects[0].value) ||
+        undefined;
+      const constraints: MediaStreamConstraints = {
+        video: id ? { deviceId: { exact: id } } : true,
+        audio: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      currentStream = stream;
+      camVideo.muted = true;
+      camVideo.autoplay = true;
+      camVideo.playsInline = true;
+      camVideo.controls = false;
+      camVideo.removeAttribute('controls');
+      camVideo.srcObject = stream;
+      try { await camVideo.play(); } catch (err) {
+        try { console.warn('[CAM] autoplay blocked; waiting for user gesture', err); } catch {}
+        camVideo.addEventListener('click', async () => { try { await camVideo.play(); } catch {} }, { once: true });
+      }
+      camWrap.style.display = 'block';
+      applyCamSizing();
+      applyCamOpacity();
+      applyCamMirror();
+      setButtons(true, false);
+      return true;
+    } catch (err) {
+      try { console.warn('[CAM] start failed', err); } catch {}
+      setButtons(false, false);
+      updateChip('CamRTC: error');
+      return false;
+    } finally {
+      isStarting = false;
+    }
+  }
+
+  function doStop(): void {
+    if (currentStream) {
+      try { currentStream.getTracks().forEach((t) => t.stop()); } catch {}
+      currentStream = null;
+    }
+    try { camVideo.srcObject = null; } catch {}
+    camWrap.style.display = 'none';
+    setButtons(false, false);
+  }
+
+  async function setDevice(id: string | null): Promise<boolean> {
+    const next = id || '';
+    deviceSelects.forEach((sel) => { sel.value = next; });
+    currentDeviceId = next || null;
+    if (window.__tpCamera) window.__tpCamera.currentDeviceId = currentDeviceId;
+    if (currentStream) {
+      doStop();
+      return await doStart();
+    }
+    return true;
+  }
+
+  function isActive(): boolean {
+    return !!currentStream;
+  }
+
+  // Wire UI events (sidebar = SSOT)
+  startBtn.addEventListener('click', () => { void doStart(); });
+  stopBtn.addEventListener('click', () => { doStop(); });
+
+  deviceSelects.forEach((sel) => {
+    sel.addEventListener('change', () => { void setDevice(sel.value || null); });
   });
-  stopBtn.addEventListener('click', () => {
-    stop();
-  });
 
-  // Wire sidebar sliders and toggles
-  if (sizeInput) sizeInput.addEventListener('input', () => applySize());
-  if (opacityInput) opacityInput.addEventListener('input', () => applyOpacity());
-  if (mirrorCheckbox) mirrorCheckbox.addEventListener('change', () => applyMirror());
+  if (sizeInput) sizeInput.addEventListener('input', applyCamSizing);
+  if (opacityInput) opacityInput.addEventListener('input', applyCamOpacity);
+  if (mirrorInput) mirrorInput.addEventListener('change', applyCamMirror);
   if (pipBtn) pipBtn.addEventListener('click', () => { void togglePiP(); });
 
-  // Keep sidebar & settings device selects in sync if both exist
-  function syncDevices(source: HTMLSelectElement, target: Maybe<HTMLSelectElement>): void {
-    if (!target) return;
-    target.innerHTML = source.innerHTML;
-    target.value = source.value;
-  }
-  if (settingsDeviceSel && sidebarDeviceSel) {
-    settingsDeviceSel.addEventListener('change', () => syncDevices(settingsDeviceSel, sidebarDeviceSel));
-    sidebarDeviceSel.addEventListener('change', () => syncDevices(sidebarDeviceSel, settingsDeviceSel));
-  }
-
-  // Restart on new device if already running
-  const activeDeviceSel = settingsDeviceSel || sidebarDeviceSel;
-  if (activeDeviceSel) {
-    activeDeviceSel.addEventListener('change', () => {
-      if (running) {
-        const deviceId = getActiveDeviceId();
-        void start(deviceId);
-      }
-    });
-  }
-
-  // Initial UI state and device list
   camWrap.style.display = 'none';
-  setButtonsForState(false);
-  updateChip('CamRTC: idle');
-  void populateDevices();
+  setButtons(false, false);
+  void refreshDevices();
+
+  // Expose API globally
+  const api: CameraAPI = window.__tpCamera || ({} as CameraAPI);
+  api.start = doStart;
+  api.stop = doStop;
+  api.setDevice = (id: string | null) => setDevice(id);
+  api.setSize = (pct: number) => { if (sizeInput) { sizeInput.value = String(pct); applyCamSizing(); } };
+  api.setOpacity = (opacity: number) => { if (opacityInput) { opacityInput.value = String(opacity); applyCamOpacity(); } };
+  api.setMirror = (on: boolean) => { if (mirrorInput) { mirrorInput.checked = on; applyCamMirror(); } };
+  api.isActive = isActive;
+  api.currentDeviceId = currentDeviceId;
+  api.startCamera = doStart;
+  api.stopCamera = doStop;
+  api.switchCamera = (id: string) => setDevice(id);
+  api.applyCamSizing = applyCamSizing;
+  api.applyCamOpacity = applyCamOpacity;
+  api.applyCamMirror = applyCamMirror;
+
+  window.__tpCamera = api;
+  if (!window.__camApi) window.__camApi = api;
 }
