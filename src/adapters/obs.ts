@@ -1,3 +1,5 @@
+import { appStore } from '../state/app-store';
+
 type ObsEventHandler = (payload?: unknown) => void;
 
 interface ObsEmitter {
@@ -15,6 +17,47 @@ interface ObsRequestResult {
 
 export async function init(): Promise<void> {
   console.log('[src/adapters/obs] init');
+
+  // Bridge obsEnabled flag in the store to the recorder surface (obs recorder)
+  const store = appStore;
+  let recModulePromise: Promise<any> | null = null;
+
+  const getRecorderModule = () => {
+    if (!recModulePromise) {
+      recModulePromise = import('../../recorders');
+    }
+    return recModulePromise;
+  };
+
+  const applyObsEnabled = async (enabled: boolean) => {
+    try {
+      const recModule: any = await getRecorderModule();
+      const obsRecorder =
+        typeof recModule.get === 'function'
+          ? recModule.get('obs')
+          : recModule.recorder?.get?.('obs') ||
+            recModule.default?.get?.('obs') ||
+            null;
+
+      if (!obsRecorder) {
+        try { console.warn('[OBS-ADAPTER] No obs recorder registered'); } catch {}
+        return;
+      }
+
+      if (enabled) {
+        try { await obsRecorder.init?.(); } catch {}
+        try { await obsRecorder.connect?.(); } catch {}
+      } else {
+        try { await obsRecorder.disconnect?.(); } catch {}
+      }
+    } catch (err) {
+      try { console.warn('[OBS-ADAPTER] obsEnabled toggle error', err); } catch {}
+    }
+  };
+
+  // Apply current state once and subscribe for future changes
+  try { await applyObsEnabled(!!store.get('obsEnabled')); } catch {}
+  try { store.subscribe('obsEnabled', (v: boolean) => { void applyObsEnabled(!!v); }); } catch {}
 }
 
 // Optional configure hook to stay compatible with existing imports
