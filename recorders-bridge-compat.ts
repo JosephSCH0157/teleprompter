@@ -131,6 +131,15 @@ let _cfgBridge = {
 
 let _enabled = false;
 
+function getObsBridge(): any | null {
+  try {
+    const w = window as any;
+    return w.__obsBridge ?? w.__tpObsBridge ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function initBridge(opts = {}) {
   _cfgBridge = { ..._cfgBridge, ...opts };
   try {
@@ -139,10 +148,21 @@ export function initBridge(opts = {}) {
 }
 
 export function setEnabled(on) {
+  _enabled = !!on;
+  const bridge = getObsBridge();
+  if (!bridge) {
+    try { console.warn('[OBS] setEnabled(%o) ignored; no bridge present', on); } catch {}
+    return false;
+  }
   try {
-    if (on) connect();
-    else disconnect();
-  } catch {}
+    if (typeof bridge.setEnabled === 'function') {
+      return bridge.setEnabled(on);
+    }
+    if (on) return connect();
+    return disconnect();
+  } catch {
+    return false;
+  }
 }
 export async function reconfigure(cfg = {}) {
   try {
@@ -205,20 +225,19 @@ function reconnectSoon(ms = 400) {
 }
 
 export async function connect({ testOnly = false, reason = 'runtime' } = {}) {
-  // If the bridge isn’t loaded yet, try to load it (once)
-  if (!window.__obsBridge || !window.__obsBridge.connect) {
-    if (typeof window.__loadObsBridge === 'function') {
-      try { await window.__loadObsBridge(); } catch {}
+  let bridge = getObsBridge();
+  if (!bridge || typeof bridge.connect !== 'function') {
+    if (typeof (window as any).__loadObsBridge === 'function') {
+      try { await (window as any).__loadObsBridge(); } catch {}
+      bridge = getObsBridge();
     }
   }
-  // If still not present, surface a clear error
-  if (!window.__obsBridge || !window.__obsBridge.connect) {
-    throw new Error('OBS bridge is not available on the page.');
+  if (!bridge || typeof bridge.connect !== 'function') {
+    try { console.warn('[OBS] bridge not found on page; skipping connect'); } catch {}
+    return false;
   }
-  // Mark desire for a persistent session; the bridge’s onclose will check this
   _cfgBridge.isEnabled = () => _enabled === true;
-  // Hand off to the bridge
-  return window.__obsBridge.connect({ testOnly, reason });
+  return bridge.connect({ testOnly, reason });
 }
 
 export function isConnected() {
