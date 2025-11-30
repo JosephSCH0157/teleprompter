@@ -219,32 +219,61 @@ export function initBridge(opts = {}) {
 export function setEnabled(on) {
   return safeSetEnabled(on);
 }
-export async function reconfigure(cfg = {}) {
+export async function reconfigure(cfg: any = {}) {
   try {
-    if (cfg && typeof cfg === 'object') {
-      obsCfg = { ...obsCfg, ...cfg, port: Number(cfg.port) || obsCfg.port };
-      // Keep password available for the inline bridge connect logic
-      if (cfg.password != null) {
-        try {
-          obsCfg.password = String(cfg.password || '');
-        } catch {}
+    // Merge incoming settings into the inline config
+    obsCfg = { ...obsCfg, ...cfg };
+
+    // Normalize port
+    if (typeof cfg?.port !== 'undefined') {
+      const n =
+        typeof cfg.port === 'string' ? parseInt(cfg.port, 10) : Number(cfg.port);
+      if (!Number.isNaN(n) && n > 0) {
+        (obsCfg as any).port = n;
       }
-      // Update the bridge getter so connect() picks up the latest password
-      try {
-        _cfgBridge.getPass = () => obsCfg.password || '';
-      } catch {}
     }
+
+    // Normalize password
+    const password =
+      typeof cfg?.password === 'string'
+        ? cfg.password
+        : (obsCfg as any).password || '';
+    (obsCfg as any).password = password;
+
+    // Build canonical URL from host/port unless an explicit url is provided
+    const explicitUrl =
+      cfg && typeof cfg.url === 'string' && cfg.url.trim() ? cfg.url.trim() : '';
+    const host = (obsCfg as any).host || '127.0.0.1';
+    const port = (obsCfg as any).port || 4455;
+    const scheme = (obsCfg as any).secure ? 'wss' : 'ws';
+    const url = explicitUrl || `${scheme}://${host}:${port}/`;
+
+    // Keep the inline bridge helpers in sync
+    try {
+      _cfgBridge.getUrl = () => url;
+      _cfgBridge.getPass = () => password;
+    } catch {}
+
+    // If the JS bridge (obsBridge.js) is present, push config into it
+    try {
+      const bridge = getObsBridge();
+      if (bridge && typeof (bridge as any).configure === 'function') {
+        (bridge as any).configure({ url, password });
+      }
+    } catch (err) {
+      try { console.warn('[OBS] bridge.configure failed', err); } catch {}
+    }
+
     // If already connected, reconnect soon to apply changes
     try {
       if (_ws) {
-        try {
-          // best-effort: close then reconnect
-          _ws.close(1000, 'reconfig');
-        } catch {}
+        try { _ws.close(1000, 'reconfig'); } catch {}
         reconnectSoon(200);
       }
     } catch {}
-  } catch {}
+  } catch (err) {
+    try { console.warn('[OBS] reconfigure failed', err); } catch {}
+  }
 }
 export async function test() {
   try {
