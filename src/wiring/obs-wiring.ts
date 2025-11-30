@@ -64,6 +64,12 @@ export function initObsUI() {
   };
   const applyEnabled = (on: boolean, { persistLegacy = false }: { persistLegacy?: boolean } = {}) => {
     obsEnabled = !!on;
+
+    // 🔍 DEBUG: log every apply call so we know the flag is being driven
+    try {
+      console.log('[OBS-WIRING] applyEnabled', obsEnabled, { persistLegacy });
+    } catch {}
+
     writeEnabledToUI(obsEnabled);
     if (persistLegacy) {
       try { localStorage.setItem(OBS_EN_KEY, obsEnabled ? '1' : '0'); } catch {}
@@ -128,6 +134,8 @@ export function initObsUI() {
       // Important: drive connection using the persistent flag, not the transient UI
       isEnabled: getObsEnabled,
       onStatus: (txt: string, ok: boolean) => {
+        // 🔍 DEBUG: surface status transitions in console
+        try { console.info('[OBS-STATUS]', txt || (ok ? 'ok' : 'status'), ok); } catch {}
         try { const p = pillEl(); if (p) p.textContent = ok ? 'connected' : (txt || 'disconnected'); } catch {}
       },
       onRecordState: (_active: boolean) => {},
