@@ -133,11 +133,15 @@ let _enabled = false;
 
 function getObsBridge(): any | null {
   try {
-    const w = window as any;
-    return w.__obsBridge ?? w.__tpObsBridge ?? null;
-  } catch {
+    if (typeof window === 'undefined') return null;
+    // Prefer the primary bridge
+    if ((window as any).__obsBridge) return (window as any).__obsBridge;
+    // Fallbacks for older wiring
+    if ((window as any).__tpObsBridge) return (window as any).__tpObsBridge;
+    const legacy = (window as any).__tpObs;
+    if (legacy && typeof legacy === 'object') return legacy;
     return null;
-  }
+  } catch { return null; }
 }
 
 async function safeConnect(testOnly?: boolean): Promise<boolean> {
@@ -149,7 +153,14 @@ async function safeConnect(testOnly?: boolean): Promise<boolean> {
     }
   }
   if (!bridge || typeof bridge.connect !== 'function') {
-    try { console.warn('[OBS] connect(testOnly=%o) ignored; no bridge present', !!testOnly); } catch {}
+    try {
+      // If maybeConnect exists (inline bridge), use that path instead
+      if (bridge && typeof bridge.maybeConnect === 'function') {
+        try { await bridge.maybeConnect(); } catch {}
+        return !!(bridge.isConnected?.() || false);
+      }
+      console.warn('[OBS] connect(testOnly=%o) ignored; no bridge present', !!testOnly);
+    } catch {}
     return false;
   }
   try {
@@ -170,12 +181,27 @@ async function safeSetEnabled(on: boolean): Promise<boolean> {
     return false;
   }
   try {
-    if (typeof bridge.setEnabled === 'function') {
-      await bridge.setEnabled(on);
-    } else {
-      if (on) await bridge.connect?.({});
-      else await bridge.disconnect?.();
+    // Prefer armed/maybeConnect if available
+    const ctrl: any = (bridge as any).setArmed ? bridge : (window as any).__tpObs;
+    if (ctrl && typeof ctrl.setArmed === 'function') {
+      ctrl.setArmed(!!on);
+      if (on && typeof ctrl.maybeConnect === 'function') {
+        await ctrl.maybeConnect();
+      } else if (!on && typeof ctrl.disconnect === 'function') {
+        await ctrl.disconnect();
+      }
+      return true;
     }
+    if (typeof bridge.start === 'function' && typeof bridge.stop === 'function') {
+      if (on) await bridge.start();
+      else await bridge.stop();
+      return true;
+    }
+    if (typeof bridge.setEnabled === 'function') {
+      await bridge.setEnabled(!!on);
+      return true;
+    }
+    try { console.warn('[OBS] safeSetEnabled: bridge present but does not support known methods'); } catch {}
     return true;
   } catch (e) {
     try { console.warn('[OBS] setEnabled(%o) failed', on, e); } catch {}
@@ -252,12 +278,22 @@ function reconnectSoon(ms = 400) {
   } catch {}
 }
 
-export async function connect({ testOnly = false, reason = 'runtime' } = {}) {
+export async function connect({ testOnly = false } = {}) {
   return safeConnect(testOnly);
+}
+
+// Compat alias
+export async function connect2(opts?: { testOnly?: boolean }) {
+  return safeConnect(opts?.testOnly);
 }
 
 export function isConnected() {
   return _identified;
+}
+
+// Compat aliases
+export function setEnabled3(on: boolean) {
+  return safeSetEnabled(on);
 }
 
 // Public initializer for UI wiring. Maps simple UI hooks into the registry settings
