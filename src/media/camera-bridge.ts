@@ -62,6 +62,12 @@ export function bindCameraUI(): void {
     return;
   }
 
+  // Non-null aliases after guard so TS understands these are present.
+  const startEl = startBtn as HTMLButtonElement;
+  const stopEl = stopBtn as HTMLButtonElement;
+  const wrapEl = camWrap as HTMLDivElement;
+  const videoEl = camVideo as HTMLVideoElement;
+
   const deviceSelects: HTMLSelectElement[] = [];
   if (sidebarDevice) deviceSelects.push(sidebarDevice);
   if (settingsDevice && settingsDevice !== sidebarDevice) deviceSelects.push(settingsDevice);
@@ -76,43 +82,41 @@ export function bindCameraUI(): void {
 
   function setButtons(active: boolean, pending = false): void {
     if (pending) {
-      startBtn.disabled = true;
-      stopBtn.disabled = true;
+      startEl.disabled = true;
+      stopEl.disabled = true;
       updateChip('CamRTC: starting…');
       return;
     }
-    startBtn.disabled = active;
-    stopBtn.disabled = !active;
+    startEl.disabled = active;
+    stopEl.disabled = !active;
     updateChip(active ? 'CamRTC: live' : 'CamRTC: idle');
   }
 
   function applyCamSizing(): void {
-    if (!camWrap || !sizeInput) return;
+    if (!wrapEl || !sizeInput) return;
     const pct = Math.max(15, Math.min(60, Number(sizeInput.value) || 28));
-    camWrap.style.width = `${pct}%`;
+    wrapEl.style.width = `${pct}%`;
   }
 
   function applyCamOpacity(): void {
-    if (!camWrap || !opacityInput) return;
+    if (!wrapEl || !opacityInput) return;
     const pct = Math.max(20, Math.min(100, Number(opacityInput.value) || 100));
-    camWrap.style.opacity = String(pct / 100);
+    wrapEl.style.opacity = String(pct / 100);
   }
 
   function applyCamMirror(): void {
-    if (!camVideo || !mirrorInput) return;
-    camVideo.style.transform = mirrorInput.checked ? 'scaleX(-1)' : 'none';
+    if (!mirrorInput) return;
+    videoEl.style.transform = mirrorInput.checked ? 'scaleX(-1)' : 'none';
   }
 
   async function togglePiP(): Promise<void> {
-    if (!camVideo || !('pictureInPictureEnabled' in document)) return;
+    if (!('pictureInPictureEnabled' in document)) return;
     try {
-      // @ts-expect-error PiP not in all lib targets
-      if (document.pictureInPictureElement === camVideo) {
-        // @ts-expect-error
-        await document.exitPictureInPicture();
-      } else if (camVideo.readyState >= 2) {
-        // @ts-expect-error
-        await camVideo.requestPictureInPicture();
+      const docAny = document as any;
+      if (docAny.pictureInPictureElement === videoEl) {
+        await docAny.exitPictureInPicture?.();
+      } else if (videoEl.readyState >= 2) {
+        await (videoEl as any).requestPictureInPicture?.();
       }
     } catch (err) {
       try { console.warn('[CAM] PiP toggle failed', err); } catch {}
@@ -173,17 +177,17 @@ export function bindCameraUI(): void {
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       currentStream = stream;
-      camVideo.muted = true;
-      camVideo.autoplay = true;
-      camVideo.playsInline = true;
-      camVideo.controls = false;
-      camVideo.removeAttribute('controls');
-      camVideo.srcObject = stream;
-      try { await camVideo.play(); } catch (err) {
+      videoEl.muted = true;
+      videoEl.autoplay = true;
+      videoEl.playsInline = true;
+      videoEl.controls = false;
+      videoEl.removeAttribute('controls');
+      videoEl.srcObject = stream;
+      try { await videoEl.play(); } catch (err) {
         try { console.warn('[CAM] autoplay blocked; waiting for user gesture', err); } catch {}
-        camVideo.addEventListener('click', async () => { try { await camVideo.play(); } catch {} }, { once: true });
+        videoEl.addEventListener('click', async () => { try { await videoEl.play(); } catch {} }, { once: true });
       }
-      camWrap.style.display = 'block';
+      wrapEl.style.display = 'block';
       applyCamSizing();
       applyCamOpacity();
       applyCamMirror();
@@ -204,8 +208,8 @@ export function bindCameraUI(): void {
       try { currentStream.getTracks().forEach((t) => t.stop()); } catch {}
       currentStream = null;
     }
-    try { camVideo.srcObject = null; } catch {}
-    camWrap.style.display = 'none';
+    try { videoEl.srcObject = null; } catch {}
+    wrapEl.style.display = 'none';
     setButtons(false, false);
   }
 
@@ -226,8 +230,8 @@ export function bindCameraUI(): void {
   }
 
   // Wire UI events (sidebar = SSOT)
-  startBtn.addEventListener('click', () => { void doStart(); });
-  stopBtn.addEventListener('click', () => { doStop(); });
+  startEl.addEventListener('click', () => { void doStart(); });
+  stopEl.addEventListener('click', () => { doStop(); });
 
   deviceSelects.forEach((sel) => {
     sel.addEventListener('change', () => { void setDevice(sel.value || null); });
@@ -238,7 +242,7 @@ export function bindCameraUI(): void {
   if (mirrorInput) mirrorInput.addEventListener('change', applyCamMirror);
   if (pipBtn) pipBtn.addEventListener('click', () => { void togglePiP(); });
 
-  camWrap.style.display = 'none';
+  wrapEl.style.display = 'none';
   setButtons(false, false);
   void refreshDevices();
 
