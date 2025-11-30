@@ -263,6 +263,67 @@ export function bindCameraUI(): void {
   api.applyCamOpacity = applyCamOpacity;
   api.applyCamMirror = applyCamMirror;
 
+  // Optional camera toggle button (top bar chip)
+  const camToggleBtn = document.getElementById('cameraToggleBtn') as HTMLButtonElement | null;
+  let camToggleLabel: HTMLElement | null = null;
+  let camToggleSpinner: HTMLElement | null = null;
+
+  if (camToggleBtn) {
+    camToggleLabel = camToggleBtn.querySelector('.cam-label');
+    camToggleSpinner = camToggleBtn.querySelector('.spinner');
+
+    const setToggleState = (state: 'off' | 'starting' | 'on' | 'error') => {
+      if (camToggleLabel) {
+        if (state === 'on') camToggleLabel.textContent = 'Camera: On';
+        else if (state === 'starting') camToggleLabel.textContent = 'Camera: Starting…';
+        else if (state === 'error') camToggleLabel.textContent = 'Camera: Error';
+        else camToggleLabel.textContent = 'Camera: Off';
+      }
+      if (camToggleSpinner) {
+        camToggleSpinner.hidden = state !== 'starting';
+        camToggleSpinner.setAttribute('aria-hidden', state !== 'starting' ? 'true' : 'false');
+      }
+      if (state === 'on') {
+        camToggleBtn.setAttribute('aria-pressed', 'true');
+        camToggleBtn.disabled = false;
+      } else if (state === 'starting') {
+        camToggleBtn.setAttribute('aria-pressed', api.isActive() ? 'true' : 'false');
+        camToggleBtn.disabled = true;
+      } else if (state === 'error') {
+        camToggleBtn.setAttribute('aria-pressed', 'false');
+        camToggleBtn.disabled = false;
+      } else {
+        camToggleBtn.setAttribute('aria-pressed', 'false');
+        camToggleBtn.disabled = false;
+      }
+    };
+
+    const originalStart = api.start.bind(api);
+    const originalStop = api.stop.bind(api);
+
+    api.start = async () => {
+      setToggleState('starting');
+      const ok = await originalStart();
+      setToggleState(ok ? 'on' : 'off');
+      return ok;
+    };
+
+    api.stop = () => {
+      originalStop();
+      setToggleState('off');
+    };
+
+    camToggleBtn.addEventListener('click', () => {
+      if (api.isActive()) {
+        api.stop();
+      } else {
+        void api.start();
+      }
+    });
+
+    setToggleState(api.isActive() ? 'on' : 'off');
+  }
+
   window.__tpCamera = api;
   if (!window.__camApi) window.__camApi = api;
 }
