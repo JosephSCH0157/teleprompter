@@ -416,11 +416,16 @@
   <span class="chip" id="wpmPx">G�� G�� px/s</span>
   
 </div>
-<!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
-<select id="micDeviceSel" class="select-md" hidden></select>
- <div class="row" id="sidebarMediaHint">
-   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings G�� Recording/Media</span>
- </div>
+<!-- Hidden mic device selector used by mic-bridge.ts as a bridge between sidebar and Settings -->
+<select id="micDeviceSel" class="select-md" hidden aria-hidden="true"></select>
+
+<div class="row" id="sidebarMediaHint" data-role="sidebar-media-hint">
+  <span class="chip sidebar-hint">
+    Mic &amp; camera quick controls are in this sidebar;
+    full device &amp; OBS settings live under
+    <strong>Settings → Recording / Media</strong>.
+  </span>
+</div>
 <!-- Add a visible, labeled OBS toggle in the sidebar for quick access -->
 <div class="row obs-row">
   <label>

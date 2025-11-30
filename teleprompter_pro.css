@@ -400,6 +400,18 @@ body.ck::after{
 #cameraToggleBtn .spinner{display:none;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:camSpin .8s linear infinite;margin-left:6px;vertical-align:middle}
 #cameraToggleBtn.busy .spinner{display:inline-block}
 #cameraToggleBtn .cam-label{display:inline-block;color:var(--fg);vertical-align:middle}
+
+/* Sidebar media hint row */
+#sidebarMediaHint {
+  margin-top: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.sidebar-hint {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  white-space: normal;
+}
 @keyframes camSpin{to{transform:rotate(360deg)}}
 .obs-test-icon{
     display:inline-block; margin-left:6px; font-style:normal; font-weight:700; opacity:0; transform: translateY(-2px) scale(0.9);
