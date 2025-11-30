@@ -128,7 +128,7 @@ export function initObsUI() {
 
   // Initialize recorder bridge with dynamic getters
   try {
-    rec.init({
+    const initResult = rec.init({
       getUrl: readUrl,
       getPass: readPass,
       // Important: drive connection using the persistent flag, not the transient UI
@@ -140,7 +140,10 @@ export function initObsUI() {
       },
       onRecordState: (_active: boolean) => {},
     });
-  } catch {}
+    try { console.log('[OBS-WIRING] rec.init result', initResult); } catch {}
+  } catch (err) {
+    try { console.error('[OBS-WIRING] rec.init error', err); } catch {}
+  }
 
   // Delegated listeners so it works even if Settings overlay mounts later
   try {
