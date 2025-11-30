@@ -265,12 +265,14 @@ export function bindCameraUI(): void {
 
   // Optional camera toggle button (top bar chip)
   const camToggleBtn = document.getElementById('cameraToggleBtn') as HTMLButtonElement | null;
-  let camToggleLabel: HTMLElement | null = null;
-  let camToggleSpinner: HTMLElement | null = null;
-
   if (camToggleBtn) {
-    camToggleLabel = camToggleBtn.querySelector('.cam-label');
-    camToggleSpinner = camToggleBtn.querySelector('.spinner');
+    const camToggleLabel = camToggleBtn.querySelector('.cam-label') as HTMLElement | null;
+    const camToggleSpinner = camToggleBtn.querySelector('.spinner') as HTMLElement | null;
+
+    if (camToggleSpinner) {
+      camToggleSpinner.style.display = 'none';
+      camToggleSpinner.setAttribute('aria-hidden', 'true');
+    }
 
     const setToggleState = (state: 'off' | 'starting' | 'on' | 'error') => {
       if (camToggleLabel) {
@@ -280,8 +282,9 @@ export function bindCameraUI(): void {
         else camToggleLabel.textContent = 'Camera: Off';
       }
       if (camToggleSpinner) {
-        camToggleSpinner.hidden = state !== 'starting';
-        camToggleSpinner.setAttribute('aria-hidden', state !== 'starting' ? 'true' : 'false');
+        const show = state === 'starting';
+        camToggleSpinner.style.display = show ? '' : 'none';
+        camToggleSpinner.setAttribute('aria-hidden', show ? 'false' : 'true');
       }
       if (state === 'on') {
         camToggleBtn.setAttribute('aria-pressed', 'true');
