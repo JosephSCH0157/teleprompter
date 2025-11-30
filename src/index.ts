@@ -10,7 +10,7 @@ try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 // Global app store (single initializer for __tpStore)
-import { createAppStore } from './state/app-store';
+import { appStore } from './state/app-store';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
 // Early dev console noise filter (benign extension async-response errors)
@@ -62,20 +62,7 @@ function isCiSmoke(): boolean {
   }
 }
 
-// Single TS-owned store instance (used across UI + settings)
-const appStore = createAppStore();
-try { (window as any).__tpStore = appStore; } catch {}
-// Safety net: if any script clears __tpStore, restore it during early boot.
-try {
-  const restoreStore = () => {
-    try {
-      if (!(window as any).__tpStore) (window as any).__tpStore = appStore;
-    } catch {}
-  };
-  restoreStore();
-  setTimeout(restoreStore, 0);
-  setTimeout(restoreStore, 500);
-} catch {}
+// appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
 
