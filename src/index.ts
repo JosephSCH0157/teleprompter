@@ -416,6 +416,7 @@ import { initObsBridge } from './wiring/obs-bridge';
 import { initObsUI } from './wiring/obs-wiring';
 import { initMicPermissions } from './media/mic-permissions';
 import { bindMicUI } from './media/mic-bridge';
+import { bindCameraUI } from './media/camera-bridge';
 import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
 import './ui/camera-drag'; // installs camera drag + persistence
@@ -723,6 +724,7 @@ export async function boot() {
           try { initObsToggle(appStore); } catch {}
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
+          try { bindCameraUI(); } catch {}
           // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
