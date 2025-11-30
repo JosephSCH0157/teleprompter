@@ -50,8 +50,10 @@ export function bindCameraUI(): void {
     qs<HTMLSelectElement>('settingsCamDevice') ||
     null;
 
+  // Only bail if the core sidebar controls are missing.
   if (!startBtn || !stopBtn || !camWrap || !camVideo) {
-    return; // core UI missing; no-op
+    try { console.warn('[CAMERA] core DOM elements missing; camera bridge not bound'); } catch {}
+    return; // no engine without these
   }
 
   let stream: MediaStream | null = null;
