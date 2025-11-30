@@ -62,22 +62,46 @@ export function initObsUI() {
     } catch {}
     return obsEnabled;
   };
-  const applyEnabled = (on: boolean, { persistLegacy = false }: { persistLegacy?: boolean } = {}) => {
-    obsEnabled = !!on;
+  const applyEnabled = (
+    on: boolean,
+    { persistLegacy = false }: { persistLegacy?: boolean } = {},
+  ) => {
+    const nextEnabled = !!on;
+    console.info('[OBS-WIRING] applyEnabled', nextEnabled, { persistLegacy });
 
-    // 🔍 DEBUG: log every apply call so we know the flag is being driven
-    try {
-      console.log('[OBS-WIRING] applyEnabled', obsEnabled, { persistLegacy });
-    } catch {}
-
+    obsEnabled = nextEnabled;
     writeEnabledToUI(obsEnabled);
+
     if (persistLegacy) {
-      try { localStorage.setItem(OBS_EN_KEY, obsEnabled ? '1' : '0'); } catch {}
+      try {
+        localStorage.setItem(OBS_EN_KEY, obsEnabled ? '1' : '0');
+      } catch {}
     }
-    try { rec.setEnabled(obsEnabled); } catch {}
+
+    // Drive the JS bridge’s enabled state
+    try {
+      (rec as any).setEnabled?.(obsEnabled);
+    } catch (err) {
+      console.error('[OBS-WIRING] setEnabled error', err);
+    }
+
+    // Belt-and-suspenders: when turning ON, explicitly poke connect(testOnly)
+    if (obsEnabled) {
+      try {
+        (rec as any)
+          .connect?.({ testOnly: true })
+          ?.catch((err: any) => {
+            console.warn('[OBS-WIRING] connect(testOnly) rejected', err);
+          });
+      } catch (err) {
+        console.error('[OBS-WIRING] connect(testOnly) threw', err);
+      }
+    }
+
     const cfg = getRecorderSettings();
     const next = new Set(Array.isArray(cfg?.selected) ? cfg.selected : []);
-    if (obsEnabled) next.add('obs'); else next.delete('obs');
+    if (obsEnabled) next.add('obs');
+    else next.delete('obs');
     syncRegistrySelection(Array.from(next));
   };
   const pushObsEnabled = (on: boolean) => {
@@ -128,21 +152,28 @@ export function initObsUI() {
 
   // Initialize recorder bridge with dynamic getters
   try {
-    const initResult = rec.init({
+    const initOk = (rec as any).init?.({
       getUrl: readUrl,
       getPass: readPass,
       // Important: drive connection using the persistent flag, not the transient UI
       isEnabled: getObsEnabled,
       onStatus: (txt: string, ok: boolean) => {
-        // 🔍 DEBUG: surface status transitions in console
-        try { console.info('[OBS-STATUS]', txt || (ok ? 'ok' : 'status'), ok); } catch {}
-        try { const p = pillEl(); if (p) p.textContent = ok ? 'connected' : (txt || 'disconnected'); } catch {}
+        console.info('[OBS-WIRING] status', txt, ok);
+        try {
+          const p = pillEl();
+          if (p) {
+            p.textContent = ok ? 'connected' : (txt || 'disconnected');
+          }
+        } catch {}
       },
-      onRecordState: (_active: boolean) => {},
+      onRecordState: (_active: boolean) => {
+        // hook if we ever want UI based on recording state
+      },
     });
-    try { console.log('[OBS-WIRING] rec.init result', initResult); } catch {}
+
+    console.info('[OBS-WIRING] rec.init returned', initOk);
   } catch (err) {
-    try { console.error('[OBS-WIRING] rec.init error', err); } catch {}
+    console.error('[OBS-WIRING] rec.init threw', err);
   }
 
   // Delegated listeners so it works even if Settings overlay mounts later
