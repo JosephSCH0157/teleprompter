@@ -140,14 +140,29 @@ function getObsBridge(): any | null {
   }
 }
 
-export function initBridge(opts = {}) {
-  _cfgBridge = { ..._cfgBridge, ...opts };
+async function safeConnect(testOnly?: boolean): Promise<boolean> {
+  let bridge = getObsBridge();
+  if (!bridge || typeof bridge.connect !== 'function') {
+    if (typeof (window as any).__loadObsBridge === 'function') {
+      try { await (window as any).__loadObsBridge(); } catch {}
+      bridge = getObsBridge();
+    }
+  }
+  if (!bridge || typeof bridge.connect !== 'function') {
+    try { console.warn('[OBS] connect(testOnly=%o) ignored; no bridge present', !!testOnly); } catch {}
+    return false;
+  }
   try {
-    if (_cfgBridge.isEnabled()) connect();
-  } catch {}
+    _cfgBridge.isEnabled = () => _enabled === true;
+    const res = await bridge.connect({ testOnly });
+    return !!res;
+  } catch (e) {
+    try { console.warn('[OBS] connect failed', e); } catch {}
+    return false;
+  }
 }
 
-export function setEnabled(on) {
+async function safeSetEnabled(on: boolean): Promise<boolean> {
   _enabled = !!on;
   const bridge = getObsBridge();
   if (!bridge) {
@@ -156,13 +171,27 @@ export function setEnabled(on) {
   }
   try {
     if (typeof bridge.setEnabled === 'function') {
-      return bridge.setEnabled(on);
+      await bridge.setEnabled(on);
+    } else {
+      if (on) await bridge.connect?.({});
+      else await bridge.disconnect?.();
     }
-    if (on) return connect();
-    return disconnect();
-  } catch {
+    return true;
+  } catch (e) {
+    try { console.warn('[OBS] setEnabled(%o) failed', on, e); } catch {}
     return false;
   }
+}
+
+export function initBridge(opts = {}) {
+  _cfgBridge = { ..._cfgBridge, ...opts };
+  try {
+    if (_cfgBridge.isEnabled()) connect();
+  } catch {}
+}
+
+export function setEnabled(on) {
+  return safeSetEnabled(on);
 }
 export async function reconfigure(cfg = {}) {
   try {
@@ -193,8 +222,7 @@ export async function reconfigure(cfg = {}) {
 }
 export async function test() {
   try {
-    await connect({ testOnly: true });
-    return true;
+    return await connect({ testOnly: true });
   } catch {
     return false;
   }
@@ -225,19 +253,7 @@ function reconnectSoon(ms = 400) {
 }
 
 export async function connect({ testOnly = false, reason = 'runtime' } = {}) {
-  let bridge = getObsBridge();
-  if (!bridge || typeof bridge.connect !== 'function') {
-    if (typeof (window as any).__loadObsBridge === 'function') {
-      try { await (window as any).__loadObsBridge(); } catch {}
-      bridge = getObsBridge();
-    }
-  }
-  if (!bridge || typeof bridge.connect !== 'function') {
-    try { console.warn('[OBS] bridge not found on page; skipping connect'); } catch {}
-    return false;
-  }
-  _cfgBridge.isEnabled = () => _enabled === true;
-  return bridge.connect({ testOnly, reason });
+  return safeConnect(testOnly);
 }
 
 export function isConnected() {
