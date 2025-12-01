@@ -4,12 +4,8 @@
 // LocalStorage key
 const STORAGE_KEY = 'tp_rec_settings_v1';
 
-// Default OBS host: assume same machine as the browser
-const defaultHost =
-  typeof window !== 'undefined' && window.location?.hostname
-    ? window.location.hostname || '127.0.0.1'
-    : '127.0.0.1';
-export const DEFAULT_OBS_URL = `ws://${defaultHost}:4455`;
+// Default OBS URL: fixed to localhost to align with CSP and first-run behavior
+export const DEFAULT_OBS_URL = 'ws://127.0.0.1:4455';
 
 export type RecorderId =
   | 'obs'
