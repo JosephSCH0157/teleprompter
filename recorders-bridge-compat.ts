@@ -198,25 +198,28 @@ async function safeConnect(testOnly?: boolean): Promise<boolean> {
       bridge = getObsBridge();
     }
   }
-  if (!bridge || typeof bridge.connect !== 'function') {
+
+  // If a native bridge exists, try it first; on failure or rejection, fall back to inline WS
+  if (bridge && typeof bridge.connect === 'function') {
     try {
-      // If maybeConnect exists (inline bridge), use that path instead
-      if (bridge && typeof bridge.maybeConnect === 'function') {
-        try { await bridge.maybeConnect(); } catch {}
-        return !!(bridge.isConnected?.() || false);
-      }
-      try { console.warn('[OBS] connect(testOnly=%o) no bridge; using inline WS probe', !!testOnly); } catch {}
-      return inlineConnect(testOnly);
-    } catch {}
+      _cfgBridge.isEnabled = () => _enabled === true;
+      const res = await bridge.connect({ testOnly });
+      if (res) return true;
+    } catch (e) {
+      try { console.warn('[OBS] native bridge connect failed, falling back to inline', e); } catch {}
+    }
   }
+
+  // If maybeConnect exists (inline bridge style), prefer that before raw WS probe
   try {
-    _cfgBridge.isEnabled = () => _enabled === true;
-    const res = await bridge.connect({ testOnly });
-    return !!res;
-  } catch (e) {
-    try { console.warn('[OBS] connect failed', e); } catch {}
-    return false;
-  }
+    if (bridge && typeof bridge.maybeConnect === 'function') {
+      try { await bridge.maybeConnect(); } catch {}
+      return !!(bridge.isConnected?.() || false);
+    }
+  } catch {}
+
+  try { console.info('[OBS] connect(testOnly=%o) no native bridge; using inline WebSocket', !!testOnly); } catch {}
+  return inlineConnect(testOnly);
 }
 
 async function safeSetEnabled(on: boolean): Promise<boolean> {
