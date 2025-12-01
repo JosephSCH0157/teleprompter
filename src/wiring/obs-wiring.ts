@@ -62,12 +62,26 @@ export function initObsUI() {
     } catch {}
     return obsEnabled;
   };
+
+  type ObsEnableOrigin =
+    | 'init'
+    | 'settings'
+    | 'parity-guard'
+    | 'legacy-bridge'
+    | 'obs-status'
+    | 'fallback';
+
+  interface ObsApplyOpts {
+    persistLegacy?: boolean;
+  }
+
   const applyEnabled = (
     on: boolean,
-    { persistLegacy = false }: { persistLegacy?: boolean } = {},
+    { persistLegacy = false }: ObsApplyOpts = {},
+    origin: ObsEnableOrigin = 'fallback',
   ) => {
     const nextEnabled = !!on;
-    console.info('[OBS-WIRING] applyEnabled', nextEnabled, { persistLegacy });
+    console.info('[OBS-WIRING] applyEnabled', nextEnabled, { persistLegacy, origin });
 
     obsEnabled = nextEnabled;
     writeEnabledToUI(obsEnabled);
@@ -109,7 +123,7 @@ export function initObsUI() {
     if (store && typeof store.set === 'function') {
       try { store.set('obsEnabled', next); return; } catch {}
     }
-    applyEnabled(next, { persistLegacy: true });
+    applyEnabled(next, { persistLegacy: true }, 'settings');
   };
 
   const readUrl = () => {
@@ -296,7 +310,7 @@ export function initObsUI() {
   try {
     if (store && typeof store.subscribe === 'function') {
       try {
-        store.subscribe('obsEnabled', (v: any) => applyEnabled(!!v, { persistLegacy: true }));
+        store.subscribe('obsEnabled', (v: any) => applyEnabled(!!v, { persistLegacy: true }, 'settings'));
       } catch {}
       try { store.subscribe('obsHost', (h: any) => { try { rec.reconfigure(parseWsUrl(h ? `ws://${String(h)}` : readUrl(), readPass())); } catch {} }); } catch {}
       try { store.subscribe('obsPassword', (p: any) => { try { rec.reconfigure({ password: String(p || '') } as any); } catch {} }); } catch {}
@@ -305,7 +319,7 @@ export function initObsUI() {
 
   // On load: apply persisted state (connect if enabled), and ensure clean disconnect on page close
   try {
-    applyEnabled(getObsEnabled(), { persistLegacy: true });
+    applyEnabled(getObsEnabled(), { persistLegacy: true }, 'init');
   } catch {}
   try {
     window.addEventListener('beforeunload', () => { try { rec.setEnabled(false); } catch {} });
