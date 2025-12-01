@@ -144,7 +144,53 @@ function getObsBridge(): any | null {
   } catch { return null; }
 }
 
+function inlineConnect(testOnly?: boolean): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const cfgUrl =
+        obsCfg && (obsCfg as any).host
+          ? `${(obsCfg as any).secure ? 'wss' : 'ws'}://${(obsCfg as any).host}:${(obsCfg as any).port}`
+          : null;
+      const url =
+        _cfgBridge.getUrl?.() ||
+        cfgUrl ||
+        'ws://127.0.0.1:4455';
+      const pass = _cfgBridge.getPass?.() || '';
+      try { console.log('[OBS-BRIDGE] inlineConnect', { url, hasPass: !!pass, testOnly: !!testOnly }); } catch {}
+
+      // Simple probe: open WebSocket; resolve on open/close
+      if (typeof WebSocket === 'undefined') {
+        try { console.warn('[OBS-BRIDGE] inlineConnect: WebSocket not available'); } catch {}
+        resolve(false);
+        return;
+      }
+
+      const ws = new WebSocket(url);
+      let settled = false;
+      ws.onopen = () => {
+        settled = true;
+        try { ws.close(1000, 'probe'); } catch {}
+        resolve(true);
+      };
+      ws.onerror = () => {
+        if (settled) return;
+        settled = true;
+        resolve(false);
+      };
+      ws.onclose = () => {
+        if (settled) return;
+        settled = true;
+        resolve(true);
+      };
+    } catch (err) {
+      try { console.warn('[OBS-BRIDGE] inlineConnect error', err); } catch {}
+      resolve(false);
+    }
+  });
+}
+
 async function safeConnect(testOnly?: boolean): Promise<boolean> {
+  try { console.log('[OBS-BRIDGE] connect()', { testOnly: !!testOnly, enabled: _enabled }); } catch {}
   let bridge = getObsBridge();
   if (!bridge || typeof bridge.connect !== 'function') {
     if (typeof (window as any).__loadObsBridge === 'function') {
@@ -159,9 +205,9 @@ async function safeConnect(testOnly?: boolean): Promise<boolean> {
         try { await bridge.maybeConnect(); } catch {}
         return !!(bridge.isConnected?.() || false);
       }
-      console.warn('[OBS] connect(testOnly=%o) ignored; no bridge present', !!testOnly);
+      try { console.warn('[OBS] connect(testOnly=%o) no bridge; using inline WS probe', !!testOnly); } catch {}
+      return inlineConnect(testOnly);
     } catch {}
-    return false;
   }
   try {
     _cfgBridge.isEnabled = () => _enabled === true;
