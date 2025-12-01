@@ -223,8 +223,9 @@ async function safeSetEnabled(on: boolean): Promise<boolean> {
   _enabled = !!on;
   const bridge = getObsBridge();
   if (!bridge) {
-    try { console.warn('[OBS] setEnabled(%o) ignored; no bridge present', on); } catch {}
-    return false;
+    try { console.info('[OBS] setEnabled(%o) no bridge; flag set inline', on); } catch {}
+    // No native bridge; keep the flag and let inline connect handle it when called.
+    return true;
   }
   try {
     // Prefer armed/maybeConnect if available
