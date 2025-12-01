@@ -515,8 +515,9 @@ async function _restoreObsOnBoot(){
 }
 
 export function wireObsPersistentUI(){
-  if (window.__tpObsPersistentUIWired) return;
-  window.__tpObsPersistentUIWired = true;
+  // Legacy OBS wiring disabled: recorder-settings/obs-wiring now own OBS enable/disable.
+  // Keep this function as a no-op to avoid double-binding checkboxes or pills.
+  return;
 
   const OBS_EN_KEY = 'tp_obs_enabled_v1';
   const getBox = () => document.getElementById('settingsEnableObs') || document.getElementById('enableObs') || null;
