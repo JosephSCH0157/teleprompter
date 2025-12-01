@@ -36,6 +36,8 @@ import { installSpeech } from './features/speech-loader';
 import { initSpeechBridge } from './asr/v2/bridge-speech';
 import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { shouldShowHud } from './hud/shouldShowHud';
+import { bindObsSettingsUI } from './ui/obs-settings-bind';
+import { initObsWiring } from './obs/obs-wiring';
 
 import { bootstrap } from './boot/boot';
 
@@ -709,6 +711,8 @@ export async function boot() {
           try { wireHudToggle(); } catch {}
           try { initHudController(); } catch {}
           try { initObsToggle(appStore); } catch {}
+          try { bindObsSettingsUI(); } catch {}
+          try { initObsWiring(); } catch {}
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
           try { bindCameraUI(); } catch {}
