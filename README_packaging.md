@@ -39,7 +39,7 @@ All serve from the teleprompter folder you launched from. The primary URLs print
   http://127.0.0.1:5180/teleprompter_pro.html?dev=1&calm=1&fixture=episode-2-data-traps
 
 ## OBS WebSocket
-- Default WebSocket URL is `ws://192.168.1.200:4455` (configurable in Settings)
+- Default WebSocket URL is `ws://192.168.1.196:4455` (configurable in Settings)
 - If OBS isn’t running, the app will continue without it.
 
 ## External display
