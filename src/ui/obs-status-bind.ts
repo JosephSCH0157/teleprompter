@@ -1,6 +1,4 @@
-import { subscribeRecorderSettings } from '../state/recorder-settings';
-
-type ObsStatus = 'disabled' | 'connecting' | 'ready' | 'offline' | 'error' | 'unknown';
+import { RecorderStatus, subscribeRecorderSettings } from '../state/recorder-settings';
 
 function applyStatusText(text: string, status: ObsStatus) {
   const ids = ['obsConnStatus', 'obsStatusText', 'obsStatus'];
@@ -25,14 +23,12 @@ function applyStatusText(text: string, status: ObsStatus) {
 export function bindObsStatusPills(): void {
   subscribeRecorderSettings((s) => {
     const enabled = !!s.enabled.obs;
-    const status = (s as any).obs?.status as ObsStatus | undefined;
+    const status = s.obsStatus as ObsStatus | RecorderStatus;
     const label =
       status === 'connecting'
         ? 'OBS: connecting…'
-        : status === 'ready'
+        : status === 'connected'
         ? 'OBS: connected'
-        : status === 'offline'
-        ? 'OBS: offline'
         : status === 'error'
         ? 'OBS: error'
         : enabled

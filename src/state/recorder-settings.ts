@@ -15,6 +15,8 @@ export type RecorderId =
   | 'capcut'
   | 'winmedia';
 
+export type RecorderStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
 export interface ObsConfig {
   url: string;
   password: string;
@@ -56,6 +58,8 @@ export interface RecorderEnabled {
 export interface RecorderSettingsState {
   enabled: RecorderEnabled;
   configs: RecorderConfigs;
+  obsStatus: RecorderStatus;
+  obsLastError: string | null;
 }
 
 // ---- defaults (only place they live) ----
@@ -80,6 +84,8 @@ const DEFAULT_STATE: RecorderSettingsState = {
     capcut: { startHotkey: 'Ctrl+R', via: 'companion' },
     winmedia: { startHotkey: 'Ctrl+R', via: 'bridge' },
   },
+  obsStatus: 'disconnected',
+  obsLastError: null,
 };
 
 // ---- helpers ----
@@ -127,7 +133,12 @@ function loadState(): RecorderSettingsState {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return cloneState(DEFAULT_STATE);
     const parsed = JSON.parse(raw);
-    return deepMergeDefaults(DEFAULT_STATE, parsed);
+    const merged = deepMergeDefaults(DEFAULT_STATE, parsed);
+    // Reset live fields
+    merged.obsStatus = 'disconnected';
+    merged.obsLastError = null;
+    merged.configs.obs.password = '';
+    return merged;
   } catch {
     return cloneState(DEFAULT_STATE);
   }
@@ -136,7 +147,12 @@ function loadState(): RecorderSettingsState {
 function persistState(state: RecorderSettingsState): void {
   try {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const toStore = cloneState(state);
+    // Do not persist live status or password
+    toStore.obsStatus = 'disconnected';
+    toStore.obsLastError = null;
+    toStore.configs.obs.password = '';
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
   } catch {
     // non-fatal; ignore
   }
@@ -197,4 +213,13 @@ export function setObsConfig(patch: Partial<ObsConfig>): void {
       obs: { ...prev.configs.obs, ...patch },
     },
   }));
+}
+
+export function setObsStatus(status: RecorderStatus, lastError: string | null = null): void {
+  currentState = {
+    ...currentState,
+    obsStatus: status,
+    obsLastError: lastError,
+  };
+  notify();
 }

@@ -1,20 +1,10 @@
 import {
   RecorderSettingsState,
+  RecorderStatus,
   subscribeRecorderSettings,
+  setObsStatus,
 } from '../state/recorder-settings';
 import * as rec from '../../recorders.js';
-
-type PillState = 'ok' | 'error' | 'busy';
-
-function setObsStatus(text: string, state: PillState): void {
-  const textEl = document.getElementById('obsStatusText');
-  if (textEl) textEl.textContent = text;
-  const pill = textEl?.closest('.obs-pill') as HTMLElement | null;
-  if (pill) {
-    pill.classList.remove('ok', 'error', 'busy');
-    pill.classList.add(state);
-  }
-}
 
 function toast(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): void {
   try {
@@ -32,8 +22,13 @@ function toast(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): vo
 
 let lastEnabled = false;
 let lastUrl = '';
+let lastPass = '';
 
-async function applyObsState(state: RecorderSettingsState) {
+function status(next: RecorderStatus, err: string | null = null): void {
+  setObsStatus(next, err);
+}
+
+async function applyObsState(state: RecorderSettingsState): Promise<void> {
   const enabled = state.enabled.obs;
   const url = state.configs.obs.url;
   const pass = state.configs.obs.password || '';
@@ -41,41 +36,45 @@ async function applyObsState(state: RecorderSettingsState) {
   if (!enabled) {
     if (lastEnabled) {
       try { await (rec as any).setEnabled?.(false); } catch {}
-      setObsStatus('disabled', 'error');
+      status('disconnected');
       toast('OBS disabled in settings.', 'info');
     }
     lastEnabled = false;
     lastUrl = url;
+    lastPass = pass;
     return;
   }
 
   lastEnabled = true;
-  const urlChanged = url !== lastUrl;
+  const urlChanged = url !== lastUrl || pass !== lastPass;
   lastUrl = url;
+  lastPass = pass;
 
-  setObsStatus('connecting…', 'busy');
+  status('connecting');
   toast(`Connecting to OBS at ${url}…`, 'info');
 
   try {
-    // Push config then enable; rec.reconfigure accepts { url, password }
     try { await (rec as any).reconfigure?.({ url, password: pass }); } catch {}
     try { await (rec as any).setEnabled?.(true); } catch {}
-    // Optional: quick probe via test() if available
     if (typeof (rec as any).test === 'function' && urlChanged) {
       try { await (rec as any).test(); } catch {}
     }
-    setObsStatus('ready', 'ok');
+    status('connected');
     toast('OBS: connected and ready.', 'ok');
   } catch (err: any) {
     const msg = err?.message || String(err || 'Unknown error');
-    setObsStatus('offline', 'error');
+    status('error', msg);
     toast(`OBS connection failed: ${msg}`, 'error');
   }
 }
 
 export function initObsWiring(): void {
   subscribeRecorderSettings((state) => {
-    if (state.enabled.obs !== lastEnabled || state.configs.obs.url !== lastUrl) {
+    if (
+      state.enabled.obs !== lastEnabled ||
+      state.configs.obs.url !== lastUrl ||
+      state.configs.obs.password !== lastPass
+    ) {
       void applyObsState(state);
     }
   });
