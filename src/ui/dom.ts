@@ -381,62 +381,35 @@ export function wireCamera() {
   on(mir, 'change', () => { try { window.__tpCamera?.applyCamMirror?.(); } catch {} });
 }
 
-export function wireLoadSample() {
-  const sample = [
-    '[s1]',
-    '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
-    'Cras justo odio, dapibus ac facilisis in, egestas eget quam.',
-    '[/s1]',
-    '',
-    '[s2]',
-    '[color=#ffcc00]Vestibulum[/color] [bg=#112233]ante[/bg] ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae;',
-    'Integer posuere erat a ante venenatis dapibus posuere velit aliquet.',
-    '[/s2]',
-    '',
-    '[g1]',
-    'Curabitur [b]non nulla[/b] sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada.',
-    'Maecenas faucibus mollis interdum.',
-    '[/g1]',
-    '',
-    '[g2]',
-    'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. [i]Etiam porta sem malesuada[/i] magna mollis euismod.',
-    '[bg=#003344][color=#a4e8ff]Quisque[/color][/bg] sit amet est a [u]libero[/u] mollis tristique.',
-    '[/g2]',
-  ].join('\n');
+export function wireLoadSample(doc: Document = document) {
+  // Simple sample text; swap later if desired
+  const sample = `Welcome to [b]Teleprompter Pro[/b].\n\nUse [s1]roles[/s1], [note]notes[/note], and colors like [color=#ff0]this[/color].\nTry scrolling, pausing, and switching speakers to get a feel for the tool.`;
 
-  const attach = (btn: HTMLElement, ed: HTMLTextAreaElement | HTMLInputElement) => {
-    if (btn.dataset.sampleWired === '1') return;
-    btn.dataset.sampleWired = '1';
-    btn.addEventListener('click', () => {
-      try {
-        (ed as any).value = sample;
-        try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-        try { if (typeof window.renderScript === 'function') window.renderScript((ed as any).value); } catch {}
-      } catch {}
-    });
-  };
+  const btn = (doc.getElementById('loadSample') ||
+    doc.querySelector('[data-action=\"load-sample\"]')) as HTMLElement | null;
+  const ed = doc.getElementById('editor') as HTMLTextAreaElement | HTMLInputElement | null;
+  if (!btn || !ed) return;
 
-  try {
-    const btn = $('loadSample') as HTMLElement | null;
-    const ed = $('editor') as HTMLTextAreaElement | HTMLInputElement | null;
-    if (btn && ed) {
-      attach(btn, ed);
-      return;
-    }
-  } catch {}
+  // Guard with our own flag; ignore legacy data-wired
+  if ((btn as any)._tpSampleWired) return;
+  (btn as any)._tpSampleWired = true;
 
-  // Fallback: observe DOM for late-mounted controls
-  try {
-    const mo = new MutationObserver(() => {
-      const btn = $('loadSample') as HTMLElement | null;
-      const ed = $('editor') as HTMLTextAreaElement | HTMLInputElement | null;
-      if (btn && ed) {
-        attach(btn, ed);
-        mo.disconnect();
+  btn.addEventListener('click', (e) => {
+    try { e.preventDefault(); e.stopImmediatePropagation?.(); } catch {}
+    try {
+      (ed as any).value = sample;
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+      if (typeof (window as any).renderScript === 'function') {
+        (window as any).renderScript((ed as any).value);
       }
-    });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-  } catch {}
+      // Place caret at end
+      try {
+        ed.focus();
+        const len = (ed as any).value.length;
+        (ed as any).setSelectionRange?.(len, len);
+      } catch {}
+    } catch {}
+  }, { capture: true });
 }
 // Reset run without clearing content: rewind to top, reset index/state, keep editor text.
 function resetRun() {
