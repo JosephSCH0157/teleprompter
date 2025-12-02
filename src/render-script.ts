@@ -83,6 +83,8 @@ function resolveSpeakerTag(tag: string): SpeakerKey | null {
 export function renderScript(text: string, container?: HTMLElement | null): void {
   const root =
     container ||
+    (document.querySelector('#viewer') as HTMLElement | null) ||
+    (document.querySelector('[data-role="viewer"]') as HTMLElement | null) ||
     (document.querySelector('[data-script-view]') as HTMLElement | null) ||
     (document.querySelector('#script') as HTMLElement | null) ||
     (document.querySelector('.script') as HTMLElement | null);
