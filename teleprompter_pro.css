@@ -110,7 +110,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inl-9{font-size:14px;color:#96a0aa}
 .inl-10{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
 
-:root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; 
+:root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#60a5fa; --s2-color:#facc15; --g1-color:#34d399; --g2-color:#f472b6; 
             /* Typography tokens (runtime-updated via CSS variables) */
             --tp-font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
             --tp-font-size: 56px;
