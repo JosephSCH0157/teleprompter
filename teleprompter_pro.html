@@ -495,7 +495,7 @@
 <div data-tp-speakers-panel>
 <h2 class="section-title">
   Speakers
-  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody" data-tp-toggle-speakers title="Show or hide speaker controls">Hide</button>
+  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody" data-tp-toggle-speakers data-action="speakers-toggle" title="Show or hide speaker controls">Hide</button>
 </h2>
 
 <div id="speakersBody" data-panel="speakers">
@@ -531,6 +531,7 @@
     <span class="chip">(use tags like [s1]GǪ[/s1], [color=#ff0]GǪ[/color])</span>
   </div>
   <p class="chip tp-speakers-hotkeys">Speaker hotkeys: S1 / S2 / G1 / G2</p>
+  <span id="speakersKey" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-speakers-key">Speakers key</span>
 </div>
 </div>
 <div class="row">
