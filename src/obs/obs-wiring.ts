@@ -1,16 +1,11 @@
-import {
-  RecorderStatus,
-  getRecorderSettings,
-  subscribeRecorderSettings,
-  setObsStatus,
-} from '../state/recorder-settings';
+import type { RecorderStatus } from '../state/recorder-settings';
+import { getRecorderSettings, subscribeRecorderSettings, setObsStatus } from '../state/recorder-settings';
 import * as rec from '../../recorders.js';
 
 function toast(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): void {
   try {
     // @ts-ignore optional global toast
     if (typeof (window as any)._toast === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       (window as any)._toast(msg, { type });
       return;
     }

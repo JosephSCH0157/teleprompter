@@ -1,4 +1,5 @@
-import { RecorderStatus, subscribeRecorderSettings } from '../state/recorder-settings';
+import type { RecorderStatus } from '../state/recorder-settings';
+import { subscribeRecorderSettings } from '../state/recorder-settings';
 
 type CssState = 'obs-status-idle' | 'obs-status-busy' | 'obs-status-ok' | 'obs-status-error';
 

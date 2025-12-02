@@ -49,7 +49,6 @@ function buildUrl(hostWithPort: string, explicitPort?: string): string {
 export function bindObsSettingsUI(doc: Document = document): void {
   let syncing = false;
   let wired = false;
-  let unsub: (() => void) | null = null;
 
   const wire = () => {
     const enableEl = doc.getElementById(ENABLE_ID) as HTMLInputElement | null;
@@ -75,7 +74,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
     try { console.info('[OBS-UI] wiring settings/sidebar controls'); } catch {}
 
     // Store -> UI
-    unsub = subscribeRecorderSettings((state) => {
+    subscribeRecorderSettings((state) => {
       syncing = true;
       try {
         toggleEls.forEach((el) => {
