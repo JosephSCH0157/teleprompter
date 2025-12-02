@@ -38,6 +38,7 @@ import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { shouldShowHud } from './hud/shouldShowHud';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { initObsWiring } from './obs/obs-wiring';
+import { bindObsStatusPills } from './ui/obs-status-bind';
 
 import { bootstrap } from './boot/boot';
 
@@ -712,6 +713,7 @@ export async function boot() {
           try { initHudController(); } catch {}
           try { initObsToggle(appStore); } catch {}
           try { bindObsSettingsUI(); } catch {}
+          try { bindObsStatusPills(); } catch {}
           try { initObsWiring(); } catch {}
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}

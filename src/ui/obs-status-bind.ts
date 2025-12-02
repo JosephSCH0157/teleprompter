@@ -27,8 +27,10 @@ export function bindObsStatusPills(): void {
 
   add(document.getElementById('obsStatus') as HTMLElement | null);
   add(document.getElementById('obsStatusText') as HTMLElement | null);
+  add(document.getElementById('obsConnStatus') as HTMLElement | null);
   document.querySelectorAll<HTMLElement>('.obs-status').forEach(add);
   document.querySelectorAll<HTMLElement>('[data-obs-status]').forEach(add);
+  document.querySelectorAll<HTMLElement>('.obs-chip-label').forEach(add);
 
   if (roots.length === 0) {
     try { console.info('[OBS-STATUS] no status elements found; skipping bind'); } catch {}
