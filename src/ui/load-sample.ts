@@ -25,7 +25,8 @@ function applySample(ed: HTMLTextAreaElement | HTMLInputElement): void {
   try {
     (ed as any).value = SAMPLE_TEXT;
     try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-    try { if (typeof window.renderScript === 'function') window.renderScript((ed as any).value); } catch {}
+    try { if (typeof (window as any).renderScript === 'function') (window as any).renderScript((ed as any).value); } catch {}
+    try { document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { from: 'load-sample' } })); } catch {}
   } catch {}
 }
 

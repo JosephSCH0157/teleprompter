@@ -137,4 +137,14 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   } catch {
     // ignore
   }
+
+  // Notify observers (e.g., display mirror) that content changed
+  try {
+    document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { lineCount: lines.length } }));
+  } catch {}
 }
+
+// Expose globally for callers that expect window.renderScript
+try {
+  (window as any).renderScript = renderScript;
+} catch {}
