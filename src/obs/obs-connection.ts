@@ -5,100 +5,104 @@ import {
   type RecorderStatus,
 } from '../state/recorder-settings';
 
-type ObsBridge = {
-  configure?: (cfg: Record<string, unknown>) => void;
-  setArmed?: (on: boolean) => void;
-  enableAutoReconnect?: (on: boolean) => void;
-  disconnect?: () => void | Promise<void>;
-  on?: (event: string, cb: (...args: any[]) => void) => (() => void) | void;
-  maybeConnect?: () => void | Promise<void>;
-  connect?: () => void | Promise<void>;
-};
+let socket: WebSocket | null = null;
+let lastUrl = '';
+let lastPassword = '';
+let lastEnabled = false;
+let isConnecting = false;
 
-function getBridge(): ObsBridge | null {
-  try {
-    const w = window as any;
-    return (w.__obsBridge as ObsBridge) || (w.__tpObs as ObsBridge) || null;
-  } catch {
-    return null;
+function updateStatus(status: RecorderStatus, err?: string) {
+  setObsStatus(status, err ?? null);
+}
+
+function closeSocket(reason?: string) {
+  if (socket) {
+    try {
+      socket.close();
+    } catch {
+      // ignore
+    }
+    socket = null;
   }
+  isConnecting = false;
+  updateStatus('disconnected', reason);
 }
 
-let wiredEvents = false;
-const eventOffs: Array<() => void> = [];
+function connect() {
+  const state = getRecorderSettings();
 
-function wireBridgeEvents(): void {
-  if (wiredEvents) return;
-  const bridge = getBridge();
-  if (!bridge?.on) return;
-
-  const offConnect = bridge.on('connect', () => setObsStatus('connected', null));
-  const offDisconnect = bridge.on('disconnect', () => setObsStatus('disconnected', null));
-  const offError = bridge.on('error', (err: unknown) => {
-    const msg = (err as any)?.message || String(err || 'error');
-    setObsStatus('error', msg);
-  });
-
-  [offConnect, offDisconnect, offError].forEach((off) => {
-    if (typeof off === 'function') eventOffs.push(off);
-  });
-  wiredEvents = true;
-}
-
-function closeBridge(reason?: string): void {
-  const bridge = getBridge();
-  try { bridge?.enableAutoReconnect?.(false); } catch {}
-  try { bridge?.setArmed?.(false); } catch {}
-  try { bridge?.disconnect?.(); } catch {}
-  setObsStatus('disconnected', reason || null);
-}
-
-function applyConfig(enabled: boolean, url: string, password: string): void {
-  const bridge = getBridge();
-  wireBridgeEvents();
-
-  if (!enabled) {
-    closeBridge();
+  if (!state.enabled.obs) {
+    closeSocket();
     return;
   }
 
-  try { bridge?.configure?.({ url, password }); } catch {}
-  try { bridge?.setArmed?.(true); } catch {}
-  try { bridge?.enableAutoReconnect?.(true); } catch {}
+  if (socket || isConnecting) return;
 
-  setObsStatus('connecting', null);
+  isConnecting = true;
+  updateStatus('connecting');
 
-  try { bridge?.maybeConnect?.(); } catch {}
-  try { bridge?.connect?.(); } catch {}
+  try {
+    const ws = new WebSocket(state.configs.obs.url);
+    socket = ws;
+
+    ws.addEventListener('open', () => {
+      isConnecting = false;
+      updateStatus('connected');
+      // If OBS authentication is needed, identify here using state.configs.obs.password.
+      void state.configs.obs.password;
+    });
+
+    ws.addEventListener('error', () => {
+      isConnecting = false;
+      socket = null;
+      updateStatus('error', 'WebSocket error');
+    });
+
+    ws.addEventListener('close', () => {
+      socket = null;
+      isConnecting = false;
+      if (getRecorderSettings().enabled.obs) {
+        updateStatus('error', 'Connection closed');
+      } else {
+        updateStatus('disconnected');
+      }
+    });
+  } catch (e: any) {
+    isConnecting = false;
+    socket = null;
+    updateStatus('error', e?.message || 'Failed to open WebSocket');
+  }
 }
 
-let lastEnabled = getRecorderSettings().enabled.obs;
-let lastUrl = getRecorderSettings().configs.obs.url;
-let lastPass = getRecorderSettings().configs.obs.password || '';
-
 export function initObsConnection(): void {
-  applyConfig(lastEnabled, lastUrl, lastPass);
+  const initial = getRecorderSettings();
+  lastEnabled = initial.enabled.obs;
+  lastUrl = initial.configs.obs.url;
+  lastPassword = initial.configs.obs.password;
 
   subscribeRecorderSettings((s) => {
-    const enabled = s.enabled.obs;
-    const url = s.configs.obs.url;
-    const pass = s.configs.obs.password || '';
+    const urlChanged = s.configs.obs.url !== lastUrl;
+    const pwdChanged = s.configs.obs.password !== lastPassword;
+    const enabledChanged = s.enabled.obs !== lastEnabled;
 
-    const enabledChanged = enabled !== lastEnabled;
-    const urlChanged = url !== lastUrl;
-    const passChanged = pass !== lastPass;
+    lastEnabled = s.enabled.obs;
+    lastUrl = s.configs.obs.url;
+    lastPassword = s.configs.obs.password;
 
-    lastEnabled = enabled;
-    lastUrl = url;
-    lastPass = pass;
-
-    if (!enabled && (enabledChanged || urlChanged || passChanged)) {
-      closeBridge();
+    if (!s.enabled.obs) {
+      closeSocket('disabled');
       return;
     }
 
-    if (enabledChanged || urlChanged || passChanged) {
-      applyConfig(enabled, url, pass);
+    if (enabledChanged || urlChanged || pwdChanged) {
+      closeSocket();
+      connect();
     }
   });
+
+  if (initial.enabled.obs) {
+    connect();
+  } else {
+    updateStatus('disconnected');
+  }
 }
