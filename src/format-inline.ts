@@ -10,10 +10,11 @@ interface RoleDef {
 }
 
 const ROLE_DEFAULTS: Record<SpeakerKey, RoleDef> = {
-  s1: { name: 'S1', color: 'var(--s1-color, #2ea8ff)' },
-  s2: { name: 'S2', color: 'var(--s2-color, #ff6b6b)' },
-  g1: { name: 'G1', color: 'var(--fg, #e5e7eb)' },
-  g2: { name: 'G2', color: 'var(--fg, #e5e7eb)' },
+  // Match legacy Speaker defaults; still defer to CSS vars when provided.
+  s1: { name: 'S1', color: 'var(--s1-color, #60a5fa)' }, // Joe light blue
+  s2: { name: 'S2', color: 'var(--s2-color, #facc15)' }, // Brad yellow
+  g1: { name: 'G1', color: 'var(--g1-color, #34d399)' }, // Guest 1 green
+  g2: { name: 'G2', color: 'var(--g2-color, #f472b6)' }, // Guest 2 pink
 };
 
 // In the monolith this is hydrated from localStorage/settings; use defaults for now.
