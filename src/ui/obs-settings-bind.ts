@@ -6,6 +6,7 @@ import {
 } from '../state/recorder-settings';
 
 const ENABLE_ID = 'settingsEnableObs';
+const SIDEBAR_ENABLE_ID = 'enableObs';
 const HOST_ID = 'settingsObsUrl';
 const PORT_ID = 'settingsObsPort';
 const PASS_ID = 'settingsObsPass';
@@ -18,6 +19,7 @@ function buildUrl(host: string, port: string): string {
 
 export function bindObsSettingsUI(doc: Document = document): void {
   const enableEl = doc.getElementById(ENABLE_ID) as HTMLInputElement | null;
+  const sidebarEnableEl = doc.getElementById(SIDEBAR_ENABLE_ID) as HTMLInputElement | null;
   const hostEl = doc.getElementById(HOST_ID) as HTMLInputElement | null;
   const portEl = doc.getElementById(PORT_ID) as HTMLInputElement | null;
   const passEl = doc.getElementById(PASS_ID) as HTMLInputElement | null;
@@ -29,6 +31,9 @@ export function bindObsSettingsUI(doc: Document = document): void {
     syncing = true;
     try {
       if (enableEl) enableEl.checked = !!state.enabled.obs;
+      if (sidebarEnableEl && sidebarEnableEl.checked !== !!state.enabled.obs) {
+        sidebarEnableEl.checked = !!state.enabled.obs;
+      }
 
       const url = state.configs.obs.url || '';
       try {
@@ -49,10 +54,13 @@ export function bindObsSettingsUI(doc: Document = document): void {
   });
 
   // UI -> Store
-  enableEl?.addEventListener('change', () => {
+  const writeEnabled = (on: boolean) => {
     if (syncing) return;
-    setRecorderEnabled('obs', !!enableEl.checked);
-  });
+    setRecorderEnabled('obs', !!on);
+  };
+
+  enableEl?.addEventListener('change', () => writeEnabled(!!enableEl.checked));
+  sidebarEnableEl?.addEventListener('change', () => writeEnabled(!!sidebarEnableEl.checked));
 
   const pushUrl = () => {
     if (syncing) return;
