@@ -385,8 +385,9 @@ export function wireLoadSample() {
   try {
     const btn = $('loadSample');
     const ed = $('editor');
-    if (!btn || !ed || btn.dataset.wired) return;
-    btn.dataset.wired = '1';
+    if (!btn || !ed || btn.dataset.sampleWired === '1') return;
+    // Use a dedicated flag so legacy data-wired attributes don't block wiring
+    btn.dataset.sampleWired = '1';
     const sample = [
       '[s1]',
       '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
