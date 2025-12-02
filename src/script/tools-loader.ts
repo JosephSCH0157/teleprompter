@@ -25,7 +25,7 @@ try {
       const ta = document.getElementById('editor');
       if (!ta) return;
       ta.value = fallbackNormalizeText(ta.value || '');
-      ta.dispatchEvent(new Event('input'));
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
       alert('Basic normalization applied.');
     } catch (e) { alert('Normalize fallback failed: ' + (e && e.message)); }
   };
