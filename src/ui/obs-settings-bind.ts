@@ -113,17 +113,6 @@ export function bindObsSettingsUI(doc: Document = document): void {
       el.addEventListener('change', () => writeEnabled(!!el.checked));
     });
 
-    // Safety net: global delegated handler in case any late/legacy checkbox isn't in toggleEls yet
-    try {
-      doc.addEventListener('change', (e) => {
-        const t = e.target as HTMLInputElement | null;
-        if (!t) return;
-        const isToggle = t.matches('[data-tp-obs-toggle]') || t.id === ENABLE_ID || t.id === SIDEBAR_ENABLE_ID;
-        if (!isToggle) return;
-        writeEnabled(!!t.checked);
-      }, { capture: true });
-    } catch {}
-
     const pushUrl = () => {
       if (syncing) return;
       const next = buildUrl(hostEl?.value ?? '', portEl?.value ?? '');
