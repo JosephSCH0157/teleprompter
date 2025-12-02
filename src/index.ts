@@ -726,7 +726,7 @@ export async function boot() {
           try { initHudController(); } catch {}
           try { wireHudToggle(); } catch {}
           try { initHudController(); } catch {}
-          try { initObsToggle(appStore); } catch {}
+          try { initObsToggle(); } catch {}
           try { bindObsSettingsUI(); } catch {}
           try { initObsConnection(); } catch {}
           try { bindObsStatusPills(); } catch {}
