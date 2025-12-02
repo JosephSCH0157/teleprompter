@@ -105,8 +105,17 @@ export function initObsWiring(): void {
     });
   } catch {}
 
-  // SSOT changes → bridge
-  subscribeRecorderSettings(() => {
+  // SSOT intent changes → bridge (ignore status-only updates)
+  subscribeRecorderSettings((s) => {
+    const enabled = s.enabled.obs;
+    const url = s.configs.obs.url;
+    const pass = s.configs.obs.password || '';
+    if (enabled === lastEnabled && url === lastUrl && pass === lastPass) {
+      return; // only status changed; ignore to avoid loops
+    }
+    lastEnabled = enabled;
+    lastUrl = url;
+    lastPass = pass;
     void applyObsStateFromSettings();
   });
 }
