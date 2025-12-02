@@ -1,6 +1,6 @@
 import {
-  RecorderSettingsState,
   RecorderStatus,
+  getRecorderSettings,
   subscribeRecorderSettings,
   setObsStatus,
 } from '../state/recorder-settings';
@@ -20,23 +20,36 @@ function toast(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): vo
   try { console.log(msg); } catch {}
 }
 
-let lastEnabled = false;
-let lastUrl = '';
-let lastPass = '';
+function mapObsTextToStatus(txt: string | undefined, ok: boolean): RecorderStatus {
+  const t = (txt || '').toLowerCase().trim();
+  if (!t) return ok ? 'connected' : 'disconnected';
 
-function status(next: RecorderStatus, err: string | null = null): void {
-  setObsStatus(next, err);
+  if (t.includes('connecting')) return 'connecting';
+  if (t.includes('connected') || t.includes('initialized')) return 'connected';
+
+  if (t.startsWith('closed')) {
+    if (t.includes('1000')) return 'disconnected';
+    return 'error';
+  }
+
+  if (t.includes('error') || t.includes('auth')) return 'error';
+
+  return ok ? 'connected' : 'disconnected';
 }
 
-async function applyObsState(state: RecorderSettingsState): Promise<void> {
-  const enabled = state.enabled.obs;
-  const url = state.configs.obs.url;
-  const pass = state.configs.obs.password || '';
+let lastEnabled = getRecorderSettings().enabled.obs;
+let lastUrl = getRecorderSettings().configs.obs.url;
+let lastPass = getRecorderSettings().configs.obs.password || '';
 
-  if (!enabled) {
+async function applyObsStateFromSettings(): Promise<void> {
+  const { enabled, configs } = getRecorderSettings();
+  const url = configs.obs.url;
+  const pass = configs.obs.password || '';
+
+  if (!enabled.obs) {
     if (lastEnabled) {
       try { await (rec as any).setEnabled?.(false); } catch {}
-      status('disconnected');
+      setObsStatus('disconnected', null);
       toast('OBS disabled in settings.', 'info');
     }
     lastEnabled = false;
@@ -50,7 +63,7 @@ async function applyObsState(state: RecorderSettingsState): Promise<void> {
   lastUrl = url;
   lastPass = pass;
 
-  status('connecting');
+  setObsStatus('connecting', null);
   toast(`Connecting to OBS at ${url}…`, 'info');
 
   try {
@@ -59,23 +72,41 @@ async function applyObsState(state: RecorderSettingsState): Promise<void> {
     if (typeof (rec as any).test === 'function' && urlChanged) {
       try { await (rec as any).test(); } catch {}
     }
-    status('connected');
+    setObsStatus('connected', null);
     toast('OBS: connected and ready.', 'ok');
   } catch (err: any) {
     const msg = err?.message || String(err || 'Unknown error');
-    status('error', msg);
+    setObsStatus('error', msg);
     toast(`OBS connection failed: ${msg}`, 'error');
   }
 }
 
 export function initObsWiring(): void {
-  subscribeRecorderSettings((state) => {
-    if (
-      state.enabled.obs !== lastEnabled ||
-      state.configs.obs.url !== lastUrl ||
-      state.configs.obs.password !== lastPass
-    ) {
-      void applyObsState(state);
-    }
+  // Bridge status → SSOT
+  try {
+    (rec as any).init?.({
+      getUrl: () => getRecorderSettings().configs.obs.url,
+      getPass: () => getRecorderSettings().configs.obs.password,
+      isEnabled: () => getRecorderSettings().enabled.obs,
+      onStatus: (txt: string, ok: boolean) => {
+        const status = mapObsTextToStatus(txt, ok);
+        setObsStatus(status, status === 'error' ? txt : null);
+        if (status === 'connected') {
+          toast('OBS connected.', 'ok');
+        } else if (status === 'connecting') {
+          toast('Connecting to OBS…', 'info');
+        } else if (status === 'error') {
+          toast(txt || 'OBS connection error.', 'error');
+        } else if (status === 'disconnected') {
+          toast('OBS disconnected.', 'warn');
+        }
+      },
+      onRecordState: () => {},
+    });
+  } catch {}
+
+  // SSOT changes → bridge
+  subscribeRecorderSettings(() => {
+    void applyObsStateFromSettings();
   });
 }
