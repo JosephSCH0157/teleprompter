@@ -40,6 +40,7 @@ import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { initObsWiring } from './obs/obs-wiring';
 import { bindObsStatusPills } from './ui/obs-status-bind';
 import { bindLoadSample } from './ui/load-sample';
+import { initObsConnection } from './obs/obs-connection';
 
 import { bootstrap } from './boot/boot';
 
@@ -714,6 +715,7 @@ export async function boot() {
           try { initHudController(); } catch {}
           try { initObsToggle(appStore); } catch {}
           try { bindObsSettingsUI(); } catch {}
+          try { initObsConnection(); } catch {}
           try { bindObsStatusPills(); } catch {}
           try { initObsWiring(); } catch {}
           try { bindLoadSample(); } catch {}
