@@ -35,6 +35,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
 
     if (wired) return true;
     wired = true;
+    try { console.info('[OBS-UI] wiring settings/sidebar controls'); } catch {}
 
     // Store -> UI
     unsub = subscribeRecorderSettings((state) => {
@@ -76,6 +77,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
       const next = buildUrl(hostEl?.value ?? '', portEl?.value ?? '');
       const cur = getRecorderSettings().configs.obs.url;
       if (next === cur) return;
+      try { console.info('[OBS-UI] setObsConfig url', next); } catch {}
       setObsConfig({ url: next });
     };
 
@@ -86,6 +88,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
 
     passEl?.addEventListener('change', () => {
       if (syncing) return;
+      try { console.info('[OBS-UI] setObsConfig password'); } catch {}
       setObsConfig({ password: passEl.value });
     });
 
