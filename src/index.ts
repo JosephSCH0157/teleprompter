@@ -39,6 +39,7 @@ import { shouldShowHud } from './hud/shouldShowHud';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { initObsWiring } from './obs/obs-wiring';
 import { bindObsStatusPills } from './ui/obs-status-bind';
+import { bindLoadSample } from './ui/load-sample';
 
 import { bootstrap } from './boot/boot';
 
@@ -715,6 +716,7 @@ export async function boot() {
           try { bindObsSettingsUI(); } catch {}
           try { bindObsStatusPills(); } catch {}
           try { initObsWiring(); } catch {}
+          try { bindLoadSample(); } catch {}
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
           try { bindCameraUI(); } catch {}
