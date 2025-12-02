@@ -98,6 +98,7 @@ export {};
     const chip2 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
     if (chip2) chip2.textContent = 'Display: closed';
     try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:display:closed')); } catch {}
   }
 
   function sendToDisplay(payload: DisplayPayload): void {
@@ -126,6 +127,7 @@ export {};
           const lineHeight = (document.getElementById('lineHeight') as HTMLInputElement | null)?.value;
           sendToDisplay({ type: 'render', html: document.getElementById('script')?.innerHTML, fontSize, lineHeight });
         } catch {}
+        try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
       }
     } catch {}
   }
