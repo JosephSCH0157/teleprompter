@@ -54,6 +54,23 @@ function normalizeScript(raw: string): string {
   return String(raw || '');
 }
 
+function applyInlineColors(scope: HTMLElement): void {
+  try {
+    scope.querySelectorAll<HTMLElement>('[data-color]').forEach((el) => {
+      const color = el.dataset.color || '';
+      if (!color) return;
+      if (el.classList.contains('fg')) {
+        el.style.color = color;
+      }
+      if (el.classList.contains('bg')) {
+        el.style.backgroundColor = color;
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
+
 export function renderScript(text: string, container?: HTMLElement | null): void {
   const root =
     container ||
@@ -124,6 +141,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
 
     const html = formatInline(rawLine);
     div.innerHTML = html || '&nbsp;';
+    applyInlineColors(div);
     frag.appendChild(div);
   }
 
