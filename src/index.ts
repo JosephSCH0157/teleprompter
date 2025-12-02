@@ -70,6 +70,10 @@ function isCiSmoke(): boolean {
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
+// Early-safe OBS UI/status wiring: binders are idempotent and will wait for DOM
+try { bindObsSettingsUI(); } catch {}
+try { bindObsStatusPills(); } catch {}
+try { initObsConnection(); } catch {}
 
 try {
 	window.Scripts = {
