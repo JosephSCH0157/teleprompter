@@ -889,7 +889,15 @@ export async function boot() {
 					// Display Sync
 					try {
 						installDisplaySync({
-							getText: () => { try { return (document.getElementById('script')?.innerHTML) || ''; } catch { return ''; } },
+							getText: () => {
+								try {
+									const v = (document.getElementById('viewer') as HTMLElement | null)
+										|| (document.querySelector('[data-role="viewer"]') as HTMLElement | null)
+										|| (document.getElementById('script') as HTMLElement | null)
+										|| (document.querySelector('.script') as HTMLElement | null);
+									return v?.innerHTML || '';
+								} catch { return ''; }
+							},
 							getAnchorRatio: () => {
 								try {
 									const v = document.getElementById('viewer') as HTMLElement | null;
