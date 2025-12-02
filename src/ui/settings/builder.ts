@@ -137,7 +137,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         <h4>OBS (WebSocket)</h4>
         <div class="row">
           <label><input type="checkbox" id="settingsEnableObs" data-tp-obs-toggle/> Enable OBS</label>
-          <span id="obsStatusText" class="badge muted" style="margin-left:auto">disconnected</span>
+          <span id="obsStatusText" class="badge muted obs-status" style="margin-left:auto">disconnected</span>
         </div>
         <form id="settingsObsCredsForm" class="settings-inline-row" autocomplete="off" novalidate onsubmit="return false;">
           <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455"/></label>

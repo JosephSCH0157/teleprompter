@@ -228,5 +228,12 @@ export function setObsStatus(status: RecorderStatus, lastError: string | null = 
     obsStatus: status,
     obsLastError: lastError,
   };
+  try {
+    const store = (typeof window !== 'undefined' ? (window as any).__tpStore : null) as
+      | { set?: (k: string, v: unknown) => void }
+      | null;
+    store?.set?.('obsStatus', status);
+    store?.set?.('obsLastError', lastError);
+  } catch {}
   notify();
 }
