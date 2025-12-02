@@ -54,11 +54,19 @@ export function bindObsSettingsUI(doc: Document = document): void {
   const wire = () => {
     const enableEl = doc.getElementById(ENABLE_ID) as HTMLInputElement | null;
     const sidebarEnableEl = doc.getElementById(SIDEBAR_ENABLE_ID) as HTMLInputElement | null;
+    const toggleEls = Array.from(
+      new Set(
+        Array.from(doc.querySelectorAll<HTMLInputElement>('[data-tp-obs-toggle]')).concat(
+          enableEl ? [enableEl] : [],
+          sidebarEnableEl ? [sidebarEnableEl] : [],
+        ),
+      ),
+    ).filter((el) => el instanceof HTMLInputElement) as HTMLInputElement[];
     const hostEl = doc.getElementById(HOST_ID) as HTMLInputElement | null;
     const portEl = doc.getElementById(PORT_ID) as HTMLInputElement | null;
     const passEl = doc.getElementById(PASS_ID) as HTMLInputElement | null;
 
-    if (!enableEl && !sidebarEnableEl && !hostEl && !portEl && !passEl) {
+    if (toggleEls.length === 0 && !hostEl && !portEl && !passEl) {
       return false;
     }
 
@@ -70,10 +78,9 @@ export function bindObsSettingsUI(doc: Document = document): void {
     unsub = subscribeRecorderSettings((state) => {
       syncing = true;
       try {
-        if (enableEl && enableEl.checked !== !!state.enabled.obs) enableEl.checked = !!state.enabled.obs;
-        if (sidebarEnableEl && sidebarEnableEl.checked !== !!state.enabled.obs) {
-          sidebarEnableEl.checked = !!state.enabled.obs;
-        }
+        toggleEls.forEach((el) => {
+          if (el && el.checked !== !!state.enabled.obs) el.checked = !!state.enabled.obs;
+        });
 
         const url = state.configs.obs.url || '';
         try {
@@ -102,8 +109,9 @@ export function bindObsSettingsUI(doc: Document = document): void {
       mirrorLegacyObsEnabled(!!on);
     };
 
-    enableEl?.addEventListener('change', () => writeEnabled(!!enableEl.checked));
-    sidebarEnableEl?.addEventListener('change', () => writeEnabled(!!sidebarEnableEl.checked));
+    toggleEls.forEach((el) => {
+      el.addEventListener('change', () => writeEnabled(!!el.checked));
+    });
 
     const pushUrl = () => {
       if (syncing) return;
