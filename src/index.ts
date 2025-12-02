@@ -41,6 +41,7 @@ import { initObsWiring } from './obs/obs-wiring';
 import { bindObsStatusPills } from './ui/obs-status-bind';
 import { bindLoadSample } from './ui/load-sample';
 import { initObsConnection } from './obs/obs-connection';
+import { setRecorderEnabled } from './state/recorder-settings';
 
 import { bootstrap } from './boot/boot';
 
@@ -74,6 +75,14 @@ try { initObsBridge(appStore); } catch {}
 try { bindObsSettingsUI(); } catch {}
 try { bindObsStatusPills(); } catch {}
 try { initObsConnection(); } catch {}
+// Keep recorder SSOT in sync with appStore.obsEnabled (legacy flag that can auto-arm the bridge)
+try {
+	const seed = appStore.get?.('obsEnabled');
+	if (typeof seed === 'boolean') setRecorderEnabled('obs', seed);
+	appStore.subscribe?.('obsEnabled', (v: any) => {
+		if (typeof v === 'boolean') setRecorderEnabled('obs', v);
+	});
+} catch {}
 
 try {
 	window.Scripts = {
