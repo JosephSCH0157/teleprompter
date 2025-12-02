@@ -1,5 +1,6 @@
 // src/render-script.ts
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
+import { formatInlineMarkup } from './format-inline';
 
 function escapeHtml(input: string): string {
   return String(input || '')
@@ -11,22 +12,7 @@ function escapeHtml(input: string): string {
 }
 
 function formatInline(line: string): string {
-  let html = escapeHtml(line);
-
-  const replacements: Array<[RegExp, string]> = [
-    [/\[b\](.+?)\[\/b\]/gi, '<strong>$1</strong>'],
-    [/\[i\](.+?)\[\/i\]/gi, '<em>$1</em>'],
-    [/\[u\](.+?)\[\/u\]/gi, '<span class="u">$1</span>'],
-    [/\[note\](.+?)\[\/note\]/gi, '<span class="tp-note-inline">$1</span>'],
-    [/\[color=([^\]]+)\](.+?)\[\/color\]/gi, '<span class="tp-inline fg" data-color="$1">$2</span>'],
-    [/\[bg=([^\]]+)\](.+?)\[\/bg\]/gi, '<span class="tp-inline bg" data-color="$1">$2</span>'],
-  ];
-
-  for (const [pattern, replacement] of replacements) {
-    html = html.replace(pattern, replacement);
-  }
-
-  return html;
+  return formatInlineMarkup(line);
 }
 
 type SpeakerKey = 's1' | 's2' | 'guest1' | 'guest2';
