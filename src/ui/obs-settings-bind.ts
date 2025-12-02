@@ -7,14 +7,33 @@ import {
 
 const ENABLE_ID = 'settingsEnableObs';
 const SIDEBAR_ENABLE_ID = 'enableObs';
-const HOST_ID = 'settingsObsUrl';
-const PORT_ID = 'settingsObsPort';
-const PASS_ID = 'settingsObsPass';
+const HOST_ID = 'settingsObsHost';
+const PASS_ID = 'settingsObsPassword';
+const PORT_ID = 'settingsObsPort'; // legacy hidden input support
 
-function buildUrl(host: string, port: string): string {
-  const h = (host || '').trim() || '127.0.0.1';
-  const p = (port || '').trim() || '4455';
-  return `ws://${h}:${p}`;
+function buildUrl(hostWithPort: string, explicitPort?: string): string {
+  const rawHost = (hostWithPort || '').trim();
+  const rawPort = (explicitPort || '').trim();
+
+  // If the user pasted a full ws:// or wss:// URL, trust it.
+  if (rawHost.startsWith('ws://') || rawHost.startsWith('wss://')) {
+    return rawHost;
+  }
+
+  // Normalize host[:port]; default host/port when missing.
+  let host = rawHost || '127.0.0.1';
+  let port = rawPort || '';
+
+  // Extract port from host if present (host:port), prefer explicitPort when provided.
+  const m = host.match(/^(\\[[^\\]]+\\]|[^:]+)(?::(\\d+))?$/);
+  if (m) {
+    host = m[1];
+    if (!port && m[2]) port = m[2];
+  }
+
+  if (!port) port = '4455';
+
+  return `ws://${host}:${port}`;
 }
 
 export function bindObsSettingsUI(doc: Document = document): void {
@@ -49,7 +68,10 @@ export function bindObsSettingsUI(doc: Document = document): void {
         const url = state.configs.obs.url || '';
         try {
           const parsed = new URL(url);
-          if (hostEl && hostEl !== doc.activeElement) hostEl.value = parsed.hostname || '';
+          if (hostEl && hostEl !== doc.activeElement) {
+            const hostPort = parsed.port ? `${parsed.hostname}:${parsed.port}` : parsed.hostname || '';
+            hostEl.value = hostPort;
+          }
           if (portEl && portEl !== doc.activeElement) portEl.value = parsed.port || '4455';
         } catch {
           if (hostEl && hostEl !== doc.activeElement) hostEl.value = '';

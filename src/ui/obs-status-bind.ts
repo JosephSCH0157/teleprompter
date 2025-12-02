@@ -25,17 +25,26 @@ export function bindObsStatusPills(): void {
     if (el && !roots.includes(el)) roots.push(el);
   };
 
-  add(document.getElementById('obsStatus') as HTMLElement | null);
-  add(document.getElementById('obsStatusText') as HTMLElement | null);
-  add(document.getElementById('obsConnStatus') as HTMLElement | null);
-  document.querySelectorAll<HTMLElement>('.obs-status').forEach(add);
-  document.querySelectorAll<HTMLElement>('[data-obs-status]').forEach(add);
-  document.querySelectorAll<HTMLElement>('.obs-chip-label').forEach(add);
+  const scan = () => {
+    add(document.getElementById('obsStatus') as HTMLElement | null);
+    add(document.getElementById('obsStatusText') as HTMLElement | null);
+    add(document.getElementById('obsConnStatus') as HTMLElement | null);
+    document.querySelectorAll<HTMLElement>('.obs-status').forEach(add);
+    document.querySelectorAll<HTMLElement>('[data-obs-status]').forEach(add);
+    document.querySelectorAll<HTMLElement>('.obs-chip-label').forEach(add);
+  };
+
+  scan();
 
   if (roots.length === 0) {
     try { console.info('[OBS-STATUS] no status elements found; skipping bind'); } catch {}
     return;
   }
+
+  try {
+    const mo = new MutationObserver(() => scan());
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+  } catch {}
 
   subscribeRecorderSettings((s) => {
     const { text, css } = computeLabel(s.enabled.obs, s.obsStatus);
