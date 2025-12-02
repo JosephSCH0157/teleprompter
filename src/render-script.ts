@@ -2,7 +2,7 @@
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
 
-function escapeHtml(input: string): string {
+function _escapeHtml(input: string): string {
   return String(input || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
