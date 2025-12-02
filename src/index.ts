@@ -551,31 +551,18 @@ try {
 } catch {}
 
 // Cross-window document channel (main <-> display)
+// NOTE: script-ingest.ts owns the onmessage handler.
+// Here we just ensure the shared channel exists and, in display mode,
+// send an initial "hello" to request the current script snapshot.
 let __docCh: BroadcastChannel | null = null;
-let __isRemote = false; // loop guard for cross-window broadcast
 try {
 	__docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = new BroadcastChannel('tp-doc'));
-	if (__docCh && !(window as any).__tpDocChOnMsg) {
-		(window as any).__tpDocChOnMsg = true;
-		(__docCh as BroadcastChannel).onmessage = (ev: MessageEvent<any>) => {
-			try {
-				const d = ev?.data || {};
-				if (d?.type === 'script' && typeof d?.text === 'string') {
-					__isRemote = true;
-					try { (window as any).__tpCurrentName = d.name || 'Untitled'; } catch {}
-					try { renderScript(String(d.text)); } catch {}
-					__isRemote = false;
-				}
-			} catch {}
-		};
-	}
-  // If this is a display window, immediately request current script snapshot
-  try {
-    const Q = new URLSearchParams(location.search || '');
-    if (Q.get('display') === '1') {
-      (__docCh as BroadcastChannel)?.postMessage({ type: 'hello', client: 'display' });
-    }
-  } catch {}
+	try {
+		const Q = new URLSearchParams(location.search || '');
+		if (Q.get('display') === '1' && __docCh) {
+			__docCh.postMessage({ type: 'hello', client: 'display' });
+		}
+	} catch {}
 } catch {}
 // Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
 		function injectSpeechNotesHud() {
