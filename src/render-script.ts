@@ -71,6 +71,15 @@ function applyInlineColors(scope: HTMLElement): void {
   }
 }
 
+function resolveSpeakerTag(tag: string): SpeakerKey | null {
+  const t = tag.toLowerCase();
+  if (t === 's1') return 's1';
+  if (t === 's2') return 's2';
+  if (t === 'g1' || t === 'guest1') return 'guest1';
+  if (t === 'g2' || t === 'guest2') return 'guest2';
+  return null;
+}
+
 export function renderScript(text: string, container?: HTMLElement | null): void {
   const root =
     container ||
@@ -93,8 +102,8 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try { root.textContent = ''; } catch {}
 
   for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i] ?? '';
-    const trimmed = rawLine.trim();
+    let rawLine = lines[i] ?? '';
+    let trimmed = rawLine.trim();
 
     if (!trimmed) {
       const div = document.createElement('div');
@@ -105,18 +114,35 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       continue;
     }
 
-    const open = trimmed.match(/^\[\s*(s1|s2|guest1|guest2|g1|g2)\s*\]$/i);
-    if (open) {
-      const key = open[1].toLowerCase();
-      currentSpeaker =
-        key === 'g1' ? 'guest1' : key === 'g2' ? 'guest2' : (key as SpeakerKey);
+    const openSolo = trimmed.match(/^\[\s*(s1|s2|guest1|guest2|g1|g2)\s*\]$/i);
+    if (openSolo) {
+      const key = resolveSpeakerTag(openSolo[1]);
+      if (key) currentSpeaker = key;
       continue;
     }
 
-    const close = trimmed.match(/^\[\/\s*(s1|s2|guest1|guest2|g1|g2)\s*\]$/i);
-    if (close) {
+    const closeSolo = trimmed.match(/^\[\/\s*(s1|s2|guest1|guest2|g1|g2)\s*\]$/i);
+    if (closeSolo) {
       currentSpeaker = null;
       continue;
+    }
+
+    // Inline leading opening tag with content after it
+    const leadingOpen = rawLine.match(/^\s*\[\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*/i);
+    if (leadingOpen) {
+      const key = resolveSpeakerTag(leadingOpen[1]);
+      if (key) currentSpeaker = key;
+      rawLine = rawLine.slice(leadingOpen[0].length);
+      trimmed = rawLine.trim();
+    }
+
+    // Inline trailing closing tag after content
+    let closeAfterLine = false;
+    const trailingClose = rawLine.match(/\s*\[\s*\/\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i);
+    if (trailingClose) {
+      closeAfterLine = true;
+      rawLine = rawLine.slice(0, rawLine.length - trailingClose[0].length);
+      trimmed = rawLine.trim();
     }
 
     if (/^\[\s*(note|pause|beat|reflective pause)\s*\]$/i.test(trimmed)) {
@@ -143,6 +169,10 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     div.innerHTML = html || '&nbsp;';
     applyInlineColors(div);
     frag.appendChild(div);
+
+    if (closeAfterLine) {
+      currentSpeaker = null;
+    }
   }
 
   try { root.appendChild(frag); } catch {}
