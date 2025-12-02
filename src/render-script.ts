@@ -178,6 +178,8 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try {
     document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { lineCount: lines.length } }));
   } catch {}
+  // Notify listeners (e.g., display sync) that script content changed
+  try { window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { lineCount: lines.length } })); } catch {}
 }
 
 // Expose globally for callers that expect window.renderScript
