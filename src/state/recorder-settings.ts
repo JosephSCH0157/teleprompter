@@ -133,8 +133,14 @@ function loadState(): RecorderSettingsState {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return cloneState(DEFAULT_STATE);
     const parsed = JSON.parse(raw);
-    const merged = deepMergeDefaults(DEFAULT_STATE, parsed);
-    // Reset live fields
+    if (!parsed || typeof parsed !== 'object') return cloneState(DEFAULT_STATE);
+
+    // Only hydrate persisted config (enabled + configs). Live fields stay fresh.
+    const persisted = {
+      enabled: (parsed as any).enabled,
+      configs: (parsed as any).configs,
+    };
+    const merged = deepMergeDefaults(DEFAULT_STATE, persisted);
     merged.obsStatus = 'disconnected';
     merged.obsLastError = null;
     merged.configs.obs.password = '';
@@ -147,10 +153,11 @@ function loadState(): RecorderSettingsState {
 function persistState(state: RecorderSettingsState): void {
   try {
     if (typeof window === 'undefined') return;
-    const toStore = cloneState(state);
-    // Do not persist live status or password
-    toStore.obsStatus = 'disconnected';
-    toStore.obsLastError = null;
+    // Persist only config fields; never store live status/error or password.
+    const toStore = {
+      enabled: cloneState(state.enabled),
+      configs: cloneState(state.configs),
+    };
     toStore.configs.obs.password = '';
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
   } catch {

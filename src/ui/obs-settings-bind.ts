@@ -11,6 +11,16 @@ const HOST_ID = 'settingsObsHost';
 const PASS_ID = 'settingsObsPassword';
 const PORT_ID = 'settingsObsPort'; // legacy hidden input support
 
+function mirrorLegacyObsEnabled(on: boolean): void {
+  const val = on ? '1' : '0';
+  try { localStorage.setItem('tp_obs_enabled', val); } catch {}
+  try { localStorage.setItem('tp_obs_enabled_v1', val); } catch {}
+  try { localStorage.setItem('tp_obs_enabled_v2', val); } catch {}
+  try { (window as any).__obsBridge?.setArmed?.(on); } catch {}
+  try { (window as any).__tpObs?.setArmed?.(on); } catch {}
+  try { (window as any).__tpStore?.set?.('obsEnabled', on); } catch {}
+}
+
 function buildUrl(hostWithPort: string, explicitPort?: string): string {
   const rawHost = (hostWithPort || '').trim();
   const rawPort = (explicitPort || '').trim();
@@ -89,6 +99,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
     const writeEnabled = (on: boolean) => {
       if (syncing) return;
       setRecorderEnabled('obs', !!on);
+      mirrorLegacyObsEnabled(!!on);
     };
 
     enableEl?.addEventListener('change', () => writeEnabled(!!enableEl.checked));
