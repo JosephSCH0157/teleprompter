@@ -68,12 +68,31 @@ function readInitialMode(store: Store | null): ScrollMode {
   return 'rehearsal';
 }
 
+function formatModeLabel(mode: ScrollMode): string {
+  switch (mode) {
+    case 'timed':
+      return 'Timed';
+    case 'wpm':
+      return 'WPM';
+    case 'hybrid':
+      return 'Hybrid';
+    case 'asr':
+      return 'ASR';
+    case 'step':
+      return 'Step';
+    case 'rehearsal':
+      return 'Rehearsal';
+    default:
+      return 'Manual';
+  }
+}
+
 function updateUi(select: HTMLSelectElement | null, status: HTMLElement | null, mode: ScrollMode) {
   try {
     if (select) select.value = mode;
   } catch {}
   try {
-    if (status) status.textContent = `Mode: ${mode}`;
+    if (status) status.textContent = `Mode: ${formatModeLabel(mode)}`;
   } catch {}
 }
 
@@ -114,6 +133,10 @@ export function initScrollRouter(): void {
     writePrefs(mode);
     updateUi(select, status, mode);
     modeRouterInstance?.applyMode(mode);
+    // Broadcast for any legacy or passive UI (mode chip, auto controls)
+    try {
+      window.dispatchEvent(new CustomEvent('tp:scrollModeChange', { detail: { mode } }));
+    } catch {}
   };
 
   // UI -> store
