@@ -256,55 +256,6 @@
           }
           return;
         }
-        // Auto toggle / speed fallback
-        var btn = q(selAuto); if (!btn) return;
-        if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
-        var step = (e.shiftKey ? 5 : 0.5);
-        var isInc = !!(t.matches && t.matches(selInc));
-        var isDec = !!(t.matches && t.matches(selDec));
-        var isToggle = !!(t.matches && t.matches(selAuto));
-        if (!isInc && !isDec && !isToggle) return;
-        // Initialize defaults
-        if (typeof window.__autoSpeed !== 'number' || !(window.__autoSpeed > 0)) window.__autoSpeed = 60;
-        if (!btn.dataset.state) btn.dataset.state = 'off';
-        // Apply action
-        if (isInc) {
-          window.__autoSpeed = Math.max(5, window.__autoSpeed + step);
-        } else if (isDec) {
-          window.__autoSpeed = Math.max(5, window.__autoSpeed - step);
-        } else if (isToggle) {
-          btn.dataset.state = (btn.dataset.state === 'on' ? 'off' : 'on');
-        }
-        var isOn = btn.dataset.state === 'on';
-        var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
-        btn.textContent = isOn ? ('Auto-scroll: On - ' + sFmt + ' px/s') : 'Auto-scroll: Off';
-        // Stop any previous fallback when toggling or when turning Off via speed buttons
-        try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
-        window.__autoFallbackTimer = null;
-        if (isOn) {
-          try {
-            if (window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function') { window.__scrollCtl.setSpeed(window.__autoSpeed); }
-            if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') { window.__scrollCtl.start(); }
-          } catch (e) {}
-          if (!(window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function')) {
-            var viewer = getViewer();
-            // Immediate nudge to make movement detectable in short probes
-            try { viewer.scrollTop += Math.max(1, window.__autoSpeed / 5); } catch (e) {}
-            window.__autoFallbackTimer = setInterval(function(){
-              try {
-                // If the real engine becomes available, switch to it and stop fallback
-                if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') {
-                  try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
-                  window.__autoFallbackTimer = null;
-                  try { window.__scrollCtl.setSpeed(window.__autoSpeed); } catch (e) {}
-                  try { window.__scrollCtl.start(); } catch (e) {}
-                  return;
-                }
-                viewer.scrollTop += window.__autoSpeed / 10;
-              } catch (e) {}
-            }, 100);
-          }
-        }
       } catch (e) {}
     }
     document.addEventListener('click', handler, true);
