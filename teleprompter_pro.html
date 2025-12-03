@@ -273,7 +273,7 @@
         }
         var isOn = btn.dataset.state === 'on';
         var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
-        btn.textContent = isOn ? ('Auto-scroll: On G�� ' + sFmt + ' px/s') : 'Auto-scroll: Off';
+        btn.textContent = isOn ? ('Auto-scroll: On - ' + sFmt + ' px/s') : 'Auto-scroll: Off';
         // Stop any previous fallback when toggling or when turning Off via speed buttons
         try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
         window.__autoFallbackTimer = null;
@@ -407,7 +407,7 @@
   <label>Auto-scroll (px/s)
     <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
   </label>
-  <button id="autoDec" class="chip" title="G��1 (Shift: G��5)">G��</button>
+  <button id="autoDec" class="chip" title="-1 (Shift: -5)">-</button>
   <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
   <button id="autoToggle">Auto-scroll: Off</button>
 </div>
