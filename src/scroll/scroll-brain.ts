@@ -58,7 +58,7 @@ export type ScrollMode =
   | 'off'
   | 'manual';
 
-import { scrollByPx } from './scroll-helpers';
+import { clampActive, scrollByPx } from './scroll-helpers';
 
 export type AdaptSample = {
   errPx: number;
@@ -136,6 +136,17 @@ const now = (): number =>
     ? performance.now()
     : Date.now();
 
+const isDebug = (): boolean => {
+  try {
+    const win = window as any;
+    if (win.__TP_DEV || win.__tpScrollDebug) return true;
+    const qs = String(location.search || '');
+    return /scrollDebug=1/i.test(qs);
+  } catch {
+    return false;
+  }
+};
+
 export function createScrollBrain(): ScrollBrain {
   const state: InternalState = {
     mode: 'rehearsal',
@@ -206,8 +217,27 @@ export function createScrollBrain(): ScrollBrain {
       state.manualNudgePx = 0;
     }
 
-    if (Number.isFinite(dy) && dy !== 0) {
+    if (Number.isFinite(dy) && dy !== 0 && !clampActive()) {
       scrollByPx(dy);
+    }
+
+    if (isDebug()) {
+      try {
+        if (!state.__debugFrame) (state as any).__debugFrame = 0;
+        (state as any).__debugFrame++;
+        if ((state as any).__debugFrame % 30 === 0) {
+          console.debug('[scroll-brain]', {
+            mode: state.mode,
+            target: state.targetSpeedPxPerSec,
+            effective: state.effectiveSpeedPxPerSec,
+            clamp: clampActive(),
+            silent: state.silence.isSilent,
+            pllErr: state.pll.smoothedErr,
+          });
+        }
+      } catch {
+        // ignore debug failures
+      }
     }
 
     state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
