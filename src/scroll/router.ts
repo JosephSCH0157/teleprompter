@@ -310,6 +310,17 @@ export function initScrollRouter(): void {
     window.addEventListener('tp:preroll:done', onReady);
   } catch {}
 
+  // Honor explicit auto intent (auto toggle) to start/stop running
+  try {
+    window.addEventListener('tp:autoIntent', (ev: Event) => {
+      const detail = (ev as CustomEvent<{ on?: boolean; enabled?: boolean }>).detail || {};
+      const on = detail.on ?? detail.enabled;
+      if (typeof on === 'boolean') {
+        setScrollRunning(on);
+      }
+    });
+  } catch {}
+
   // Expose a small legacy-compatible surface so existing HUD/mode-chip readers see the new mode names
   try {
     (window as any).__tpScrollMode = {
