@@ -192,3 +192,10 @@ function autoInit() {
 }
 
 autoInit();
+
+// Expose helper for other UI (top bar Calibrate Mic, legacy hooks)
+try {
+  (window as any).openSettingsToAsr = openSettingsToAsr;
+} catch {
+  // ignore
+}
