@@ -59,6 +59,18 @@ export function scrollByPx(dy: number, getScroller = defaultViewer): void {
           maxScrollTop,
         });
       }
+      try {
+        window.dispatchEvent(new CustomEvent('tp:scroll:commit', {
+          detail: {
+            delta: dy,
+            targetTop: target,
+            currentTop: sc.scrollTop,
+            maxScrollTop: Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0)),
+          },
+        }));
+      } catch {
+        // ignore
+      }
     } catch {
       // ignore HUD/log errors
     }

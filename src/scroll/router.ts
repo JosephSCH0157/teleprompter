@@ -162,6 +162,21 @@ let modeRouterInstance: ReturnType<typeof createModeRouter> | null = null;
 let brainInstance: ScrollBrain | null = null;
 let enginesArmed = false;
 
+function emitScrollStatus(payload: {
+  mode: ScrollMode;
+  strategy: string;
+  running: boolean;
+  activeIdx?: number;
+  lineCount?: number;
+}) {
+  try {
+    (window as any).__tpScrollRunning = payload.running;
+    window.dispatchEvent(new CustomEvent('tp:scroll:status', { detail: payload }));
+  } catch {
+    // ignore
+  }
+}
+
 export function setScrollRunning(next: boolean): void {
   if (isScrollRunning === next) return;
   isScrollRunning = next;
@@ -223,6 +238,17 @@ export function initScrollRouter(): void {
           mode === 'rehearsal' ? 'clamp' : 'unknown';
         (window as any).HUD?.log?.('scroll-router', { mode, appliedMode: desired, strategy, running: isScrollRunning });
       }
+      emitScrollStatus({
+        mode,
+        strategy:
+          mode === 'timed' ? 'timed' :
+          mode === 'wpm' ? 'wpm' :
+          mode === 'hybrid' ? 'hybrid-pll' :
+          mode === 'asr' ? 'asr-lock' :
+          mode === 'step' ? 'step' :
+          mode === 'rehearsal' ? 'clamp' : 'unknown',
+        running: isScrollRunning,
+      });
     } catch {}
     // Broadcast for any legacy or passive UI (mode chip, auto controls)
     try {

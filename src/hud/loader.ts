@@ -1,6 +1,7 @@
 import { initSpeechNotesHud } from './speech-notes-hud';
 import { initAsrStatsHud } from './asr-stats';
 import { initRecStatsHud } from './rec-stats';
+import { initScrollStripHud } from './scroll-strip';
 import type { AppStore } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
 
@@ -21,11 +22,13 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
   const speechNotes = initSpeechNotesHud({ root, bus, store });
   const asrStats = initAsrStatsHud({ root, bus, store });
   const recStats = initRecStatsHud({ root, bus, store });
+  const scrollStrip = initScrollStripHud({ root });
 
   function destroy() {
     speechNotes?.destroy?.();
     asrStats?.destroy?.();
     recStats?.destroy?.();
+    scrollStrip?.destroy?.();
   }
 
   try {
