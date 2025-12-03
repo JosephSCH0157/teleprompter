@@ -135,6 +135,15 @@ function updateUi(select: HTMLSelectElement | null, status: HTMLElement | null, 
     if (status) status.textContent = `Mode: ${formatModeLabel(mode)}`;
   } catch {}
   setControlVisibility(mode);
+
+  // Update any passive mode labels (e.g., top-bar pill with data-scroll-mode-label)
+  try {
+    const pills = document.querySelectorAll<HTMLElement>('[data-scroll-mode-label]');
+    pills.forEach((el) => {
+      el.textContent = formatModeLabel(mode);
+      el.setAttribute('data-mode', mode);
+    });
+  } catch {}
 }
 
 let modeRouterInstance: ModeRouter | null = null;
