@@ -10,6 +10,7 @@ const DEFAULT_SPEED_PX = 21;
 let enabled = false;
 let speed = DEFAULT_SPEED_PX; // px/sec default (SSOT)
 let raf = 0;
+let lastTs = 0;
 let viewer: HTMLElement | null = null;
 let autoChip: HTMLElement | null = null;
 let statusEl: HTMLElement | null = null;
@@ -46,33 +47,47 @@ function applyLabel() {
   try {
     if (!statusEl) statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
     if (statusEl) {
-      statusEl.textContent = enabled ? `Auto-scroll: On – ${sFmt} px/s` : 'Auto-scroll: Off';
+      statusEl.textContent = enabled ? `Auto-scroll: On - ${sFmt} px/s` : 'Auto-scroll: Off';
     }
   } catch {}
 }
 
+function stopLoop() {
+  if (raf) {
+    cancelAnimationFrame(raf);
+    raf = 0;
+  }
+}
+
 function loop() {
-  cancelAnimationFrame(raf);
+  stopLoop();
   if (!enabled || !viewer) return;
   try { if ((window as any).__TP_REHEARSAL) return; } catch {}
-  let last = performance.now();
+  lastTs = 0;
   const step = (now: number) => {
-    const dt = (now - last) / 1000;
-    last = now;
+    if (!enabled || !viewer) { stopLoop(); return; }
     try {
-      try {
-        const ov = document.getElementById('countOverlay');
-        if (ov) {
-          const cs = getComputedStyle(ov);
-          const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !ov.classList.contains('hidden');
-          if (visible) { raf = requestAnimationFrame(step); return; }
-        }
-      } catch {}
-      const delta = getSpeed() * dt + _fracCarry;
-      const whole = (delta >= 0) ? Math.floor(delta) : Math.ceil(delta);
-      _fracCarry = delta - whole;
-      if (whole !== 0 && viewer) viewer.scrollTop += whole;
+      const ov = document.getElementById('countOverlay');
+      if (ov) {
+        const cs = getComputedStyle(ov);
+        const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !ov.classList.contains('hidden');
+        if (visible) { raf = requestAnimationFrame(step); return; }
+      }
     } catch {}
+
+    if (!lastTs) { lastTs = now; raf = requestAnimationFrame(step); return; }
+
+    const dt = (now - lastTs) / 1000;
+    lastTs = now;
+    const delta = getSpeed() * dt + _fracCarry;
+    const whole = delta >= 0 ? Math.floor(delta) : Math.ceil(delta);
+    _fracCarry = delta - whole;
+    if (whole !== 0 && viewer) {
+      const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+      const next = Math.min(maxScroll, (viewer.scrollTop || 0) + whole);
+      viewer.scrollTop = next;
+      if (next >= maxScroll) { stopLoop(); return; }
+    }
     raf = requestAnimationFrame(step);
   };
   raf = requestAnimationFrame(step);
@@ -113,6 +128,7 @@ export function initAutoscrollFeature() {
       const detail = (ev as CustomEvent<{ running?: boolean }>).detail || {};
       if (typeof detail.running === 'boolean') {
         enabled = detail.running;
+        if (enabled) { _fracCarry = 0; lastTs = 0; loop(); } else { stopLoop(); }
         applyLabel();
       }
     });
@@ -132,6 +148,9 @@ export function toggle() {
     }
   } catch {}
   enabled = want;
+  _fracCarry = 0;
+  lastTs = 0;
+  if (enabled) loop(); else stopLoop();
   applyLabel();
   try {
     window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } }));
@@ -148,6 +167,9 @@ export function setEnabled(v: boolean) {
     }
   } catch {}
   enabled = !!v;
+  _fracCarry = 0;
+  lastTs = 0;
+  if (enabled) loop(); else stopLoop();
   applyLabel();
   try {
     window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } }));
@@ -190,6 +212,7 @@ export function setSpeed(pxPerSec: number) {
     });
   } catch {}
   applyLabel();
+  if (enabled) { _fracCarry = 0; lastTs = 0; loop(); }
 }
 
 export function nudge(pixels: number) {
