@@ -136,7 +136,7 @@ const now = (): number =>
     ? performance.now()
     : Date.now();
 
-// Debug logging is opt-in only.
+// Debug logging is opt-in only (scrollDebug=1 or __tpScrollDebug = true)
 let debugEnabled = false;
 let debugCounter = 0;
 const isScrollDebug = (): boolean => {
@@ -236,18 +236,25 @@ export function createScrollBrain(): ScrollBrain {
       scrollByPx(dy);
     }
 
-    if (debugEnabled && (++debugCounter % 30 === 0)) {
-      try {
-        console.log('[scroll-brain]', {
-          mode,
-          target: base,
-          effective: effectiveSpeed,
-          clamp: isClamped,
-          silent: state.silence.isSilent,
-          pllErr: state.pll?.smoothedErr ?? 0,
-        });
-      } catch {
-        // ignore
+    if (!debugEnabled) {
+      debugEnabled = isScrollDebug();
+    }
+    if (debugEnabled) {
+      debugCounter++;
+      if (debugCounter >= 30) {
+        debugCounter = 0;
+        try {
+          console.log('[scroll-brain]', {
+            mode,
+            target: state.targetSpeedPxPerSec || 0,
+            effective: effectiveSpeed,
+            clamp: isClamped,
+            silent: state.silence.isSilent,
+            pllErr: state.pll?.smoothedErr ?? 0,
+          });
+        } catch {
+          // ignore
+        }
       }
     }
 
