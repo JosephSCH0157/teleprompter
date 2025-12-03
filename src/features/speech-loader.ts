@@ -573,6 +573,12 @@ export function installSpeech(): void {
             // NOW start auto-scroll after countdown completes
             try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
             await startBackend();
+            // Signal that pre-roll + speech sync are ready
+            try {
+              window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
+                detail: { source: 'speech', preroll: sec }
+              }));
+            } catch {}
             // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
             try { await doAutoRecordStart(); }
             catch (err) {

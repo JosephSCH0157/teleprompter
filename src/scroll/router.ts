@@ -290,6 +290,15 @@ export function initScrollRouter(): void {
     }, { once: true });
   } catch {}
 
+  // Start scroll when speech sync reports ready (post pre-roll)
+  try {
+    const onReady = () => {
+      try { setScrollRunning(true); } catch {}
+    };
+    window.addEventListener('tp:speechSync:ready', onReady);
+    window.addEventListener('tp:preroll:done', onReady);
+  } catch {}
+
   // Expose a small legacy-compatible surface so existing HUD/mode-chip readers see the new mode names
   try {
     (window as any).__tpScrollMode = {
