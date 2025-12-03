@@ -456,6 +456,7 @@ declare global {
 		HUD?: { bus?: { emit?: AnyFn | undefined } | undefined; log?: AnyFn | undefined } | undefined;
 		__tpScrollDebug?: boolean;
 		__tpHudTsInited?: boolean;
+		hudRoot?: HTMLElement | null;
 	}
 }
 
@@ -495,7 +496,11 @@ function ensureHud(store: any): void {
 			}
 		} catch {}
 
-		const root = (document.querySelector('[data-role=\"hud-root\"], #hud-root') as HTMLElement | null) || document.body;
+		const root =
+			(document.querySelector('[data-tp-hud]') as HTMLElement | null) ||
+			(document.querySelector('[data-role=\"hud-root\"]') as HTMLElement | null) ||
+			(document.getElementById('hud-root') as HTMLElement | null) ||
+			document.body;
 		initHud({
 			store,
 			bus: (window as any).HUD?.bus ?? null,
