@@ -250,14 +250,14 @@ export function addAsrWizardCard(root: HTMLElement) {
         <button id="asrPreviewStop" class="btn">Stop preview</button>
         <button id="asrSaveBtn" class="btn success">Save profile</button>
       </div>
-      <small
-        class="muted"
+      <div
+        class="asr-status-banner"
         data-calibration-status
         id="asrCalStatus"
         hidden
       >
         Click “Start calibration” to begin. We’ll ask you to stay quiet, then speak in your normal voice.
-      </small>
+      </div>
       <small class="muted">Tip: Use headphones; leave NS/AGC off for best timing. Enable AEC only if using speakers.</small>
     `;
     container.appendChild(sec);

@@ -207,7 +207,7 @@ export async function startAsrWizard(): Promise<void> {
   try {
     if (calibrating) return;
     calibrating = true;
-    setCalStatus("Calibrating� Step 1: stay quiet, then speak in your normal voice.");
+    setCalStatus('Calibrating: first stay quiet for a few seconds, then speak in your normal podcast voice and keep talking until this banner changes to "Calibration done.".');
     const startBtn = $('asrStartBtn') as HTMLButtonElement | null;
     if (startBtn) startBtn.disabled = true;
 
@@ -230,9 +230,23 @@ export async function startAsrWizard(): Promise<void> {
     setCalStatus('Calibration failed. Check mic and try again.');
   } finally {
     if (current) {
-      setCalStatus(
-        "Calibration done. Noise " + current.profile.cal.noiseRmsDbfs.toFixed(1) + " dBFS, speech " + current.profile.cal.speechRmsDbfs.toFixed(1) + " dBFS, SNR " + current.profile.cal.snrDb.toFixed(1) + " dB",
-      );
+      const summary =
+        "Calibration done. Noise " +
+        current.profile.cal.noiseRmsDbfs.toFixed(1) +
+        " dBFS, speech " +
+        current.profile.cal.speechRmsDbfs.toFixed(1) +
+        " dBFS, SNR " +
+        current.profile.cal.snrDb.toFixed(1) +
+        " dB.";
+      setTimeout(() => {
+        try {
+          setCalStatus(summary);
+        } catch {
+          // ignore
+        }
+      }, 1500);
+    } else {
+      setCalStatus("");
     }
     calibrating = false;
     try {
@@ -341,3 +355,5 @@ try {
 } catch {
   // ignore - e.g., non-browser env
 }
+
+

@@ -834,3 +834,14 @@ html.tp-present .present-exit { display: inline-flex; }
 .speaker-guest2{color:#ce93d8;font-weight:600;}
 [data-script-view] .speaker-tag{text-transform:uppercase;letter-spacing:0.08em;font-size:0.8em;opacity:.8;margin-right:0.5rem;}
 [data-script-view] .line.line-empty{min-height:1.2em;}
+.asr-status-banner {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  background: rgba(80, 160, 255, 0.12);
+  border: 1px solid rgba(80, 160, 255, 0.4);
+  color: var(--fg);
+}
