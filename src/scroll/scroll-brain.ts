@@ -136,8 +136,20 @@ const now = (): number =>
     ? performance.now()
     : Date.now();
 
-// Debug logging is disabled; re-enable manually only if needed.
-const isDebug = (): boolean => false;
+// Debug logging is opt-in only.
+let debugEnabled = false;
+let debugCounter = 0;
+const isScrollDebug = (): boolean => {
+  try {
+    const w = window as any;
+    if (w.__tpScrollDebug === true) return true;
+    const qs = new URLSearchParams(window.location.search || '');
+    if (qs.has('scrollDebug')) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+};
 
 export function createScrollBrain(): ScrollBrain {
   const state: InternalState = {
@@ -180,40 +192,64 @@ export function createScrollBrain(): ScrollBrain {
       state.rafId = null;
       return;
     }
+    if (!debugEnabled) debugEnabled = isScrollDebug();
+
     const last = state.lastTickTs ?? ts;
     const dtMs = ts - last;
     state.lastTickTs = ts;
 
-    // Placeholder: compute effective speed from target/PLL/silence.
-    // No scrolling occurs in Phase 1.
     const dtSec = dtMs > 0 ? dtMs / 1000 : 0;
 
-    // Compute effective speed (silence gate for ASR/hybrid)
-    let speed = state.targetSpeedPxPerSec;
+    const mode = state.mode;
+    const base = state.targetSpeedPxPerSec || 0;
+    let effectiveSpeed = base;
 
-    // Silence gate (hybrid-only)
-    const silenceHold = state.mode === 'hybrid' && state.silence.isSilent;
+    const isClamped = clampActive();
+    const silenceHold = mode === 'hybrid' && state.silence.isSilent;
 
     // PLL adjustment (hybrid-only)
-    if (state.mode === 'hybrid' && !silenceHold) {
-      speed += state.pll.smoothedErr * state.pll.gain;
+    if (mode === 'hybrid' && !silenceHold) {
+      effectiveSpeed += state.pll.smoothedErr * state.pll.gain;
     }
 
-    if (speed < 0 || !Number.isFinite(speed)) speed = 0;
-    state.effectiveSpeedPxPerSec = speed;
+    // Silence gate for hybrid
+    if (mode === 'hybrid' && silenceHold) {
+      effectiveSpeed = 0;
+    }
+
+    // Never scroll when clamped
+    if (isClamped) {
+      effectiveSpeed = 0;
+    }
+
+    if (effectiveSpeed < 0 || !Number.isFinite(effectiveSpeed)) effectiveSpeed = 0;
+    state.effectiveSpeedPxPerSec = effectiveSpeed;
 
     // Apply manual nudge once per tick if present
-    let dy = state.effectiveSpeedPxPerSec * dtSec;
+    let dy = effectiveSpeed * dtSec;
     if (state.manualNudgePx) {
       dy += state.manualNudgePx;
       state.manualNudgePx = 0;
     }
 
-    if (Number.isFinite(dy) && dy !== 0 && !clampActive()) {
+    if (Number.isFinite(dy) && dy !== 0 && !isClamped) {
       scrollByPx(dy);
     }
 
-    // Debug logging removed to avoid console spam.
+    if (debugEnabled && (++debugCounter % 30 === 0)) {
+      try {
+        console.log('[scroll-brain]', {
+          mode,
+          target: base,
+          effective: effectiveSpeed,
+          clamp: isClamped,
+          silent: state.silence.isSilent,
+          pllErr: state.pll?.smoothedErr ?? 0,
+        });
+      } catch {
+        // ignore
+      }
+    }
 
     state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
   };
