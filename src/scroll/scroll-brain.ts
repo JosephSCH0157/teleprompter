@@ -1,207 +1,261 @@
-// === Scroll Controller Core ===
-import { SpeedGovernor, adaptSample, type AdaptSample } from '../controllers/adaptiveSpeed';
-import { createScrollerHelpers } from './scroll-helpers';
+/**
+ * scroll-brain.ts — "Queen" of the scroll hive
+ *
+ * Responsibilities:
+ * - Hold the active scroll mode in memory and provide a tiny API around it.
+ * - Coordinate which scroll engines are allowed to run in each mode.
+ * - Start/stop the continuous scroll tick loop when appropriate.
+ * - Expose a small, engine-focused surface to orchestrators (mode-router, ASR bridge, etc.).
+ *
+ * Canonical scroll modes (from the app store `scrollMode` key):
+ *   - "timed"    : fixed px/sec autoscroll, no speech following.
+ *   - "wpm"      : autoscroll where px/sec is derived from target WPM + typography metrics.
+ *   - "hybrid"   : timed + ASR + PLL catchup; auto scrolls and adjusts to match speech.
+ *   - "asr"      : ASR-only scroll; script moves only when speech is recognized.
+ *   - "step"     : pedal/arrow step scroll only; no continuous movement.
+ *   - "rehearsal": practice bubble; no engines move the script, clamp blocks programmatic scroll.
+ *
+ * "Manual" is NOT a mode string. Manual scrolling = no engines running and not in rehearsal;
+ * the user just wheels/drags the script themselves.
+ *
+ * Mode → engine matrix (scroll-brain is the single place that enforces this):
+ *
+ *   mode       timed engine   WPM adapter   ASR scroll   PLL/catchup         step engine         rehearsal clamp
+ *   ----------------------------------------------------------------------------------------------------------------
+ *   "timed"    ON             OFF           OFF          minimal (end-only)  allowed             OFF
+ *   "wpm"      ON             ON            OFF          minimal (end-only)  allowed             OFF
+ *   "asr"      OFF            OFF           ON           visual smoothing    allowed (backup)    OFF
+ *   "hybrid"   ON             optional      ON           full (ASR-driven)   allowed (secondary) OFF
+ *   "step"     OFF            OFF           OFF          OFF                 ON (primary)        OFF
+ *   "rehearsal"OFF            OFF           OFF          OFF                 blocked by guards   ON (clamp/guards)
+ *
+ * Invariants:
+ * - scroll-brain never touches the DOM directly (no document.getElementById, no HTML event listeners).
+ * - scroll-brain never reads/writes localStorage or any persistence keys.
+ * - scroll-brain does NOT know about recording, HUD, or OBS; it only coordinates scroll engines.
+ * - scroll-brain does not directly call window.scrollBy / scrollTop; engines and scroll-helpers own viewport changes.
+ * - scroll-brain does not call store.set('scrollMode', ...); mode is driven by the app store and reflected here.
+ *
+ * Expected integration:
+ * - A higher-level mode-router subscribes to store.scrollMode and calls scroll-brain.setMode(mode).
+ * - Engines (timed, wpm adapter, ASR scroll, PLL, step, rehearsal clamp) are injected or referenced here
+ *   and toggled ON/OFF according to the matrix above.
+ * - A scheduler/RAF utility is used to tick continuous engines in timed/wpm/hybrid modes while active.
+ *
+ * If you add a new scroll mode or engine, update this header and the matrix first,
+ * then extend the implementation to keep the Queen as the single source of truth for scroll behavior.
+ */
 
-export type ScrollMode = 'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal';
+// Include legacy strings ('auto'/'off'/'manual') for compatibility with existing callers.
+export type ScrollMode =
+  | 'timed'
+  | 'wpm'
+  | 'hybrid'
+  | 'asr'
+  | 'step'
+  | 'rehearsal'
+  | 'auto'
+  | 'off'
+  | 'manual';
 
-let scrollMode: ScrollMode = 'manual';
-let scrollTimer: number | null = null;
-
-// Previous constant per-frame speed (px/frame @ ~60fps)
-const CONSTANT_SPEED = 2.4;
-// Interpret that as a baseline px/sec (~144px/s)
-const DEFAULT_PX_PER_SEC = CONSTANT_SPEED * 60;
-
-const governor = new SpeedGovernor({
-  basePxPerSec: DEFAULT_PX_PER_SEC,
-  minPxPerSec: 20,
-  maxPxPerSec: 3000,
-  asrGain: 1,
-  smoothing: 0.5,
-});
-
-let governedSpeedPxPerSec = governor.getSpeedPxPerSec();
-const silenceGate = {
-  active: true,
-  since: nowTs(),
+export type AdaptSample = {
+  errPx: number;
+  conf?: number;
+  ts?: number;
 };
 
-function isHybridMode(): boolean {
-  return scrollMode === 'hybrid';
-}
-
-function effectiveSpeedPxPerSec(): number {
-  if (silenceGate.active && isHybridMode()) {
-    return 0;
-  }
-  return governedSpeedPxPerSec;
-}
-
-function syncEngineSpeed() {
-  governedSpeedPxPerSec = governor.getSpeedPxPerSec();
-}
-
-let frameCount = 0;
-
-// Scroller helpers ensure we go through the scheduler + single-writer pipeline
-const scroller = createScrollerHelpers(
-  () => document.getElementById('viewer') as HTMLElement | null
-);
-
-function nowTs(): number {
-  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-    return performance.now();
-  }
-  return Date.now();
-}
-
-// Optional HUD logging
-const log = (msg: string) => {
-  try {
-    (window as any).HUD?.log?.('scroll-brain', msg);
-  } catch {
-    // silent
-  }
-};
-
-let lastFrameTs = nowTs();
-
-// --- Mode control ---
-function setScrollMode(mode: ScrollMode) {
-  if (scrollMode === mode) return;
-  scrollMode = mode;
-  log(`Scroll mode → ${mode}`);
-
-  if (mode === 'manual' || mode === 'rehearsal' || mode === 'step') {
-    stopScrollEngine();
-  } else {
-    startScrollEngine();
-  }
-}
-
-// --- Loop control ---
-function startScrollEngine() {
-  if (scrollTimer !== null) return;
-  lastFrameTs = nowTs();
-  scrollTimer = requestAnimationFrame(scrollTick);
-}
-
-function stopScrollEngine() {
-  if (scrollTimer === null) return;
-  cancelAnimationFrame(scrollTimer);
-  scrollTimer = null;
-}
-
-function scrollBySpeedPxPerSec(pxPerSec: number, dtSec: number) {
-  if (!Number.isFinite(pxPerSec) || dtSec <= 0) return;
-  const dy = pxPerSec * dtSec;
-  try {
-    scroller.scrollByPx(dy);
-  } catch {
-    try {
-      window.scrollBy(0, dy);
-    } catch {}
-  }
-}
-
-function scrollTick(now?: number) {
-  const ts = typeof now === 'number' ? now : nowTs();
-  const dt = Math.max(0.001, (ts - lastFrameTs) / 1000);
-  lastFrameTs = ts;
-
-  frameCount++;
-
-  if (scrollMode === 'auto' || scrollMode === 'hybrid') {
-    scrollBySpeedPxPerSec(effectiveSpeedPxPerSec(), dt);
-  }
-
-  if (frameCount % 10 === 0) {
-    try {
-      const y = typeof window.scrollY === 'number'
-        ? window.scrollY
-        : (document.documentElement?.scrollTop || 0);
-      log(`scroll[${scrollMode}]: y=${y.toFixed(1)}`);
-    } catch {}
-  }
-
-  if (scrollMode === 'auto' || scrollMode === 'hybrid') {
-    scrollTimer = requestAnimationFrame(scrollTick);
-  } else {
-    scrollTimer = null;
-  }
-}
-
-// --- Governor hooks ---
-function setBaseSpeedPx(pxPerSec: number) {
-  const numeric = Number(pxPerSec);
-  if (!Number.isFinite(numeric) || numeric <= 0) return;
-  governor.setBaseSpeedPx(numeric);
-  syncEngineSpeed();
-}
-
-function onManualSpeedAdjust(deltaPxPerSec: number) {
-  const delta = Number(deltaPxPerSec);
-  if (!Number.isFinite(delta) || delta === 0) return;
-  governor.nudge(delta);
-  syncEngineSpeed();
-}
-
-function onSpeechSample(sample: AdaptSample) {
-  if (!sample) return;
-  const safe = {
-    errPx: Number(sample.errPx) || 0,
-    conf: typeof sample.conf === 'number' ? sample.conf : 1,
-  } satisfies AdaptSample;
-  try {
-    (window as any).__tpAsrDebug = {
-      lastErrPx: safe.errPx,
-      lastConf: safe.conf,
-      lastSpeedPx: governor.getSpeedPxPerSec(),
-      silenceHold: silenceGate.active,
-      holdSince: silenceGate.since,
-    };
-  } catch {}
-  const { speedPxPerSec } = adaptSample(governor, safe);
-  governedSpeedPxPerSec = speedPxPerSec;
-}
-
-function reportAsrSilence(detail: { silent: boolean; ts?: number }) {
-  const next = !!(detail?.silent);
-  if (silenceGate.active === next) return;
-  silenceGate.active = next;
-  const ts = typeof detail?.ts === 'number' ? detail.ts : nowTs();
-  silenceGate.since = ts;
-  log(`ASR silence → ${next ? 'hold' : 'resume'}`);
-  try {
-    const prev = (window as any).__tpAsrDebug || {};
-    (window as any).__tpAsrDebug = {
-      ...prev,
-      silenceHold: silenceGate.active,
-      holdSince: silenceGate.since,
-    };
-  } catch {}
-}
-
-// --- Public API ---
 export interface ScrollBrain {
-  setMode: (_mode: ScrollMode) => void;
-  getMode: () => ScrollMode;
-  setBaseSpeedPx: (_pxPerSec: number) => void;
-  onManualSpeedAdjust: (_deltaPxPerSec: number) => void;
-  onSpeechSample: (_sample: AdaptSample) => void;
-  reportAsrSilence: (_detail: { silent: boolean; ts?: number }) => void;
-  getCurrentSpeedPx: () => number;
+  // Mode
+  setMode(mode: ScrollMode): void;
+  getMode(): ScrollMode;
+
+  // Engine lifecycle
+  startEngine(): void;
+  stopEngine(): void;
+
+  // ASR inputs
+  reportAsrSample(sample: AdaptSample): void;
+  reportAsrSilence(isSilent: boolean, ts: number): void;
+
+  // Script alignment
+  centerOnLine(lineIndex: number): void;
+
+  // Micro adjustments
+  nudge(deltaPx: number): void;
+
+  // Legacy compatibility shims (no-op in Phase 1)
+  setBaseSpeedPx?(pxPerSec: number): void;
+  onManualSpeedAdjust?(deltaPxPerSec: number): void;
+  getCurrentSpeedPx?(): number;
 }
+
+interface InternalState {
+  mode: ScrollMode;
+
+  // tick loop
+  ticking: boolean;
+  rafId: number | null;
+  lastTickTs: number | null;
+
+  // governor / PLL (hybrid)
+  pll: {
+    errPx: number;
+    lastErrTs: number;
+    smoothedErr: number;
+  };
+
+  // ASR silence gate
+  silence: {
+    isSilent: boolean;
+    lastChangeTs: number;
+  };
+
+  // Speed state
+  targetSpeedPxPerSec: number;
+  effectiveSpeedPxPerSec: number;
+
+  // Metrics
+  pxPerLine: number;
+  pxPerWord: number;
+
+  // Nudges / centering
+  manualNudgePx: number;
+  lastCenteredLine: number | null;
+}
+
+const now = (): number =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
 
 export function createScrollBrain(): ScrollBrain {
+  const state: InternalState = {
+    mode: 'rehearsal',
+    ticking: false,
+    rafId: null,
+    lastTickTs: null,
+    pll: {
+      errPx: 0,
+      lastErrTs: 0,
+      smoothedErr: 0,
+    },
+    silence: {
+      isSilent: false,
+      lastChangeTs: now(),
+    },
+    targetSpeedPxPerSec: 0,
+    effectiveSpeedPxPerSec: 0,
+    pxPerLine: 0,
+    pxPerWord: 0,
+    manualNudgePx: 0,
+    lastCenteredLine: null,
+  };
+
+  const resetForMode = (mode: ScrollMode): void => {
+    // Reset mode-specific state; engines remain disconnected in Phase 1.
+    state.pll = { errPx: 0, lastErrTs: now(), smoothedErr: 0 };
+    state.silence = { isSilent: false, lastChangeTs: now() };
+    state.targetSpeedPxPerSec = 0;
+    state.effectiveSpeedPxPerSec = 0;
+    state.manualNudgePx = 0;
+    state.lastCenteredLine = null;
+    state.mode = mode;
+  };
+
+  const tick = (ts: number): void => {
+    if (!state.ticking) {
+      state.rafId = null;
+      return;
+    }
+    const last = state.lastTickTs ?? ts;
+    const dtMs = ts - last;
+    state.lastTickTs = ts;
+
+    // Placeholder: compute effective speed from target/PLL/silence.
+    // No scrolling occurs in Phase 1.
+    const dtSec = dtMs > 0 ? dtMs / 1000 : 0;
+    const _unused = dtSec; // keep lint happy for now
+    // Future: state.effectiveSpeedPxPerSec = derive(...);
+
+    state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
+  };
+
+  const startEngine = (): void => {
+    if (state.ticking) return;
+    state.ticking = true;
+    state.lastTickTs = null;
+    state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
+  };
+
+  const stopEngine = (): void => {
+    state.ticking = false;
+    if (state.rafId && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(state.rafId);
+    }
+    state.rafId = null;
+    state.lastTickTs = null;
+  };
+
+  const setMode = (mode: ScrollMode): void => {
+    if (state.mode === mode) return;
+    stopEngine();
+    resetForMode(mode);
+    // Leave engine stopped; orchestrators decide when to start based on mode.
+  };
+
+  const getMode = (): ScrollMode => state.mode;
+
+  const reportAsrSample = (sample: AdaptSample): void => {
+    if (!sample || typeof sample.errPx !== 'number') return;
+    const ts = typeof sample.ts === 'number' ? sample.ts : now();
+    state.pll.errPx = sample.errPx;
+    state.pll.lastErrTs = ts;
+    // Simple smoothing placeholder
+    state.pll.smoothedErr = state.pll.smoothedErr * 0.8 + sample.errPx * 0.2;
+  };
+
+  const reportAsrSilence = (isSilent: boolean, ts: number): void => {
+    state.silence.isSilent = !!isSilent;
+    state.silence.lastChangeTs = typeof ts === 'number' ? ts : now();
+  };
+
+  const centerOnLine = (lineIndex: number): void => {
+    state.lastCenteredLine = Number.isFinite(lineIndex) ? Math.max(0, Math.floor(lineIndex)) : null;
+    // No viewport movement in Phase 1.
+  };
+
+  const nudge = (deltaPx: number): void => {
+    const delta = Number(deltaPx);
+    if (!Number.isFinite(delta) || delta === 0) return;
+    state.manualNudgePx += delta;
+    // Nudge is stored; no scrolling in Phase 1.
+  };
+
   return {
-    setMode: setScrollMode,
-    getMode: () => scrollMode,
-    setBaseSpeedPx,
-    onManualSpeedAdjust,
-    onSpeechSample,
+    setMode,
+    getMode,
+    startEngine,
+    stopEngine,
+    reportAsrSample,
     reportAsrSilence,
-    getCurrentSpeedPx: () => effectiveSpeedPxPerSec(),
+    centerOnLine,
+    nudge,
+    // Legacy shims
+    setBaseSpeedPx: (px) => {
+      const val = Number(px);
+      if (Number.isFinite(val)) {
+        state.targetSpeedPxPerSec = val;
+        state.effectiveSpeedPxPerSec = val;
+      }
+    },
+    onManualSpeedAdjust: (delta) => {
+      const d = Number(delta);
+      if (Number.isFinite(d)) {
+        state.targetSpeedPxPerSec += d;
+      }
+    },
+    getCurrentSpeedPx: () => state.effectiveSpeedPxPerSec,
   };
 }
 
+export default createScrollBrain;
