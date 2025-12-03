@@ -428,6 +428,7 @@ import './ui/camera-drag'; // installs camera drag + persistence
 import './ui/upload'; // installs script upload wiring
 import './ui/speakers-panel'; // toggles Speakers panel visibility
 import './utils/safe-dom'; // installs window.safeDOM for legacy callers
+import './media/mic'; // exposes window.__tpMic for mic controls + dB meter
 import './ui/step-visibility'; // hides step-only controls unless scrollMode === 'step'
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';

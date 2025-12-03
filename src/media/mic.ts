@@ -1,6 +1,6 @@
 // Mic + dB meter helpers extracted from monolith. Exposes window.__tpMic
 export interface MicAPI {
-  requestMic(): Promise<MediaStream>;
+  requestMic(deviceId?: string): Promise<MediaStream>;
   releaseMic(): void;
   populateDevices(): Promise<void> | void;
   startDbMeter(stream: MediaStream): void;
@@ -131,10 +131,10 @@ function startDbMeter(stream: MediaStream): void {
   }
 }
 
-async function requestMic(): Promise<MediaStream> {
+async function requestMic(preferredId?: string): Promise<MediaStream> {
   try {
     const sel = document.getElementById('settingsMicSel') as HTMLSelectElement | null;
-    const chosenId = sel?.value || undefined;
+    const chosenId = preferredId || sel?.value || undefined;
     const constraints: MediaStreamConstraints = { audio: { deviceId: chosenId ? { exact: chosenId } : undefined } };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     audioStream = stream;
