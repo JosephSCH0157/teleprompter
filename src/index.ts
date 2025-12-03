@@ -501,6 +501,8 @@ try {
 		// 2) Legacy/test auto-scroll wiring (temporary until router owns it fully)
 		try {
 			const viewer = document.getElementById('viewer') as HTMLElement | null;
+			// Legacy auto-scroll wiring retained only if both controls are present.
+			// New scroll/router owns mode + speed; legacy UI is hidden outside timed mode.
 			const autoToggle = document.getElementById('autoScrollToggle') as HTMLButtonElement | null
 				|| document.getElementById('autoToggle') as HTMLButtonElement | null;
 			const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
