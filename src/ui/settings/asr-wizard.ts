@@ -1,4 +1,4 @@
-// src/ui/settings/asr-wizard.ts
+ï»¿// src/ui/settings/asr-wizard.ts
 import { runCalibration } from '../../asr/calibration';
 import { getAsrState, setActiveProfile, upsertProfile } from '../../asr/store';
 import type { AsrProfile as SchemaAsrProfile } from '../../asr/schema';
@@ -207,7 +207,7 @@ export async function startAsrWizard(): Promise<void> {
   try {
     if (calibrating) return;
     calibrating = true;
-    setCalStatus("Calibrating… Step 1: stay quiet, then speak in your normal voice.");
+    setCalStatus("Calibratingï¿½ Step 1: stay quiet, then speak in your normal voice.");
     const startBtn = $('asrStartBtn') as HTMLButtonElement | null;
     if (startBtn) startBtn.disabled = true;
 
@@ -334,3 +334,10 @@ export async function initAsrSettingsUI(): Promise<void> {
   }
 }
 
+
+// Make the wizard available to global callers (mic pill / legacy hooks).
+try {
+  (window as any).startAsrWizard = startAsrWizard;
+} catch {
+  // ignore - e.g., non-browser env
+}
