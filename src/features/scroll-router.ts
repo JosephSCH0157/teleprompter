@@ -632,18 +632,18 @@ function installScrollRouter(opts) {
     el.setAttribute("data-state", state3);
     if (detail) el.title = detail;
   }
-  const AUTO_MIN = 5;
-  const AUTO_MAX = 200;
+  const AUTO_MIN = 1;
+  const AUTO_MAX = 60;
   const AUTO_STEP_FINE = 1;
   const AUTO_STEP_COARSE = 5;
   const getStoredSpeed = () => {
     try {
       const raw = localStorage.getItem("tp_auto_speed");
       const v = raw != null ? parseFloat(raw) : NaN;
-      if (!Number.isFinite(v)) return 60;
+      if (!Number.isFinite(v)) return 21;
       return Math.min(AUTO_MAX, Math.max(AUTO_MIN, v));
     } catch {
-      return 60;
+      return 21;
     }
   };
   const getCurrentSpeed = () => {
