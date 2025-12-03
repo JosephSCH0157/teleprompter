@@ -5,6 +5,7 @@ import { createScrollBrain } from './scroll-brain';
 import { createModeRouter, type ModeRouter } from './mode-router';
 import createTimedEngine from './autoscroll';
 import createWpmEngine from './wpm';
+import createStepScrollEngine from './step-scroll';
 
 type Store = {
   get?: (_k: string) => any;
@@ -88,11 +89,13 @@ export function initScrollRouter(): void {
   brainInstance = createScrollBrain();
   const timed = createTimedEngine(brainInstance);
   const wpm = createWpmEngine(brainInstance);
+  const step = createStepScrollEngine();
   modeRouterInstance = createModeRouter({
     brain: brainInstance,
     store,
     autoscroll: timed,
     wpm,
+    step,
     legacyGuard: () => { /* noop */ },
   });
 
