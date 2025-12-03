@@ -87,6 +87,46 @@ function formatModeLabel(mode: ScrollMode): string {
   }
 }
 
+function setControlVisibility(mode: ScrollMode): void {
+  try {
+    const autoRow = document.getElementById('autoSpeed')?.closest('.row') as HTMLElement | null;
+    const wpmRow = document.getElementById('wpmRow') as HTMLElement | null;
+
+    const show = (el: HTMLElement | null) => {
+      if (!el) return;
+      el.classList.remove('visually-hidden');
+      el.removeAttribute('aria-hidden');
+    };
+    const hide = (el: HTMLElement | null) => {
+      if (!el) return;
+      el.classList.add('visually-hidden');
+      el.setAttribute('aria-hidden', 'true');
+    };
+
+    // Default: hide both, then enable what we need per mode
+    hide(autoRow);
+    hide(wpmRow);
+
+    switch (mode) {
+      case 'timed':
+        show(autoRow);
+        break;
+      case 'wpm':
+      case 'hybrid':
+        show(wpmRow);
+        break;
+      case 'asr':
+      case 'step':
+      case 'rehearsal':
+      default:
+        // keep both hidden
+        break;
+    }
+  } catch {
+    // best-effort only
+  }
+}
+
 function updateUi(select: HTMLSelectElement | null, status: HTMLElement | null, mode: ScrollMode) {
   try {
     if (select) select.value = mode;
@@ -94,6 +134,7 @@ function updateUi(select: HTMLSelectElement | null, status: HTMLElement | null, 
   try {
     if (status) status.textContent = `Mode: ${formatModeLabel(mode)}`;
   } catch {}
+  setControlVisibility(mode);
 }
 
 let modeRouterInstance: ModeRouter | null = null;
