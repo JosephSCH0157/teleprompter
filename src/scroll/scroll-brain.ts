@@ -58,6 +58,8 @@ export type ScrollMode =
   | 'off'
   | 'manual';
 
+import { scrollByPx } from './scroll-helpers';
+
 export type AdaptSample = {
   errPx: number;
   conf?: number;
@@ -72,6 +74,9 @@ export interface ScrollBrain {
   // Engine lifecycle
   startEngine(): void;
   stopEngine(): void;
+
+  // Speed target (continuous engines like timed/WPM/hybrid)
+  setTargetSpeed(pxPerSec: number): void;
 
   // ASR inputs
   reportAsrSample(sample: AdaptSample): void;
@@ -174,8 +179,23 @@ export function createScrollBrain(): ScrollBrain {
     // Placeholder: compute effective speed from target/PLL/silence.
     // No scrolling occurs in Phase 1.
     const dtSec = dtMs > 0 ? dtMs / 1000 : 0;
-    const _unused = dtSec; // keep lint happy for now
-    // Future: state.effectiveSpeedPxPerSec = derive(...);
+
+    // Compute effective speed (silence gate for ASR/hybrid)
+    const baseSpeed = state.targetSpeedPxPerSec;
+    const silenceHold =
+      (state.mode === 'asr' || state.mode === 'hybrid') && state.silence.isSilent;
+    state.effectiveSpeedPxPerSec = silenceHold ? 0 : baseSpeed;
+
+    // Apply manual nudge once per tick if present
+    let dy = state.effectiveSpeedPxPerSec * dtSec;
+    if (state.manualNudgePx) {
+      dy += state.manualNudgePx;
+      state.manualNudgePx = 0;
+    }
+
+    if (Number.isFinite(dy) && dy !== 0) {
+      scrollByPx(dy);
+    }
 
     state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
   };
@@ -204,6 +224,11 @@ export function createScrollBrain(): ScrollBrain {
   };
 
   const getMode = (): ScrollMode => state.mode;
+
+  const setTargetSpeed = (pxPerSec: number): void => {
+    const v = Number(pxPerSec);
+    state.targetSpeedPxPerSec = Number.isFinite(v) && v > 0 ? v : 0;
+  };
 
   const reportAsrSample = (sample: AdaptSample): void => {
     if (!sample || typeof sample.errPx !== 'number') return;
@@ -236,6 +261,7 @@ export function createScrollBrain(): ScrollBrain {
     getMode,
     startEngine,
     stopEngine,
+    setTargetSpeed,
     reportAsrSample,
     reportAsrSilence,
     centerOnLine,

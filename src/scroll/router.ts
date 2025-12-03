@@ -3,6 +3,7 @@
 import type { ScrollMode, ScrollBrain } from './scroll-brain';
 import { createScrollBrain } from './scroll-brain';
 import { createModeRouter, type ModeRouter } from './mode-router';
+import createTimedEngine from './autoscroll';
 
 type Store = {
   get?: (_k: string) => any;
@@ -84,7 +85,13 @@ export function initScrollRouter(): void {
 
   const store = getStore();
   brainInstance = createScrollBrain();
-  modeRouterInstance = createModeRouter({ brain: brainInstance, store, legacyGuard: () => { /* noop */ } });
+  const timed = createTimedEngine(brainInstance);
+  modeRouterInstance = createModeRouter({
+    brain: brainInstance,
+    store,
+    autoscroll: timed,
+    legacyGuard: () => { /* noop */ },
+  });
 
   const select = document.getElementById('scrollMode') as HTMLSelectElement | null;
   const status = document.getElementById('scrollModeStatus') as HTMLElement | null;

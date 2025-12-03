@@ -8,7 +8,7 @@ type Store = { get?: (_k: string) => any; subscribe?: (_k: string, _fn: (v: any)
 export type ModeRouterOptions = {
   brain: ScrollBrain;
   store?: Store | null;
-  autoscroll?: ToggleEngine;
+  autoscroll?: { enable: () => void; disable: () => void };
   wpm?: ToggleEngine;
   asr?: ToggleEngine;
   step?: StepEngine;
