@@ -106,6 +106,19 @@ export function initAutoscrollFeature() {
     if (v !== viewer) { viewer = v; if (enabled) loop(); }
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Reflect scroll running state in the toggle label
+  try {
+    window.addEventListener('tp:scroll:status', (ev: Event) => {
+      const detail = (ev as CustomEvent<{ running?: boolean }>).detail || {};
+      if (typeof detail.running === 'boolean') {
+        enabled = detail.running;
+        applyLabel();
+      }
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 export function toggle() {
