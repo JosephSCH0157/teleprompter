@@ -1,117 +1,107 @@
-import type { ScrollBrain, ScrollMode } from './scroll-brain';
+/**
+ * Mode Router — FINAL PHASE 4.6 Integration
+ *
+ * Drives all six engines:
+ *  - timedEngine
+ *  - wpmEngine
+ *  - asrAlignmentEngine
+ *  - stepScrollEngine
+ *  - rehearsalEngine (clamp)
+ *  - scrollBrain (master tick controller)
+ *
+ * Mode matrix is STRICTLY defined here.
+ *
+ * Modes:
+ *  - 'timed'
+ *  - 'wpm'
+ *  - 'asr'
+ *  - 'hybrid'
+ *  - 'step'
+ *  - 'rehearsal'
+ *
+ * No DOM, no UI, no persistence.
+ */
 
-type ToggleEngine = { enable: () => void; disable: () => void };
-type StepEngine = { enablePrimary: () => void; enableHelper: () => void; disable: () => void };
-type ClampEngine = { enableClamp: () => void; disableClamp: () => void };
-type Store = { get?: (_k: string) => any; subscribe?: (_k: string, _fn: (v: any) => void) => () => void };
+export interface ModeRouterDeps {
+  scrollBrain: any;
+  timedEngine: any;
+  wpmEngine: any;
+  asrEngine: any;
+  stepEngine: any;
+  rehearsalEngine: any;
+}
 
-export type ModeRouterOptions = {
-  brain: ScrollBrain;
-  store?: Store | null;
-  autoscroll?: { enable: () => void; disable: () => void };
-  wpm?: ToggleEngine;
-  asr?: ToggleEngine;
-  step?: StepEngine;
-  rehearsal?: ClampEngine;
-  legacyGuard?: (_on: boolean) => void;
-  onModeChange?: (_mode: ScrollMode) => void;
-  log?: (_msg: string) => void;
-};
-
-export type ModeRouter = {
-  setMode: (_mode: ScrollMode) => void;
-  dispose: () => void;
-};
-
-const normalizeMode = (mode: ScrollMode): ScrollMode => {
-  // Accept legacy aliases; map to the canonical matrix modes.
-  if (mode === 'auto') return 'timed';
-  if (mode === 'manual' || mode === 'off') return 'rehearsal';
-  return mode;
-};
-
-export function createModeRouter(opts: ModeRouterOptions): ModeRouter {
+export function createModeRouter(deps: ModeRouterDeps) {
   const {
-    brain,
-    store = null,
-    autoscroll,
-    wpm,
-    asr,
-    step,
-    rehearsal,
-    legacyGuard,
-    onModeChange,
-    log = () => {},
-  } = opts;
+    scrollBrain,
+    timedEngine,
+    wpmEngine,
+    asrEngine,
+    stepEngine,
+    rehearsalEngine,
+  } = deps;
 
-  const disableAll = () => {
-    try { autoscroll?.disable(); } catch {}
-    try { wpm?.disable(); } catch {}
-    try { asr?.disable(); } catch {}
-    try { step?.disable(); } catch {}
-    try { rehearsal?.disableClamp(); } catch {}
-    try { brain.stopEngine(); } catch {}
-  };
+  let currentMode: string = 'manual';
 
-  const applyMode = (nextMode: ScrollMode) => {
-    const mode = normalizeMode(nextMode);
-    disableAll();
-    try { legacyGuard?.(true); } catch {}
-    try { brain.setMode(mode); } catch {}
+  function disableAllEngines() {
+    try { timedEngine.disable(); } catch {}
+    try { wpmEngine.disable(); } catch {}
+    try { asrEngine.disable(); } catch {}
+    try { stepEngine.disable(); } catch {}
+    try { rehearsalEngine.disableClamp(); } catch {}
+    try { scrollBrain.stopEngine(); } catch {}
+  }
+
+  function applyMode(mode: string) {
+    if (!mode) return;
+    if (mode === currentMode) return;
+
+    currentMode = mode;
+    disableAllEngines();
 
     switch (mode) {
       case 'timed':
-        try { autoscroll?.enable(); } catch {}
-        try { brain.startEngine(); } catch {}
-        try { step?.enableHelper(); } catch {}
+        timedEngine.enable();
+        stepEngine.enableHelperMode();
+        scrollBrain.startEngine();
         break;
+
       case 'wpm':
-        try { wpm?.enable(); } catch {}
-        try { brain.startEngine(); } catch {}
-        try { step?.enableHelper(); } catch {}
+        wpmEngine.enable();
+        stepEngine.enableHelperMode();
+        scrollBrain.startEngine();
         break;
+
       case 'asr':
-        try { asr?.enable(); } catch {}
-        try { step?.enableHelper(); } catch {}
+        asrEngine.enable();
+        stepEngine.enableHelperMode();
+        scrollBrain.startEngine();
         break;
+
       case 'hybrid':
-        try { wpm?.enable(); } catch {}
-        try { asr?.enable(); } catch {}
-        try { brain.startEngine(); } catch {}
-        try { step?.enableHelper(); } catch {}
+        wpmEngine.enable();
+        asrEngine.enable();
+        stepEngine.enableHelperMode();
+        scrollBrain.startEngine();
         break;
+
       case 'step':
-        try { step?.enablePrimaryMode?.() ?? step?.enablePrimary?.(); } catch {}
+        stepEngine.enablePrimaryMode();
         break;
+
       case 'rehearsal':
-        try { rehearsal?.enableClamp(); } catch {}
+        rehearsalEngine.enableClamp();
         break;
+
       default:
-        // Unknown -> safest: everything off + clamp if present
-        try { rehearsal?.enableClamp(); } catch {}
+        // unknown mode => keep everything disabled
         break;
     }
-
-    try { onModeChange?.(mode); } catch {}
-    try { log(`mode-router → ${mode}`); } catch {}
-  };
-
-  let unsubscribe: (() => void) | null = null;
-  if (store?.subscribe) {
-    try {
-      unsubscribe = store.subscribe('scrollMode', (v: any) => {
-        const m = typeof v === 'string' ? (v as ScrollMode) : 'rehearsal';
-        applyMode(m);
-      });
-    } catch {}
   }
 
   return {
-    setMode: applyMode,
-    dispose: () => {
-      try { unsubscribe?.(); } catch {}
-      disableAll();
-    },
+    applyMode,
+    getCurrentMode: () => currentMode,
   };
 }
 

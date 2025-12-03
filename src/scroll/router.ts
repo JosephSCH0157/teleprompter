@@ -7,6 +7,7 @@ import createTimedEngine from './autoscroll';
 import createWpmEngine from './wpm';
 import createStepScrollEngine from './step-scroll';
 import createRehearsalEngine from './rehearsal';
+import createAsrAlignmentEngine from './asr-mode';
 
 type Store = {
   get?: (_k: string) => any;
@@ -88,18 +89,19 @@ export function initScrollRouter(): void {
 
   const store = getStore();
   brainInstance = createScrollBrain();
-  const timed = createTimedEngine(brainInstance);
-  const wpm = createWpmEngine(brainInstance);
-  const step = createStepScrollEngine();
-  const rehearsal = createRehearsalEngine();
+  const timedEngine = createTimedEngine(brainInstance);
+  const wpmEngine = createWpmEngine(brainInstance);
+  const stepEngine = createStepScrollEngine();
+  const rehearsalEngine = createRehearsalEngine();
+  const asrEngine = createAsrAlignmentEngine(brainInstance, () => []);
+
   modeRouterInstance = createModeRouter({
-    brain: brainInstance,
-    store,
-    autoscroll: timed,
-    wpm,
-    step,
-    rehearsal,
-    legacyGuard: () => { /* noop */ },
+    scrollBrain: brainInstance,
+    timedEngine,
+    wpmEngine,
+    asrEngine,
+    stepEngine,
+    rehearsalEngine,
   });
 
   const select = document.getElementById('scrollMode') as HTMLSelectElement | null;
@@ -111,7 +113,7 @@ export function initScrollRouter(): void {
     try { store?.set?.(MODE_KEY, mode); } catch {}
     writePrefs(mode);
     updateUi(select, status, mode);
-    modeRouterInstance?.setMode(mode);
+    modeRouterInstance?.applyMode(mode);
   };
 
   // UI -> store
