@@ -104,6 +104,8 @@ try {
 } catch {}
 // Load HUD script on demand in dev/debug contexts
 loadHudScriptIfNeeded();
+// Fallback legacy HUD hotkey installer (uses debug-tools.js)
+try { maybeInstallLegacyHud(); } catch {}
 
 try {
 	initRecorderBackends();
