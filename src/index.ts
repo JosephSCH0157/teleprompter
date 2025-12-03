@@ -100,6 +100,12 @@ try {
 // sets up the same early hooks when the module entry is used.
 bootstrap().catch(() => {});
 installHudIfAvailable();
+// Retry once after a short delay in case debug-tools.js loads late
+try {
+	setTimeout(() => { try { installHudIfAvailable(); } catch {} }, 1500);
+} catch {}
+// Load HUD script on demand in dev/debug contexts
+loadHudScriptIfNeeded();
 
 try {
 	initRecorderBackends();
@@ -457,6 +463,38 @@ function installHudIfAvailable(): void {
 		}
 	} catch {
 		// HUD is optional; never break boot
+	}
+}
+
+function wantsHud(): boolean {
+	try {
+		const qs = new URLSearchParams(String(location.search || ''));
+		if (qs.has('hud') || qs.has('scrollDebug') || qs.has('dev')) return true;
+		const w = window as any;
+		if (w.__tpScrollDebug === true) return true;
+		if (localStorage.getItem('tp_dev_mode') === '1') return true;
+	} catch {
+		// ignore
+	}
+	return false;
+}
+
+function loadHudScriptIfNeeded(): void {
+	try {
+		if (typeof (window as any).__tpInstallHUD === 'function') return;
+		if (document.querySelector('script[data-hud-loader]')) return;
+		if (!wantsHud()) return;
+		const s = document.createElement('script');
+		s.src = '/debug-tools.js';
+		s.async = true;
+		s.defer = true;
+		s.setAttribute('data-hud-loader', '1');
+		s.onload = () => {
+			try { installHudIfAvailable(); } catch {}
+		};
+		document.head.appendChild(s);
+	} catch {
+		// optional; ignore failures
 	}
 }
 
