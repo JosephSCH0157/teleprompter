@@ -557,8 +557,26 @@ export function installSpeech(): void {
       async function startSpeech() {
         if (btn) btn.disabled = true;
         try {
+          const mode = getScrollMode();
+          const wantsSpeech = mode === 'hybrid' || mode === 'asr';
+          const S = window.__tpStore;
+          const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
+
+          if (!wantsSpeech) {
+            // Non-ASR modes: just run pre-roll and start auto-scroll
+            await beginCountdownThen(sec, async () => {
+              try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+              try {
+                window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
+                  detail: { source: 'auto-only', preroll: sec }
+                }));
+              } catch {}
+            });
+            return;
+          }
+
           running = true;
-          rememberMode(getScrollMode());
+          rememberMode(mode);
           // Flip UI + legacy speech gate immediately
           try { document.body.classList.add('listening'); } catch {}
           try { window.HUD?.bus?.emit?.('speech:toggle', true); } catch {}
@@ -567,8 +585,6 @@ export function installSpeech(): void {
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
           // NOTE: Do NOT start auto-scroll yet - wait for countdown to finish
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
-          const S = window.__tpStore;
-          const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
           await beginCountdownThen(sec, async () => {
             // NOW start auto-scroll after countdown completes
             try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
