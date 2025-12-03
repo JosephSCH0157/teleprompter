@@ -896,11 +896,9 @@ export async function boot() {
 						installDisplaySync({
 							getText: () => {
 								try {
-									const v = (document.getElementById('viewer') as HTMLElement | null)
-										|| (document.querySelector('[data-role="viewer"]') as HTMLElement | null)
-										|| (document.getElementById('script') as HTMLElement | null)
-										|| (document.querySelector('.script') as HTMLElement | null);
-									return v?.innerHTML || '';
+									const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+									if (ed && typeof ed.value === 'string') return ed.value;
+									return '';
 								} catch { return ''; }
 							},
 							getAnchorRatio: () => {
