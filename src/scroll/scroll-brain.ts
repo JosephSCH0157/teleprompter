@@ -141,6 +141,7 @@ const isDebug = (): boolean => {
     const win = window as any;
     if (win.__tpScrollDebug) return true;
     const qs = String(location.search || '');
+    // Guarded so normal dev builds do not spam unless explicitly requested
     return /scrollDebug=1/i.test(qs);
   } catch {
     return false;
@@ -221,9 +222,10 @@ export function createScrollBrain(): ScrollBrain {
       scrollByPx(dy);
     }
 
-    if (isDebug()) {
-      try {
-        if (!state.__debugFrame) (state as any).__debugFrame = 0;
+    // Debug logging only when explicitly enabled
+    try {
+      if (isDebug()) {
+        if (!(state as any).__debugFrame) (state as any).__debugFrame = 0;
         (state as any).__debugFrame++;
         if ((state as any).__debugFrame % 30 === 0) {
           console.debug('[scroll-brain]', {
@@ -235,9 +237,9 @@ export function createScrollBrain(): ScrollBrain {
             pllErr: state.pll.smoothedErr,
           });
         }
-      } catch {
-        // ignore debug failures
       }
+    } catch {
+      // ignore debug failures
     }
 
     state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
