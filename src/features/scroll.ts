@@ -1,4 +1,5 @@
 import { setMode as setScrollMode, getMode as getScrollMode } from '../scroll/router';
+import type { ScrollMode } from '../scroll/scroll-brain';
 import * as Auto from './autoscroll';
 
 function bindAutoControls() {
@@ -32,7 +33,7 @@ function bindRouterControls() {
       sel.dataset.bound = '1';
       sel.value = (getScrollMode() || '').toLowerCase();
       sel.addEventListener('change', () => {
-        const mode = (sel.value || '').toLowerCase();
+        const mode = ((sel.value || '').toLowerCase() as ScrollMode);
         setScrollMode(mode);
       });
     }

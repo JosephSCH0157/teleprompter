@@ -93,6 +93,7 @@ export interface ScrollBrain {
   setBaseSpeedPx?(pxPerSec: number): void;
   onManualSpeedAdjust?(deltaPxPerSec: number): void;
   getCurrentSpeedPx?(): number;
+  onSpeechSample?(sample: AdaptSample): void;
 }
 
 interface InternalState {
@@ -152,6 +153,9 @@ const isScrollDebug = (): boolean => {
 };
 
 export function createScrollBrain(): ScrollBrain {
+  const PLL_GAIN = 0.4;
+  const PLL_SMOOTH = 0.12;
+
   const state: InternalState = {
     mode: 'rehearsal',
     ticking: false,
@@ -161,8 +165,8 @@ export function createScrollBrain(): ScrollBrain {
       errPx: 0,
       lastErrTs: 0,
       smoothedErr: 0,
-      gain: 0.4,
-      smoothFactor: 0.12,
+      gain: PLL_GAIN,
+      smoothFactor: PLL_SMOOTH,
     },
     silence: {
       isSilent: false,
@@ -178,7 +182,7 @@ export function createScrollBrain(): ScrollBrain {
 
   const resetForMode = (mode: ScrollMode): void => {
     // Reset mode-specific state; engines remain disconnected in Phase 1.
-    state.pll = { errPx: 0, lastErrTs: now(), smoothedErr: 0 };
+    state.pll = { errPx: 0, lastErrTs: now(), smoothedErr: 0, gain: PLL_GAIN, smoothFactor: PLL_SMOOTH };
     state.silence = { isSilent: false, lastChangeTs: now() };
     state.targetSpeedPxPerSec = 0;
     state.effectiveSpeedPxPerSec = 0;
@@ -318,6 +322,14 @@ export function createScrollBrain(): ScrollBrain {
     // No viewport movement in Phase 1.
   };
 
+  const onSpeechSample = (sample: AdaptSample): void => {
+    try {
+      reportAsrSample(sample);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const nudge = (deltaPx: number): void => {
     const delta = Number(deltaPx);
     if (!Number.isFinite(delta) || delta === 0) return;
@@ -335,6 +347,7 @@ export function createScrollBrain(): ScrollBrain {
     reportAsrSample,
     reportAsrSilence,
     centerOnLine,
+    onSpeechSample,
     nudge,
     // Legacy shims
     setBaseSpeedPx: (px) => {

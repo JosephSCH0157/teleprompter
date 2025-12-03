@@ -98,7 +98,7 @@ export function getViewportMetrics(getScroller = defaultViewer): ViewportMetrics
 }
 
 // Back-compat helper for legacy TS wiring; returns the same helpers but uses the provided getter.
-export type ScrollerGetter = () => HTMLElement | null | undefined;
+export type ScrollerGetter = () => HTMLElement | null;
 export function createScrollerHelpers(getScroller: ScrollerGetter) {
   return {
     getScroller,
@@ -107,9 +107,9 @@ export function createScrollerHelpers(getScroller: ScrollerGetter) {
       if (!sc) return 0;
       return clampScrollTop(sc, y);
     },
-    scrollByPx: (px: number) => scrollByPx(px, getScroller),
-    scrollByLines: (n: number) => scrollByLines(n, getScroller),
-    centerLine: (i: number) => centerLine(i, getScroller),
+    scrollByPx: (px: number) => scrollByPx(px, () => getScroller()),
+    scrollByLines: (n: number) => scrollByLines(n, () => getScroller()),
+    centerLine: (i: number) => centerLine(i, () => getScroller()),
     requestScroll: (top: number) => {
       if (clampActive()) return;
       const sc = getScroller();

@@ -1,6 +1,6 @@
 // Runtime hooks for ScrollBrain singletons used by legacy JS features.
 
-import type { ScrollBrain } from './scroll-brain';
+import type { ScrollBrain, AdaptSample } from './scroll-brain';
 
 declare global {
   interface Window {
@@ -40,7 +40,7 @@ export function nudgeBrainSpeed(deltaPxPerSec: number): void {
   }
 }
 
-export function submitBrainSpeechSample(sample: Parameters<ScrollBrain['onSpeechSample']>[0]): void {
+export function submitBrainSpeechSample(sample: AdaptSample): void {
   try {
     const brain = getBrain();
     brain?.onSpeechSample?.(sample);

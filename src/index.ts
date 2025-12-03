@@ -482,13 +482,30 @@ try {
 				const brain = ensureScrollBrain();
 				installWpmSpeedBridge({
 					api: {
-						setBaseSpeedPx: brain.setBaseSpeedPx,
-						onManualSpeedAdjust: brain.onManualSpeedAdjust,
+						setBaseSpeedPx: (px: number) => {
+              try {
+                if (typeof brain.setBaseSpeedPx === 'function') return brain.setBaseSpeedPx(px);
+                if (typeof brain.setTargetSpeed === 'function') return brain.setTargetSpeed(px);
+              } catch {}
+            },
+						onManualSpeedAdjust: (delta: number) => {
+              try {
+                if (typeof brain.onManualSpeedAdjust === 'function') return brain.onManualSpeedAdjust(delta);
+                if (typeof brain.setTargetSpeed === 'function') {
+                  const cur = brain.getCurrentSpeedPx?.() ?? 0;
+                  return brain.setTargetSpeed(cur + delta);
+                }
+              } catch {}
+            },
 					},
 				});
 				installAsrScrollBridge({
-					onSpeechSample: brain.onSpeechSample,
-					reportSilence: brain.reportAsrSilence,
+					onSpeechSample: (sample) => {
+            try { brain.onSpeechSample?.(sample as any); } catch {}
+          },
+					reportSilence: ({ silent, ts }) => {
+            try { brain.reportAsrSilence(silent, ts ?? Date.now()); } catch {}
+          },
 				});
 				bridgeLegacyScrollController();
 		// 1) Install the TypeScript scheduler before any scroll writers run.
@@ -519,7 +536,11 @@ try {
 					try {
 						const val = Number(autoSpeed.value);
 						if (!Number.isFinite(val)) return;
-						brain.setBaseSpeedPx(val);
+						if (typeof brain.setBaseSpeedPx === 'function') {
+              brain.setBaseSpeedPx(val);
+            } else if (typeof brain.setTargetSpeed === 'function') {
+              brain.setTargetSpeed(val);
+            }
 					} catch {}
 				};
 				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });

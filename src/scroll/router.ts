@@ -2,7 +2,7 @@
 // Phase 3: UI/store/persistence wiring only. No engines, no scrolling.
 import type { ScrollMode, ScrollBrain } from './scroll-brain';
 import { createScrollBrain } from './scroll-brain';
-import { createModeRouter, type ModeRouter } from './mode-router';
+import createModeRouter from './mode-router';
 import createTimedEngine from './autoscroll';
 import createWpmEngine from './wpm';
 import createStepScrollEngine from './step-scroll';
@@ -146,7 +146,7 @@ function updateUi(select: HTMLSelectElement | null, status: HTMLElement | null, 
   } catch {}
 }
 
-let modeRouterInstance: ModeRouter | null = null;
+let modeRouterInstance: ReturnType<typeof createModeRouter> | null = null;
 let brainInstance: ScrollBrain | null = null;
 
 export function initScrollRouter(): void {
@@ -235,7 +235,7 @@ export default initScrollRouter;
 export function setMode(mode: ScrollMode): void {
   initScrollRouter();
   currentMode = normalizeMode(mode);
-  try { modeRouterInstance?.setMode(currentMode); } catch {}
+  try { modeRouterInstance?.applyMode(currentMode); } catch {}
 }
 
 export function getMode(): ScrollMode {
