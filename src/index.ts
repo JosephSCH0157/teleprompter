@@ -884,7 +884,7 @@ export async function boot() {
 								};
 							} catch {}
 						} catch {}
-						if (!(window as any).setScrollMode) {
+						if (!(window as any).setScrollMode && !(window as any).__tpScrollMode) {
 							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
 								try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
 								try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
