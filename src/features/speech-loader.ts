@@ -61,7 +61,25 @@ declare global {
     getAutoRecordEnabled?: () => boolean;
     recAutoRestart?: unknown;
     speechOn?: boolean;
+    enumerateDevices?: () => Promise<MediaDeviceInfo[]>;
   }
+}
+
+async function enumerateDevices(): Promise<MediaDeviceInfo[]> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return [];
+    return await navigator.mediaDevices.enumerateDevices();
+  } catch {
+    return [];
+  }
+}
+
+function hasKind(devs: MediaDeviceInfo[], kind: MediaDeviceKind): boolean {
+  return devs.some((d) => d.kind === kind);
+}
+
+function showToast(msg: string) {
+  try { (window as any).toasts?.show?.(msg); } catch {}
 }
 
 // One entry point for speech. Uses Web Speech by default.
@@ -596,7 +614,7 @@ export function installSpeech(): void {
               }));
             } catch {}
             // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
-            try { await doAutoRecordStart(); }
+            try { await maybeStartRecorders(); }
             catch (err) {
               try { console.warn('[auto-record] start failed', err); } catch {}
             }
@@ -647,4 +665,34 @@ export function installSpeech(): void {
       }, { capture: true });
     } catch {}
   })();
+}
+async function maybeStartRecorders(): Promise<void> {
+  try {
+    const wantsAudio = !!wantsAutoRecord();
+    const wantsVideo = (() => {
+      try { return window.__tpStore?.get?.('videoRecord') === true; } catch { return false; }
+    })();
+
+    if (!wantsAudio && !wantsVideo) return;
+
+    const devs = await enumerateDevices();
+    const hasMic = hasKind(devs, 'audioinput');
+    const hasCam = hasKind(devs, 'videoinput');
+
+    if (wantsAudio && !hasMic) {
+      showToast('No microphone detected – recording will be audio-less.');
+    }
+    if (wantsVideo) {
+      if (!hasCam) {
+        showToast('No camera detected – recording will not include video.');
+      }
+    }
+
+    // Start only what we have enabled and available
+    if ((wantsAudio && hasMic) || (wantsVideo && hasCam)) {
+      try { await doAutoRecordStart(); } catch {}
+    }
+  } catch {
+    // swallow; recorder start is best-effort
+  }
 }
