@@ -9,6 +9,17 @@ import createStepScrollEngine from './step-scroll';
 import createRehearsalEngine from './rehearsal';
 import createAsrAlignmentEngine from './asr-mode';
 
+const isScrollDebug = (): boolean => {
+  try {
+    const w = window as any;
+    if (w.__tpScrollDebug === true) return true;
+    const qs = new URLSearchParams(location.search || '');
+    return qs.has('scrollDebug');
+  } catch {
+    return false;
+  }
+};
+
 type Store = {
   get?: (_k: string) => any;
   set?: (_k: string, _v: any) => void;
@@ -185,14 +196,16 @@ export function initScrollRouter(): void {
     modeRouterInstance?.applyMode(mode);
     // Debug/diagnostic HUD log
     try {
-      const strategy =
-        mode === 'timed' ? 'timed' :
-        mode === 'wpm' ? 'wpm' :
-        mode === 'hybrid' ? 'hybrid-pll' :
-        mode === 'asr' ? 'asr-lock' :
-        mode === 'step' ? 'step' :
-        mode === 'rehearsal' ? 'clamp' : 'unknown';
-      (window as any).HUD?.log?.('scroll-router', { mode, strategy });
+      if (isScrollDebug()) {
+        const strategy =
+          mode === 'timed' ? 'timed' :
+          mode === 'wpm' ? 'wpm' :
+          mode === 'hybrid' ? 'hybrid-pll' :
+          mode === 'asr' ? 'asr-lock' :
+          mode === 'step' ? 'step' :
+          mode === 'rehearsal' ? 'clamp' : 'unknown';
+        (window as any).HUD?.log?.('scroll-router', { mode, strategy });
+      }
     } catch {}
     // Broadcast for any legacy or passive UI (mode chip, auto controls)
     try {

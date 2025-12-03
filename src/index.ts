@@ -99,6 +99,7 @@ try {
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
 bootstrap().catch(() => {});
+installHudIfAvailable();
 
 try {
 	initRecorderBackends();
@@ -436,6 +437,27 @@ import { bindCoreUI } from './wiring/ui-binds';
 // Side-effect debug / DOM helpers (legacy parity)
 import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
+
+declare global {
+	interface Window {
+		__tpInstallHUD?: (opts?: { hotkey?: string }) => any;
+		__tpHud?: any;
+		HUD?: { log?: (tag: string, payload?: unknown) => void };
+		__tpScrollDebug?: boolean;
+	}
+}
+
+function installHudIfAvailable(): void {
+	try {
+		if ((window as any).__tpHud) return; // already installed (legacy or previous call)
+		if (typeof (window as any).__tpInstallHUD === 'function') {
+			(window as any).__tpHud = (window as any).__tpInstallHUD({ hotkey: '~' });
+		}
+	} catch {
+		// HUD is optional; never break boot
+	}
+}
+
 const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
 const startScroll      = initOnce('scroll',      initScrollFeature);
