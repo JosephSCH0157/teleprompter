@@ -42,6 +42,26 @@ export function scrollByPx(dy: number, getScroller = defaultViewer): void {
   const target = clampScrollTop(sc, (sc.scrollTop || 0) + (Number(dy) || 0));
   requestWrite(() => {
     try { sc.scrollTop = target; } catch {}
+    try {
+      const win = window as any;
+      const debug = win?.__tpScrollDebug === true || /scrollDebug=1/i.test(String(location.search || ''));
+      if (debug) {
+        const mode =
+          (win.__tpScrollMode && typeof win.__tpScrollMode.getMode === 'function')
+            ? win.__tpScrollMode.getMode()
+            : undefined;
+        const maxScrollTop = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+        win.HUD?.log?.('scroll-commit', {
+          mode,
+          delta: dy,
+          targetTop: target,
+          currentTop: sc.scrollTop,
+          maxScrollTop,
+        });
+      }
+    } catch {
+      // ignore HUD/log errors
+    }
   });
 }
 

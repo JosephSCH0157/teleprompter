@@ -183,6 +183,17 @@ export function initScrollRouter(): void {
     writePrefs(mode);
     updateUi(select, status, mode);
     modeRouterInstance?.applyMode(mode);
+    // Debug/diagnostic HUD log
+    try {
+      const strategy =
+        mode === 'timed' ? 'timed' :
+        mode === 'wpm' ? 'wpm' :
+        mode === 'hybrid' ? 'hybrid-pll' :
+        mode === 'asr' ? 'asr-lock' :
+        mode === 'step' ? 'step' :
+        mode === 'rehearsal' ? 'clamp' : 'unknown';
+      (window as any).HUD?.log?.('scroll-router', { mode, strategy });
+    } catch {}
     // Broadcast for any legacy or passive UI (mode chip, auto controls)
     try {
       window.dispatchEvent(new CustomEvent('tp:scrollModeChange', { detail: { mode } }));
