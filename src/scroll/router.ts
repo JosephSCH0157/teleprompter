@@ -200,6 +200,24 @@ export function initScrollRouter(): void {
 
   // initial mode
   applyMode(readInitialMode(store));
+
+  // Expose a small legacy-compatible surface so existing HUD/mode-chip readers see the new mode names
+  try {
+    (window as any).__tpScrollMode = {
+      getMode: () => currentMode,
+      setMode: (m: ScrollMode) => applyMode(m),
+    };
+  } catch {}
+
+  // If some other part of the app fires tp:scrollModeChange, mirror the UI visibility
+  try {
+    window.addEventListener('tp:scrollModeChange', (ev: Event) => {
+      const detail = (ev as CustomEvent<{ mode?: ScrollMode }>).detail;
+      if (!detail || !detail.mode) return;
+      const mode = normalizeMode(detail.mode);
+      updateUi(select, status, mode);
+    });
+  } catch {}
 }
 
 export default initScrollRouter;
