@@ -78,9 +78,9 @@ function startDbMeter(stream: MediaStream): void {
     }
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
+    analyser.fftSize = 1024;
     src.connect(analyser);
-    const data = new Uint8Array(analyser.frequencyBinCount);
+    const data = new Uint8Array(analyser.fftSize);
     const hostTop = document.getElementById('dbMeterTop');
     const unifiedFill = hostTop?.querySelector?.('i');
     const topBars = !unifiedFill ? buildDbBars(hostTop) : [];
@@ -94,8 +94,12 @@ function startDbMeter(stream: MediaStream): void {
         dbAnim = null;
         return;
       }
-      analyser.getByteFrequencyData(data);
-      const rms = Math.sqrt(data.reduce((a, b) => a + b * b, 0) / data.length) / 255;
+      analyser.getByteTimeDomainData(data);
+      const rms =
+        Math.sqrt(data.reduce((a, b) => {
+          const centered = (b - 128) / 128; // center around 0
+          return a + centered * centered;
+        }, 0) / data.length) || 0;
       const dbfs = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
       const dB = dbfs === -Infinity ? dBFloor : Math.max(dBFloor, Math.min(0, dbfs));
       let level = (dB - dBFloor) / (0 - dBFloor);
