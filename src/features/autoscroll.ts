@@ -13,6 +13,8 @@ let raf = 0;
 let viewer: HTMLElement | null = null;
 let autoChip: HTMLElement | null = null;
 let statusEl: HTMLElement | null = null;
+let toggleBtns: HTMLElement[] = [];
+let speedInputs: HTMLInputElement[] = [];
 let _fracCarry = 0; // fractional accumulator to avoid stalling at low speeds
 
 function clampSpeed(px: number): number {
@@ -24,13 +26,13 @@ function getSpeed(): number {
 }
 
 function applyLabel() {
-  const btn = document.getElementById('autoToggle');
-  const managedByRouter = !!(btn && (btn as HTMLElement).dataset && (btn as HTMLElement).dataset.state);
-  if (btn && !managedByRouter) {
-    const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
+  const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
+  toggleBtns.forEach((btn) => {
+    const managedByRouter = !!btn.dataset.state;
+    if (managedByRouter) return;
     btn.textContent = enabled ? `Auto-scroll: On - ${sFmt} px/s` : 'Auto-scroll: Off';
     btn.setAttribute('aria-pressed', String(enabled));
-  }
+  });
   try {
     autoChip = autoChip || document.getElementById('autoChip');
     const chipManaged = !!(autoChip && autoChip.getAttribute && autoChip.getAttribute('data-state'));
@@ -44,7 +46,6 @@ function applyLabel() {
   try {
     if (!statusEl) statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
     if (statusEl) {
-      const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
       statusEl.textContent = enabled ? `Auto-scroll: On – ${sFmt} px/s` : 'Auto-scroll: Off';
     }
   } catch {}
@@ -81,6 +82,15 @@ export function initAutoscrollFeature() {
   viewer = document.getElementById('viewer');
   autoChip = document.getElementById('autoChip');
   statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
+  toggleBtns = [
+    document.getElementById('autoToggle') as HTMLElement | null,
+    document.getElementById('autoScrollToggle') as HTMLElement | null,
+    ...Array.from(document.querySelectorAll<HTMLElement>('[data-action="auto-toggle"]')),
+  ].filter(Boolean) as HTMLElement[];
+  speedInputs = [
+    document.getElementById('autoSpeed') as HTMLInputElement | null,
+    document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
+  ].filter(Boolean) as HTMLInputElement[];
   try {
     const stored =
       Number(localStorage.getItem('tp_autoScrollPx') || '') ||
@@ -88,11 +98,7 @@ export function initAutoscrollFeature() {
     if (Number.isFinite(stored) && stored > 0) {
       speed = clampSpeed(stored);
     }
-    const inputs = [
-      document.getElementById('autoSpeed') as HTMLInputElement | null,
-      document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
-    ].filter(Boolean) as HTMLInputElement[];
-    inputs.forEach((inp) => { inp.value = String(speed); });
+    speedInputs.forEach((inp) => { inp.value = String(speed); });
   } catch {}
   applyLabel();
   const mo = new MutationObserver(() => {
@@ -157,21 +163,14 @@ export function setSpeed(pxPerSec: number) {
   try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
   try {
-    const inputs = [
-      document.getElementById('autoSpeed') as HTMLInputElement | null,
-      document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
-    ].filter(Boolean) as HTMLInputElement[];
-    inputs.forEach((inp) => { inp.value = String(speed); });
+    speedInputs.forEach((inp) => { inp.value = String(speed); });
   } catch {}
   try {
-    const btn = document.getElementById('autoToggle');
-    const st = (btn as HTMLElement | null)?.dataset?.state || '';
-    if (btn && st) {
-      const s1 = Number.isFinite(speed) ? Number(speed) : 0;
-      const sFmt = (Math.round(s1 * 10) / 10).toFixed(1);
+    toggleBtns.forEach((btn) => {
+      const st = btn.dataset?.state || '';
       if (st === 'on') btn.textContent = `Auto-scroll: On - ${sFmt} px/s`;
       else if (st === 'paused') btn.textContent = `Auto-scroll: Paused - ${sFmt} px/s`;
-    }
+    });
   } catch {}
   applyLabel();
 }
