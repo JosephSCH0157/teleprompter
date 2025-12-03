@@ -442,6 +442,9 @@ import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
 // Side-effect debug / DOM helpers (legacy parity)
 import { bindStaticDom } from './ui/dom';
+import { initHud } from './hud/loader';
+import { initHudController } from './hud/controller';
+import { wireHudToggle } from './hud/toggle';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
@@ -452,6 +455,7 @@ declare global {
 		__tpHud?: { log?: AnyFn | undefined } | undefined;
 		HUD?: { bus?: { emit?: AnyFn | undefined } | undefined; log?: AnyFn | undefined } | undefined;
 		__tpScrollDebug?: boolean;
+		__tpHudTsInited?: boolean;
 	}
 }
 
@@ -463,6 +467,44 @@ function installHudIfAvailable(): void {
 		}
 	} catch {
 		// HUD is optional; never break boot
+	}
+}
+
+function ensureHud(store: any): void {
+	try {
+		if ((window as any).__tpHudTsInited) return;
+		(window as any).__tpHudTsInited = true;
+
+		const dev = (() => {
+			try {
+				const qs = new URLSearchParams(String(location.search || ''));
+				if (qs.has('hud') || qs.has('dev') || qs.has('scrollDebug')) return true;
+				if (localStorage.getItem('tp_dev_mode') === '1') return true;
+			} catch {}
+			return false;
+		})();
+		const saved = (() => {
+			try { return localStorage.getItem('tp_hud_save') === '1'; } catch { return false; }
+		})();
+
+		try { store?.set?.('hudSupported', true); } catch {}
+		try {
+			const existing = store?.get?.('hudEnabledByUser');
+			if (existing == null) {
+				store?.set?.('hudEnabledByUser', dev || saved);
+			}
+		} catch {}
+
+		const root = (document.querySelector('[data-role=\"hud-root\"], #hud-root') as HTMLElement | null) || document.body;
+		initHud({
+			store,
+			bus: (window as any).HUD?.bus ?? null,
+			root,
+		});
+		initHudController();
+		wireHudToggle();
+	} catch {
+		// HUD is optional; ignore failures
 	}
 }
 
