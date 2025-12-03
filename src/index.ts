@@ -24,11 +24,9 @@ import './features/scripts-local';
 import { ScriptStore, type ScriptMeta, type ScriptRecord } from './features/scripts-store';
 import { installSpeech } from './features/speech-loader';
 import { initAsrStatsHud } from './hud/asr-stats';
-import { initHudController } from './hud/controller';
 import { initRecStatsHud } from './hud/rec-stats';
 import { shouldShowHud } from './hud/shouldShowHud';
 import { initSpeechNotesHud } from './hud/speech-notes-hud';
-import { wireHudToggle } from './hud/toggle';
 import { initObsConnection } from './obs/obs-connection';
 import { initObsWiring } from './obs/obs-wiring';
 import { initRecorderBackends } from './recording/registerRecorders';
@@ -441,10 +439,10 @@ import { initObsUI } from './wiring/obs-wiring';
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
 // Side-effect debug / DOM helpers (legacy parity)
-import { bindStaticDom } from './ui/dom';
-import { initHud } from './hud/loader';
 import { initHudController } from './hud/controller';
+import { initHud } from './hud/loader';
 import { wireHudToggle } from './hud/toggle';
+import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
