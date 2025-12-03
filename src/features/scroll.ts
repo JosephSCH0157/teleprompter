@@ -13,16 +13,33 @@ function bindAutoControls() {
     }
   } catch {}
   try {
-    const input = document.getElementById('autoSpeed') as HTMLInputElement | null;
-    if (input && !input.dataset.bound) {
+    const inputs = [
+      document.getElementById('autoSpeed') as HTMLInputElement | null,
+      document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
+    ].filter(Boolean) as HTMLInputElement[];
+
+    inputs.forEach((input) => {
+      if (input.dataset.bound) return;
       input.dataset.bound = '1';
+
+      const apply = (val: string) => {
+        const next = Number(val);
+        if (!Number.isFinite(next)) return;
+        Auto.setSpeed(next);
+      };
+
       input.addEventListener('change', (e) => {
         const tgt = e.target as HTMLInputElement | null;
         if (!tgt) return;
-        const next = Number(tgt.value);
-        Auto.setSpeed(next);
+        apply(tgt.value);
       });
-    }
+
+      input.addEventListener('input', (e) => {
+        const tgt = e.target as HTMLInputElement | null;
+        if (!tgt) return;
+        apply(tgt.value);
+      }, { passive: true });
+    });
   } catch {}
 }
 
