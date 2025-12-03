@@ -1,8 +1,27 @@
-// Step scroll engine: manual gearbox for arrow/page/pedal input.
-// Primary mode: only steps move the viewport (no continuous engines).
-// Helper mode: steps nudge while continuous engines may run.
+/**
+ * StepScrollEngine — manual gearbox for teleprompter scrolling.
+ *
+ * Responsibilities:
+ * - Provide deterministic, discrete scroll movements (lines or blocks).
+ * - Primary mode: exclusively handles scroll (no continuous engines).
+ * - Helper mode: can nudge viewport while continuous engines remain active.
+ * - Respect clampActive(): step movement is disabled in rehearsal.
+ * - Never touches scroll-brain or engines directly.
+ * - Always scrolls through scroll-helpers (scrollByPx / scrollByLines).
+ *
+ * Not responsible for:
+ * - Deciding scrollMode (mode-router handles that).
+ * - Continuous scrolling (timed/WPM/hybrid).
+ * - ASR logic.
+ * - UI.
+ */
 
-import { clampActive, getViewportMetrics, scrollByLines, scrollByPx } from './scroll-helpers';
+import {
+  scrollByLines,
+  scrollByPx,
+  getViewportMetrics,
+  clampActive,
+} from './scroll-helpers';
 
 export interface StepScrollEngine {
   enablePrimaryMode(): void;
@@ -10,75 +29,92 @@ export interface StepScrollEngine {
   disable(): void;
 }
 
-type KeyHandler = (e: KeyboardEvent) => void;
-
 export function createStepScrollEngine(): StepScrollEngine {
   let enabled = false;
   let primary = false;
 
-  const onKey: KeyHandler = (e) => {
+  // --- Key Handler ---------------------------------------------------------
+  function onKeyDown(ev: KeyboardEvent) {
     if (!enabled) return;
-    if (clampActive()) return;
-    const k = (e.key || '').toLowerCase();
-    switch (k) {
-      case 'arrowdown':
-        e.preventDefault();
+    if (clampActive()) return; // Rehearsal clamp blocks programmatic scroll.
+
+    switch (ev.key) {
+      case 'ArrowDown':
+        ev.preventDefault();
         scrollByLines(+1);
         break;
-      case 'arrowup':
-        e.preventDefault();
+
+      case 'ArrowUp':
+        ev.preventDefault();
         scrollByLines(-1);
         break;
-      case 'pagedown': {
-        e.preventDefault();
-        const { viewportHeight } = getViewportMetrics();
-        scrollByPx(viewportHeight * 0.8);
+
+      case 'PageDown': {
+        ev.preventDefault();
+        const { viewportHeight, height } = getViewportMetrics();
+        const h = viewportHeight || height || 0;
+        scrollByPx(h * 0.8); // deterministic block step
         break;
       }
-      case 'pageup': {
-        e.preventDefault();
-        const { viewportHeight } = getViewportMetrics();
-        scrollByPx(-viewportHeight * 0.8);
+
+      case 'PageUp': {
+        ev.preventDefault();
+        const { viewportHeight, height } = getViewportMetrics();
+        const h = viewportHeight || height || 0;
+        scrollByPx(-h * 0.8); // deterministic block step
         break;
       }
+
       default:
-        // ignore
         break;
     }
-  };
+  }
 
-  const addListeners = () => {
+  // --- Listener Management -------------------------------------------------
+  function attachListeners() {
     try {
-      window.addEventListener('keydown', onKey, { capture: true });
+      window.addEventListener('keydown', onKeyDown, { passive: false });
     } catch {
       // ignore
     }
-  };
+  }
 
-  const removeListeners = () => {
+  function detachListeners() {
     try {
-      window.removeEventListener('keydown', onKey, { capture: true });
+      window.removeEventListener('keydown', onKeyDown);
     } catch {
       // ignore
     }
-  };
+  }
+
+  // --- Public API ----------------------------------------------------------
+  function enablePrimaryMode() {
+    if (enabled && primary) return; // Already in primary mode.
+    enabled = true;
+    primary = true;
+    detachListeners();
+    attachListeners();
+  }
+
+  function enableHelperMode() {
+    if (enabled && !primary) return; // Already in helper mode.
+    enabled = true;
+    primary = false;
+    detachListeners();
+    attachListeners();
+  }
+
+  function disable() {
+    if (!enabled) return;
+    enabled = false;
+    primary = false;
+    detachListeners();
+  }
 
   return {
-    enablePrimaryMode: () => {
-      enabled = true;
-      primary = true;
-      addListeners();
-    },
-    enableHelperMode: () => {
-      enabled = true;
-      primary = false;
-      addListeners();
-    },
-    disable: () => {
-      enabled = false;
-      primary = false;
-      removeListeners();
-    },
+    enablePrimaryMode,
+    enableHelperMode,
+    disable,
   };
 }
 

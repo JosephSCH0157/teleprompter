@@ -81,7 +81,7 @@ export function createModeRouter(opts: ModeRouterOptions): ModeRouter {
         try { step?.enableHelper(); } catch {}
         break;
       case 'step':
-        try { step?.enablePrimary(); } catch {}
+        try { step?.enablePrimaryMode?.() ?? step?.enablePrimary?.(); } catch {}
         break;
       case 'rehearsal':
         try { rehearsal?.enableClamp(); } catch {}

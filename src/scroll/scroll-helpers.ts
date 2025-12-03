@@ -6,6 +6,7 @@ export interface ViewportMetrics {
   scrollHeight: number;
   pxPerLine: number;
   pxPerWord: number;
+  height?: number; // alias for viewportHeight
 }
 
 const defaultViewer = () =>
@@ -85,6 +86,7 @@ export function getViewportMetrics(getScroller = defaultViewer): ViewportMetrics
   return {
     scrollTop: sc.scrollTop || 0,
     viewportHeight: sc.clientHeight || 0,
+    height: sc.clientHeight || 0,
     scrollHeight: sc.scrollHeight || 0,
     pxPerLine,
     pxPerWord,
