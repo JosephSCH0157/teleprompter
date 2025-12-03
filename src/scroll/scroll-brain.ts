@@ -222,24 +222,13 @@ export function createScrollBrain(): ScrollBrain {
       scrollByPx(dy);
     }
 
-    // Debug logging only when explicitly enabled
+    // Debug logging disabled by default; enable only via __tpScrollDebug/scrollDebug=1.
     try {
       if (isDebug()) {
-        if (!(state as any).__debugFrame) (state as any).__debugFrame = 0;
-        (state as any).__debugFrame++;
-        if ((state as any).__debugFrame % 30 === 0) {
-          console.debug('[scroll-brain]', {
-            mode: state.mode,
-            target: state.targetSpeedPxPerSec,
-            effective: state.effectiveSpeedPxPerSec,
-            clamp: clampActive(),
-            silent: state.silence.isSilent,
-            pllErr: state.pll.smoothedErr,
-          });
-        }
+        // Intentionally no-op unless explicitly requested.
       }
     } catch {
-      // ignore debug failures
+      // ignore
     }
 
     state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
