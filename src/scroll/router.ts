@@ -31,6 +31,7 @@ const PREFS_KEY = 'tp_ui_prefs_v1';
 const LEGACY_KEY = 'tp_scroll_mode';
 
 let currentMode: ScrollMode = 'rehearsal';
+let isScrollRunning = false;
 
 const normalizeMode = (mode: string | null | undefined): ScrollMode => {
   const m = String(mode || '').trim().toLowerCase() as ScrollMode;
@@ -161,6 +162,20 @@ let modeRouterInstance: ReturnType<typeof createModeRouter> | null = null;
 let brainInstance: ScrollBrain | null = null;
 let enginesArmed = false;
 
+export function setScrollRunning(next: boolean): void {
+  if (isScrollRunning === next) return;
+  isScrollRunning = next;
+  try {
+    const desired = enginesArmed && isScrollRunning ? currentMode : 'rehearsal';
+    modeRouterInstance?.applyMode(desired);
+    if (isScrollDebug()) {
+      (window as any).HUD?.log?.('scroll-router', { tag: 'run-state', running: isScrollRunning, appliedMode: desired });
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function initScrollRouter(): void {
   try {
     if ((window as any).__tp_scrollRouterInited) return;
@@ -194,9 +209,8 @@ export function initScrollRouter(): void {
     try { store?.set?.(MODE_KEY, mode); } catch {}
     writePrefs(mode);
     updateUi(select, status, mode);
-    if (enginesArmed) {
-      modeRouterInstance?.applyMode(mode);
-    }
+    const desired = enginesArmed && isScrollRunning ? mode : 'rehearsal';
+    modeRouterInstance?.applyMode(desired);
     // Debug/diagnostic HUD log
     try {
       if (isScrollDebug()) {
@@ -207,7 +221,7 @@ export function initScrollRouter(): void {
           mode === 'asr' ? 'asr-lock' :
           mode === 'step' ? 'step' :
           mode === 'rehearsal' ? 'clamp' : 'unknown';
-        (window as any).HUD?.log?.('scroll-router', { mode, strategy });
+        (window as any).HUD?.log?.('scroll-router', { mode, appliedMode: desired, strategy, running: isScrollRunning });
       }
     } catch {}
     // Broadcast for any legacy or passive UI (mode chip, auto controls)
@@ -243,7 +257,8 @@ export function initScrollRouter(): void {
       try {
         if (!enginesArmed) {
           enginesArmed = true;
-          modeRouterInstance?.applyMode(currentMode);
+          const desired = isScrollRunning ? currentMode : 'rehearsal';
+          modeRouterInstance?.applyMode(desired);
         }
       } catch {}
     }, { once: true });
