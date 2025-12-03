@@ -1150,3 +1150,17 @@ export async function boot() {
 try {
 	if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', () => { boot(); });
 } catch {}
+
+// Fallback legacy HUD installer: tries to install HUD if legacy debug-tools.js is present
+function maybeInstallLegacyHud() {
+	try {
+		// If legacy HUD installer exists, call it with default hotkey
+		if (typeof (window as any).__tpInstallHUD === 'function') {
+			(window as any).__tpHud = (window as any).__tpInstallHUD({ hotkey: '~' });
+		}
+	} catch {
+		// HUD is optional; ignore failures
+	}
+}
+// (removed duplicate implementation of maybeInstallLegacyHud)
+
