@@ -136,17 +136,8 @@ const now = (): number =>
     ? performance.now()
     : Date.now();
 
-const isDebug = (): boolean => {
-  try {
-    const win = window as any;
-    if (win.__tpScrollDebug) return true;
-    const qs = String(location.search || '');
-    // Guarded so normal dev builds do not spam unless explicitly requested
-    return /scrollDebug=1/i.test(qs);
-  } catch {
-    return false;
-  }
-};
+// Debug logging is disabled; re-enable manually only if needed.
+const isDebug = (): boolean => false;
 
 export function createScrollBrain(): ScrollBrain {
   const state: InternalState = {
@@ -222,14 +213,7 @@ export function createScrollBrain(): ScrollBrain {
       scrollByPx(dy);
     }
 
-    // Debug logging disabled by default; enable only via __tpScrollDebug/scrollDebug=1.
-    try {
-      if (isDebug()) {
-        // Intentionally no-op unless explicitly requested.
-      }
-    } catch {
-      // ignore
-    }
+    // Debug logging removed to avoid console spam.
 
     state.rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : null;
   };
