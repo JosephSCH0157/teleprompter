@@ -133,7 +133,9 @@ export function toggle() {
   } catch {}
   enabled = want;
   applyLabel();
-  loop();
+  try {
+    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } }));
+  } catch {}
 }
 
 export function setEnabled(v: boolean) {
@@ -147,7 +149,9 @@ export function setEnabled(v: boolean) {
   } catch {}
   enabled = !!v;
   applyLabel();
-  loop();
+  try {
+    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } }));
+  } catch {}
 }
 
 export function inc() { setSpeed(speed + 0.5); if (enabled) loop(); }
