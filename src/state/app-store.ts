@@ -524,8 +524,8 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
       try {
         Object.defineProperty(w, '__tpStore', {
           value: appStore,
-          writable: false,
-          configurable: false,
+          writable: true,
+          configurable: true,
           enumerable: true,
         });
       } catch {
