@@ -7,7 +7,7 @@ export function shouldShowHud(state: AppStoreState): boolean {
 
   if (!hudSupported) return false;
   if (!hudEnabledByUser) return false;
-  if (page !== 'scripts') return false;
 
-  return true;
+  // Show HUD on all pages except explicit display mode
+  return page !== 'display';
 }
