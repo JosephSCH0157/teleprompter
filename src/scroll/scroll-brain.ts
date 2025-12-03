@@ -108,6 +108,8 @@ interface InternalState {
     errPx: number;
     lastErrTs: number;
     smoothedErr: number;
+    gain: number;
+    smoothFactor: number;
   };
 
   // ASR silence gate
@@ -144,6 +146,8 @@ export function createScrollBrain(): ScrollBrain {
       errPx: 0,
       lastErrTs: 0,
       smoothedErr: 0,
+      gain: 0.4,
+      smoothFactor: 0.12,
     },
     silence: {
       isSilent: false,
@@ -182,10 +186,18 @@ export function createScrollBrain(): ScrollBrain {
     const dtSec = dtMs > 0 ? dtMs / 1000 : 0;
 
     // Compute effective speed (silence gate for ASR/hybrid)
-    const baseSpeed = state.targetSpeedPxPerSec;
-    const silenceHold =
-      (state.mode === 'asr' || state.mode === 'hybrid') && state.silence.isSilent;
-    state.effectiveSpeedPxPerSec = silenceHold ? 0 : baseSpeed;
+    let speed = state.targetSpeedPxPerSec;
+
+    // Silence gate (hybrid-only)
+    const silenceHold = state.mode === 'hybrid' && state.silence.isSilent;
+
+    // PLL adjustment (hybrid-only)
+    if (state.mode === 'hybrid' && !silenceHold) {
+      speed += state.pll.smoothedErr * state.pll.gain;
+    }
+
+    if (speed < 0 || !Number.isFinite(speed)) speed = 0;
+    state.effectiveSpeedPxPerSec = speed;
 
     // Apply manual nudge once per tick if present
     let dy = state.effectiveSpeedPxPerSec * dtSec;
@@ -239,12 +251,13 @@ export function createScrollBrain(): ScrollBrain {
   };
 
   const reportAsrSample = (sample: AdaptSample): void => {
+    if (state.mode !== 'hybrid') return;
     if (!sample || typeof sample.errPx !== 'number') return;
     const ts = typeof sample.ts === 'number' ? sample.ts : now();
     state.pll.errPx = sample.errPx;
     state.pll.lastErrTs = ts;
-    // Simple smoothing placeholder
-    state.pll.smoothedErr = state.pll.smoothedErr * 0.8 + sample.errPx * 0.2;
+    const alpha = state.pll.smoothFactor;
+    state.pll.smoothedErr = state.pll.smoothedErr * (1 - alpha) + sample.errPx * alpha;
   };
 
   const reportAsrSilence = (isSilent: boolean, ts: number): void => {
