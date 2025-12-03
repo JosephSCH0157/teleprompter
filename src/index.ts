@@ -869,7 +869,9 @@ export async function boot() {
 							const store = (window as any).__tpStore || null;
 							const auto = getAutoScrollApi();
 							const router = createScrollModeRouter({ store, step, rehearsal, auto });
-							(window as any).__tpScrollMode = router; // expose for dev/diagnostics
+							if (!(window as any).__tpScrollMode) {
+								(window as any).__tpScrollMode = router; // expose for dev/diagnostics
+							}
 							// Dev helper: quick router poke from console
 							try {
 								(window as any).__tpSetMode = (mode: string) => {

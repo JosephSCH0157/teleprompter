@@ -139,7 +139,7 @@ const now = (): number =>
 const isDebug = (): boolean => {
   try {
     const win = window as any;
-    if (win.__TP_DEV || win.__tpScrollDebug) return true;
+    if (win.__tpScrollDebug) return true;
     const qs = String(location.search || '');
     return /scrollDebug=1/i.test(qs);
   } catch {
