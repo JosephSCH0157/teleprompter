@@ -432,7 +432,6 @@ import './ui/step-visibility'; // hides step-only controls unless scrollMode ===
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
-import { renderScript } from './render-script';
 // Side-effect debug / DOM helpers (legacy parity)
 import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
