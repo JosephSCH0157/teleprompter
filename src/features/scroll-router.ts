@@ -609,16 +609,14 @@ function installScrollRouter(opts) {
   const chipEl = () => document.getElementById("autoChip");
   function emitAutoState() {
     try {
-      const btn = document.getElementById("autoToggle");
       const chip = chipEl();
-      const st = (btn && btn.getAttribute && btn.getAttribute("data-state")) || "";
-      const gate = st === "on" ? "on" : st === "paused" ? "paused" : "manual";
+      const gate = userEnabled ? enabledNow ? "on" : "paused" : "manual";
       const speed = getCurrentSpeed();
       const payload = {
         intentOn: !!userEnabled,
         gate,
         speed,
-        label: (btn && btn.textContent || "").trim(),
+        label: "",
         chip: (chip && chip.textContent || "").trim(),
       };
       try { (window.__tp_onAutoStateChange || null) && window.__tp_onAutoStateChange(payload); } catch {}
@@ -671,21 +669,11 @@ function installScrollRouter(opts) {
         silenceTimer = void 0;
       }
       // All non-hybrid modes require both user intent AND speech to be active
-      const want = !!userEnabled && !!speechActive;
+      const want = !!userEnabled;
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
-      try {
-        const btn = document.getElementById("autoToggle");
-        if (btn) {
-          const s = getStoredSpeed();
-          if (!userEnabled) { btn.textContent = "Auto-scroll: Off"; btn.setAttribute("data-state", "off"); }
-          else if (enabledNow) { btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`; btn.setAttribute("data-state", "on"); }
-          else { btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`; btn.setAttribute("data-state", "paused"); }
-          btn.setAttribute("aria-pressed", String(!!userEnabled));
-        }
-      } catch {}
       try { emitAutoState(); } catch {}
       return;
     }
@@ -742,19 +730,6 @@ function installScrollRouter(opts) {
               const detail3 = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
               setAutoChip(userEnabled ? "paused" : "manual", detail3);
               try {
-                const btn2 = document.getElementById("autoToggle");
-                if (btn2) {
-                  if (userEnabled) {
-                    btn2.textContent = `Auto-scroll: Paused \u2014 ${s2} px/s`;
-                    btn2.setAttribute("data-state", "paused");
-                  } else {
-                    btn2.textContent = "Auto-scroll: Off";
-                    btn2.setAttribute("data-state", "off");
-                  }
-                  btn2.setAttribute("aria-pressed", String(!!userEnabled));
-                }
-              } catch {}
-              try {
                 emitAutoState();
               } catch {}
             }
@@ -780,24 +755,7 @@ function installScrollRouter(opts) {
     }
   const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
     setAutoChip(userEnabled ? enabledNow ? "on" : "paused" : "manual", detail);
-    try {
-      const btn = document.getElementById("autoToggle");
-      if (btn) {
-        const s = getStoredSpeed();
-        if (!userEnabled) {
-          btn.textContent = "Auto-scroll: Off";
-          btn.setAttribute("data-state", "off");
-        } else if (enabledNow) {
-          btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`;
-          btn.setAttribute("data-state", "on");
-        } else {
-          btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`;
-          btn.setAttribute("data-state", "paused");
-        }
-        btn.setAttribute("aria-pressed", String(!!userEnabled));
-      }
-    } catch {
-    }
+    // Button label handled by autoscroll.ts binding
     try { emitAutoState(); } catch {}
   }
   onUiPrefs((p) => {
@@ -965,22 +923,6 @@ function installScrollRouter(opts) {
       } catch {}
     });
   } catch {}
-  try {
-    document.addEventListener("click", (ev) => {
-      const t = ev.target;
-      if (t?.id === "autoToggle") {
-        const was = userEnabled;
-        userEnabled = !userEnabled;
-        if (!was && userEnabled) {
-          const cur = getStoredSpeed();
-          try { auto.setSpeed?.(cur); } catch {}
-          try { window.__scrollCtl?.setSpeed?.(cur); } catch {}
-        }
-        applyGate();
-      }
-    }, { capture: true });
-  } catch {
-  }
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;
     try {
@@ -998,38 +940,12 @@ function installScrollRouter(opts) {
       } else {
         auto.setSpeed?.(getStoredSpeed());
       }
-    } catch {
-    }
-    try {
-      const btn = document.getElementById("autoToggle");
-      if (btn) {
-        btn.dataset.state = "on";
-        if (state2.mode === "wpm") {
-          const baselineWpm = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
-          btn.textContent = `Auto-scroll: On — ${Math.round(baselineWpm)} WPM`;
-        } else {
-          btn.textContent = `Auto-scroll: On — ${getStoredSpeed()} px/s`;
-        }
-      }
-    } catch {
-    }
+    } catch {}
     applyGate();
   } else {
     applyGate();
   }
   if (state2.mode === "wpm" || state2.mode === "asr") ensureOrchestratorForMode();
-  try {
-    document.addEventListener("tp:autoSpeed", (e) => {
-      const btn = document.getElementById("autoToggle");
-      if (!btn) return;
-      const ds = btn.dataset?.state || "";
-      const s = e && e.detail && typeof e.detail.speed === "number" ? e.detail.speed : getStoredSpeed();
-      if (ds === "on") btn.textContent = `Auto-scroll: On \u2014 ${s} px/s`;
-      if (ds === "paused") btn.textContent = `Auto-scroll: Paused \u2014 ${s} px/s`;
-      try { emitAutoState(); } catch {}
-    });
-  } catch {
-  }
   try {
     document.addEventListener("keydown", (e) => {
       try {
