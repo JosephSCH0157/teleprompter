@@ -16,32 +16,32 @@ import './state/auto-record-ssot';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
+import { initSpeechBridge } from './asr/v2/bridge-speech';
+import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { installScheduler } from './boot/scheduler';
+import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import './features/scripts-local';
 import { ScriptStore, type ScriptMeta, type ScriptRecord } from './features/scripts-store';
+import { installSpeech } from './features/speech-loader';
+import { initAsrStatsHud } from './hud/asr-stats';
+import { initHudController } from './hud/controller';
+import { initRecStatsHud } from './hud/rec-stats';
+import { shouldShowHud } from './hud/shouldShowHud';
+import { initSpeechNotesHud } from './hud/speech-notes-hud';
+import { wireHudToggle } from './hud/toggle';
+import { initObsConnection } from './obs/obs-connection';
+import { initObsWiring } from './obs/obs-wiring';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
+import { setRecorderEnabled } from './state/recorder-settings';
+import { bindLoadSample } from './ui/load-sample';
+import { bindObsSettingsUI } from './ui/obs-settings-bind';
+import { bindObsStatusPills } from './ui/obs-status-bind';
+import { initObsToggle } from './ui/obs-toggle';
+import { initOverlays } from './ui/overlays';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
-import { initSpeechNotesHud } from './hud/speech-notes-hud';
-import { initAsrStatsHud } from './hud/asr-stats';
-import { initRecStatsHud } from './hud/rec-stats';
-import { initOverlays } from './ui/overlays';
-import { initHudController } from './hud/controller';
-import { wireHudToggle } from './hud/toggle';
-import { initObsToggle } from './ui/obs-toggle';
-import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
-import { installSpeech } from './features/speech-loader';
-import { initSpeechBridge } from './asr/v2/bridge-speech';
-import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
-import { shouldShowHud } from './hud/shouldShowHud';
-import { bindObsSettingsUI } from './ui/obs-settings-bind';
-import { initObsWiring } from './obs/obs-wiring';
-import { bindObsStatusPills } from './ui/obs-status-bind';
-import { bindLoadSample } from './ui/load-sample';
-import { initObsConnection } from './obs/obs-connection';
-import { setRecorderEnabled } from './state/recorder-settings';
 
 import { bootstrap } from './boot/boot';
 
@@ -405,32 +405,32 @@ ensureUiCrawlTargets();
 import './asr/v2/prompts';
 import * as Auto from './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
-import './media/display-bridge';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
-import { initScrollRouter } from './scroll/router';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
 import { createScrollModeRouter } from './features/scroll/mode-router';
 import { installStepScroll } from './features/scroll/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
+import { bindCameraUI } from './media/camera-bridge';
+import './media/display-bridge';
+import './media/mic'; // exposes window.__tpMic for mic controls + dB meter
+import { bindMicUI } from './media/mic-bridge';
+import { initMicPermissions } from './media/mic-permissions';
+import { initScrollRouter } from './scroll/router';
 import { onTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
+import './ui/camera-drag'; // installs camera drag + persistence
 import { wireMicToggle } from './ui/mic-toggle';
 import './ui/micMenu';
-import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
-import { initObsBridge } from './wiring/obs-bridge';
-import { initObsUI } from './wiring/obs-wiring';
-import { initMicPermissions } from './media/mic-permissions';
-import { bindMicUI } from './media/mic-bridge';
-import { bindCameraUI } from './media/camera-bridge';
+import './ui/speakers-panel'; // toggles Speakers panel visibility
+import './ui/step-visibility'; // hides step-only controls unless scrollMode === 'step'
 import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
-import './ui/camera-drag'; // installs camera drag + persistence
 import './ui/upload'; // installs script upload wiring
-import './ui/speakers-panel'; // toggles Speakers panel visibility
 import './utils/safe-dom'; // installs window.safeDOM for legacy callers
-import './media/mic'; // exposes window.__tpMic for mic controls + dB meter
-import './ui/step-visibility'; // hides step-only controls unless scrollMode === 'step'
+import { initObsBridge } from './wiring/obs-bridge';
+import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
+import { initObsUI } from './wiring/obs-wiring';
 // Unified core UI binder (central scroll mode + present mode + minimal overlay helpers)
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
@@ -438,11 +438,13 @@ import { bindCoreUI } from './wiring/ui-binds';
 import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
 
+type AnyFn = (...args: any[]) => any;
+
 declare global {
 	interface Window {
 		__tpInstallHUD?: (opts?: { hotkey?: string }) => any;
-		__tpHud?: any;
-		HUD?: { log?: (tag: string, payload?: unknown) => void };
+		__tpHud?: { log?: AnyFn | undefined } | undefined;
+		HUD?: { bus?: { emit?: AnyFn | undefined } | undefined; log?: AnyFn | undefined } | undefined;
 		__tpScrollDebug?: boolean;
 	}
 }

@@ -159,6 +159,7 @@ function updateUi(select: HTMLSelectElement | null, status: HTMLElement | null, 
 
 let modeRouterInstance: ReturnType<typeof createModeRouter> | null = null;
 let brainInstance: ScrollBrain | null = null;
+let enginesArmed = false;
 
 export function initScrollRouter(): void {
   try {
@@ -193,7 +194,9 @@ export function initScrollRouter(): void {
     try { store?.set?.(MODE_KEY, mode); } catch {}
     writePrefs(mode);
     updateUi(select, status, mode);
-    modeRouterInstance?.applyMode(mode);
+    if (enginesArmed) {
+      modeRouterInstance?.applyMode(mode);
+    }
     // Debug/diagnostic HUD log
     try {
       if (isScrollDebug()) {
@@ -233,6 +236,18 @@ export function initScrollRouter(): void {
 
   // initial mode
   applyMode(readInitialMode(store));
+
+  // Arm engines once the session starts (start speech sync)
+  try {
+    window.addEventListener('tp:session:start', () => {
+      try {
+        if (!enginesArmed) {
+          enginesArmed = true;
+          modeRouterInstance?.applyMode(currentMode);
+        }
+      } catch {}
+    }, { once: true });
+  } catch {}
 
   // Expose a small legacy-compatible surface so existing HUD/mode-chip readers see the new mode names
   try {
