@@ -25,6 +25,10 @@ export function clampActive(): boolean {
   try { return !!(window as any).__tpClampActive; } catch { return false; }
 }
 
+export function setClampActive(on: boolean): void {
+  try { (window as any).__tpClampActive = !!on; } catch {}
+}
+
 function clampScrollTop(sc: HTMLElement, y: number): number {
   const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
   const t = Math.max(0, Math.min(Number(y) || 0, max));
