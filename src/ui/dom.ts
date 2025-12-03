@@ -791,7 +791,7 @@ function ensureEmptyBanner() {
     if (!anyLines && !banner) {
       const el = document.createElement('div');
       el.className = 'empty-msg';
-      el.textContent = 'Paste text in the editor to beginâ€¦';
+      el.textContent = 'Paste text in the editor to begin…';
       viewer.appendChild(el);
     }
     if (anyLines && banner) {
