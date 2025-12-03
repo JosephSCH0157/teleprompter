@@ -896,6 +896,8 @@ export async function boot() {
 						installDisplaySync({
 							getText: () => {
 								try {
+									const raw = (window as any).__tpRawScript;
+									if (typeof raw === 'string' && raw.length) return raw;
 									const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
 									if (ed && typeof ed.value === 'string') return ed.value;
 									return '';

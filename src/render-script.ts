@@ -67,6 +67,9 @@ function resolveSpeakerTag(tag: string): SpeakerKey | null {
 }
 
 export function renderScript(text: string, container?: HTMLElement | null): void {
+  const raw = String(text ?? '');
+  try { (window as any).__tpRawScript = raw; } catch {}
+
   const root =
     container ||
     (document.querySelector('#viewer') as HTMLElement | null) ||
@@ -80,7 +83,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     return;
   }
 
-  const normalized = normalizeScript(text ?? '').replace(/\r\n/g, '\n');
+  const normalized = normalizeScript(raw).replace(/\r\n/g, '\n');
   const lines = normalized.split('\n');
   const frag = document.createDocumentFragment();
 
