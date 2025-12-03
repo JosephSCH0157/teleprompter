@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Anvil v1.7.6</title>
-  <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="description" content="Anvil Teleprompter Pro â€” speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <!-- Prefer color-scheme-aware theme colors; add fallback, drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
@@ -43,7 +43,7 @@
         }
 
         // Initial state
-        try { saveChip.textContent = 'Draft: —'; saveChip.removeAttribute('data-state'); } catch(e){}
+        try { saveChip.textContent = 'Draft: â€”'; saveChip.removeAttribute('data-state'); } catch(e){}
 
         // Editor changes mark draft as modified
         try {
@@ -90,7 +90,7 @@
   <!-- Load CSS in a simple, reliable way -->
   <link rel="stylesheet" href="teleprompter_pro.css">
 
-  <!-- One true boot path: module try → legacy fallback; mark which path wins -->
+  <!-- One true boot path: module try â†’ legacy fallback; mark which path wins -->
   <script>
     (function () {
       try {
@@ -105,7 +105,7 @@
       window.__tpBootSrc = 'module';
       await import('./dist/index.js?v=dev');
     })().catch(err => {
-      try { console.warn('[boot] module import failed → fallback', err); } catch (e) {}
+      try { console.warn('[boot] module import failed â†’ fallback', err); } catch (e) {}
       if (!window.__tpBooted) {
         window.__tpBootSrc = 'fallback';
         const s = document.createElement('script');
@@ -119,7 +119,7 @@
   <!-- Legacy browsers (no module support) load the legacy bundle -->
   <script nomodule src="./teleprompter_pro.js" defer></script>
 
-  <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
+  <!-- Dev flag â†’ add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
       try {
@@ -281,7 +281,7 @@
         // OBS Test connection
         if (t.matches && t.matches(selTest)) {
           if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
-          var pill = ensurePill(t); pill.textContent = 'testing…';
+          var pill = ensurePill(t); pill.textContent = 'testingâ€¦';
           try {
             var url  = (q('#settingsObsUrl,#obsUrl') && q('#settingsObsUrl,#obsUrl').value && q('#settingsObsUrl,#obsUrl').value.trim()) || 'ws://127.0.0.1:4455';
             var pass = (q('#settingsObsPassword,#obsPassword') && q('#settingsObsPassword,#obsPassword').value) || '';
@@ -319,7 +319,7 @@
         }
         var isOn = btn.dataset.state === 'on';
         var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
-        btn.textContent = isOn ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
+        btn.textContent = isOn ? ('Auto-scroll: On â€” ' + sFmt + ' px/s') : 'Auto-scroll: Off';
         // Stop any previous fallback when toggling or when turning Off via speed buttons
         try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
         window.__autoFallbackTimer = null;
@@ -357,12 +357,12 @@
 <div class="topbar">
 <strong>Anvil - Teleprompter</strong>
 <span id="appVersion" class="version-badge" aria-label="App version">v1.7.6</span>
-<span class="chip" id="saveChip">Draft: —</span>
+<span class="chip" id="saveChip">Draft: â€”</span>
 <span class="chip" id="permChip">Mic: unknown</span>
 <span class="chip" id="displayChip">Display: closed</span>
 <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
 <span class="chip" id="scrollChip">Scroll: idle</span>
-<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
+<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor â€” â€¢ scrollTop â€”</span>
 <span class="chip" id="camRtcChip">CamRTC: idle</span>
 <!-- Mic level + calibration -->
 <div class="mic-block">
@@ -390,7 +390,7 @@
   <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false">Help</button>
   <button id="loadDemoBtn" class="chip dev-only" hidden>Load Demo Script</button>
   <span id="selfChecksChip" class="chip chip-muted dev-only">
-    Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
+    Self-checks: <strong id="selfChecksText">6/6 âœ”</strong> <em>(click)</em>
   </span>
   
 </div>
@@ -431,7 +431,7 @@
   <label>Auto-scroll (px/s)
     <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
   </label>
-  <button id="autoDec" class="chip" title="–1 (Shift: –5)">–</button>
+  <button id="autoDec" class="chip" title="â€“1 (Shift: â€“5)">â€“</button>
   <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
   <button id="autoToggle">Auto-scroll: Off</button>
 </div>
@@ -439,13 +439,13 @@
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
   </label>
-  <span class="chip" id="wpmPx">≈ — px/s</span>
+  <span class="chip" id="wpmPx">â‰ˆ â€” px/s</span>
   
 </div>
 <!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
 <select id="micDeviceSel" class="select-md" hidden></select>
  <div class="row" id="sidebarMediaHint">
-   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings ▶ Recording/Media</span>
+   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings â–¶ Recording/Media</span>
  </div>
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
@@ -508,22 +508,22 @@
   <div class="row">
     <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
     <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
-    <button id="wrap-s1">Wrap ➜ S1</button>
+    <button id="wrap-s1">Wrap âžœ S1</button>
   </div>
   <div class="row">
     <label>Name <input id="name-s2" type="text" placeholder="Speaker 2"></label>
     <label>Color <input id="color-s2" type="color" value="#facc15"></label>
-    <button id="wrap-s2">Wrap ➜ S2</button>
+    <button id="wrap-s2">Wrap âžœ S2</button>
   </div>
   <div class="row">
     <label>Name <input id="name-g1" type="text" placeholder="Guest 1"></label>
     <label>Color <input id="color-g1" type="color" value="#34d399"></label>
-    <button id="wrap-g1">Wrap ➜ G1</button>
+    <button id="wrap-g1">Wrap âžœ G1</button>
   </div>
   <div class="row">
     <label>Name <input id="name-g2" type="text" placeholder="Guest 2"></label>
     <label>Color <input id="color-g2" type="color" value="#f472b6"></label>
-    <button id="wrap-g2">Wrap ➜ G2</button>
+    <button id="wrap-g2">Wrap âžœ G2</button>
   </div>
 
   <div class="row toolbar">
@@ -531,10 +531,10 @@
     <button id="wrap-italic"><i>I</i></button>
     <button id="wrap-underline"><span class="u">U</span></button>
     <button id="wrap-note">Note</button>
-    <button id="wrap-color">Color…</button>
-    <button id="wrap-bg">BG…</button>
+    <button id="wrap-color">Colorâ€¦</button>
+    <button id="wrap-bg">BGâ€¦</button>
     <button id="autoTagBtn">Smart Tag</button>
-    <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
+    <span class="chip">(use tags like [s1]â€¦[/s1], [color=#ff0]â€¦[/color])</span>
   </div>
 </div>
 <div class="row">
@@ -568,7 +568,7 @@
 </div>
 <p class="status" id="status"></p>
 <h2>Script</h2>
-<textarea id="editor" placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+<textarea id="editor" placeholder="Use tags: [s1]â€¦[/s1], [s2]â€¦[/s2], [g1]â€¦[/g1], [g2]â€¦[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
 </aside>
 <main class="viewer" id="viewer">
 <div class="marker"></div>
@@ -597,9 +597,9 @@
 
     <div class="shortcuts-grid">
       <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-      <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed (±1)</div>
-      <div><strong>Shift + ↑ / ↓</strong></div><div>Adjust by ±5</div>
-      <div><strong>Mouse-wheel on speed field</strong></div><div>±1 (Shift: ±5)</div>
+      <div><strong>â†‘ / â†“</strong></div><div>Adjust Auto-scroll speed (Â±1)</div>
+      <div><strong>Shift + â†‘ / â†“</strong></div><div>Adjust by Â±5</div>
+      <div><strong>Mouse-wheel on speed field</strong></div><div>Â±1 (Shift: Â±5)</div>
       <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
       <div><strong>Shift + ?</strong></div><div>Open Help</div>
       <div><strong>Ctrl/Cmd + S</strong></div><div>Save to browser</div>
@@ -621,14 +621,14 @@
       <button class="settings-tab" data-tab="advanced">Advanced</button>
     </div>
     <div id="settingsBody" class="settings-body"></div>
-    <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
+    <div class="settings-footer settings-small">Press Esc to close â€¢ Changes apply immediately</div>
   </div>
 </div>
 <!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
 
 <!-- Build label -->
 <div id="anvil-build-label">
-  ANVIL build 2025-10-15 00:00 • baseline: mainframe • HUD wired
+  ANVIL build 2025-10-15 00:00 â€¢ baseline: mainframe â€¢ HUD wired
 </div>
 
 <!-- HUD mount -->
@@ -731,7 +731,7 @@
           btn.hidden = !!(hasLines || hasText);
         }catch(e){}
       };
-      // Wire click → reuse existing sidebar control
+      // Wire click â†’ reuse existing sidebar control
       btn.addEventListener('click', function(){
         try{
           var loadBtn = document.getElementById('loadSample');
@@ -766,3 +766,4 @@
   </script>
 </body>
 </html>
+
