@@ -162,6 +162,17 @@ let modeRouterInstance: ReturnType<typeof createModeRouter> | null = null;
 let brainInstance: ScrollBrain | null = null;
 let enginesArmed = false;
 
+const armEngines = (): void => {
+  if (enginesArmed) return;
+  enginesArmed = true;
+  try {
+    const desired = isScrollRunning ? currentMode : 'rehearsal';
+    modeRouterInstance?.applyMode(desired);
+  } catch {
+    // ignore
+  }
+};
+
 function emitScrollStatus(payload: {
   mode: ScrollMode;
   strategy: string;
@@ -181,6 +192,9 @@ export function setScrollRunning(next: boolean): void {
   if (isScrollRunning === next) return;
   isScrollRunning = next;
   try {
+    if (!enginesArmed && next) {
+      armEngines();
+    }
     const desired = enginesArmed && isScrollRunning ? currentMode : 'rehearsal';
     modeRouterInstance?.applyMode(desired);
     if (isScrollDebug()) {
@@ -280,20 +294,17 @@ export function initScrollRouter(): void {
   // Arm engines once the session starts (start speech sync)
   try {
     window.addEventListener('tp:session:start', () => {
-      try {
-        if (!enginesArmed) {
-          enginesArmed = true;
-          const desired = isScrollRunning ? currentMode : 'rehearsal';
-          modeRouterInstance?.applyMode(desired);
-        }
-      } catch {}
+      try { armEngines(); } catch {}
     }, { once: true });
   } catch {}
 
   // Start scroll when speech sync reports ready (post pre-roll)
   try {
     const onReady = () => {
-      try { setScrollRunning(true); } catch {}
+      try {
+        armEngines();
+        setScrollRunning(true);
+      } catch {}
     };
     window.addEventListener('tp:speechSync:ready', onReady);
     window.addEventListener('tp:preroll:done', onReady);
