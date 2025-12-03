@@ -77,6 +77,7 @@ export interface ScrollBrain {
 
   // Speed target (continuous engines like timed/WPM/hybrid)
   setTargetSpeed(pxPerSec: number): void;
+  setMetrics?(pxPerLine: number, pxPerWord: number): void;
 
   // ASR inputs
   reportAsrSample(sample: AdaptSample): void;
@@ -230,6 +231,13 @@ export function createScrollBrain(): ScrollBrain {
     state.targetSpeedPxPerSec = Number.isFinite(v) && v > 0 ? v : 0;
   };
 
+  const setMetrics = (pxPerLine: number, pxPerWord: number): void => {
+    const line = Number(pxPerLine);
+    const word = Number(pxPerWord);
+    if (Number.isFinite(line) && line > 0) state.pxPerLine = line;
+    if (Number.isFinite(word) && word > 0) state.pxPerWord = word;
+  };
+
   const reportAsrSample = (sample: AdaptSample): void => {
     if (!sample || typeof sample.errPx !== 'number') return;
     const ts = typeof sample.ts === 'number' ? sample.ts : now();
@@ -262,6 +270,7 @@ export function createScrollBrain(): ScrollBrain {
     startEngine,
     stopEngine,
     setTargetSpeed,
+    setMetrics,
     reportAsrSample,
     reportAsrSilence,
     centerOnLine,
