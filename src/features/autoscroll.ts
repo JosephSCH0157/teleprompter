@@ -2,19 +2,33 @@ import { setBrainBaseSpeed } from '../scroll/brain-hooks';
 
 type AutoState = { enabled: boolean; speed: number };
 
+const MIN_SPEED_PX = 1;
+const MAX_SPEED_PX = 60;
+const DEFAULT_SPEED_PX = 21;
+
 // Authoritative auto-scroll controller (TS primary)
 let enabled = false;
-let speed = 21; // px/sec default
+let speed = DEFAULT_SPEED_PX; // px/sec default (SSOT)
 let raf = 0;
 let viewer: HTMLElement | null = null;
 let autoChip: HTMLElement | null = null;
+let statusEl: HTMLElement | null = null;
 let _fracCarry = 0; // fractional accumulator to avoid stalling at low speeds
+
+function clampSpeed(px: number): number {
+  return Math.max(MIN_SPEED_PX, Math.min(MAX_SPEED_PX, Number(px) || DEFAULT_SPEED_PX));
+}
+
+function getSpeed(): number {
+  return speed;
+}
 
 function applyLabel() {
   const btn = document.getElementById('autoToggle');
   const managedByRouter = !!(btn && (btn as HTMLElement).dataset && (btn as HTMLElement).dataset.state);
   if (btn && !managedByRouter) {
-    btn.textContent = enabled ? 'Auto-scroll: On' : 'Auto-scroll: Off';
+    const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
+    btn.textContent = enabled ? `Auto-scroll: On - ${sFmt} px/s` : 'Auto-scroll: Off';
     btn.setAttribute('aria-pressed', String(enabled));
   }
   try {
@@ -25,6 +39,13 @@ function applyLabel() {
       autoChip.setAttribute('aria-live', 'polite');
       autoChip.setAttribute('aria-atomic', 'true');
       autoChip.title = enabled ? 'Auto scroll is enabled' : 'Auto scroll is manual/off';
+    }
+  } catch {}
+  try {
+    if (!statusEl) statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
+    if (statusEl) {
+      const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
+      statusEl.textContent = enabled ? `Auto-scroll: On – ${sFmt} px/s` : 'Auto-scroll: Off';
     }
   } catch {}
 }
@@ -46,7 +67,7 @@ function loop() {
           if (visible) { raf = requestAnimationFrame(step); return; }
         }
       } catch {}
-      const delta = speed * dt + _fracCarry;
+      const delta = getSpeed() * dt + _fracCarry;
       const whole = (delta >= 0) ? Math.floor(delta) : Math.ceil(delta);
       _fracCarry = delta - whole;
       if (whole !== 0 && viewer) viewer.scrollTop += whole;
@@ -59,14 +80,19 @@ function loop() {
 export function initAutoscrollFeature() {
   viewer = document.getElementById('viewer');
   autoChip = document.getElementById('autoChip');
+  statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
   try {
-    const s = Number(localStorage.getItem('tp_auto_speed') || '');
-    if (Number.isFinite(s) && s > 0) {
-      speed = Math.max(5, Math.min(200, s));
-      try { const inp = document.getElementById('autoSpeed') as HTMLInputElement | null; if (inp) inp.value = String(speed); } catch {}
-    } else {
-      try { const inp2 = document.getElementById('autoSpeed') as HTMLInputElement | null; if (inp2) inp2.value = String(speed); } catch {}
+    const stored =
+      Number(localStorage.getItem('tp_autoScrollPx') || '') ||
+      Number(localStorage.getItem('tp_auto_speed') || ''); // legacy fallback
+    if (Number.isFinite(stored) && stored > 0) {
+      speed = clampSpeed(stored);
     }
+    const inputs = [
+      document.getElementById('autoSpeed') as HTMLInputElement | null,
+      document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
+    ].filter(Boolean) as HTMLInputElement[];
+    inputs.forEach((inp) => { inp.value = String(speed); });
   } catch {}
   applyLabel();
   const mo = new MutationObserver(() => {
@@ -113,12 +139,12 @@ let _setSpeedReentrant = false;
 export function setSpeed(pxPerSec: number) {
   const v = Number(pxPerSec);
   if (!Number.isFinite(v)) return;
-  const clamped = Math.max(1, Math.min(200, v));
+  const clamped = clampSpeed(v);
   if (clamped === speed) return;
   const prev = speed;
   speed = clamped;
   try { setBrainBaseSpeed(clamped); } catch {}
-  try { localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
+  try { localStorage.setItem('tp_autoScrollPx', String(speed)); localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
   if (!_setSpeedReentrant) {
     try {
       _setSpeedReentrant = true;
@@ -130,7 +156,13 @@ export function setSpeed(pxPerSec: number) {
   const detail = { speed, deltaPx: clamped - prev };
   try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
-  try { const inp = document.getElementById('autoSpeed') as HTMLInputElement | null; if (inp) inp.value = String(speed); } catch {}
+  try {
+    const inputs = [
+      document.getElementById('autoSpeed') as HTMLInputElement | null,
+      document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
+    ].filter(Boolean) as HTMLInputElement[];
+    inputs.forEach((inp) => { inp.value = String(speed); });
+  } catch {}
   try {
     const btn = document.getElementById('autoToggle');
     const st = (btn as HTMLElement | null)?.dataset?.state || '';
@@ -141,6 +173,7 @@ export function setSpeed(pxPerSec: number) {
       else if (st === 'paused') btn.textContent = `Auto-scroll: Paused - ${sFmt} px/s`;
     }
   } catch {}
+  applyLabel();
 }
 
 export function nudge(pixels: number) {
