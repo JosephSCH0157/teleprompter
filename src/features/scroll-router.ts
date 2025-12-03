@@ -443,7 +443,11 @@ function applyMode(m) {
   try {
     const autoRow = document.querySelector('.row:has(#autoSpeed)');
     const wpmRow = document.getElementById('wpmRow');
-    
+    const speedLabel = document.querySelector('[data-scroll-speed-label]') as HTMLElement | null;
+    const speedHint = document.querySelector('[data-scroll-speed-hint]') as HTMLElement | null;
+    const speedInput = document.getElementById('autoSpeed') as HTMLInputElement | null;
+    const modeExplain = document.querySelector('[data-scroll-mode-explain]') as HTMLElement | null;
+
     if (m === 'wpm') {
       // Show WPM controls, hide manual speed controls
       if (wpmRow) {
@@ -454,6 +458,9 @@ function applyMode(m) {
         autoRow.classList.add('visually-hidden');
         autoRow.setAttribute('aria-hidden', 'true');
       }
+      if (speedLabel) speedLabel.textContent = 'Target speed (WPM)';
+      if (speedHint) speedHint.textContent = 'Scroll speed is driven purely by this WPM value.';
+      if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = 'wpm'; }
     } else {
       // Show manual speed controls, hide WPM controls
       if (wpmRow) {
@@ -463,6 +470,41 @@ function applyMode(m) {
       if (autoRow) {
         autoRow.classList.remove('visually-hidden');
         autoRow.removeAttribute('aria-hidden');
+      }
+
+      if (m === 'hybrid') {
+        if (speedLabel) speedLabel.textContent = 'Baseline speed (WPM)';
+        if (speedHint) speedHint.textContent = 'Hybrid: uses this WPM as a floor; ASR can pull the text ahead as you speak.';
+        if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = 'hybrid'; }
+      } else if (m === 'asr') {
+        if (speedLabel) speedLabel.textContent = 'Scroll speed';
+        if (speedHint) speedHint.textContent = 'ASR-only: scroll position is driven by your voice; speed slider is ignored.';
+        if (speedInput) { speedInput.disabled = true; speedInput.dataset.mode = 'asr'; }
+      } else {
+        if (speedLabel) speedLabel.textContent = 'Scroll speed';
+        if (speedHint) speedHint.textContent = '';
+        if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = m; }
+      }
+    }
+
+    // Mode explanation text
+    if (modeExplain) {
+      switch (m) {
+        case 'wpm':
+          modeExplain.textContent = 'WPM: scrolls at a fixed words-per-minute target; good for solo reads.';
+          break;
+        case 'hybrid':
+          modeExplain.textContent = 'Hybrid: PLL between your voice and the WPM baseline; ASR nudges while baseline keeps moving.';
+          break;
+        case 'asr':
+          modeExplain.textContent = 'ASR: pure voice-locked mode — scroll position follows recognized speech; speed slider is ignored.';
+          break;
+        case 'timed':
+          modeExplain.textContent = 'Timed: scrolls to hit your end time; useful for fixed-slot rehearsals.';
+          break;
+        default:
+          modeExplain.textContent = '';
+          break;
       }
     }
   } catch {
