@@ -295,6 +295,7 @@ export function initScrollRouter(): void {
   try {
     window.addEventListener('tp:session:start', () => {
       try { armEngines(); } catch {}
+      try { setScrollRunning(false); } catch {}
     }, { once: true });
   } catch {}
 
