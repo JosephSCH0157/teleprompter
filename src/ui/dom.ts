@@ -412,6 +412,9 @@ function resetRun() {
   try { window.stopAutoScroll && window.stopAutoScroll(); } catch {}
   try { window.__scrollCtl?.stopAutoCatchup?.(); } catch {}
   try { window.resetTimer && window.resetTimer(); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:session:start', { detail: { reason: 'reset' } })); } catch {}
 
   const editor = document.getElementById('editor');
   const text = (editor && 'value' in editor) ? editor.value : '';
@@ -437,6 +440,7 @@ function resetRun() {
 
   // Notify listeners that the run was rewound
   try { window.dispatchEvent(new CustomEvent('tp:script:reset', { detail: { at: Date.now() } })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:scroll:status', { detail: { running: false } })); } catch {}
 
   try { (window.setStatus || (()=>{}))('Script reset to start'); } catch {}
 }
