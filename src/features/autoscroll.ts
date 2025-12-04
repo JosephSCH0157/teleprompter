@@ -122,15 +122,10 @@ export function initAutoscrollFeature() {
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
-  // Reflect scroll running state in the toggle label
+  // Listen to scroll status for HUD purposes only (no control of the loop here)
   try {
-    window.addEventListener('tp:scroll:status', (ev: Event) => {
-      const detail = (ev as CustomEvent<{ running?: boolean }>).detail || {};
-      if (typeof detail.running === 'boolean') {
-        enabled = detail.running;
-        if (enabled) { _fracCarry = 0; lastTs = 0; loop(); } else { stopLoop(); }
-        applyLabel();
-      }
+    window.addEventListener('tp:scroll:status', () => {
+      applyLabel();
     });
   } catch {
     /* ignore */
