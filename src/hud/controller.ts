@@ -6,7 +6,11 @@ export function initHudController(): void {
   const store = getAppStore();
   if (!store || typeof store.getSnapshot !== 'function' || typeof store.subscribeAll !== 'function') return;
 
-  const hudRoot = document.querySelector<HTMLElement>('[data-tp-hud]');
+  // Use same root selection logic as index.ts (ensureHud) to avoid mismatched mounts.
+  const hudRoot =
+    (document.querySelector<HTMLElement>('[data-tp-hud]')) ||
+    (document.querySelector<HTMLElement>('[data-role="hud-root"]')) ||
+    (document.getElementById('hud-root') as HTMLElement | null);
   if (!hudRoot) return;
 
   const apply = () => {
