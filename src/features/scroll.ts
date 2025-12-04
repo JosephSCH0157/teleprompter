@@ -1,7 +1,5 @@
 import { setMode as setScrollMode, getMode as getScrollMode } from '../scroll/router';
 import type { ScrollMode } from '../scroll/scroll-brain';
-import * as Auto from './autoscroll';
-
 function bindAutoControls() {
   // Intentionally left empty; auto controls are owned by autoscroll.ts bindings.
 }

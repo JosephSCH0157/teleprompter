@@ -726,11 +726,10 @@ function installScrollRouter(opts) {
               } catch {
               }
               enabledNow = false;
-              const s2 = getStoredSpeed();
-              const detail3 = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
-              setAutoChip(userEnabled ? "paused" : "manual", detail3);
-              try {
-                emitAutoState();
+          const detail3 = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
+          setAutoChip(userEnabled ? "paused" : "manual", detail3);
+          try {
+            emitAutoState();
               } catch {}
             }
           } catch {}

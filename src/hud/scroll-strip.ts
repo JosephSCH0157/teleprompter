@@ -29,26 +29,21 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
 
   container.innerHTML = `
     <div class="tp-hud-strip-inner">
-      <span class="tp-hud-pill" data-hud-scroll-mode>Mode: —</span>
+      <span class="tp-hud-pill" data-hud-scroll-mode>Mode: -</span>
       <span class="tp-hud-pill" data-hud-scroll-state>Scroll: Waiting</span>
-      <span class="tp-hud-pill" data-hud-scroll-speed>Speed: —</span>
-      <span class="tp-hud-pill" data-hud-scroll-pos>Line: —</span>
+      <span class="tp-hud-pill" data-hud-scroll-speed>Speed: -</span>
+      <span class="tp-hud-pill" data-hud-scroll-pos>Line: -</span>
     </div>
   `;
 
   root.appendChild(container);
 
-  const modeEl   = container.querySelector<HTMLElement>('[data-hud-scroll-mode]');
-  const stateEl  = container.querySelector<HTMLElement>('[data-hud-scroll-state]');
-  const speedEl  = container.querySelector<HTMLElement>('[data-hud-scroll-speed]');
-  const posEl    = container.querySelector<HTMLElement>('[data-hud-scroll-pos]');
-
-  let lastStatus: ScrollStatusDetail | null = null;
-  let lastCommit: ScrollCommitDetail | null = null;
+  const modeEl = container.querySelector<HTMLElement>('[data-hud-scroll-mode]');
+  const stateEl = container.querySelector<HTMLElement>('[data-hud-scroll-state]');
+  const speedEl = container.querySelector<HTMLElement>('[data-hud-scroll-speed]');
+  const posEl = container.querySelector<HTMLElement>('[data-hud-scroll-pos]');
 
   function updateFromStatus(detail: ScrollStatusDetail) {
-    lastStatus = detail;
-
     if (modeEl) {
       const label = (() => {
         switch (detail.mode) {
@@ -70,14 +65,13 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
     }
 
     if (posEl && detail.activeIdx != null && detail.lineCount != null && detail.lineCount > 0) {
-      const idx = detail.activeIdx + 1; // zero → one-based
+      const idx = detail.activeIdx + 1; // zero -> one-based
       const pct = Math.round((idx / detail.lineCount) * 100);
       posEl.textContent = `Line: ${idx} / ${detail.lineCount} (${pct}%)`;
     }
   }
 
   function updateFromCommit(detail: ScrollCommitDetail) {
-    lastCommit = detail;
     if (speedEl) {
       speedEl.textContent = `Speed: Δ${detail.delta.toFixed(1)} px`;
     }

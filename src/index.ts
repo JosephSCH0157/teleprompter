@@ -471,7 +471,7 @@ function installHudIfAvailable(): void {
 	}
 }
 
-function ensureHud(store: any): void {
+function _ensureHud(store: any): void {
 	try {
 		if ((window as any).__tpHudTsInited) return;
 		(window as any).__tpHudTsInited = true;

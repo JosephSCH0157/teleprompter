@@ -329,7 +329,7 @@ export function initScrollRouter(): void {
       } catch {}
       return currentMode;
     };
-    const handlePrerollDone = (ev: CustomEvent<PrerollDetail>) => {
+    const handlePrerollDone = (_ev?: CustomEvent<PrerollDetail>) => {
       const mode = normalizeMode(getModeForPreroll());
       if (mode === 'rehearsal') return;
       if (!isAutoCapable(mode)) return;
