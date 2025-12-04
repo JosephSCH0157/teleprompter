@@ -1,254 +1,301 @@
-import { setBrainBaseSpeed } from '../scroll/brain-hooks';
+// src/features/autoscroll.ts
 
-type AutoState = { enabled: boolean; speed: number };
+type ViewerGetter = () => HTMLElement | null;
 
-const MIN_SPEED_PX = 1;
-const MAX_SPEED_PX = 60;
-const DEFAULT_SPEED_PX = 21;
-
-// Authoritative auto-scroll controller (TS primary)
-let enabled = false;
-let speed = DEFAULT_SPEED_PX; // px/sec default (SSOT)
-let raf = 0;
-let lastTs = 0;
-let viewer: HTMLElement | null = null;
-let autoChip: HTMLElement | null = null;
-let statusEl: HTMLElement | null = null;
-let toggleBtns: HTMLElement[] = [];
-let speedInputs: HTMLInputElement[] = [];
-let _fracCarry = 0; // fractional accumulator to avoid stalling at low speeds
-
-function clampSpeed(px: number): number {
-  return Math.max(MIN_SPEED_PX, Math.min(MAX_SPEED_PX, Number(px) || DEFAULT_SPEED_PX));
+export interface AutoScrollController {
+  bindUI(toggleEl: HTMLElement | null, speedInput: HTMLInputElement | null): void;
+  start(): void;
+  stop(): void;
+  isActive(): boolean;
 }
 
-function getSpeed(): number {
-  return speed;
-}
+declare global {
+  interface Window {
+    startAutoScroll?: () => void;
+    stopAutoScroll?: () => void;
+    tweakAutoSpeed?: (delta: number) => void;
 
-function applyLabel() {
-  const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
-  toggleBtns.forEach((btn) => {
-    const managedByRouter = !!btn.dataset.state;
-    if (managedByRouter) return;
-    btn.textContent = enabled ? `Auto-scroll: On - ${sFmt} px/s` : 'Auto-scroll: Off';
-    btn.setAttribute('aria-pressed', String(enabled));
-  });
-  try {
-    autoChip = autoChip || document.getElementById('autoChip');
-    const chipManaged = !!(autoChip && autoChip.getAttribute && autoChip.getAttribute('data-state'));
-    if (autoChip && !chipManaged) {
-      autoChip.textContent = enabled ? 'Auto: On' : 'Auto: Manual';
-      autoChip.setAttribute('aria-live', 'polite');
-      autoChip.setAttribute('aria-atomic', 'true');
-      autoChip.title = enabled ? 'Auto scroll is enabled' : 'Auto scroll is manual/off';
-    }
-  } catch {}
-  try {
-    if (!statusEl) statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
-    if (statusEl) {
-      statusEl.textContent = enabled ? `Auto-scroll: On - ${sFmt} px/s` : 'Auto-scroll: Off';
-    }
-  } catch {}
-}
+    __tp_has_script?: boolean;
+    tpArmWatchdog?: (armed: boolean) => void;
 
-function stopLoop() {
-  if (raf) {
-    cancelAnimationFrame(raf);
-    raf = 0;
+    // HUD variants already in the project
+    HUD?: { log?: (evt: string, data?: unknown) => void };
+    tp_hud?: (evt: string, data?: unknown) => void;
+
+    __tpMomentaryHandlers?: { onKey?: (e: KeyboardEvent) => void } | null;
   }
 }
 
-function loop() {
-  stopLoop();
-  if (!enabled || !viewer) return;
-  try { if ((window as any).__TP_REHEARSAL) return; } catch {}
-  lastTs = 0;
-  const step = (now: number) => {
-    if (!enabled || !viewer) { stopLoop(); return; }
-    try {
-      const ov = document.getElementById('countOverlay');
-      if (ov) {
-        const cs = getComputedStyle(ov);
-        const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !ov.classList.contains('hidden');
-        if (visible) { raf = requestAnimationFrame(step); return; }
-      }
-    } catch {}
+// --- Internal state ---------------------------------------------------------
 
-    if (!lastTs) { lastTs = now; raf = requestAnimationFrame(step); return; }
+let getViewer: ViewerGetter;
+let toggleEl: HTMLElement | null = null;
+let speedInput: HTMLInputElement | null = null;
 
-    const dt = (now - lastTs) / 1000;
-    lastTs = now;
-    const delta = getSpeed() * dt + _fracCarry;
-    const whole = delta >= 0 ? Math.floor(delta) : Math.ceil(delta);
-    _fracCarry = delta - whole;
-    if (whole !== 0 && viewer) {
-      const maxScroll = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-      const next = Math.min(maxScroll, (viewer.scrollTop || 0) + whole);
-      viewer.scrollTop = next;
-      if (next >= maxScroll) { stopLoop(); return; }
-    }
-    raf = requestAnimationFrame(step);
-  };
-  raf = requestAnimationFrame(step);
-}
+let rafId: number | null = null;
+let lastTs: number | null = null;
+let active = false;
 
-export function initAutoscrollFeature() {
-  viewer = document.getElementById('viewer');
-  autoChip = document.getElementById('autoChip');
-  statusEl = document.querySelector<HTMLElement>('[data-auto-status]');
-  toggleBtns = [
-    document.getElementById('autoToggle') as HTMLElement | null,
-    document.getElementById('autoScrollToggle') as HTMLElement | null,
-    ...Array.from(document.querySelectorAll<HTMLElement>('[data-action="auto-toggle"]')),
-  ].filter(Boolean) as HTMLElement[];
-  speedInputs = [
-    document.getElementById('autoSpeed') as HTMLInputElement | null,
-    document.getElementById('autoScrollSpeed') as HTMLInputElement | null,
-  ].filter(Boolean) as HTMLInputElement[];
+// Momentary speed multiplier (Shift/Alt)
+let momentaryMult = 1;
+
+// --- Helpers: base speed persistence (mirrors legacy behavior) -------------
+
+function vpBaseKey(): string {
   try {
-    const stored =
-      Number(localStorage.getItem('tp_autoScrollPx') || '') ||
-      Number(localStorage.getItem('tp_auto_speed') || ''); // legacy fallback
-    if (Number.isFinite(stored) && stored > 0) {
-      speed = clampSpeed(stored);
-    }
-    speedInputs.forEach((inp) => { inp.value = String(speed); });
-  } catch {}
-  applyLabel();
-
-  // Wire UI controls to the TS engine
-  try {
-    toggleBtns.forEach((btn) => {
-      if (btn.dataset.wired) return;
-      btn.dataset.wired = '1';
-      btn.addEventListener('click', (ev) => {
-        try { ev.preventDefault(); ev.stopPropagation(); } catch {}
-        const pressed = btn.getAttribute('aria-pressed') === 'true';
-        // toggle based on current aria state
-        enabled = !pressed;
-        _fracCarry = 0;
-        lastTs = 0;
-        if (enabled) loop(); else stopLoop();
-        applyLabel();
-        try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } })); } catch {}
-      }, { capture: true });
-    });
-  } catch {}
-
-  try {
-    speedInputs.forEach((inp) => {
-      if (inp.dataset.wired) return;
-      inp.dataset.wired = '1';
-      inp.addEventListener('input', () => {
-        const v = Number(inp.value) || 0;
-        setSpeed(v);
-      });
-    });
-  } catch {}
-
-  const mo = new MutationObserver(() => {
-    const v = document.getElementById('viewer');
-    if (v !== viewer) { viewer = v; if (enabled) loop(); }
-  });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-
-  // Listen to scroll status for HUD purposes only (no control of the loop here)
-  try {
-    window.addEventListener('tp:scroll:status', () => {
-      applyLabel();
-    });
+    const vh = Math.round((window.innerHeight || 0) / 10) * 10;
+    return `tp_base_speed_px_s@vh=${vh}`;
   } catch {
-    /* ignore */
+    return 'tp_base_speed_px_s';
   }
 }
 
-export function toggle() {
-  const want = !enabled;
+function loadBaseSpeed(): number {
   try {
-    if (want && (window as any).__TP_REHEARSAL) {
-      enabled = false;
-      try { (window as any).toasts?.show?.('Auto-scroll disabled in Rehearsal Mode'); } catch {}
-      applyLabel();
-      return;
-    }
-  } catch {}
-  enabled = want;
-  _fracCarry = 0;
-  lastTs = 0;
-  if (enabled) loop(); else stopLoop();
-  applyLabel();
-  try {
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } }));
-  } catch {}
+    const k = vpBaseKey();
+    const v = localStorage.getItem(k) || localStorage.getItem('tp_base_speed_px_s');
+    const n = Number(v ?? '');
+    return Number.isFinite(n) && n > 0 ? n : 120;
+  } catch {
+    return 120;
+  }
 }
 
-export function setEnabled(v: boolean) {
+function saveBaseSpeed(pxPerSec: number): void {
   try {
-    if (v && (window as any).__TP_REHEARSAL) {
-      enabled = false;
-      try { (window as any).toasts?.show?.('Auto-scroll disabled in Rehearsal Mode'); } catch {}
-      applyLabel();
-      return;
-    }
-  } catch {}
-  enabled = !!v;
-  _fracCarry = 0;
-  lastTs = 0;
-  if (enabled) loop(); else stopLoop();
-  applyLabel();
-  try {
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } }));
-  } catch {}
+    const k = vpBaseKey();
+    const v = String(pxPerSec);
+    localStorage.setItem(k, v);
+    // keep legacy key for compatibility
+    localStorage.setItem('tp_base_speed_px_s', v);
+  } catch {
+    // ignore
+  }
 }
 
-export function inc() { setSpeed(speed + 0.5); if (enabled) loop(); }
-export function dec() { setSpeed(speed - 0.5); if (enabled) loop(); }
-export function getState(): AutoState { return { enabled, speed }; }
+function currentSpeedPx(): number {
+  if (speedInput) {
+    const v = Number(speedInput.value);
+    if (Number.isFinite(v)) {
+      return Math.max(0, Math.min(300, v));
+    }
+  }
+  return loadBaseSpeed();
+}
 
-let _setSpeedReentrant = false;
-export function setSpeed(pxPerSec: number) {
-  const v = Number(pxPerSec);
-  if (!Number.isFinite(v)) return;
-  const clamped = clampSpeed(v);
-  if (clamped === speed) return;
-  const prev = speed;
-  speed = clamped;
-  try { setBrainBaseSpeed(clamped); } catch {}
-  try { localStorage.setItem('tp_autoScrollPx', String(speed)); localStorage.setItem('tp_auto_speed', String(speed)); } catch {}
-  if (!_setSpeedReentrant) {
+function hud(tag: string, data?: unknown): void {
+  try {
+    if (window.tp_hud) window.tp_hud(tag, data);
+    else if (window.HUD?.log) window.HUD.log(tag, data);
+  } catch {
+    // ignore HUD failures
+  }
+}
+
+// --- Core scroll loop -------------------------------------------------------
+
+function tick(now: number) {
+  if (!active) return;
+
+  if (lastTs == null) {
+    lastTs = now;
+  }
+
+  const dt = (now - lastTs) / 1000;
+  lastTs = now;
+
+  const viewer = getViewer?.();
+  if (viewer) {
+    const base = currentSpeedPx();
+    const pxPerSec = base * momentaryMult;
+    const dy = pxPerSec * dt;
+
+    const maxTop = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const nextTop = Math.max(0, Math.min(maxTop, viewer.scrollTop + dy));
+
     try {
-      _setSpeedReentrant = true;
-      (window as any).__scrollCtl?.setSpeed?.(speed);
-    } finally {
-      _setSpeedReentrant = false;
+      viewer.scrollTop = nextTop;
+    } catch {
+      // ignore
+    }
+
+    // Send to display if the legacy helper is present
+    try {
+      const ratio = maxTop ? nextTop / maxTop : 0;
+      (window as any).sendToDisplay?.({ type: 'scroll', top: nextTop, ratio });
+    } catch {
+      // ignore
     }
   }
-  const detail = { speed, deltaPx: clamped - prev };
-  try { document.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
-  try { window.dispatchEvent(new CustomEvent('tp:autoSpeed', { detail })); } catch {}
-  try {
-    speedInputs.forEach((inp) => { inp.value = String(speed); });
-  } catch {}
-  try {
-    toggleBtns.forEach((btn) => {
-      const st = btn.dataset?.state || '';
-      const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
-      if (st === 'on') btn.textContent = `Auto-scroll: On - ${sFmt} px/s`;
-      else if (st === 'paused') btn.textContent = `Auto-scroll: Paused - ${sFmt} px/s`;
-    });
-  } catch {}
-  applyLabel();
-  if (enabled) { _fracCarry = 0; lastTs = 0; loop(); }
+
+  rafId = requestAnimationFrame(tick);
 }
 
-export function nudge(pixels: number) {
-  try {
-    if (!viewer) viewer = document.getElementById('viewer');
-    if (!viewer) return;
-    viewer.scrollTop += Number(pixels) || 0;
-  } catch {}
+// --- Momentary key handling (Shift = faster, Alt = slower) -----------------
+
+function attachMomentaryKeys() {
+  const handler = (e: KeyboardEvent) => {
+    try {
+      const next = e.shiftKey ? 1.1 : e.altKey ? 0.88 : 1;
+      if (next !== momentaryMult) {
+        momentaryMult = next;
+        hud('auto:momentary', { mult: momentaryMult });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  window.__tpMomentaryHandlers = { onKey: handler };
+
+  window.addEventListener('keydown', handler);
+  window.addEventListener('keyup', handler);
 }
 
-// Back-compat named entry
-export const initAutoScroll = initAutoscrollFeature;
+function detachMomentaryKeys() {
+  try {
+    const h = window.__tpMomentaryHandlers;
+    if (h?.onKey) {
+      window.removeEventListener('keydown', h.onKey);
+      window.removeEventListener('keyup', h.onKey);
+    }
+  } catch {
+    // ignore
+  } finally {
+    window.__tpMomentaryHandlers = null;
+    momentaryMult = 1;
+  }
+}
+
+// --- Public controller ------------------------------------------------------
+
+function updateToggleLabel() {
+  if (!toggleEl) return;
+  if (!active) {
+    toggleEl.classList.remove('active');
+    toggleEl.textContent = 'Auto-scroll: Off';
+  } else {
+    const v = Math.round(currentSpeedPx());
+    toggleEl.classList.add('active');
+    toggleEl.textContent = `Auto-scroll: On (${v}px/s)`;
+  }
+}
+
+function start() {
+  if (active) return;
+
+  const viewer = getViewer?.();
+  if (!viewer) return;
+
+  // Optional guard: require a script to be loaded
+  if (window.__tp_has_script === false) {
+    return;
+  }
+
+  active = true;
+  lastTs = null;
+
+  updateToggleLabel();
+  hud('auto:start', { speed: currentSpeedPx() });
+
+  // Arm scroll watchdog if present
+  try {
+    window.tpArmWatchdog?.(true);
+  } catch {
+    // ignore
+  }
+
+  attachMomentaryKeys();
+  rafId = requestAnimationFrame(tick);
+}
+
+function stop() {
+  if (!active) return;
+
+  active = false;
+
+  if (rafId != null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+  lastTs = null;
+
+  updateToggleLabel();
+  hud('auto:stop');
+
+  try {
+    window.tpArmWatchdog?.(false);
+  } catch {
+    // ignore
+  }
+
+  detachMomentaryKeys();
+}
+
+// tweak for +/- buttons or future callers
+function tweakSpeed(delta: number) {
+  if (!speedInput) return;
+  const clamped = Math.max(0, Math.min(300, (Number(speedInput.value) || 0) + delta));
+  speedInput.value = String(clamped);
+  saveBaseSpeed(clamped);
+  if (active) updateToggleLabel();
+  hud('auto:tweak', { delta, speed: clamped });
+}
+
+// --- Factory: what index.ts calls ------------------------------------------
+
+export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController {
+  getViewer = viewerGetter;
+
+  // Expose globals for legacy callers (ASR, countdown, etc.)
+  window.startAutoScroll = start;
+  window.stopAutoScroll = stop;
+  window.tweakAutoSpeed = tweakSpeed;
+
+  return {
+    bindUI(toggle, speed) {
+      toggleEl = toggle;
+      speedInput = speed;
+
+      // Initialize speed input
+      if (speedInput) {
+        const base = loadBaseSpeed();
+        speedInput.min = speedInput.min || '0';
+        speedInput.max = speedInput.max || '300';
+        speedInput.step = speedInput.step || '5';
+        speedInput.value = speedInput.value || String(base);
+
+        speedInput.addEventListener('input', () => {
+          const v = currentSpeedPx();
+          saveBaseSpeed(v);
+          if (active) updateToggleLabel();
+        });
+      }
+
+      // Wire +/- buttons if present
+      const decBtn = document.getElementById('autoDec');
+      const incBtn = document.getElementById('autoInc');
+
+      decBtn?.addEventListener('click', () => tweakSpeed(-10));
+      incBtn?.addEventListener('click', () => tweakSpeed(+10));
+
+      // Toggle button
+      if (toggleEl && !toggleEl.hasAttribute('data-autoscroll-wired')) {
+        toggleEl.setAttribute('data-autoscroll-wired', '1');
+        toggleEl.addEventListener('click', () => {
+          if (active) stop();
+          else start();
+        });
+      }
+
+      // Initial label
+      updateToggleLabel();
+    },
+
+    start,
+    stop,
+    isActive() {
+      return active;
+    },
+  };
+}
