@@ -1,6 +1,7 @@
 // src/features/autoscroll.ts
 
 type ViewerGetter = () => HTMLElement | null;
+type AnyFn = (...args: any[]) => any;
 
 export interface AutoScrollController {
   bindUI(toggleEl: HTMLElement | null, speedInput: HTMLInputElement | null): void;
@@ -11,15 +12,15 @@ export interface AutoScrollController {
 
 declare global {
   interface Window {
-    startAutoScroll?: () => void;
-    stopAutoScroll?: () => void;
-    tweakAutoSpeed?: (delta: number) => void;
+    startAutoScroll?(): void;
+    stopAutoScroll?(): void;
+    tweakAutoSpeed?(delta: number): void;
 
     __tp_has_script?: boolean;
     tpArmWatchdog?: (armed: boolean) => void;
 
     // HUD variants already in the project
-    HUD?: { log?: (evt: string, data?: unknown) => void };
+    HUD?: { bus?: { emit?: AnyFn | undefined } | undefined; log?: AnyFn | undefined };
     tp_hud?: (evt: string, data?: unknown) => void;
 
     __tpMomentaryHandlers?: { onKey?: (e: KeyboardEvent) => void } | null;
@@ -35,6 +36,7 @@ let speedInput: HTMLInputElement | null = null;
 let rafId: number | null = null;
 let lastTs: number | null = null;
 let active = false;
+let controller: AutoScrollController | null = null;
 
 // Momentary speed multiplier (Shift/Alt)
 let momentaryMult = 1;
@@ -298,4 +300,73 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
       return active;
     },
   };
+}
+
+// --- Legacy compatibility exports (used by existing index.ts wiring) -------
+
+function ensureController(): AutoScrollController | null {
+  if (!controller) {
+    controller = initAutoScroll(() => document.getElementById('viewer'));
+  }
+  return controller;
+}
+
+function bindDefaultUi(ctrl: AutoScrollController): void {
+  const autoToggle =
+    (document.getElementById('autoScrollToggle') as HTMLButtonElement | null) ||
+    (document.getElementById('autoToggle') as HTMLButtonElement | null);
+  const autoSpeed =
+    (document.getElementById('autoScrollSpeed') as HTMLInputElement | null) ||
+    (document.getElementById('autoSpeed') as HTMLInputElement | null);
+
+  ctrl.bindUI(autoToggle, autoSpeed);
+}
+
+export function initAutoscrollFeature(): AutoScrollController | null {
+  const ctrl = ensureController();
+  if (!ctrl) return null;
+  bindDefaultUi(ctrl);
+  try {
+    (window as any).__tpAuto = { setEnabled };
+  } catch {
+    // ignore
+  }
+  return ctrl;
+}
+
+export function toggle(): void {
+  const ctrl = initAutoscrollFeature();
+  if (!ctrl) return;
+  if (ctrl.isActive()) ctrl.stop();
+  else ctrl.start();
+}
+
+export function setSpeed(pxPerSec: number): void {
+  const ctrl = initAutoscrollFeature();
+  if (!ctrl) return;
+
+  if (speedInput) {
+    const clamped = Math.max(0, Math.min(300, Number(pxPerSec) || 0));
+    speedInput.value = String(clamped);
+    saveBaseSpeed(clamped);
+    if (ctrl.isActive()) updateToggleLabel();
+    hud('auto:set-speed', { speed: clamped });
+  }
+}
+
+export function inc(): void {
+  initAutoscrollFeature();
+  tweakSpeed(+10);
+}
+
+export function dec(): void {
+  initAutoscrollFeature();
+  tweakSpeed(-10);
+}
+
+export function setEnabled(enable: boolean): void {
+  const ctrl = initAutoscrollFeature();
+  if (!ctrl) return;
+  if (enable) ctrl.start();
+  else ctrl.stop();
 }
