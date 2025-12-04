@@ -116,15 +116,13 @@ function tick(now: number) {
     const nextTop = Math.max(0, Math.min(maxTop, viewer.scrollTop + dy));
 
     try {
-      viewer.scrollTop = nextTop;
-    } catch {
-      // ignore
-    }
-
-    // Send to display if the legacy helper is present
-    try {
-      const ratio = maxTop ? nextTop / maxTop : 0;
-      (window as any).sendToDisplay?.({ type: 'scroll', top: nextTop, ratio });
+      // All main viewer scroll writes should go through the central writer.
+      const w = window as any;
+      if (typeof w.__tpScrollWrite === 'function') {
+        w.__tpScrollWrite(nextTop);
+      } else {
+        viewer.scrollTop = nextTop;
+      }
     } catch {
       // ignore
     }
@@ -234,7 +232,7 @@ function stop() {
 // tweak for +/- buttons or future callers
 function tweakSpeed(delta: number) {
   if (!speedInput) return;
-  const clamped = Math.max(0, Math.min(300, (Number(speedInput.value) || 0) + delta));
+  const clamped = Math.max(0, Math.min(200, (Number(speedInput.value) || 0) + delta));
   speedInput.value = String(clamped);
   saveBaseSpeed(clamped);
   if (active) updateToggleLabel();
@@ -260,8 +258,8 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
       if (speedInput) {
         const base = loadBaseSpeed();
         speedInput.min = speedInput.min || '0';
-        speedInput.max = speedInput.max || '300';
-        speedInput.step = speedInput.step || '5';
+        speedInput.max = speedInput.max || '200';
+        speedInput.step = speedInput.step || '0.5';
         speedInput.value = speedInput.value || String(base);
 
         speedInput.addEventListener('input', () => {
@@ -275,8 +273,9 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
       const decBtn = document.getElementById('autoDec');
       const incBtn = document.getElementById('autoInc');
 
-      decBtn?.addEventListener('click', () => tweakSpeed(-10));
-      incBtn?.addEventListener('click', () => tweakSpeed(+10));
+      // 0.5 px/s per click
+      decBtn?.addEventListener('click', () => tweakSpeed(-0.5));
+      incBtn?.addEventListener('click', () => tweakSpeed(+0.5));
 
       // Toggle button
       if (toggleEl && !toggleEl.hasAttribute('data-autoscroll-wired')) {
