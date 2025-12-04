@@ -207,6 +207,7 @@ export function setSpeed(pxPerSec: number) {
   try {
     toggleBtns.forEach((btn) => {
       const st = btn.dataset?.state || '';
+      const sFmt = (Math.round(speed * 10) / 10).toFixed(1);
       if (st === 'on') btn.textContent = `Auto-scroll: On - ${sFmt} px/s`;
       else if (st === 'paused') btn.textContent = `Auto-scroll: Paused - ${sFmt} px/s`;
     });
