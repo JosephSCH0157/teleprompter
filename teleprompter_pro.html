@@ -66,8 +66,14 @@
   <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
   <!-- Dev HUD / debug tools (loads __tpInstallHUD) -->
   <script src="/debug-tools.js" async defer></script>
-  <!-- TS HUD root -->
-  <div id="tpHudRoot" data-tp-hud class="tp-hud-root hidden" aria-hidden="true"></div>
+<!-- TS HUD root -->
+<div
+  id="hud-root"
+  data-role="hud-root"
+  data-tp-hud
+  class="tp-hud-root hidden"
+  aria-hidden="true"
+></div>
 
   <!-- Dev flag G�� add .tp-dev class early so CSS can key off it -->
   <script>
@@ -605,8 +611,13 @@
 </div>
 
 <!-- HUD mount -->
-<div data-tp-hud>
-  <div id="hud-root" data-role="hud-root"></div>
+<div
+  id="hud-root"
+  data-role="hud-root"
+  data-tp-hud
+  class="tp-hud-root hidden"
+  aria-hidden="true"
+>
   <!-- Present Mode exit button (visible only in Present Mode) -->
   <button id="presentExitBtn" class="present-exit" type="button" data-tp-toggle-hud>Exit Present (Esc)</button>
 </div>

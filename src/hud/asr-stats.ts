@@ -31,8 +31,10 @@ function ensureHudRoot(root?: HTMLElement | null): HTMLElement | null {
     if (!r) {
       r = document.createElement('div');
       r.id = 'hud-root';
-      r.className = 'hud-root hidden';
+      r.classList.add('tp-hud-root', 'hidden');
       r.setAttribute('aria-hidden', 'true');
+      r.setAttribute('data-tp-hud', '');
+      r.setAttribute('data-role', 'hud-root');
       r.setAttribute('inert', '');
       document.body.appendChild(r);
     }

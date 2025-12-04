@@ -8,9 +8,9 @@ export function initHudController(): void {
 
   // Use same root selection logic as index.ts (ensureHud) to avoid mismatched mounts.
   const hudRoot =
-    (document.querySelector<HTMLElement>('[data-tp-hud]')) ||
+    (document.getElementById('hud-root') as HTMLElement | null) ||
     (document.querySelector<HTMLElement>('[data-role="hud-root"]')) ||
-    (document.getElementById('hud-root') as HTMLElement | null);
+    (document.querySelector<HTMLElement>('[data-tp-hud]'));
   if (!hudRoot) return;
 
   const apply = () => {
