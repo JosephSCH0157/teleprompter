@@ -582,6 +582,9 @@ export function installSpeech(): void {
 
           if (!wantsSpeech) {
             // Non-ASR modes: just run pre-roll and start auto-scroll
+            running = true;
+            setListeningUi(true);
+            try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
             await beginCountdownThen(sec, async () => {
               try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
               try {
@@ -590,6 +593,7 @@ export function installSpeech(): void {
                 }));
               } catch {}
             });
+            if (btn) btn.disabled = false;
             return;
           }
 
