@@ -79,7 +79,7 @@ function currentSpeedPx(): number {
   if (speedInput) {
     const v = Number(speedInput.value);
     if (Number.isFinite(v)) {
-      return Math.max(0, Math.min(300, v));
+      return Math.max(0, Math.min(200, v));
     }
   }
   return loadBaseSpeed();
@@ -342,7 +342,7 @@ export function setSpeed(pxPerSec: number): void {
   if (!ctrl) return;
 
   if (speedInput) {
-    const clamped = Math.max(0, Math.min(300, Number(pxPerSec) || 0));
+    const clamped = Math.max(0, Math.min(200, Number(pxPerSec) || 0));
     speedInput.value = String(clamped);
     saveBaseSpeed(clamped);
     if (ctrl.isActive()) updateToggleLabel();
@@ -352,12 +352,12 @@ export function setSpeed(pxPerSec: number): void {
 
 export function inc(): void {
   initAutoscrollFeature();
-  tweakSpeed(+10);
+  tweakSpeed(+0.5);
 }
 
 export function dec(): void {
   initAutoscrollFeature();
-  tweakSpeed(-10);
+  tweakSpeed(-0.5);
 }
 
 export function setEnabled(enable: boolean): void {
@@ -365,4 +365,58 @@ export function setEnabled(enable: boolean): void {
   if (!ctrl) return;
   if (enable) ctrl.start();
   else ctrl.stop();
+}
+
+// --- Auto-boot: wire itself on DOM ready so we don't depend on index.ts wiring ---
+
+if (typeof window !== 'undefined') {
+  const boot = () => {
+    try {
+      const viewer = document.getElementById('viewer') as HTMLElement | null;
+
+      // Try multiple ids for the toggle and speed in case HTML naming drifted
+      const toggle =
+        (document.getElementById('autoToggle') as HTMLElement | null) ||
+        (document.getElementById('autoScrollToggle') as HTMLElement | null) ||
+        (document.querySelector('[data-auto-toggle]') as HTMLElement | null);
+
+      const speed =
+        (document.getElementById('autoSpeed') as HTMLInputElement | null) ||
+        (document.querySelector('[data-auto-speed]') as HTMLInputElement | null);
+
+      if (!viewer || !toggle || !speed) {
+        try {
+          console.warn('[auto-scroll] boot: missing elements', {
+            viewer: !!viewer,
+            toggle: !!toggle,
+            speed: !!speed,
+          });
+        } catch {}
+        return;
+      }
+
+      const auto = initAutoScroll(() => viewer);
+      auto.bindUI(toggle, speed);
+      try { (window as any).__tpAuto = auto; } catch {}
+
+      try {
+        console.log('[auto-scroll] boot: wired', {
+          viewer: true,
+          toggleId: toggle.id,
+          speedId: speed.id,
+        });
+      } catch {}
+    } catch (e) {
+      try { console.error('[auto-scroll] boot failed', e); } catch {}
+    }
+  };
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      // DOM is already ready
+      setTimeout(boot, 0);
+    }
+  }
 }

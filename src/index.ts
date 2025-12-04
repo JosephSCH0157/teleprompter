@@ -409,7 +409,7 @@ ensureUiCrawlTargets();
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
 import './asr/v2/prompts';
-import { initAutoScroll, type AutoScrollController } from './features/autoscroll';
+import './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
@@ -448,7 +448,6 @@ import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
-let autoController: AutoScrollController | null = null;
 
 declare global {
 	interface Window {
@@ -629,17 +628,8 @@ try {
 		try {
 			// Legacy auto-scroll wiring retained only if both controls are present.
 			// New scroll/router owns mode + speed; legacy UI is hidden outside timed mode.
-			const autoToggle = document.getElementById('autoScrollToggle') as HTMLButtonElement | null
-				|| document.getElementById('autoToggle') as HTMLButtonElement | null;
 			const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
 				|| document.getElementById('autoSpeed') as HTMLInputElement | null;
-
-			if (!autoController) {
-				try { autoController = initAutoScroll(() => document.getElementById('viewer') as HTMLElement | null); } catch {}
-			}
-			if (autoController) {
-				try { autoController.bindUI(autoToggle, autoSpeed); } catch {}
-			}
 
 			if (autoSpeed) {
 				const applySliderToBrain = () => {
@@ -1008,18 +998,8 @@ export async function boot() {
 						if (!(window as any).setScrollMode && !(window as any).__tpScrollMode) {
 							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
 								try {
-									if (!autoController) {
-										autoController = initAutoScroll(() => document.getElementById('viewer') as HTMLElement | null);
-										const autoToggle = document.getElementById('autoScrollToggle') as HTMLElement | null
-											|| document.getElementById('autoToggle') as HTMLElement | null;
-										const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
-											|| document.getElementById('autoSpeed') as HTMLInputElement | null;
-										autoController.bindUI(autoToggle, autoSpeed);
-									}
-									if (autoController) {
-										if (mode === 'auto') autoController.start();
-										else autoController.stop();
-									}
+									if (mode === 'auto') (window as any).startAutoScroll?.();
+									else (window as any).stopAutoScroll?.();
 								} catch {}
 								try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
 								if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
