@@ -311,6 +311,40 @@ export function initScrollRouter(): void {
     window.addEventListener('tp:preroll:done', onReady);
   } catch {}
 
+  // Auto-start autoscroll after pre-roll in applicable modes by "clicking" the single owned toggle
+  try {
+    type PrerollDetail = { seconds?: number; source?: string };
+    const isAutoCapable = (mode: string): boolean => {
+      const m = (mode || '').toLowerCase();
+      return m === 'timed' || m === 'wpm' || m === 'hybrid' || m === 'asr' || m === 'auto' || m === 'assist';
+    };
+    const getModeForPreroll = (): string => {
+      try {
+        const storeMode = (window as any).__tpStore?.get?.('scrollMode') || (window as any).__tpStore?.get?.('mode');
+        if (storeMode) return String(storeMode);
+      } catch {}
+      try {
+        const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+        if (sel && typeof sel.value === 'string') return sel.value;
+      } catch {}
+      return currentMode;
+    };
+    const handlePrerollDone = (ev: CustomEvent<PrerollDetail>) => {
+      const mode = normalizeMode(getModeForPreroll());
+      if (mode === 'rehearsal') return;
+      if (!isAutoCapable(mode)) return;
+      const btn = document.getElementById('autoToggle') as HTMLButtonElement | null;
+      if (!btn) return;
+      const pressed = btn.getAttribute('aria-pressed') === 'true';
+      if (!pressed) {
+        try { btn.click(); } catch {}
+      }
+    };
+    window.addEventListener('tp:preroll:done', (ev: Event) => {
+      try { handlePrerollDone(ev as CustomEvent<PrerollDetail>); } catch {}
+    });
+  } catch {}
+
   // Honor explicit auto intent (auto toggle) to start/stop running
   try {
     window.addEventListener('tp:autoIntent', (ev: Event) => {
