@@ -116,6 +116,37 @@ export function initAutoscrollFeature() {
     speedInputs.forEach((inp) => { inp.value = String(speed); });
   } catch {}
   applyLabel();
+
+  // Wire UI controls to the TS engine
+  try {
+    toggleBtns.forEach((btn) => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = '1';
+      btn.addEventListener('click', (ev) => {
+        try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+        const pressed = btn.getAttribute('aria-pressed') === 'true';
+        // toggle based on current aria state
+        enabled = !pressed;
+        _fracCarry = 0;
+        lastTs = 0;
+        if (enabled) loop(); else stopLoop();
+        applyLabel();
+        try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: enabled } })); } catch {}
+      }, { capture: true });
+    });
+  } catch {}
+
+  try {
+    speedInputs.forEach((inp) => {
+      if (inp.dataset.wired) return;
+      inp.dataset.wired = '1';
+      inp.addEventListener('input', () => {
+        const v = Number(inp.value) || 0;
+        setSpeed(v);
+      });
+    });
+  } catch {}
+
   const mo = new MutationObserver(() => {
     const v = document.getElementById('viewer');
     if (v !== viewer) { viewer = v; if (enabled) loop(); }
