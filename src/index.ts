@@ -409,7 +409,7 @@ ensureUiCrawlTargets();
 
 // Optional: wire Auto-scroll + install scroll router in TS path as well
 import './asr/v2/prompts';
-import * as Auto from './features/autoscroll';
+import { initAutoScroll, type AutoScrollController } from './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
@@ -448,6 +448,7 @@ import { bindStaticDom } from './ui/dom';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
+let autoController: AutoScrollController | null = null;
 
 declare global {
 	interface Window {
@@ -626,7 +627,6 @@ try {
 
 		// 2) Legacy/test auto-scroll wiring (temporary until router owns it fully)
 		try {
-			const viewer = document.getElementById('viewer') as HTMLElement | null;
 			// Legacy auto-scroll wiring retained only if both controls are present.
 			// New scroll/router owns mode + speed; legacy UI is hidden outside timed mode.
 			const autoToggle = document.getElementById('autoScrollToggle') as HTMLButtonElement | null
@@ -634,13 +634,14 @@ try {
 			const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
 				|| document.getElementById('autoSpeed') as HTMLInputElement | null;
 
-			if (viewer && autoToggle && autoSpeed) {
-				try { Auto.initAutoscrollFeature(); } catch {}
-				autoToggle.addEventListener('click', () => { try { Auto.toggle(); } catch {} });
-				autoSpeed.addEventListener('change', () => {
-					try { Auto.setSpeed(Number(autoSpeed.value)); } catch {}
-				});
+			if (!autoController) {
+				try { autoController = initAutoScroll(() => document.getElementById('viewer') as HTMLElement | null); } catch {}
+			}
+			if (autoController) {
+				try { autoController.bindUI(autoToggle, autoSpeed); } catch {}
+			}
 
+			if (autoSpeed) {
 				const applySliderToBrain = () => {
 					try {
 						const val = Number(autoSpeed.value);
@@ -910,8 +911,6 @@ export async function boot() {
               import('./boot/console-noise-filter').then(m => m.installConsoleNoiseFilter?.({ debug: false })).catch(()=>{});
             }
           } catch {}
-          // Ensure autoscroll engine init
-          try { Auto.initAutoscrollFeature(); } catch {}
           // TS scroll router + UI wiring
           try { initScrollRouter(); } catch {}
           try { initScrollFeature(); } catch {}
@@ -926,16 +925,6 @@ export async function boot() {
 					try {
 						const ready = Object.assign({}, (window as any).__tpInit || {});
 						console.log('[TP-READY]', ready);
-					} catch {}
-
-					// Resilient click delegation (auto +/-)
-					try {
-						const onClick = (e: Event) => {
-							const t = e && (e.target as any);
-							try { if (t?.closest?.('#autoInc'))    return (Auto as any).inc?.(); } catch {}
-							try { if (t?.closest?.('#autoDec'))    return (Auto as any).dec?.(); } catch {}
-						};
-						document.addEventListener('click', onClick, { capture: true });
 					} catch {}
 
 					// Session recording auto-start wiring
@@ -1018,7 +1007,20 @@ export async function boot() {
 						} catch {}
 						if (!(window as any).setScrollMode && !(window as any).__tpScrollMode) {
 							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
-								try { (Auto as any).setEnabled?.(mode === 'auto'); } catch {}
+								try {
+									if (!autoController) {
+										autoController = initAutoScroll(() => document.getElementById('viewer') as HTMLElement | null);
+										const autoToggle = document.getElementById('autoScrollToggle') as HTMLElement | null
+											|| document.getElementById('autoToggle') as HTMLElement | null;
+										const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
+											|| document.getElementById('autoSpeed') as HTMLInputElement | null;
+										autoController.bindUI(autoToggle, autoSpeed);
+									}
+									if (autoController) {
+										if (mode === 'auto') autoController.start();
+										else autoController.stop();
+									}
+								} catch {}
 								try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
 								if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
 								else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }

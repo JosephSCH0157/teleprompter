@@ -187,11 +187,8 @@ function start() {
   if (active) return;
 
   const viewer = getViewer?.();
-  if (!viewer) return;
-
-  // Optional guard: require a script to be loaded
-  if (window.__tp_has_script === false) {
-    return;
+  if (!viewer) {
+    try { console.warn('[auto-scroll] viewer not found, will still arm loop'); } catch {}
   }
 
   active = true;
