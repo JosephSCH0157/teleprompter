@@ -272,17 +272,22 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
         return setSpeed(px);
       },
       getState: () => ({ enabled: active, speed: currentSpeedPx() }),
-      startFromPreroll: () => {
-        try { console.log('[AUTO] startFromPreroll() called'); } catch {}
-        const speed = readSpeedFromSlider();
-        try { console.log('[AUTO] slider speed =', speed); } catch {}
-        setSpeed(speed);
-        if (speed > AUTO_MIN_SPEED) {
-          try { console.log('[AUTO] enabling auto from preroll'); } catch {}
-          start();
-        } else {
-          try { console.log('[AUTO] not enabling auto; speed <= AUTO_MIN_SPEED'); } catch {}
+      startFromPreroll: (detail?: unknown) => {
+        try { console.log('[AUTO] startFromPreroll', detail); } catch {}
+        let speed = readSpeedFromSlider();
+        if (!Number.isFinite(speed) || speed <= 0 || speed < AUTO_MIN_SPEED) {
+          try {
+            console.log('[AUTO] preroll: bumping speed to min', {
+              from: speed,
+              to: AUTO_MIN_SPEED,
+            });
+          } catch {}
+          setSpeed(AUTO_MIN_SPEED);
+          speed = AUTO_MIN_SPEED;
         }
+        // Hard-enable auto after preroll
+        try { console.log('[AUTO] enabling auto from preroll'); } catch {}
+        setEnabled(true, 'preroll');
       },
     };
   } catch {}
