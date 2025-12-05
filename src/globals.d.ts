@@ -1,7 +1,7 @@
 interface Window {
   __TP_DEV?: boolean;
   __TP_CALM?: boolean;
-  __tpScrollWrite?: (top: number) => void;
+  __tpScrollWrite?: import('./scroll/scroll-writer').ScrollWriter | ((top: number) => void);
   __tpMatcher?: { matchBatch?: Function };
   HUD?: any;
   __tpObsBridge?: any;

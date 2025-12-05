@@ -3,6 +3,8 @@
 type ViewerGetter = () => HTMLElement | null;
 type AnyFn = (...args: any[]) => any;
 
+import { getScrollWriter } from '../scroll/scroll-writer';
+
 export interface AutoScrollController {
   bindUI(toggleEl: HTMLElement | null, speedInput: HTMLInputElement | null): void;
   start(): void;
@@ -116,18 +118,9 @@ function tick(now: number) {
     const currentTop = viewer.scrollTop || 0;
     const nextTop = Math.max(0, Math.min(maxTop, currentTop + dy));
 
-    try {
-      // All main viewer scroll writes must go through the central writer.
-      const w = window as any;
-      if (typeof w.__tpScrollWrite === 'function') {
-        w.__tpScrollWrite(nextTop);
-      } else {
-        // No writer available: avoid direct DOM writes to keep SSOT intact.
-        try { console.warn('[auto-scroll] missing __tpScrollWrite; cannot apply scroll step'); } catch {}
-      }
-    } catch {
-      // ignore
-    }
+    const writer = getScrollWriter();
+    if (!writer) return;
+    try { writer.scrollTo(nextTop, { behavior: 'auto' }); } catch {}
   }
 
   rafId = requestAnimationFrame(tick);

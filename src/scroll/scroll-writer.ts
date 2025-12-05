@@ -18,6 +18,21 @@ export function getScrollWriter(): ScrollWriter {
 
   if (typeof window !== 'undefined') {
     const maybe = (window as any).__tpScrollWrite;
+    if (typeof maybe === 'function') {
+      const fn = maybe as (_top: number) => void;
+      cached = {
+        scrollTo(top: number) {
+          try { fn(top); } catch {}
+        },
+        scrollBy(delta: number) {
+          try { fn((Number(delta) || 0) + 0); } catch {}
+        },
+        ensureVisible(_top: number, _paddingPx?: number) {
+          // not supported for bare function writers
+        },
+      };
+      return cached;
+    }
     if (maybe && typeof maybe === 'object') {
       const w = maybe as { scrollTo?: (_top: number, _opts?: any) => void; scrollBy?: (_delta: number, _opts?: any) => void; ensureVisible?: (_top: number, _pad?: number) => void };
       if (typeof w.scrollTo === 'function' && typeof w.scrollBy === 'function') {
