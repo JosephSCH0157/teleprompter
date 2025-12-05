@@ -41,7 +41,12 @@
       try {
         const mode = getScrollMode();
         if (!isRehearsal() && isAutoCapable(mode)) {
-          try { if (window.Auto && typeof window.Auto.setEnabled === 'function') window.Auto.setEnabled(true); } catch{}
+          try {
+            const auto = (window.__tpAuto && typeof window.__tpAuto.setEnabled === 'function')
+              ? window.__tpAuto
+              : (window.Auto && typeof window.Auto.setEnabled === 'function' ? window.Auto : null);
+            if (auto) auto.setEnabled(true);
+          } catch{}
           if (!window.__tpScrollRouterStarted && typeof window.scrollRouterStart === 'function') {
             window.scrollRouterStart();
             window.__tpScrollRouterStarted = true;

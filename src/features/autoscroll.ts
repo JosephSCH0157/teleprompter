@@ -188,6 +188,7 @@ function start() {
 
   active = true;
   lastTs = null;
+  lastTargetTop = viewer ? (viewer.scrollTop || 0) : null;
 
   updateToggleLabel();
   hud('auto:start', { speed: currentSpeedPx() });
