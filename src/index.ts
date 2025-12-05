@@ -849,10 +849,22 @@ export async function boot() {
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.
           const onReady = () => {
             try {
-              try {
-                const hasHudRoot = !!document.getElementById('hud-root') || !!document.getElementById('tp-speech-notes-hud');
-                appStore.set?.('hudSupported', hasHudRoot);
-              } catch {}
+							// Prime scroll-router init once the viewer exists (before mode wiring)
+							try {
+								const initScrollRouter = initOnce('scroll-router', () => {
+									const viewer =
+										document.getElementById('scriptScrollContainer') ||
+										document.getElementById('viewer');
+									const msg = `[SCROLL] initOnce: scroll-router (viewer=${!!viewer})`;
+									try { console.info(msg); } catch {}
+									return viewer;
+								});
+								initScrollRouter();
+							} catch {}
+							try {
+								const hasHudRoot = !!document.getElementById('hud-root') || !!document.getElementById('tp-speech-notes-hud');
+								appStore.set?.('hudSupported', hasHudRoot);
+							} catch {}
           try { initOverlays(); } catch {}
           try { initHudController(); } catch {}
           try { wireHudToggle(); } catch {}
