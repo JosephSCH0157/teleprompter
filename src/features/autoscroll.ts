@@ -435,9 +435,9 @@ if (typeof window !== 'undefined') {
         (document.getElementById('autoSpeed') as HTMLInputElement | null) ||
         (document.querySelector('[data-auto-speed]') as HTMLInputElement | null);
 
-      if (!viewer || !toggle || !speed) {
+      if (!viewer) {
         try {
-          console.warn('[auto-scroll] boot: missing elements', {
+          console.warn('[auto-scroll] boot: missing viewer', {
             viewer: !!viewer,
             toggle: !!toggle,
             speed: !!speed,
@@ -447,7 +447,17 @@ if (typeof window !== 'undefined') {
       }
 
       const auto = initAutoScroll(() => viewer);
-      auto.bindUI(toggle, speed);
+      if (toggle && speed) {
+        auto.bindUI(toggle, speed);
+      } else {
+        try {
+          console.warn('[auto-scroll] boot: missing toggle/speed; binding skipped', {
+            viewer: !!viewer,
+            toggle: !!toggle,
+            speed: !!speed,
+          });
+        } catch {}
+      }
       try { (window as any).__tpAuto = auto; } catch {}
 
       try {
