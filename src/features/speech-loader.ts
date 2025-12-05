@@ -97,6 +97,26 @@ let pendingManualRestartCount = 0;
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
 
+function armAutoFromPreroll(detail: { seconds: number; source: string }): void {
+  const auto: any = (window as any).__tpAuto;
+  const legacyAuto: any = (window as any).Auto;
+  try { console.log('[PREROLL] tp:preroll:done dispatch', detail); } catch {}
+
+  if (auto && typeof auto.startFromPreroll === 'function') {
+    try { console.log('[PREROLL] → __tpAuto.startFromPreroll()'); } catch {}
+    try { auto.startFromPreroll(detail); } catch (err) { try { console.error('[PREROLL] __tpAuto.startFromPreroll error', err); } catch {} }
+    return;
+  }
+
+  if (legacyAuto && typeof legacyAuto.startFromPreroll === 'function') {
+    try { console.warn('[PREROLL] __tpAuto missing; using legacy Auto.startFromPreroll()'); } catch {}
+    try { legacyAuto.startFromPreroll(detail); } catch (err) { try { console.error('[PREROLL] legacy Auto.startFromPreroll error', err); } catch {} }
+    return;
+  }
+
+  try { console.warn('[PREROLL] No auto-scroll controller present when preroll finished.'); } catch {}
+}
+
 function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
 }
@@ -400,7 +420,9 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promis
         if (s <= 0) {
           hidePreroll();
           try { await cb(); } catch {}
-          try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail: { seconds: s, source: 'speech' } })); } catch {}
+          const detail = { seconds: s, source: 'speech' };
+          try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail })); } catch {}
+          try { armAutoFromPreroll(detail); } catch {}
           done = true;
           return;
         }
@@ -411,7 +433,9 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promis
         }
         hidePreroll();
         try { await cb(); } catch {}
-        try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail: { seconds: s, source: 'speech' } })); } catch {}
+        const detail = { seconds: s, source: 'speech' };
+        try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail })); } catch {}
+        try { armAutoFromPreroll(detail); } catch {}
         done = true;
       } catch {}
       finally {
