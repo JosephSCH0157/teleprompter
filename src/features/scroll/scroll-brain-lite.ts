@@ -3,6 +3,8 @@
 // Does NOT replace your existing PLL/scheduler logic;
 // it’s a clean, typed module you can wire in when ready.
 
+import type { ScrollWriter } from '../../scroll/scroll-writer';
+
 export type ScrollMode = 'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal';
 
 export interface ScrollBrainOptions {
@@ -49,6 +51,21 @@ let caf: typeof cancelAnimationFrame | null =
     ? cancelAnimationFrame
     : null;
 
+function getWriter(): ScrollWriter | null {
+  try {
+    const w = (window as any).__tpScrollWrite as ScrollWriter | undefined;
+    if (w && typeof w.scrollTo === 'function' && typeof w.scrollBy === 'function') {
+      return w;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    console.warn('[scroll-brain-lite] __tpScrollWrite missing; scroll loop will no-op.');
+  } catch {}
+  return null;
+}
+
 /**
  * Create a simple scroll brain that manages a scroll loop for
  * auto / hybrid modes, and exposes a clean typed interface.
@@ -80,12 +97,9 @@ export function createScrollBrainLite(
   };
 
   function scrollBySpeed(speed: number): void {
-    try {
-      if (typeof window === 'undefined') return;
-      window.scrollBy(0, speed);
-    } catch {
-      // ignore
-    }
+    const writer = getWriter();
+    if (!writer) return;
+    try { writer.scrollBy(speed, { behavior: 'auto' }); } catch {}
   }
 
   function applyHybridScroll(): void {

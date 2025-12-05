@@ -422,7 +422,6 @@ import './media/display-bridge';
 import './media/mic'; // exposes window.__tpMic for mic controls + dB meter
 import { bindMicUI } from './media/mic-bridge';
 import { initMicPermissions } from './media/mic-permissions';
-import { initScrollRouter } from './scroll/router';
 import { onTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
 import './ui/camera-drag'; // installs camera drag + persistence
@@ -624,31 +623,8 @@ try {
 			try { console.warn('[scheduler] install failed', err); } catch {}
 		}
 
-		// 2) Legacy/test auto-scroll wiring (temporary until router owns it fully)
-		try {
-			// Legacy auto-scroll wiring retained only if both controls are present.
-			// New scroll/router owns mode + speed; legacy UI is hidden outside timed mode.
-			const autoSpeed = document.getElementById('autoScrollSpeed') as HTMLInputElement | null
-				|| document.getElementById('autoSpeed') as HTMLInputElement | null;
-
-			if (autoSpeed) {
-				const applySliderToBrain = () => {
-					try {
-						const val = Number(autoSpeed.value);
-						if (!Number.isFinite(val)) return;
-						if (typeof brain.setBaseSpeedPx === 'function') {
-              brain.setBaseSpeedPx(val);
-            } else if (typeof brain.setTargetSpeed === 'function') {
-              brain.setTargetSpeed(val);
-            }
-					} catch {}
-				};
-				autoSpeed.addEventListener('input', applySliderToBrain, { passive: true });
-				applySliderToBrain();
-			}
-		} catch (err) {
-			try { console.warn('[auto-scroll] wiring failed', err); } catch {}
-		}
+		// LEGACY AUTO-SPEED HOOK – intentionally disabled.
+		// Autoscroll now owns #autoSpeed via src/features/autoscroll.ts.
 
 		// 3) Bridge legacy mode selectors into the TS scroll brain
 		try { initScrollModeBridge(); } catch {}
@@ -902,7 +878,6 @@ export async function boot() {
             }
           } catch {}
           // TS scroll router + UI wiring
-          try { initScrollRouter(); } catch {}
           try { initScrollFeature(); } catch {}
           // Initialize features via idempotent wrappers
           try { startPersistence(); } catch {}
