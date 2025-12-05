@@ -984,44 +984,58 @@ export async function boot() {
 					} catch {}
 
 					// Step / Rehearsal
-					try {
-						const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
-						const rehearsal = installRehearsal();
-						try { resolveInitialRehearsal(); } catch {}
-						// Minimal typed router: syncs store ↔ step/rehearsal (auto can be added later)
-						try {
-							const store = (window as any).__tpStore || null;
-							const auto = getAutoScrollApi();
-							const router = createScrollModeRouter({ store, step, rehearsal, auto });
-							if (!(window as any).__tpScrollMode) {
-								(window as any).__tpScrollMode = router; // expose for dev/diagnostics
-							}
-							// Dev helper: quick router poke from console
-							try {
-								(window as any).__tpSetMode = (mode: string) => {
-									try {
-										(window as any).__tpScrollMode?.setMode?.(mode as any);
-										console.info('[Anvil] scrollMode →', mode);
-									} catch (err) {
-										console.error('Failed to set scroll mode', err);
-									}
-								};
-							} catch {}
-						} catch {}
-						if (!(window as any).setScrollMode && !(window as any).__tpScrollMode) {
-							(window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
-								try {
-									if (mode === 'auto') (window as any).startAutoScroll?.();
-									else (window as any).stopAutoScroll?.();
-								} catch {}
-								try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
-								if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
-								else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
-							};
-						}
-					} catch {}
+try {
+  const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
+  const rehearsal = installRehearsal();
+  try { resolveInitialRehearsal(); } catch {}
+  // Minimal typed router: syncs store <-> step/rehearsal (auto can be added later)
+  try {
+    const store = (window as any).__tpStore || null;
+    const auto = getAutoScrollApi();
+    const router = createScrollModeRouter({ store, step, rehearsal, auto });
+    if (!(window as any).__tpScrollMode) {
+      (window as any).__tpScrollMode = router; // expose for dev/diagnostics
+    }
+    // Hydrate router/UI from persisted scrollMode on boot
+    try {
+      const initialMode =
+        (store?.get?.('scrollMode') as any) ||
+        localStorage.getItem('tp_scroll_mode_v1') ||
+        localStorage.getItem('tp_scroll_mode') ||
+        localStorage.getItem('scrollMode') ||
+        'auto';
+      router.setMode(initialMode as any);
+      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
+      if (sel && Array.from(sel.options).some((o) => o.value === initialMode)) {
+        sel.value = initialMode;
+      }
+    } catch {}
+    // Dev helper: quick router poke from console
+    try {
+      (window as any).__tpSetMode = (mode: string) => {
+        try {
+          (window as any).__tpScrollMode?.setMode?.(mode as any);
+          console.info('[Anvil] scrollMode', mode);
+        } catch (err) {
+          console.error('Failed to set scroll mode', err);
+        }
+      };
+    } catch {}
+  } catch {}
+  if (!(window as any).setScrollMode && !(window as any).__tpScrollMode) {
+    (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
+      try {
+        if (mode === 'auto') (window as any).startAutoScroll?.();
+        else (window as any).stopAutoScroll?.();
+      } catch {}
+      try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
+      if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
+      else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
+    };
+  }
+} catch {}
 
-					// Display Sync
+// Display Sync
 					try {
 						installDisplaySync({
 							getText: () => {
@@ -1163,4 +1177,7 @@ function maybeInstallLegacyHud() {
 	}
 }
 // (removed duplicate implementation of maybeInstallLegacyHud)
+
+
+
 
