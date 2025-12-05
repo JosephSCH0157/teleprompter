@@ -563,16 +563,8 @@ function _ensureHud(store: any): void {
 }
 
 function wantsHud(): boolean {
-	try {
-		const qs = new URLSearchParams(String(location.search || ''));
-		if (qs.has('hud') || qs.has('scrollDebug') || qs.has('dev')) return true;
-		const w = window as any;
-		if (w.__tpScrollDebug === true) return true;
-		if (localStorage.getItem('tp_dev_mode') === '1') return true;
-	} catch {
-		// ignore
-	}
-	return false;
+	// Temporarily force HUD to load for troubleshooting
+	return true;
 }
 
 function loadHudScriptIfNeeded(): void {
