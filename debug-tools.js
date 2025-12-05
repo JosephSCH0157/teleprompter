@@ -260,6 +260,13 @@
     let paused = false;
 
     function show() {
+      // Reset position to lower-right on open
+      try {
+        hud.style.left = 'auto';
+        hud.style.top = 'auto';
+        hud.style.right = '8px';
+        hud.style.bottom = '8px';
+      } catch {}
       hud.classList.add('open');
       state.open = true;
       try { if (hudRoot) hudRoot.style.pointerEvents = 'auto'; } catch {}
