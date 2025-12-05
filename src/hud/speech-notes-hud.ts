@@ -3,12 +3,12 @@
 
 import type { AppStore } from '../state/app-store';
 
-export interface HudBus {
+export type HudBus = ((event: string, payload?: unknown) => void) & {
   on(event: string, handler: (...args: unknown[]) => void): void;
   off?(event: string, handler: (...args: unknown[]) => void): void;
   emit?(event: string, payload?: unknown): void;
   log?(event: string, payload?: unknown): void;
-}
+};
 
 export interface SpeechNotesHudOptions {
   root?: HTMLElement | null;

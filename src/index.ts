@@ -23,10 +23,6 @@ import { injectSettingsFolderForSmoke } from './features/inject-settings-folder'
 import './features/scripts-local';
 import { ScriptStore, type ScriptMeta, type ScriptRecord } from './features/scripts-store';
 import { installSpeech } from './features/speech-loader';
-import { initAsrStatsHud } from './hud/asr-stats';
-import { initRecStatsHud } from './hud/rec-stats';
-import { shouldShowHud } from './hud/shouldShowHud';
-import { initSpeechNotesHud } from './hud/speech-notes-hud';
 import { initObsConnection } from './obs/obs-connection';
 import { initObsWiring } from './obs/obs-wiring';
 import { initRecorderBackends } from './recording/registerRecorders';
@@ -501,9 +497,8 @@ function _ensureHud(store: any): void {
 			(document.querySelector('[data-role=\"hud-root\"]') as HTMLElement | null) ||
 			(document.getElementById('hud-root') as HTMLElement | null) ||
 			document.body;
-		initHud({
+		const hud = initHud({
 			store,
-			bus: (window as any).HUD?.bus ?? null,
 			root,
 		});
 		initHudController();
@@ -683,30 +678,6 @@ try {
 } catch {
   __docCh = null;
 }
-// Defer loading speech notes HUD until legacy/debug HUD announces readiness so the legacy bus exists first.
-		function injectSpeechNotesHud() {
-	try {
-		if (!shouldShowHud(appStore.getSnapshot())) return;
-		if (document.getElementById('tp-speech-notes-hud')) return; // already present
-		initSpeechNotesHud({
-			bus: (window as any).HUD?.bus ?? null,
-			store: appStore,
-			root: document.getElementById('hud-root') || document.body,
-		});
-		initAsrStatsHud({
-			bus: (window as any).HUD?.bus ?? null,
-			store: appStore,
-			root: document.getElementById('hud-root') || document.body,
-		});
-		initRecStatsHud({
-			bus: (window as any).HUD?.bus ?? null,
-			store: appStore,
-			root: document.getElementById('hud-root') || document.body,
-		});
-	} catch {}
-}
-window.addEventListener('hud:ready', () => { injectSpeechNotesHud(); }, { once: true });
-if ((window as any).__tpHudWireActive) { injectSpeechNotesHud(); }
 // Expose folder injection helpers globally for smoke harness / fallback JS paths
 try { (window as any).ensureSettingsFolderControls = ensureSettingsFolderControls; } catch {}
 try { (window as any).ensureSettingsFolderControlsAsync = ensureSettingsFolderControlsAsync; } catch {}
