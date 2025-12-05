@@ -82,9 +82,13 @@ function saveBaseSpeed(pxPerSec: number): void {
 
 function currentSpeedPx(): number {
   if (speedInput) {
-    const v = Number(speedInput.value);
-    if (Number.isFinite(v)) {
-      return Math.max(0, Math.min(200, v));
+    const raw = Number(speedInput.value);
+    if (Number.isFinite(raw)) {
+      const clamped = Math.max(0, Math.min(200, raw));
+      if (clamped !== raw) {
+        try { hud('auto:speed:clamp', { raw, clamped }); } catch {}
+      }
+      return clamped;
     }
   }
   return loadBaseSpeed();
@@ -241,11 +245,13 @@ function stop() {
 // tweak for +/- buttons or future callers
 function tweakSpeed(delta: number) {
   if (!speedInput) return;
-  const clamped = Math.max(0, Math.min(200, (Number(speedInput.value) || 0) + delta));
+  const prev = Number(speedInput.value) || 0;
+  const next = prev + delta;
+  const clamped = Math.max(0, Math.min(200, next));
   speedInput.value = String(clamped);
   saveBaseSpeed(clamped);
   if (active) updateToggleLabel();
-  hud('auto:tweak', { delta, speed: clamped });
+  hud('auto:tweak', { delta, prev, next, speed: clamped });
 }
 
 // --- Factory: what index.ts calls ------------------------------------------
