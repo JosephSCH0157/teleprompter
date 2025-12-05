@@ -37,6 +37,7 @@ let speedInput: HTMLInputElement | null = null;
 
 let rafId: number | null = null;
 let lastTs: number | null = null;
+let lastTargetTop: number | null = null; // keep sub-pixel accumulation even if DOM rounds
 let active = false;
 let controller: AutoScrollController | null = null;
 
@@ -115,8 +116,9 @@ function tick(now: number) {
     const dy = pxPerSec * dt;
 
     const maxTop = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const currentTop = viewer.scrollTop || 0;
+    const currentTop = (lastTargetTop != null ? lastTargetTop : viewer.scrollTop || 0);
     const nextTop = Math.max(0, Math.min(maxTop, currentTop + dy));
+    lastTargetTop = nextTop;
 
     const writer = getScrollWriter();
     if (!writer) return;
@@ -211,6 +213,7 @@ function stop() {
     rafId = null;
   }
   lastTs = null;
+  lastTargetTop = null;
 
   updateToggleLabel();
   hud('auto:stop');
