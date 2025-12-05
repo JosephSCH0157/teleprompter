@@ -20,12 +20,22 @@ export function getScrollWriter(): ScrollWriter {
     const maybe = (window as any).__tpScrollWrite;
     if (typeof maybe === 'function') {
       const fn = maybe as (_top: number) => void;
+      const getScroller = () =>
+        (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+        (document.getElementById('viewer') as HTMLElement | null) ||
+        (document.scrollingElement as HTMLElement | null) ||
+        (document.documentElement as HTMLElement | null) ||
+        (document.body as HTMLElement | null);
       cached = {
         scrollTo(top: number) {
           try { fn(top); } catch {}
         },
         scrollBy(delta: number) {
-          try { fn((Number(delta) || 0) + 0); } catch {}
+          try {
+            const sc = getScroller();
+            const cur = sc ? (sc.scrollTop || 0) : 0;
+            fn(cur + (Number(delta) || 0));
+          } catch {}
         },
         ensureVisible(_top: number, _paddingPx?: number) {
           // not supported for bare function writers
