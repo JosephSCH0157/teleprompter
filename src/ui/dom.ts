@@ -1,6 +1,8 @@
 // @ts-nocheck
 // Minimal DOM helpers for the UI layer
 
+import { getScrollWriter } from '../scroll/scroll-writer';
+
 
 type AnyFn = (...args: any[]) => any;
 
@@ -38,6 +40,8 @@ declare global {
 
 // Broadcast channel for cross-window display sync (names/colors)
 let __bc = null; try { __bc = new BroadcastChannel('prompter'); } catch {}
+
+const scrollWriter = getScrollWriter();
 
 export function on(
   el: EventTarget | null | undefined,
@@ -430,7 +434,7 @@ function resetRun() {
     const scroller =
       (document.querySelector('[data-script-view]') as HTMLElement | null) ||
       document.getElementById('viewer');
-    if (scroller) scroller.scrollTop = 0;
+    if (scroller) scrollWriter.scrollTo(0, { behavior: 'auto' });
     try {
       const max = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
       const ratio = max ? 0 : 0;

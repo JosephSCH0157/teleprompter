@@ -2,6 +2,8 @@
 // Step-by-line / Step-by-block scroller for the Teleprompter viewer.
 // Non-invasive: uses existing #viewer, marker %, and scroll helpers if present.
 
+import { getScrollWriter } from '../../scroll/scroll-writer';
+
 export interface StepScrollConfig {
   stepLines?: number;
   pageLines?: number;
@@ -88,22 +90,31 @@ function getScrollHelpers():
   return (window as Window).__scrollHelpers || null;
 }
 
+const scrollWriter = getScrollWriter();
+
 function scrollToEl(el: HTMLElement, offsetPx: number): void {
   const sh = getScrollHelpers();
   if (sh?.scrollToEl) {
     sh.scrollToEl(el, offsetPx);
   } else {
     const sc = getViewer();
-    if (!sc) return;
     const y = (el.offsetTop || 0) - offsetPx;
+    if (!sc) {
+      scrollWriter.scrollTo(Math.max(0, y), { behavior: 'auto' });
+      return;
+    }
     const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-    sc.scrollTop = Math.max(0, Math.min(y, max));
+    const target = Math.max(0, Math.min(y, max));
+    try { scrollWriter.scrollTo(target, { behavior: 'auto' }); } catch {}
   }
 }
 
 function scrollByPx(px: number): void {
   const sc = getViewer();
-  if (!sc) return;
+  if (!sc) {
+    scrollWriter.scrollBy(px, { behavior: 'auto' });
+    return;
+  }
 
   const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
   const next = Math.max(0, Math.min(sc.scrollTop + px, max));
@@ -112,7 +123,7 @@ function scrollByPx(px: number): void {
   if (sh?.requestScroll) {
     sh.requestScroll(next);
   } else {
-    sc.scrollTop = next;
+    try { scrollWriter.scrollTo(next, { behavior: 'auto' }); } catch {}
   }
 
   // Mirror to display if available
@@ -293,13 +304,11 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
       safePreventDefault(e);
       stepLinesFn(+1, pageLinesN);
     } else if (key === 'Home') {
-      const v = getViewer();
-      if (!v) return;
-      v.scrollTop = 0;
+      scrollWriter.scrollTo(0, { behavior: 'auto' });
     } else if (key === 'End') {
       const v = getViewer();
-      if (!v) return;
-      v.scrollTop = Math.max(0, v.scrollHeight - v.clientHeight);
+      const max = v ? Math.max(0, v.scrollHeight - v.clientHeight) : 0;
+      scrollWriter.scrollTo(max, { behavior: 'auto' });
     }
   };
 

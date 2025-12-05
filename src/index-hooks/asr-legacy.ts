@@ -1,6 +1,8 @@
 // @ts-nocheck
 export {};
 
+import { getScrollWriter } from '../scroll/scroll-writer';
+
 // Lightweight ASR ride-along (JS build) — mirrors src/index-hooks/asr.ts behavior
 // Uses the Web Speech API directly to avoid TS build requirements in dev.
 
@@ -25,6 +27,8 @@ export const VAD_PARTIAL_GRACE_MS = 400;
 // Internal instance registry for tests/teardown
 const __asrInstances = new Set();
 const RESCUE_JUMPS_ENABLED = false; // temp gate: keep HUD telemetry but disable forced reposition
+
+const scrollWriter = getScrollWriter();
 
 export function initAsrFeature() {
   try { console.info('[ASR] dev initAsrFeature()'); } catch {}
@@ -416,7 +420,7 @@ export function initAsrFeature() {
         i++;
         const k = i / steps;
         const y = from + delta * (k < 0 ? 0 : (k > 1 ? 1 : k));
-        try { if (isWin) window.scrollTo(0, y); else scroller.scrollTo({ top: y }); } catch {}
+        try { scrollWriter.scrollTo(y, { behavior: 'auto' }); } catch {}
         if (i < steps) requestAnimationFrame(write);
       };
       this._scrollAnim = { cancel: () => { cancelled = true; } };

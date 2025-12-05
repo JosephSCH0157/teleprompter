@@ -2,6 +2,7 @@
 export {};
 
 import { initOnce } from '../index';
+import { getScrollWriter } from '../scroll/scroll-writer';
 
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
@@ -345,6 +346,7 @@ var DEFAULTS = {
 };
 var state2 = { ...DEFAULTS };
 var viewer = null;
+const scrollWriter = getScrollWriter();
 var isHybridBypass = () => {
   try {
     return localStorage.getItem("tp_hybrid_bypass") === "1";
@@ -391,7 +393,11 @@ function stepOnce(dir) {
   if (!viewer) return;
   const next = findNextLine(viewer.scrollTop, dir);
   if (!next) return;
-  viewer.scrollTop = Math.max(0, next.offsetTop - 6);
+  const target = Math.max(0, next.offsetTop - 6);
+  try {
+    scrollWriter.scrollTo(target, { behavior: "auto" });
+  } catch {
+  }
 }
 var creepRaf = 0;
 var creepLast = 0;
@@ -404,7 +410,7 @@ function holdCreepStart(pxPerSec = DEFAULTS.step.holdCreep, dir = 1) {
     const dt = (now - creepLast) / 1e3;
     creepLast = now;
     try {
-      if (viewer) viewer.scrollTop += dir * pxPerSec * dt;
+      scrollWriter.scrollBy(dir * pxPerSec * dt, { behavior: "auto" });
     } catch {
     }
     creepRaf = requestAnimationFrame(tick);
@@ -963,9 +969,8 @@ function installScrollRouter(opts) {
         try { window.__scrollCtl?.setSpeed?.(next); } catch {}
         // Best-effort viewport nudge so hotkeys have visible effect even when auto is Off/paused
         try {
-          const vp = document.getElementById("viewer") || document.scrollingElement || document.documentElement;
           const deltaPx = wantUp ? -24 : 24;
-          if (vp) vp.scrollTop = Math.max(0, (vp.scrollTop || 0) + deltaPx);
+          scrollWriter.scrollBy(deltaPx, { behavior: "auto" });
         } catch {}
       } catch {
       }

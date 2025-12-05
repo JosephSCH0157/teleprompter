@@ -113,15 +113,17 @@ function tick(now: number) {
     const dy = pxPerSec * dt;
 
     const maxTop = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
-    const nextTop = Math.max(0, Math.min(maxTop, viewer.scrollTop + dy));
+    const currentTop = viewer.scrollTop || 0;
+    const nextTop = Math.max(0, Math.min(maxTop, currentTop + dy));
 
     try {
-      // All main viewer scroll writes should go through the central writer.
+      // All main viewer scroll writes must go through the central writer.
       const w = window as any;
       if (typeof w.__tpScrollWrite === 'function') {
         w.__tpScrollWrite(nextTop);
       } else {
-        viewer.scrollTop = nextTop;
+        // No writer available: avoid direct DOM writes to keep SSOT intact.
+        try { console.warn('[auto-scroll] missing __tpScrollWrite; cannot apply scroll step'); } catch {}
       }
     } catch {
       // ignore
