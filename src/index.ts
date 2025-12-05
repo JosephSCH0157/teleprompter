@@ -170,9 +170,63 @@ function bridgeLegacyScrollController() {
 	setTimeout(() => clearInterval(timer), 10_000);
 }
 
+// Ensure the scrollMode <select> reflects any stored preference before tests read it
+function hydrateScrollModeSelect(): void {
+  try {
+    const el = document.getElementById('scrollMode') as HTMLSelectElement | null;
+    if (!el) return;
+    const stored =
+      sessionStorage.getItem('tp_last_scroll_mode') ||
+      (appStore.get?.('scrollMode') as string | undefined) ||
+      localStorage.getItem('tp_scroll_mode_v1') ||
+      localStorage.getItem('tp_scroll_mode') ||
+      localStorage.getItem('scrollMode');
+    if (stored && Array.from(el.options).some((o) => o.value === stored)) {
+      el.value = stored;
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function storeScrollMode(): void {
+  try {
+    const el = document.getElementById('scrollMode') as HTMLSelectElement | null;
+    if (!el) return;
+    const v = String(el.value || '');
+    localStorage.setItem('tp_scroll_mode_v1', v);
+    localStorage.setItem('tp_scroll_mode', v);
+    localStorage.setItem('scrollMode', v);
+    sessionStorage.setItem('tp_last_scroll_mode', v);
+    appStore.set?.('scrollMode', v as any);
+  } catch {
+    // ignore
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => hydrateScrollModeSelect(), { once: true });
+} else {
+  hydrateScrollModeSelect();
+}
+
+function persistScrollModeSelect(ev: Event): void {
+  const t = ev.target as HTMLSelectElement | null;
+  if (!t || t.id !== 'scrollMode') return;
+  storeScrollMode();
+}
+try { document.addEventListener('change', persistScrollModeSelect, { capture: true }); } catch {}
+try { window.addEventListener('beforeunload', storeScrollMode, { capture: true }); } catch {}
+try {
+  const timer = window.setInterval(() => storeScrollMode(), 500);
+  window.setTimeout(() => window.clearInterval(timer), 5000);
+} catch {}
+
 function applyUiScrollMode(mode: UiScrollMode) {
   // Store the UI mode somewhere global so existing JS can still read it
   (window as any).__tpUiScrollMode = mode;
+  // Persist for next load (CI smoke expects scrollMode to survive reloads)
+  try { appStore.set?.('scrollMode', mode); } catch {}
 
 	const brain = ensureScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;

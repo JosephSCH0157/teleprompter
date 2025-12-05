@@ -49,6 +49,7 @@ export interface ScrollModeRouter {
 
 function asMode(v: unknown, fallback: ScrollMode = 'manual'): ScrollMode {
   const m = String(v || '').toLowerCase();
+  if (m === 'timed') return 'auto';
   if (m === 'auto' || m === 'hybrid' || m === 'step' || m === 'rehearsal') {
     return m as ScrollMode;
   }

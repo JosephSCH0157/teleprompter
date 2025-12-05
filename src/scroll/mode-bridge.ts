@@ -1,4 +1,5 @@
 import { getScrollBrain } from '../index';
+import { appStore } from '../state/app-store';
 import type { ScrollMode } from './scroll-brain';
 
 function resolveModeFromValue(value: string): ScrollMode {
@@ -25,6 +26,7 @@ function wireElement(el: HTMLSelectElement, setMode: (mode: ScrollMode) => void)
     try {
       const mode = resolveModeFromValue(el.value);
       setMode(mode);
+      try { appStore.set?.('scrollMode', mode); } catch {}
     } catch {}
   };
 
@@ -43,6 +45,24 @@ export function initScrollModeBridge(): void {
     const elements = select ? [select] : [];
 
     if (!elements.length) return;
+
+    const storedMode = (() => {
+      try {
+        const storeMode = (window as any).__tpStore?.get?.('scrollMode');
+        if (storeMode) return String(storeMode);
+      } catch {}
+      try { return localStorage.getItem('tp_scroll_mode_v1') || localStorage.getItem('scrollMode') || undefined; } catch { return undefined; }
+    })();
+
+    if (storedMode) {
+      elements.forEach((el) => {
+        try {
+          if (Array.from(el.options).some((o) => o.value === storedMode)) {
+            el.value = storedMode;
+          }
+        } catch {}
+      });
+    }
 
     elements.forEach((el) => wireElement(el, brain.setMode));
   } catch {}

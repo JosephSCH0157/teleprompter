@@ -290,7 +290,12 @@ function buildInitialState(): AppStoreState {
     // Scroll router (persisted)
     scrollMode: (() => {
       try {
-        return localStorage.getItem(SCROLL_MODE_KEY) || 'timed';
+        return (
+          localStorage.getItem(SCROLL_MODE_KEY) ||
+          localStorage.getItem('tp_scroll_mode') ||
+          localStorage.getItem('scrollMode') ||
+          'timed'
+        );
       } catch {
         return 'timed';
       }
@@ -461,6 +466,10 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
             try {
               localStorage.removeItem(LEGACY_AUTO_RECORD_KEY);
             } catch {}
+          }
+          if (key === 'scrollMode') {
+            try { localStorage.setItem('tp_scroll_mode', String(value)); } catch {}
+            try { localStorage.setItem('scrollMode', String(value)); } catch {}
           }
         }
       } catch {}
