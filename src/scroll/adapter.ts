@@ -14,12 +14,12 @@ try {
   if (!window.__tpScrollSSOT || window.__tpScrollSSOT === 'ts') {
     window.__tpScrollSSOT = 'ts';
     const writer: ScrollWriter = {
-      scrollTo(top: number, opts?: { behavior?: ScrollBehavior }) {
+      scrollTo(top: number, _opts?: { behavior?: ScrollBehavior }) {
         try {
           helpers.requestScroll(Number(top) || 0);
         } catch {}
       },
-      scrollBy(delta: number, opts?: { behavior?: ScrollBehavior }) {
+      scrollBy(delta: number, _opts?: { behavior?: ScrollBehavior }) {
         try {
           helpers.scrollByPx?.(Number(delta) || 0);
         } catch {}
