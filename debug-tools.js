@@ -217,8 +217,6 @@
       let startTop = 0;
 
       head.style.cursor = 'move';
-      hud.style.right = 'auto';
-      hud.style.bottom = 'auto';
 
       function onPointerDown(ev) {
         if (ev.button !== undefined && ev.button !== 0) return;
@@ -231,6 +229,8 @@
         hud.style.position = 'fixed';
         hud.style.left = startLeft + 'px';
         hud.style.top = startTop + 'px';
+        hud.style.right = 'auto';
+        hud.style.bottom = 'auto';
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
         window.addEventListener('pointercancel', onPointerUp);
