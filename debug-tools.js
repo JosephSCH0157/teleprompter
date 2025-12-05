@@ -435,7 +435,7 @@
 
     // Monkey-patch common scroller & display paths if present later
     function lateWrap() {
-      if ((window as any).__TP_DISABLE_HUD_WRAPS) return;
+      if (window.__TP_DISABLE_HUD_WRAPS) return;
       // viewer scroll telemetry
       try {
         const viewer = document.getElementById('viewer');

@@ -497,7 +497,7 @@ function _ensureHud(store: any): void {
 			(document.querySelector('[data-role=\"hud-root\"]') as HTMLElement | null) ||
 			(document.getElementById('hud-root') as HTMLElement | null) ||
 			document.body;
-		const hud = initHud({
+		initHud({
 			store,
 			root,
 		});
