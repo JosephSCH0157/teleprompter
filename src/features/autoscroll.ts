@@ -287,7 +287,7 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
         }
         // Hard-enable auto after preroll
         try { console.log('[AUTO] enabling auto from preroll'); } catch {}
-        setEnabled(true, 'preroll');
+        setEnabled(true);
       },
     };
   } catch {}

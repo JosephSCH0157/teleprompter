@@ -1,4 +1,8 @@
 (async function(){
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    console.log('[rehearsal_api_smoke] skip: no DOM available (Node context)');
+    return;
+  }
   const ok=(b,m)=>{ if(!b) throw new Error(m); };
   const R = window.__tpRehearsal || window;
   const enter = (R && (R.enterRehearsal || R.enable || (window.enterRehearsal))) || null;

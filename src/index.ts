@@ -41,7 +41,7 @@ import './wiring/ui-binds';
 import { bootstrap } from './boot/boot';
 
 // Idempotent init guard for feature initializers (prevents double-init as we migrate)
-function initOnce<T extends (..._args: any[]) => any>(name: string, fn: T): T {
+export function initOnce<T extends (..._args: any[]) => any>(name: string, fn: T): T {
 	(window as any).__tpInit = (window as any).__tpInit || {};
 	return ((..._args: any[]) => {
 		try {
