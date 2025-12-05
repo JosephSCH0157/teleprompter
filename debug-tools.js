@@ -6,22 +6,15 @@
   'use strict';
 
   // Dev guard: only install HUD when dev mode is enabled
-  var dev = false;
+  // Dev flag (temporarily force on so HUD always installs)
+  var dev = true;
   try {
     dev =
+      true || // force enabled for now
       !!window.__TP_DEV ||
       (location.search + location.hash).indexOf('dev=1') !== -1 ||
       (window.localStorage && localStorage.getItem('tp_dev_mode') === '1');
   } catch (_e) {}
-
-  if (!dev) {
-    // Provide safe no-ops so HUD.log calls don't explode
-    try {
-      window.HUD = window.HUD || { log: function () {} };
-      window.__tpInstallHUD = function () {};
-    } catch (_e) {}
-    return;
-  }
 
   // Top of file: quiet flag + rate limiter
   window.__TP_QUIET = window.__TP_QUIET ?? false; // set true to silence info/debug
