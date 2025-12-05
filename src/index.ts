@@ -32,6 +32,7 @@ import { initObsWiring } from './obs/obs-wiring';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
+import './index-hooks/preroll';
 import { setRecorderEnabled } from './state/recorder-settings';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
