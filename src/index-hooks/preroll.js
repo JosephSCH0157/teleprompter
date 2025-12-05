@@ -42,11 +42,17 @@
         const mode = getScrollMode();
         if (!isRehearsal() && isAutoCapable(mode)) {
           try {
-            const auto = (window.__tpAuto && typeof window.__tpAuto.setEnabled === 'function')
+            const auto = (window.__tpAuto && typeof window.__tpAuto.startFromPreroll === 'function')
               ? window.__tpAuto
-              : (window.Auto && typeof window.Auto.setEnabled === 'function' ? window.Auto : null);
-            if (auto) auto.setEnabled(true);
-          } catch{}
+              : (window.Auto && typeof window.Auto.startFromPreroll === 'function' ? window.Auto : null);
+            if (auto) {
+              auto.startFromPreroll();
+            } else {
+              console.warn('[PREROLL] No auto controller found (__tpAuto/Auto)');
+            }
+          } catch(err){
+            try { console.error('[PREROLL] auto start failed', err); } catch {}
+          }
           if (!window.__tpScrollRouterStarted && typeof window.scrollRouterStart === 'function') {
             window.scrollRouterStart();
             window.__tpScrollRouterStarted = true;

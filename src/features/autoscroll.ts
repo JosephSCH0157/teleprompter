@@ -247,6 +247,19 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
   window.startAutoScroll = start;
   window.stopAutoScroll = stop;
   window.tweakAutoSpeed = tweakSpeed;
+  try {
+    (window as any).__tpAuto = {
+      setEnabled: (on: boolean) => (on ? start() : stop()),
+      set: (on: boolean) => (on ? start() : stop()),
+      setSpeed: (px: number) => setSpeed(px),
+      getState: () => ({ enabled: active, speed: currentSpeedPx() }),
+      startFromPreroll: () => {
+        const speed = currentSpeedPx();
+        // Only arm if speed is positive; otherwise leave off
+        if (speed > 0) start();
+      },
+    };
+  } catch {}
 
   return {
     bindUI(toggle, speed) {
