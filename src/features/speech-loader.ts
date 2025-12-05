@@ -648,6 +648,26 @@ export function installSpeech(): void {
           try { window.speechOn = false; } catch {}
           setListeningUi(false);
           setReadyUi();
+          try {
+            console.log('[ASR] Stop speech sync clicked');
+            const auto = (window as any).__tpAuto;
+            if (auto && typeof auto.setEnabled === 'function') {
+              console.log('[ASR] Disabling auto-scroll from Stop speech sync');
+              auto.setEnabled(false);
+            } else {
+              console.warn('[ASR] __tpAuto not available; cannot disable auto-scroll.');
+            }
+            const asr = (window as any).__tpASR || (window as any).ASR || rec;
+            if (asr && typeof asr.stop === 'function') {
+              console.log('[ASR] Calling ASR.stop() from Stop speech sync');
+              asr.stop();
+            } else if (asr && typeof asr.abort === 'function') {
+              console.log('[ASR] Calling ASR.abort() from Stop speech sync');
+              asr.abort();
+            } else {
+              console.warn('[ASR] No ASR controller found to stop.');
+            }
+          } catch {}
           // If auto-record is on, stop it
           try { await doAutoRecordStop(); } catch {}
           // Ensure display window knows to stop auto modes

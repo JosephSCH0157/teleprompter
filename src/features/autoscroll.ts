@@ -5,6 +5,8 @@ type AnyFn = (...args: any[]) => any;
 
 import { getScrollWriter } from '../scroll/scroll-writer';
 
+const AUTO_MIN_SPEED = 0.1;
+
 export interface AutoScrollController {
   bindUI(toggleEl: HTMLElement | null, speedInput: HTMLInputElement | null): void;
   start(): void;
@@ -86,6 +88,14 @@ function currentSpeedPx(): number {
     }
   }
   return loadBaseSpeed();
+}
+
+function readSpeedFromSlider(): number {
+  try {
+    return currentSpeedPx();
+  } catch {
+    return 0;
+  }
 }
 
 function hud(tag: string, data?: unknown): void {
@@ -249,14 +259,30 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
   window.tweakAutoSpeed = tweakSpeed;
   try {
     (window as any).__tpAuto = {
-      setEnabled: (on: boolean) => (on ? start() : stop()),
-      set: (on: boolean) => (on ? start() : stop()),
-      setSpeed: (px: number) => setSpeed(px),
+      setEnabled: (on: boolean) => {
+        try { console.log('[AUTO] setEnabled(from hotkey) →', on); } catch {}
+        return on ? start() : stop();
+      },
+      set: (on: boolean) => {
+        try { console.log('[AUTO] set(from hotkey) →', on); } catch {}
+        return on ? start() : stop();
+      },
+      setSpeed: (px: number) => {
+        try { console.log('[AUTO] setSpeed(from hotkey) →', px); } catch {}
+        return setSpeed(px);
+      },
       getState: () => ({ enabled: active, speed: currentSpeedPx() }),
       startFromPreroll: () => {
-        const speed = currentSpeedPx();
-        // Only arm if speed is positive; otherwise leave off
-        if (speed > 0) start();
+        try { console.log('[AUTO] startFromPreroll() called'); } catch {}
+        const speed = readSpeedFromSlider();
+        try { console.log('[AUTO] slider speed =', speed); } catch {}
+        setSpeed(speed);
+        if (speed > AUTO_MIN_SPEED) {
+          try { console.log('[AUTO] enabling auto from preroll'); } catch {}
+          start();
+        } else {
+          try { console.log('[AUTO] not enabling auto; speed <= AUTO_MIN_SPEED'); } catch {}
+        }
       },
     };
   } catch {}
