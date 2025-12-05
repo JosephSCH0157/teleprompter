@@ -442,11 +442,6 @@ function applyMode(m) {
   state2.mode = m;
   persistMode();
   viewer = document.getElementById("viewer");
-  try {
-    const sel = document.getElementById("scrollMode");
-    if (sel && sel.value !== m) sel.value = m;
-  } catch {
-  }
   
   // Toggle UI controls based on mode
   try {
@@ -773,17 +768,6 @@ function installScrollRouter(opts) {
   try {
     document.addEventListener("change", (e) => {
       const t = e.target;
-      if (t?.id === "scrollMode") {
-        const modeVal = t.value;
-        if (modeVal === "asr") {
-          try {
-            initOnce("speech");
-          } catch {}
-        }
-        applyMode(modeVal);
-        applyGate();
-        ensureOrchestratorForMode();
-      }
       // Handle WPM target changes
       if (t?.id === "wpmTarget") {
         try {
@@ -871,9 +855,6 @@ function installScrollRouter(opts) {
         }
       }
     }, { capture: true });
-    
-    const modeSel = document.getElementById("scrollMode");
-    modeSel?.setAttribute("aria-live", "polite");
   } catch {
   }
   try {

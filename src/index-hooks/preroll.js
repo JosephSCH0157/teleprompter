@@ -19,10 +19,6 @@
         const fromStore = window.__tpStore?.get?.('scrollMode') || window.__tpStore?.get?.('mode');
         if (fromStore) return String(fromStore).toLowerCase();
       } catch {}
-      try {
-        const sel = document.getElementById('scrollMode');
-        if (sel && typeof sel.value === 'string') return String(sel.value).toLowerCase();
-      } catch {}
       return 'auto';
     }
 
@@ -83,4 +79,3 @@
     });
   } catch {}
 })();
-

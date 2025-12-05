@@ -289,24 +289,7 @@ function confirmExit(): boolean {
 }
 
 function handleDropdownChange(e: Event): void {
-  try {
-    const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    if (!sel) return;
-
-    const val = sel.value;
-    if ((window as any).__TP_REHEARSAL && val !== 'rehearsal') {
-      if (!confirmExit()) {
-        sel.value = 'rehearsal';
-        safePreventDefault(e);
-        return;
-      }
-      disable();
-    } else if (!(window as any).__TP_REHEARSAL && val === 'rehearsal') {
-      enable();
-    }
-  } catch {
-    /* ignore */
-  }
+  // No-op: rehearsal now follows the store scrollMode via subscriptions.
 }
 
 interface SelectModeDetail {
@@ -335,15 +318,6 @@ function handleSelectModeEvent(e: Event): void {
 function wireSelectObserversOnce(): void {
   if (wiredSelectListeners) return;
   wiredSelectListeners = true;
-
-  try {
-    const sel = document.getElementById('scrollMode');
-    sel?.addEventListener('change', handleDropdownChange, {
-      capture: true,
-    });
-  } catch {
-    /* ignore */
-  }
 
   try {
     document.addEventListener('tp:selectMode' as any, handleSelectModeEvent, {
@@ -444,14 +418,6 @@ export function installRehearsal(_store?: unknown): RehearsalApi {
     /* ignore */
   }
 
-  // Auto-wire if dropdown already selected at boot
-  try {
-    const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    if (sel && sel.value === 'rehearsal') enable();
-  } catch {
-    /* ignore */
-  }
-
   return api;
 }
 
@@ -472,12 +438,6 @@ export function resolveInitialRehearsal(): void {
   }
 
   if (should) {
-    try {
-      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      if (sel) sel.value = 'rehearsal';
-    } catch {
-      /* ignore */
-    }
     if (!(window as any).__TP_REHEARSAL) enable();
   }
 }
@@ -496,14 +456,6 @@ export function syncRehearsalFromMode(
   }
   if (!wants && on) {
     if (!confirmExit()) {
-      try {
-        const sel = document.getElementById(
-          'scrollMode',
-        ) as HTMLSelectElement | null;
-        if (sel) sel.value = 'rehearsal';
-      } catch {
-        /* ignore */
-      }
       try {
         revert?.('rehearsal');
       } catch {

@@ -2,6 +2,7 @@
 export {};
 
 import { getScrollWriter } from '../scroll/scroll-writer';
+import { appStore } from '../state/app-store';
 
 // Lightweight ASR ride-along (JS build) — mirrors src/index-hooks/asr.ts behavior
 // Uses the Web Speech API directly to avoid TS build requirements in dev.
@@ -606,13 +607,17 @@ export function initAsrFeature() {
   // Coordinator: follow Speech Sync and Mode changes; interlock auto-scroll
   let asrMode = null; let speechActive = false; let asrActive = false; let autoHeld = false;
   // Allow a dev/test override of mode via window.__tpModeOverride or tp:mode events
-  const wantASR = () => {
+  const getScrollMode = () => {
     try {
       const ov = (typeof window.__tpModeOverride === 'string') ? window.__tpModeOverride : null;
-      if (ov) return String(ov).toLowerCase() === 'asr';
-      return String(document.getElementById('scrollMode')?.value || '').toLowerCase() === 'asr';
-    } catch { return false; }
+      if (ov) return String(ov).toLowerCase();
+      const store = (window as any).__tpStore || appStore;
+      const v = store?.get?.('scrollMode');
+      if (typeof v === 'string') return v.toLowerCase();
+    } catch {}
+    return '';
   };
+  const wantASR = () => getScrollMode() === 'asr';
   const setChipVisible = (on) => { try { const c = document.getElementById('asrChip'); if (c) c.style.display = on ? '' : 'none'; } catch {} };
   const setChipState = (state) => { try { window.dispatchEvent(new CustomEvent('asr:state', { detail: { state } })); } catch {} };
   const holdAuto = () => {
@@ -658,9 +663,9 @@ export function initAsrFeature() {
       if (speechActive) { wantASR() ? void start() : void stop(); }
     } catch {}
   });
-  document.addEventListener('change', (ev) => {
-    try {
-      if (ev?.target?.id !== 'scrollMode') return;
+  try {
+    const store = (window as any).__tpStore || appStore;
+    store?.subscribe?.('scrollMode', () => {
       const isAsr = wantASR();
       if (isAsr) {
         try { mountAsrChip(); } catch {}
@@ -672,8 +677,8 @@ export function initAsrFeature() {
       }
       if (!speechActive) return; // Do not start/stop engine when speech is off
       isAsr ? void start() : void stop();
-    } catch {}
-  });
+    });
+  } catch {}
   window.addEventListener('asr:toggle', (e) => { const armed = !!(e?.detail?.armed); armed ? void start() : void stop(); });
   window.addEventListener('asr:stop', () => { void stop(); });
 
