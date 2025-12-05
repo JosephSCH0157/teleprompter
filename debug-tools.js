@@ -444,7 +444,8 @@
   } catch {}
 
   try {
-    installHUD();
+    var hud = installHUD();
+    try { hud && hud.show && hud.show(); } catch {}
   } catch (err) {
     try {
       console.error('[HUD] failed to install', err);

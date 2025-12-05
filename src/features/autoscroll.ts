@@ -425,6 +425,9 @@ function installLazyAutoGlobal(): void {
   }
 }
 
+// Install a minimal controller immediately so preroll/tests have something to call
+installLazyAutoGlobal();
+
 export function toggle(): void {
   const ctrl = initAutoscrollFeature();
   if (!ctrl) return;
