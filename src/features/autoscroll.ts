@@ -266,15 +266,15 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
   try {
     (window as any).__tpAuto = {
       setEnabled: (on: boolean) => {
-        try { console.log('[AUTO] setEnabled(from hotkey) →', on); } catch {}
+        try { console.log('[AUTO] setEnabled(from hotkey)', on); } catch {}
         return on ? start() : stop();
       },
       set: (on: boolean) => {
-        try { console.log('[AUTO] set(from hotkey) →', on); } catch {}
+        try { console.log('[AUTO] set(from hotkey)', on); } catch {}
         return on ? start() : stop();
       },
       setSpeed: (px: number) => {
-        try { console.log('[AUTO] setSpeed(from hotkey) →', px); } catch {}
+        try { console.log('[AUTO] setSpeed(from hotkey)', px); } catch {}
         return setSpeed(px);
       },
       getState: () => ({ enabled: active, speed: currentSpeedPx() }),
@@ -351,7 +351,12 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
 
 function ensureController(): AutoScrollController | null {
   if (!controller) {
-    controller = initAutoScroll(() => document.getElementById('viewer'));
+    controller = initAutoScroll(() => {
+      return (
+        document.getElementById('scriptScrollContainer') ||
+        document.getElementById('viewer')
+      );
+    });
   }
   return controller;
 }
@@ -371,11 +376,6 @@ export function initAutoscrollFeature(): AutoScrollController | null {
   const ctrl = ensureController();
   if (!ctrl) return null;
   bindDefaultUi(ctrl);
-  try {
-    (window as any).__tpAuto = { setEnabled };
-  } catch {
-    // ignore
-  }
   return ctrl;
 }
 
@@ -421,7 +421,9 @@ export function setEnabled(enable: boolean): void {
 if (typeof window !== 'undefined') {
   const boot = () => {
     try {
-      const viewer = document.getElementById('viewer') as HTMLElement | null;
+      const viewer =
+        (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+        (document.getElementById('viewer') as HTMLElement | null);
 
       // Try multiple ids for the toggle and speed in case HTML naming drifted
       const toggle =
@@ -469,3 +471,4 @@ if (typeof window !== 'undefined') {
     }
   }
 }
+

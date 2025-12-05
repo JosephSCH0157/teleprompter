@@ -437,3 +437,24 @@
     function lateWrap() {
       // legacy monkeypatches removed
     }
+
+    try {
+      setTimeout(lateWrap, 500);
+      window.addEventListener('focus', lateWrap, { once: true });
+    } catch {}
+
+    return HUD;
+  }
+
+  try {
+    window.__tpInstallHUD = installHUD;
+  } catch {}
+
+  try {
+    installHUD();
+  } catch (err) {
+    try {
+      console.error('[HUD] failed to install', err);
+    } catch {}
+  }
+})();
