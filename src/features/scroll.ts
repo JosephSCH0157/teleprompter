@@ -7,16 +7,12 @@ function bindAutoControls() {
 
 function bindRouterControls() {
   try {
+    // Create the router against the store/auto brain; DOM select is bridged elsewhere (mode-bridge.ts).
     const auto = getAutoScrollApi();
     const router = createScrollModeRouter({ auto, store: appStore });
-    const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    if (sel && !sel.dataset.bound) {
-      sel.dataset.bound = '1';
-      sel.value = (router.getMode() || '').toLowerCase();
-      sel.addEventListener('change', () => {
-        const mode = ((sel.value || '').toLowerCase() as ScrollMode);
-        router.setMode(mode);
-      });
+    // Expose for legacy callers without touching #scrollMode directly.
+    if (!(window as any).__tpScrollMode) {
+      (window as any).__tpScrollMode = router;
     }
   } catch {}
 }
