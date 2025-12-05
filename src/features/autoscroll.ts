@@ -379,6 +379,52 @@ export function initAutoscrollFeature(): AutoScrollController | null {
   return ctrl;
 }
 
+// Fallback: ensure __tpAuto exists even if boot skipped UI wiring
+function installLazyAutoGlobal(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = (window as any).__tpAuto;
+    if (existing && typeof existing.startFromPreroll === 'function') return;
+  } catch {
+    // ignore
+  }
+
+  try {
+    (window as any).__tpAuto = {
+      setEnabled: (on: boolean) => {
+        const ctrl = initAutoscrollFeature();
+        if (!ctrl) return;
+        return on ? ctrl.start() : ctrl.stop();
+      },
+      set: (on: boolean) => {
+        const ctrl = initAutoscrollFeature();
+        if (!ctrl) return;
+        return on ? ctrl.start() : ctrl.stop();
+      },
+      setSpeed: (px: number) => {
+        setSpeed(px);
+      },
+      getState: () => {
+        const ctrl = initAutoscrollFeature();
+        return { enabled: !!ctrl?.isActive?.(), speed: currentSpeedPx() };
+      },
+      startFromPreroll: (detail?: unknown) => {
+        try { console.log('[AUTO] startFromPreroll(lazy)', detail); } catch {}
+        let speed = readSpeedFromSlider();
+        if (!Number.isFinite(speed) || speed <= 0 || speed < AUTO_MIN_SPEED) {
+          setSpeed(AUTO_MIN_SPEED);
+          speed = AUTO_MIN_SPEED;
+        }
+        const ctrl = initAutoscrollFeature();
+        if (!ctrl) return;
+        ctrl.start();
+      },
+    };
+  } catch {
+    // ignore
+  }
+}
+
 export function toggle(): void {
   const ctrl = initAutoscrollFeature();
   if (!ctrl) return;
@@ -419,6 +465,9 @@ export function setEnabled(enable: boolean): void {
 // --- Auto-boot: wire itself on DOM ready so we don't depend on index.ts wiring ---
 
 if (typeof window !== 'undefined') {
+  // Ensure a controller is available for preroll/hotkeys even if UI wiring hasn't run yet
+  installLazyAutoGlobal();
+
   const boot = () => {
     try {
       const viewer =
