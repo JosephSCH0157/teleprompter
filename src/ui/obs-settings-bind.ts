@@ -16,6 +16,12 @@ function mirrorLegacyObsEnabled(on: boolean): void {
   try { (window as any).__tpStore?.set?.('obsEnabled', on); } catch {}
 }
 
+function handleToggle(on: boolean): void {
+  setRecorderEnabled('obs', !!on);
+  mirrorLegacyObsEnabled(!!on);
+  try { console.info('[OBS-UI] toggled', { enabled: !!on }); } catch {}
+}
+
 function buildUrl(hostWithPort: string, explicitPort?: string): string {
   const rawHost = (hostWithPort || '').trim();
   const rawPort = (explicitPort || '').trim();
@@ -30,7 +36,7 @@ function buildUrl(hostWithPort: string, explicitPort?: string): string {
   let port = rawPort || '';
 
   // Extract port from host if present (host:port), prefer explicitPort when provided.
-  const m = host.match(/^(\\[[^\\]]+\\]|[^:]+)(?::(\\d+))?$/);
+  const m = host.match(/^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/);
   if (m) {
     host = m[1];
     if (!port && m[2]) port = m[2];
@@ -99,8 +105,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
 
     const writeEnabled = (on: boolean) => {
       if (syncing) return;
-      setRecorderEnabled('obs', !!on);
-      mirrorLegacyObsEnabled(!!on);
+      handleToggle(on);
     };
 
     toggleEls.forEach((el) => {
@@ -141,4 +146,18 @@ export function bindObsSettingsUI(doc: Document = document): void {
       mo.observe(doc.documentElement, { childList: true, subtree: true });
     } catch {}
   }
+
+  // Delegated safety net for late-mounted toggles
+  try {
+    doc.addEventListener(
+      'change',
+      (ev) => {
+        const t = ev.target as HTMLElement | null;
+        const input = (t && t.closest('[data-tp-obs-toggle]')) as HTMLInputElement | null;
+        if (!input) return;
+        handleToggle(!!input.checked);
+      },
+      { capture: true },
+    );
+  } catch {}
 }
