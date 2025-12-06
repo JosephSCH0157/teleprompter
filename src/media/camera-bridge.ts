@@ -5,6 +5,7 @@
 // - Device comes from a single camera select (sidebar or settings), mirrored if both exist.
 // - Exposes window.__tpCamera / window.__camApi for legacy/test callers.
 
+import { appStore } from '../state/app-store';
 type Maybe<T> = T | null;
 
 type CameraAPI = {
@@ -72,9 +73,10 @@ export function bindCameraUI(): void {
   if (sidebarDevice) deviceSelects.push(sidebarDevice);
   if (settingsDevice && settingsDevice !== sidebarDevice) deviceSelects.push(settingsDevice);
 
-  let currentStream: MediaStream | null = null;
-  let currentDeviceId: string | null = null;
-  let isStarting = false;
+let currentStream: MediaStream | null = null;
+let currentDeviceId: string | null = null;
+let isStarting = false;
+let applyingFromStore = false;
 
   function updateChip(text: string): void {
     if (camRtcChip) camRtcChip.textContent = text;
@@ -229,9 +231,34 @@ export function bindCameraUI(): void {
     return !!currentStream;
   }
 
+  try {
+    appStore.subscribe('cameraEnabled', async (on) => {
+      if (applyingFromStore) return;
+      applyingFromStore = true;
+      try {
+        if (on) {
+          const ok = await doStart();
+          try { appStore.set('cameraAvailable', !!ok); } catch {}
+          if (!ok) {
+            try { appStore.set('cameraEnabled', false); } catch {}
+          }
+        } else {
+          doStop();
+          try { appStore.set('cameraAvailable', false); } catch {}
+        }
+      } finally {
+        applyingFromStore = false;
+      }
+    });
+  } catch {}
+
   // Wire UI events (sidebar = SSOT)
-  startEl.addEventListener('click', () => { void doStart(); });
-  stopEl.addEventListener('click', () => { doStop(); });
+  startEl.addEventListener('click', () => {
+    try { appStore.set('cameraEnabled', true); } catch {}
+  });
+  stopEl.addEventListener('click', () => {
+    try { appStore.set('cameraEnabled', false); } catch {}
+  });
 
   deviceSelects.forEach((sel) => {
     sel.addEventListener('change', () => { void setDevice(sel.value || null); });

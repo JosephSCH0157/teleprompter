@@ -74,6 +74,8 @@ export type AppStoreState = {
   micDevice: string;
   obsEnabled: boolean;
   micGranted: boolean;
+  cameraEnabled: boolean;
+  cameraAvailable: boolean;
   obsScene: string;
   obsReconnect: boolean;
   obsHost: string;
@@ -206,6 +208,8 @@ function buildInitialState(): AppStoreState {
         return '';
       }
     })(),
+    cameraEnabled: false,
+    cameraAvailable: false,
     micGranted: false,
     obsEnabled: (() => {
       try {
