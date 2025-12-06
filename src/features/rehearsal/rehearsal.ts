@@ -94,7 +94,6 @@ function injectCssOnce(): void {
   body.is-rehearsal #rehearsalWatermark{ display:flex; }
   body.is-rehearsal [data-role=start-rec],
   body.is-rehearsal #startRecBtn,
-  body.is-rehearsal #recBtn,
   body.is-rehearsal #micBtn,
   body.is-rehearsal #releaseMicBtn,
   body.is-rehearsal #startCam,
@@ -243,7 +242,6 @@ function restorePrev(): void {
 
 function markUiDisabled(on: boolean): void {
   const ids = [
-    'recBtn',
     'micBtn',
     'releaseMicBtn',
     'startCam',
@@ -336,25 +334,6 @@ function enable(): void {
   ensureWatermark();
   installScrollGuard();
   setState(true);
-
-  // Assign a session id for HUD grouping
-  try {
-    const sid = new Date().toISOString().replace(/[:.]/g, '');
-    try {
-      localStorage.setItem('tp_hud_session', sid);
-    } catch {
-      /* ignore */
-    }
-    try {
-      window.dispatchEvent(
-        new CustomEvent('tp:session:start', { detail: { sid } }),
-      );
-    } catch {
-      /* ignore */
-    }
-  } catch {
-    /* ignore */
-  }
 
   stopAllRecordingPaths();
   markUiDisabled(true);

@@ -2,6 +2,7 @@
 // Minimal DOM helpers for the UI layer
 
 import { getScrollWriter } from '../scroll/scroll-writer';
+import { setSessionPhase } from '../state/session';
 
 
 type AnyFn = (...args: any[]) => any;
@@ -418,7 +419,7 @@ function resetRun() {
   try { window.resetTimer && window.resetTimer(); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
-  try { window.dispatchEvent(new CustomEvent('tp:session:start', { detail: { reason: 'reset' } })); } catch {}
+  try { setSessionPhase('idle'); } catch {}
 
   const editor = document.getElementById('editor');
   const text = (editor && 'value' in editor) ? editor.value : '';

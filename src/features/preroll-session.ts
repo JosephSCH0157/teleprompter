@@ -123,6 +123,19 @@ async function runCountdown(seconds: number): Promise<void> {
 
 let prerollRunning = false;
 
+export function completePrerollSession(detail: { seconds: number; source: string }): void {
+  setSessionPhase('live');
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:preroll:done', {
+        detail,
+      }),
+    );
+  } catch {
+    // ignore
+  }
+}
+
 async function onPhaseChange(phase: SessionPhase): Promise<void> {
   if (phase !== 'preroll') return;
   if (prerollRunning) return;
@@ -144,15 +157,8 @@ async function onPhaseChange(phase: SessionPhase): Promise<void> {
     // ignore countdown failures
   }
 
-  setSessionPhase('live');
   try {
-    window.dispatchEvent(
-      new CustomEvent('tp:preroll:done', {
-        detail: { seconds, source: 'session' },
-      }),
-    );
-  } catch {
-    // ignore
+    completePrerollSession({ seconds, source: 'session' });
   } finally {
     prerollRunning = false;
   }

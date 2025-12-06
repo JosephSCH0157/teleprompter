@@ -1,5 +1,5 @@
 import { appStore } from '../state/app-store';
-import { type SessionPhase } from '../state/session';
+import { getSession, type SessionPhase } from '../state/session';
 
 function startAutoScroll(): void {
   try {
@@ -41,8 +41,8 @@ function maybeStartOnLive(phase: SessionPhase): void {
     return;
   }
 
-  const shouldAuto = !!appStore.get('session.scrollAutoOnLive');
-  if (!shouldAuto) return;
+  const session = getSession();
+  if (!session.scrollAutoOnLive) return;
   startAutoScroll();
 }
 
@@ -56,8 +56,27 @@ export function initScrollSessionRouter(): void {
   }
 
   try {
-    window.addEventListener('tp:preroll:done', () => {
-      maybeStartOnLive('live');
+    window.addEventListener('tp:preroll:done', (ev) => {
+      const session = getSession();
+      const detail = (ev as CustomEvent)?.detail || {};
+
+      try {
+        console.debug('[scroll-session] preroll done', {
+          phase: session.phase,
+          scrollAutoOnLive: session.scrollAutoOnLive,
+          mode: appStore.get('scrollMode'),
+          detail,
+        });
+      } catch {
+        // ignore
+      }
+
+      if (session.phase !== 'live') return;
+      if (!session.scrollAutoOnLive) {
+        try { console.debug('[scroll-session] auto-scroll disabled for this mode'); } catch {}
+        return;
+      }
+      startAutoScroll();
     });
   } catch {
     // ignore

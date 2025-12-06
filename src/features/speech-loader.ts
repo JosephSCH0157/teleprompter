@@ -1,5 +1,6 @@
 import { wantsAutoRecord } from '../recording/wantsAutoRecord';
 import { getSession, setSessionPhase } from '../state/session';
+import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
 
 type AnyFn = (...args: any[]) => any;
@@ -97,10 +98,6 @@ let pendingManualRestartCount = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
-
-function armAutoFromPreroll(detail: { seconds: number; source: string }): void {
-  try { console.debug('[PREROLL] preroll done (session-managed)', detail); } catch {}
-}
 
 function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -371,7 +368,7 @@ async function doAutoRecordStop(): Promise<void> {
   } catch {}
 }
 
-function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promise<void> {
+function beginCountdownThen(sec: number, cb: () => Promise<void> | void, source = 'speech'): Promise<void> {
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
   // Overlay helpers (local so they don't leak globals if loader is re-imported)
@@ -405,9 +402,7 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promis
         if (s <= 0) {
           hidePreroll();
           try { await cb(); } catch {}
-          const detail = { seconds: s, source: 'speech' };
-          try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail })); } catch {}
-          try { armAutoFromPreroll(detail); } catch {}
+          completePrerollSession({ seconds: s, source });
           done = true;
           return;
         }
@@ -418,9 +413,7 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void): Promis
         }
         hidePreroll();
         try { await cb(); } catch {}
-        const detail = { seconds: s, source: 'speech' };
-        try { window.dispatchEvent(new CustomEvent('tp:preroll:done', { detail })); } catch {}
-        try { armAutoFromPreroll(detail); } catch {}
+        completePrerollSession({ seconds: s, source });
         done = true;
       } catch {}
       finally {
