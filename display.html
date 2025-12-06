@@ -230,10 +230,11 @@
             // Render helper: prefer TS renderScript if available; fallback to innerHTML
             function applyScriptSnapshot(text){
               // Ensure top padding matches marker offset before render
+              let markerOffset = 0;
               try {
                 const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
                 const h = (wrap?.clientHeight || window.innerHeight || 0);
-                const markerOffset = Math.max(0, Math.round(h * markerPct));
+                markerOffset = Math.max(0, Math.round(h * markerPct));
                 if (scriptEl) {
                   scriptEl.style.paddingTop = `${markerOffset}px`;
                   (scriptEl as any).style.scrollPaddingTop = `${markerOffset}px`;
@@ -251,12 +252,14 @@
                       scriptEl.style.paddingTop = `${markerOffset2}px`;
                       (scriptEl as any).style.scrollPaddingTop = `${markerOffset2}px`;
                     }
-                    wrap?.scrollTo({ top: 0, behavior: 'auto' });
+                    markerOffset = markerOffset2;
+                    wrap?.scrollTo({ top: markerOffset2, behavior: 'auto' });
                   } catch {}
                   return;
                 }
               } catch {}
               try { scriptEl.innerHTML = text || ''; } catch {}
+              try { wrap?.scrollTo({ top: markerOffset, behavior: 'auto' }); } catch {}
             }
 
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)

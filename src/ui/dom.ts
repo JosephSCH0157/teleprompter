@@ -237,7 +237,7 @@ export function wireDisplayMirror() {
         if (!viewer || !window.sendToDisplay) return;
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max > 0 ? (viewer.scrollTop / max) : 0;
-        window.sendToDisplay({ type: 'scroll', ratio });
+        window.sendToDisplay({ type: 'scroll', ratio, top: viewer.scrollTop });
       } finally {
         scrollPending = false;
       }
