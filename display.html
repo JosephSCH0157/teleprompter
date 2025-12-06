@@ -253,12 +253,31 @@
                       (scriptEl as any).style.scrollPaddingTop = `${markerOffset2}px`;
                     }
                     markerOffset = markerOffset2;
+                    // Spacer element to force the first line to sit at the marker
+                    const existingSpacer = scriptEl.querySelector('.marker-spacer');
+                    const spacer = existingSpacer || document.createElement('div');
+                    spacer.className = 'marker-spacer';
+                    spacer.style.height = `${markerOffset2}px`;
+                    spacer.style.margin = '0';
+                    if (!existingSpacer) {
+                      scriptEl.insertBefore(spacer, scriptEl.firstChild);
+                    }
                     wrap?.scrollTo({ top: markerOffset2, behavior: 'auto' });
                   } catch {}
                   return;
                 }
               } catch {}
-              try { scriptEl.innerHTML = text || ''; } catch {}
+              try {
+                scriptEl.innerHTML = '';
+                const spacer = document.createElement('div');
+                spacer.className = 'marker-spacer';
+                spacer.style.height = `${markerOffset}px`;
+                spacer.style.margin = '0';
+                scriptEl.appendChild(spacer);
+                const cont = document.createElement('div');
+                cont.innerHTML = text || '';
+                while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
+              } catch {}
               try { wrap?.scrollTo({ top: markerOffset, behavior: 'auto' }); } catch {}
             }
 

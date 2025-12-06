@@ -242,15 +242,24 @@ export function wireDisplayMirror() {
         scrollPending = false;
       }
     };
+    const requestSendScroll = () => {
+      if (scrollPending) return;
+      scrollPending = true;
+      requestAnimationFrame(sendScroll);
+    };
     if (viewer) {
       viewer.addEventListener('scroll', () => {
-        if (!scrollPending) {
-          scrollPending = true;
-          requestAnimationFrame(() => {
-            try { sendScroll(); } finally { try { window.dispatchEvent(new Event('tp:anchorChanged')); } catch {} }
-          });
-        }
+        requestSendScroll();
+        try { window.dispatchEvent(new Event('tp:anchorChanged')); } catch {}
       }, { passive: true });
+      // Heartbeat: ensure display keeps getting the latest top even if scroll events are swallowed
+      const pulse = () => {
+        try {
+          requestSendScroll();
+        } catch {}
+        try { setTimeout(pulse, 150); } catch {}
+      };
+      try { setTimeout(pulse, 150); } catch {}
     }
 
     // Typography mirroring (font size / line height)
