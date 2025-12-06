@@ -213,26 +213,9 @@
             // requestScroll: absolute pixels in the same container as viewer
             function requestScroll(value) {
               const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-              const targetTop = Math.max(0, Math.min(max, value|0));
-              const currentTop = wrap.scrollTop;
-              const delta = targetTop - currentTop;
-
-              // Hysteresis: ignore tiny corrections
-              if (Math.abs(delta) < 2) {
-                logScrollCommand(targetTop, currentTop, delta, 'N/A', 'tiny');
-                return;
-              }
-
-              // Monotonic guard: don't allow backward movement unless jump back is >200px
-              const backJumpPx = currentTop - targetTop;
-              const allowBack = backJumpPx >= 200;
-              if (targetTop < currentTop && !allowBack) {
-                logScrollCommand(targetTop, currentTop, delta, 'N/A', 'blocked');
-                return;
-              }
-
-              logScrollCommand(targetTop, currentTop, delta, 'N/A', 'allowed');
-              wrap.scrollTo({ top: targetTop, behavior: 'auto' });
+              const targetTop = Math.max(0, Math.min(max, value | 0));
+              wrap.scrollTop = targetTop;
+              logScrollCommand(targetTop, wrap.scrollTop, targetTop - wrap.scrollTop, 'N/A', 'applied');
             }
 
             // Log scroll commands to HUD
