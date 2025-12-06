@@ -49,7 +49,7 @@ export interface ScrollModeRouter {
 
 function asMode(v: unknown, fallback: ScrollMode = 'manual'): ScrollMode {
   const m = String(v || '').toLowerCase();
-  if (m === 'timed') return 'auto';
+  if (m === 'timed') return 'manual';
   if (m === 'auto' || m === 'hybrid' || m === 'step' || m === 'rehearsal') {
     return m as ScrollMode;
   }
@@ -91,11 +91,9 @@ export function createScrollModeRouter(
     const auto = deps.auto;
     if (!auto) return;
 
+    // Do not auto-start scrolling on mode change; session router will enable when appropriate.
     if (next === 'auto' || next === 'hybrid') {
-      auto.setEnabled(true);
-      if (auto.setMode) {
-        auto.setMode(next);
-      }
+      if (auto.setMode) auto.setMode(next);
     } else {
       auto.setEnabled(false);
     }

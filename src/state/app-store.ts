@@ -300,10 +300,10 @@ function buildInitialState(): AppStoreState {
           localStorage.getItem(SCROLL_MODE_KEY) ||
           localStorage.getItem('tp_scroll_mode') ||
           localStorage.getItem('scrollMode') ||
-          'timed'
+          'manual'
         );
       } catch {
-        return 'timed';
+        return 'manual';
       }
     })(),
     timedSpeed: (() => {
