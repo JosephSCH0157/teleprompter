@@ -18,7 +18,7 @@ type ObsBridge = {
 function getBridge(): ObsBridge | null {
   try {
     const w = window as any;
-    return (w.__obsBridge as ObsBridge) || (w.__tpObs as ObsBridge) || null;
+    return (w.__obsBridge as ObsBridge) || null;
   } catch {
     return null;
   }
@@ -50,15 +50,9 @@ function wireBridgeEvents(): void {
 
 function closeBridge(reason?: string): void {
   const bridge = getBridge();
-  const legacy = (() => {
-    try { return (window as any).__tpObs as ObsBridge | null; } catch { return null; }
-  })();
   try { bridge?.enableAutoReconnect?.(false); } catch {}
-  try { legacy?.enableAutoReconnect?.(false); } catch {}
   try { bridge?.setArmed?.(false); } catch {}
-  try { legacy?.setArmed?.(false); } catch {}
   try { bridge?.disconnect?.(); } catch {}
-  try { legacy?.disconnect?.(); } catch {}
   updateStatus('disconnected', reason);
 }
 
@@ -70,27 +64,19 @@ function connectViaBridge(): void {
   }
 
   const bridge = getBridge();
-  const legacy = (() => {
-    try { return (window as any).__tpObs as ObsBridge | null; } catch { return null; }
-  })();
   wireBridgeEvents();
-  if (!bridge && !legacy) {
+  if (!bridge) {
     updateStatus('error', 'OBS bridge unavailable');
     return;
   }
 
   try { bridge?.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }); } catch {}
-  try { legacy?.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }); } catch {}
   try { bridge?.setArmed?.(true); } catch {}
-  try { legacy?.setArmed?.(true); } catch {}
   try { bridge?.enableAutoReconnect?.(true); } catch {}
-  try { legacy?.enableAutoReconnect?.(true); } catch {}
 
   updateStatus('connecting');
   try { bridge?.maybeConnect?.(); } catch {}
   try { bridge?.connect?.(); } catch {}
-  try { legacy?.maybeConnect?.(); } catch {}
-  try { legacy?.connect?.(); } catch {}
 }
 
 export function initObsConnection(): void {
