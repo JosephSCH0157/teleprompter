@@ -87,6 +87,17 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   const lines = normalized.split('\n');
   const frag = document.createDocumentFragment();
 
+  // Set a top padding equal to the marker offset so the first line sits on the marker line
+  try {
+    const markerPct =
+      typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4;
+    const h = root.clientHeight || window.innerHeight || 0;
+    const markerOffset = Math.max(0, Math.round(h * markerPct));
+    root.style.paddingTop = `${markerOffset}px`;
+    // scroll-padding helps browsers honor alignment when using scrollTo with behavior
+    (root as any).style.scrollPaddingTop = `${markerOffset}px`;
+  } catch {}
+
   let currentSpeaker: SpeakerKey | null = null;
   let inNote = false;
 
@@ -174,12 +185,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try {
     const firstLine = root.querySelector('.line') as HTMLElement | null;
     if (firstLine) {
-      const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
-        ? (window as any).__TP_MARKER_PCT
-        : 0.4;
-      const markerOffset = Math.round((root.clientHeight || 0) * markerPct);
-      const targetTop = Math.max(0, firstLine.offsetTop - markerOffset);
-      root.scrollTo({ top: targetTop, behavior: 'auto' });
+      root.scrollTo({ top: 0, behavior: 'auto' });
     }
   } catch {}
 
