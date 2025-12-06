@@ -229,18 +229,29 @@
 
             // Render helper: prefer TS renderScript if available; fallback to innerHTML
             function applyScriptSnapshot(text){
+              // Ensure top padding matches marker offset before render
+              try {
+                const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
+                const h = (wrap?.clientHeight || window.innerHeight || 0);
+                const markerOffset = Math.max(0, Math.round(h * markerPct));
+                if (scriptEl) {
+                  scriptEl.style.paddingTop = `${markerOffset}px`;
+                  (scriptEl as any).style.scrollPaddingTop = `${markerOffset}px`;
+                }
+              } catch {}
               try {
                 if (typeof window.renderScript === 'function') {
                   window.renderScript(String(text||''), scriptEl);
-                  // Apply top padding equal to marker offset so first line sits on marker
+                  // Re-apply padding in case renderScript resized the root
                   try {
                     const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
-                    const h = wrap?.clientHeight || window.innerHeight || 0;
-                    const markerOffset = Math.max(0, Math.round(h * markerPct));
+                    const h2 = (wrap?.clientHeight || window.innerHeight || 0);
+                    const markerOffset2 = Math.max(0, Math.round(h2 * markerPct));
                     if (scriptEl) {
-                      scriptEl.style.paddingTop = `${markerOffset}px`;
-                      scriptEl.style.scrollPaddingTop = `${markerOffset}px`;
+                      scriptEl.style.paddingTop = `${markerOffset2}px`;
+                      (scriptEl as any).style.scrollPaddingTop = `${markerOffset2}px`;
                     }
+                    wrap?.scrollTo({ top: 0, behavior: 'auto' });
                   } catch {}
                   return;
                 }
