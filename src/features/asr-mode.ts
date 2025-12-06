@@ -154,13 +154,7 @@ export class AsrMode {
    * Gate: only emit transcript events in dev OR when explicitly enabled in Settings
    */
   private shouldEmitTx(): boolean {
-    try {
-      return localStorage.getItem('tp_dev_mode') === '1' || 
-             localStorage.getItem('tp_hud_prod') === '1' ||
-             (window as any).__TP_DEV === true;
-    } catch {
-      return false;
-    }
+    return true;
   }
   
   /**
