@@ -35,6 +35,19 @@ function clampScrollTop(sc: HTMLElement, y: number): number {
   return clampGuard(t, max) ? t : sc.scrollTop || 0;
 }
 
+function mirrorToDisplay(sc: HTMLElement): void {
+  try {
+    const send = (window as any).sendToDisplay;
+    if (typeof send !== 'function') return;
+    const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
+    const top = sc.scrollTop || 0;
+    const ratio = max > 0 ? top / max : 0;
+    send({ type: 'scroll', top, ratio });
+  } catch {
+    // ignore display mirror errors
+  }
+}
+
 export function scrollByPx(dy: number, getScroller = defaultViewer): void {
   if (clampActive()) return;
   const sc = getScroller();
@@ -42,6 +55,7 @@ export function scrollByPx(dy: number, getScroller = defaultViewer): void {
   const target = clampScrollTop(sc, (sc.scrollTop || 0) + (Number(dy) || 0));
   requestWrite(() => {
     try { sc.scrollTop = target; } catch {}
+    mirrorToDisplay(sc);
     try {
       const win = window as any;
       const debug = win?.__tpScrollDebug === true || /scrollDebug=1/i.test(String(location.search || ''));
@@ -143,13 +157,14 @@ export function createScrollerHelpers(getScroller: ScrollerGetter) {
     scrollByLines: (n: number) => scrollByLines(n, () => getScroller()),
     centerLine: (i: number) => centerLine(i, () => getScroller()),
     requestScroll: (top: number) => {
-      if (clampActive()) return;
-      const sc = getScroller();
-      if (!sc) return;
-      const target = clampScrollTop(sc, top);
-      requestWrite(() => {
-        try { sc.scrollTop = target; } catch {}
-      });
-    },
+    if (clampActive()) return;
+    const sc = getScroller();
+    if (!sc) return;
+    const target = clampScrollTop(sc, top);
+    requestWrite(() => {
+      try { sc.scrollTop = target; } catch {}
+      mirrorToDisplay(sc);
+    });
+  },
   };
 }
