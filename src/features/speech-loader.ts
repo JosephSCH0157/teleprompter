@@ -481,7 +481,7 @@ export function installSpeech(): void {
         'click',
         () => {
           const session = getSession();
-          if (session.phase === 'preroll' || session.phase === 'live') {
+          if (session.phase === 'preroll') {
             try { console.debug('[session/start] ignored: phase=', session.phase); } catch {}
             return;
           }
