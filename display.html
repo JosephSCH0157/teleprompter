@@ -293,6 +293,23 @@
               chan.addEventListener('message', (e) => {
                 try {
                   const msg = e?.data || {};
+                  // Script snapshots from main
+                  if (msg && msg.kind === 'tp:script') {
+                    applyScriptSnapshot(msg.text || msg.html || '');
+                    applyScaled();
+                    applyBottomPad();
+                    return;
+                  }
+                  // Typography updates
+                  if (msg && msg.kind === 'tp:typography') {
+                    if (msg.fontSize && msg.lineHeight) {
+                      applyBase(msg.fontSize, msg.lineHeight);
+                    } else {
+                      applyScaled();
+                    }
+                    applyBottomPad();
+                    return;
+                  }
                   // Lightweight mirror/diagnostic channel only
                   if (msg && msg.t === 'display:ping') {
                     try { chan.postMessage({ t: 'display:pong' }); } catch {}
@@ -303,6 +320,45 @@
 
             window.addEventListener('message', ev => {
               const d = ev.data||{};
+              // Scroll mirror: obey main window scroll commands
+              if (d && d.type === 'scroll' && typeof d.top === 'number') {
+                requestScroll(d.top);
+                return;
+              }
+              // Script snapshots via postMessage
+              if (d && d.kind === 'tp:script') {
+                applyScriptSnapshot(d.text || d.html || '');
+                applyScaled();
+                applyBottomPad();
+                if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
+                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                  wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
+                }
+                return;
+              }
+              // Typography via postMessage
+              if (d && d.kind === 'tp:typography') {
+                try {
+                  const s = document.documentElement.style;
+                  const x = d.t || d || {};
+                  if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
+                  if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
+                  if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
+                  if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
+                  if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
+                  if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
+                  if (x.color) s.setProperty('--tp-fg', x.color);
+                  if (x.background) s.setProperty('--tp-bg', x.background);
+                  if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
+                  if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                  if (x.fontSizePx != null || x.lineHeight != null) {
+                    applyBase(x.fontSizePx, x.lineHeight);
+                  }
+                } catch {}
+                applyScaled();
+                applyBottomPad();
+                return;
+              }
               // New display-sync snapshot via postMessage fallback
               if (d && d.kind === 'tp:script' && d.source === 'main') {
                 try { window.__lastDisplayHash = d.textHash || ''; } catch {}
