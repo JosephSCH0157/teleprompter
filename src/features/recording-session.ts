@@ -24,6 +24,13 @@ function maybeStartOnLive(phase: SessionPhase): void {
 
   try {
     const obsEnabled = !!appStore.get('obsEnabled');
+    try {
+      console.debug('[recording-session] live phase', {
+        recordOnLive: shouldRecord,
+        reason,
+        obsEnabled,
+      });
+    } catch {}
     startSessionRecording({ obsEnabled }).catch((err) => {
       console.warn('[session] startSessionRecording failed', err);
     });
