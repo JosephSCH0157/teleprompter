@@ -1,4 +1,4 @@
-// Central preroll event hooks: logging, autoscroll start, auto-record start
+// Central preroll event hooks: session-driven orchestration only
 (function () {
   try {
     if (window.__tpPrerollHooksWired) return; // idempotent guard
@@ -22,60 +22,10 @@
       return 'auto';
     }
 
-    function isRehearsal() {
-      try { return getScrollMode() === 'rehearsal'; } catch { return false; }
-    }
-
-    function isAutoCapable(mode) {
-      const m = (mode || getScrollMode() || '').toLowerCase();
-      return m === 'auto' || m === 'timed' || m === 'hybrid' || m === 'asr' || m === 'wpm' || m === 'assist';
-    }
-
     window.addEventListener('tp:preroll:done', (ev) => {
       hudLog('preroll:done', ev?.detail);
-      try { console.log('[PREROLL] done → attempting to arm auto-scroll'); } catch {}
-      // Autoscroll start (Hybrid/WPM/Timed) — defer actual movement until preroll completes
-      try {
-        const mode = getScrollMode();
-        if (!isRehearsal() && isAutoCapable(mode)) {
-          try {
-            const auto = (window.__tpAuto && typeof window.__tpAuto.startFromPreroll === 'function')
-              ? window.__tpAuto
-              : (window.Auto && typeof window.Auto.startFromPreroll === 'function' ? window.Auto : null);
-            if (auto) {
-              auto.startFromPreroll();
-            } else {
-              console.warn('[PREROLL] No auto controller found (__tpAuto/Auto).');
-            }
-          } catch (err) {
-            try { console.error('[PREROLL] Error when arming auto-scroll:', err); } catch {}
-          }
-          if (!window.__tpScrollRouterStarted && typeof window.scrollRouterStart === 'function') {
-            window.scrollRouterStart();
-            window.__tpScrollRouterStarted = true;
-          }
-          hudLog('preroll:auto:start', { mode });
-        } else {
-          hudLog('preroll:auto:skip', { mode });
-        }
-      } catch {}
-
-      // Auto-record start hook (after preroll, if enabled and not rehearsal)
-      try {
-        const store = window.__tpStore;
-        const auto = window.__tpAutoRecord;
-        if (store && auto && typeof auto.start === 'function') {
-          const autoEnabled = typeof window.wantsAutoRecord === 'function'
-            ? !!window.wantsAutoRecord()
-            : !!store.get?.('autoRecord');
-          const scrollMode = store.get?.('scrollMode');
-          const src = ev && ev.detail && ev.detail.source;
-          // Only start auto-record when preroll is from Speech start, not mode-switch
-          if (autoEnabled && scrollMode !== 'rehearsal' && src === 'speech') {
-            try { auto.start(); } catch (err) { console.error('[auto-record] start after preroll failed', err); }
-          }
-        }
-      } catch {}
+      try { console.log('[PREROLL] done (session orchestrated)'); } catch {}
+      try { hudLog('preroll:auto:skip', { mode: getScrollMode() }); } catch {}
     });
   } catch {}
 })();

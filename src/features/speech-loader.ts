@@ -1,4 +1,5 @@
 import { wantsAutoRecord } from '../recording/wantsAutoRecord';
+import { setSessionPhase } from '../state/session';
 import type { AppStore } from '../state/app-store';
 
 type AnyFn = (...args: any[]) => any;
@@ -492,6 +493,28 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
 }
 
 export function installSpeech(): void {
+  // Session-first: recBtn only starts preroll/session
+  (async () => {
+    try {
+      const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
+      if (!btn || (btn as any).__sessionWired) return;
+      (btn as any).__sessionWired = true;
+      setReadyUi();
+      btn.addEventListener(
+        'click',
+        () => {
+          try {
+            window.dispatchEvent(
+              new CustomEvent('tp:session:start', { detail: { source: 'recBtn' } }),
+            );
+          } catch {}
+          try { setSessionPhase('preroll'); } catch {}
+        },
+        { capture: true },
+      );
+    } catch {}
+  })();
+  return;
   // Enable/disable the button based on browser support or orchestrator presence.
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
   (async () => {

@@ -11,6 +11,7 @@ try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 import './boot/compat-ids';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
+import { initSession } from './state/session';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
 // Early dev console noise filter (benign extension async-response errors)
@@ -37,6 +38,9 @@ import { initObsToggle } from './ui/obs-toggle';
 import { initOverlays } from './ui/overlays';
 import { wireRecordButtons } from './ui/recordButtons';
 import './wiring/ui-binds';
+import { initPrerollSession } from './features/preroll-session';
+import { initScrollSessionRouter } from './features/scroll-session';
+import { initRecordingSession } from './features/recording-session';
 
 import { bootstrap } from './boot/boot';
 
@@ -812,6 +816,12 @@ export async function boot() {
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
 
+			// Session slice + preroll-driven orchestration
+			try { initSession(); } catch {}
+			try { initPrerollSession(); } catch {}
+			try { initScrollSessionRouter(); } catch {}
+			try { initRecordingSession(); } catch {}
+
 			// Early: folder card injection + async watcher (before any user opens Settings)
           try { ensureSettingsFolderControls(); } catch {}
           try { ensureSettingsFolderControlsAsync(6000); } catch {}
@@ -926,19 +936,6 @@ export async function boot() {
 					try {
 						const store = appStore;
 						const recording = createStartOnPlay(store);
-						const startEvents = ['tp:session:start', 'speech:start', 'autoscroll:start'];
-						startEvents.forEach((ev) => {
-							document.addEventListener(
-								ev as any,
-								() => {
-									recording.onSessionStart().catch((err) => {
-										console.warn('[recording] auto-start failed', err);
-									});
-								},
-								{ capture: true },
-							);
-						});
-
 						document.addEventListener(
 							'tp:speech-state',
 							(e: any) => {
