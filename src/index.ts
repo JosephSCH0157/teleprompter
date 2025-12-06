@@ -1029,6 +1029,11 @@ try {
 						installDisplaySync({
 							getText: () => {
 								try {
+									// Prefer rendered HTML so display window preserves colors/markup
+									const viewer = document.getElementById('viewer') as HTMLElement | null;
+									if (viewer && typeof viewer.innerHTML === 'string' && viewer.innerHTML.length) {
+										return viewer.innerHTML;
+									}
 									const raw = (window as any).__tpRawScript;
 									if (typeof raw === 'string' && raw.length) return raw;
 									const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
