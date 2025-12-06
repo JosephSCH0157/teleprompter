@@ -257,14 +257,14 @@ function applyUiScrollMode(mode: UiScrollMode) {
       brainMode = 'auto';      // pure time-based scroll
       clampMode = 'free';      // ASR anti-jitter not needed
       asrEnabled = false;
-      autoEnabled = true;       // Enable legacy Auto scroll
+      autoEnabled = false;      // Defer auto until session/router enables it
       break;
 
     case 'asr':
       brainMode = 'hybrid';    // auto + ASR corrections
       clampMode = 'follow';    // monotonic clamp: no back-jogs
       asrEnabled = true;
-      autoEnabled = true;       // Auto runs in background for hybrid
+      autoEnabled = false;      // Defer auto until session/router enables it
       break;
 
     case 'step':
