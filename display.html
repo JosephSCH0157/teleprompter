@@ -397,13 +397,15 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
-                // Convert ratio to absolute pixels if needed, then requestScroll
+                // Prefer absolute top if provided; otherwise map ratio to local height
                 let absoluteValue;
-                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
+                if (typeof d.top === 'number' && isFinite(d.top)) {
+                  absoluteValue = d.top;
+                } else if (typeof d.ratio === 'number' && isFinite(d.ratio)){
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                   absoluteValue = Math.round(d.ratio * max);
                 } else {
-                  absoluteValue = d.top||0;
+                  absoluteValue = wrap.scrollTop || 0;
                 }
                 requestScroll(absoluteValue);
               }
