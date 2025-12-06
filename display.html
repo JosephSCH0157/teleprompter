@@ -259,12 +259,10 @@
 
             // Render helper: prefer TS renderScript if available; fallback to innerHTML
             function applyScriptSnapshot(text){
-              // Ensure top padding matches marker offset before render
-              let markerOffset = 0;
               try {
                 const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
                 const h = (wrap?.clientHeight || window.innerHeight || 0);
-                markerOffset = Math.max(0, Math.round(h * markerPct));
+                const markerOffset = Math.max(0, Math.round(h * markerPct));
                 if (scriptEl) {
                   scriptEl.style.paddingTop = `${markerOffset}px`;
                   (scriptEl as any).style.scrollPaddingTop = `${markerOffset}px`;
@@ -273,42 +271,15 @@
               try {
                 if (typeof window.renderScript === 'function') {
                   window.renderScript(String(text||''), scriptEl);
-                  // Re-apply padding in case renderScript resized the root
-                  try {
-                    const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
-                    const h2 = (wrap?.clientHeight || window.innerHeight || 0);
-                    const markerOffset2 = Math.max(0, Math.round(h2 * markerPct));
-                    if (scriptEl) {
-                      scriptEl.style.paddingTop = `${markerOffset2}px`;
-                      (scriptEl as any).style.scrollPaddingTop = `${markerOffset2}px`;
-                    }
-                    markerOffset = markerOffset2;
-                    // Spacer element to force the first line to sit at the marker
-                    const existingSpacer = scriptEl.querySelector('.marker-spacer');
-                    const spacer = existingSpacer || document.createElement('div');
-                    spacer.className = 'marker-spacer';
-                    spacer.style.height = `${markerOffset2}px`;
-                    spacer.style.margin = '0';
-                    if (!existingSpacer) {
-                      scriptEl.insertBefore(spacer, scriptEl.firstChild);
-                    }
-                    wrap?.scrollTo({ top: markerOffset2, behavior: 'auto' });
-                  } catch {}
                   return;
                 }
               } catch {}
               try {
                 scriptEl.innerHTML = '';
-                const spacer = document.createElement('div');
-                spacer.className = 'marker-spacer';
-                spacer.style.height = `${markerOffset}px`;
-                spacer.style.margin = '0';
-                scriptEl.appendChild(spacer);
                 const cont = document.createElement('div');
                 cont.innerHTML = text || '';
                 while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
               } catch {}
-              try { wrap?.scrollTo({ top: markerOffset, behavior: 'auto' }); } catch {}
             }
 
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
@@ -320,18 +291,6 @@
                   // Lightweight mirror/diagnostic channel
                   if (msg && msg.t === 'display:ping') {
                     try { chan.postMessage({ t: 'display:pong' }); } catch {}
-                    return;
-                  }
-                  if (msg && msg.t === 'scrollTop') {
-                    try {
-                      const top = Math.max(0, Number(msg.v) | 0);
-                      requestAnimationFrame(() => {
-                        try { wrap.scrollTo({ top, behavior: 'auto' }); } catch {}
-                        if (msg.ask) {
-                          try { chan.postMessage({ t: 'display:applied', v: wrap.scrollTop | 0 }); } catch {}
-                        }
-                      });
-                    } catch {}
                     return;
                   }
                   if (msg && msg.kind === 'tp:script' && msg.source === 'main') {
@@ -409,8 +368,6 @@
                 try { window.__camPC.addIceCandidate(d.candidate); } catch {}
                 return;
               }
-              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
-              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
               if (d && d.kind === 'tp:typography' && d.source === 'main' && d.display === 'display') {
                 try {
                   const s = document.documentElement.style;
