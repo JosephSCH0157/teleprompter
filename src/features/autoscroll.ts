@@ -5,6 +5,18 @@ type AnyFn = (...args: any[]) => any;
 
 import { getScrollWriter } from '../scroll/scroll-writer';
 
+function isDisplayWindow(): boolean {
+  try {
+    const cls = document.documentElement.classList;
+    if (cls.contains('tp-display')) return true;
+    const params = new URLSearchParams(String(location.search || ''));
+    if (params.get('display') === '1') return true;
+    const path = (location.pathname || '').toLowerCase();
+    if (path.endsWith('/display.html') || path === '/display.html') return true;
+  } catch {}
+  return false;
+}
+
 const AUTO_MIN_SPEED = 0.1;
 
 export interface AutoScrollController {
@@ -257,6 +269,18 @@ function tweakSpeed(delta: number) {
 // --- Factory: what index.ts calls ------------------------------------------
 
 export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController {
+  if (isDisplayWindow()) {
+    const noop: AutoScrollController = {
+      bindUI() {},
+      start() {},
+      stop() {},
+      isActive() {
+        return false;
+      },
+    };
+    try { (window as any).__tpAuto = noop; } catch {}
+    return noop;
+  }
   getViewer = viewerGetter;
 
   // Expose globals for legacy callers (ASR, countdown, etc.)
@@ -467,7 +491,7 @@ export function setEnabled(enable: boolean): void {
 
 // --- Auto-boot: wire itself on DOM ready so we don't depend on index.ts wiring ---
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !isDisplayWindow()) {
   // Ensure a controller is available for preroll/hotkeys even if UI wiring hasn't run yet
   installLazyAutoGlobal();
 
