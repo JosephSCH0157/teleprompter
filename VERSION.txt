@@ -1,4 +1,4 @@
-1.7.6
-ANVIL build: 2025-11-20 00:00
+1.7.7-pre
+ANVIL build: 2025-12-06 00:00
 Baseline: v1.7.x
-Notes: TS entrypoint is now canonical (dist/index.js); legacy teleprompter_pro.js + scroll JS are gone; io-anchor dev observer and HUD gatings are green.
+Notes: Session-first preroll/scroll pipeline stable; display mirroring uses single scroll/render channel with marker padding parity; OBS/settings hooks aligned; checkpoint before final 1.7.7 cut.
