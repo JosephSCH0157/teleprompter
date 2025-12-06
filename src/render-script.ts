@@ -169,6 +169,20 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try { root.appendChild(frag); } catch {}
   try { (root as any).dataset.lineCount = String(lines.length); } catch {}
   try { root.scrollTop = 0; } catch {}
+
+  // Snap the first line to the marker offset so the top aligns with the active line marker
+  try {
+    const firstLine = root.querySelector('.line') as HTMLElement | null;
+    if (firstLine) {
+      const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+        ? (window as any).__TP_MARKER_PCT
+        : 0.4;
+      const markerOffset = Math.round((root.clientHeight || 0) * markerPct);
+      const targetTop = Math.max(0, firstLine.offsetTop - markerOffset);
+      root.scrollTo({ top: targetTop, behavior: 'auto' });
+    }
+  } catch {}
+
   try {
     const evt = new CustomEvent('tp:render:done', { detail: { lineCount: lines.length } });
     root.dispatchEvent(evt);
