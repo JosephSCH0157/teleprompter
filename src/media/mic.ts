@@ -1,4 +1,5 @@
 // Mic + dB meter helpers extracted from monolith. Exposes window.__tpMic
+import { appStore } from '../state/app-store';
 export interface MicAPI {
   requestMic(deviceId?: string): Promise<MediaStream>;
   releaseMic(): void;
@@ -145,6 +146,7 @@ async function requestMic(preferredId?: string): Promise<MediaStream> {
     } catch {
       // ignore
     }
+    try { appStore.set('micGranted', true); } catch {}
     startDbMeter(stream);
     try {
       if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId);
@@ -178,6 +180,7 @@ function releaseMic(): void {
   } catch {
     // ignore
   }
+  try { appStore.set('micGranted', false); } catch {}
   stopDbMeter();
 }
 

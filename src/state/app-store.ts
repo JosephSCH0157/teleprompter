@@ -73,6 +73,7 @@ export type AppStoreState = {
   settingsTab: string;
   micDevice: string;
   obsEnabled: boolean;
+  micGranted: boolean;
   obsScene: string;
   obsReconnect: boolean;
   obsHost: string;
@@ -205,6 +206,7 @@ function buildInitialState(): AppStoreState {
         return '';
       }
     })(),
+    micGranted: false,
     obsEnabled: (() => {
       try {
         return localStorage.getItem(OBS_ENABLED_KEY) === '1';

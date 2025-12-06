@@ -1,6 +1,7 @@
 import { showToast } from '../ui/toasts';
 import { safeDOM } from '../utils/safe-dom';
 import { initAsrSettingsUI } from '../ui/settings/asr-wizard';
+import { appStore } from '../state/app-store';
 
 function requestMicFromBrowser(): Promise<MediaStream | null> {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -31,6 +32,11 @@ async function handleRequestMic(source: 'sidebar' | 'settings'): Promise<void> {
   }
 
   try {
+    appStore.set('micGranted', true);
+  } catch {
+    // ignore
+  }
+  try {
     (window as any).__tpMicGranted = true;
   } catch {
     // ignore
@@ -46,6 +52,24 @@ export function initMicPermissions(): void {
   const buttons = Array.from(
     document.querySelectorAll<HTMLButtonElement>('[data-tp-request-mic]'),
   );
+  const applyState = (granted: boolean) => {
+    buttons.forEach((btn) => {
+      const isSidebar = (btn.getAttribute('data-tp-request-mic') || '').toLowerCase() === 'sidebar';
+      if (granted) {
+        btn.classList.add('mic-active');
+        btn.textContent = isSidebar ? 'Mic active' : 'Mic active';
+      } else {
+        btn.classList.remove('mic-active');
+        btn.textContent = isSidebar ? 'Request mic' : 'Request mic';
+      }
+    });
+  };
+  try {
+    applyState(!!appStore.get?.('micGranted'));
+    appStore.subscribe?.('micGranted', (v: unknown) => applyState(!!v));
+  } catch {
+    // ignore
+  }
   buttons.forEach((btn) => {
     const source =
       (btn.getAttribute('data-tp-request-mic') as 'sidebar' | 'settings') ||
