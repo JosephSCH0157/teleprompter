@@ -29,6 +29,17 @@ function hasMicDevice(): boolean {
   }
 }
 
+function hasCameraActive(): boolean {
+  try {
+    const cam = (window as any).__tpCamera;
+    if (cam && typeof cam.isActive === 'function') return !!cam.isActive();
+    if (cam && cam.__lastStream) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason } {
   try {
     const autoRecord = !!appStore.get('autoRecord');
@@ -40,6 +51,21 @@ function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason
     }
     if (!hasMicDevice()) {
       return { recordOnLive: false, reason: 'no-mic' };
+    }
+    if (!hasCameraActive()) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('tp:session:warning', {
+            detail: {
+              type: 'camera',
+              message: 'Camera not ready; recording disabled for this run.',
+            },
+          }),
+        );
+      } catch {
+        // ignore
+      }
+      return { recordOnLive: false, reason: 'no-camera' as RecordReason };
     }
     return { recordOnLive: true, reason: 'auto' };
   } catch {
