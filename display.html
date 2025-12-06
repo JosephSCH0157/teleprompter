@@ -259,27 +259,32 @@
 
             // Render helper: prefer TS renderScript if available; fallback to innerHTML
             function applyScriptSnapshot(text){
+              // 1) Compute marker offset and apply as top padding
+              let markerOffset = 0;
               try {
                 const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
                 const h = (wrap?.clientHeight || window.innerHeight || 0);
-                const markerOffset = Math.max(0, Math.round(h * markerPct));
+                markerOffset = Math.max(0, Math.round(h * markerPct));
                 if (scriptEl) {
                   scriptEl.style.paddingTop = `${markerOffset}px`;
-                  (scriptEl as any).style.scrollPaddingTop = `${markerOffset}px`;
+                  (scriptEl).style.scrollPaddingTop = `${markerOffset}px`;
                 }
               } catch {}
+
+              // 2) Render script content
               try {
                 if (typeof window.renderScript === 'function') {
-                  window.renderScript(String(text||''), scriptEl);
-                  return;
+                  window.renderScript(String(text || ''), scriptEl);
+                } else {
+                  scriptEl.innerHTML = '';
+                  const cont = document.createElement('div');
+                  cont.innerHTML = text || '';
+                  while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
                 }
               } catch {}
-              try {
-                scriptEl.innerHTML = '';
-                const cont = document.createElement('div');
-                cont.innerHTML = text || '';
-                while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
-              } catch {}
+
+              // 3) Ensure we start at the top (marker line)
+              try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
             }
 
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
@@ -367,17 +372,16 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
-                // Prefer absolute top if provided; otherwise map ratio to local height
-                let absoluteValue;
                 if (typeof d.top === 'number' && isFinite(d.top)) {
-                  absoluteValue = d.top;
-                } else if (typeof d.ratio === 'number' && isFinite(d.ratio)){
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  absoluteValue = Math.round(d.ratio * max);
-                } else {
-                  absoluteValue = wrap.scrollTop || 0;
+                  requestScroll(Math.max(0, d.top | 0));
+                  return;
                 }
-                requestScroll(absoluteValue);
+                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
+                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                  const absoluteValue = Math.round(d.ratio * max);
+                  requestScroll(absoluteValue);
+                  return;
+                }
               }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }
