@@ -232,6 +232,16 @@
               try {
                 if (typeof window.renderScript === 'function') {
                   window.renderScript(String(text||''), scriptEl);
+                  // Apply top padding equal to marker offset so first line sits on marker
+                  try {
+                    const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
+                    const h = wrap?.clientHeight || window.innerHeight || 0;
+                    const markerOffset = Math.max(0, Math.round(h * markerPct));
+                    if (scriptEl) {
+                      scriptEl.style.paddingTop = `${markerOffset}px`;
+                      scriptEl.style.scrollPaddingTop = `${markerOffset}px`;
+                    }
+                  } catch {}
                   return;
                 }
               } catch {}
