@@ -1,4 +1,3 @@
-import { wantsAutoRecord } from '../recording/wantsAutoRecord';
 import { getSession, setSessionPhase } from '../state/session';
 import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
@@ -335,39 +334,6 @@ function setListeningUi(listening: boolean): void {
 
 // … (keep your existing helper functions unchanged above installSpeech)
 
-// Provide safe no-op wrappers for auto-record start/stop so callers can invoke them
-// without risking a ReferenceError if the feature is not present.
-async function doAutoRecordStart(): Promise<void> {
-  try {
-    if (!wantsAutoRecord()) return;
-    // Respect OBS "Off": if primary adapter is OBS and it's disarmed, skip starting
-    try {
-      const a = (window.__tpRecording && typeof window.__tpRecording.getAdapter === 'function')
-        ? String(window.__tpRecording.getAdapter() || '')
-        : '';
-      if (a === 'obs') {
-        const armed = !!(window.__tpObs && typeof window.__tpObs.armed === 'function' ? window.__tpObs.armed() : false);
-        if (!armed) {
-          try { window.__tpHud?.log?.('[auto-record]', 'skip (OBS disabled)'); } catch {}
-          return; // do not attempt to start OBS when disabled
-        }
-      }
-    } catch {}
-    if (window.__tpAutoRecord && typeof window.__tpAutoRecord.start === 'function') {
-      await window.__tpAutoRecord.start();
-    }
-  } catch {}
-}
-
-async function doAutoRecordStop(): Promise<void> {
-  try {
-    if (!wantsAutoRecord()) return;
-    if (window.__tpAutoRecord && typeof window.__tpAutoRecord.stop === 'function') {
-      await window.__tpAutoRecord.stop();
-    }
-  } catch {}
-}
-
 function beginCountdownThen(sec: number, cb: () => Promise<void> | void, source = 'speech'): Promise<void> {
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
@@ -481,10 +447,17 @@ export function installSpeech(): void {
         'click',
         () => {
           const session = getSession();
-          if (session.phase === 'preroll') {
-            try { console.debug('[session/start] ignored: phase=', session.phase); } catch {}
+          if (session.phase === 'preroll' || session.phase === 'live') {
+            try { console.debug('[session/stop] click in phase=', session.phase); } catch {}
+            try { setSessionPhase('wrap'); } catch {}
+            try {
+              window.dispatchEvent(
+                new CustomEvent('tp:session:stop', { detail: { source: 'recBtn', phase: session.phase } }),
+              );
+            } catch {}
             return;
           }
+          try { console.debug('[session/start] phase', session.phase, '→ preroll'); } catch {}
           try {
             window.dispatchEvent(
               new CustomEvent('tp:session:start', { detail: { source: 'recBtn' } }),
@@ -602,7 +575,6 @@ export function installSpeech(): void {
       }
 
       async function startSpeech() {
-        if (btn) btn.disabled = true;
         try {
           const mode = getScrollMode();
           const wantsSpeech = mode === 'hybrid' || mode === 'asr';
@@ -646,11 +618,6 @@ export function installSpeech(): void {
                 detail: { source: 'speech', preroll: sec }
               }));
             } catch {}
-            // If auto-record isn't enabled, no-op; if enabled and already armed, ensure it's running
-            try { await maybeStartRecorders(); }
-            catch (err) {
-              try { console.warn('[auto-record] start failed', err); } catch {}
-            }
             // Ensure mic stream is granted so Hybrid gates (dB/VAD) can open
             try { await window.__tpMic?.requestMic?.(); } catch {}
           });
@@ -662,12 +629,10 @@ export function installSpeech(): void {
           const msg = e instanceof Error ? e.message : String(e);
           try { (window.HUD?.log || console.warn)?.('speech', { startError: msg }); } catch {}
         } finally {
-          if (btn) btn.disabled = false;
         }
       }
 
       async function stopSpeech() {
-        if (btn) btn.disabled = true;
         try {
           try { rec?.stop?.(); } catch {}
           setActiveRecognizer(null);
@@ -697,8 +662,6 @@ export function installSpeech(): void {
               console.warn('[ASR] No ASR controller found to stop.');
             }
           } catch {}
-          // If auto-record is on, stop it
-          try { await doAutoRecordStop(); } catch {}
           // Ensure display window knows to stop auto modes
           try {
             const sendToDisplay = window.__tpSendToDisplay || (()=>{});
@@ -709,7 +672,6 @@ export function installSpeech(): void {
           try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
         } finally {
-          if (btn) btn.disabled = false;
         }
       }
 
@@ -720,32 +682,12 @@ export function installSpeech(): void {
   })();
 }
 async function maybeStartRecorders(): Promise<void> {
-  try {
-    const wantsAudio = !!wantsAutoRecord();
-    const wantsVideo = (() => {
-      try { return window.__tpStore?.get?.('videoRecord') === true; } catch { return false; }
-    })();
-
-    if (!wantsAudio && !wantsVideo) return;
-
-    const devs = await enumerateDevices();
-    const hasMic = hasKind(devs, 'audioinput');
-    const hasCam = hasKind(devs, 'videoinput');
-
-    if (wantsAudio && !hasMic) {
-      showToast('No microphone detected – recording will be audio-less.');
-    }
-    if (wantsVideo) {
-      if (!hasCam) {
-        showToast('No camera detected – recording will not include video.');
-      }
-    }
-
-    // Start only what we have enabled and available
-    if ((wantsAudio && hasMic) || (wantsVideo && hasCam)) {
-      try { await doAutoRecordStart(); } catch {}
-    }
-  } catch {
-    // swallow; recorder start is best-effort
-  }
+  // recording/session-managed; placeholder to preserve API
+  return;
 }
+
+
+
+
+
+

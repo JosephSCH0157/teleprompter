@@ -37,6 +37,7 @@ function stopAutoScroll(): void {
 
 function maybeStartOnLive(phase: SessionPhase): void {
   if (phase !== 'live') {
+    try { console.debug('[scroll-session] stopping auto-scroll for phase', phase); } catch {}
     stopAutoScroll();
     return;
   }

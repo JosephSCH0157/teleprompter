@@ -37,8 +37,13 @@ function maybeStartOnLive(phase: SessionPhase): void {
 }
 
 function maybeStopOnEnd(phase: SessionPhase): void {
-  if (phase === 'live') return;
+  if (phase !== 'wrap' && phase !== 'idle') return;
   if (!isSessionRecording()) return;
+  try {
+    console.debug('[recording-session] stopping recorders; phase=', phase);
+  } catch {
+    // ignore
+  }
   try {
     stopSessionRecording().catch(() => {});
   } catch {
