@@ -57,14 +57,27 @@ function computeAsrReady(): boolean {
 }
 
 function snapshotPreroll(): void {
+  const mode = String(appStore.get('scrollMode') || 'manual');
   const scrollAutoOnLive = computeScrollAutoOnLive();
   const { recordOnLive, reason } = computeRecordArmOnLive();
   const asrReady = computeAsrReady();
+  const autoRecord = !!appStore.get('autoRecord');
+  const hasMic = hasMicDevice();
 
   appStore.set('session.scrollAutoOnLive', scrollAutoOnLive);
   appStore.set('session.recordOnLive', recordOnLive);
   appStore.set('session.recordReason', reason);
   appStore.set('session.asrReady', asrReady);
+
+  try {
+    console.debug(
+      '[session/preroll]',
+      { mode, autoRecord, hasMic },
+      { scrollAutoOnLive, recordOnLive, recordReason: reason, asrReady },
+    );
+  } catch {
+    // ignore
+  }
 }
 
 function showCountdown(n: number): void {

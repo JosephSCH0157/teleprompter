@@ -1,5 +1,5 @@
 import { wantsAutoRecord } from '../recording/wantsAutoRecord';
-import { setSessionPhase } from '../state/session';
+import { getSession, setSessionPhase } from '../state/session';
 import type { AppStore } from '../state/app-store';
 
 type AnyFn = (...args: any[]) => any;
@@ -99,23 +99,7 @@ const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
 
 function armAutoFromPreroll(detail: { seconds: number; source: string }): void {
-  const auto: any = (window as any).__tpAuto;
-  const legacyAuto: any = (window as any).Auto;
-  try { console.log('[PREROLL] tp:preroll:done dispatch', detail); } catch {}
-
-  if (auto && typeof auto.startFromPreroll === 'function') {
-    try { console.log('[PREROLL] → __tpAuto.startFromPreroll()'); } catch {}
-    try { auto.startFromPreroll(detail); } catch (err) { try { console.error('[PREROLL] __tpAuto.startFromPreroll error', err); } catch {} }
-    return;
-  }
-
-  if (legacyAuto && typeof legacyAuto.startFromPreroll === 'function') {
-    try { console.warn('[PREROLL] __tpAuto missing; using legacy Auto.startFromPreroll()'); } catch {}
-    try { legacyAuto.startFromPreroll(detail); } catch (err) { try { console.error('[PREROLL] legacy Auto.startFromPreroll error', err); } catch {} }
-    return;
-  }
-
-  try { console.warn('[PREROLL] No auto-scroll controller present when preroll finished.'); } catch {}
+  try { console.debug('[PREROLL] preroll done (session-managed)', detail); } catch {}
 }
 
 function inRehearsal(): boolean {
@@ -503,6 +487,11 @@ export function installSpeech(): void {
       btn.addEventListener(
         'click',
         () => {
+          const session = getSession();
+          if (session.phase === 'preroll' || session.phase === 'live') {
+            try { console.debug('[session/start] ignored: phase=', session.phase); } catch {}
+            return;
+          }
           try {
             window.dispatchEvent(
               new CustomEvent('tp:session:start', { detail: { source: 'recBtn' } }),
