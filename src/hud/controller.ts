@@ -26,6 +26,7 @@ export function initHudController(): void {
         });
       } catch {}
       hudRoot.classList.toggle('hidden', !visible);
+      hudRoot.classList.toggle('open', visible);
       hudRoot.setAttribute('aria-hidden', visible ? 'false' : 'true');
     } catch {}
   };
