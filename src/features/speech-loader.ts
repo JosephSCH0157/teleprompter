@@ -443,6 +443,20 @@ export function installSpeech(): void {
       if (!btn || (btn as any).__sessionWired) return;
       (btn as any).__sessionWired = true;
       setReadyUi();
+      const syncBtnUi = (phase?: string) => {
+        try {
+          const p = (phase || '').toLowerCase();
+          const isRunning = p === 'preroll' || p === 'live';
+          btn.textContent = isRunning ? 'Stop' : 'Start speech sync';
+          btn.title = isRunning ? 'Stop speech sync' : 'Start speech sync';
+        } catch {}
+      };
+      try {
+        window.addEventListener('tp:session:phase', (ev: Event) => {
+          const phase = (ev as CustomEvent)?.detail?.phase || '';
+          syncBtnUi(String(phase));
+        });
+      } catch {}
       btn.addEventListener(
         'click',
         () => {
@@ -464,6 +478,7 @@ export function installSpeech(): void {
             );
           } catch {}
           try { setSessionPhase('preroll'); } catch {}
+          syncBtnUi('preroll');
         },
         { capture: true },
       );
