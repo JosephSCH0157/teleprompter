@@ -22,6 +22,8 @@ export type MappedHandle = {
   handle: FileSystemHandle; // FileSystemFileHandle expected
 };
 
+import { debugLog, hudLog } from '../env/logging';
+
 const scriptsById = new Map<string, ScriptRecord>();
 const mappedHandles = new Map<string, MappedHandle>();
 
@@ -36,7 +38,7 @@ function emitScriptsUpdated(): void {
 export const ScriptStore = {
   list(): ScriptMeta[] {
     const all = Array.from(scriptsById.values());
-    try { console.debug('[SCRIPT-STORE] list size', all.length, all.map((r) => r.id)); } catch {}
+    debugLog('[SCRIPT-STORE] list size', all.length, all.map((r) => r.id));
     return all.map((rec) => ({
       id: rec.id,
       title: rec.title,
@@ -106,7 +108,7 @@ export const ScriptStore = {
   },
 
   syncMapped(entries: { id: string; title: string; handle: FileSystemHandle }[]): void {
-    try { console.debug('[SCRIPT-STORE] syncMapped entries', entries); } catch {}
+    debugLog('[SCRIPT-STORE] syncMapped entries', entries);
     mappedHandles.clear();
 
     for (const e of entries) {
@@ -122,7 +124,9 @@ export const ScriptStore = {
         source: existing?.source ?? 'mapped',
       });
     }
-    try { console.debug('[SCRIPT-STORE] scriptsById size after sync', scriptsById.size, Array.from(scriptsById.keys())); } catch {}
+    const ids = Array.from(scriptsById.keys());
+    debugLog('[SCRIPT-STORE] scriptsById size after sync', scriptsById.size, ids);
+    hudLog('script-store:syncMapped', { size: scriptsById.size, ids });
     emitScriptsUpdated();
   },
 };

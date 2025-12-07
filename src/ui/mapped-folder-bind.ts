@@ -4,6 +4,7 @@
 
 import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
 import { ScriptStore } from '../features/scripts-store';
+import { debugLog, hudLog } from '../env/logging';
 
 const SUPPORTED_EXT = /\.(docx|doc|txt|md)$/i;
 function isSupportedScriptName(name: string): boolean {
@@ -54,7 +55,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           const ok = await pickMappedFolder();
           if (ok) {
             await refreshList();
-            try { (window as any).HUD?.log?.('folder:mapped', { count: _lastCount }); } catch {}
+            hudLog('folder:mapped', { count: _lastCount });
           } else {
             // If picker returns falsy (cancel/no-op), do nothing
           }
@@ -62,7 +63,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           // Handle non-user-activation environments (CI/automation) by falling back to hidden input when present
           const name = (err && (err.name || err.code)) || '';
           if (String(name) === 'NotAllowedError' && fallback) {
-            try { (window as any).HUD?.log?.('folder:pick:not-allowed', { fallback: true }); } catch {}
+            hudLog('folder:pick:not-allowed', { fallback: true });
             fallback.click();
           } else {
             try { console.warn('[mapped-folder] pick failed', err); } catch {}
@@ -81,16 +82,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       try {
         const files = Array.from(fallback.files || []);
         // If user canceled or automation triggered empty selection, ignore silently
-        if (!files.length) { try { (window as any).HUD?.log?.('folder:fallback:empty'); } catch {}; return; }
+        if (!files.length) { hudLog('folder:fallback:empty'); return; }
         populateSelectFromFiles(files);
       } catch {}
     });
   }
 
   sel.addEventListener('change', async () => {
-    try {
-      console.debug('[MAPPED-FOLDER] change', { id: sel.id, value: sel.value });
-    } catch {}
+    debugLog('[MAPPED-FOLDER] change', { id: sel.id, value: sel.value });
     try {
       const opt = sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : sel.options[sel.selectedIndex];
       if (!opt) return;
@@ -109,7 +108,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         if (mockMode) {
           const name = opt?.text || 'Mock_Script.txt';
           const text = `This is a CI mock script for ${name}.\n\n- Line 1\n- Line 2\n- Line 3`;
-          try { (window as any).HUD?.log?.('script:loaded:mock', { name, chars: text.length }); } catch {}
+          hudLog('script:loaded:mock', { name, chars: text.length });
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
         }
@@ -171,7 +170,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           sel.append(new Option('(No scripts found)', '', true, false));
         }
         try { ScriptStore.syncMapped([]); } catch {}
-        try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
+        hudLog('folder:cleared', {});
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
         return;
@@ -179,7 +178,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
     sel.disabled = false;
     for (const e of entries) {
       try {
-        console.debug('[MAPPED-FOLDER] seen entry', {
+        debugLog('[MAPPED-FOLDER] seen entry', {
           name: e.name,
           allowed: isSupportedScriptName(e.name),
         });
@@ -195,7 +194,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { opt.__fileHandle = e.handle; } catch {}
       try { mappedEntries.push({ id: e.name, title: e.name, handle: e.handle }); } catch {}
       try {
-        console.debug('[MAPPED-FOLDER] option created', {
+        debugLog('[MAPPED-FOLDER] option created', {
           id: e.name,
           label: e.name,
           hasHandle: !!e.handle,
@@ -204,7 +203,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       } catch {}
       sel.append(opt);
     }
-      try { console.debug('[MAPPED-FOLDER] syncing mapped entries', { count: mappedEntries.length }); } catch {}
+      try { debugLog('[MAPPED-FOLDER] syncing mapped entries', { count: mappedEntries.length }); } catch {}
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: mappedEntries.length, selectId: sel.id } })); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
@@ -213,7 +212,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         const last = getLastScriptName();
         if (last) {
           setSelectedByName(sel, last);
-          (window as any).HUD?.log?.('script:last:preselect', { name: last });
+          hudLog('script:last:preselect', { name: last });
         }
         maybeAutoLoad(sel);
       } catch {}
@@ -237,7 +236,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { sel.setAttribute('aria-busy','true'); } catch {}
       const filtered = files.filter(f => {
         try {
-          console.debug('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
+          debugLog('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
         } catch {}
         return isSupportedScriptName(f.name);
       }).sort((a,b)=>a.name.localeCompare(b.name));
@@ -252,7 +251,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           sel.disabled = true;
           sel.append(new Option('(No scripts found)', '', true, false));
         }
-        try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
+        hudLog('folder:cleared', {});
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
         return;
@@ -269,7 +268,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { opt.__file = f; } catch {}
       try { mappedEntries.push({ id: f.name, title: f.name, handle: f as any }); } catch {}
       try {
-        console.debug('[MAPPED-FOLDER] option created', {
+        debugLog('[MAPPED-FOLDER] option created', {
           id: f.name,
           label: f.name,
           hasHandle: false,
@@ -278,16 +277,16 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       } catch {}
       sel.append(opt);
     }
-      try { console.debug('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length }); } catch {}
+      try { debugLog('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length }); } catch {}
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
-      try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
+      hudLog('folder:mapped', { count: filtered.length });
       // Preselect last used script if present (fallback path) + maybe auto-load
       try {
         const last = getLastScriptName();
         if (last) {
           setSelectedByName(sel, last);
-          (window as any).HUD?.log?.('script:last:preselect', { name: last });
+          hudLog('script:last:preselect', { name: last });
         }
         maybeAutoLoad(sel);
       } catch {}
@@ -360,7 +359,7 @@ export async function recheckMappedFolderPermissions() {
     // @ts-ignore
     const res = await (dir as any).requestPermission?.({ mode: 'read' });
     const granted = res === 'granted';
-    try { (window as any).HUD?.log?.('folder:permission', { granted }); } catch {}
+    hudLog('folder:permission', { granted });
     toast(granted ? 'Folder access granted' : 'Folder access denied');
     if (!granted) {
       try { await (window as any).__tpFolder?.clear?.(); } catch {}
@@ -371,7 +370,7 @@ export async function recheckMappedFolderPermissions() {
 
 // tiny toast: HUD event first; alert fallback to ensure visibility
 function toast(msg: string) {
-  try { (window as any).HUD?.log?.('toast', { msg }); } catch {}
+  hudLog('toast', { msg });
   try { window.dispatchEvent(new CustomEvent('tp:toast', { detail: { msg, ts: Date.now() } })); } catch {}
   try { if (!(window as any).HUD) alert(msg); } catch {}
 }
@@ -401,7 +400,7 @@ function maybeAutoLoad(sel: HTMLSelectElement) {
     const auto = !!(s && s.autoLoadLastScript);
     if (auto && sel.selectedIndex >= 0) {
       sel.dispatchEvent(new Event('change', { bubbles: true }));
-      (window as any).HUD?.log?.('script:auto-load:last', { name: sel.options[sel.selectedIndex]?.text });
+      hudLog('script:auto-load:last', { name: sel.options[sel.selectedIndex]?.text });
     }
   } catch {}
 }
