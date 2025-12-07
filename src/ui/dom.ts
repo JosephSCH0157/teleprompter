@@ -140,7 +140,7 @@ function once(key, fn) {
 
 // (legacy non-delegated overlay wiring removed; replaced by idempotent delegated wiring)
 
-export function wireDisplayBridgeDelegated() {
+export function wireDisplayBridgeDelegated(onToggle?: () => void) {
   if ((window as any).__tpDisplayDelegatedWired) return;
   (window as any).__tpDisplayDelegatedWired = true;
 
@@ -174,7 +174,13 @@ export function wireDisplayBridgeDelegated() {
       window.openDisplay();
     } else {
       console.warn('[display-toggle] openDisplay() is not available');
+      try {
+        const w = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
+        try { (window as any).__tpDisplayWindow = w || null; } catch {}
+      } catch {}
     }
+
+    try { onToggle && onToggle(); } catch {}
   });
 }
 
@@ -200,7 +206,10 @@ export function wireDisplayBridge() {
   // Buttons
   const openBtn = $('openDisplayBtn');
   const closeBtn = $('closeDisplayBtn');
-  const getToggleBtn = () => document.querySelector<HTMLButtonElement>('#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"]');
+  const getToggleBtn = () =>
+    document.querySelector<HTMLButtonElement>(
+      '#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"],[data-action="display-toggle"]',
+    );
   const updateToggleState = () => {
     try {
       const w = window.__tpDisplayWindow || null;
@@ -221,7 +230,7 @@ export function wireDisplayBridge() {
     window.addEventListener('tp:display:closed', updateToggleState);
   } catch {}
   updateToggleState();
-  wireDisplayBridgeDelegated();
+  wireDisplayBridgeDelegated(updateToggleState);
 }
 
 // Mirror main window state to display: scroll position, typography, and content
