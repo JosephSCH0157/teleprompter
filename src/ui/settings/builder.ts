@@ -3,7 +3,9 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
   // Render a compact settings body with tab content placeholders.
   // The media tab contains mic device selector and mic controls which
   // will be wired to the TS mic API via `wireSettingsDynamic`.
+  try { console.info('[settings-builder] renderSettingsBody TS v2025-12-07'); } catch {}
   const html = `
+    <div class="settings-body-root" data-settings-source="ts-builder-2025-12-07">
     <div class="settings-tabs" role="tablist">
       <button type="button" class="settings-tab active" data-settings-tab="general" aria-pressed="true">General</button>
       <button type="button" class="settings-tab" data-settings-tab="media" aria-pressed="false">Media</button>
@@ -197,6 +199,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <p class="muted">Questions? Open the Help overlay or reach out to the team.</p>
         </div>
       </section>
+    </div>
     </div>
   `;
 
