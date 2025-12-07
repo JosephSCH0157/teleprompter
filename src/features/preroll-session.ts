@@ -4,6 +4,29 @@ import {
   type SessionPhase,
   type RecordReason,
 } from '../state/session';
+import { wantsAutoRecord as wantsAutoRecordStore } from '../recording/wantsAutoRecord';
+
+function wantsAutoRecord(): boolean {
+  try {
+    const w = window as any;
+    if (w.__tpRecording && typeof w.__tpRecording.wantsAuto === 'function') {
+      return !!w.__tpRecording.wantsAuto();
+    }
+    if (w.__tpStore && typeof w.__tpStore.get === 'function') {
+      const v = w.__tpStore.get('autoRecord');
+      if (typeof v === 'boolean') return v;
+    }
+  } catch (e) {
+    try {
+      if ((window as any).__TP_DEV) console.warn('[rec] wantsAutoRecord() failed, defaulting to false', e);
+    } catch {}
+  }
+  try {
+    return wantsAutoRecordStore();
+  } catch {
+    return false;
+  }
+}
 
 function computeScrollAutoOnLive(): boolean {
   try {
@@ -42,7 +65,7 @@ function hasCameraActive(): boolean {
 
 function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason } {
   try {
-    const autoRecord = !!appStore.get('autoRecord');
+    const autoRecord = wantsAutoRecord();
     const mode = String(appStore.get('scrollMode') || '').toLowerCase();
 
     if (!autoRecord) return { recordOnLive: false, reason: 'manual' };
