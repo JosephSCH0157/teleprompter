@@ -206,21 +206,24 @@ export function wireDisplayBridge() {
   // Buttons
   const openBtn = $('openDisplayBtn');
   const closeBtn = $('closeDisplayBtn');
-  const getToggleBtn = () =>
-    document.querySelector<HTMLButtonElement>(
-      '#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"],[data-action="display-toggle"]',
+  const getToggleBtns = () =>
+    Array.from(
+      document.querySelectorAll<HTMLButtonElement>(
+        '#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"],[data-action="display-toggle"]',
+      ),
     );
   const updateToggleState = () => {
     try {
       const w = window.__tpDisplayWindow || null;
       const isOpen = !!(w && !w.closed);
-      const toggleBtn = getToggleBtn();
-      if (toggleBtn) {
-        toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        toggleBtn.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
-        toggleBtn.dataset.state = isOpen ? 'open' : 'closed';
-        toggleBtn.textContent = isOpen ? 'Display: Open' : 'Display: Closed';
-      }
+      getToggleBtns().forEach((toggleBtn) => {
+        try {
+          toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          toggleBtn.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+          toggleBtn.dataset.state = isOpen ? 'open' : 'closed';
+          toggleBtn.textContent = isOpen ? 'Display: Open' : 'Display: Closed';
+        } catch {}
+      });
     } catch {}
   };
   on(openBtn, 'click', () => { try { window.openDisplay && window.openDisplay(); } catch {} });
