@@ -632,81 +632,8 @@
   
   <script>
     (function(){
-      // Display & Camera toggle wiring for prod HTML: aligns with mic toggle UX
       try {
-        var tog = document.getElementById('displayToggleBtn');
-        if (tog) {
-          var setState = function(open){
-            try{
-              tog.dataset.state = open ? 'open' : 'closed';
-              tog.textContent = open ? 'Display: Open' : 'Display: Closed';
-              tog.setAttribute('aria-pressed', open ? 'true' : 'false');
-            }catch(e){}
-          };
-          setState(false);
-          tog.addEventListener('click', function(){
-            try{
-              var isOpen = tog.dataset.state === 'open';
-              if (isOpen) {
-                try {
-                  if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay === 'function') window.__tpDisplay.closeDisplay();
-                  else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close();
-                } catch(e) {}
-                setState(false);
-              } else {
-                try {
-                  if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay === 'function') window.__tpDisplay.openDisplay();
-                  else window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
-                } catch(e) {}
-                setState(true);
-              }
-            }catch(e){}
-          });
-          document.addEventListener('tp:display:opened', function(){ try{ setState(true); }catch(e){} });
-          document.addEventListener('tp:display:closed', function(){ try{ setState(false); }catch(e){} });
-        }
-        var camTog = document.getElementById('cameraToggleBtn');
-        if (camTog) {
-          var setCam = function(on){
-            try {
-              camTog.dataset.state = on ? 'on' : 'off';
-              var lab = camTog.querySelector('.cam-label');
-              if (lab) lab.textContent = on ? 'Camera: On' : 'Camera: Off';
-              else camTog.textContent = on ? 'Camera: On' : 'Camera: Off';
-              camTog.setAttribute('aria-pressed', on ? 'true' : 'false');
-            } catch(e){}
-          };
-          setCam(false);
-          // Re-enable button helpers
-          function clearBusy(){ try { camTog.disabled = false; camTog.classList.remove('busy'); } catch(e){} }
-          document.addEventListener('tp:camera:started', clearBusy);
-          document.addEventListener('tp:camera:error', clearBusy);
-          document.addEventListener('tp:camera:stopped', clearBusy);
-          camTog.addEventListener('click', function(){
-            try {
-              var isOn = camTog.dataset.state === 'on';
-              var api = window.__tpCamera || window.__camApi;
-              // Re-query alias buttons late so order of inline scripts doesn't matter
-              var startBtnDyn = document.getElementById('startCamAlias') || document.getElementById('startCam') || document.querySelector('[data-action="start-camera"]');
-              var stopBtnDyn  = document.getElementById('stopCamAlias')  || document.getElementById('stopCam')  || document.querySelector('[data-action="stop-camera"]');
-              if (isOn) {
-                var did = false;
-                try { if (api && typeof api.stopCamera === 'function') { api.stopCamera(); did = true; } } catch(e){}
-                if (!did && stopBtnDyn && typeof stopBtnDyn.click === 'function') stopBtnDyn.click();
-                setCam(false);
-              } else {
-                // Busy state while starting
-                try { camTog.disabled = true; camTog.classList.add('busy'); } catch(e){}
-                var did2 = false;
-                try { if (api && typeof api.startCamera === 'function') { api.startCamera(); did2 = true; } } catch(e){}
-                if (!did2 && startBtnDyn && typeof startBtnDyn.click === 'function') startBtnDyn.click();
-                setCam(true);
-              }
-            } catch(e){}
-          });
-          document.addEventListener('tp:camera:started', function(){ try { setCam(true); } catch(e){} });
-          document.addEventListener('tp:camera:stopped', function(){ try { setCam(false); } catch(e){} });
-        }
+        // legacy display/camera wiring removed (TS bridges own these)
       } catch (e) {}
     })();
   </script>

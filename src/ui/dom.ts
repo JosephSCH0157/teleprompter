@@ -208,7 +208,9 @@ export function wireDisplayBridge() {
       const toggleBtn = getToggleBtn();
       if (toggleBtn) {
         toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        toggleBtn.textContent = isOpen ? 'Display: Open' : 'Display';
+        toggleBtn.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+        toggleBtn.dataset.state = isOpen ? 'open' : 'closed';
+        toggleBtn.textContent = isOpen ? 'Display: Open' : 'Display: Closed';
       }
     } catch {}
   };
@@ -838,41 +840,6 @@ export function bindStaticDom() {
     // one-time UI wiring guard to prevent duplicate listeners and chips
     if (document.documentElement.dataset.uiWired === '1') return;
     document.documentElement.dataset.uiWired = '1';
-
-    // Display toggle (guaranteed wiring + debug buffer)
-    try {
-      const btn = document.querySelector<HTMLButtonElement>('#displayToggleBtn,[data-action="display-toggle"]');
-      logDisplayDebug('bindStaticDom:display-btn', { found: !!btn });
-      if (btn && !btn.dataset.displayWired) {
-        btn.dataset.displayWired = '1';
-        btn.addEventListener('click', () => {
-          const win = window.__tpDisplayWindow || null;
-          const hasApi = typeof window.openDisplay === 'function' || typeof window.closeDisplay === 'function';
-          const isOpen = !!(win && !win.closed);
-          logDisplayDebug('display:click', {
-            hasApi,
-            isOpen,
-            openDisplay: typeof window.openDisplay === 'function',
-            closeDisplay: typeof window.closeDisplay === 'function',
-          });
-          if (!hasApi) return;
-          if (!isOpen && window.openDisplay) {
-            window.openDisplay();
-            btn.textContent = 'Display: Open';
-            btn.setAttribute('aria-pressed', 'true');
-          } else if (isOpen && window.closeDisplay) {
-            window.closeDisplay();
-            btn.textContent = 'Display: Closed';
-            btn.setAttribute('aria-pressed', 'false');
-            try {
-              if (window.__tpDisplayWindow && !window.__tpDisplayWindow.closed) {
-                window.__tpDisplayWindow.close();
-              }
-            } catch {}
-          }
-        });
-      }
-    } catch {}
 
     // core feature wiring
     const toggleCount = document.querySelectorAll('#displayToggleBtn').length;
