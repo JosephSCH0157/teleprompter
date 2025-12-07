@@ -193,23 +193,22 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
       <section class="settings-panel" data-settings-panel="about" data-tab-content="about" hidden>
         <div class="settings-card anim-in">
           <h4>About Anvil</h4>
-          <p id="aboutSignature">
-            Anvil is part of the Podcaster’s Forge toolkit — built by working creators for working creators.
-          </p>
-          <p>
-            It’s designed to stay out of your way while you record:
-            tight scroll control, clean overlays, and recording that “just works.”
-          </p>
-          <p>
-            If Anvil has saved you time (or your sanity), you can support development here:
-            <br/>
-            <a href="https://buymeacoffee.com/podcastersforge" target="_blank" rel="noreferrer">
-              buymeacoffee.com/podcastersforge
-            </a>
-          </p>
-          <p class="settings-small">
-            Version: dev build • Settings UI rendered by TS builder (no legacy HTML).
-          </p>
+          <div class="settings-small">
+            <p>
+              Anvil is part of the Podcaster’s Forge toolset — a teleprompter and recording companion
+              designed for creators who want fewer tabs, less chaos, and more control.
+            </p>
+            <p>
+              If Anvil has saved you at least one cup of coffee’s worth of time,
+              you can support ongoing development here:
+              <a href="https://buymeacoffee.com/podcastersforge"
+                 class="settings-link"
+                 target="_blank"
+                 rel="noopener noreferrer">
+                buymeacoffee.com/podcastersforge
+              </a>.
+            </p>
+          </div>
         </div>
       </section>
     </div>
