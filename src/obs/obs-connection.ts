@@ -15,6 +15,12 @@ type ObsBridge = {
   connect?: () => void | Promise<void>;
 };
 
+function logObsCommand(cmd: string, extra: Record<string, unknown> = {}): void {
+  const payload = { cmd, ...extra };
+  try { console.log('[OBS-CMD]', payload); } catch {}
+  try { (window as any).HUD?.log?.('obs:command', payload); } catch {}
+}
+
 function getBridge(): ObsBridge | null {
   try {
     const w = window as any;
@@ -50,6 +56,7 @@ function wireBridgeEvents(): void {
 
 function closeBridge(reason?: string): void {
   const bridge = getBridge();
+  logObsCommand('close', { reason });
   try { bridge?.enableAutoReconnect?.(false); } catch {}
   try { bridge?.setArmed?.(false); } catch {}
   try { bridge?.disconnect?.(); } catch {}
@@ -70,13 +77,13 @@ function connectViaBridge(): void {
     return;
   }
 
-  try { bridge?.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }); } catch {}
-  try { bridge?.setArmed?.(true); } catch {}
-  try { bridge?.enableAutoReconnect?.(true); } catch {}
+  try { bridge?.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }); logObsCommand('configure', { url: state.configs.obs.url }); } catch {}
+  try { bridge?.setArmed?.(true); logObsCommand('setArmed', { armed: true }); } catch {}
+  try { bridge?.enableAutoReconnect?.(true); logObsCommand('enableAutoReconnect', { on: true }); } catch {}
 
   updateStatus('connecting');
-  try { bridge?.maybeConnect?.(); } catch {}
-  try { bridge?.connect?.(); } catch {}
+  try { bridge?.maybeConnect?.(); logObsCommand('connect:maybe'); } catch {}
+  try { bridge?.connect?.(); logObsCommand('connect:explicit'); } catch {}
 }
 
 export function initObsConnection(): void {

@@ -135,6 +135,12 @@ function callWithTimeout<T>(promiseOrFn: Promise<T> | (() => Promise<T> | T), ms
   ]);
 }
 
+function logRecCommand(stage: string, extra: Record<string, unknown> = {}): void {
+  const payload = { stage, ...extra };
+  try { console.log('[REC-CMD]', payload); } catch {}
+  try { (window as any).HUD?.log?.('recorder:command', payload); } catch {}
+}
+
 let _busy = false;
 async function guarded<T>(fn: () => Promise<T>) {
   if (_busy) return { skipped: true } as any;
@@ -159,23 +165,37 @@ export async function startSelected() {
     const started: string[] = [];
     const actions = ids.map((id) => ({ id, a: registry.get(id) }));
     const doStart = async ({ id, a }: any) => {
-      if (!a) return { id, ok: false, error: 'missing' };
+      if (!a) {
+        logRecCommand('start:adapter-missing', { id });
+        return { id, ok: false, error: 'missing' };
+      }
+      logRecCommand('start:adapter', { id });
       try {
         const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.start as number);
+        logRecCommand('start:adapter-available', { id, avail });
         if (!avail) return { id, ok: false, error: 'unavailable' };
       } catch (e) {
+        logRecCommand('start:adapter-error', { id, error: String((e as any)?.message || e) });
         return { id, ok: false, error: String((e as any)?.message || e) };
       }
       try {
         await callWithTimeout(() => a.start(), settings.timeouts.start as number);
         started.push(id);
+        logRecCommand('start:adapter-started', { id });
         return { id, ok: true };
       } catch (e) {
+        logRecCommand('start:adapter-error', { id, error: String((e as any)?.message || e) });
         return { id, ok: false, error: String((e as any)?.message || e) };
       }
     };
 
     const results: any[] = [];
+    logRecCommand('start:init', {
+      mode: settings.mode,
+      selected: ids,
+      configs: settings.configs ? Object.keys(settings.configs) : [],
+      auto: (settings as any).autoRecord ?? false,
+    });
     if (settings.failPolicy === 'abort-on-first-fail') {
       for (const act of actions) {
         const r = await doStart(act);
@@ -193,20 +213,32 @@ export async function startSelected() {
 export async function stopSelected() {
   return guarded(async () => {
     const ids = selectedIds();
+    logRecCommand('stop:init', {
+      mode: settings.mode,
+      selected: ids,
+    });
     const actions = ids.map((id) => ({ id, a: registry.get(id) })).filter((x) => !!x.a);
     const rs = await Promise.all(
       actions.map(async ({ id, a }) => {
-        if (!a) return { id, ok: false, error: 'missing' };
+        if (!a) {
+          logRecCommand('stop:adapter-missing', { id });
+          return { id, ok: false, error: 'missing' };
+        }
+        logRecCommand('stop:adapter', { id });
         try {
           const avail = await callWithTimeout(() => a.isAvailable(), settings.timeouts.stop as number);
+          logRecCommand('stop:adapter-available', { id, avail });
           if (!avail) return { id, ok: false, error: 'unavailable' };
         } catch (e) {
+          logRecCommand('stop:adapter-error', { id, error: String((e as any)?.message || e) });
           return { id, ok: false, error: String((e as any)?.message || e) };
         }
         try {
           await callWithTimeout(() => a.stop(), settings.timeouts.stop as number);
+          logRecCommand('stop:adapter-stopped', { id });
           return { id, ok: true };
         } catch (e) {
+          logRecCommand('stop:adapter-error', { id, error: String((e as any)?.message || e) });
           return { id, ok: false, error: String((e as any)?.message || e) };
         }
       })
