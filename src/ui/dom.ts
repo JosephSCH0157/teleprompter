@@ -233,6 +233,11 @@ export function wireDisplayBridge() {
     window.addEventListener('tp:display:closed', updateToggleState);
   } catch {}
   updateToggleState();
+  try {
+    // Early resync to catch any late-mount duplicate buttons
+    const t0 = window.setInterval(updateToggleState, 400);
+    window.setTimeout(() => { try { window.clearInterval(t0); } catch {} }, 4000);
+  } catch {}
   wireDisplayBridgeDelegated(updateToggleState);
 }
 
