@@ -10,7 +10,7 @@ export { AsrMode } from '../features/asr-mode';
 
 export function initAsrFeature() {
   // Wire UI settings
-  mountAsrSettings('#settingsSpeech, #settings, body');
+  mountAsrSettings(document.getElementById('settingsBody') || document);
   installAsrHotkeys();
 
   // Create coordinator and topbar UI

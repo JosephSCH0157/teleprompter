@@ -1,59 +1,54 @@
 // =============================================================
 // File: src/ui/settings-asr.ts
 // =============================================================
-import { speechStore } from '../state/speech-store';
+import { speechStore, type SpeechState } from '../state/speech-store';
 
-export function mountAsrSettings(containerSelector = '#settingsSpeech, #settings, body') {
-  const host = document.querySelector(containerSelector) || document.body;
-  const box = document.createElement('section');
-  box.className = 'settings-card asr';
-  box.innerHTML = `
-    <h3>ASR</h3>
-    <div class="grid" style="gap:8px;grid-template-columns: repeat(auto-fit,minmax(160px,1fr));">
-      <label>Engine
-        <select id="asrEngine">
-          <option value="webspeech">Web Speech (browser)</option>
-          <option value="vosk">Offline (WASM)</option>
-          <option value="whisper">Server (Whisper bridge)</option>
-        </select>
-      </label>
-      <label>Language
-        <input id="asrLang" type="text" placeholder="en-US" />
-      </label>
-      <label><input id="asrInterim" type="checkbox" /> Use interim results</label>
-      <label><input id="asrFillers" type="checkbox" /> Filter filler words</label>
-      <label>Threshold
-        <input id="asrThresh" type="number" step="0.01" min="0" max="1" />
-      </label>
-      <label>Endpointing (ms)
-        <input id="asrEndMs" type="number" min="200" step="50" />
-      </label>
-    </div>
-  `;
-  host.appendChild(box);
+// Wire the existing ASR settings card rendered by the TS builder (Media panel).
+export function mountAsrSettings(root: ParentNode = document): void {
+  const card =
+    root.querySelector<HTMLElement>('#asrSettingsCard') ||
+    root.querySelector<HTMLElement>('.settings-card.asr');
 
-  const $ = <T extends HTMLElement>(id: string) => box.querySelector<T>(id)!;
-  const eng = $('#asrEngine') as HTMLSelectElement;
-  const lang = $('#asrLang') as HTMLInputElement;
-  const interim = $('#asrInterim') as HTMLInputElement;
-  const fillers = $('#asrFillers') as HTMLInputElement;
-  const thresh = $('#asrThresh') as HTMLInputElement;
-  const endms = $('#asrEndMs') as HTMLInputElement;
+  if (!card) {
+    try { console.warn('[ASR] settings card not found (skipping wiring)'); } catch {}
+    return;
+  }
 
-  const s = speechStore.get();
-  eng.value = s.engine;
-  lang.value = s.lang;
-  interim.checked = s.interim;
-  fillers.checked = s.fillerFilter;
-  thresh.value = String(s.threshold);
-  endms.value = String(s.endpointingMs);
+  const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
+  const eng = q<HTMLSelectElement>('#asrEngine');
+  const lang = q<HTMLInputElement>('#asrLang');
+  const interim = q<HTMLInputElement>('#asrInterim');
+  const fillers = q<HTMLInputElement>('#asrFillers');
+  const thresh = q<HTMLInputElement>('#asrThresh');
+  const endms = q<HTMLInputElement>('#asrEndMs');
 
-  eng.addEventListener('change', () => speechStore.set({ engine: eng.value as any }));
-  lang.addEventListener('change', () => speechStore.set({ lang: lang.value }));
-  interim.addEventListener('change', () => speechStore.set({ interim: interim.checked }));
-  fillers.addEventListener('change', () => speechStore.set({ fillerFilter: fillers.checked }));
-  thresh.addEventListener('change', () => speechStore.set({ threshold: clamp(+thresh.value, 0, 1) }));
-  endms.addEventListener('change', () => speechStore.set({ endpointingMs: Math.max(200, Math.round(+endms.value)) }));
+  const applyState = (s: SpeechState) => {
+    if (eng && typeof s.engine === 'string') {
+      try { eng.value = s.engine; } catch {}
+    }
+    if (lang && typeof s.lang === 'string') {
+      lang.value = s.lang;
+    }
+    if (interim) interim.checked = !!s.interim;
+    if (fillers) fillers.checked = !!s.fillerFilter;
+    if (thresh && typeof s.threshold === 'number') {
+      thresh.value = String(s.threshold);
+    }
+    if (endms && typeof s.endpointingMs === 'number') {
+      endms.value = String(s.endpointingMs);
+    }
+  };
+
+  applyState(speechStore.get());
+
+  eng?.addEventListener('change', () => speechStore.set({ engine: eng.value as any }));
+  lang?.addEventListener('change', () => speechStore.set({ lang: lang.value }));
+  interim?.addEventListener('change', () => speechStore.set({ interim: interim.checked }));
+  fillers?.addEventListener('change', () => speechStore.set({ fillerFilter: fillers.checked }));
+  thresh?.addEventListener('change', () => speechStore.set({ threshold: clamp(+thresh.value, 0, 1) }));
+  endms?.addEventListener('change', () => speechStore.set({ endpointingMs: Math.max(200, Math.round(+endms.value)) }));
 }
 
-function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}

@@ -91,6 +91,30 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </label>
       </div>
 
+      <section class="settings-card asr anim-in" id="asrSettingsCard">
+        <h4>ASR (speech-to-text)</h4>
+        <div class="settings-grid" style="gap:8px;grid-template-columns: repeat(auto-fit,minmax(160px,1fr));">
+          <label>Engine
+            <select id="asrEngine">
+              <option value="webspeech">Web Speech (browser)</option>
+              <option value="vosk">Offline (WASM)</option>
+              <option value="whisper">Server (Whisper bridge)</option>
+            </select>
+          </label>
+          <label>Language
+            <input id="asrLang" type="text" placeholder="en-US">
+          </label>
+          <label><input id="asrInterim" type="checkbox"> Use interim results</label>
+          <label><input id="asrFillers" type="checkbox"> Filter filler words</label>
+          <label>Threshold
+            <input id="asrThresh" type="number" step="0.01" min="0" max="1">
+          </label>
+          <label>Endpointing (ms)
+            <input id="asrEndMs" type="number" min="200" step="50">
+          </label>
+        </div>
+      </section>
+
       <h4>Hybrid Gate</h4>
       <div class="row">
         <label>Hybrid gate source
@@ -101,7 +125,6 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <option value="db_and_vad">VAD and dB</option>
           </select>
         </label>
-        <a id="linkAsrSettings" href="#asrSettings" class="settings-link" style="margin-left:12px">ASR settings</a>
       </div>
       </section>
 
