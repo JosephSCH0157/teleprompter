@@ -142,8 +142,8 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <span id="obsStatusText" class="badge muted obs-status" style="margin-left:auto">disconnected</span>
         </div>
         <form id="settingsObsCredsForm" class="settings-inline-row" autocomplete="off" novalidate onsubmit="return false;">
-          <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455"/></label>
-          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>
+          <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455" autocomplete="off"/></label>
+          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••" autocomplete="current-password"/></label>
           <button type="submit" hidden aria-hidden="true"></button>
         </form>
         <div class="row gap">
@@ -173,30 +173,43 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
       </section>
 
       <section class="settings-panel" data-settings-panel="pricing" data-tab-content="pricing" hidden>
-        <h4>Pricing</h4>
         <div class="settings-card anim-in">
-          <p class="muted">Teleprompter Pro is currently in open preview. Billing controls will land here soon.</p>
-          <ul class="muted" style="margin-left:16px">
-            <li>No charges are applied during preview.</li>
-            <li>All features remain available while we finalize plans.</li>
-            <li>Saved recordings and settings stay intact.</li>
-            <li>We’ll announce pricing before enabling billing.</li>
+          <h4>Pricing</h4>
+          <p>
+            You’re currently using a pre-release build of Anvil. During this phase,
+            all features are available to invited testers.
+          </p>
+          <ul>
+            <li>No watermarking.</li>
+            <li>Local files stay on your machine.</li>
+            <li>Feedback from this build helps shape the paid tiers.</li>
           </ul>
+          <p class="settings-small">
+            Final pricing will be published closer to public launch.
+          </p>
         </div>
       </section>
 
       <section class="settings-panel" data-settings-panel="about" data-tab-content="about" hidden>
-        <h4>About</h4>
         <div class="settings-card anim-in">
-          <p class="muted">Teleprompter Pro is built for live presenters, rehearsal, and remote production.</p>
-          <ul class="muted" style="margin-left:16px">
-            <li>Built-in recorder (core) with OBS WebSocket integration.</li>
-            <li>Speech-driven scrolling with VAD/ASR hybrid modes.</li>
-            <li>Typography controls for main and external display, including color tuning.</li>
-            <li>HUD overlays for dB meter, speech notes, and recorder status.</li>
-            <li>Script ingest helpers and validation to keep your script clean.</li>
-          </ul>
-          <p class="muted">Questions? Open the Help overlay or reach out to the team.</p>
+          <h4>About Anvil</h4>
+          <p id="aboutSignature">
+            Anvil is part of the Podcaster’s Forge toolkit — built by working creators for working creators.
+          </p>
+          <p>
+            It’s designed to stay out of your way while you record:
+            tight scroll control, clean overlays, and recording that “just works.”
+          </p>
+          <p>
+            If Anvil has saved you time (or your sanity), you can support development here:
+            <br/>
+            <a href="https://buymeacoffee.com/podcastersforge" target="_blank" rel="noreferrer">
+              buymeacoffee.com/podcastersforge
+            </a>
+          </p>
+          <p class="settings-small">
+            Version: dev build • Settings UI rendered by TS builder (no legacy HTML).
+          </p>
         </div>
       </section>
     </div>
