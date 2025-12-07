@@ -219,60 +219,6 @@
 <body>
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
-<!-- Safety bridge: guarantees OBS Test pill + basic Auto-scroll movement in CI/dev only -->
-<script>
-(function(){
-  try {
-    // Enable only for CI/dev: query/hash (?ci=1 or #ci or ?dev=1) or localStorage.tp_ci==='1'
-    var url = String(location && location.href || '');
-    var devOn = /(\?|#)(.*\bci=1\b|dev=1\b)/i.test(url) || (function(){try{return localStorage.getItem('tp_ci')==='1'}catch(e){return false}})();
-    if (!devOn) return; // fully disabled in prod sessions
-
-    if (window.__TP_SAFETY_BRIDGE) return; window.__TP_SAFETY_BRIDGE = '1.0';
-    var q = function(s){ return document.querySelector(s); };
-    var selTest = '#settingsObsTest,#obsTest,[data-action="obs-test"]';
-    var selAuto = '#autoToggle,[data-action="auto-toggle"]';
-    var selInc  = '#autoInc,[data-action="auto-inc"]';
-    var selDec  = '#autoDec,[data-action="auto-dec"]';
-
-    function ensurePill(btn){
-      var pill = q('#obsStatusText,#obsStatus');
-      if (!pill) { pill = document.createElement('span'); pill.id = 'obsStatusText'; pill.style.marginLeft = '8px'; btn.after(pill); }
-      return pill;
-    }
-    function getViewer(){ return q('#viewer,[data-role="viewer"]') || document.scrollingElement || document.documentElement; }
-
-  async function handler(e){
-      try {
-        var t = e && e.target && (e.target.closest ? e.target.closest(selTest+','+selAuto+','+selInc+','+selDec) : null);
-        if (!t) return;
-        // OBS Test connection
-        if (t.matches && t.matches(selTest)) {
-          if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
-          var pill = ensurePill(t); pill.textContent = 'testingGǪ';
-          try {
-            var url  = (q('#settingsObsUrl,#obsUrl') && q('#settingsObsUrl,#obsUrl').value && q('#settingsObsUrl,#obsUrl').value.trim()) || 'ws://127.0.0.1:4455';
-            var pass = (q('#settingsObsPassword,#obsPassword') && q('#settingsObsPassword,#obsPassword').value) || '';
-            if (typeof window.__obsTestConnect === 'function') {
-              var res = await window.__obsTestConnect(url, pass);
-              var ver = (res && (res.version||res.obsWebSocketVersion||res.obsVersion)) || null;
-              pill.textContent = ver ? ('connected ('+ver+')') : 'connected';
-            } else {
-              pill.textContent = 'failed: probe not loaded';
-            }
-          } catch (err) {
-            pill.textContent = 'failed: ' + (err && (err.message||String(err)));
-            try { console.warn('[OBS test failed]', err); } catch (e) {}
-          }
-          return;
-        }
-      } catch (e) {}
-    }
-    document.addEventListener('click', handler, true);
-    document.addEventListener('click', handler, false);
-  } catch (e) {}
-})();
-</script>
 <div class="topbar">
   <strong>Anvil - Teleprompter</strong>
   <span id="appVersion" class="version-badge" aria-label="App version">v1.7.6</span>
@@ -338,27 +284,6 @@
     <option value="step">Step</option>
     <option value="rehearsal">Rehearsal</option>
   </select>
-  <script>
-    (function(){
-      try {
-        var sel = document.getElementById('scrollMode');
-        if (!sel) return;
-        var saved = null;
-        try {
-          var ls = window.localStorage;
-          if (ls) saved = ls.getItem('tp_scroll_mode') || ls.getItem('scrollMode');
-        } catch {}
-        if (!saved && window.__tpStore && typeof window.__tpStore.get === 'function') {
-          try { saved = window.__tpStore.get('scrollMode'); } catch {}
-        }
-        if (!saved) return;
-        saved = String(saved || '').trim().toLowerCase();
-        if (!saved) return;
-        if (!sel.querySelector('option[value="' + saved + '"]')) return;
-        sel.value = saved;
-      } catch {}
-    })();
-  </script>
   <p class="mode-hint" id="scrollModeHelpText">Hybrid follows speech automatically. Switch anytime to lock in manual, ASR, or rehearsal modes.</p>
 </section>
 <div class="row">
