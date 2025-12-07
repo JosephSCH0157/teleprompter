@@ -5,18 +5,16 @@
 (function () {
   'use strict';
 
-  // Dev guard: only install HUD when dev mode is enabled
-  // Dev flag (temporarily force on so HUD always installs)
-  var dev = true;
+    // Dev guard: only install HUD when dev mode is enabled
+  var dev = false;
   try {
     dev =
-      true || // force enabled for now
       !!window.__TP_DEV ||
       (location.search + location.hash).indexOf('dev=1') !== -1 ||
       (window.localStorage && localStorage.getItem('tp_dev_mode') === '1');
   } catch (_e) {}
 
-  // Top of file: quiet flag + rate limiter
+// Top of file: quiet flag + rate limiter
   window.__TP_QUIET = window.__TP_QUIET ?? false; // set true to silence info/debug
   window.__TP_LOG_MIN_MS = window.__TP_LOG_MIN_MS ?? 250; // throttle info/debug to at most 4/sec
 
@@ -451,8 +449,18 @@
   } catch {}
 
   try {
-    var hud = installHUD();
-    try { hud && hud.show && hud.show(); } catch {}
+    // Only auto-install in dev, and never in the external DISPLAY window
+    var isDisplay = false;
+    try {
+      isDisplay =
+        !!window.__TP_FORCE_DISPLAY ||
+        String(location.search || '').indexOf('display=1') !== -1;
+    } catch (_e) {}
+
+    if (dev && !isDisplay) {
+      var hud = installHUD();
+      try { hud && hud.show && hud.show(); } catch {}
+    }
   } catch (err) {
     try {
       console.error('[HUD] failed to install', err);

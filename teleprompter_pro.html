@@ -66,16 +66,8 @@
   <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
   <!-- Dev HUD / debug tools (loads __tpInstallHUD) -->
   <script src="/debug-tools.js" async defer></script>
-<!-- TS HUD root -->
-<div
-  id="hud-root"
-  data-role="hud-root"
-  data-tp-hud
-  class="tp-hud-root hidden"
-  aria-hidden="true"
-></div>
 
-  <!-- Dev flag G�� add .tp-dev class early so CSS can key off it -->
+<!-- Dev flag G�� add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
       try {
@@ -173,7 +165,19 @@
     button.chip{border:0;background:transparent;color:var(--fg);cursor:pointer}
     @media (max-width:900px){.app{grid-template-columns:1fr;}.topbar{height:56px;padding:10px}}
     /* Extra tiny critical rules to stabilize first-paint for HUD and overlays */
-    #hud-root{position:fixed;right:12px;top:12px;z-index:2147483630;pointer-events:none;min-width:140px}
+    /* TS HUD root (owned by src/hud/*) */
+    #hud-root {
+      position: fixed;
+      right: 12px;
+      top: 12px;              /* we can move this later if it still feels "in the way" */
+      z-index: 2147483630;
+      pointer-events: auto;   /* IMPORTANT: allow interaction/drags inside the HUD */
+      min-width: 140px;
+    }
+
+    #hud-root.hidden {
+      display: none;
+    }
     .overlay{display:flex}
     .overlay.hidden{display:none}
     .overlay .sheet{background:#07101a;color:var(--fg);border-radius:8px;padding:10px}
