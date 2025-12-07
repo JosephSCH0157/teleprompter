@@ -15,7 +15,19 @@ type ObsBridge = {
   connect?: () => void | Promise<void>;
 };
 
+const shouldSilenceObsLogs = (() => {
+  try {
+    const w = window as any;
+    if (w.__TP_SILENCE_OBS_LOGS) return true;
+    const search = String(location.search || '').toLowerCase();
+    return search.includes('ci=1') || search.includes('uimock=1');
+  } catch {
+    return false;
+  }
+})();
+
 function logObsCommand(cmd: string, extra: Record<string, unknown> = {}): void {
+  if (shouldSilenceObsLogs) return;
   const payload = { cmd, ...extra };
   try { console.log('[OBS-CMD]', payload); } catch {}
   try { (window as any).HUD?.log?.('obs:command', payload); } catch {}

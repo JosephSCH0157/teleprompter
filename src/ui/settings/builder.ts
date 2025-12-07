@@ -214,15 +214,15 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
       </section>
 
       <section class="settings-panel" data-settings-panel="about" data-tab-content="about" hidden>
-        <div class="settings-card anim-in">
+        <div class="settings-card anim-in" data-tab="about">
           <h4>About Anvil</h4>
           <div class="settings-small">
             <p>
-              Anvil is part of the Podcasterâ€™s Forge toolset â€” a teleprompter and recording companion
+              Anvil is part of the Podcaster’s Forge toolset — a teleprompter and recording companion
               designed for creators who want fewer tabs, less chaos, and more control.
             </p>
             <p>
-              If Anvil has saved you at least one cup of coffeeâ€™s worth of time,
+              If Anvil has saved you at least one cup of coffee’s worth of time,
               you can support ongoing development here:
               <a href="https://buymeacoffee.com/podcastersforge"
                  class="settings-link"
@@ -231,6 +231,13 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
                 buymeacoffee.com/podcastersforge
               </a>.
             </p>
+            <ul>
+              <li>Scroll control that stays smooth and predictable.</li>
+              <li>Color and typography options tuned for on-camera clarity.</li>
+              <li>Scripts stay local and easy to swap while you work.</li>
+              <li>OBS integration to keep recording in sync with your sessions.</li>
+            </ul>
+            <p id="aboutVersion">Version: dev build</p>
           </div>
         </div>
       </section>
@@ -301,3 +308,4 @@ export function addAsrWizardCard(root: HTMLElement) {
     container.appendChild(sec);
   } catch {}
 }
+
