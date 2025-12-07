@@ -105,23 +105,11 @@
       window.__tpBootSrc = 'module';
       await import('./dist/index.js?v=dev');
     })().catch(err => {
-      try { console.warn('[boot] module import failed â†’ fallback', err); } catch (e) {}
-      if (!window.__tpBooted) {
-        window.__tpBootSrc = 'fallback';
-        const s = document.createElement('script');
-        s.src = './teleprompter_pro.js';
-        s.defer = true;
-        s.onload = () => { try { console.log('[boot] legacy loaded'); } catch (e) {} };
-        document.head.appendChild(s);
-      }
+      try { console.warn('[boot] module import failed; no legacy fallback loaded', err); } catch (e) {}
     });
   </script>
   <!-- Dev HUD / debug tools (loads __tpInstallHUD) -->
   <script src="/debug-tools.js" async defer></script>
-  <!-- Legacy browsers (no module support) load the legacy bundle -->
-  <script nomodule src="./teleprompter_pro.js" defer></script>
-  <!-- TS HUD root -->
-  <div id="tpHudRoot" data-tp-hud class="tp-hud-root hidden" aria-hidden="true"></div>
 
   <!-- Dev flag â†’ add .tp-dev class early so CSS can key off it -->
   <script>

@@ -1,0 +1,20 @@
+        if (window.__tpBooted) return; // hard guard if HTML is duplicated
+        window.__tpBootSrc = 'pending';
+      } catch (e) {}
+    }());
+  </script>
+  <script type="module">
+    (async () => {
+      if (window.__tpBooted) return;
+      window.__tpBootSrc = 'module';
+      await import('./dist/index.js?v=dev');
+    })().catch(err => {
+      try { console.warn('[boot] module import failed → fallback', err); } catch (e) {}
+      if (!window.__tpBooted) {
+        window.__tpBootSrc = 'fallback';
+        const s = document.createElement('script');
+        s.src = './teleprompter_pro.js';
+        s.defer = true;
+        s.onload = () => { try { console.log('[boot] legacy loaded'); } catch (e) {} };
+        document.head.appendChild(s);
+      }
