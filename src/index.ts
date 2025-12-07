@@ -30,6 +30,7 @@ import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
 import './index-hooks/preroll';
+import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
@@ -711,26 +712,117 @@ try {
   // Detect display mode:
   //  - Either ?display=1 in the URL
   //  - Or we are literally on /display.html
+  let __isDisplay = false;
   try {
     const search = location.search || '';
     const params = new URLSearchParams(search);
     const displayFlag = params.get('display');
     const path = (location.pathname || '').toLowerCase();
-    const isDisplay =
+    __isDisplay =
       displayFlag === '1' ||
       path.endsWith('/display.html') ||
       path === '/display.html';
 
-    if (isDisplay && __docCh) {
+    if (__isDisplay && __docCh) {
       __docCh.postMessage({ type: 'hello', client: 'display' });
     }
   } catch {}
-} catch {
-  __docCh = null;
-}
-// Expose folder injection helpers globally for smoke harness / fallback JS paths
-try { (window as any).ensureSettingsFolderControls = ensureSettingsFolderControls; } catch {}
-try { (window as any).ensureSettingsFolderControlsAsync = ensureSettingsFolderControlsAsync; } catch {}
+  } catch {
+    __docCh = null;
+  }
+
+  // Display window: receive script/scroll/typography updates and render locally
+  if (__isDisplay) {
+    const markerPct = (typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4);
+    const getWrap = () => document.getElementById('wrap') as HTMLElement | null;
+    const getScriptEl = () => document.getElementById('script') as HTMLElement | null;
+
+    const applyPadding = () => {
+      const wrap = getWrap();
+      const script = getScriptEl();
+      if (!wrap || !script) return;
+      const h = wrap.clientHeight || window.innerHeight || 0;
+      const offset = Math.max(0, Math.round(h * markerPct));
+      script.style.paddingTop = `${offset}px`;
+      wrap.style.scrollPaddingTop = `${offset}px`;
+    };
+
+    const applyTypography = (fontSize?: string | number, lineHeight?: string | number) => {
+      const root = document.documentElement;
+      if (fontSize != null && fontSize !== '') {
+        const fs = String(fontSize).includes('px') ? String(fontSize) : `${fontSize}px`;
+        root.style.setProperty('--tp-font-size', fs);
+      }
+      if (lineHeight != null && lineHeight !== '') {
+        root.style.setProperty('--tp-line-height', String(lineHeight));
+      }
+    };
+
+    const applyHtml = (html: string, opts?: { fontSize?: any; lineHeight?: any; resetScroll?: boolean }) => {
+      const script = getScriptEl();
+      if (!script) return;
+      script.innerHTML = html || '';
+      applyTypography(opts?.fontSize, opts?.lineHeight);
+      applyPadding();
+      try { (getWrap() || script).scrollTop = 0; } catch {}
+    };
+
+    const applyText = (text: string, opts?: { fontSize?: any; lineHeight?: any }) => {
+      const script = getScriptEl();
+      if (!script) return;
+      renderScript(text, script);
+      applyTypography(opts?.fontSize, opts?.lineHeight);
+      applyPadding();
+      try { (getWrap() || script).scrollTop = 0; } catch {}
+    };
+
+    const handleDisplayMessage = (ev: MessageEvent<any>) => {
+      const m = ev?.data;
+      if (!m) return;
+      // Render payloads from sendToDisplay (render/scroll/typography) or display-sync snapshots
+      if (m.type === 'render') {
+        const html = typeof m.html === 'string' ? m.html : '';
+        const text = typeof m.text === 'string' ? m.text : '';
+        if (html) { applyHtml(html, { fontSize: m.fontSize, lineHeight: m.lineHeight, resetScroll: true }); return; }
+        if (text) { applyText(text, { fontSize: m.fontSize, lineHeight: m.lineHeight }); return; }
+      }
+      if (m.kind === 'tp:script' && m.source === 'main' && typeof m.text === 'string') {
+        applyText(m.text);
+        return;
+      }
+      if (m.type === 'scroll') {
+        const wrap = getWrap();
+        if (!wrap) return;
+        if (typeof m.top === 'number') wrap.scrollTop = m.top;
+        else if (typeof m.ratio === 'number') {
+          const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+          wrap.scrollTop = m.ratio * max;
+        }
+        return;
+      }
+      if (m.type === 'typography') {
+        applyTypography(m.fontSize, m.lineHeight);
+        applyPadding();
+        return;
+      }
+    };
+
+    try { window.addEventListener('message', handleDisplayMessage); } catch {}
+
+    try {
+      installDisplaySync({
+        getText: () => '',
+        onApplyRemote: (txt) => applyText(txt),
+        getDisplayWindow: () => { try { return window.opener || null; } catch { return null; } },
+      });
+    } catch {}
+
+    try { window.addEventListener('resize', applyPadding); } catch {}
+    try { document.addEventListener('DOMContentLoaded', applyPadding, { passive: true } as any); } catch {}
+  }
+  // Expose folder injection helpers globally for smoke harness / fallback JS paths
+  try { (window as any).ensureSettingsFolderControls = ensureSettingsFolderControls; } catch {}
+  try { (window as any).ensureSettingsFolderControlsAsync = ensureSettingsFolderControlsAsync; } catch {}
 
 // Dev-only anchor observer: lazily load IO helper for diagnostics / HUDs
 try {
