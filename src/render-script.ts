@@ -147,11 +147,12 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       trimmed = rawLine.trim();
     }
 
-    if (/^\[\s*(note|pause|beat|reflective pause)\s*\]$/i.test(trimmed)) {
+    // Only [note] blocks are hidden; pacing cues like [pause]/[beat] should render normally
+    if (/^\[\s*note\s*\]$/i.test(trimmed)) {
       inNote = true;
       continue;
     }
-    if (/^\[\/\s*(note|pause|beat|reflective pause)\s*\]$/i.test(trimmed)) {
+    if (/^\[\/\s*note\s*\]$/i.test(trimmed)) {
       inNote = false;
       continue;
     }
