@@ -60,10 +60,10 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
             // If picker returns falsy (cancel/no-op), do nothing
           }
         } catch (err: any) {
-          // Handle non-user-activation environments (CI/automation) by falling back to hidden input when present
+          // Handle picker failures by falling back to hidden input when present
           const name = (err && (err.name || err.code)) || '';
-          if (String(name) === 'NotAllowedError' && fallback) {
-            hudLog('folder:pick:not-allowed', { fallback: true });
+          if (fallback) {
+            hudLog('folder:pick:fallback', { reason: name || 'unknown' });
             fallback.click();
           } else {
             try { console.warn('[mapped-folder] pick failed', err); } catch {}
