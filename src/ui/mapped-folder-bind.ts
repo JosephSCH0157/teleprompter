@@ -80,6 +80,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         fallback.click();
       } else {
         try { console.warn('[mapped-folder] File System Access API not supported; provide fallback input'); } catch {}
+        try { toast('Folder picking is not supported in this environment. Open the app in Chrome/Edge on https/localhost to choose a scripts folder.'); } catch {}
       }
     } catch {}
   });
