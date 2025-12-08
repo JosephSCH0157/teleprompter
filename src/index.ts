@@ -703,6 +703,7 @@ try {
 // running in the display window, send an initial "hello" so the main
 // window can respond with the current script snapshot.
 let __docCh: BroadcastChannel | null = null;
+let __isDisplay = false; // shared flag for display-specific logic
 
 try {
   __docCh =
@@ -712,7 +713,6 @@ try {
   // Detect display mode:
   //  - Either ?display=1 in the URL
   //  - Or we are literally on /display.html
-  let __isDisplay = false;
   try {
     const search = location.search || '';
     const params = new URLSearchParams(search);
