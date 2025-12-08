@@ -48,9 +48,15 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   try { (btn as any).dataset.mappedFolderWired = '1'; } catch {}
   btn.addEventListener('click', async () => {
+    let initOk = false;
     try {
       await ensureInit();
-      if ('showDirectoryPicker' in window) {
+      initOk = true;
+    } catch (err) {
+      try { console.warn('[mapped-folder] init failed, falling back', err); } catch {}
+    }
+    try {
+      if ('showDirectoryPicker' in window && initOk) {
         try {
           const ok = await pickMappedFolder();
           if (ok) {
@@ -70,6 +76,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           }
         }
       } else if (fallback) {
+        hudLog('folder:pick:fallback', { reason: initOk ? 'no-picker' : 'init-failed' });
         fallback.click();
       } else {
         try { console.warn('[mapped-folder] File System Access API not supported; provide fallback input'); } catch {}

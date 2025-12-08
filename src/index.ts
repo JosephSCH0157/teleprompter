@@ -1213,9 +1213,15 @@ try {
 								const t = e.target as HTMLElement | null;
 								const btn = t?.closest('#chooseFolderBtn') as HTMLButtonElement | null;
 								if (!btn) return;
-								if (btn.dataset.mappedFolderWired === '1') return; // already wired
-								if ('showDirectoryPicker' in window) { await pickMappedFolder(); }
-								else { (document.getElementById('folderFallback') as HTMLInputElement | null)?.click(); }
+								if ('showDirectoryPicker' in window) {
+									try {
+										await pickMappedFolder();
+									} catch {
+										(document.getElementById('folderFallback') as HTMLInputElement | null)?.click();
+									}
+								} else {
+									(document.getElementById('folderFallback') as HTMLInputElement | null)?.click();
+								}
 							} catch {}
 						}, { capture: true });
 					} catch {}
