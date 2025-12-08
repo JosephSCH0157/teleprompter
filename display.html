@@ -257,8 +257,8 @@
               }
             }
 
-            // Render helper: prefer TS renderScript if available; fallback to innerHTML
-            function applyScriptSnapshot(text){
+            // Render helper: accept either raw script text or already-rendered HTML
+            function applyScriptSnapshot(text) {
               // 1) Compute marker offset and apply as top padding
               let markerOffset = 0;
               try {
@@ -267,21 +267,29 @@
                 markerOffset = Math.max(0, Math.round(h * markerPct));
                 if (scriptEl) {
                   scriptEl.style.paddingTop = `${markerOffset}px`;
-                  (scriptEl).style.scrollPaddingTop = `${markerOffset}px`;
+                  scriptEl.style.scrollPaddingTop = `${markerOffset}px`;
                 }
               } catch {}
 
               // 2) Render script content
               try {
-                if (typeof window.renderScript === 'function') {
-                  window.renderScript(String(text || ''), scriptEl);
+                if (!scriptEl) return;
+
+                const str = String(text || '');
+                // Heuristic: if it already looks like rendered markup, inject directly
+                const looksRendered = /<div[^>]+class=["']line\b/i.test(str);
+
+                if (!looksRendered && typeof window.renderScript === 'function') {
+                  window.renderScript(str, scriptEl);
                 } else {
                   scriptEl.innerHTML = '';
                   const cont = document.createElement('div');
-                  cont.innerHTML = text || '';
+                  cont.innerHTML = str;
                   while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
                 }
-              } catch {}
+              } catch (err) {
+                try { console.warn('[display] applyScriptSnapshot failed', err); } catch {}
+              }
 
               // 3) Ensure we start at the top (marker line)
               try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
@@ -295,7 +303,7 @@
                   const msg = e?.data || {};
                   // Script snapshots from main
                   if (msg && msg.kind === 'tp:script') {
-                    applyScriptSnapshot(msg.text || msg.html || '');
+                    applyScriptSnapshot(msg.html || msg.text || '');
                     applyScaled();
                     applyBottomPad();
                     return;
