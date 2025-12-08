@@ -46,6 +46,7 @@ let lastUrl = '';
 let lastPassword = '';
 let lastEnabled = false;
 let wiredEvents = false;
+let bridgeArmed = false;
 
 function updateStatus(status: RecorderStatus, err?: string) {
   setObsStatus(status, err ?? null);
@@ -68,10 +69,12 @@ function wireBridgeEvents(): void {
 
 function closeBridge(reason?: string): void {
   const bridge = getBridge();
+  if (reason === 'disabled' && !bridgeArmed) return; // already idle; avoid log spam
   logObsCommand('close', { reason });
   try { bridge?.enableAutoReconnect?.(false); } catch {}
   try { bridge?.setArmed?.(false); } catch {}
   try { bridge?.disconnect?.(); } catch {}
+  bridgeArmed = false;
   updateStatus('disconnected', reason);
 }
 
@@ -90,7 +93,7 @@ function connectViaBridge(): void {
   }
 
   try { bridge?.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }); logObsCommand('configure', { url: state.configs.obs.url }); } catch {}
-  try { bridge?.setArmed?.(true); logObsCommand('setArmed', { armed: true }); } catch {}
+  try { bridge?.setArmed?.(true); logObsCommand('setArmed', { armed: true }); bridgeArmed = true; } catch {}
   try { bridge?.enableAutoReconnect?.(true); logObsCommand('enableAutoReconnect', { on: true }); } catch {}
 
   updateStatus('connecting');
@@ -105,23 +108,29 @@ export function initObsConnection(): void {
   lastPassword = initial.configs.obs.password;
 
   subscribeRecorderSettings((s) => {
-    const urlChanged = s.configs.obs.url !== lastUrl;
-    const pwdChanged = s.configs.obs.password !== lastPassword;
-    const enabledChanged = s.enabled.obs !== lastEnabled;
+    const prevEnabled = lastEnabled;
+    const prevUrl = lastUrl;
+    const prevPwd = lastPassword;
+    const urlChanged = s.configs.obs.url !== prevUrl;
+    const pwdChanged = s.configs.obs.password !== prevPwd;
+    const enabledChanged = s.enabled.obs !== prevEnabled;
 
     lastEnabled = s.enabled.obs;
     lastUrl = s.configs.obs.url;
     lastPassword = s.configs.obs.password;
 
+    // When disabled and nothing changed, stay idle and quiet.
     if (!s.enabled.obs) {
-      closeBridge('disabled');
+      if (enabledChanged) {
+        closeBridge('disabled');
+      }
       return;
     }
 
-    if (enabledChanged || urlChanged || pwdChanged) {
-      closeBridge();
-      connectViaBridge();
-    }
+    if (!enabledChanged && !urlChanged && !pwdChanged) return;
+
+    closeBridge(enabledChanged ? 'reconnect' : undefined);
+    connectViaBridge();
   });
 
   if (initial.enabled.obs) {
