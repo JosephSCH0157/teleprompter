@@ -11,12 +11,23 @@ const HOST_ID = 'settingsObsHost';
 const PASS_ID = 'settingsObsPassword';
 const PORT_ID = 'settingsObsPort'; // legacy hidden input support
 
+function syncEnabledCheckboxes(doc: Document, enabled: boolean): void {
+  const checked = !!enabled;
+  const settingsEl = doc.getElementById(ENABLE_ID) as HTMLInputElement | null;
+  const sidebarEl = doc.getElementById(SIDEBAR_ENABLE_ID) as HTMLInputElement | null;
+
+  if (settingsEl) settingsEl.checked = checked;
+  if (sidebarEl) sidebarEl.checked = checked;
+}
+
 function mirrorLegacyObsEnabled(on: boolean): void {
   // Preserve appStore flag for consumers still reading it
   try { (window as any).__tpStore?.set?.('obsEnabled', on); } catch {}
 }
 
 function handleToggle(on: boolean): void {
+  const doc = window.document;
+  syncEnabledCheckboxes(doc, on);
   setRecorderEnabled('obs', !!on);
   mirrorLegacyObsEnabled(!!on);
   try { console.info('[OBS-UI] toggled', { enabled: !!on }); } catch {}
@@ -78,9 +89,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
     subscribeRecorderSettings((state) => {
       syncing = true;
       try {
-        toggleEls.forEach((el) => {
-          if (el && el.checked !== !!state.enabled.obs) el.checked = !!state.enabled.obs;
-        });
+        syncEnabledCheckboxes(doc, !!state.enabled.obs);
 
         const url = state.configs.obs.url || '';
         try {
