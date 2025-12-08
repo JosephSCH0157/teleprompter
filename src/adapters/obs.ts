@@ -136,6 +136,19 @@ async function computeAuth(pass: string, salt: string, challenge: string): Promi
   }
 }
 
+function notifyObsConnectionError(reason?: unknown): void {
+  try {
+    const toast = (window as any).toast;
+    if (typeof toast === 'function') {
+      toast('Could not connect to OBS. Make sure OBS is running and check Settings → Recording.');
+    }
+  } catch {}
+
+  try {
+    console.warn('[OBS] connection failed', reason);
+  } catch {}
+}
+
 interface ObsConnectOptions {
   url?: string;
   host?: string;
@@ -404,7 +417,8 @@ export function connect(urlOrOpts: string | ObsConnectOptions, pass?: string): O
         }
       };
       ws.onmessage = onMessage;
-      ws.onerror = () => {
+      ws.onerror = (ev) => {
+        notifyObsConnectionError(ev);
         emitter.emit('error', new Error('WebSocket error'));
         try {
           window.dispatchEvent(
@@ -416,7 +430,8 @@ export function connect(urlOrOpts: string | ObsConnectOptions, pass?: string): O
           // ignore
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        if (!closedByUser) notifyObsConnectionError(ev);
         emitter.emit('closed');
         try {
           window.dispatchEvent(
@@ -430,6 +445,7 @@ export function connect(urlOrOpts: string | ObsConnectOptions, pass?: string): O
         schedule();
       };
     } catch (err) {
+      notifyObsConnectionError(err);
       emitter.emit('error', err as Error);
     }
   };

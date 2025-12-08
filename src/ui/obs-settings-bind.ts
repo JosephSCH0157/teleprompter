@@ -11,6 +11,11 @@ const HOST_ID = 'settingsObsHost';
 const PASS_ID = 'settingsObsPassword';
 const PORT_ID = 'settingsObsPort'; // legacy hidden input support
 
+function mirrorLegacyObsEnabled(on: boolean): void {
+  // Preserve appStore flag for consumers still reading it
+  try { (window as any).__tpStore?.set?.('obsEnabled', on); } catch {}
+}
+
 function syncEnabledCheckboxes(doc: Document, enabled: boolean): void {
   const checked = !!enabled;
   const settingsEl = doc.getElementById(ENABLE_ID) as HTMLInputElement | null;
@@ -20,17 +25,62 @@ function syncEnabledCheckboxes(doc: Document, enabled: boolean): void {
   if (sidebarEl) sidebarEl.checked = checked;
 }
 
-function mirrorLegacyObsEnabled(on: boolean): void {
-  // Preserve appStore flag for consumers still reading it
-  try { (window as any).__tpStore?.set?.('obsEnabled', on); } catch {}
-}
+function handleToggle(on: boolean, sourceId?: string): void {
+  const enabling = !!on;
+  const fromSidebar = sourceId === SIDEBAR_ENABLE_ID;
 
-function handleToggle(on: boolean): void {
+  // Sidebar → ON: sanity-check for obviously half-configured remote setups.
+  // "No URL" is allowed (local fallback). We only warn if it *looks* remote.
+  if (enabling && fromSidebar) {
+    try {
+      const state = getRecorderSettings() as any;
+      const cfg = state?.configs?.obs || {};
+      const url = String(cfg.url ?? '');
+      const host = String(cfg.host ?? '');
+
+      const hasRemoteHost =
+        !!host &&
+        host !== 'localhost' &&
+        host !== '127.0.0.1';
+
+      const remoteButMissingUrl = !url && hasRemoteHost;
+
+      if (remoteButMissingUrl) {
+        const doc = window.document;
+        syncEnabledCheckboxes(doc, false);
+
+        try {
+          const toast = (window as any).toast;
+          if (typeof toast === 'function') {
+            toast('Finish configuring OBS in Settings → Recording before enabling remote OBS.');
+          }
+        } catch {}
+
+        try {
+          console.info('[OBS-UI] blocked OBS enable from sidebar: remote config incomplete', { host, url });
+        } catch {}
+
+        return;
+      }
+    } catch {
+      // If we can't read settings, don't block; let the core pipeline try its defaults.
+    }
+  }
+
+  // Normal path: apply state and mirror everywhere.
   const doc = window.document;
-  syncEnabledCheckboxes(doc, on);
-  setRecorderEnabled('obs', !!on);
-  mirrorLegacyObsEnabled(!!on);
-  try { console.info('[OBS-UI] toggled', { enabled: !!on }); } catch {}
+  syncEnabledCheckboxes(doc, enabling);
+
+  try {
+    // Recorder store SSOT
+    setRecorderEnabled('obs', enabling);
+  } catch {}
+
+  mirrorLegacyObsEnabled(enabling);
+
+  try {
+    console.info('[OBS-UI] toggled', { enabled: enabling, sourceId });
+  } catch {}
 }
 
 function buildUrl(hostWithPort: string, explicitPort?: string): string {
@@ -112,13 +162,13 @@ export function bindObsSettingsUI(doc: Document = document): void {
       }
     });
 
-    const writeEnabled = (on: boolean) => {
+    const writeEnabled = (on: boolean, src?: HTMLInputElement | null) => {
       if (syncing) return;
-      handleToggle(on);
+      handleToggle(on, src?.id);
     };
 
     toggleEls.forEach((el) => {
-      el.addEventListener('change', () => writeEnabled(!!el.checked));
+      el.addEventListener('change', () => writeEnabled(!!el.checked, el));
     });
 
     const pushUrl = () => {
@@ -164,7 +214,7 @@ export function bindObsSettingsUI(doc: Document = document): void {
         const t = ev.target as HTMLElement | null;
         const input = (t && t.closest('[data-tp-obs-toggle]')) as HTMLInputElement | null;
         if (!input) return;
-        handleToggle(!!input.checked);
+        handleToggle(!!input.checked, input.id);
       },
       { capture: true },
     );
