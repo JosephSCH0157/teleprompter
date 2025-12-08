@@ -787,7 +787,8 @@ try {
         if (text) { applyText(text, { fontSize: m.fontSize, lineHeight: m.lineHeight }); return; }
       }
       if (m.kind === 'tp:script' && m.source === 'main' && typeof m.text === 'string') {
-        applyText(m.text);
+        // display-sync snapshots carry pre-rendered HTML; render directly
+        applyHtml(m.text);
         return;
       }
       if (m.type === 'scroll') {
