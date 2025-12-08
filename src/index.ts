@@ -604,7 +604,7 @@ import { installGlobalIngestListener, installScriptIngest } from './features/scr
 import { pickMappedFolder } from './fs/mapped-folder';
 import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
-import { bindMappedFolderUI, bindPermissionButton } from './ui/mapped-folder-bind';
+import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
@@ -1208,20 +1208,13 @@ try {
 
 					// Delegated safety handler for Choose Folder if binder missed reinjection
 					try {
-						document.addEventListener('click', async (e) => {
+						document.addEventListener('click', (e) => {
 							try {
 								const t = e.target as HTMLElement | null;
 								const btn = t?.closest('#chooseFolderBtn') as HTMLButtonElement | null;
 								if (!btn) return;
-								if ('showDirectoryPicker' in window) {
-									try {
-										await pickMappedFolder();
-									} catch {
-										(document.getElementById('folderFallback') as HTMLInputElement | null)?.click();
-									}
-								} else {
-									(document.getElementById('folderFallback') as HTMLInputElement | null)?.click();
-								}
+								e.preventDefault();
+								void handleChooseFolder(document);
 							} catch {}
 						}, { capture: true });
 					} catch {}

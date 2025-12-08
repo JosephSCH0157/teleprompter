@@ -6,6 +6,35 @@ import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from 
 import { ScriptStore } from '../features/scripts-store';
 import { debugLog, hudLog } from '../env/logging';
 
+function getFolderPickerEnvironmentHint(): string {
+  try {
+    const proto = window.location.protocol;
+    const ua = navigator.userAgent || '';
+
+    if (proto === 'file:') {
+      return 'Folder picking is blocked when running from file://. Please run Anvil on http://localhost or https:// instead.';
+    }
+
+    const hasFS = typeof (window as any).showDirectoryPicker === 'function';
+    const hasWebkitDir = (() => {
+      const i = document.createElement('input');
+      return 'webkitdirectory' in i || 'directory' in i;
+    })();
+
+    if (!hasFS && !hasWebkitDir) {
+      return 'This browser/webview does not support folder picking. Use Chrome or Edge on http://localhost or https://.';
+    }
+
+    if (/OBS|Electron|WebView|Headless/i.test(ua)) {
+      return 'This embedded browser may not allow folder picking. Choose a scripts folder in a full browser (Chrome/Edge) first, then reopen Anvil here.';
+    }
+  } catch {
+    // ignore
+  }
+
+  return 'Folder picking is not available in this environment. Try running Anvil in a full browser (Chrome/Edge on http://localhost or https://).';
+}
+
 const SUPPORTED_EXT = /\.(docx|doc|txt|md)$/i;
 function isSupportedScriptName(name: string): boolean {
   const lower = (name || '').toLowerCase().trim();
@@ -28,6 +57,53 @@ type BindOpts = {
   onSelect?: (_fileOrHandle: FileSystemFileHandle | File | null) => void; // callback when user picks a script
 };
 
+export async function handleChooseFolder(doc: Document = document): Promise<void> {
+  try {
+    await initMappedFolder();
+  } catch (err) {
+    try {
+      console.warn('[mapped-folder] initMappedFolder failed', err);
+      const toastFn = (window as any).toast;
+      if (typeof toastFn === 'function') {
+        toastFn('Could not initialize mapped folder. Check console for details.');
+      }
+    } catch {}
+    return;
+  }
+
+  const hasFS = typeof (window as any).showDirectoryPicker === 'function';
+  const fallback = doc.getElementById('folderFallback') as HTMLInputElement | null;
+
+  if (hasFS) {
+    try {
+      await pickMappedFolder();
+      return;
+    } catch (err) {
+      try { console.info('[mapped-folder] directory picker cancelled/failed, falling back', err); } catch {}
+    }
+  }
+
+  if (fallback) {
+    try {
+      fallback.click();
+      return;
+    } catch (err) {
+      try { console.warn('[mapped-folder] folderFallback click failed', err); } catch {}
+    }
+  }
+
+  try {
+    const toastFn = (window as any).toast;
+    if (typeof toastFn === 'function') {
+      toastFn(getFolderPickerEnvironmentHint());
+    }
+  } catch {}
+
+  try {
+    console.warn('[mapped-folder] no supported folder picker available (both FS API and fallback failed)');
+  } catch {}
+}
+
 export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   const btn = typeof opts.button === 'string' ? document.querySelector(opts.button) as HTMLButtonElement : opts.button as HTMLButtonElement;
   const sel = typeof opts.select === 'string' ? document.querySelector(opts.select) as HTMLSelectElement : opts.select as HTMLSelectElement;
@@ -47,42 +123,9 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   };
 
   try { (btn as any).dataset.mappedFolderWired = '1'; } catch {}
-  btn.addEventListener('click', async () => {
-    let initOk = false;
-    try {
-      await ensureInit();
-      initOk = true;
-    } catch (err) {
-      try { console.warn('[mapped-folder] init failed, falling back', err); } catch {}
-    }
-    try {
-      if ('showDirectoryPicker' in window && initOk) {
-        try {
-          const ok = await pickMappedFolder();
-          if (ok) {
-            await refreshList();
-            hudLog('folder:mapped', { count: _lastCount });
-          } else {
-            // If picker returns falsy (cancel/no-op), do nothing
-          }
-        } catch (err: any) {
-          // Handle picker failures by falling back to hidden input when present
-          const name = (err && (err.name || err.code)) || '';
-          if (fallback) {
-            hudLog('folder:pick:fallback', { reason: name || 'unknown' });
-            fallback.click();
-          } else {
-            try { console.warn('[mapped-folder] pick failed', err); } catch {}
-          }
-        }
-      } else if (fallback) {
-        hudLog('folder:pick:fallback', { reason: initOk ? 'no-picker' : 'init-failed' });
-        fallback.click();
-      } else {
-        try { console.warn('[mapped-folder] File System Access API not supported; provide fallback input'); } catch {}
-        try { toast('Folder picking is not supported in this environment. Open the app in Chrome/Edge on https/localhost to choose a scripts folder.'); } catch {}
-      }
-    } catch {}
+  btn.addEventListener('click', (ev) => {
+    try { ev.preventDefault(); } catch {}
+    void handleChooseFolder(document);
   });
 
   if (fallback) {
