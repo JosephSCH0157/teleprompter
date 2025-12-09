@@ -31,6 +31,7 @@ const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
 const PAGE_KEY = 'tp_page_v1';
 const HUD_ENABLED_KEY = 'tp_hud_enabled_v1';
 const OVERLAY_KEY = 'tp_overlay_v1';
+const CAMERA_KEY = 'tp_camera_enabled_v1';
 
 const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   settingsTab: SETTINGS_TAB_KEY,
@@ -46,6 +47,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   hudEnabledByUser: HUD_ENABLED_KEY,
   page: PAGE_KEY,
   overlay: OVERLAY_KEY,
+  cameraEnabled: CAMERA_KEY,
   // Scroll router persistence
   scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
@@ -208,7 +210,15 @@ function buildInitialState(): AppStoreState {
         return '';
       }
     })(),
-    cameraEnabled: false,
+    cameraEnabled: (() => {
+      try {
+        const raw = localStorage.getItem(CAMERA_KEY);
+        if (raw == null) return false;
+        return raw === '1';
+      } catch {
+        return false;
+      }
+    })(),
     cameraAvailable: false,
     micGranted: false,
     obsEnabled: (() => {
