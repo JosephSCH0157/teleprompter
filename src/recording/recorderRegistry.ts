@@ -51,6 +51,9 @@ export async function startSessionRecording(opts: { obsEnabled: boolean }): Prom
 
   const core = registry.get('core');
   if (core) {
+    try {
+      console.debug('[recording-session] startRecorders: core available, obsEnabled=', !!opts?.obsEnabled);
+    } catch {}
     tasks.push(
       core
         .isAvailable()
@@ -66,6 +69,9 @@ export async function startSessionRecording(opts: { obsEnabled: boolean }): Prom
   if (opts?.obsEnabled) {
     const obs = registry.get('obs');
     if (obs) {
+      try {
+        console.debug('[recording-session] startRecorders: obs available');
+      } catch {}
       tasks.push(
         obs
           .isAvailable()
@@ -78,6 +84,9 @@ export async function startSessionRecording(opts: { obsEnabled: boolean }): Prom
   }
 
   if (tasks.length === 0) return;
+  try {
+    console.debug('[recording-session] startRecorders', { count: tasks.length, enabled: true });
+  } catch {}
   await Promise.all(tasks);
   sessionRecording = true;
   emitRecordingState(true);
