@@ -2,6 +2,7 @@ import { initSpeechNotesHud } from './speech-notes-hud';
 import { initAsrStatsHud } from './asr-stats';
 import { initRecStatsHud } from './rec-stats';
 import { initScrollStripHud } from './scroll-strip';
+import { attachHudDrag } from './drag';
 import type { AppStore } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
 
@@ -54,6 +55,12 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
   const { store } = opts;
   const bus = opts.bus ?? createHudBus();
   const root = opts.root ?? document.getElementById('hud-root') ?? document.body;
+
+  if (!root) {
+    throw new Error('[HUD] No root element found');
+  }
+
+  try { attachHudDrag(root); } catch {}
 
   const speechNotes = initSpeechNotesHud({ root, bus, store });
   const asrStats = initAsrStatsHud({ root, bus, store });

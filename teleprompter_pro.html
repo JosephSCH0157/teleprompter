@@ -166,17 +166,82 @@
     @media (max-width:900px){.app{grid-template-columns:1fr;}.topbar{height:56px;padding:10px}}
     /* Extra tiny critical rules to stabilize first-paint for HUD and overlays */
     /* TS HUD root (owned by src/hud/*) */
-    #hud-root {
+    #hud-root.tp-hud-root {
       position: fixed;
-      right: 12px;
-      top: 12px;              /* we can move this later if it still feels "in the way" */
+      right: 16px;
+      top: 16px;
       z-index: 2147483630;
-      pointer-events: auto;   /* IMPORTANT: allow interaction/drags inside the HUD */
-      min-width: 140px;
+      pointer-events: auto;
+
+      /* Panel sizing */
+      min-width: 260px;
+      max-width: 420px;
+      max-height: 55vh;
+
+      /* Visual style */
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 55%), rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.8);
+      border-radius: 10px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7);
+
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #e5f0ff;
+
+      padding: 6px 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+
+      /* Smooth show/hide */
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 120ms ease-out, transform 120ms ease-out;
+    }
+
+    #hud-root.tp-hud-root.open {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     #hud-root.hidden {
       display: none;
+    }
+
+    /* Optional “dragging” visual hint */
+    #hud-root.tp-hud-root.is-dragging {
+      cursor: grabbing;
+      user-select: none;
+    }
+
+    /* Generic HUD content polish */
+    #hud-root.tp-hud-root .hud-section {
+      padding-top: 2px;
+      border-top: 1px solid rgba(51, 65, 85, 0.9);
+      margin-top: 2px;
+    }
+
+    #hud-root.tp-hud-root .hud-section:first-of-type {
+      border-top: 0;
+      margin-top: 0;
+    }
+
+    #hud-root.tp-hud-root .hud-label {
+      opacity: 0.7;
+      margin-right: 4px;
+    }
+
+    #hud-root.tp-hud-root .hud-value {
+      font-weight: 500;
+    }
+
+    #hud-root.tp-hud-root .hud-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    #hud-root.tp-hud-root .hud-row + .hud-row {
+      margin-top: 2px;
     }
     .overlay{display:flex}
     .overlay.hidden{display:none}
