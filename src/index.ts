@@ -916,15 +916,6 @@ export async function boot() {
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
 
-			// Display window: run display-only path and skip main boot wiring to avoid clashes/duplicates.
-			try {
-				const displayFlag = (typeof window !== 'undefined') ? (window as any).__TP_FORCE_DISPLAY : false;
-				if (displayFlag === true) {
-					try { console.info('[TP-BOOT] display mode: skipping main boot'); } catch {}
-					return;
-				}
-			} catch {}
-
 			// Session slice + preroll-driven orchestration
 			try { initSession(); } catch {}
 			try { initPrerollSession(); } catch {}
