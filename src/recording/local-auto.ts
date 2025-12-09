@@ -105,6 +105,9 @@
         try {
           const blob = new Blob(chunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'video/webm' });
           chunks = [];
+          try {
+            console.log('[core-recorder] about to save blob', { size: blob.size, type: blob.type });
+          } catch {}
           await saveBlob(blob, nowName());
         } catch (e) {
           try {
@@ -154,6 +157,9 @@
           const w = await fh.createWritable();
           await w.write(blob);
           await w.close();
+          try {
+            console.log('[core-recorder] saved file', name);
+          } catch {}
           return true;
         } catch {}
       }
