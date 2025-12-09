@@ -518,7 +518,11 @@ declare global {
 
 function installHudIfAvailable(): void {
 	try {
-		if ((window as any).__tpHud) return; // already installed (legacy or previous call)
+		// If the TS HUD is present or already initialized, skip legacy HUD install
+		if ((window as any).__tpHud || (window as any).__tpHudTsInited) return;
+		// If the TS HUD root exists in the DOM, prefer the TS HUD instead of legacy/debug HUD
+		if (typeof document !== 'undefined' && document.getElementById('hud-root')) return;
+		// already installed (legacy or previous call)
 		if (typeof (window as any).__tpInstallHUD === 'function') {
 			(window as any).__tpHud = (window as any).__tpInstallHUD({ hotkey: '~' });
 		}
