@@ -47,9 +47,14 @@ function readObsSettings(src?: unknown): { enabled: boolean; url: string; pass: 
     }
   }
 
+  const hasCfg = !!state?.configs?.obs;
+  if (!hasCfg) {
+    try { console.warn('[obs-wiring] No OBS settings yet; using defaults'); } catch {}
+  }
+
   const enabled = Boolean(state?.enabled?.obs);
-  const url = state?.configs?.obs?.url || DEFAULT_OBS_URL;
-  const pass = state?.configs?.obs?.password || '';
+  const url = (hasCfg && state?.configs?.obs?.url) || DEFAULT_OBS_URL;
+  const pass = (hasCfg && state?.configs?.obs?.password) || '';
 
   return { enabled, url, pass };
 }
