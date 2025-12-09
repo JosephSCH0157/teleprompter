@@ -87,18 +87,31 @@ export function createScrollModeRouter(
     }
   }
 
-  function syncAuto(next: ScrollMode): void {
-    const auto = deps.auto;
-    if (!auto) return;
+function syncAuto(next: ScrollMode): void {
+  const auto = deps.auto;
+  if (!auto) return;
 
-    const active = next === 'auto' || next === 'hybrid';
-    if (typeof auto.setEnabled === 'function') {
-      auto.setEnabled(active);
+  // Only allow auto-scroll once preroll has finished and the session
+  // explicitly wants auto-scroll on live.
+  const allowAuto = (() => {
+    try {
+      const phase = deps.store?.get?.('session.phase');
+      if (phase !== 'live') return false;
+      const allowed = deps.store?.get?.('session.scrollAutoOnLive');
+      return !!allowed;
+    } catch {
+      return false;
     }
-    if (active && typeof auto.setMode === 'function') {
-      auto.setMode(next);
-    }
+  })();
+
+  const active = allowAuto && (next === 'auto' || next === 'hybrid');
+  if (typeof auto.setEnabled === 'function') {
+    auto.setEnabled(active);
   }
+  if (active && typeof auto.setMode === 'function') {
+    auto.setMode(next);
+  }
+}
 
   function syncStep(next: ScrollMode): void {
     const step = deps.step;
