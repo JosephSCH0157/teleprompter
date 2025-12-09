@@ -117,6 +117,7 @@
       };
       mediaRecorder.onstop = async () => {
         try {
+          console.log('[core-recorder] mediaRecorder.onstop fired', { chunks: chunks.length });
           console.log('[core-recorder] mediaRecorder.onstop fired');
           const blob = new Blob(chunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'video/webm' });
           chunks = [];
@@ -165,6 +166,7 @@
 
   async function saveBlob(blob: Blob, name: string): Promise<boolean> {
     try {
+      console.log('[recording-dir] saveRecordingBlob start', { size: blob.size, name });
       await import('../fs/recording-dir');
       const dir = (window as any).__tpRecDir?.get?.() || null;
       if (dir && typeof dir.getFileHandle === 'function') {
@@ -184,7 +186,12 @@
           try { console.warn('[core-recorder] failed to write via FileSystemAccess', err); } catch {}
         }
       } else {
-        try { console.warn('[core-recorder] no recording directory handle available'); } catch {}
+        try {
+          console.warn(
+            '[core-recorder] no recording directory handle available; pick a folder in Settings → Recording/Media',
+          );
+        } catch {}
+        return false;
       }
     } catch {}
     try {
