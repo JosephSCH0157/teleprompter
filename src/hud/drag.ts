@@ -1,13 +1,16 @@
-const POS_KEY = 'tp_hud_pos_v1';
+// src/hud/drag.ts
+// Draggable HUD with click-suppression so dragging doesn't trigger collapse/toggle handlers.
 
 interface HudPos {
   left: number;
   top: number;
 }
 
-function loadSavedPos(): HudPos | null {
+const STORAGE_KEY = 'tp_hud_pos_v1';
+
+function loadPos(): HudPos | null {
   try {
-    const raw = localStorage.getItem(POS_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<HudPos>;
     if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
@@ -19,23 +22,64 @@ function loadSavedPos(): HudPos | null {
   return null;
 }
 
-function savePos(pos: HudPos): void {
+function savePos(root: HTMLElement): void {
   try {
-    localStorage.setItem(POS_KEY, JSON.stringify(pos));
+    const rect = root.getBoundingClientRect();
+    const pos: HudPos = { left: rect.left, top: rect.top };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pos));
   } catch {
     // ignore
   }
 }
 
-export function attachHudDrag(root: HTMLElement): void {
-  if ((root as any).__hudDragBound) return;
-  (root as any).__hudDragBound = true;
+function clampPos(root: HTMLElement, left: number, top: number): HudPos {
+  const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  const rect = root.getBoundingClientRect();
+  const w = rect.width || 320;
+  const h = rect.height || 180;
+  const margin = 8;
 
+  const minLeft = margin;
+  const maxLeft = Math.max(minLeft, vw - w - margin);
+  const minTop = margin;
+  const maxTop = Math.max(minTop, vh - h - margin);
+
+  return {
+    left: Math.min(maxLeft, Math.max(minLeft, left)),
+    top: Math.min(maxTop, Math.max(minTop, top)),
+  };
+}
+
+/**
+ * Attach drag behavior to the HUD root.
+ * - Uses [data-hud-drag-handle] as the handle if present, otherwise the root.
+ * - Persists position in localStorage.
+ * - Suppresses click events that immediately follow a drag so we don't
+ *   fire HUD "collapse/toggle" click handlers after a move.
+ */
+export function attachHudDrag(root: HTMLElement): void {
+  if (!root) return;
+
+  const handle =
+    root.querySelector<HTMLElement>('[data-hud-drag-handle]') || root;
+
+  let dragging = false;
+  let moved = false;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+  let lastDragTs = 0;
+
+  // Apply any saved position on first attach
   try {
-    const saved = loadSavedPos();
+    const saved = loadPos();
     if (saved) {
-      root.style.left = `${saved.left}px`;
-      root.style.top = `${saved.top}px`;
+      const clamped = clampPos(root, saved.left, saved.top);
+      root.style.position = 'fixed';
+      root.style.left = `${clamped.left}px`;
+      root.style.top = `${clamped.top}px`;
       root.style.right = 'auto';
       root.style.bottom = 'auto';
     }
@@ -43,87 +87,75 @@ export function attachHudDrag(root: HTMLElement): void {
     // ignore
   }
 
-  let dragging = false;
-  let startX = 0;
-  let startY = 0;
-  let startLeft = 0;
-  let startTop = 0;
-
-  const onMove = (e: MouseEvent) => {
-    if (!dragging) return;
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return; // left button only
     try { e.preventDefault(); } catch {}
+    dragging = true;
+    moved = false;
 
+    const rect = root.getBoundingClientRect();
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = rect.left;
+    startTop = rect.top;
+
+    root.classList.add('tp-hud-dragging');
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (!dragging) return;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
 
-    let nextLeft = startLeft + dx;
-    let nextTop = startTop + dy;
+    if (!moved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+      moved = true;
+    }
 
-    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    const rect = root.getBoundingClientRect();
-    const margin = 8;
-    const maxLeft = Math.max(margin, vw - rect.width - margin);
-    const maxTop = Math.max(margin, vh - rect.height - margin);
-
-    if (nextLeft < margin) nextLeft = margin;
-    if (nextLeft > maxLeft) nextLeft = maxLeft;
-    if (nextTop < margin) nextTop = margin;
-    if (nextTop > maxTop) nextTop = maxTop;
-
-    root.style.left = `${nextLeft}px`;
-    root.style.top = `${nextTop}px`;
+    const { left, top } = clampPos(root, startLeft + dx, startTop + dy);
+    root.style.position = 'fixed';
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
     root.style.right = 'auto';
     root.style.bottom = 'auto';
   };
 
-  const onUp = (e: MouseEvent) => {
+  const onMouseUp = () => {
     if (!dragging) return;
     dragging = false;
-    try { e.preventDefault(); } catch {}
-    try {
-      root.classList.remove('is-dragging');
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    } catch {}
-    try {
-      const rect = root.getBoundingClientRect();
-      savePos({ left: rect.left, top: rect.top });
-    } catch {
-      // ignore
+    root.classList.remove('tp-hud-dragging');
+
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+
+    if (moved) {
+      lastDragTs = Date.now();
+      savePos(root);
     }
   };
 
-  const onDown = (e: MouseEvent) => {
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement | null;
-    if (target && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)) return;
-    try { e.preventDefault(); } catch {}
-
-    const rect = root.getBoundingClientRect();
-    if (!root.style.left && !root.style.right) {
-      root.style.left = `${rect.left}px`;
-      root.style.top = `${rect.top}px`;
-      root.style.right = 'auto';
-      root.style.bottom = 'auto';
-    }
-
-    startX = e.clientX;
-    startY = e.clientY;
-    const currentRect = root.getBoundingClientRect();
-    startLeft = currentRect.left;
-    startTop = currentRect.top;
-
-    dragging = true;
-    root.classList.add('is-dragging');
-
-    try {
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    } catch {
-      // ignore
+  // Capture-phase click handler that eats clicks that come right after a drag.
+  const onClickCapture = (e: MouseEvent) => {
+    if (!lastDragTs) return;
+    const dt = Date.now() - lastDragTs;
+    if (dt >= 0 && dt < 250) {
+      // This click is just the tail of a drag: swallow it so the HUD
+      // doesn't interpret it as "collapse" or "toggle".
+      try {
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        e.preventDefault();
+      } catch {
+        // ignore
+      } finally {
+        lastDragTs = 0;
+      }
     }
   };
 
-  root.addEventListener('mousedown', onDown);
+  handle.addEventListener('mousedown', onMouseDown);
+  // Capture so we beat any internal HUD click handlers
+  root.addEventListener('click', onClickCapture, true);
 }
