@@ -43,6 +43,7 @@ import { initPrerollSession } from './features/preroll-session';
 import { initScrollSessionRouter } from './features/scroll-session';
 import { initRecordingSession } from './features/recording-session';
 import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
+import './recording/local-auto'; // ensure core recorder bridge is loaded
 
 import { bootstrap } from './boot/boot';
 
