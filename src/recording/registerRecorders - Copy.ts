@@ -32,22 +32,6 @@ async function ensureRecorderSurface() {
     // Load the TS core recorder shim (local-auto) which bridges itself to window.__tpRecording.
     await import('../recording/local-auto');
     rec = resolveLegacyRecorder();
-    if (!rec) {
-      // Fallback: bridge to start/stop globals if present.
-      const start = (window as any).startAutoRecord;
-      const stop = (window as any).stopAutoRecord;
-      if (typeof start === 'function' && typeof stop === 'function') {
-        rec = {
-          start,
-          stop,
-          isAvailable: () => true,
-        } as any;
-        try {
-          (window as any).__tpRecording = rec;
-          console.debug('[core-recorder] bridged to start/stop globals');
-        } catch {}
-      }
-    }
   } catch {
     // ignore
   }
@@ -61,7 +45,7 @@ function createCoreRecorder(): RecorderBackend {
     async isAvailable() {
       try {
         const recorder = await ensureRecorderSurface();
-        try { console.debug('[core-recorder] isAvailable', { ok: !!recorder, keys: recorder ? Object.keys(recorder) : [] }); } catch {}
+        try { console.debug('[core-recorder] isAvailable', !!recorder); } catch {}
         if (!recorder) return false;
         if (typeof recorder.isAvailable === 'function') {
           return coerceBoolean(recorder.isAvailable());
@@ -77,13 +61,13 @@ function createCoreRecorder(): RecorderBackend {
         try { console.warn('[core-recorder] start aborted: recorder surface unavailable'); } catch {}
         throw new Error('core recorder unavailable');
       }
-      try { console.debug('[core-recorder] start requested via registry', { hasStart: typeof recorder.start === 'function' }); } catch {}
+      try { console.debug('[core-recorder] start requested via registry'); } catch {}
       await recorder.start?.();
     },
     async stop() {
       const recorder = await ensureRecorderSurface();
       if (!recorder) return;
-      try { console.debug('[core-recorder] stop requested via registry', { hasStop: typeof recorder.stop === 'function' }); } catch {}
+      try { console.debug('[core-recorder] stop requested via registry'); } catch {}
       await recorder.stop?.();
     },
   };
