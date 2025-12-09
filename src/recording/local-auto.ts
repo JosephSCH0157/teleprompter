@@ -248,6 +248,19 @@
     (window as any).startAutoRecord = start;
     (window as any).stopAutoRecord = stop;
   } catch {}
+
+  // Bridge this implementation to the legacy __tpRecording surface so the recorder registry
+  // can see a "core" recorder even if no external bridge is present.
+  try {
+    if (!(window as any).__tpRecording) {
+      (window as any).__tpRecording = {
+        start,
+        stop,
+        isAvailable: () => true,
+      };
+      try { console.log('[core-recorder] bridged to __tpRecording'); } catch {}
+    }
+  } catch {}
 })();
 
 export {};
