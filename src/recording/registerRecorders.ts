@@ -25,13 +25,27 @@ function resolveLegacyRecorder() {
   }
 }
 
+async function ensureRecorderSurface() {
+  let rec = resolveLegacyRecorder();
+  if (rec) return rec;
+  try {
+    // Load the TS core recorder shim (local-auto) which bridges itself to window.__tpRecording.
+    await import('../recording/local-auto');
+    rec = resolveLegacyRecorder();
+  } catch {
+    // ignore
+  }
+  return rec;
+}
+
 function createCoreRecorder(): RecorderBackend {
   return {
     id: 'core',
     label: 'Bridge / local recorder',
     async isAvailable() {
       try {
-        const recorder = resolveLegacyRecorder();
+        const recorder = await ensureRecorderSurface();
+        try { console.debug('[core-recorder] isAvailable', !!recorder); } catch {}
         if (!recorder) return false;
         if (typeof recorder.isAvailable === 'function') {
           return coerceBoolean(recorder.isAvailable());
@@ -42,13 +56,18 @@ function createCoreRecorder(): RecorderBackend {
       }
     },
     async start() {
-      const recorder = resolveLegacyRecorder();
-      if (!recorder) throw new Error('core recorder unavailable');
+      const recorder = await ensureRecorderSurface();
+      if (!recorder) {
+        try { console.warn('[core-recorder] start aborted: recorder surface unavailable'); } catch {}
+        throw new Error('core recorder unavailable');
+      }
+      try { console.debug('[core-recorder] start requested via registry'); } catch {}
       await recorder.start?.();
     },
     async stop() {
-      const recorder = resolveLegacyRecorder();
+      const recorder = await ensureRecorderSurface();
       if (!recorder) return;
+      try { console.debug('[core-recorder] stop requested via registry'); } catch {}
       await recorder.stop?.();
     },
   };
