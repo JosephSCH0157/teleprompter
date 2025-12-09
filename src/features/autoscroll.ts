@@ -4,6 +4,7 @@ type ViewerGetter = () => HTMLElement | null;
 type AnyFn = (...args: any[]) => any;
 
 import { getScrollWriter } from '../scroll/scroll-writer';
+import { appStore } from '../state/app-store';
 
 function isDisplayWindow(): boolean {
   try {
@@ -60,7 +61,7 @@ let momentaryMult = 1;
 
 function allowAuto(): boolean {
   try {
-    const store = (window as any).__tpStore;
+    const store = (window as any).__tpStore || appStore;
     const phase = store?.get?.('session.phase');
     const allow = store?.get?.('session.scrollAutoOnLive');
     if (phase !== 'live') return false;
