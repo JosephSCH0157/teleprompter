@@ -185,7 +185,7 @@ function announceState(live: HTMLElement | null, prev: RecState, next: RecState)
   let msg = '';
   if (next === 'recording') {
     msg = 'Recording started';
-  } else if (prev === 'recording' && next !== 'recording') {
+  } else if (prev === 'recording') {
     msg = 'Recording stopped';
   } else if (next === 'armed') {
     msg = 'Recording armed';

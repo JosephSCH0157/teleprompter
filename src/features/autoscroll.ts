@@ -525,6 +525,13 @@ if (typeof window !== 'undefined' && !isDisplayWindow()) {
       const auto = initAutoScroll(() => viewer);
       if (toggle && speed) {
         auto.bindUI(toggle, speed);
+        try {
+          console.log('[auto-scroll] boot: wired', {
+            viewer: true,
+            toggleId: toggle.id,
+            speedId: speed.id,
+          });
+        } catch {}
       } else {
         try {
           console.warn('[auto-scroll] boot: missing toggle/speed; binding skipped', {
@@ -535,14 +542,6 @@ if (typeof window !== 'undefined' && !isDisplayWindow()) {
         } catch {}
       }
       try { (window as any).__tpAuto = auto; } catch {}
-
-      try {
-        console.log('[auto-scroll] boot: wired', {
-          viewer: true,
-          toggleId: toggle.id,
-          speedId: speed.id,
-        });
-      } catch {}
     } catch (e) {
       try { console.error('[auto-scroll] boot failed', e); } catch {}
     }
