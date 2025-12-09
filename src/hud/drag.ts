@@ -71,6 +71,7 @@ export function attachHudDrag(root: HTMLElement): void {
   let startLeft = 0;
   let startTop = 0;
   let lastDragTs = 0;
+  let suppressUntil = 0;
 
   // Apply any saved position on first attach
   try {
@@ -89,7 +90,10 @@ export function attachHudDrag(root: HTMLElement): void {
 
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return; // left button only
-    try { e.preventDefault(); } catch {}
+    try {
+      e.preventDefault();
+      e.stopPropagation();
+    } catch {}
     dragging = true;
     moved = false;
 
@@ -99,7 +103,7 @@ export function attachHudDrag(root: HTMLElement): void {
     startLeft = rect.left;
     startTop = rect.top;
 
-    root.classList.add('tp-hud-dragging');
+    root.classList.add('tp-hud-dragging', 'is-dragging');
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -125,37 +129,37 @@ export function attachHudDrag(root: HTMLElement): void {
   const onMouseUp = () => {
     if (!dragging) return;
     dragging = false;
-    root.classList.remove('tp-hud-dragging');
+    root.classList.remove('tp-hud-dragging', 'is-dragging');
 
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('mouseup', onMouseUp);
 
     if (moved) {
       lastDragTs = Date.now();
+      suppressUntil = lastDragTs + 350;
       savePos(root);
     }
   };
 
   // Capture-phase click handler that eats clicks that come right after a drag.
-  const onClickCapture = (e: MouseEvent) => {
-    if (!lastDragTs) return;
-    const dt = Date.now() - lastDragTs;
-    if (dt >= 0 && dt < 250) {
-      // This click is just the tail of a drag: swallow it so the HUD
-      // doesn't interpret it as "collapse" or "toggle".
-      try {
-        e.stopPropagation();
-        e.stopImmediatePropagation?.();
-        e.preventDefault();
-      } catch {
-        // ignore
-      } finally {
-        lastDragTs = 0;
-      }
+  const swallowIfNeeded = (e: MouseEvent) => {
+    const now = Date.now();
+    if (!lastDragTs || now > suppressUntil) return;
+    // This click is just the tail of a drag: swallow it so the HUD
+    // doesn't interpret it as "collapse" or "toggle".
+    try {
+      e.stopPropagation();
+      e.stopImmediatePropagation?.();
+      e.preventDefault();
+    } catch {
+      // ignore
+    } finally {
+      lastDragTs = 0;
     }
   };
 
   handle.addEventListener('mousedown', onMouseDown);
   // Capture so we beat any internal HUD click handlers
-  root.addEventListener('click', onClickCapture, true);
+  root.addEventListener('click', swallowIfNeeded, true);
+  window.addEventListener('click', swallowIfNeeded, true);
 }
