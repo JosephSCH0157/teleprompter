@@ -842,8 +842,7 @@ html.tp-present .present-exit { display: inline-flex; }
 }
 
 /* HUD scroll strip */
-.tp-hud-root,
-[data-tp-hud] {
+[data-tp-hud-strip] {
   position: fixed;
   right: 0;
   left: 0;
