@@ -91,11 +91,12 @@ export function createScrollModeRouter(
     const auto = deps.auto;
     if (!auto) return;
 
-    // Do not auto-start scrolling on mode change; session router will enable when appropriate.
-    if (next === 'auto' || next === 'hybrid') {
-      if (auto.setMode) auto.setMode(next);
-    } else {
-      auto.setEnabled(false);
+    const active = next === 'auto' || next === 'hybrid';
+    if (typeof auto.setEnabled === 'function') {
+      auto.setEnabled(active);
+    }
+    if (active && typeof auto.setMode === 'function') {
+      auto.setMode(next);
     }
   }
 
@@ -125,10 +126,10 @@ export function createScrollModeRouter(
     }
   }
 
-  function applyMode(next: ScrollMode): void {
-    if (mode === next) return;
+  function applyMode(next: ScrollMode, force = false): void {
+    if (!force && mode === next) return;
     mode = next;
-    log(`mode → ${mode}`);
+    log(`mode -> ${mode}`);
 
     syncAuto(next);
     syncStep(next);
@@ -161,6 +162,14 @@ export function createScrollModeRouter(
 
   function getMode(): ScrollMode {
     return mode;
+  }
+
+  // Apply initial mode once so controllers reflect the current state immediately.
+  try {
+    const seed = asMode(deps.store?.get?.(key), mode);
+    applyMode(seed, true);
+  } catch {
+    applyMode(mode, true);
   }
 
   function bindStore(): void {
@@ -200,3 +209,4 @@ export function createScrollModeRouter(
     dispose,
   };
 }
+
