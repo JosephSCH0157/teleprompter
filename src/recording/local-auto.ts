@@ -80,8 +80,14 @@
         typeof (window as any).wantsAutoRecord === 'function'
           ? !!(window as any).wantsAutoRecord()
           : !!((window as any).__tpStore && (window as any).__tpStore.get && (window as any).__tpStore.get('autoRecord'));
-      if (!armed) return;
-      if (mustSkipForMode()) return;
+      if (!armed) {
+        try { console.log('[core-recorder] start skipped: autoRecord disabled'); } catch {}
+        return;
+      }
+      if (mustSkipForMode()) {
+        try { console.log('[core-recorder] start skipped: rehearsal mode'); } catch {}
+        return;
+      }
 
       try {
         console.log('[core-recorder] start', {
@@ -106,10 +112,12 @@
       mediaRecorder.ondataavailable = (e: BlobEvent) => {
         try {
           if (e && e.data && e.data.size) chunks.push(e.data);
+          else console.log('[core-recorder] dataavailable empty chunk');
         } catch {}
       };
       mediaRecorder.onstop = async () => {
         try {
+          console.log('[core-recorder] mediaRecorder.onstop fired');
           const blob = new Blob(chunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'video/webm' });
           chunks = [];
           try {
@@ -172,7 +180,11 @@
             console.log('[core-recorder] saved file', name);
           } catch {}
           return true;
-        } catch {}
+        } catch (err) {
+          try { console.warn('[core-recorder] failed to write via FileSystemAccess', err); } catch {}
+        }
+      } else {
+        try { console.warn('[core-recorder] no recording directory handle available'); } catch {}
       }
     } catch {}
     try {
