@@ -1,5 +1,10 @@
 import type { RecorderStatus } from '../state/recorder-settings';
-import { getRecorderSettings, subscribeRecorderSettings, setObsStatus } from '../state/recorder-settings';
+import {
+  DEFAULT_OBS_URL,
+  getRecorderSettings,
+  subscribeRecorderSettings,
+  setObsStatus,
+} from '../state/recorder-settings';
 import * as rec from '../../recorders.js';
 
 function toast(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): void {
@@ -32,16 +37,32 @@ function mapObsTextToStatus(txt: string | undefined, ok: boolean): RecorderStatu
   return ok ? 'connected' : 'disconnected';
 }
 
-let lastEnabled = getRecorderSettings().enabled.obs;
-let lastUrl = getRecorderSettings().configs.obs.url;
-let lastPass = getRecorderSettings().configs.obs.password || '';
+function readObsSettings(src?: unknown): { enabled: boolean; url: string; pass: string } {
+  let state: any = src;
+  if (!state) {
+    try {
+      state = getRecorderSettings();
+    } catch {
+      state = null;
+    }
+  }
+
+  const enabled = Boolean(state?.enabled?.obs);
+  const url = state?.configs?.obs?.url || DEFAULT_OBS_URL;
+  const pass = state?.configs?.obs?.password || '';
+
+  return { enabled, url, pass };
+}
+
+const initial = readObsSettings();
+let lastEnabled = initial.enabled;
+let lastUrl = initial.url;
+let lastPass = initial.pass;
 
 async function applyObsStateFromSettings(): Promise<void> {
-  const { enabled, configs } = getRecorderSettings();
-  const url = configs.obs.url;
-  const pass = configs.obs.password || '';
+  const { enabled, url, pass } = readObsSettings();
 
-  if (!enabled.obs) {
+  if (!enabled) {
     if (lastEnabled) {
       try { await (rec as any).setEnabled?.(false); } catch {}
       setObsStatus('disconnected', null);
@@ -59,7 +80,7 @@ async function applyObsStateFromSettings(): Promise<void> {
   lastPass = pass;
 
   setObsStatus('connecting', null);
-  toast(`Connecting to OBS at ${url}…`, 'info');
+  toast(`Connecting to OBS at ${url}`, 'info');
 
   try {
     try { await (rec as any).reconfigure?.({ url, password: pass }); } catch {}
@@ -77,19 +98,19 @@ async function applyObsStateFromSettings(): Promise<void> {
 }
 
 export function initObsWiring(): void {
-  // Bridge status → SSOT
+  // Bridge status SSOT
   try {
     (rec as any).init?.({
-      getUrl: () => getRecorderSettings().configs.obs.url,
-      getPass: () => getRecorderSettings().configs.obs.password,
-      isEnabled: () => getRecorderSettings().enabled.obs,
+      getUrl: () => readObsSettings().url,
+      getPass: () => readObsSettings().pass,
+      isEnabled: () => readObsSettings().enabled,
       onStatus: (txt: string, ok: boolean) => {
         const status = mapObsTextToStatus(txt, ok);
         setObsStatus(status, status === 'error' ? txt : null);
         if (status === 'connected') {
           toast('OBS connected.', 'ok');
         } else if (status === 'connecting') {
-          toast('Connecting to OBS…', 'info');
+          toast('Connecting to OBS', 'info');
         } else if (status === 'error') {
           toast(txt || 'OBS connection error.', 'error');
         } else if (status === 'disconnected') {
@@ -100,11 +121,9 @@ export function initObsWiring(): void {
     });
   } catch {}
 
-  // SSOT intent changes → bridge (ignore status-only updates)
+  // SSOT intent changes bridge (ignore status-only updates)
   subscribeRecorderSettings((s) => {
-    const enabled = s.enabled.obs;
-    const url = s.configs.obs.url;
-    const pass = s.configs.obs.password || '';
+    const { enabled, url, pass } = readObsSettings(s);
     if (enabled === lastEnabled && url === lastUrl && pass === lastPass) {
       return; // only status changed; ignore to avoid loops
     }
