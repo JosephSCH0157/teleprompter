@@ -158,7 +158,7 @@ let applyingFromStore = false;
     }
   }
 
-  async function doStart(): Promise<boolean> {
+  async function doStart(attemptedFallback = false): Promise<boolean> {
     if (isStarting) return false;
     if (currentStream) return true;
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -197,8 +197,34 @@ let applyingFromStore = false;
       return true;
     } catch (err) {
       try { console.warn('[CAM] start failed', err); } catch {}
+
+      // Fallback: if a specific device is selected and it is busy, retry with default device once.
+      const name = (err as any)?.name || '';
+      const busy = name === 'NotReadableError' || name === 'TrackStartError';
+      if (!attemptedFallback && currentDeviceId && busy) {
+        try {
+          console.warn('[CAM] selected device busy, retrying with default');
+          currentDeviceId = null;
+          deviceSelects.forEach((sel) => { sel.value = ''; });
+          isStarting = false;
+          return await doStart(true);
+        } catch {
+          // ignore and fall through to error handling
+        }
+      }
+
       setButtons(false, false);
       updateChip('CamRTC: error');
+      try {
+        const toast = (window as any).toast;
+        if (typeof toast === 'function') {
+          const msg =
+            busy
+              ? 'Camera is in use by another app. Close it or pick "OBS Virtual Camera" in Settings → Recording.'
+              : 'Camera failed to start. Check permissions or pick another device.';
+          toast(msg, { type: 'warn' });
+        }
+      } catch {}
       return false;
     } finally {
       isStarting = false;
