@@ -26,32 +26,9 @@ function resolveLegacyRecorder() {
 }
 
 async function ensureRecorderSurface() {
-  let rec = resolveLegacyRecorder();
-  if (rec) return rec;
-  try {
-    // Load the TS core recorder shim (local-auto) which bridges itself to window.__tpRecording.
-    await import('../recording/local-auto');
-    rec = resolveLegacyRecorder();
-    if (!rec) {
-      // Fallback: bridge to start/stop globals if present.
-      const start = (window as any).startAutoRecord;
-      const stop = (window as any).stopAutoRecord;
-      if (typeof start === 'function' && typeof stop === 'function') {
-        rec = {
-          start,
-          stop,
-          isAvailable: () => true,
-        } as any;
-        try {
-          (window as any).__tpRecording = rec;
-          console.debug('[core-recorder] bridged to start/stop globals');
-        } catch {}
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return rec;
+  // local-auto is now statically imported from index.ts and bridges to window.__tpRecording.
+  // Just resolve the surface synchronously.
+  return resolveLegacyRecorder();
 }
 
 function createCoreRecorder(): RecorderBackend {
