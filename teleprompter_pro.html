@@ -237,7 +237,7 @@
     <span id="recPillLive" class="sr-only rec-pill-live"></span>
   </span>
   <!-- ASR chip + button will mount here -->
-    <button class="chip" id="presentBtn" data-action="present-toggle" data-tp-toggle-hud>Present Mode</button>
+    <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
@@ -551,7 +551,7 @@
   aria-hidden="true"
 >
   <!-- Present Mode exit button (visible only in Present Mode) -->
-  <button id="presentExitBtn" class="present-exit" type="button" data-tp-toggle-hud>Exit Present (Esc)</button>
+  <button id="presentExitBtn" class="present-exit" type="button">Exit Present (Esc)</button>
 </div>
 
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
@@ -711,13 +711,15 @@
           presentExit.className = 'present-exit';
           presentExit.textContent = 'Exit Present (Esc)';
           presentExit.setAttribute('aria-label', 'Exit Present Mode');
+          document.body.appendChild(presentExit);
+        }
+        if (presentExit) {
           presentExit.addEventListener('click', function (ev) {
             try { ev.preventDefault(); } catch (e) {}
             if (html.classList.contains('tp-present')) {
               html.classList.remove('tp-present');
             }
           });
-          document.body.appendChild(presentExit);
         }
       } catch (e) {
         try { console.warn('[overlay-fallback] failed', e); } catch (e2) {}

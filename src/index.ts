@@ -527,7 +527,16 @@ function installHudIfAvailable(): void {
 	}
 }
 
+function isDisplayContext(): boolean {
+	try {
+		return typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY === true;
+	} catch {
+		return false;
+	}
+}
+
 function _ensureHud(store: any): void {
+	if (isDisplayContext()) return;
 	try {
 		if ((window as any).__tpHudTsInited) return;
 		(window as any).__tpHudTsInited = true;
@@ -574,6 +583,7 @@ function wantsHud(): boolean {
 }
 
 function loadHudScriptIfNeeded(): void {
+	if (isDisplayContext()) return;
 	try {
 		if (typeof (window as any).__tpInstallHUD === 'function') return;
 		if (document.querySelector('script[data-hud-loader]')) return;
@@ -963,9 +973,11 @@ export async function boot() {
 								appStore.set?.('hudSupported', hasHudRoot);
 							} catch {}
           try { initOverlays(); } catch {}
-          try { initHudController(); } catch {}
-          try { wireHudToggle(); } catch {}
-          try { initHudController(); } catch {}
+          if (!isDisplayContext()) {
+            try { _ensureHud(appStore); } catch {}
+            try { initHudController(); } catch {}
+            try { wireHudToggle(); } catch {}
+          }
           try { initObsToggle(); } catch {}
           try { bindObsSettingsUI(); } catch {}
           try { initObsConnection(); } catch {}
