@@ -1095,7 +1095,7 @@ try {
         localStorage.getItem('tp_scroll_mode_v1') ||
         localStorage.getItem('tp_scroll_mode') ||
         localStorage.getItem('scrollMode') ||
-        'manual';
+        'off';
       router.setMode(initialMode as any);
       const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
       if (sel && Array.from(sel.options).some((o) => o.value === initialMode)) {
@@ -1114,17 +1114,22 @@ try {
       };
     } catch {}
   } catch {}
-  if (!(window as any).setScrollMode && !(window as any).__tpScrollMode) {
-    (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
-      try {
-        if (mode === 'auto') (window as any).startAutoScroll?.();
-        else (window as any).stopAutoScroll?.();
-      } catch {}
-      try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
-      if (mode === 'rehearsal') { rehearsal.enable(); step.disable(); }
-      else { rehearsal.disable(); if (mode === 'step') step.enable(); else step.disable(); }
-    };
-  }
+  // Always bridge legacy setScrollMode through the canonical helper + typed router.
+  (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
+    // 1) Update UI/brain/store via the canonical helper.
+    try { applyUiScrollMode(mode as any); } catch {}
+
+    // 2) Keep typed router (step/rehearsal/auto wiring) in sync.
+    try {
+      const r = (window as any).__tpScrollMode;
+      if (r && typeof r.setMode === 'function') {
+        r.setMode(mode);
+      }
+    } catch {}
+
+    // 3) Stop any legacy auto-catchup when mode changes.
+    try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
+  };
 } catch {}
 
 // Display Sync
