@@ -6,6 +6,7 @@ import {
   isSessionRecording,
   startSessionRecording,
   stopSessionRecording,
+  listRecorders,
 } from '../recording/recorderRegistry';
 
 function maybeStartOnLive(phase: SessionPhase): void {
@@ -29,6 +30,13 @@ function maybeStartOnLive(phase: SessionPhase): void {
         recordOnLive: shouldRecord,
         reason,
         obsEnabled,
+      });
+    } catch {}
+    try {
+      console.debug('[recording-session] startRecorders: intent', {
+        obsEnabled,
+        recordOnLive: shouldRecord,
+        registered: listRecorders().map((r) => r.id),
       });
     } catch {}
     startSessionRecording({ obsEnabled }).catch((err) => {
