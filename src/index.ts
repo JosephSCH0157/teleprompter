@@ -591,29 +591,11 @@ function _ensureHud(store: any): void {
 	}
 }
 
-function wantsHud(): boolean {
-	// Temporarily force HUD to load for troubleshooting
-	return true;
-}
+// Legacy HUD loader removed; TS HUD is canonical
 
 function loadHudScriptIfNeeded(): void {
 	if (isDisplayContext()) return;
-	try {
-		if (typeof (window as any).__tpInstallHUD === 'function') return;
-		if (document.querySelector('script[data-hud-loader]')) return;
-		if (!wantsHud()) return;
-		const s = document.createElement('script');
-		s.src = '/debug-tools.js';
-		s.async = true;
-		s.defer = true;
-		s.setAttribute('data-hud-loader', '1');
-		s.onload = () => {
-			try { installHudIfAvailable(); } catch {}
-		};
-		document.head.appendChild(s);
-	} catch {
-		// optional; ignore failures
-	}
+// Legacy debug HUD loader removed: TS HUD is canonical
 }
 
 const startPersistence = initOnce('persistence', initPersistence);
@@ -1279,18 +1261,7 @@ try {
 	if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', () => { boot(); });
 } catch {}
 
-// Fallback legacy HUD installer: tries to install HUD if legacy debug-tools.js is present
-function maybeInstallLegacyHud() {
-	try {
-		// If legacy HUD installer exists, call it with default hotkey
-		if (typeof (window as any).__tpInstallHUD === 'function') {
-			(window as any).__tpHud = (window as any).__tpInstallHUD({ hotkey: '~' });
-		}
-	} catch {
-		// HUD is optional; ignore failures
-	}
-}
-// (removed duplicate implementation of maybeInstallLegacyHud)
+// Legacy HUD installer removed; TS HUD is canonical
 
 
 
