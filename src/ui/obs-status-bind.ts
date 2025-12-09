@@ -1,23 +1,18 @@
 import type { RecorderStatus } from '../state/recorder-settings';
+import type { RecorderStatus } from '../state/recorder-settings';
 import { subscribeRecorderSettings } from '../state/recorder-settings';
 
-type CssState = 'obs-status-idle' | 'obs-status-busy' | 'obs-status-ok' | 'obs-status-error';
+type PillState = 'obs-pill--off' | 'obs-pill--pending' | 'obs-pill--on' | 'obs-pill--error';
 
-function computeLabel(enabled: boolean, status: RecorderStatus): { text: string; css: CssState } {
+function computeLabel(enabled: boolean, status: RecorderStatus): { text: string; css: PillState } {
   if (!enabled) {
-    return { text: 'disabled', css: 'obs-status-idle' };
+    return { text: 'Disabled', css: 'obs-pill--off' };
   }
 
-  switch (status) {
-    case 'connecting':
-      return { text: 'connecting…', css: 'obs-status-busy' };
-    case 'connected':
-      return { text: 'connected', css: 'obs-status-ok' };
-    case 'error':
-      return { text: 'error', css: 'obs-status-error' };
-    default:
-      return { text: 'disconnected', css: 'obs-status-idle' };
-  }
+  if (status === 'connecting') return { text: 'Connecting…', css: 'obs-pill--pending' };
+  if (status === 'connected') return { text: 'Connected', css: 'obs-pill--on' };
+  if (status === 'error') return { text: 'Error', css: 'obs-pill--error' };
+  return { text: 'Enabled', css: 'obs-pill--pending' };
 }
 
 export function bindObsStatusPills(): void {
@@ -52,8 +47,14 @@ export function bindObsStatusPills(): void {
     roots.forEach((el) => {
       const wantsPrefix = el.id === 'obsStatus' || el.classList.contains('chip');
       el.textContent = wantsPrefix ? `OBS: ${text}` : text;
-      el.classList?.remove?.('obs-status-idle', 'obs-status-busy', 'obs-status-ok', 'obs-status-error');
-      el.classList?.add?.(css);
+      const base = ['obs-pill'];
+      const existing = (el.className || '')
+        .split(' ')
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .filter((c) => !c.startsWith('obs-status-') && !c.startsWith('obs-pill--'));
+      base.push(...existing, css);
+      el.className = base.join(' ');
     });
   });
 }
