@@ -83,6 +83,13 @@
       if (!armed) return;
       if (mustSkipForMode()) return;
 
+      try {
+        console.log('[core-recorder] start', {
+          armed,
+          mode: (window as any).__tpStore?.get?.('scrollMode') || null,
+        });
+      } catch {}
+
       const v = await getVideoStream();
       const a = await getAudioStream();
       const mix = new MediaStream();
@@ -128,6 +135,7 @@
   }
 
   async function stop(): Promise<void> {
+    try { console.log('[core-recorder] stop called'); } catch {}
     if (!active) return;
     try {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
@@ -153,6 +161,9 @@
       const dir = (window as any).__tpRecDir?.get?.() || null;
       if (dir && typeof dir.getFileHandle === 'function') {
         try {
+          try {
+            console.log('[core-recorder] writing to directory', { name: (dir as any).name || '(handle)' });
+          } catch {}
           const fh = await dir.getFileHandle(name, { create: true });
           const w = await fh.createWritable();
           await w.write(blob);
