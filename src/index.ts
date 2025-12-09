@@ -815,18 +815,38 @@ try {
       }
     };
 
-    try { window.addEventListener('message', handleDisplayMessage); } catch {}
+  try { window.addEventListener('message', handleDisplayMessage); } catch {}
 
-    try {
-      installDisplaySync({
-        getText: () => '',
-        onApplyRemote: (txt) => applyText(txt),
-        getDisplayWindow: () => { try { return window.opener || null; } catch { return null; } },
-      });
-    } catch {}
+  try {
+    installDisplaySync({
+      getText: () => '',
+      onApplyRemote: (txt) => applyText(txt),
+      getDisplayWindow: () => { try { return window.opener || null; } catch { return null; } },
+    });
+  } catch {}
 
     try { window.addEventListener('resize', applyPadding); } catch {}
     try { document.addEventListener('DOMContentLoaded', applyPadding, { passive: true } as any); } catch {}
+  } else {
+    // Main window: mirror rendered script to the display window
+    try {
+      installDisplaySync({
+        getText: () => {
+          try {
+            const viewer = document.getElementById('viewer') as HTMLElement | null;
+            if (viewer && typeof viewer.innerHTML === 'string' && viewer.innerHTML.length) {
+              return viewer.innerHTML;
+            }
+            const raw = (window as any).__tpRawScript;
+            if (typeof raw === 'string' && raw.length) return raw;
+            const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
+            if (ed && typeof ed.value === 'string') return ed.value;
+          } catch {}
+          return '';
+        },
+        getDisplayWindow: () => { try { return (window as any).__tpDisplayWindow || null; } catch { return null; } },
+      });
+    } catch {}
   }
   // Expose folder injection helpers globally for smoke harness / fallback JS paths
   try { (window as any).ensureSettingsFolderControls = ensureSettingsFolderControls; } catch {}
