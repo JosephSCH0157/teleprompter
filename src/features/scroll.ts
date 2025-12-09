@@ -1,4 +1,4 @@
-import { createScrollModeRouter, type ScrollMode } from './scroll/mode-router';
+import { createScrollModeRouter } from './scroll/mode-router';
 import { getAutoScrollApi } from './scroll/auto-adapter';
 import { appStore } from '../state/app-store';
 function bindAutoControls() {

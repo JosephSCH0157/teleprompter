@@ -612,7 +612,6 @@ const startToasts      = initOnce('toasts',      initToasts);
 import './features/scroll/mode-chip';
 // Mapped Folder (scripts directory) binder
 import { installGlobalIngestListener, installScriptIngest } from './features/script-ingest';
-import { pickMappedFolder } from './fs/mapped-folder';
 import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';

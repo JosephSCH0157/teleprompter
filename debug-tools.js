@@ -104,7 +104,7 @@
       autoscroll: !!opts.autoscroll,
       maxRows: opts.maxRows,
     };
-    const metrics = {
+    const _metrics = {
       // commit metrics
       lastCommitAt: 0,
       commitIntervals: [], // ms buckets

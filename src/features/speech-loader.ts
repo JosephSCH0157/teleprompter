@@ -66,7 +66,7 @@ declare global {
   }
 }
 
-async function enumerateDevices(): Promise<MediaDeviceInfo[]> {
+async function _enumerateDevices(): Promise<MediaDeviceInfo[]> {
   try {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return [];
     return await navigator.mediaDevices.enumerateDevices();
@@ -75,11 +75,11 @@ async function enumerateDevices(): Promise<MediaDeviceInfo[]> {
   }
 }
 
-function hasKind(devs: MediaDeviceInfo[], kind: MediaDeviceKind): boolean {
+function _hasKind(devs: MediaDeviceInfo[], kind: MediaDeviceKind): boolean {
   return devs.some((d) => d.kind === kind);
 }
 
-function showToast(msg: string) {
+function _showToast(msg: string) {
   try { (window as any).toasts?.show?.(msg); } catch {}
 }
 
@@ -696,7 +696,7 @@ export function installSpeech(): void {
     } catch {}
   })();
 }
-async function maybeStartRecorders(): Promise<void> {
+async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }

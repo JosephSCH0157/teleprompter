@@ -77,7 +77,7 @@ export function initAsrFeature() {
   // Mode changes via store/router
   try {
     const store = (window as any).__tpStore || appStore;
-    store?.subscribe?.('scrollMode', (mode: string) => {
+    store?.subscribe?.('scrollMode', (_mode: string) => {
       if (!speechActive) return;
       wantASR() ? void start() : void stop();
     });

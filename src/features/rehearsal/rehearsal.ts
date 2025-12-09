@@ -286,10 +286,6 @@ function confirmExit(): boolean {
   }
 }
 
-function handleDropdownChange(e: Event): void {
-  // No-op: rehearsal now follows the store scrollMode via subscriptions.
-}
-
 interface SelectModeDetail {
   mode?: string;
 }

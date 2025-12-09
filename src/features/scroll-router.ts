@@ -1,7 +1,6 @@
 // @ts-nocheck
 export {};
 
-import { initOnce } from '../index';
 import { getScrollWriter } from '../scroll/scroll-writer';
 
 // src/asr/v2/adapters/vad.ts
