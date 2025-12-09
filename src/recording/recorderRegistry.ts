@@ -11,6 +11,18 @@ export interface RecorderBackend {
 const registry = new Map<RecorderId, RecorderBackend>();
 let sessionRecording = false;
 
+function emitRecordingState(recording: boolean): void {
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(
+        new CustomEvent('tp:recording:state', { detail: { recording: !!recording } }),
+      );
+    }
+  } catch {
+    // best-effort only
+  }
+}
+
 export function registerRecorder(backend: RecorderBackend): void {
   if (!backend) return;
   registry.set(backend.id, backend);
@@ -68,6 +80,7 @@ export async function startSessionRecording(opts: { obsEnabled: boolean }): Prom
   if (tasks.length === 0) return;
   await Promise.all(tasks);
   sessionRecording = true;
+  emitRecordingState(true);
 }
 
 export async function stopSessionRecording(): Promise<void> {
@@ -84,6 +97,7 @@ export async function stopSessionRecording(): Promise<void> {
 
   await Promise.all(tasks);
   sessionRecording = false;
+  emitRecordingState(false);
 }
 
 export function isSessionRecording(): boolean {

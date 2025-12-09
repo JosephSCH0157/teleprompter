@@ -232,6 +232,10 @@
   </div>
 <!-- Right-side controls wrapper (ASR chip mounts here) -->
 <div id="topbarRight" class="inl-1">
+  <span id="recPillHost" class="rec-pill-host" aria-live="polite" aria-atomic="true">
+    <span id="recPill" class="rec-pill rec-pill--main" aria-hidden="true">REC</span>
+    <span id="recPillLive" class="sr-only rec-pill-live"></span>
+  </span>
   <!-- ASR chip + button will mount here -->
     <button class="chip" id="presentBtn" data-action="present-toggle" data-tp-toggle-hud>Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
@@ -350,7 +354,6 @@
 <div class="row">
 <label>Pre-roll (sec)
           <input id="preroll" max="10" min="0" step="1" type="number" value="3"/>
-          <span id="recIndicator" class="rec-indicator hidden" title="Recording in progress">G�� REC</span>
 </label>
 </div>
 <div class="row">

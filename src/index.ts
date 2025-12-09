@@ -42,6 +42,7 @@ import './wiring/ui-binds';
 import { initPrerollSession } from './features/preroll-session';
 import { initScrollSessionRouter } from './features/scroll-session';
 import { initRecordingSession } from './features/recording-session';
+import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 
 import { bootstrap } from './boot/boot';
 
@@ -733,6 +734,7 @@ try {
 
   // Display window: receive script/scroll/typography updates and render locally
   if (__isDisplay) {
+    try { initRecPillsDisplay(); } catch {}
     const markerPct = (typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4);
     const getWrap = () => document.getElementById('wrap') as HTMLElement | null;
     const getScriptEl = () => document.getElementById('script') as HTMLElement | null;
@@ -973,6 +975,7 @@ export async function boot() {
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
           try { bindCameraUI(); } catch {}
+          try { initRecPillsMain(appStore); } catch {}
           // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
