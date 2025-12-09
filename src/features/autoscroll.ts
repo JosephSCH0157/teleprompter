@@ -58,6 +58,18 @@ let controller: AutoScrollController | null = null;
 // Momentary speed multiplier (Shift/Alt)
 let momentaryMult = 1;
 
+function allowAuto(): boolean {
+  try {
+    const store = (window as any).__tpStore;
+    const phase = store?.get?.('session.phase');
+    const allow = store?.get?.('session.scrollAutoOnLive');
+    if (phase !== 'live') return false;
+    return !!allow;
+  } catch {
+    return false;
+  }
+}
+
 // --- Helpers: base speed persistence (mirrors legacy behavior) -------------
 
 function vpBaseKey(): string {
@@ -291,10 +303,18 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
     (window as any).__tpAuto = {
       setEnabled: (on: boolean) => {
         try { console.log('[AUTO] setEnabled(from hotkey)', on); } catch {}
+        if (on && !allowAuto()) {
+          try { console.log('[AUTO] blocked: session not live or auto-on-live disabled'); } catch {}
+          return stop();
+        }
         return on ? start() : stop();
       },
       set: (on: boolean) => {
         try { console.log('[AUTO] set(from hotkey)', on); } catch {}
+        if (on && !allowAuto()) {
+          try { console.log('[AUTO] blocked: session not live or auto-on-live disabled'); } catch {}
+          return stop();
+        }
         return on ? start() : stop();
       },
       setSpeed: (px: number) => {
@@ -418,11 +438,19 @@ function installLazyAutoGlobal(): void {
       setEnabled: (on: boolean) => {
         const ctrl = initAutoscrollFeature();
         if (!ctrl) return;
+        if (on && !allowAuto()) {
+          try { console.log('[AUTO] blocked (lazy): session not live or auto-on-live disabled'); } catch {}
+          return ctrl.stop();
+        }
         return on ? ctrl.start() : ctrl.stop();
       },
       set: (on: boolean) => {
         const ctrl = initAutoscrollFeature();
         if (!ctrl) return;
+        if (on && !allowAuto()) {
+          try { console.log('[AUTO] blocked (lazy): session not live or auto-on-live disabled'); } catch {}
+          return ctrl.stop();
+        }
         return on ? ctrl.start() : ctrl.stop();
       },
       setSpeed: (px: number) => {
