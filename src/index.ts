@@ -1095,7 +1095,7 @@ try {
         localStorage.getItem('tp_scroll_mode_v1') ||
         localStorage.getItem('tp_scroll_mode') ||
         localStorage.getItem('scrollMode') ||
-        'auto';
+        'manual';
       router.setMode(initialMode as any);
       const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
       if (sel && Array.from(sel.options).some((o) => o.value === initialMode)) {

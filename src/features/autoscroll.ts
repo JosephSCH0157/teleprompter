@@ -217,6 +217,10 @@ function updateToggleLabel() {
 }
 
 function start() {
+  if (!allowAuto()) {
+    try { console.log('[AUTO] start blocked: session not live or auto-on-live disabled'); } catch {}
+    return;
+  }
   if (active) return;
 
   const viewer = getViewer?.();
