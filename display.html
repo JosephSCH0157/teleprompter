@@ -408,7 +408,7 @@
               // New display-sync snapshot via postMessage fallback
               if (d && d.kind === 'tp:script' && d.source === 'main') {
                 try { window.__lastDisplayHash = d.textHash || ''; } catch {}
-                const payload = (d.html || d.text || '') as string;
+                const payload = String(d.html || d.text || '');
                 if (payload) {
                   applyScriptSnapshot(payload);
                   applyScaled();
