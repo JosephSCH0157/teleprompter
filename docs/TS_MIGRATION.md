@@ -24,6 +24,7 @@ This document explains a staged approach to converting the monolithic legacy JS 
 
 4. Migrate UI slices last
    - Move settings panels, HUD, and toast manager into small TS modules.
+   - Recent moves: HUD is TS-first (`src/hud/*`), eggs are now typed (`src/ui/eggs.ts`), and legacy HUD/eggs live in `legacy/` (ignored by lint/build).
 
 ## CI & Build notes
 - `src/logic` is a composite project that emits `.d.ts` into `src/build-logic`. Build it first:

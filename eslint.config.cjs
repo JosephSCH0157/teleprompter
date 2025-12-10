@@ -9,6 +9,7 @@ module.exports = [
       'teleprompter_pro.js',
       'releases/**',
       '**/*.min.js',
+      'legacy/**',
       'recorders.js',
       'adapters/*.js',
       '**/*.map',
