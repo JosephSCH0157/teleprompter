@@ -14,6 +14,27 @@ export type IngestOpts = {
 let __ingestListening = false;
 let __docCh: BroadcastChannel | null = null;
 let __isRemote = false; // broadcast loop guard
+let __displayCh: BroadcastChannel | null = null;
+
+function broadcastToDisplay(text: string): void {
+  const payload = {
+    kind: 'tp:script',
+    source: 'main',
+    text,
+    textHash: String(text?.length || 0) + ':' + (text?.slice?.(0, 32) || ''),
+  };
+  // BroadcastChannel preferred
+  try {
+    if (!__displayCh) {
+      __displayCh = new BroadcastChannel('tp_display');
+    }
+    __displayCh?.postMessage(payload as any);
+  } catch (err) {
+    try { console.warn('[display-sync] postMessage on tp_display failed', err); } catch {}
+  }
+  // window.postMessage fallback (legacy display.html listener)
+  try { window.postMessage(payload as any, '*'); } catch {}
+}
 try {
   __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));
   if (__docCh) {
@@ -26,13 +47,14 @@ try {
             try {
               const snap = getCurrentScriptSnapshot();
               __docCh?.postMessage({ type: 'script', ...snap });
+              broadcastToDisplay(snap.text || '');
             } catch {}
             return;
           }
           if (m?.type === 'script' && typeof m.text === 'string') {
             __isRemote = true;
             try { (window as any).__tpCurrentName = m.name; } catch {}
-            try { renderScript(m.text); } catch {}
+            try { renderScript(m.text); broadcastToDisplay(m.text); } catch {}
             __isRemote = false;
           }
         } catch {}
@@ -230,6 +252,7 @@ export function installGlobalIngestListener() {
       // Broadcast to other windows only if local origin
       if (!__isRemote) {
         try { __docCh?.postMessage({ type: 'script', name, text }); } catch {}
+        try { broadcastToDisplay(text); } catch {}
       }
 
       // Signals for any legacy listeners
