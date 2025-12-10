@@ -759,26 +759,49 @@ function updateLegend() {
     const legend = document.getElementById('legend');
     if (!legend) return;
     const ROLES = loadRoles();
-    legend.innerHTML = '';
+    // Build a snapshot of the legend so we only touch the DOM when something changes
+    const resolved: Record<string, { color: string; name: string }> = {};
+    const snapParts: string[] = [];
     for (const key of ROLE_KEYS) {
       const item = ROLES[key];
+
+      let color = item.color;
+      try {
+        const colorInput = document.getElementById('color-' + key) as HTMLInputElement | null;
+        const c = (colorInput && 'value' in colorInput) ? String(colorInput.value || '').trim() : '';
+        if (c) color = c;
+      } catch {}
+
+      let nameText = key.toUpperCase();
+      try {
+        const nameInput = document.getElementById('name-' + key) as HTMLInputElement | null;
+        const v = (nameInput && 'value' in nameInput) ? String(nameInput.value || '').trim() : '';
+        if (v) nameText = v;
+      } catch {}
+
+      resolved[key] = { color, name: nameText };
+      snapParts.push(`${key}:${color}:${nameText}`);
+    }
+
+    const snapshot = snapParts.join('|');
+    const rootAny = document.documentElement as any;
+    if (rootAny.__tpLegendSnapshot === snapshot) {
+      return;
+    }
+    rootAny.__tpLegendSnapshot = snapshot;
+
+    legend.innerHTML = '';
+    for (const key of ROLE_KEYS) {
       const tag = document.createElement('span');
       tag.className = 'tag';
+
       const dot = document.createElement('span');
       dot.className = 'dot';
-      // Prefer live color input value if provided; else stored default
-      try {
-        const colorInput = document.getElementById('color-' + key);
-        const c = (colorInput && 'value' in colorInput) ? String(colorInput.value || '').trim() : '';
-        dot.style.background = c || item.color;
-      } catch { dot.style.background = item.color; }
+      dot.style.background = resolved[key].color;
+
       const name = document.createElement('span');
-      // Prefer live input value if provided; else show canonical tag (S1/S2/G1/G2)
-      try {
-        const input = document.getElementById('name-' + key);
-        const val = (input && 'value' in input) ? String(input.value || '').trim() : '';
-        name.textContent = val || key.toUpperCase();
-      } catch { name.textContent = key.toUpperCase(); }
+      name.textContent = resolved[key].name;
+
       tag.appendChild(dot);
       tag.appendChild(name);
       legend.appendChild(tag);
@@ -804,10 +827,10 @@ function updateLegend() {
       const getName = (role, fallback) => {
         try { const inp = document.getElementById('name-' + role); const v = (inp && 'value' in inp) ? String(inp.value||'').trim() : ''; return v || fallback; } catch { return fallback; }
       };
-      const s1Color = getColor('s1', ROLES.s1.color);
-      const s2Color = getColor('s2', ROLES.s2.color);
-      const s1Name  = getName('s1', 'S1');
-      const s2Name  = getName('s2', 'S2');
+      const s1Color = getColor('s1', resolved.s1?.color || ROLES.s1.color);
+      const s2Color = getColor('s2', resolved.s2?.color || ROLES.s2.color);
+      const s1Name  = getName('s1', resolved.s1?.name || 'S1');
+      const s2Name  = getName('s2', resolved.s2?.name || 'S2');
       if (__bc) {
         try { __bc.postMessage({ type: 'SPEAKER_COLORS', s1: s1Color, s2: s2Color }); } catch {}
         try { __bc.postMessage({ type: 'SPEAKER_NAMES', s1Name, s2Name }); } catch {}
