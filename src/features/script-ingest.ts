@@ -19,7 +19,7 @@ const __isDisplayCtx = (() => {
   try { return (window as any).__TP_FORCE_DISPLAY === true; } catch { return false; }
 })();
 
-function broadcastToDisplay(text: string): void {
+export function broadcastToDisplay(text: string): void {
   // Display window is receive-only; avoid echoing back to main
   if (__isDisplayCtx) return;
   let html = '';

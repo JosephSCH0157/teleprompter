@@ -2,6 +2,7 @@
 // Sidebar now mirrors the ScriptStore directly (mapped entries) and triggers loads via the store.
 import { debugLog } from '../env/logging';
 import { ScriptStore } from '../features/scripts-store';
+import { broadcastToDisplay } from '../features/script-ingest';
 
 declare global {
   interface Window {
@@ -98,6 +99,8 @@ async function handleLoadClick(): Promise<void> {
     if (typeof (window as any).renderScript === 'function') {
       try { (window as any).renderScript(text); } catch {}
     }
+    // Explicitly mirror to display for sidebar loads
+    try { broadcastToDisplay(text); } catch {}
     // Still emit tp:script-load for any listeners that rely on the event path
     try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text } })); } catch {}
   } catch {}
