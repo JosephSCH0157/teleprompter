@@ -115,6 +115,8 @@ function installScriptEditor(): void {
     if (!t) return;
     if (t.id === 'scriptSelect') {
       syncSidebarFromSettings();
+    } else if (t.id === 'scriptSelectSidebar') {
+      forwardSidebarChange();
     }
   });
 
