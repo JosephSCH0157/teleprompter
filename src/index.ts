@@ -786,37 +786,17 @@ try {
 
     const handleDisplayMessage = (ev: MessageEvent<any>) => {
       const m = ev?.data;
-      if (!m) return;
-      // Render payloads from sendToDisplay (render/scroll/typography) or display-sync snapshots
-      if (m.type === 'render') {
-        const html = typeof m.html === 'string' ? m.html : '';
-        const text = typeof m.text === 'string' ? m.text : '';
-        if (html) { applyHtml(html, { fontSize: m.fontSize, lineHeight: m.lineHeight, resetScroll: true }); return; }
-        if (text) { applyText(text, { fontSize: m.fontSize, lineHeight: m.lineHeight }); return; }
-      }
-      if (m.type === 'script' && typeof m.text === 'string') {
-        // script-ingest broadcast snapshot
-        applyText(m.text);
-        return;
-      }
+      // Ignore non-objects / noise early
+      if (!m || typeof m !== 'object') return;
+
+      // Only handle the two script payload shapes; everything else is ignored
       if (m.kind === 'tp:script' && m.source === 'main' && typeof m.text === 'string') {
-        // display-sync snapshots carry pre-rendered HTML; render directly
         applyHtml(m.text);
         return;
       }
-      if (m.type === 'scroll') {
-        const wrap = getWrap();
-        if (!wrap) return;
-        if (typeof m.top === 'number') wrap.scrollTop = m.top;
-        else if (typeof m.ratio === 'number') {
-          const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-          wrap.scrollTop = m.ratio * max;
-        }
-        return;
-      }
-      if (m.type === 'typography') {
-        applyTypography(m.fontSize, m.lineHeight);
-        applyPadding();
+
+      if (m.type === 'script' && typeof m.text === 'string') {
+        applyText(m.text);
         return;
       }
     };
