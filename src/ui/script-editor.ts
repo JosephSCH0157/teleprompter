@@ -40,15 +40,11 @@ export function syncSidebarFromSettings(): void {
   }
 
   const prev = select.value;
-  select.innerHTML = '';
-  for (const entry of entries) {
-    const opt = document.createElement('option') as HTMLOptionElement & { __handle?: FileSystemFileHandle; __file?: File };
-    opt.value = entry.id;
-    opt.textContent = entry.title || entry.id;
-    if ((entry as any).handle) opt.__handle = (entry as any).handle;
-    if ((entry as any).file) opt.__file = (entry as any).file;
-    select.appendChild(opt);
-  }
+  // Simple rebuild via HTML to avoid any weird DOM issues
+  const html = entries
+    .map((entry) => `<option value="${entry.id}">${entry.title || entry.id}</option>`)
+    .join('');
+  select.innerHTML = html;
   if (!prev || !entries.some((e) => e.id === prev)) {
     select.value = select.options.length ? select.options[0].value : '';
   } else {
