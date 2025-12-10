@@ -15,8 +15,13 @@ let __ingestListening = false;
 let __docCh: BroadcastChannel | null = null;
 let __isRemote = false; // broadcast loop guard
 let __displayCh: BroadcastChannel | null = null;
+const __isDisplayCtx = (() => {
+  try { return (window as any).__TP_FORCE_DISPLAY === true; } catch { return false; }
+})();
 
 function broadcastToDisplay(text: string): void {
+  // Display window is receive-only; avoid echoing back to main
+  if (__isDisplayCtx) return;
   let html = '';
   try {
     const scriptEl =
@@ -55,6 +60,7 @@ try {
           const m = ev.data;
           // Respond to display hydration request
           if (m?.type === 'hello' && m.client === 'display') {
+            if (__isDisplayCtx) return; // display should not echo hello
             try {
               const snap = getCurrentScriptSnapshot();
               __docCh?.postMessage({ type: 'script', ...snap });
