@@ -39,6 +39,7 @@ import { bindObsStatusPills } from './ui/obs-status-bind';
 import { initObsToggle } from './ui/obs-toggle';
 import { initOverlays } from './ui/overlays';
 import { wireRecordButtons } from './ui/recordButtons';
+import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
 import { initPrerollSession } from './features/preroll-session';
 import { initScrollSessionRouter } from './features/scroll-session';
@@ -978,6 +979,11 @@ export async function boot() {
           try { bindMicUI(); } catch {}
           try { bindCameraUI(); } catch {}
           try { initRecPillsMain(appStore); } catch {}
+          if (!isDisplayContext()) {
+            try { installEasterEggs(); } catch {}
+            try { installCKEgg(); } catch {}
+            try { installAboutPopover(); } catch {}
+          }
           // Load debug tools dynamically in dev only (non-blocking)
 					try {
 						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
