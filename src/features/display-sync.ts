@@ -48,6 +48,7 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   let chan: BroadcastChannel | null = null;
   const isRequester = typeof opts.onApplyRemote === 'function';
   const isResponder = !isRequester;
+  const isDisplay = typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY === true;
   try {
     chan = new BroadcastChannel(chanName);
   } catch (err) {
@@ -64,6 +65,8 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
         return;
       }
       if (!msg || msg.kind !== 'tp:script') return;
+      // Display should only hydrate from main-origin snapshots
+      if (isDisplay && msg.source && msg.source !== 'main') return;
       if (typeof msg.text === 'string' && typeof opts.onApplyRemote === 'function') {
         opts.onApplyRemote(msg.text);
       }
@@ -73,6 +76,7 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   try { chan?.addEventListener('message', onMsg as any); } catch {}
 
   const push = () => {
+    if (isDisplay) return; // display is receive-only to avoid loops
     try {
       const text = opts.getText?.() || '';
       const anchor = opts.getAnchorRatio?.();
@@ -88,12 +92,14 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
     } catch {}
   };
 
-  try { window.addEventListener('tp:scriptChanged', push as any); } catch {}
-  try { push(); } catch {}
+  if (!isDisplay) {
+    try { window.addEventListener('tp:scriptChanged', push as any); } catch {}
+    try { push(); } catch {}
+  }
 
   // Display side: immediately request the latest snapshot so late-opened display windows hydrate
   try {
-    if (isRequester) {
+    if (isRequester && isDisplay) {
       chan?.postMessage({ kind: 'tp:script:request', from: 'display', ts: Date.now() } as any);
     }
   } catch {}
