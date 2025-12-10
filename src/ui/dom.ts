@@ -882,8 +882,10 @@ export function bindStaticDom() {
       if (btn && body && !btn.dataset.wired) {
         btn.dataset.wired = '1';
         const KEY = 'tp_speakers_visible';
-        const apply = (vis) => {
+        let vis = true;
+        const apply = (next: boolean) => {
           try {
+            vis = !!next;
             body.style.display = vis ? '' : 'none';
             btn.textContent = vis ? 'Hide' : 'Show';
             btn.setAttribute('aria-expanded', vis ? 'true' : 'false');
@@ -891,9 +893,9 @@ export function bindStaticDom() {
           } catch {}
         };
         // initial
-        let vis = true; try { vis = (localStorage.getItem(KEY) !== '0'); } catch {}
+        try { vis = (localStorage.getItem(KEY) !== '0'); } catch {}
         apply(vis);
-        btn.addEventListener('click', () => apply(!(body.style.display === '' || body.style.display === 'block' || body.style.display === null)));
+        btn.addEventListener('click', () => apply(!vis));
       }
     } catch {}
 
