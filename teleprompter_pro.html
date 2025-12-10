@@ -42,6 +42,13 @@
   <!-- Preload Mammoth so DOCX importer always sees window.mammoth -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
+  <script>
+    // Supabase config for Forge auth/profile (public anon key is safe to expose)
+    // TODO: replace with your real project URL and anon key.
+    window.__forgeSupabaseUrl = 'https://YOUR-PROJECT-ID.supabase.co';
+    window.__forgeSupabaseAnonKey = 'YOUR_ANON_KEY_HERE';
+  </script>
+
   <!-- TS bundle preload + entry (single brain) -->
   <link id="tp-dist-preload" rel="modulepreload" href="./dist/index.js?v=dev" as="script">
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->

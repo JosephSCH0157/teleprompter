@@ -46,6 +46,12 @@
       <p id="error" aria-live="polite"></p>
     </main>
 
+    <script>
+      // Supabase config for Forge auth/profile (public anon key is safe to expose)
+      // TODO: replace with your real project URL and anon key.
+      window.__forgeSupabaseUrl = 'https://YOUR-PROJECT-ID.supabase.co';
+      window.__forgeSupabaseAnonKey = 'YOUR_ANON_KEY_HERE';
+    </script>
     <!-- Adjust path if your bundler outputs somewhere else -->
     <script type="module" src="/dist/forge/login.js"></script>
   </body>
