@@ -286,34 +286,39 @@
 <div class="topbar">
   <strong>Anvil - Teleprompter</strong>
   <span id="appVersion" class="version-badge" aria-label="App version">v1.7.6</span>
-    <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
-    <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
-    <!-- Mic level + calibration -->
-    <div class="mic-block">
-      <span class="topbar-label">Mic level</span>
+  <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
+  <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+  <!-- Mic level + calibration -->
+  <div class="mic-block">
+    <span class="topbar-label">Mic level</span>
     <div id="dbMeterTop" title="Input level"></div>
     <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
   </div>
-<!-- Right-side controls wrapper (ASR chip mounts here) -->
-<div id="topbarRight" class="inl-1">
-  <span id="recPillHost" class="rec-pill-host" aria-live="polite" aria-atomic="true">
-    <span id="recPill" class="rec-pill rec-pill--main" aria-hidden="true">REC</span>
-    <span id="recPillLive" class="sr-only rec-pill-live"></span>
-  </span>
-  <!-- ASR chip + button will mount here -->
+
+  <!-- Right-side controls wrapper (ASR chip mounts here) -->
+  <div id="topbarRight" class="inl-1">
+    <span id="recPillHost" class="rec-pill-host" aria-live="polite" aria-atomic="true">
+      <span id="recPill" class="rec-pill rec-pill--main" aria-hidden="true">REC</span>
+      <span id="recPillLive" class="sr-only rec-pill-live"></span>
+    </span>
+    <!-- ASR chip + button will mount here -->
     <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
-  <span id="selfChecksChip" class="chip chip-muted dev-only">
-    Self-checks: <strong id="selfChecksText">6/6 OK</strong> <em>(click)</em>
-  </span>
-  
-</div>
-<nav class="page-tabs" id="pageTabs">
-  <button class="page-tab is-active" data-tp-page="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
-</nav>
-<div class="legend" id="legend"></div>
+    <span id="selfChecksChip" class="chip chip-muted dev-only">
+      Self-checks: <strong id="selfChecksText">6/6 OK</strong> <em>(click)</em>
+    </span>
+  </div>
+
+  <nav class="page-tabs" id="pageTabs">
+    <button class="page-tab is-active" data-tp-page="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
+  </nav>
+
+  <div class="legend" id="legend"></div>
+  <div id="scrollModeChip" data-role="scroll-mode-chip"></div>
+  <span id="obsChip" class="chip"></span>
+  <div data-step-ui="1" style="display:none;"></div>
 </div>
 <script>
   (function(){
