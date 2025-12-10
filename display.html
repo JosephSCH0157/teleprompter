@@ -297,7 +297,7 @@
                 const looksRendered = /<div[^>]+class=["']line\b/i.test(source);
 
                 if (!looksRendered && window.opener && typeof window.opener.renderScript === 'function') {
-                  const o = window.opener as any;
+                  const o = window.opener;
                   const prev = o.__TP_SUPPRESS_DISPLAY_PUSH;
                   o.__TP_SUPPRESS_DISPLAY_PUSH = true;
                   o.renderScript(source, scriptEl);
