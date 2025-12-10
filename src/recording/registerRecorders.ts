@@ -25,10 +25,17 @@ function resolveLegacyRecorder() {
   }
 }
 
-async function ensureRecorderSurface() {
-  // local-auto is now statically imported from index.ts and bridges to window.__tpRecording.
-  // Just resolve the surface synchronously.
-  return resolveLegacyRecorder();
+function ensureRecorderSurface() {
+  // local-auto is now statically imported from index.ts and bridges to window.__tpRecording/__tpLocalRecorder.
+  // Just resolve the surface synchronously from the available globals.
+  try {
+    const api = (window as any).__tpLocalRecorder || (window as any).__tpRecording || (window as any).__recorder;
+    if (!api) return null;
+    if (typeof api.start !== 'function' || typeof api.stop !== 'function') return null;
+    return api;
+  } catch {
+    return null;
+  }
 }
 
 function createCoreRecorder(): RecorderBackend {
