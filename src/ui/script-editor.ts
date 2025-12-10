@@ -4,6 +4,7 @@
 // - #scriptSelectSidebar mirrors its options/selection.
 // - #scriptLoadBtn re-fires change on the active select.
 // No ScriptStore/tp:script-load involvement here.
+import { debugLog } from '../env/logging';
 
 declare global {
   interface Window {
@@ -11,43 +12,65 @@ declare global {
   }
 }
 
-function getSettingsSelect(): HTMLSelectElement | null {
-  return document.getElementById('scriptSelect') as HTMLSelectElement | null;
+const SETTINGS_ID = 'scriptSelect';
+const SIDEBAR_ID = 'scriptSelectSidebar';
+
+function getSelect(id: string): HTMLSelectElement | null {
+  return document.getElementById(id) as HTMLSelectElement | null;
 }
 
-function getSidebarSelect(): HTMLSelectElement | null {
-  return document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-}
+function getSettingsSelect(): HTMLSelectElement | null { return getSelect(SETTINGS_ID); }
+function getSidebarSelect(): HTMLSelectElement | null { return getSelect(SIDEBAR_ID); }
 
 let isSyncingScriptsSelect = false;
 
 function syncSidebarFromSettings(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
-  if (!settings || !sidebar) return;
+  if (!sidebar) {
+    debugLog('[SCRIPT-EDITOR] sidebar select missing, cannot sync');
+    return;
+  }
+  if (!settings || settings.options.length === 0) {
+    debugLog('[SCRIPT-EDITOR] settings select empty, clearing sidebar');
+    sidebar.innerHTML = '';
+    sidebar.setAttribute('aria-busy', 'false');
+    return;
+  }
 
   if (isSyncingScriptsSelect) return;
   isSyncingScriptsSelect = true;
   try {
-    // If sidebar lost its options, rebuild from settings to keep in lockstep
-    if (sidebar.options.length !== settings.options.length) {
-      sidebar.innerHTML = settings.innerHTML;
-      // Rehydrate handle/file metadata if present
-      const sOpts = Array.from(settings.options);
-      const tOpts = Array.from(sidebar.options);
-      for (let i = 0; i < sOpts.length; i += 1) {
-        const src = sOpts[i] as any;
-        const dst = tOpts[i] as any;
-        if (!src || !dst) continue;
-        if (src.__handle) dst.__handle = src.__handle;
-        if (src.__file) dst.__file = src.__file;
+    const sOpts = Array.from(settings.options).map((o) => ({
+      text: o.textContent || '',
+      value: o.value,
+      handle: (o as any).__handle,
+      file: (o as any).__file,
+    }));
+    const sbOpts = Array.from(sidebar.options).map((o) => ({
+      text: o.textContent || '',
+      value: o.value,
+    }));
+
+    const needsRebuild =
+      sOpts.length !== sbOpts.length ||
+      sOpts.some((o, i) => !sbOpts[i] || o.value !== sbOpts[i].value || o.text !== sbOpts[i].text);
+
+    if (needsRebuild) {
+      debugLog('[SCRIPT-EDITOR] sidebar desynced from settings, rebuilding (S=%d, SB=%d)', sOpts.length, sbOpts.length);
+      sidebar.innerHTML = '';
+      for (const opt of sOpts) {
+        const o = new Option(opt.text, opt.value);
+        (o as any).__handle = opt.handle;
+        (o as any).__file = opt.file;
+        sidebar.appendChild(o);
       }
     }
+
     sidebar.disabled = settings.disabled;
     sidebar.value = settings.value;
-    if (sidebar.selectedIndex !== settings.selectedIndex) {
-      sidebar.selectedIndex = settings.selectedIndex;
-    }
+    sidebar.selectedIndex = settings.selectedIndex;
+    sidebar.setAttribute('aria-busy', 'false');
   } finally {
     isSyncingScriptsSelect = false;
   }
@@ -64,12 +87,12 @@ function forwardSidebarChange(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
   if (!settings || !sidebar) return;
+  if (isSyncingScriptsSelect) return;
   if (!sidebar.value) {
-    // If the sidebar is empty/out-of-sync, resync from settings and bail
+    debugLog('[SCRIPT-EDITOR] sidebar value empty on change, forcing resync from settings');
     syncSidebarFromSettings();
     return;
   }
-  if (isSyncingScriptsSelect) return;
   if (sidebar.value === settings.value) return;
   isSyncingScriptsSelect = true;
   try {
@@ -90,8 +113,8 @@ function handleLoadClick(): void {
   const sidebar = getSidebarSelect();
   const settings = getSettingsSelect();
   const active =
-    (sidebar && sidebar.options.length > 0) ? sidebar :
-    (settings && settings.options.length > 0) ? settings :
+    (settings && settings.options.length > 0 && settings.value) ? settings :
+    (sidebar && sidebar.options.length > 0 && sidebar.value) ? sidebar :
     null;
   try {
     console.debug('[SCRIPT-EDITOR] Load click', {
