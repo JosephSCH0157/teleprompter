@@ -31,12 +31,16 @@ function syncSidebarFromSettings(): void {
   try {
     // If sidebar lost its options, rebuild from settings to keep in lockstep
     if (sidebar.options.length !== settings.options.length) {
-      sidebar.innerHTML = '';
-      for (const opt of Array.from(settings.options)) {
-        const clone = new Option(opt.textContent || '', opt.value, opt.defaultSelected, opt.selected);
-        (clone as any).__handle = (opt as any).__handle;
-        (clone as any).__file = (opt as any).__file;
-        sidebar.appendChild(clone);
+      sidebar.innerHTML = settings.innerHTML;
+      // Rehydrate handle/file metadata if present
+      const sOpts = Array.from(settings.options);
+      const tOpts = Array.from(sidebar.options);
+      for (let i = 0; i < sOpts.length; i += 1) {
+        const src = sOpts[i] as any;
+        const dst = tOpts[i] as any;
+        if (!src || !dst) continue;
+        if (src.__handle) dst.__handle = src.__handle;
+        if (src.__file) dst.__file = src.__file;
       }
     }
     sidebar.disabled = settings.disabled;
