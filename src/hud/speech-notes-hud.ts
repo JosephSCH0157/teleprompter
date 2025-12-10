@@ -277,7 +277,15 @@ export function initSpeechNotesHud(options: SpeechNotesHudOptions = {}): SpeechN
   if (clearBtn) clearBtn.onclick = clear;
   if (copyBtn) copyBtn.onclick = copyAll;
   if (exportBtn) exportBtn.onclick = exportTxt;
-  if (closeBtn) closeBtn.onclick = () => panel.remove();
+  if (closeBtn) closeBtn.onclick = () => {
+    // Hide the entire HUD root instead of leaving a collapsed bar.
+    const hideHud = (window as any).HUD?.hide;
+    if (typeof hideHud === 'function') {
+      try { hideHud(); return; } catch {}
+    }
+    // Fallback: hide this panel completely
+    try { panel.style.display = 'none'; } catch {}
+  };
   if (finalsChk) finalsChk.onchange = render;
 
   // --- Event wiring ---

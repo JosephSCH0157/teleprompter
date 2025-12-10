@@ -67,7 +67,21 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
   const recStats = initRecStatsHud({ root, bus, store });
   const scrollStrip = initScrollStripHud({ root });
 
+  const showHudRoot = () => {
+    try {
+      root.style.display = '';
+      root.removeAttribute('aria-hidden');
+    } catch {}
+  };
+  const hideHudRoot = () => {
+    try {
+      root.style.display = 'none';
+      root.setAttribute('aria-hidden', 'true');
+    } catch {}
+  };
+
   function destroy() {
+    hideHudRoot();
     speechNotes?.destroy?.();
     asrStats?.destroy?.();
     recStats?.destroy?.();
@@ -75,11 +89,16 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
   }
 
   try {
-    (window as any).__tpHud = { bus, root };
+    (window as any).__tpHud = { bus, root, show: showHudRoot, hide: hideHudRoot };
     (window as any).tp_hud = (event: string, payload?: unknown) => {
       try { bus(event, payload); } catch {}
     };
-    (window as any).HUD = { log: (event: string, payload?: unknown) => { try { bus(event, payload); } catch {} }, bus };
+    (window as any).HUD = {
+      log: (event: string, payload?: unknown) => { try { bus(event, payload); } catch {} },
+      bus,
+      show: showHudRoot,
+      hide: hideHudRoot,
+    };
     try { window.dispatchEvent(new CustomEvent('hud:ready')); } catch {}
   } catch {
     /* ignore */
