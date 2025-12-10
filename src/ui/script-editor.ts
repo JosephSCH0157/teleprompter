@@ -29,6 +29,16 @@ function syncSidebarFromSettings(): void {
   if (isSyncingScriptsSelect) return;
   isSyncingScriptsSelect = true;
   try {
+    // If sidebar lost its options, rebuild from settings to keep in lockstep
+    if (sidebar.options.length !== settings.options.length) {
+      sidebar.innerHTML = '';
+      for (const opt of Array.from(settings.options)) {
+        const clone = new Option(opt.textContent || '', opt.value, opt.defaultSelected, opt.selected);
+        (clone as any).__handle = (opt as any).__handle;
+        (clone as any).__file = (opt as any).__file;
+        sidebar.appendChild(clone);
+      }
+    }
     sidebar.disabled = settings.disabled;
     sidebar.value = settings.value;
     if (sidebar.selectedIndex !== settings.selectedIndex) {
@@ -49,7 +59,12 @@ function syncSidebarFromSettings(): void {
 function forwardSidebarChange(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
-  if (!settings || !sidebar || !sidebar.value) return;
+  if (!settings || !sidebar) return;
+  if (!sidebar.value) {
+    // If the sidebar is empty/out-of-sync, resync from settings and bail
+    syncSidebarFromSettings();
+    return;
+  }
   if (isSyncingScriptsSelect) return;
   if (sidebar.value === settings.value) return;
   isSyncingScriptsSelect = true;
