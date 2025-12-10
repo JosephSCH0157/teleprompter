@@ -39,6 +39,7 @@ function broadcastToDisplay(text: string): void {
       __displayCh = new BroadcastChannel('tp_display');
     }
     __displayCh?.postMessage(payload as any);
+    try { console.log('[display-sync] posted snapshot to tp_display', { len: text.length }); } catch {}
   } catch (err) {
     try { console.warn('[display-sync] postMessage on tp_display failed', err); } catch {}
   }
