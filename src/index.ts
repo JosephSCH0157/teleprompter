@@ -821,16 +821,14 @@ try {
       }
     };
 
-  try { window.addEventListener('message', handleDisplayMessage); } catch {}
-    try { __docCh?.addEventListener('message', (e) => handleDisplayMessage({ data: e.data } as any)); } catch {}
-
     try {
-      installDisplaySync({
-        getText: () => '',
-        onApplyRemote: (txt) => applyText(txt),
-      getDisplayWindow: () => { try { return window.opener || null; } catch { return null; } },
-    });
-  } catch {}
+      const w = window as any;
+      if (!w.__tpDisplayMsgBound) {
+        w.__tpDisplayMsgBound = true;
+        window.addEventListener('message', handleDisplayMessage);
+        __docCh?.addEventListener('message', (e) => handleDisplayMessage({ data: e.data } as any));
+      }
+    } catch {}
 
     try { window.addEventListener('resize', applyPadding); } catch {}
     try { document.addEventListener('DOMContentLoaded', applyPadding, { passive: true } as any); } catch {}
