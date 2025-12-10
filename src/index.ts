@@ -789,6 +789,20 @@ try {
       // Ignore non-objects / noise early
       if (!m || typeof m !== 'object') return;
 
+      // Optional render payload (pre-rendered HTML or plain text)
+      if (m.type === 'render') {
+        const html = typeof m.html === 'string' ? m.html : '';
+        const text = typeof m.text === 'string' ? m.text : '';
+        if (html) {
+          applyHtml(html, { fontSize: m.fontSize, lineHeight: m.lineHeight, resetScroll: true });
+          return;
+        }
+        if (text) {
+          applyText(text, { fontSize: m.fontSize, lineHeight: m.lineHeight });
+          return;
+        }
+      }
+
       // Only handle the two script payload shapes; everything else is ignored
       if (m.kind === 'tp:script' && m.source === 'main' && typeof m.text === 'string') {
         applyHtml(m.text);
