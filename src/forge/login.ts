@@ -1,6 +1,7 @@
 // src/forge/login.ts
 // Minimal login page wiring for the Forge /login shell (framework-agnostic).
 import { supabase } from './supabaseClient';
+import { ensureUserAndProfile } from './authProfile';
 
 function getRedirectTarget(): string {
   const params = new URLSearchParams(window.location.search || '');
@@ -21,12 +22,15 @@ async function checkExistingSession(): Promise<void> {
 async function handleLogin(email: string, password: string): Promise<void> {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
+  await ensureUserAndProfile();
   window.location.href = getRedirectTarget();
 }
 
 async function handleSignup(email: string, password: string): Promise<void> {
   const { error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
+  // If email confirmation is required, this may fail until confirmed; ignore for now.
+  try { await ensureUserAndProfile(); } catch {}
   const msg = document.getElementById('error');
   if (msg) msg.textContent = 'Check your email to confirm your account.';
 }

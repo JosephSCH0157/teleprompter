@@ -32,6 +32,7 @@ import './scroll/adapter';
 import './index-hooks/preroll';
 import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
+import { ensureUserAndProfile } from './forge/authProfile';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
@@ -84,6 +85,16 @@ try {
 	appStore.subscribe?.('obsEnabled', (v: any) => {
 		if (typeof v === 'boolean') setRecorderEnabled('obs', v);
 	});
+} catch {}
+
+// Forge auth/profile gate: ensure session + profile; stash on window for legacy consumers.
+try {
+	ensureUserAndProfile()
+		.then(({ user, profile }) => {
+			try { (window as any).__forgeUser = user; } catch {}
+			try { (window as any).__forgeProfile = profile; } catch {}
+		})
+		.catch((err) => { try { console.error('[forge] auth/profile init failed', err); } catch {} });
 } catch {}
 
 try {
