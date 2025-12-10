@@ -147,6 +147,23 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       sel.setAttribute('aria-busy','true');
       const handle = (opt as any)?.__handle || (opt as any)?._handle;
       const file = (opt as any)?.__file || (opt as any)?._file;
+      const ensureReadPermission = async (h: any): Promise<boolean> => {
+        try {
+          const hasQuery = typeof h?.queryPermission === 'function';
+          const hasRequest = typeof h?.requestPermission === 'function';
+          if (!hasQuery && !hasRequest) return true;
+          const q = hasQuery ? await h.queryPermission({ mode: 'read' }) : undefined;
+          if (q === 'granted') return true;
+          if (!hasRequest) return true;
+          const r = await h.requestPermission({ mode: 'read' });
+          return r === 'granted';
+        } catch { return true; }
+      };
+      if (handle && !(await ensureReadPermission(handle))) {
+        try { hudLog('folder:permission:denied', { id: sel.id }); } catch {}
+        toast('Allow folder access to load scripts, or re-pick the folder in Settings.');
+        return;
+      }
       if (handle || file) {
         const { name, text } = await readHandleOrFile(handle || file);
         try { (window as any).__tpCurrentName = name; } catch {}
@@ -169,7 +186,11 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           try { requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} }); } catch {}
         }
       }
-    } catch (e) { try { console.warn('[mapped-folder] mammoth parse failed', e); } catch {} }
+    } catch (e) {
+      try { console.warn('[mapped-folder] load failed', e); } catch {}
+      try { hudLog('folder:load:error', { id: sel.id, err: (e as any)?.name || (e as any)?.message || String(e) }); } catch {}
+      try { toast('Could not load script from the mapped folder. Recheck permissions or pick the folder again.'); } catch {}
+    }
     finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   });
 
