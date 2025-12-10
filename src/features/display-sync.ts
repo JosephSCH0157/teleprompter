@@ -46,6 +46,8 @@ export type DisplaySyncOpts = {
 export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   const chanName = opts.channelName || 'tp_display';
   let chan: BroadcastChannel | null = null;
+  const isRequester = typeof opts.onApplyRemote === 'function';
+  const isResponder = !isRequester;
   try {
     chan = new BroadcastChannel(chanName);
   } catch (err) {
@@ -56,6 +58,11 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   const onMsg = (ev: MessageEvent) => {
     try {
       const msg = ev?.data || {};
+      // Display window asks for a fresh snapshot
+      if ((msg?.kind === 'tp:script:request' || msg?.type === 'tp:script:request' || msg?.request === 'snapshot') && isResponder) {
+        try { push(); } catch {}
+        return;
+      }
       if (!msg || msg.kind !== 'tp:script') return;
       if (typeof msg.text === 'string' && typeof opts.onApplyRemote === 'function') {
         opts.onApplyRemote(msg.text);
@@ -83,6 +90,13 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
 
   try { window.addEventListener('tp:scriptChanged', push as any); } catch {}
   try { push(); } catch {}
+
+  // Display side: immediately request the latest snapshot so late-opened display windows hydrate
+  try {
+    if (isRequester) {
+      chan?.postMessage({ kind: 'tp:script:request', from: 'display', ts: Date.now() } as any);
+    }
+  } catch {}
 
   return () => {
     try { window.removeEventListener('tp:scriptChanged', push as any); } catch {}
