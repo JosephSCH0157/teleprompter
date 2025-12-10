@@ -92,9 +92,14 @@ async function handleLoadClick(): Promise<void> {
   if (!id) return;
   try {
     const rec = await ScriptStore.get(id);
-    if (rec && typeof rec.content === 'string') {
-      window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text: rec.content } }));
+    if (!rec || typeof rec.content !== 'string') return;
+    const text = rec.content;
+    // Render locally so viewer + display snapshot are refreshed immediately
+    if (typeof (window as any).renderScript === 'function') {
+      try { (window as any).renderScript(text); } catch {}
     }
+    // Still emit tp:script-load for any listeners that rely on the event path
+    try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text } })); } catch {}
   } catch {}
 }
 
