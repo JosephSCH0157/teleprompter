@@ -35,6 +35,20 @@ export function pushDisplaySnapshot(text: string): void {
   try { window.postMessage(payload as any, '*'); } catch {}
 }
 
+export type RecordState = 'idle' | 'armed' | 'recording';
+
+export function pushDisplayRecordState(state: RecordState): void {
+  const payload = { kind: 'tp:record', state };
+  const ch = getDisplayChannel();
+  if (ch) {
+    try { ch.postMessage(payload as any); } catch {}
+  }
+  try {
+    const w = (window as any).__tpDisplayWindow as Window | null;
+    if (w && !w.closed) w.postMessage(payload as any, '*');
+  } catch {}
+}
+
 export type DisplaySyncOpts = {
   getText: () => string;
   getAnchorRatio?: () => number;

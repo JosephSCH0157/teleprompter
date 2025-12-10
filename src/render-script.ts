@@ -208,7 +208,12 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try { window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { lineCount: lines.length } })); } catch {}
 
   // Mirror to display window (tp_display channel + postMessage fallback)
-  try { pushDisplaySnapshot(raw); } catch {}
+  try {
+    const w = window as any;
+    if (!w.__TP_SUPPRESS_DISPLAY_PUSH) {
+      pushDisplaySnapshot(raw);
+    }
+  } catch {}
 }
 
 // Expose globally for callers that expect window.renderScript

@@ -51,6 +51,14 @@
           #legend .lbl{font-size:12px;color:var(--muted);margin-right:10px}
           #legend .dot.s1{background:var(--s1-color)}
           #legend .dot.s2{background:var(--s2-color)}
+          #displayTopbar{display:flex;align-items:center;justify-content:flex-start;gap:12px}
+          #displayRecPill{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.6);color:#ffb3b3;text-transform:uppercase}
+          #displayRecPill::before{content:'●';font-size:10px}
+          #displayRecPill.hidden{display:none}
+          #displayRecPill.armed{background:rgba(255,215,0,.18);color:#ffe28a}
+          #displayRecPill.live{background:rgba(220,53,69,.35);color:#ffd6d6}
+          /* Override to ensure bullet renders consistently */
+          #displayRecPill::before{content:'\2022';font-size:10px}
           /* Match main app width for identical wrapping */
           .script{max-width:900px;margin:0 auto;padding:40px}
           /* Match main app metrics exactly for consistent scroll physics */
@@ -98,6 +106,7 @@
               <span class="dot s1"></span><span class="lbl" id="lbl-s1">Joe</span>
               <span class="dot s2"></span><span class="lbl" id="lbl-s2">Brad</span>
             </div>
+            <span id="displayRecPill" class="rec-pill hidden">REC</span>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
           <div class="hud">
@@ -216,6 +225,21 @@
               }catch{}
             }
 
+            const recPill = document.getElementById('displayRecPill');
+            function applyRecordState(state){
+              if (!recPill) return;
+              recPill.classList.remove('hidden','armed','live');
+              if (state === 'armed') {
+                recPill.textContent = 'REC ARMED';
+                recPill.classList.add('armed');
+              } else if (state === 'recording') {
+                recPill.textContent = 'REC';
+                recPill.classList.add('live');
+              } else {
+                recPill.classList.add('hidden');
+              }
+            }
+
             // Call on resize (debounced 150ms; only adjust if focus changed)
             (function(){
               let startActive = null; let t = null;
@@ -275,6 +299,20 @@
 
                 if (!looksRendered && typeof window.renderScript === 'function') {
                   window.renderScript(str, scriptEl);
+                } else if (window.opener && typeof window.opener.renderScript === 'function') {
+                  try {
+                    const o = window.opener;
+                    const prev = (o as any).__TP_SUPPRESS_DISPLAY_PUSH;
+                    (o as any).__TP_SUPPRESS_DISPLAY_PUSH = true;
+                    o.renderScript(str, scriptEl);
+                    (o as any).__TP_SUPPRESS_DISPLAY_PUSH = prev;
+                  } catch (err2) {
+                    console.warn('[display] opener.renderScript failed, falling back to raw HTML', err2);
+                    scriptEl.innerHTML = '';
+                    const cont = document.createElement('div');
+                    cont.innerHTML = str;
+                    while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
+                  }
                 } else {
                   scriptEl.innerHTML = '';
                   const cont = document.createElement('div');
@@ -312,6 +350,10 @@
                     applyBottomPad();
                     return;
                   }
+                  if (msg && msg.kind === 'tp:record') {
+                    applyRecordState(msg.state || 'idle');
+                    return;
+                  }
                   // Lightweight mirror/diagnostic channel only
                   if (msg && msg.t === 'display:ping') {
                     try { chan.postMessage({ t: 'display:pong' }); } catch {}
@@ -336,6 +378,10 @@
                   const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
                   wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
                 }
+                return;
+              }
+              if (d && d.kind === 'tp:record') {
+                applyRecordState(d.state || 'idle');
                 return;
               }
               // Typography via postMessage
