@@ -24,10 +24,10 @@ let displayWired = false;
 let bc: BroadcastChannel | null = null;
 const DISPLAY_STYLE_ID = 'rec-pill-display-style';
 const REC_PILL_BASE_CSS = `
-.rec-pill{display:none;align-items:center;justify-content:center;height:22px;padding:0 12px;border-radius:999px;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 180ms ease,transform 180ms ease,color 160ms ease,background-color 160ms ease;pointer-events:none;user-select:none}
+.rec-pill{display:none;align-items:center;justify-content:center;height:22px;padding:0 12px;border-radius:999px;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 500ms ease,transform 500ms ease,color 320ms ease,background-color 320ms ease;pointer-events:none;user-select:none}
 .rec-pill.is-visible{opacity:1;transform:scale(1)}
 .rec-pill.rec-pill--armed{background:#ffd54f;color:#1a1f27}
-.rec-pill.rec-pill--recording{background:#ef5350;color:#fff;animation:recPulse 2s ease-in-out infinite}
+.rec-pill.rec-pill--recording{background:#ef5350;color:#fff;animation:recPulse 2.5s ease-in-out infinite}
 .rec-pill--main{height:24px;padding:0 12px;font-size:0.84rem}
 .rec-pill--display{position:fixed;top:10px;right:14px;height:18px;padding:0 10px;font-size:0.7rem;z-index:1200;opacity:0.75}
 .rec-pill--display.is-visible{opacity:0.75}

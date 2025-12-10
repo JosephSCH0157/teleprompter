@@ -76,6 +76,15 @@
           #preRoll .num{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
           /* CK watermark */
           body.ck::after{content:"CK";position:fixed;left:10px;bottom:10px;z-index:9999;font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;letter-spacing:2px;color:#d67d2d;opacity:.18;pointer-events:none}
+          /* Recorder pill overrides */
+          #displayRecPill{all: unset; display:none;}
+          .rec-pill{display:none;align-items:center;justify-content:center;height:22px;padding:0 12px;border-radius:999px;font-size:0.82rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 500ms ease,transform 500ms ease,color 320ms ease,background-color 320ms ease;pointer-events:none;user-select:none}
+          .rec-pill.is-visible{opacity:1;transform:scale(1)}
+          .rec-pill.rec-pill--armed{background:#ffd54f;color:#1a1f27}
+          .rec-pill.rec-pill--recording{background:#ef5350;color:#fff;animation:recPulse 2.5s ease-in-out infinite}
+          .rec-pill--display{height:18px;padding:0 10px;font-size:11px}
+          #displayRecPill::before{content:'\2022';font-size:10px;margin-right:6px}
+          @keyframes recPulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.03);opacity:.95}100%{transform:scale(1);opacity:1}}
           /* Remote camera preview styles */
           #mirrorCamWrap{position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;z-index:1200;}
           #mirrorCamVideo{width:100%;max-width:100%;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;display:block;}
@@ -106,7 +115,7 @@
               <span class="dot s1"></span><span class="lbl" id="lbl-s1">Joe</span>
               <span class="dot s2"></span><span class="lbl" id="lbl-s2">Brad</span>
             </div>
-            <span id="displayRecPill" class="rec-pill hidden">REC</span>
+            <span id="displayRecPill" class="rec-pill rec-pill--display">REC</span>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
           <div class="hud">
@@ -228,15 +237,19 @@
             const recPill = document.getElementById('displayRecPill');
             function applyRecordState(state){
               if (!recPill) return;
-              recPill.classList.remove('hidden','armed','live');
+              recPill.classList.remove('rec-pill--armed','rec-pill--recording','is-visible');
+              recPill.style.display = 'none';
+              recPill.setAttribute('aria-hidden','true');
               if (state === 'armed') {
                 recPill.textContent = 'REC ARMED';
-                recPill.classList.add('armed');
+                recPill.classList.add('rec-pill--armed','is-visible');
+                recPill.style.display = 'inline-flex';
+                recPill.setAttribute('aria-hidden','false');
               } else if (state === 'recording') {
                 recPill.textContent = 'REC';
-                recPill.classList.add('live');
-              } else {
-                recPill.classList.add('hidden');
+                recPill.classList.add('rec-pill--recording','is-visible');
+                recPill.style.display = 'inline-flex';
+                recPill.setAttribute('aria-hidden','false');
               }
             }
             const mapRecState = (s) => (s === 'armed' ? 'armed' : s === 'recording' ? 'recording' : 'idle');
