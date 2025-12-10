@@ -96,11 +96,13 @@ function syncAuto(next: ScrollMode): void {
   const allowAuto = (() => {
     try {
       const phase = deps.store?.get?.('session.phase');
-      if (phase !== 'live') return false;
       const allowed = deps.store?.get?.('session.scrollAutoOnLive');
+      const hasGate = phase !== undefined || allowed !== undefined;
+      if (!hasGate) return true; // no session state => allow by default (tests/standalone)
+      if (phase !== 'live') return false;
       return !!allowed;
     } catch {
-      return false;
+      return true;
     }
   })();
 
