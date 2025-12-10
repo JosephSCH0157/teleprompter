@@ -107,6 +107,14 @@ export const ScriptStore = {
     emitScriptsUpdated();
   },
 
+  getMappedEntries(): Array<{ id: string; title: string; handle?: FileSystemHandle }> {
+    return Array.from(mappedHandles.values()).map((m) => ({
+      id: m.id,
+      title: m.title,
+      handle: m.handle,
+    }));
+  },
+
   syncMapped(entries: { id: string; title: string; handle: FileSystemHandle }[]): void {
     debugLog('[SCRIPT-STORE] syncMapped entries', entries);
     mappedHandles.clear();

@@ -1,10 +1,7 @@
 // src/ui/script-editor.ts
-// Sidebar mirror + Load forwarder.
-// - #scriptSelect (Settings) is the sole mapped-folder target.
-// - #scriptSelectSidebar mirrors its options/selection.
-// - #scriptLoadBtn re-fires change on the active select.
-// No ScriptStore/tp:script-load involvement here.
+// Sidebar now mirrors the ScriptStore directly (mapped entries) and triggers loads via the store.
 import { debugLog } from '../env/logging';
+import { ScriptStore } from '../features/scripts-store';
 
 declare global {
   interface Window {
@@ -12,120 +9,93 @@ declare global {
   }
 }
 
-const SETTINGS_ID = 'scriptSelect';
 const SIDEBAR_ID = 'scriptSelectSidebar';
 
-function getSelect(id: string): HTMLSelectElement | null {
-  return document.getElementById(id) as HTMLSelectElement | null;
+function getSidebarSelect(): HTMLSelectElement | null {
+  return document.getElementById(SIDEBAR_ID) as HTMLSelectElement | null;
 }
 
-function getSettingsSelect(): HTMLSelectElement | null { return getSelect(SETTINGS_ID); }
-function getSidebarSelect(): HTMLSelectElement | null { return getSelect(SIDEBAR_ID); }
+type MappedEntry = { id: string; title: string; handle?: FileSystemFileHandle };
 
-let isSyncingScriptsSelect = false;
-
-function syncSidebarFromSettings(): void {
-  const settings = getSettingsSelect();
-  const sidebar = getSidebarSelect();
-  if (!sidebar) {
-    debugLog('[SCRIPT-EDITOR] sidebar select missing, cannot sync');
+function rebuildSidebarFromMapped(entries: MappedEntry[]): void {
+  const select = getSidebarSelect();
+  if (!select) {
+    debugLog('[SCRIPT-EDITOR] rebuildSidebarFromMapped: sidebar select missing');
     return;
   }
-  if (!settings || settings.options.length === 0) {
-    debugLog('[SCRIPT-EDITOR] settings select empty, clearing sidebar');
-    sidebar.innerHTML = '';
-    sidebar.setAttribute('aria-busy', 'false');
-    return;
+  const prev = select.value;
+  select.innerHTML = '';
+
+  for (const entry of entries) {
+    const opt = document.createElement('option') as HTMLOptionElement & { __handle?: FileSystemFileHandle };
+    opt.value = entry.id;
+    opt.textContent = entry.title;
+    if (entry.handle) opt.__handle = entry.handle;
+    select.appendChild(opt);
   }
 
-  if (isSyncingScriptsSelect) return;
-  isSyncingScriptsSelect = true;
-  try {
-    const sOpts = Array.from(settings.options).map((o) => ({
-      text: o.textContent || '',
-      value: o.value,
-      handle: (o as any).__handle,
-      file: (o as any).__file,
-    }));
-    const sbOpts = Array.from(sidebar.options).map((o) => ({
-      text: o.textContent || '',
-      value: o.value,
-    }));
+  if (entries.length > 0) {
+    const hasPrev = entries.some((e) => e.id === prev);
+    select.value = hasPrev ? prev : entries[0].id;
+  }
+  select.setAttribute('aria-busy', 'false');
 
-    const needsRebuild =
-      sOpts.length !== sbOpts.length ||
-      sOpts.some((o, i) => !sbOpts[i] || o.value !== sbOpts[i].value || o.text !== sbOpts[i].text);
+  debugLog('[SCRIPT-EDITOR] rebuildSidebarFromMapped', {
+    options: select.options.length,
+    value: select.value,
+  });
+}
 
-    if (needsRebuild) {
-      debugLog('[SCRIPT-EDITOR] sidebar desynced from settings, rebuilding (S=%d, SB=%d)', sOpts.length, sbOpts.length);
-      sidebar.innerHTML = '';
-      for (const opt of sOpts) {
-        const o = new Option(opt.text, opt.value);
-        (o as any).__handle = opt.handle;
-        (o as any).__file = opt.file;
-        sidebar.appendChild(o);
-      }
+function getMappedSnapshot(): MappedEntry[] {
+  try { return ScriptStore.getMappedEntries?.() || []; } catch { return []; }
+}
+
+function wireSidebarStoreSync(): void {
+  const run = () => rebuildSidebarFromMapped(getMappedSnapshot());
+  try { window.addEventListener('tp:scripts-updated', run as any); } catch {}
+  run();
+}
+
+function wireSidebarHandlers(): void {
+  const select = getSidebarSelect();
+  if (!select) return;
+  select.addEventListener('change', () => {
+    debugLog('[SCRIPT-EDITOR] sidebar change', { value: select.value });
+    if (!select.value) {
+      rebuildSidebarFromMapped(getMappedSnapshot());
+      return;
     }
+  });
+}
 
-    sidebar.disabled = settings.disabled;
-    sidebar.value = settings.value;
-    sidebar.selectedIndex = settings.selectedIndex;
-    sidebar.setAttribute('aria-busy', 'false');
-  } finally {
-    isSyncingScriptsSelect = false;
-  }
+function getActiveScriptId(): string | null {
+  const select = getSidebarSelect();
+  const entries = getMappedSnapshot();
+  const sidebarVal = select?.value || '';
+  if (sidebarVal && entries.some((e) => e.id === sidebarVal)) return sidebarVal;
+  if (entries.length > 0) return entries[0].id;
+  return null;
+}
+
+async function handleLoadClick(): Promise<void> {
+  const id = getActiveScriptId();
+  debugLog('[SCRIPT-EDITOR] Load click', { id });
+  if (!id) return;
   try {
-    console.debug('[SCRIPT-EDITOR] syncSidebarFromSettings', {
-      settingsOptions: settings.options.length,
-      sidebarOptions: sidebar.options.length,
-      value: sidebar.value,
-    });
+    const rec = await ScriptStore.get(id);
+    if (rec && typeof rec.content === 'string') {
+      window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text: rec.content } }));
+    }
   } catch {}
 }
 
-function forwardSidebarChange(): void {
-  const settings = getSettingsSelect();
-  const sidebar = getSidebarSelect();
-  if (!settings || !sidebar) return;
-  if (isSyncingScriptsSelect) return;
-  if (!sidebar.value) {
-    debugLog('[SCRIPT-EDITOR] sidebar value empty on change, forcing resync from settings');
-    syncSidebarFromSettings();
-    return;
-  }
-  if (sidebar.value === settings.value) return;
-  isSyncingScriptsSelect = true;
-  try {
-    settings.value = sidebar.value;
-    try {
-      console.debug('[SCRIPT-EDITOR] sidebar -> settings', {
-        sidebarValue: sidebar.value,
-        settingsOptions: settings.options.length,
-      });
-    } catch {}
-    settings.dispatchEvent(new Event('change', { bubbles: true }));
-  } finally {
-    isSyncingScriptsSelect = false;
-  }
-}
-
-function handleLoadClick(): void {
-  const sidebar = getSidebarSelect();
-  const settings = getSettingsSelect();
-  const active =
-    (settings && settings.options.length > 0 && settings.value) ? settings :
-    (sidebar && sidebar.options.length > 0 && sidebar.value) ? sidebar :
-    null;
-  try {
-    console.debug('[SCRIPT-EDITOR] Load click', {
-      activeId: active?.id || null,
-      activeValue: active?.value || null,
-      sidebarOptions: sidebar?.options.length ?? 0,
-      settingsOptions: settings?.options.length ?? 0,
-    });
-  } catch {}
-  if (!active) return;
-  active.dispatchEvent(new Event('change', { bubbles: true }));
+function wireLoadButton(): void {
+  document.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement | null)?.closest('#scriptLoadBtn') as HTMLButtonElement | null;
+    if (!btn) return;
+    try { ev.preventDefault(); } catch {}
+    void handleLoadClick();
+  }, { capture: true });
 }
 
 function installScriptEditor(): void {
@@ -136,39 +106,9 @@ function installScriptEditor(): void {
   }
   (window as any).__tpScriptEditorBound = true;
 
-  // Initial sync (in case Settings already populated)
-  syncSidebarFromSettings();
-
-  // React to mapped-folder population signal
-  window.addEventListener('tp:folderScripts:populated' as any, syncSidebarFromSettings);
-
-  // Observe Settings select option mutations (handles reinjection/rebuilds)
-  try {
-    const settings = getSettingsSelect();
-    if (settings) {
-      const obs = new MutationObserver(() => syncSidebarFromSettings());
-      obs.observe(settings, { childList: true });
-    }
-  } catch {}
-
-  // Document-level change handlers so we don't care if selects are replaced
-  document.addEventListener('change', (ev) => {
-    const t = ev.target as HTMLElement | null;
-    if (!t) return;
-    if (t.id === 'scriptSelect') {
-      syncSidebarFromSettings();
-    } else if (t.id === 'scriptSelectSidebar') {
-      forwardSidebarChange();
-    }
-  });
-
-  // Load button via delegation (handles late reinjection)
-  document.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement | null)?.closest('#scriptLoadBtn') as HTMLButtonElement | null;
-    if (!btn) return;
-    try { ev.preventDefault(); } catch {}
-    handleLoadClick();
-  }, { capture: true });
+  wireSidebarStoreSync();
+  wireSidebarHandlers();
+  wireLoadButton();
 
   try { console.debug('[SCRIPT-EDITOR] wiring complete'); } catch {}
 }
