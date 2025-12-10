@@ -293,7 +293,9 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
       try { announceCount(cnt); } catch {}
       try { sel.setAttribute('aria-busy','false'); } catch {}
-      try { syncSidebarOptions(); } catch {}
+      queueMicrotask(() => {
+        try { if (sidebar) sidebar.value = sel.value; } catch {}
+      });
     } catch {}
   }
   function populateSelectFromFiles(files: File[]) {
@@ -368,7 +370,9 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
       try { announceCount(cnt); } catch {}
       try { sel.setAttribute('aria-busy','false'); } catch {}
-      try { syncSidebarOptions(); } catch {}
+      queueMicrotask(() => {
+        try { if (sidebar) sidebar.value = sel.value; } catch {}
+      });
     } catch {}
   }
   function announceCount(n: number) {
@@ -389,14 +393,6 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         }
       }
       s.textContent = n === 1 ? '1 script found' : `${n} scripts found`;
-    } catch {}
-  }
-  function syncSidebarOptions() {
-    if (!sidebar) return;
-    try {
-      sidebar.innerHTML = sel.innerHTML;
-      sidebar.selectedIndex = sel.selectedIndex;
-      sidebar.disabled = sel.disabled;
     } catch {}
   }
 }

@@ -29,11 +29,12 @@ function syncSidebarFromSettings(): void {
   if (syncing) return;
   syncing = true;
   try {
-    // Only mirror selection/value; options are managed by mapped-folder binding
-    sidebar.value = settings.value;
-    if (sidebar.selectedIndex !== settings.selectedIndex) {
-      sidebar.selectedIndex = settings.selectedIndex;
+    sidebar.innerHTML = '';
+    for (const opt of Array.from(settings.options)) {
+      const clone = opt.cloneNode(true) as HTMLOptionElement;
+      sidebar.appendChild(clone);
     }
+    sidebar.selectedIndex = settings.selectedIndex;
   } finally {
     syncing = false;
   }
@@ -111,8 +112,6 @@ function installScriptEditor(): void {
     if (!t) return;
     if (t.id === 'scriptSelect') {
       syncSidebarFromSettings();
-    } else if (t.id === 'scriptSelectSidebar') {
-      forwardSidebarChange();
     }
   });
 
