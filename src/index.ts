@@ -794,6 +794,11 @@ try {
         if (html) { applyHtml(html, { fontSize: m.fontSize, lineHeight: m.lineHeight, resetScroll: true }); return; }
         if (text) { applyText(text, { fontSize: m.fontSize, lineHeight: m.lineHeight }); return; }
       }
+      if (m.type === 'script' && typeof m.text === 'string') {
+        // script-ingest broadcast snapshot
+        applyText(m.text);
+        return;
+      }
       if (m.kind === 'tp:script' && m.source === 'main' && typeof m.text === 'string') {
         // display-sync snapshots carry pre-rendered HTML; render directly
         applyHtml(m.text);
@@ -817,11 +822,12 @@ try {
     };
 
   try { window.addEventListener('message', handleDisplayMessage); } catch {}
+    try { __docCh?.addEventListener('message', (e) => handleDisplayMessage({ data: e.data } as any)); } catch {}
 
-  try {
-    installDisplaySync({
-      getText: () => '',
-      onApplyRemote: (txt) => applyText(txt),
+    try {
+      installDisplaySync({
+        getText: () => '',
+        onApplyRemote: (txt) => applyText(txt),
       getDisplayWindow: () => { try { return window.opener || null; } catch { return null; } },
     });
   } catch {}
