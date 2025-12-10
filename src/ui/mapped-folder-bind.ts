@@ -108,6 +108,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   const btn = typeof opts.button === 'string' ? document.querySelector(opts.button) as HTMLButtonElement : opts.button as HTMLButtonElement;
   const sel = typeof opts.select === 'string' ? document.querySelector(opts.select) as HTMLSelectElement : opts.select as HTMLSelectElement;
   const fallback = opts.fallbackInput ? (typeof opts.fallbackInput === 'string' ? document.querySelector(opts.fallbackInput) as HTMLInputElement : opts.fallbackInput) : null;
+  const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
 
   if (!btn || !sel) return () => {};
   // Avoid double-binding across reinjections
@@ -292,6 +293,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
       try { announceCount(cnt); } catch {}
       try { sel.setAttribute('aria-busy','false'); } catch {}
+      try { syncSidebarOptions(); } catch {}
     } catch {}
   }
   function populateSelectFromFiles(files: File[]) {
@@ -366,6 +368,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
       try { announceCount(cnt); } catch {}
       try { sel.setAttribute('aria-busy','false'); } catch {}
+      try { syncSidebarOptions(); } catch {}
     } catch {}
   }
   function announceCount(n: number) {
@@ -386,6 +389,14 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         }
       }
       s.textContent = n === 1 ? '1 script found' : `${n} scripts found`;
+    } catch {}
+  }
+  function syncSidebarOptions() {
+    if (!sidebar) return;
+    try {
+      sidebar.innerHTML = sel.innerHTML;
+      sidebar.selectedIndex = sel.selectedIndex;
+      sidebar.disabled = sel.disabled;
     } catch {}
   }
 }

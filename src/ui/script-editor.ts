@@ -19,17 +19,24 @@ function getSidebarSelect(): HTMLSelectElement | null {
   return document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
 }
 
+let syncing = false;
+
 function syncSidebarFromSettings(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
   if (!settings || !sidebar) return;
 
-  sidebar.innerHTML = '';
-  for (const opt of Array.from(settings.options)) {
-    const clone = opt.cloneNode(true) as HTMLOptionElement;
-    sidebar.appendChild(clone);
+  if (syncing) return;
+  syncing = true;
+  try {
+    // Only mirror selection/value; options are managed by mapped-folder binding
+    sidebar.value = settings.value;
+    if (sidebar.selectedIndex !== settings.selectedIndex) {
+      sidebar.selectedIndex = settings.selectedIndex;
+    }
+  } finally {
+    syncing = false;
   }
-  sidebar.selectedIndex = settings.selectedIndex;
   try {
     console.debug('[SCRIPT-EDITOR] syncSidebarFromSettings', {
       settingsOptions: settings.options.length,
@@ -43,6 +50,8 @@ function forwardSidebarChange(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
   if (!settings || !sidebar || !sidebar.value) return;
+  if (syncing) return;
+  syncing = true;
   settings.value = sidebar.value;
   try {
     console.debug('[SCRIPT-EDITOR] sidebar → settings', {
@@ -51,6 +60,7 @@ function forwardSidebarChange(): void {
     });
   } catch {}
   settings.dispatchEvent(new Event('change', { bubbles: true }));
+  syncing = false;
 }
 
 function handleLoadClick(): void {
