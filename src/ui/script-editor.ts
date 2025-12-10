@@ -17,41 +17,54 @@ function getSidebarSelect(): HTMLSelectElement | null {
 
 type MappedEntry = { id: string; title: string; handle?: FileSystemFileHandle };
 
-function rebuildSidebarFromMapped(entries: MappedEntry[]): void {
+// Store -> sidebar sync (single source of truth)
+export function syncSidebarFromSettings(): void {
   const select = getSidebarSelect();
   if (!select) {
-    debugLog('[SCRIPT-EDITOR] rebuildSidebarFromMapped: sidebar select missing');
+    debugLog('[SCRIPT-EDITOR] syncSidebarFromSettings: no sidebar select found');
     return;
   }
-  const prev = select.value;
-  select.innerHTML = '';
 
-  for (const entry of entries) {
-    const opt = document.createElement('option') as HTMLOptionElement & { __handle?: FileSystemFileHandle };
-    opt.value = entry.id;
-    opt.textContent = entry.title;
-    if (entry.handle) opt.__handle = entry.handle;
-    select.appendChild(opt);
+  const entries = ScriptStore.getMappedEntries ? ScriptStore.getMappedEntries() as MappedEntry[] : [];
+  const count = entries.length;
+
+  if (!count) {
+    select.innerHTML = '';
+    select.value = '';
+    debugLog('[SCRIPT-EDITOR] syncSidebarFromSettings (no entries)', {
+      settingsOptions: 0,
+      sidebarOptions: select.options.length,
+      value: select.value,
+    });
+    return;
   }
 
-  if (entries.length > 0) {
-    const hasPrev = entries.some((e) => e.id === prev);
-    select.value = hasPrev ? prev : entries[0].id;
+  const prev = select.value;
+  select.innerHTML = '';
+  for (const entry of entries) {
+    const opt = document.createElement('option') as HTMLOptionElement & { __handle?: FileSystemFileHandle; __file?: File };
+    opt.value = entry.id;
+    opt.textContent = entry.title || entry.id;
+    if ((entry as any).handle) opt.__handle = (entry as any).handle;
+    if ((entry as any).file) opt.__file = (entry as any).file;
+    select.appendChild(opt);
+  }
+  if (!prev || !entries.some((e) => e.id === prev)) {
+    select.value = select.options.length ? select.options[0].value : '';
+  } else {
+    select.value = prev;
   }
   select.setAttribute('aria-busy', 'false');
 
-  debugLog('[SCRIPT-EDITOR] rebuildSidebarFromMapped', {
-    options: select.options.length,
+  debugLog('[SCRIPT-EDITOR] syncSidebarFromSettings (post-rebuild)', {
+    settingsOptions: count,
+    sidebarOptions: select.options.length,
     value: select.value,
   });
 }
 
-function getMappedSnapshot(): MappedEntry[] {
-  try { return ScriptStore.getMappedEntries?.() || []; } catch { return []; }
-}
-
 function wireSidebarStoreSync(): void {
-  const run = () => rebuildSidebarFromMapped(getMappedSnapshot());
+  const run = () => syncSidebarFromSettings();
   try { window.addEventListener('tp:scripts-updated', run as any); } catch {}
   run();
 }
@@ -62,7 +75,7 @@ function wireSidebarHandlers(): void {
   select.addEventListener('change', () => {
     debugLog('[SCRIPT-EDITOR] sidebar change', { value: select.value });
     if (!select.value) {
-      rebuildSidebarFromMapped(getMappedSnapshot());
+      syncSidebarFromSettings();
       return;
     }
   });
@@ -70,8 +83,8 @@ function wireSidebarHandlers(): void {
 
 function getActiveScriptId(): string | null {
   const select = getSidebarSelect();
-  const entries = getMappedSnapshot();
   const sidebarVal = select?.value || '';
+  const entries = ScriptStore.getMappedEntries ? ScriptStore.getMappedEntries() as MappedEntry[] : [];
   if (sidebarVal && entries.some((e) => e.id === sidebarVal)) return sidebarVal;
   if (entries.length > 0) return entries[0].id;
   return null;
