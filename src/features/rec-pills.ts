@@ -1,6 +1,7 @@
 import { getAutoRecordEnabled } from '../state/auto-record-ssot';
 import type { AppStore } from '../state/app-store';
 import { isSessionRecording } from '../recording/recorderRegistry';
+import { pushDisplayRecordState } from './display-sync';
 
 export type RecState = 'off' | 'armed' | 'recording';
 
@@ -203,6 +204,7 @@ function broadcastState(state: RecState): void {
     const send = (window as any).sendToDisplay;
     if (typeof send === 'function') send({ type: 'rec-state', state });
   } catch {}
+  try { pushDisplayRecordState(state === 'off' ? 'idle' : state === 'armed' ? 'armed' : 'recording'); } catch {}
 }
 
 function setMainState(next: RecState): void {

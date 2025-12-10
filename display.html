@@ -293,31 +293,29 @@
               try {
                 if (!scriptEl) return;
 
-                const str = String(text || '');
-                // Heuristic: if it already looks like rendered markup, inject directly
-                const looksRendered = /<div[^>]+class=["']line\b/i.test(str);
+                const source = String(text || '');
+                const looksRendered = /<div[^>]+class=["']line\b/i.test(source);
 
-                if (!looksRendered && typeof window.renderScript === 'function') {
-                  window.renderScript(str, scriptEl);
-                } else if (window.opener && typeof window.opener.renderScript === 'function') {
-                  try {
-                    const o = window.opener;
-                    const prev = (o as any).__TP_SUPPRESS_DISPLAY_PUSH;
-                    (o as any).__TP_SUPPRESS_DISPLAY_PUSH = true;
-                    o.renderScript(str, scriptEl);
-                    (o as any).__TP_SUPPRESS_DISPLAY_PUSH = prev;
-                  } catch (err2) {
-                    console.warn('[display] opener.renderScript failed, falling back to raw HTML', err2);
-                    scriptEl.innerHTML = '';
-                    const cont = document.createElement('div');
-                    cont.innerHTML = str;
-                    while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
-                  }
+                if (!looksRendered && window.opener && typeof window.opener.renderScript === 'function') {
+                  const o = window.opener as any;
+                  const prev = o.__TP_SUPPRESS_DISPLAY_PUSH;
+                  o.__TP_SUPPRESS_DISPLAY_PUSH = true;
+                  o.renderScript(source, scriptEl);
+                  o.__TP_SUPPRESS_DISPLAY_PUSH = prev;
+                } else if (!looksRendered && typeof window.renderScript === 'function') {
+                  window.renderScript(source, scriptEl);
                 } else {
                   scriptEl.innerHTML = '';
-                  const cont = document.createElement('div');
-                  cont.innerHTML = str;
-                  while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
+                  const looksHtml = /<\/?[a-z][\s\S]*>/i.test(source);
+                  if (looksHtml) {
+                    const cont = document.createElement('div');
+                    cont.innerHTML = source || '';
+                    while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
+                  } else {
+                    const pre = document.createElement('pre');
+                    pre.textContent = source;
+                    scriptEl.appendChild(pre);
+                  }
                 }
               } catch (err) {
                 try { console.warn('[display] applyScriptSnapshot failed', err); } catch {}
@@ -371,7 +369,7 @@
               }
               // Script snapshots via postMessage
               if (d && d.kind === 'tp:script') {
-                applyScriptSnapshot(d.text || d.html || '');
+                applyScriptSnapshot(d.html || d.text || '');
                 applyScaled();
                 applyBottomPad();
                 if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
@@ -410,8 +408,9 @@
               // New display-sync snapshot via postMessage fallback
               if (d && d.kind === 'tp:script' && d.source === 'main') {
                 try { window.__lastDisplayHash = d.textHash || ''; } catch {}
-                if (typeof d.text === 'string') {
-                  applyScriptSnapshot(d.text);
+                const payload = (d.html || d.text || '') as string;
+                if (payload) {
+                  applyScriptSnapshot(payload);
                   applyScaled();
                   applyBottomPad();
                 }
