@@ -832,6 +832,10 @@ try {
     // Main window: mirror rendered script to the display window
     try {
       installDisplaySync({
+        channelName: 'tp_display',
+        isDisplay: false,
+        isResponder: true,
+        isRequester: false,
         getText: () => {
           try {
             const viewer = document.getElementById('viewer') as HTMLElement | null;
@@ -1156,11 +1160,15 @@ try {
 // Display Sync
 					try {
 						installDisplaySync({
-							getText: () => {
-								try {
-									// Prefer rendered HTML so display window preserves colors/markup
-									const viewer = document.getElementById('viewer') as HTMLElement | null;
-									if (viewer && typeof viewer.innerHTML === 'string' && viewer.innerHTML.length) {
+							channelName: 'tp_display',
+							isDisplay: false,
+							isResponder: true,
+							isRequester: false,
+  							getText: () => {
+  								try {
+  									// Prefer rendered HTML so display window preserves colors/markup
+  									const viewer = document.getElementById('viewer') as HTMLElement | null;
+  									if (viewer && typeof viewer.innerHTML === 'string' && viewer.innerHTML.length) {
 										return viewer.innerHTML;
 									}
 									const raw = (window as any).__tpRawScript;
