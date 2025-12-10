@@ -876,3 +876,11 @@ html.tp-present .present-exit { display: inline-flex; }
   color: rgba(240, 244, 255, 0.9);
   white-space: nowrap;
 }
+
+/* HUD hide state: nuke when closed/hidden */
+#hud-root[aria-hidden="true"],
+.tp-hud-root[aria-hidden="true"],
+.tp-hud-root.tp-hud-closed{
+  display:none !important;
+  pointer-events:none !important;
+}

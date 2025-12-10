@@ -277,15 +277,25 @@ export function initSpeechNotesHud(options: SpeechNotesHudOptions = {}): SpeechN
   if (clearBtn) clearBtn.onclick = clear;
   if (copyBtn) copyBtn.onclick = copyAll;
   if (exportBtn) exportBtn.onclick = exportTxt;
-  if (closeBtn) closeBtn.onclick = () => {
-    // Hide the entire HUD root instead of leaving a collapsed bar.
-    const hideHud = (window as any).HUD?.hide;
-    if (typeof hideHud === 'function') {
-      try { hideHud(); return; } catch {}
-    }
-    // Fallback: hide this panel completely
-    try { panel.style.display = 'none'; } catch {}
-  };
+  if (closeBtn) {
+    closeBtn.onclick = (ev) => {
+      try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+      // Prefer hiding the shared HUD root so all HUD widgets disappear
+      const rootEl =
+        (window as any).HUD?.root ||
+        panel.closest('.tp-hud-root') ||
+        document.getElementById('hud-root') ||
+        null;
+
+      const target = (rootEl as HTMLElement | null) || panel;
+      try {
+        target.style.display = 'none';
+        target.setAttribute('aria-hidden', 'true');
+        target.classList.add('tp-hud-closed');
+      } catch {}
+      try { (window as any).HUD?.hide?.(); } catch {}
+    };
+  }
   if (finalsChk) finalsChk.onchange = render;
 
   // --- Event wiring ---

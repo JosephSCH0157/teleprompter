@@ -60,6 +60,11 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
     throw new Error('[HUD] No root element found');
   }
 
+  try {
+    root.classList.add('tp-hud-root');
+    if (!root.hasAttribute('role')) root.setAttribute('role', 'complementary');
+  } catch {}
+
   try { attachHudDrag(root); } catch {}
 
   const speechNotes = initSpeechNotesHud({ root, bus, store });
