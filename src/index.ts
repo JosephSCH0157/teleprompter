@@ -111,16 +111,9 @@ try {
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
-bootstrap().catch(() => {});
-installHudIfAvailable();
-// Retry once after a short delay in case debug-tools.js loads late
-try {
-	setTimeout(() => { try { installHudIfAvailable(); } catch {} }, 1500);
-} catch {}
-// Load HUD script on demand in dev/debug contexts
-loadHudScriptIfNeeded();
-// Fallback legacy HUD hotkey installer (uses debug-tools.js)
-try { maybeInstallLegacyHud(); } catch {}
+bootstrap().catch(() => {
+	// HUD/debug paths are optional; never block boot
+});
 
 try {
 	initRecorderBackends();
@@ -519,37 +512,10 @@ type AnyFn = (...args: any[]) => any;
 
 declare global {
 	interface Window {
-		__tpInstallHUD?: (opts?: { hotkey?: string }) => any;
-		__tpHud?: { log?: AnyFn | undefined } | undefined;
 		HUD?: { bus?: { emit?: AnyFn | undefined } | undefined; log?: AnyFn | undefined } | undefined;
 		__tpScrollDebug?: boolean;
 		__tpHudTsInited?: boolean;
 		hudRoot?: HTMLElement | null;
-	}
-}
-
-function installHudIfAvailable(): void {
-	try {
-		// If TS HUD is already initialized or legacy HUD exists, bail.
-		if ((window as any).__tpHud || (window as any).__tpHudTsInited) return;
-
-		// Defer until DOM is ready so we can see #hud-root before deciding to install legacy HUD.
-		if (typeof document !== 'undefined' && document.readyState === 'loading') {
-			document.addEventListener('DOMContentLoaded', () => {
-				try { installHudIfAvailable(); } catch {}
-			}, { once: true });
-			return;
-		}
-
-		// If the TS HUD root exists in the DOM, prefer the TS HUD and skip legacy/debug HUD.
-		if (typeof document !== 'undefined' && document.getElementById('hud-root')) return;
-
-		// already installed (legacy or previous call)
-		if (typeof (window as any).__tpInstallHUD === 'function') {
-			(window as any).__tpHud = (window as any).__tpInstallHUD({ hotkey: '~' });
-		}
-	} catch {
-		// HUD is optional; never break boot
 	}
 }
 
@@ -601,13 +567,6 @@ function _ensureHud(store: any): void {
 	} catch {
 		// HUD is optional; ignore failures
 	}
-}
-
-// Legacy HUD loader removed; TS HUD is canonical
-
-function loadHudScriptIfNeeded(): void {
-	if (isDisplayContext()) return;
-// Legacy debug HUD loader removed: TS HUD is canonical
 }
 
 const startPersistence = initOnce('persistence', initPersistence);
