@@ -19,24 +19,23 @@ function getSidebarSelect(): HTMLSelectElement | null {
   return document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
 }
 
-let syncing = false;
+let isSyncingScriptsSelect = false;
 
 function syncSidebarFromSettings(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
   if (!settings || !sidebar) return;
 
-  if (syncing) return;
-  syncing = true;
+  if (isSyncingScriptsSelect) return;
+  isSyncingScriptsSelect = true;
   try {
-    sidebar.innerHTML = '';
-    for (const opt of Array.from(settings.options)) {
-      const clone = opt.cloneNode(true) as HTMLOptionElement;
-      sidebar.appendChild(clone);
+    sidebar.disabled = settings.disabled;
+    sidebar.value = settings.value;
+    if (sidebar.selectedIndex !== settings.selectedIndex) {
+      sidebar.selectedIndex = settings.selectedIndex;
     }
-    sidebar.selectedIndex = settings.selectedIndex;
   } finally {
-    syncing = false;
+    isSyncingScriptsSelect = false;
   }
   try {
     console.debug('[SCRIPT-EDITOR] syncSidebarFromSettings', {
@@ -51,17 +50,21 @@ function forwardSidebarChange(): void {
   const settings = getSettingsSelect();
   const sidebar = getSidebarSelect();
   if (!settings || !sidebar || !sidebar.value) return;
-  if (syncing) return;
-  syncing = true;
-  settings.value = sidebar.value;
+  if (isSyncingScriptsSelect) return;
+  if (sidebar.value === settings.value) return;
+  isSyncingScriptsSelect = true;
   try {
-    console.debug('[SCRIPT-EDITOR] sidebar → settings', {
-      sidebarValue: sidebar.value,
-      settingsOptions: settings.options.length,
-    });
-  } catch {}
-  settings.dispatchEvent(new Event('change', { bubbles: true }));
-  syncing = false;
+    settings.value = sidebar.value;
+    try {
+      console.debug('[SCRIPT-EDITOR] sidebar -> settings', {
+        sidebarValue: sidebar.value,
+        settingsOptions: settings.options.length,
+      });
+    } catch {}
+    settings.dispatchEvent(new Event('change', { bubbles: true }));
+  } finally {
+    isSyncingScriptsSelect = false;
+  }
 }
 
 function handleLoadClick(): void {
@@ -135,3 +138,8 @@ if (typeof document !== 'undefined') {
 }
 
 export {};
+
+
+
+
+
