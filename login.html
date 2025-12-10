@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Podcaster’s Forge – Log In</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+  </head>
+  <body>
+    <main id="forge-login-root">
+      <h1>Podcaster’s Forge</h1>
+      <p>Log in or create an account to access your tools.</p>
+
+      <form id="login-form">
+        <label>
+          Email<br />
+          <input
+            id="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+        </label>
+
+        <br />
+
+        <label>
+          Password<br />
+          <input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+
+        <br />
+
+        <button type="submit">Log in</button>
+      </form>
+
+      <p>
+        New here?
+        <button id="signup-btn" type="button">Create account</button>
+      </p>
+
+      <p id="error" aria-live="polite"></p>
+    </main>
+
+    <!-- Adjust path if your bundler outputs somewhere else -->
+    <script type="module" src="/dist/forge/login.js"></script>
+  </body>
+</html>
