@@ -17,10 +17,20 @@ let __isRemote = false; // broadcast loop guard
 let __displayCh: BroadcastChannel | null = null;
 
 function broadcastToDisplay(text: string): void {
+  let html = '';
+  try {
+    const scriptEl =
+      (document.querySelector('#viewer #script') as HTMLElement | null) ||
+      (document.getElementById('script') as HTMLElement | null);
+    if (scriptEl && typeof scriptEl.innerHTML === 'string') {
+      html = scriptEl.innerHTML;
+    }
+  } catch {}
   const payload = {
     kind: 'tp:script',
     source: 'main',
     text,
+    html,
     textHash: String(text?.length || 0) + ':' + (text?.slice?.(0, 32) || ''),
   };
   // BroadcastChannel preferred
