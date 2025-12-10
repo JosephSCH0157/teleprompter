@@ -16,6 +16,7 @@ export function pushDisplaySnapshot(text: string): void {
     return; // do not echo from the display window itself
   }
   const payload = {
+    type: 'tp:script',
     kind: 'tp:script',
     source: 'main',
     text: text || '',
@@ -95,6 +96,7 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
       const text = opts.getText?.() || '';
       const anchor = opts.getAnchorRatio?.();
       const payload = {
+        type: 'tp:script',
         kind: 'tp:script',
         source: 'main',
         text,

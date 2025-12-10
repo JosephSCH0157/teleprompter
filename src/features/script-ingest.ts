@@ -32,6 +32,7 @@ export function broadcastToDisplay(text: string): void {
     }
   } catch {}
   const payload = {
+    type: 'tp:script',
     kind: 'tp:script',
     source: 'main',
     text,
