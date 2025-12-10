@@ -16,8 +16,7 @@ let __docCh: BroadcastChannel | null = null;
 let __isRemote = false; // broadcast loop guard
 try {
   __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));
-  if (__docCh && !(window as any).__tpDocChOnMsg) {
-    (window as any).__tpDocChOnMsg = true;
+  if (__docCh) {
     try {
       __docCh.onmessage = (ev: MessageEvent) => {
         try {
