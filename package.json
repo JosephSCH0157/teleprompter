@@ -8,7 +8,7 @@
     "lint:strict": "eslint . --ext .js,.ts --max-warnings=0 --ignore-pattern dist/**",
     "lint:fix": "eslint . --ext .js,.ts --fix",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
-    "build:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src",
+    "build:ts": "esbuild src/index.ts src/forge/login.ts src/forge/account.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src",
     "build:compat": "esbuild recorders.ts adapters/bridge.ts adapters/obs.ts --bundle --format=esm --sourcemap --outdir=. --platform=browser --banner:js=\"/* GENERATED FROM TypeScript - DO NOT EDIT. Edit recorders.ts / adapters/*.ts instead. */\"",
     "build": "npm run build:ts && npm run build:compat && npm run build:speech && npm run build:hud",
     "watch:ts": "esbuild src/index.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src --watch",
