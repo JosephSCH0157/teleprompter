@@ -346,7 +346,7 @@
                 try {
                   const msg = e?.data || {};
                   // Script snapshots from main
-                  if (msg && msg.kind === 'tp:script') {
+                  if (msg && (msg.kind === 'tp:script' || msg.type === 'tp:script')) {
                     applyScriptSnapshot(msg.html || msg.text || '');
                     applyScaled();
                     applyBottomPad();
@@ -386,7 +386,7 @@
                 return;
               }
               // Script snapshots via postMessage
-              if (d && d.kind === 'tp:script') {
+              if (d && (d.kind === 'tp:script' || d.type === 'tp:script')) {
                 applyScriptSnapshot(d.html || d.text || '');
                 applyScaled();
                 applyBottomPad();
@@ -428,7 +428,7 @@
                 return;
               }
               // New display-sync snapshot via postMessage fallback
-              if (d && d.kind === 'tp:script' && d.source === 'main') {
+              if (d && (d.kind === 'tp:script' || d.type === 'tp:script') && d.source === 'main') {
                 try { window.__lastDisplayHash = d.textHash || ''; } catch {}
                 const payload = String(d.html || d.text || '');
                 if (payload) {
