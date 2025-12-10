@@ -239,6 +239,7 @@
                 recPill.classList.add('hidden');
               }
             }
+            const mapRecState = (s) => (s === 'armed' ? 'armed' : s === 'recording' ? 'recording' : 'idle');
 
             // Call on resize (debounced 150ms; only adjust if focus changed)
             (function(){
@@ -352,6 +353,10 @@
                     applyRecordState(msg.state || 'idle');
                     return;
                   }
+                  if (msg && msg.type === 'rec-state') {
+                    applyRecordState(mapRecState(msg.state));
+                    return;
+                  }
                   // Lightweight mirror/diagnostic channel only
                   if (msg && msg.t === 'display:ping') {
                     try { chan.postMessage({ t: 'display:pong' }); } catch {}
@@ -380,6 +385,10 @@
               }
               if (d && d.kind === 'tp:record') {
                 applyRecordState(d.state || 'idle');
+                return;
+              }
+              if (d && d.type === 'rec-state') {
+                applyRecordState(mapRecState(d.state));
                 return;
               }
               // Typography via postMessage
