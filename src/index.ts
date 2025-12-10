@@ -637,9 +637,11 @@ function onDomReady(fn: () => void): void {
   }
 }
 
-// Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
-try {
+  // Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
+  try {
 			onDomReady(() => {
+        // Display window is a passive mirror; skip main UI wiring to avoid duplicate observers
+        if (isDisplayContext()) return;
         try { bindStaticDom(); } catch (e) { try { console.warn('[index] bindStaticDom failed', e); } catch {} }
 				const brain = ensureScrollBrain();
 				installWpmSpeedBridge({
