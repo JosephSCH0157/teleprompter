@@ -159,19 +159,51 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
-            // Color sync via BroadcastChannel
+
+            // Speakers legend (display window)
+            const legendEl = document.getElementById('legend');
+            const legendState = {
+              s1: { name: 'Joe', color: '#60a5fa' },
+              s2: { name: 'Brad', color: '#facc15' },
+            };
+            const cssColor = (varName, fallback) => {
+              try {
+                const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+                return v || fallback;
+              } catch { return fallback; }
+            };
+            function renderLegend() {
+              if (!legendEl) return;
+              legendEl.innerHTML = '';
+              (['s1','s2']).forEach((key) => {
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                const dot = document.createElement('span');
+                dot.className = 'dot';
+                dot.style.background = legendState[key].color || cssColor(`--${key}-color`, '#60a5fa');
+                const lbl = document.createElement('span');
+                lbl.id = `lbl-${key}`;
+                lbl.textContent = legendState[key].name;
+                tag.appendChild(dot);
+                tag.appendChild(lbl);
+                legendEl.appendChild(tag);
+              });
+            }
+            renderLegend();
+
+            // Color/name sync via BroadcastChannel
             let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
             if (bc) {
-              const lblS1 = () => document.getElementById('lbl-s1');
-              const lblS2 = () => document.getElementById('lbl-s2');
               bc.onmessage = (e) => {
                 const d = e?.data || {};
                 if (d.type === 'SPEAKER_COLORS') {
-                  if (d.s1) document.documentElement.style.setProperty('--s1-color', d.s1);
-                  if (d.s2) document.documentElement.style.setProperty('--s2-color', d.s2);
+                  if (d.s1) { document.documentElement.style.setProperty('--s1-color', d.s1); legendState.s1.color = d.s1; }
+                  if (d.s2) { document.documentElement.style.setProperty('--s2-color', d.s2); legendState.s2.color = d.s2; }
+                  renderLegend();
                 } else if (d.type === 'SPEAKER_NAMES') {
-                  if (typeof d.s1Name === 'string') { const n = lblS1(); if (n) n.textContent = d.s1Name; }
-                  if (typeof d.s2Name === 'string') { const n = lblS2(); if (n) n.textContent = d.s2Name; }
+                  if (typeof d.s1Name === 'string') { legendState.s1.name = d.s1Name; }
+                  if (typeof d.s2Name === 'string') { legendState.s2.name = d.s2Name; }
+                  renderLegend();
                 }
               };
             }
