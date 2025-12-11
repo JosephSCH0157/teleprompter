@@ -32,6 +32,9 @@ date: 2025-12-10
 - Other JS stubs still shipped for back-compat: `obs.js`, `hotkey.js`, `bridge.js`, `events.js`, `help.js`, `ui-sanitize.js`, `asr-types.js`
 - Generated logic helpers: `src/build-logic/*.js` (output of `npm run build:logic`)
 
+**Generated modules**
+- `src/build-logic/**` — compiled from `src/logic/**` via `npm run build:logic` (do not edit)
+
 **Notes**
 - `ui-sanitize.js` is intentionally commented out in `teleprompter_pro.html`.
 - Display window no longer loads the main TS bundle; it hydrates via `tp_display` snapshots.
