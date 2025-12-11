@@ -72,3 +72,35 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       break;
   }
 }
+
+export function initWpmBindings(root: Document | HTMLElement = document): void {
+  const anyWin = window as any;
+  const store = anyWin.__tpStore;
+  const wpmInput = root.querySelector<HTMLInputElement>('#wpmTarget');
+  const wpmPxChip = root.querySelector<HTMLElement>('#wpmPx');
+
+  if (!wpmInput || !store || typeof store.set !== 'function' || typeof store.get !== 'function') return;
+
+  const updateFromStore = () => {
+    const wpm = Number(store.get('wpmTarget') ?? 150) || 150;
+    const pxPerWord = Number(store.get('pxPerWord') ?? 4) || 4;
+    const pxPerSec = (wpm * pxPerWord) / 60;
+    wpmInput.value = String(wpm);
+    if (wpmPxChip) {
+      wpmPxChip.textContent = `${pxPerSec.toFixed(1)} px/s`;
+    }
+  };
+
+  wpmInput.addEventListener('change', () => {
+    const next = Number(wpmInput.value || '0') || 0;
+    store.set('wpmTarget', next);
+    updateFromStore();
+  });
+
+  if (typeof store.subscribe === 'function') {
+    store.subscribe('wpmTarget', updateFromStore);
+    store.subscribe('pxPerWord', updateFromStore);
+  }
+
+  updateFromStore();
+}

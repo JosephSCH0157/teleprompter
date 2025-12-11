@@ -55,6 +55,7 @@ let lastTs: number | null = null;
 let lastTargetTop: number | null = null; // keep sub-pixel accumulation even if DOM rounds
 let active = false;
 let controller: AutoScrollController | null = null;
+let currentMode: 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'auto' = 'timed';
 
 // Momentary speed multiplier (Shift/Alt)
 let momentaryMult = 1;
@@ -106,17 +107,36 @@ function saveBaseSpeed(pxPerSec: number): void {
 }
 
 function currentSpeedPx(): number {
-  if (speedInput) {
-    const raw = Number(speedInput.value);
-    if (Number.isFinite(raw)) {
-      const clamped = Math.max(0, Math.min(200, raw));
-      if (clamped !== raw) {
-        try { hud('auto:speed:clamp', { raw, clamped }); } catch {}
+  const store = (window as any).__tpStore || appStore;
+  const base = (() => {
+    if (speedInput) {
+      const raw = Number(speedInput.value);
+      if (Number.isFinite(raw)) {
+        const clamped = Math.max(0, Math.min(200, raw));
+        if (clamped !== raw) {
+          try { hud('auto:speed:clamp', { raw, clamped }); } catch {}
+        }
+        return clamped;
       }
-      return clamped;
     }
+    return loadBaseSpeed();
+  })();
+
+  // WPM / Hybrid derive px/s from WPM target if available
+  if (currentMode === 'wpm' || currentMode === 'hybrid') {
+    const wpm = Number(store?.get?.('wpmTarget') ?? 150) || 150;
+    const pxPerWord = Number(store?.get?.('pxPerWord') ?? 4) || 4;
+    const wpmSpeed = (wpm * pxPerWord) / 60;
+    if (Number.isFinite(wpmSpeed) && wpmSpeed > 0) return wpmSpeed;
   }
-  return loadBaseSpeed();
+
+  // Timed/Auto fall back to base px/s
+  if (currentMode === 'timed' || currentMode === 'auto') {
+    return base;
+  }
+
+  // ASR / Step / Rehearsal should not be driven by this engine
+  return 0;
 }
 
 function readSpeedFromSlider(): number {
@@ -327,6 +347,9 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
         return setSpeed(px);
       },
       getState: () => ({ enabled: active, speed: currentSpeedPx() }),
+      setMode: (mode: any) => {
+        try { currentMode = mode; } catch {}
+      },
       startFromPreroll: (detail?: unknown) => {
         try { console.log('[AUTO] startFromPreroll', detail); } catch {}
         let speed = readSpeedFromSlider();

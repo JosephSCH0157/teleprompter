@@ -46,7 +46,7 @@ import { initRecordingSession } from './features/recording-session';
 import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
-import { applyScrollModeUI } from './ui/scrollMode';
+import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 
 import { bootstrap } from './boot/boot';
 
@@ -1103,6 +1103,7 @@ try {
 
   // Ensure UI/store reflect initial mode
   try { applyUiScrollMode(scrollModeSource.get() as any); } catch {}
+  try { initWpmBindings(); } catch {}
 
   // Legacy setScrollMode bridge
   (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off'|'timed'|'wpm'|'hybrid') => {
