@@ -945,21 +945,7 @@ export async function boot() {
             try { installCKEgg(); } catch {}
             try { installAboutPopover(); } catch {}
           }
-          // Load debug tools dynamically in dev only (non-blocking)
-					try {
-						const DEV = (() => { try { return location.search.includes('dev=1') || localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; } })();
-						if (DEV) {
-							setTimeout(() => {
-								try {
-									const s = document.createElement('script');
-									s.src = '/debug-tools.js';
-									s.async = true;
-									document.head.appendChild(s);
-								} catch {}
-							}, 0);
-						}
-					} catch {}
-					// Core UI binder (idempotent)
+          // Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
 								try { wireSettings({ store: appStore }); } catch {}
