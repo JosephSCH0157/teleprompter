@@ -1,227 +1,227 @@
 // src/features/scroll/mode-router.ts
-// Central router for scroll modes. Decides which subsystems are active:
-// - auto/hybrid scroll engine
-// - step scroll
-// - rehearsal mode
-// and keeps them in sync with the global scrollMode value.
+// Central router that turns engines on/off based on scrollMode + session state.
 
-import type { StepScrollAPI } from './step-scroll';
+export type ScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'auto';
 
-// These should match whatever you’re already using as mode labels
-export type ScrollMode =
-  | 'manual'
-  | 'auto'
-  | 'hybrid'
-  | 'step'
-  | 'rehearsal';
-
-export interface AutoScrollAPI {
-  setEnabled(on: boolean): void;
-  setMode?(mode: 'auto' | 'hybrid'): void;
+export interface SessionState {
+  state: 'idle' | 'preroll' | 'live' | 'stopping' | 'stopped';
+  scrollAutoOnLive: boolean;
 }
 
-export interface RehearsalApi {
-  enable(): void;
-  disable(): void;
-  isActive(): boolean;
+// Engines are deliberately loose so we can adapt to existing shapes.
+export interface AutoEngine {
+  setEnabled?(enabled: boolean): void;
+  start?(): void;
+  stop?(): void;
+  setMode?(mode: ScrollMode): void;
 }
 
-export interface StoreLike {
-  subscribe?(key: string, cb: (value: unknown) => void): () => void;
-  get?(key: string): unknown;
-  set?(key: string, value: unknown): void;
+export interface SimpleEngine {
+  setEnabled?(enabled: boolean): void;
+  enable?(): void;
+  disable?(): void;
+  start?(): void;
+  stop?(): void;
+  isActive?(): boolean;
 }
 
-export interface ScrollModeRouterDeps {
-  store?: StoreLike | null;
-  storeKey?: string; // usually 'scrollMode'
-  auto?: AutoScrollAPI | null;
-  step?: StepScrollAPI | null;
-  rehearsal?: RehearsalApi | null;
-  log?: (msg: string) => void;
+export interface SessionSource {
+  get(): SessionState;
+  subscribe(cb: (sess: SessionState) => void): void;
 }
 
+export interface ScrollModeSource {
+  get(): ScrollMode;
+  subscribe(cb: (mode: ScrollMode) => void): void;
+}
+
+export interface ModeRouterDeps {
+  auto: AutoEngine | null;
+  asr: SimpleEngine | null;
+  step: SimpleEngine | null;
+  session: SessionSource;
+  scrollMode: ScrollModeSource;
+}
+
+let currentMode: ScrollMode = 'hybrid';
+let currentSession: SessionState = { state: 'idle', scrollAutoOnLive: false };
+
+let autoEngine: AutoEngine | null = null;
+let asrEngine: SimpleEngine | null = null;
+let stepEngine: SimpleEngine | null = null;
+
+let lastAuto = false;
+let lastAsr = false;
+let lastStep = false;
+
+function shouldAutoRun(mode: ScrollMode, sess: SessionState): boolean {
+  if (sess.state !== 'live') return false;
+  if (!sess.scrollAutoOnLive) return false;
+  // Auto engine drives px/s in these modes only.
+  if (mode === 'timed' || mode === 'wpm' || mode === 'hybrid' || mode === 'auto') return true;
+  return false;
+}
+
+function shouldAsrRun(mode: ScrollMode, sess: SessionState): boolean {
+  if (sess.state !== 'live') return false;
+  return mode === 'hybrid' || mode === 'asr';
+}
+
+function shouldStepRun(mode: ScrollMode, sess: SessionState): boolean {
+  if (sess.state !== 'live') return false;
+  return mode === 'step';
+}
+
+function applySimpleEngine(engine: SimpleEngine | null, enabled: boolean, last: boolean): boolean {
+  if (!engine || enabled === last) return enabled;
+
+  if (engine.setEnabled) {
+    engine.setEnabled(enabled);
+  } else if (enabled) {
+    (engine.enable || engine.start || (() => {})).call(engine);
+  } else {
+    (engine.disable || engine.stop || (() => {})).call(engine);
+  }
+
+  return enabled;
+}
+
+function syncEngines() {
+  const mode = currentMode;
+  const sess = currentSession;
+
+  const wantAuto = shouldAutoRun(mode, sess);
+  const wantAsr = shouldAsrRun(mode, sess);
+  const wantStep = shouldStepRun(mode, sess);
+
+  if (autoEngine) {
+    if (autoEngine.setMode) {
+      autoEngine.setMode(mode);
+    }
+    if (wantAuto !== lastAuto) {
+      if (autoEngine.setEnabled) {
+        autoEngine.setEnabled(wantAuto);
+      } else if (wantAuto) {
+        autoEngine.start && autoEngine.start();
+      } else {
+        autoEngine.stop && autoEngine.stop();
+      }
+      lastAuto = wantAuto;
+    }
+  }
+
+  lastAsr = applySimpleEngine(asrEngine, wantAsr, lastAsr);
+  lastStep = applySimpleEngine(stepEngine, wantStep, lastStep);
+}
+
+export function initScrollModeRouter(deps: ModeRouterDeps) {
+  autoEngine = deps.auto;
+  asrEngine = deps.asr;
+  stepEngine = deps.step;
+
+  currentMode = deps.scrollMode.get();
+  currentSession = deps.session.get();
+
+  syncEngines();
+
+  deps.scrollMode.subscribe((mode) => {
+    if (!mode) return;
+    currentMode = mode;
+    syncEngines();
+  });
+
+  deps.session.subscribe((sess) => {
+    currentSession = sess;
+    syncEngines();
+  });
+}
+
+// Back-compat wrapper for older call sites/tests expecting a router object.
 export interface ScrollModeRouter {
   setMode(next: ScrollMode): void;
   getMode(): ScrollMode;
   dispose(): void;
 }
 
-function asMode(v: unknown, fallback: ScrollMode = 'manual'): ScrollMode {
-  const m = String(v || '').toLowerCase();
-  if (m === 'timed') return 'manual';
-  if (m === 'auto' || m === 'hybrid' || m === 'step' || m === 'rehearsal') {
-    return m as ScrollMode;
-  }
-  return fallback;
+export interface LegacyStoreLike {
+  subscribe?(key: string, cb: (value: unknown) => void): () => void;
+  get?(key: string): unknown;
+  set?(key: string, value: unknown): void;
 }
 
-export function createScrollModeRouter(
-  deps: ScrollModeRouterDeps,
-): ScrollModeRouter {
-  const log =
-    deps.log ||
-    ((msg: string) => {
-      try {
-        (window as any).HUD?.log?.('mode-router', msg);
-      } catch {
-        // ignore
-      }
-    });
+export interface LegacyDeps {
+  store?: LegacyStoreLike | null;
+  storeKey?: string;
+  auto?: AutoEngine | null;
+  step?: SimpleEngine | null;
+  rehearsal?: SimpleEngine | null; // ignored in new router
+  log?: (msg: string) => void;
+}
 
+export function createScrollModeRouter(deps: LegacyDeps): ScrollModeRouter {
+  const store = deps.store || null;
   const key = deps.storeKey || 'scrollMode';
-  let mode: ScrollMode = 'manual';
-  let unsubStore: (() => void) | null = null;
-  let updatingFromStore = false;
+  let currentMode: ScrollMode = 'hybrid';
+  const rehearsal = deps.rehearsal || null;
 
-  function applyToStore(next: ScrollMode): void {
-    const s = deps.store;
-    if (!s || typeof s.set !== 'function') return;
-    try {
-      updatingFromStore = true;
-      s.set(key, next);
-    } catch {
-      // ignore
-    } finally {
-      updatingFromStore = false;
-    }
-  }
+  const scrollModeSource: ScrollModeSource = {
+    get(): ScrollMode {
+      const raw = String(store?.get?.(key) ?? '').trim().toLowerCase();
+      const allowed: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto'];
+      return allowed.includes(raw as ScrollMode) ? (raw as ScrollMode) : 'hybrid';
+    },
+    subscribe(cb: (mode: ScrollMode) => void) {
+      store?.subscribe?.(key, () => cb(this.get()));
+    },
+  };
 
-function syncAuto(next: ScrollMode): void {
-  const auto = deps.auto;
-  if (!auto) return;
+  const sessionSource: SessionSource = {
+    get(): SessionState {
+      return {
+        state: 'live', // legacy wrapper assumes live to mirror previous behavior
+        scrollAutoOnLive: true,
+      };
+    },
+    subscribe(cb: (sess: SessionState) => void) {
+      // legacy wrapper: no session subscriptions
+      void cb;
+    },
+  };
 
-  // Only allow auto-scroll once preroll has finished and the session
-  // explicitly wants auto-scroll on live.
-  const allowAuto = (() => {
-    try {
-      const phase = deps.store?.get?.('session.phase');
-      const allowed = deps.store?.get?.('session.scrollAutoOnLive');
-      const hasGate = phase !== undefined || allowed !== undefined;
-      if (!hasGate) return true; // no session state => allow by default (tests/standalone)
-      if (phase !== 'live') return false;
-      return !!allowed;
-    } catch {
-      return true;
-    }
-  })();
+  initScrollModeRouter({
+    auto: deps.auto || null,
+    asr: null,
+    step: deps.step || null,
+    session: sessionSource,
+    scrollMode: scrollModeSource,
+  });
 
-  const active = allowAuto && (next === 'auto' || next === 'hybrid');
-  if (typeof auto.setEnabled === 'function') {
-    auto.setEnabled(active);
-  }
-  if (active && typeof auto.setMode === 'function') {
-    auto.setMode(next);
-  }
-}
+  // Handle rehearsal enable/disable for legacy callers
+  const syncRehearsal = (mode: ScrollMode) => {
+    if (!rehearsal) return;
+    const wants = mode === 'rehearsal';
+    const on = rehearsal.isActive ? !!rehearsal.isActive() : false;
+    if (wants && !on) rehearsal.enable?.();
+    if (!wants && on) rehearsal.disable?.();
+  };
 
-  function syncStep(next: ScrollMode): void {
-    const step = deps.step;
-    if (!step) return;
-
-    if (next === 'step') {
-      step.enable();
-    } else {
-      step.disable();
-    }
-  }
-
-  function syncRehearsal(next: ScrollMode): void {
-    const reh = deps.rehearsal;
-    if (!reh) return;
-
-    const wants = next === 'rehearsal';
-    const on = reh.isActive();
-
-    if (wants && !on) {
-      reh.enable();
-    } else if (!wants && on) {
-      // Let Rehearsal handle any confirmation / UI; router just nudges.
-      reh.disable();
-    }
-  }
-
-  function applyMode(next: ScrollMode, force = false): void {
-    if (!force && mode === next) return;
-    mode = next;
-    log(`mode -> ${mode}`);
-
-    syncAuto(next);
-    syncStep(next);
+  currentMode = scrollModeSource.get();
+  syncRehearsal(currentMode);
+  store?.subscribe?.(key, (v: unknown) => {
+    const next = scrollModeSource.get();
+    currentMode = next;
     syncRehearsal(next);
-
-    // Expose mode to DOM + listeners
-    try {
-      if (typeof document !== 'undefined') {
-        document.documentElement.setAttribute('data-scroll-mode', mode);
-      }
-    } catch {
-      // ignore
-    }
-    try {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('tp:scrollModeChange', { detail: { mode } }),
-        );
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  function setMode(next: ScrollMode): void {
-    const m = asMode(next, mode);
-    applyMode(m);
-    applyToStore(m);
-  }
-
-  function getMode(): ScrollMode {
-    return mode;
-  }
-
-  // Apply initial mode once so controllers reflect the current state immediately.
-  try {
-    const seed = asMode(deps.store?.get?.(key), mode);
-    applyMode(seed, true);
-  } catch {
-    applyMode(mode, true);
-  }
-
-  function bindStore(): void {
-    const s = deps.store;
-    if (!s || typeof s.subscribe !== 'function') return;
-
-    unsubStore =
-      s.subscribe(key, (v) => {
-        if (updatingFromStore) return;
-        const m = asMode(v, mode);
-        applyMode(m);
-      }) || null;
-
-    try {
-      const current = s.get?.(key);
-      const initial = asMode(current, mode);
-      applyMode(initial);
-    } catch {
-      // ignore
-    }
-  }
-
-  bindStore();
-
-  function dispose(): void {
-    try {
-      unsubStore?.();
-    } catch {
-      // ignore
-    }
-    unsubStore = null;
-  }
+  });
 
   return {
-    setMode,
-    getMode,
-    dispose,
+    setMode(next: ScrollMode) {
+      try { store?.set?.(key, next); } catch {}
+    },
+    getMode() {
+      return currentMode;
+    },
+    dispose() {
+      // no-op placeholder to satisfy legacy signature
+    },
   };
 }
-

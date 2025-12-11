@@ -1,4 +1,4 @@
-import { createScrollModeRouter } from './scroll/mode-router';
+import { initScrollModeRouter, type ScrollMode, type SessionState } from './scroll/mode-router';
 import { getAutoScrollApi } from './scroll/auto-adapter';
 import { appStore } from '../state/app-store';
 function bindAutoControls() {
@@ -7,13 +7,39 @@ function bindAutoControls() {
 
 function bindRouterControls() {
   try {
-    // Create the router against the store/auto brain; DOM select is bridged elsewhere (mode-bridge.ts).
     const auto = getAutoScrollApi();
-    const router = createScrollModeRouter({ auto, store: appStore });
-    // Expose for legacy callers without touching #scrollMode directly.
-    if (!(window as any).__tpScrollMode) {
-      (window as any).__tpScrollMode = router;
-    }
+    const scrollModeSource = {
+      get(): ScrollMode {
+        const raw = String(appStore.get?.('scrollMode') ?? '').trim().toLowerCase();
+        const allowed: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto'];
+        return (allowed.includes(raw as ScrollMode) ? (raw as ScrollMode) : 'hybrid');
+      },
+      subscribe(cb: (mode: ScrollMode) => void) {
+        appStore.subscribe?.('scrollMode', () => cb(this.get()));
+      },
+    };
+    const sessionSource = {
+      get(): SessionState {
+        const phase = (appStore.get?.('session.phase') as string) || 'idle';
+        return {
+          state: phase === 'live' ? 'live' : 'idle',
+          scrollAutoOnLive: !!appStore.get?.('session.scrollAutoOnLive'),
+        };
+      },
+      subscribe(cb: (sess: SessionState) => void) {
+        appStore.subscribe?.('session.phase', () => cb(this.get()));
+        appStore.subscribe?.('session.scrollAutoOnLive', () => cb(this.get()));
+      },
+    };
+
+    initScrollModeRouter({
+      auto,
+      asr: null,
+      step: null,
+      session: sessionSource,
+      scrollMode: scrollModeSource,
+    });
+    (window as any).__tpScrollMode = { setMode: (m: ScrollMode) => appStore.set?.('scrollMode', m), getMode: () => appStore.get?.('scrollMode') };
   } catch {}
 }
 

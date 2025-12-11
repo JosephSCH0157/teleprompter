@@ -466,7 +466,7 @@ import './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
-import { createScrollModeRouter } from './features/scroll/mode-router';
+import { initScrollModeRouter, type ScrollMode as RouterMode, type SessionState as RouterSessionState } from './features/scroll/mode-router';
 import { installStepScroll } from './features/scroll/step-scroll';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
@@ -1036,59 +1036,78 @@ export async function boot() {
 						}
 					} catch {}
 
-					// Step / Rehearsal
+					// Step / Rehearsal / Scroll Mode router wiring
 try {
   const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
   const rehearsal = installRehearsal();
   try { resolveInitialRehearsal(); } catch {}
-  // Minimal typed router: syncs store <-> step/rehearsal (auto can be added later)
-  try {
-    const store = (window as any).__tpStore || null;
-    const auto = getAutoScrollApi();
-    const router = createScrollModeRouter({ store, step, rehearsal, auto });
-    if (!(window as any).__tpScrollMode) {
-      (window as any).__tpScrollMode = router; // expose for dev/diagnostics
-    }
-    // Hydrate router/UI from persisted scrollMode on boot
-    try {
-      const initialMode =
-        (store?.get?.('scrollMode') as any) ||
+
+  const store = (window as any).__tpStore || null;
+  const auto = getAutoScrollApi();
+  const asrEngine = {
+    setEnabled(on: boolean) {
+      try { (window as any).__tpAsrMode?.setEnabled?.(on); } catch {}
+    },
+  };
+  const stepEngine = {
+    setEnabled(on: boolean) {
+      try {
+        if (on) step.enable();
+        else step.disable();
+      } catch {}
+    },
+  };
+  const sessionSource = {
+    get(): RouterSessionState {
+      const phase = (store?.get?.('session.phase') as string) || 'idle';
+      return {
+        state: phase === 'live' ? 'live' : 'idle',
+        scrollAutoOnLive: !!store?.get?.('session.scrollAutoOnLive'),
+      };
+    },
+    subscribe(cb: (sess: RouterSessionState) => void) {
+      store?.subscribe?.('session.phase', () => cb(this.get()));
+      store?.subscribe?.('session.scrollAutoOnLive', () => cb(this.get()));
+    },
+  };
+  const scrollModeSource = {
+    get(): RouterMode {
+      const raw =
+        (store?.get?.('scrollMode') as string | undefined) ||
         localStorage.getItem('tp_scroll_mode_v1') ||
         localStorage.getItem('tp_scroll_mode') ||
         localStorage.getItem('scrollMode') ||
-        'off';
-      router.setMode(initialMode as any);
-      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      if (sel && Array.from(sel.options).some((o) => o.value === initialMode)) {
-        sel.value = initialMode;
-      }
-    } catch {}
-    // Dev helper: quick router poke from console
-    try {
-      (window as any).__tpSetMode = (mode: string) => {
-        try {
-          (window as any).__tpScrollMode?.setMode?.(mode as any);
-          console.info('[Anvil] scrollMode', mode);
-        } catch (err) {
-          console.error('Failed to set scroll mode', err);
-        }
-      };
-    } catch {}
-  } catch {}
-  // Always bridge legacy setScrollMode through the canonical helper + typed router.
-  (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off') => {
-    // 1) Update UI/brain/store via the canonical helper.
+        'hybrid';
+      const val = String(raw || '').trim().toLowerCase();
+      const allowed: RouterMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto'];
+      return allowed.includes(val as RouterMode) ? (val as RouterMode) : 'hybrid';
+    },
+    subscribe(cb: (mode: RouterMode) => void) {
+      store?.subscribe?.('scrollMode', () => cb(this.get()));
+    },
+  };
+
+  initScrollModeRouter({
+    auto,
+    asr: asrEngine,
+    step: stepEngine,
+    session: sessionSource,
+    scrollMode: scrollModeSource,
+  });
+
+  // Expose minimal setter for dev/diagnostics
+  (window as any).__tpScrollMode = {
+    setMode: (m: RouterMode) => { try { store?.set?.('scrollMode', m); } catch {} },
+    getMode: () => scrollModeSource.get(),
+  };
+
+  // Ensure UI/store reflect initial mode
+  try { applyUiScrollMode(scrollModeSource.get() as any); } catch {}
+
+  // Legacy setScrollMode bridge
+  (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off'|'timed'|'wpm'|'hybrid') => {
     try { applyUiScrollMode(mode as any); } catch {}
-
-    // 2) Keep typed router (step/rehearsal/auto wiring) in sync.
-    try {
-      const r = (window as any).__tpScrollMode;
-      if (r && typeof r.setMode === 'function') {
-        r.setMode(mode);
-      }
-    } catch {}
-
-    // 3) Stop any legacy auto-catchup when mode changes.
+    try { store?.set?.('scrollMode', mode); } catch {}
     try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
   };
 } catch {}
