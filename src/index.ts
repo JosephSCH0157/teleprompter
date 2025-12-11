@@ -497,7 +497,7 @@ import { bindCoreUI } from './wiring/ui-binds';
 import { initHudController } from './hud/controller';
 import { initHud } from './hud/loader';
 import { wireHudToggle } from './hud/toggle';
-import { bindStaticDom } from './ui/dom';
+import { bindStaticDom, initLegend } from './ui/dom';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
@@ -1155,6 +1155,7 @@ try {
 							},
 							getDisplayWindow: () => { try { return (window as any).__tpDisplayWindow || null; } catch { return null; } },
 						});
+						try { initLegend(appStore); } catch {}
 					} catch {}
 
 					// Typography

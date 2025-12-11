@@ -752,7 +752,7 @@ function loadRoles() {
   catch { return { ...ROLE_DEFAULTS }; }
 }
 
-function updateLegend() {
+export function updateLegend() {
   try {
     // Mark that legend is being rendered so the MutationObserver can ignore these mutations
     document.documentElement.dataset.legendRendering = '1';
@@ -839,6 +839,22 @@ function updateLegend() {
   } finally {
     try { delete document.documentElement.dataset.legendRendering; } catch {}
   }
+}
+
+export function initLegend(appStore: any = (window as any).__tpStore): void {
+  try {
+    updateLegend();
+    // Subscribe to any speaker name/color changes; fallback to periodic refresh if no store
+    const refresh = () => { try { updateLegend(); } catch {} };
+    const sub = appStore?.subscribe;
+    if (typeof sub === 'function') {
+      try { sub('speakerNames', refresh); } catch {}
+      try { sub('speakerColors', refresh); } catch {}
+      try { sub('tp_roles_v2', refresh); } catch {}
+    } else {
+      // fallback: observe input changes (already wired inside updateLegend)
+    }
+  } catch {}
 }
 
 function ensureEmptyBanner() {
