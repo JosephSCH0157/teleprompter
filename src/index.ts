@@ -465,6 +465,7 @@ import './asr/v2/prompts';
 import './features/autoscroll';
 import { installDisplaySync } from './features/display-sync';
 import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal';
+import { asrEngine } from './features/asr-engine';
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
 import { initScrollModeRouter, type ScrollMode as RouterMode, type SessionState as RouterSessionState } from './features/scroll/mode-router';
 import { installStepScroll } from './features/scroll/step-scroll';
@@ -1045,25 +1046,6 @@ try {
 
   const store = (window as any).__tpStore || null;
   const auto = getAutoScrollApi();
-  const asrEngine = {
-    setEnabled(on: boolean) {
-      try {
-        const speech = (window as any).__tpAsrMode;
-        if (!speech) {
-          if ((window as any).__tpDevMode) console.warn('[ASR-ENGINE] No __tpAsrMode; cannot toggle ASR scroll');
-          return;
-        }
-        if (on) {
-          if ((window as any).__tpDevMode) console.info('[ASR-ENGINE] enabling ASR scroll');
-          speech.enableScroll?.();
-          speech.setScrollMode?.('anchor');
-        } else {
-          if ((window as any).__tpDevMode) console.info('[ASR-ENGINE] disabling ASR scroll');
-          speech.disableScroll?.();
-        }
-      } catch {}
-    },
-  };
   const stepEngineApi = stepEngine;
   const sessionSource = {
     get(): RouterSessionState {
@@ -1259,7 +1241,5 @@ try {
 } catch {}
 
 // Legacy HUD installer removed; TS HUD is canonical
-
-
 
 
