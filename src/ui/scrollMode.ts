@@ -19,6 +19,11 @@ function setRowVisibility(row: HTMLElement | null, visible: boolean) {
 export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement = document): void {
   const { autoSpeed, autoSpeedLabel, autoToggle, wpmRow, stepRow } = findAutoControls(root);
 
+  try {
+    const rootEl = root instanceof Document ? root.documentElement : root.ownerDocument?.documentElement || document.documentElement;
+    rootEl.classList.toggle('tp-mode-rehearsal', mode === 'rehearsal');
+  } catch {}
+
   // Default reset
   if (autoSpeed) autoSpeed.disabled = false;
   if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (px/s)';

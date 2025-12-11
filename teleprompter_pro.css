@@ -884,3 +884,20 @@ html.tp-present .present-exit { display: inline-flex; }
   display:none !important;
   pointer-events:none !important;
 }
+
+/* Rehearsal watermark */
+body.tp-mode-rehearsal::after{
+  content:'REHEARSAL MODE';
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:4rem;
+  font-weight:700;
+  letter-spacing:0.2em;
+  color:rgba(255,255,255,0.15);
+  pointer-events:none;
+  z-index:9999;
+}
+
