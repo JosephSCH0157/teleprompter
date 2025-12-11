@@ -116,6 +116,21 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     return () => {};
   }
 
+  // Reassurance hint: folder picker may look empty; mapping still works and files are filtered after selection.
+  try {
+    const hintId = `${sel.id || 'scripts'}-picker-hint`;
+    let hint = document.getElementById(hintId) as HTMLElement | null;
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.id = hintId;
+      hint.className = 'sidebar-hint';
+      hint.textContent = 'Note: The folder picker may look empty. Choose the folder; Anvil will scan supported script files automatically.';
+      if (sel.parentElement) {
+        sel.parentElement.appendChild(hint);
+      }
+    }
+  } catch {}
+
   let didInit = false;
   const ensureInit = async () => {
     if (didInit) return;
