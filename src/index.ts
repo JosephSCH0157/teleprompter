@@ -468,6 +468,7 @@ import { installRehearsal, resolveInitialRehearsal } from './features/rehearsal'
 import { getAutoScrollApi } from './features/scroll/auto-adapter';
 import { initScrollModeRouter, type ScrollMode as RouterMode, type SessionState as RouterSessionState } from './features/scroll/mode-router';
 import { installStepScroll } from './features/scroll/step-scroll';
+import { stepEngine } from './features/scroll/step-engine';
 import { applyTypographyTo } from './features/typography';
 import { initAsrFeature } from './index-hooks/asr';
 import { bindCameraUI } from './media/camera-bridge';
@@ -1049,14 +1050,7 @@ try {
       try { (window as any).__tpAsrMode?.setEnabled?.(on); } catch {}
     },
   };
-  const stepEngine = {
-    setEnabled(on: boolean) {
-      try {
-        if (on) step.enable();
-        else step.disable();
-      } catch {}
-    },
-  };
+  const stepEngineApi = stepEngine;
   const sessionSource = {
     get(): RouterSessionState {
       const phase = (store?.get?.('session.phase') as string) || 'idle';
@@ -1079,7 +1073,8 @@ try {
         localStorage.getItem('scrollMode') ||
         'hybrid';
       const val = String(raw || '').trim().toLowerCase();
-      const allowed: RouterMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto'];
+      if (val === 'auto') return 'hybrid';
+      const allowed: RouterMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal'];
       return allowed.includes(val as RouterMode) ? (val as RouterMode) : 'hybrid';
     },
     subscribe(cb: (mode: RouterMode) => void) {
@@ -1090,7 +1085,7 @@ try {
   initScrollModeRouter({
     auto,
     asr: asrEngine,
-    step: stepEngine,
+    step: stepEngineApi,
     session: sessionSource,
     scrollMode: scrollModeSource,
   });

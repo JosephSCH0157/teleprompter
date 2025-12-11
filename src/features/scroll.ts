@@ -11,7 +11,8 @@ function bindRouterControls() {
     const scrollModeSource = {
       get(): ScrollMode {
         const raw = String(appStore.get?.('scrollMode') ?? '').trim().toLowerCase();
-        const allowed: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto'];
+        if (raw === 'auto') return 'hybrid';
+        const allowed: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal'];
         return (allowed.includes(raw as ScrollMode) ? (raw as ScrollMode) : 'hybrid');
       },
       subscribe(cb: (mode: ScrollMode) => void) {
