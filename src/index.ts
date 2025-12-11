@@ -1047,7 +1047,26 @@ try {
   const auto = getAutoScrollApi();
   const asrEngine = {
     setEnabled(on: boolean) {
-      try { (window as any).__tpAsrMode?.setEnabled?.(on); } catch {}
+      try {
+        const mic = (window as any).__tpMic || {};
+        const speech = (window as any).__tpAsrMode;
+        const ready =
+          mic?.permission === 'granted' ||
+          mic?.hasPermission === true ||
+          mic?.isGranted === true ||
+          mic?.state === 'ready' ||
+          mic?.state === 'granted';
+        if (!ready) {
+          if ((window as any).__tpDevMode) {
+            console.warn('[ASR-ENGINE] cannot enable, mic not ready');
+          }
+          speech?.disableScroll?.();
+          return;
+        }
+        speech?.setEnabled?.(on);
+        if (on) speech?.setScrollMode?.('anchor');
+        else speech?.disableScroll?.();
+      } catch {}
     },
   };
   const stepEngineApi = stepEngine;

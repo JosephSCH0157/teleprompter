@@ -167,7 +167,8 @@ export function createScrollModeRouter(deps: LegacyDeps): ScrollModeRouter {
   const scrollModeSource: ScrollModeSource = {
     get(): ScrollMode {
       const raw = String(store?.get?.(key) ?? '').trim().toLowerCase();
-      const allowed: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto'];
+      if (raw === 'auto') return 'auto';
+      const allowed: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal'];
       return allowed.includes(raw as ScrollMode) ? (raw as ScrollMode) : 'hybrid';
     },
     subscribe(cb: (mode: ScrollMode) => void) {
