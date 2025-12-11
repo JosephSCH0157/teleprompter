@@ -2,48 +2,162 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Podcaster’s Forge – Log In</title>
+    <title>Podcaster's Forge — Log In</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      /* Login page shell */
+      body, html {
+        margin: 0;
+        padding: 0;
+      }
+      .tp-login-page {
+        min-height: 100vh;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 2rem 4rem;
+        box-sizing: border-box;
+        background-image: url("assets/login.png");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        position: relative;
+        color: #f5f5f5;
+        font-family: "Segoe UI", Arial, sans-serif;
+      }
+      .tp-login-page::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 25% 50%, rgba(0,0,0,0.35), rgba(0,0,0,0.75));
+        pointer-events: none;
+      }
+      .tp-login-content {
+        position: relative;
+        width: 100%;
+        max-width: 420px;
+      }
+      .tp-login-card {
+        background: rgba(15, 15, 20, 0.68);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.7);
+        padding: 2.5rem 2.75rem;
+      }
+      .tp-login-title {
+        font-size: 1.6rem;
+        font-weight: 600;
+        margin: 0 0 0.25rem;
+      }
+      .tp-login-subtitle {
+        font-size: 0.95rem;
+        opacity: 0.85;
+        margin: 0 0 1.75rem;
+      }
+      .tp-login-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 1.1rem;
+      }
+      .tp-login-field label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+      }
+      .tp-login-field input {
+        background: rgba(5,5,10,0.9);
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.14);
+        padding: 0.6rem 0.75rem;
+        color: #f8f8f8;
+        font-size: 0.95rem;
+      }
+      .tp-login-field input:focus {
+        outline: none;
+        border-color: #d66a2e;
+        box-shadow: 0 0 0 1px rgba(214,106,46,0.6);
+      }
+      .tp-login-button {
+        width: 100%;
+        margin-top: 0.5rem;
+        padding: 0.7rem 0.9rem;
+        border-radius: 999px;
+        border: none;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        background: linear-gradient(135deg, #d66a2e, #f4cfa0);
+        color: #151515;
+      }
+      .tp-login-button:hover { filter: brightness(1.05); }
+      .tp-login-secondary {
+        margin-top: 0.9rem;
+        font-size: 0.85rem;
+        text-align: center;
+        opacity: 0.85;
+      }
+      .tp-login-secondary a {
+        color: #f4cfa0;
+        text-decoration: none;
+      }
+      .tp-login-secondary a:hover { text-decoration: underline; }
+      #error {
+        color: #ffb3b3;
+        min-height: 1.2rem;
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+      }
+      @media (max-width: 768px) {
+        .tp-login-page {
+          justify-content: center;
+          padding: 1.5rem;
+        }
+        .tp-login-card {
+          padding: 2rem 1.75rem;
+        }
+      }
+    </style>
   </head>
   <body>
-    <main id="forge-login-root">
-      <h1>Podcaster’s Forge</h1>
-      <p>Log in or create an account to access your tools.</p>
+    <main id="forge-login-root" class="tp-login-page">
+      <div class="tp-login-content">
+        <div class="tp-login-card">
+          <div class="tp-login-title">Anvil</div>
+          <div class="tp-login-subtitle">Forge your voice. Shape your story.</div>
 
-      <form id="login-form">
-        <label>
-          Email<br />
-          <input
-            id="email"
-            type="email"
-            autocomplete="email"
-            required
-          />
-        </label>
+          <form id="login-form">
+            <div class="tp-login-field">
+              <label for="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                autocomplete="email"
+                required
+              />
+            </div>
 
-        <br />
+            <div class="tp-login-field">
+              <label for="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+            </div>
 
-        <label>
-          Password<br />
-          <input
-            id="password"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
-        </label>
+            <button type="submit" class="tp-login-button">Sign In</button>
 
-        <br />
+            <div class="tp-login-secondary">
+              Don't have an account?
+              <button id="signup-btn" type="button" style="background:none;border:none;color:#f4cfa0;cursor:pointer;padding:0;text-decoration:underline;">Request access</button>
+            </div>
+          </form>
 
-        <button type="submit">Log in</button>
-      </form>
-
-      <p>
-        New here?
-        <button id="signup-btn" type="button">Create account</button>
-      </p>
-
-      <p id="error" aria-live="polite"></p>
+          <p id="error" aria-live="polite"></p>
+        </div>
+      </div>
     </main>
 
     <script src="/forge-config.js"></script>
