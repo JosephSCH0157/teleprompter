@@ -240,7 +240,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           sel.append(opt);
         } else {
           sel.disabled = true;
-          sel.append(new Option('(No scripts found)', '', true, false));
+          sel.append(new Option('No existing scripts yet — map folder and save new ones here', '', true, false));
         }
         try { ScriptStore.syncMapped([]); } catch {}
         hudLog('folder:cleared', {});
@@ -325,7 +325,7 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           sel.append(opt);
         } else {
           sel.disabled = true;
-          sel.append(new Option('(No scripts found)', '', true, false));
+          sel.append(new Option('No existing scripts yet — map folder and save new ones here', '', true, false));
         }
         hudLog('folder:cleared', {});
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
@@ -392,7 +392,9 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           document.body.appendChild(s);
         }
       }
-      s.textContent = n === 1 ? '1 script found' : `${n} scripts found`;
+      s.textContent = n === 0
+        ? 'No existing scripts yet — map folder and save new ones here'
+        : (n === 1 ? '1 script found' : `${n} scripts found`);
     } catch {}
   }
 }
