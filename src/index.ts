@@ -46,6 +46,7 @@ import { initScrollSessionRouter } from './features/scroll-session';
 import { initRecordingSession } from './features/recording-session';
 import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
+import { ensurePageTabs } from './features/page-tabs';
 
 import { bootstrap } from './boot/boot';
 
@@ -98,6 +99,8 @@ try {
 		.catch((err) => { try { console.error('[forge] auth/profile init failed', err); } catch {} });
 } catch {}
 
+try { ensurePageTabs(appStore); } catch {}
+
 try {
 	window.Scripts = {
 		list: () => ScriptStore.list(),
@@ -139,24 +142,10 @@ import { installAsrScrollBridge } from './scroll/asr-bridge';
 import { setBrainBaseSpeed } from './scroll/brain-hooks';
 import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
-import { createScrollBrain } from './scroll/scroll-brain';
+import { getScrollBrain } from './scroll/brain-access';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
-
-let scrollBrain: ScrollBrain | null = null;
-
-function ensureScrollBrain(): ScrollBrain {
-	if (!scrollBrain) {
-		scrollBrain = createScrollBrain();
-		(window as any).__tpScrollBrain = scrollBrain;
-	}
-	return scrollBrain;
-}
-
-export function getScrollBrain() {
-	return ensureScrollBrain();
-}
 
 function bridgeLegacyScrollController() {
 	if (typeof window === 'undefined') return;

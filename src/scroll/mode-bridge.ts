@@ -1,4 +1,4 @@
-import { getScrollBrain } from '../index';
+import { getScrollBrain } from './brain-access';
 import { appStore } from '../state/app-store';
 import type { ScrollMode } from './scroll-brain';
 

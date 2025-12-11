@@ -4,6 +4,8 @@ import type { AppStore, PageName } from '../state/app-store';
 
 type PageStore = AppStore;
 
+let pageTabsWired = false;
+
 export function initPageTabs(store?: PageStore) {
   const S = store || ((window as any).__tpStore as AppStore | undefined);
   if (!S) {
@@ -69,4 +71,43 @@ export function initPageTabs(store?: PageStore) {
   apply(initial);
 
   try { S.subscribe('page', (v: PageName) => apply(coerce(v))); } catch {}
+}
+
+export function ensurePageTabs(store: PageStore): void {
+  if (pageTabsWired) return;
+  if (typeof document === 'undefined') return;
+
+  const tryInit = () => {
+    if (pageTabsWired) return true;
+    try {
+      // Keep the global attached in case something cleared it
+      try { (window as any).__tpStore = (window as any).__tpStore || store; } catch {}
+      const hasPanels = !!document.querySelector('[data-tp-panel]');
+      const hasTabs = !!document.querySelector('[data-tp-page]');
+      if (!hasPanels || !hasTabs) return false;
+      initPageTabs(store);
+      pageTabsWired = true;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      if (tryInit()) return;
+      const mo = new MutationObserver(() => {
+        if (tryInit()) mo.disconnect();
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(() => { try { mo.disconnect(); } catch {} }, 6000);
+    }, { once: true });
+  } else {
+    if (tryInit()) return;
+    const mo = new MutationObserver(() => {
+      if (tryInit()) mo.disconnect();
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => { try { mo.disconnect(); } catch {} }, 6000);
+  }
 }

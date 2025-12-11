@@ -1,6 +1,5 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
-import { initPageTabs } from '../features/page-tabs';
 
 const DEVICE_KEY = 'tp_mic_device_v1';
 const OBS_ENABLED_KEY = 'tp_obs_enabled';
@@ -152,46 +151,6 @@ function migrateAutoRecordFlag() {
 }
 
 migrateAutoRecordFlag();
-
-let pageTabsWired = false;
-function ensurePageTabs(store: PageStore) {
-  if (pageTabsWired) return;
-  if (typeof document === 'undefined') return;
-
-  const tryInit = () => {
-    if (pageTabsWired) return true;
-    try {
-      // Make sure the global stays attached in case something cleared it.
-      try { (window as any).__tpStore = (window as any).__tpStore || store; } catch {}
-      const hasPanels = !!document.querySelector('[data-tp-panel]');
-      const hasTabs = !!document.querySelector('[data-tp-page]');
-      if (!hasPanels || !hasTabs) return false;
-      initPageTabs(store);
-      pageTabsWired = true;
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      if (tryInit()) return;
-      const mo = new MutationObserver(() => {
-        if (tryInit()) mo.disconnect();
-      });
-      mo.observe(document.documentElement, { childList: true, subtree: true });
-      setTimeout(() => { try { mo.disconnect(); } catch {} }, 6000);
-    }, { once: true });
-  } else {
-    if (tryInit()) return;
-    const mo = new MutationObserver(() => {
-      if (tryInit()) mo.disconnect();
-    });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    setTimeout(() => { try { mo.disconnect(); } catch {} }, 6000);
-  }
-}
 
 function buildInitialState(): AppStoreState {
   return {
@@ -557,7 +516,6 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
         w.__tpStore = appStore;
       }
     }
-    ensurePageTabs(appStore);
   } catch {}
 
   return appStore;
