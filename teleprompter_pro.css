@@ -886,7 +886,7 @@ html.tp-present .present-exit { display: inline-flex; }
 }
 
 /* Rehearsal watermark */
-body.tp-mode-rehearsal::after{
+html.tp-mode-rehearsal::after{
   content:'REHEARSAL MODE';
   position:fixed;
   inset:0;

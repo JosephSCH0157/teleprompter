@@ -1048,24 +1048,19 @@ try {
   const asrEngine = {
     setEnabled(on: boolean) {
       try {
-        const mic = (window as any).__tpMic || {};
         const speech = (window as any).__tpAsrMode;
-        const ready =
-          mic?.permission === 'granted' ||
-          mic?.hasPermission === true ||
-          mic?.isGranted === true ||
-          mic?.state === 'ready' ||
-          mic?.state === 'granted';
-        if (!ready) {
-          if ((window as any).__tpDevMode) {
-            console.warn('[ASR-ENGINE] cannot enable, mic not ready');
-          }
-          speech?.disableScroll?.();
+        if (!speech) {
+          if ((window as any).__tpDevMode) console.warn('[ASR-ENGINE] No __tpAsrMode; cannot toggle ASR scroll');
           return;
         }
-        speech?.setEnabled?.(on);
-        if (on) speech?.setScrollMode?.('anchor');
-        else speech?.disableScroll?.();
+        if (on) {
+          if ((window as any).__tpDevMode) console.info('[ASR-ENGINE] enabling ASR scroll');
+          speech.enableScroll?.();
+          speech.setScrollMode?.('anchor');
+        } else {
+          if ((window as any).__tpDevMode) console.info('[ASR-ENGINE] disabling ASR scroll');
+          speech.disableScroll?.();
+        }
       } catch {}
     },
   };

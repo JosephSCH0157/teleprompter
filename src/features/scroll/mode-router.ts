@@ -67,8 +67,8 @@ function shouldAsrRun(mode: ScrollMode, sess: SessionState): boolean {
   return mode === 'hybrid' || mode === 'asr';
 }
 
-function shouldStepRun(mode: ScrollMode, sess: SessionState): boolean {
-  if (sess.state !== 'live') return false;
+function shouldStepRun(mode: ScrollMode, _sess: SessionState): boolean {
+  // Step should work even outside a live session
   return mode === 'step';
 }
 
