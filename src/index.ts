@@ -46,6 +46,7 @@ import { initRecordingSession } from './features/recording-session';
 import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
+import { applyScrollModeUI } from './ui/scrollMode';
 
 import { bootstrap } from './boot/boot';
 
@@ -133,7 +134,7 @@ import type { ScrollMode as BrainMode } from './scroll/scroll-brain';
 import { getScrollBrain } from './scroll/brain-access';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 
-type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal';
+type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal' | 'wpm' | 'hybrid' | 'timed';
 
 function bridgeLegacyScrollController() {
 	if (typeof window === 'undefined') return;
@@ -203,6 +204,7 @@ function persistScrollModeSelect(ev: Event): void {
   const t = ev.target as HTMLSelectElement | null;
   if (!t || t.id !== 'scrollMode') return;
   storeScrollMode();
+  try { applyUiScrollMode(t.value as UiScrollMode); } catch {}
 }
 try { document.addEventListener('change', persistScrollModeSelect, { capture: true }); } catch {}
 try { window.addEventListener('beforeunload', storeScrollMode, { capture: true }); } catch {}
@@ -216,6 +218,8 @@ function applyUiScrollMode(mode: UiScrollMode) {
   (window as any).__tpUiScrollMode = mode;
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
   try { appStore.set?.('scrollMode', mode); } catch {}
+
+  try { applyScrollModeUI(mode as any); } catch {}
 
 	const brain = getScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
@@ -238,11 +242,20 @@ function applyUiScrollMode(mode: UiScrollMode) {
       autoEnabled = false;
       break;
 
+    case 'timed':
+    case 'wpm':
     case 'auto':
       brainMode = 'auto';      // pure time-based scroll
       clampMode = 'free';      // ASR anti-jitter not needed
       asrEnabled = false;
       autoEnabled = false;      // Defer auto until session/router enables it
+      break;
+
+    case 'hybrid':
+      brainMode = 'hybrid';    // auto + ASR corrections
+      clampMode = 'follow';    // monotonic clamp
+      asrEnabled = false;
+      autoEnabled = false;
       break;
 
     case 'asr':
