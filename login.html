@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <title>Podcaster's Forge — Log In</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
     <style>
       /* Login page shell */
       body, html {
@@ -114,6 +117,24 @@
         margin-top: 0.75rem;
         font-size: 0.9rem;
       }
+      /* Brand masthead: Podcaster's Forge */
+      .tp-brand-forge {
+        position: absolute;
+        top: 1.75rem;
+        left: 2.5rem;
+        font-family: 'UnifrakturCook', 'Cinzel Decorative', 'Times New Roman', serif;
+        font-size: clamp(1.9rem, 2.4vw + 1rem, 2.7rem);
+        letter-spacing: 0.06em;
+        color: #f5f0e6;
+        text-shadow:
+          0 0 6px rgba(0, 0, 0, 0.75),
+          0 0 18px rgba(0, 0, 0, 0.65);
+        pointer-events: none;
+        user-select: none;
+      }
+      .tp-brand-forge .tp-brand-accent {
+        color: #f4cfa0;
+      }
       @media (max-width: 768px) {
         .tp-login-page {
           justify-content: center;
@@ -122,11 +143,19 @@
         .tp-login-card {
           padding: 2rem 1.75rem;
         }
+        .tp-brand-forge {
+          top: 1.25rem;
+          left: 1.5rem;
+          font-size: clamp(1.5rem, 4vw + 0.6rem, 2.1rem);
+        }
       }
     </style>
   </head>
   <body>
     <main id="forge-login-root" class="tp-login-page">
+      <div class="tp-brand-forge">
+        Podcaster's <span class="tp-brand-accent">Forge</span>
+      </div>
       <div class="tp-login-content">
         <div class="tp-login-card">
           <div class="tp-login-title">Anvil</div>
