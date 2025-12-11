@@ -71,13 +71,15 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   const raw = String(text ?? '');
   try { (window as any).__tpRawScript = raw; } catch {}
 
+  // Prefer the dedicated script container so we never nuke sibling UI (e.g., camera overlay).
+  // Fall back to viewer wrappers only if no script element exists.
   const root =
     container ||
+    (document.getElementById('script') as HTMLElement | null) ||
+    (document.querySelector('.script') as HTMLElement | null) ||
     (document.querySelector('#viewer') as HTMLElement | null) ||
     (document.querySelector('[data-role="viewer"]') as HTMLElement | null) ||
-    (document.querySelector('[data-script-view]') as HTMLElement | null) ||
-    (document.querySelector('#script') as HTMLElement | null) ||
-    (document.querySelector('.script') as HTMLElement | null);
+    (document.querySelector('[data-script-view]') as HTMLElement | null);
 
   if (!root) {
     try { console.warn('[render] #script container not found'); } catch {}
