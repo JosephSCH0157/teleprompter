@@ -22,7 +22,6 @@ import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { installScheduler } from './boot/scheduler';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import './features/scripts-local';
-import { ScriptStore, type ScriptMeta, type ScriptRecord } from './features/scripts-store';
 import { installSpeech } from './features/speech-loader';
 import { initObsConnection } from './obs/obs-connection';
 import { initObsWiring } from './obs/obs-wiring';
@@ -101,17 +100,6 @@ try {
 
 try { ensurePageTabs(appStore); } catch {}
 
-try {
-	window.Scripts = {
-		list: () => ScriptStore.list(),
-		get: (id: string) => ScriptStore.get(id),
-		save: (data) => ScriptStore.save(data),
-		rename: (id, title) => ScriptStore.rename(id, title),
-		remove: (id) => ScriptStore.remove(id),
-		syncMapped: (entries) => ScriptStore.syncMapped(entries),
-	};
-} catch {}
-
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
@@ -141,7 +129,7 @@ import './ui/script-editor';
 import { installAsrScrollBridge } from './scroll/asr-bridge';
 import { setBrainBaseSpeed } from './scroll/brain-hooks';
 import { initScrollModeBridge } from './scroll/mode-bridge';
-import type { ScrollMode as BrainMode, ScrollBrain } from './scroll/scroll-brain';
+import type { ScrollMode as BrainMode } from './scroll/scroll-brain';
 import { getScrollBrain } from './scroll/brain-access';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 
@@ -229,7 +217,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
   try { appStore.set?.('scrollMode', mode); } catch {}
 
-	const brain = ensureScrollBrain();
+	const brain = getScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
@@ -576,19 +564,6 @@ import { bindSettingsExportImport } from './ui/settings-export-import';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
-	declare global {
-		interface Window {
-		Scripts?: {
-			list: () => ScriptMeta[];
-			get: (id: string) => Promise<ScriptRecord | null>;
-			save: (data: { id?: string | null; title: string; content: string }) => string;
-			rename: (id: string, title: string) => void;
-			remove: (id: string) => void;
-			syncMapped: (entries: { id: string; title: string; handle: FileSystemHandle }[]) => void;
-		};
-		}
-	}
-
 function onDomReady(fn: () => void): void {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -603,7 +578,7 @@ function onDomReady(fn: () => void): void {
         // Display window is a passive mirror; skip main UI wiring to avoid duplicate observers
         if (isDisplayContext()) return;
         try { bindStaticDom(); } catch (e) { try { console.warn('[index] bindStaticDom failed', e); } catch {} }
-				const brain = ensureScrollBrain();
+				const brain = getScrollBrain();
 				installWpmSpeedBridge({
 					api: {
 						setBaseSpeedPx: (px: number) => {
@@ -793,9 +768,6 @@ try {
     try {
       installDisplaySync({
         channelName: 'tp_display',
-        isDisplay: false,
-        isResponder: true,
-        isRequester: false,
         getText: () => {
           try {
             const viewer = document.getElementById('viewer') as HTMLElement | null;
@@ -1126,9 +1098,6 @@ try {
 					try {
 						installDisplaySync({
 							channelName: 'tp_display',
-							isDisplay: false,
-							isResponder: true,
-							isRequester: false,
   							getText: () => {
   								try {
   									// Prefer rendered HTML so display window preserves colors/markup

@@ -2,7 +2,6 @@
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
 import { pushDisplaySnapshot } from './features/display-sync';
-import { pushDisplaySnapshot } from './features/display-sync';
 
 function _escapeHtml(input: string): string {
   return String(input || '')

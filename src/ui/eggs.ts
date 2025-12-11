@@ -4,9 +4,8 @@
 
 declare global {
 	interface Window {
-		toast?: (msg: string) => void;
 		setStatus?: (msg: string) => void;
-		sendToDisplay?: (payload: { type: 'toggle-ck'; on: boolean }) => void;
+		sendToDisplay?: (payload: any) => void;
 		APP_VERSION?: string;
 		__TP_DEV?: boolean;
 	}
@@ -331,4 +330,3 @@ export function installAboutPopover(): void {
 		}
 	});
 }
-

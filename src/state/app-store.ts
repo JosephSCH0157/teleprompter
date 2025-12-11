@@ -67,7 +67,6 @@ export type PageName = string;
 
 type Subscriber<T = unknown> = (value: T) => void;
 type SubscriptionMap = Record<string, Array<Subscriber<any>>>;
-type PageStore = AppStore;
 
 export type AppStoreState = {
   // UI / Settings

@@ -36,7 +36,6 @@ declare global {
     };
 
     __lastScrollTarget?: number;
-    sendToDisplay?(msg: any): void;
 
     __scrollCtl?: {
       stopAutoCatchup?(): void;

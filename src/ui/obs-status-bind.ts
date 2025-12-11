@@ -1,5 +1,4 @@
 import type { RecorderStatus } from '../state/recorder-settings';
-import type { RecorderStatus } from '../state/recorder-settings';
 import { subscribeRecorderSettings } from '../state/recorder-settings';
 
 type PillState = 'obs-pill--off' | 'obs-pill--pending' | 'obs-pill--on' | 'obs-pill--error';
