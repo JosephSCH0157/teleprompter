@@ -582,6 +582,72 @@
       <div><strong>F2</strong></div><div>Rename selected script</div>
       <div><strong>Delete</strong></div><div>Delete selected script</div>
     </div>
+    <section id="help-asr">
+      <h3>Speech-to-Text (ASR) Settings</h3>
+      <p>Anvil can listen to your voice and auto-scroll to follow you. Pick an engine and tune how it behaves.</p>
+
+      <h4>ASR Engines</h4>
+      <h5>Web Speech (Browser)</h5>
+      <p>Built-in browser recognition (e.g., Chrome Web Speech).</p>
+      <ul>
+        <li><strong>Pros:</strong> Very fast, no setup.</li>
+        <li><strong>Cons:</strong> Accuracy varies by browser/device; sensitive to noise.</li>
+      </ul>
+      <p>Use for quick tests or casual recordings.</p>
+
+      <h5>Offline Engine</h5>
+      <p>Local recognizer (no internet needed).</p>
+      <ul>
+        <li><strong>Pros:</strong> Private, consistent, works offline.</li>
+        <li><strong>Cons:</strong> Slightly slower; accuracy depends on model/hardware.</li>
+      </ul>
+      <p>Use when you want privacy or unreliable internet.</p>
+
+      <h5>Whisper Bridge</h5>
+      <p>High-accuracy Whisper (local or cloud-backed).</p>
+      <ul>
+        <li><strong>Pros:</strong> Excellent accuracy; handles accents and noisy rooms.</li>
+        <li><strong>Cons:</strong> Cloud use may spend tokens; a bit more latency.</li>
+      </ul>
+      <p>Use for serious podcast/video work.</p>
+
+      <h4>Common Options</h4>
+      <h5>Language</h5>
+      <p>Language you are speaking. Passed to the engine for correct interpretation.</p>
+
+      <h5>Use interim results</h5>
+      <p>Allows partial guesses before a sentence is done for faster scroll response.</p>
+      <ul>
+        <li><strong>On:</strong> Faster, more “live” scroll; can be jumpy in noise.</li>
+        <li><strong>Off:</strong> Waits for finalized phrases; smoother but slower.</li>
+      </ul>
+
+      <h5>Filter filler words</h5>
+      <p>Drop “um/uh/like…” so scroll matches script better and jitters less.</p>
+
+      <h4>Advanced Controls</h4>
+      <h5>Confidence threshold</h5>
+      <p>Minimum confidence (0.0–1.0) before accepting words.</p>
+      <ul>
+        <li><strong>Higher (0.8–0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
+        <li><strong>Lower (0.4–0.6):</strong> More responsive; occasional wrong words.</li>
+      </ul>
+
+      <h5>End-pointing (µs)</h5>
+      <p>Silence duration before a phrase finalizes (1,000,000 µs = 1s).</p>
+      <ul>
+        <li><strong>Lower (200k–400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
+        <li><strong>Higher (800k–1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
+      </ul>
+
+      <h4>Suggested Starting Points</h4>
+      <ul>
+        <li><strong>Podcast:</strong> Whisper Bridge; interim on; fillers on; threshold 0.55; end-pointing 900,000 µs.</li>
+        <li><strong>Fast live:</strong> Web Speech; interim on; fillers off; threshold 0.40; end-pointing 400,000 µs.</li>
+        <li><strong>Noisy room:</strong> Whisper Bridge; interim off; fillers on; threshold 0.70; end-pointing 1,000,000 µs.</li>
+      </ul>
+      <p>Tweak to taste: raise threshold/end-pointing to calm jitter; lower them to speed up.</p>
+    </section>
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
 </div>
@@ -817,7 +883,6 @@
   </script>
 </body>
 </html>
-
 
 
 

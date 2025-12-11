@@ -1,4 +1,4 @@
-export function buildSettingsContent(rootEl: HTMLElement | null) {
+﻿export function buildSettingsContent(rootEl: HTMLElement | null) {
   if (!rootEl) return '';
   // Render a compact settings body with tab content placeholders.
   // The media tab contains mic device selector and mic controls which
@@ -36,7 +36,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           </div>
           <div class="settings-inline-row">
             <button id="typoResetMain" class="chip">Reset to Default</button>
-            <button id="typoCopyMainToDisplay" class="chip">Copy ➜ Display</button>
+            <button id="typoCopyMainToDisplay" class="chip">Copy â Display</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="readable">Readable</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="studio">Studio</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="bigroom">Big Room</button>
@@ -60,7 +60,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           </div>
           <div class="settings-inline-row">
             <button id="typoResetDisplay" class="chip">Reset to Default</button>
-            <button id="typoCopyDisplayToMain" class="chip">Copy ➜ Main</button>
+            <button id="typoCopyDisplayToMain" class="chip">Copy â Main</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="readable">Readable</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="studio">Studio</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="bigroom">Big Room</button>
@@ -95,22 +95,22 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         <h4>ASR (speech-to-text)</h4>
         <div class="settings-grid" style="gap:8px;grid-template-columns: repeat(auto-fit,minmax(160px,1fr));">
           <label>Engine
-            <select id="asrEngine">
+            <select id="asrEngine" title="Choose how Anvil listens to your voice. Different engines trade off speed, accuracy, and privacy.">
               <option value="webspeech">Web Speech (browser)</option>
               <option value="vosk">Offline (WASM)</option>
               <option value="whisper">Server (Whisper bridge)</option>
             </select>
           </label>
           <label>Language
-            <input id="asrLang" type="text" placeholder="en-US">
+            <input id="asrLang" type="text" placeholder="en-US" title="Language you’ll speak during recording so ASR can interpret correctly.">
           </label>
-          <label><input id="asrInterim" type="checkbox"> Use interim results</label>
-          <label><input id="asrFillers" type="checkbox"> Filter filler words</label>
+          <label><input id="asrInterim" type="checkbox" title="Show partial speech results before a sentence finishes for faster scroll response."> Use interim results</label>
+          <label><input id="asrFillers" type="checkbox" title="Remove filler words like um/uh/like so scroll aligns better with your script."> Filter filler words</label>
           <label>Threshold
-            <input id="asrThresh" type="number" step="0.01" min="0" max="1">
+            <input id="asrThresh" type="number" step="0.01" min="0" max="1" title="Minimum confidence before ASR accepts words. Higher = cleaner/slower; lower = more responsive/noisier.">
           </label>
           <label>Endpointing (ms)
-            <input id="asrEndMs" type="number" min="200" step="50">
+            <input id="asrEndMs" type="number" min="200" step="50" title="How long ASR waits after silence before finalizing a phrase. Lower reacts faster; higher is smoother but delayed.">
           </label>
         </div>
       </section>
@@ -138,7 +138,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <div class="row" id="autoRecordFolderRow">
           <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>
-          <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder…</button>
+          <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folderâ¦</button>
           <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>
         </div>
       </div>
@@ -166,14 +166,14 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <form id="settingsObsCredsForm" class="settings-inline-row" autocomplete="off" novalidate onsubmit="return false;">
           <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455" autocomplete="off"/></label>
-          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••" autocomplete="current-password"/></label>
+          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="â¢â¢â¢â¢â¢â¢" autocomplete="current-password"/></label>
           <button type="submit" hidden aria-hidden="true"></button>
         </form>
         <div class="row gap">
           <button id="settingsObsTest" data-action="obs-test" class="chip btn-chip" type="button">Test connection</button>
           <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>
         </div>
-        <small class="muted">OBS ➜ Tools ➜ WebSocket Server Settings (default port 4455). Use this host and password.</small>
+        <small class="muted">OBS â Tools â WebSocket Server Settings (default port 4455). Use this host and password.</small>
       </div>
 
       <div class="settings-card anim-in">
@@ -199,7 +199,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         <div class="settings-card anim-in">
           <h4>Pricing</h4>
           <p>
-            You’re currently using a pre-release build of Anvil. During this phase,
+            Youâre currently using a pre-release build of Anvil. During this phase,
             all features are available to invited testers.
           </p>
           <ul>
@@ -218,11 +218,11 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <h4>About Anvil</h4>
           <div class="settings-small">
             <p>
-              Anvil is part of the Podcaster�s Forge toolset � a teleprompter and recording companion
+              Anvil is part of the Podcasters Forge toolset  a teleprompter and recording companion
               designed for creators who want fewer tabs, less chaos, and more control.
             </p>
             <p>
-              If Anvil has saved you at least one cup of coffee�s worth of time,
+              If Anvil has saved you at least one cup of coffees worth of time,
               you can support ongoing development here:
               <a href="https://buymeacoffee.com/podcastersforge"
                  class="settings-link"
@@ -277,16 +277,16 @@ export function addAsrWizardCard(root: HTMLElement) {
       </div>
 
       <div class="row">
-        <label class="grow">Profile label <input id="asrLabel" placeholder="Studio A • MV7 • no AEC"></label>
+        <label class="grow">Profile label <input id="asrLabel" placeholder="Studio A â¢ MV7 â¢ no AEC"></label>
       </div>
 
       <div class="row">
         <div id="asrMeter" class="asr-meter"><div class="marker" aria-hidden="true"></div></div>
       </div>
       <div class="row spread">
-        <div>Noise: <span id="asrNoise">–</span> dBFS</div>
-        <div>Speech: <span id="asrSpeech">–</span> dBFS</div>
-        <div>SNR: <span id="asrSnr">–</span> dB</div>
+        <div>Noise: <span id="asrNoise">â</span> dBFS</div>
+        <div>Speech: <span id="asrSpeech">â</span> dBFS</div>
+        <div>SNR: <span id="asrSnr">â</span> dB</div>
       </div>
 
       <div class="row gap">
@@ -301,11 +301,10 @@ export function addAsrWizardCard(root: HTMLElement) {
         id="asrCalStatus"
         hidden
       >
-        Click “Start calibration” to begin. We’ll ask you to stay quiet, then speak in your normal voice.
+        Click âStart calibrationâ to begin. Weâll ask you to stay quiet, then speak in your normal voice.
       </div>
       <small class="muted">Tip: Use headphones; leave NS/AGC off for best timing. Enable AEC only if using speakers.</small>
     `;
     container.appendChild(sec);
   } catch {}
 }
-
