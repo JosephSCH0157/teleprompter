@@ -877,13 +877,15 @@ html.tp-present .present-exit { display: inline-flex; }
   white-space: nowrap;
 }
 
-/* HUD hide state: nuke when closed/hidden */
+/* HUD hide state disabled (HUD removed) */
+/*
 #hud-root[aria-hidden="true"],
 .tp-hud-root[aria-hidden="true"],
 .tp-hud-root.tp-hud-closed{
   display:none !important;
   pointer-events:none !important;
 }
+*/
 
 /* Rehearsal watermark */
 html.tp-mode-rehearsal::after{
@@ -900,4 +902,3 @@ html.tp-mode-rehearsal::after{
   pointer-events:none;
   z-index:9999;
 }
-

@@ -520,7 +520,10 @@ function isDisplayContext(): boolean {
 	}
 }
 
+const ENABLE_HUD = false;
+
 function _ensureHud(store: any): void {
+	if (!ENABLE_HUD) return;
 	if (isDisplayContext()) return;
 	try {
 		if ((window as any).__tpHudTsInited) return;
@@ -940,7 +943,7 @@ export async function boot() {
 								appStore.set?.('hudSupported', hasHudRoot);
 							} catch {}
           try { initOverlays(); } catch {}
-          if (!isDisplayContext()) {
+          if (ENABLE_HUD && !isDisplayContext()) {
             try { _ensureHud(appStore); } catch {}
             try { initHudController(); } catch {}
             try { wireHudToggle(); } catch {}
@@ -1241,5 +1244,4 @@ try {
 } catch {}
 
 // Legacy HUD installer removed; TS HUD is canonical
-
 

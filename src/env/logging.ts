@@ -17,5 +17,6 @@ export function debugLog(...args: any[]): void {
 
 export function hudLog(event: string, payload?: any): void {
   if (isQuietEnv()) return;
-  try { (window as any).HUD?.log?.(event, payload); } catch {}
+  // keep console logs but kill DOM logs
+  try { console.debug(event, payload); } catch {}
 }
