@@ -48,6 +48,7 @@ import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
+import { initAsrPersistence } from './features/asr/persistence';
 
 import { bootstrap } from './boot/boot';
 
@@ -1008,6 +1009,7 @@ export async function boot() {
           try { initScrollFeature(); } catch {}
           // Initialize features via idempotent wrappers
           try { startPersistence(); } catch {}
+          try { initAsrPersistence(); } catch {}
 					try { startTelemetry(); } catch {}
 					try { startScroll(); } catch {}
 					try { startHotkeys(); } catch {}
