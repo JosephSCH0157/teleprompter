@@ -279,6 +279,26 @@
 </head>
 
 <body>
+<div id="fatalFallback" class="fatal-fallback" hidden>
+  <div class="fatal-inner">
+    <h1>There seems to be a problem lighting the fire.</h1>
+    <p>Possibly wet coal. We’re looking into the issue.</p>
+
+    <p class="fatal-hint">
+      Try reloading Anvil. If this keeps happening, email
+      <a href="mailto:support@podcastersforge.com">support@podcastersforge.com</a>
+      with what you were doing.
+    </p>
+
+    <p class="fatal-note">
+      Founders can also drop a note in the Iron Mine Support section.
+    </p>
+
+    <button id="btnReloadAnvil" type="button" class="btn btn-primary">
+      Reload Anvil
+    </button>
+  </div>
+</div>
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
 <div class="topbar">
@@ -864,7 +884,6 @@
   </script>
 </body>
 </html>
-
 
 
 

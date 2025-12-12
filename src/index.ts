@@ -51,6 +51,53 @@ import './dev/ci-mocks';
 import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 
+function showFatalFallback(): void {
+  try {
+    const w = window as any;
+    if (w.__tpFatalShown) return;
+    w.__tpFatalShown = true;
+
+    const fb = document.getElementById('fatalFallback');
+    const reloadBtn = document.getElementById('btnReloadAnvil') as HTMLButtonElement | null;
+    const appRoot = document.documentElement;
+
+    try { appRoot?.classList?.add?.('tp-fatal'); } catch {}
+
+    if (fb) {
+      try { fb.removeAttribute('hidden'); } catch {}
+      try { fb.classList.add('fatal-visible'); } catch {}
+    }
+
+    reloadBtn?.addEventListener('click', () => {
+      try { window.location.reload(); } catch {}
+    }, { once: true });
+  } catch (err) {
+    try { console.error('[TP-FATAL:showFallback]', err); } catch {}
+    try { window.location.reload(); } catch {}
+  }
+}
+
+function installFatalGuards(): void {
+  try {
+    const w = window as any;
+    if (w.__tpFatalGuards) return;
+    w.__tpFatalGuards = true;
+
+    window.onerror = (_msg, _src, _line, _col, err) => {
+      try { console.error('[TP-FATAL:window]', err); } catch {}
+      showFatalFallback();
+    };
+
+    window.onunhandledrejection = (event) => {
+      try { console.error('[TP-FATAL:promise]', event?.reason); } catch {}
+      showFatalFallback();
+    };
+  } catch {
+    // ignore guard failures
+  }
+}
+
+installFatalGuards();
 import { bootstrap } from './boot/boot';
 
 // Idempotent init guard for feature initializers (prevents double-init as we migrate)
@@ -1287,12 +1334,23 @@ try {
 		} catch (e) {
 			try { console.warn('[ts-boot] failed', e); } catch {}
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:fail:ts' });
+      try { showFatalFallback(); } catch {}
 		}
 }
 
 // Auto-run boot (primary entry)
 try {
-	if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', () => { boot(); });
-} catch {}
+  const params = new URLSearchParams(location.search || '');
+  if (params.get('fatalTest') === '1') {
+    showFatalFallback();
+    throw new Error('Fatal fallback test');
+  }
+
+	const startBoot = () => { try { boot(); } catch (err) { try { console.error('[TP-FATAL:init]', err); } catch {} showFatalFallback(); } };
+	if (document.readyState !== 'loading') startBoot(); else document.addEventListener('DOMContentLoaded', () => { startBoot(); });
+} catch (err) {
+  try { console.error('[TP-FATAL:init-outer]', err); } catch {}
+  showFatalFallback();
+}
 
 // Legacy HUD installer removed; TS HUD is canonical
