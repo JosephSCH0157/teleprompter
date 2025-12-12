@@ -5,6 +5,7 @@ import type { AppStore, PageName } from '../state/app-store';
 type PageStore = AppStore;
 
 let pageTabsWired = false;
+const FALLBACK_PAGE: PageName = 'scripts';
 
 function getAllowedPages(): Set<PageName> {
   const pages = new Set<PageName>();
@@ -12,7 +13,7 @@ function getAllowedPages(): Set<PageName> {
     const p = btn.getAttribute('data-tp-page') as PageName | null;
     if (p) pages.add(p);
   });
-  pages.add('scripts');
+  pages.add(FALLBACK_PAGE);
   return pages;
 }
 
@@ -45,18 +46,24 @@ export function initPageTabs(store?: PageStore) {
   const apply = (page: PageName) => {
     const allowed = getAllowedPages();
     const routedPanels = getRoutablePanels(allowed);
-    const p = allowed.has(page) ? page : 'scripts';
+    const panelByName = new Map<PageName, HTMLElement>();
+    routedPanels.forEach((panel) => {
+      const name = panel.getAttribute('data-tp-panel') as PageName | null;
+      if (name) panelByName.set(name, panel);
+    });
+    const targetPage = allowed.has(page) ? page : FALLBACK_PAGE;
+    const target = panelByName.get(targetPage) || panelByName.get(FALLBACK_PAGE);
+
     buttons.forEach((btn) => {
       const name = btn.getAttribute('data-tp-page') as PageName | null;
-      const active = name === p;
+      const active = name === targetPage;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
     });
     routedPanels.forEach((panel) => {
-      const name = panel.getAttribute('data-tp-panel') as PageName | null;
-      const visible = name === p;
+      const visible = panel === target;
       panel.classList.toggle('is-active', visible);
       panel.hidden = !visible;
       panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
@@ -74,9 +81,9 @@ export function initPageTabs(store?: PageStore) {
   try {
     const allowed = getAllowedPages();
     const routedPanels = getRoutablePanels(allowed);
-    const scriptsPanel = routedPanels.find((p) => p.getAttribute('data-tp-panel') === 'scripts');
+    const scriptsPanel = routedPanels.find((p) => p.getAttribute('data-tp-panel') === FALLBACK_PAGE);
     scriptsPanel?.addEventListener('focusin', () => {
-      try { S.set('page', 'scripts' as PageName); } catch {}
+      try { S.set('page', FALLBACK_PAGE as PageName); } catch {}
     });
   } catch {
     // ignore
@@ -86,7 +93,7 @@ export function initPageTabs(store?: PageStore) {
   const initial = (() => {
     const allowed = getAllowedPages();
     const candidate = stored as PageName;
-    return allowed.has(candidate) ? candidate : 'scripts';
+    return allowed.has(candidate) ? candidate : FALLBACK_PAGE;
   })();
   if (!stored) {
     try { S.set('page', initial); } catch {}

@@ -30,6 +30,7 @@ const REH_PUNCT_KEY = 'tp_scroll_reh_punct_v1';
 const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
 const PAGE_KEY = 'tp_page_v1';
 const ALLOWED_PAGES = new Set<PageName>(['scripts']);
+const ALLOWED_OVERLAYS = new Set<AppStoreState['overlay']>(['none', 'settings', 'help', 'shortcuts']);
 const HUD_ENABLED_KEY = 'tp_hud_enabled_v1';
 const OVERLAY_KEY = 'tp_overlay_v1';
 const CAMERA_KEY = 'tp_camera_enabled_v1';
@@ -235,7 +236,11 @@ function buildInitialState(): AppStoreState {
     overlay: (() => {
       try {
         const v = localStorage.getItem(OVERLAY_KEY) || 'none';
-        return (v === 'settings' || v === 'help' || v === 'shortcuts') ? v as any : 'none';
+        if (!ALLOWED_OVERLAYS.has(v as any)) {
+          try { localStorage.removeItem(OVERLAY_KEY); } catch {}
+          return 'none';
+        }
+        return v as any;
       } catch {
         return 'none';
       }
@@ -401,14 +406,30 @@ function ensureExistingState(): Partial<AppStoreState> {
   return {};
 }
 
+function sanitizeState(state: AppStoreState): AppStoreState {
+  // Clamp page to allowed set and clean persisted value if invalid
+  if (!ALLOWED_PAGES.has(state.page as PageName)) {
+    state.page = 'scripts';
+    try { localStorage.removeItem(PAGE_KEY); } catch {}
+  }
+  // Clamp overlay to allowed set and clear bad persisted values
+  if (!ALLOWED_OVERLAYS.has(state.overlay)) {
+    state.overlay = 'none';
+    try { localStorage.removeItem(OVERLAY_KEY); } catch {}
+  }
+  return state;
+}
+
 export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
   const subs: SubscriptionMap = Object.create(null);
   const baseState = buildInitialState();
-  const state: AppStoreState = Object.assign(
-    {},
-    baseState,
-    ensureExistingState(),
-    initial || {},
+  const state: AppStoreState = sanitizeState(
+    Object.assign(
+      {},
+      baseState,
+      ensureExistingState(),
+      initial || {},
+    ),
   );
 
   function notify(key: keyof AppStoreState, value: AppStoreState[typeof key]) {
@@ -433,6 +454,12 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
 
   function set<K extends keyof AppStoreState>(key: K, value: AppStoreState[K]): AppStoreState[K] {
     try {
+      if (key === 'page') {
+        value = (ALLOWED_PAGES.has(value as PageName) ? value : 'scripts') as AppStoreState[K];
+      }
+      if (key === 'overlay') {
+        value = (ALLOWED_OVERLAYS.has(value as AppStoreState['overlay']) ? value : 'none') as AppStoreState[K];
+      }
       const prev = state[key];
       if (prev === value) return value;
       state[key] = value;
