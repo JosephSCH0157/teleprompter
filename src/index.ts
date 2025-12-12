@@ -591,6 +591,7 @@ import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from 
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
 import { triggerSettingsDownload } from './features/settings/exportSettings';
+import { triggerSettingsImport } from './features/settings/importSettings';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
@@ -1209,6 +1210,15 @@ try {
 									exportBtn.dataset.settingsExportWired = '1';
 									exportBtn.addEventListener('click', () => {
 										try { triggerSettingsDownload(); } catch (err) { try { console.error('[settings-export] click error', err); } catch {} }
+									});
+								}
+							} catch {}
+							try {
+								const importBtn = document.getElementById('btnImportSettings') as HTMLButtonElement | null;
+								if (importBtn && importBtn.dataset.settingsImportWired !== '1') {
+									importBtn.dataset.settingsImportWired = '1';
+									importBtn.addEventListener('click', () => {
+										try { triggerSettingsImport(); } catch (err) { try { console.error('[settings-import] click error', err); } catch {} }
 									});
 								}
 							} catch {}
