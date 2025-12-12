@@ -13,6 +13,12 @@
 .fatal-fallback .btn.btn-primary{margin-top:1.25rem}
 .tp-fatal body>*:not(#fatalFallback){display:none!important}
 
+/* Honor the HTML hidden attribute everywhere */
+[hidden] { display: none !important; }
+
+/* Extra safety for the fatal fallback */
+#fatalFallback[hidden] { display: none !important; }
+
 /* Mic pill popover menu (compact) */
 #micMenu{font:13px/1.2 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#e6eef8;background:rgba(12,16,24,.98);border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.45);padding:6px 6px;min-width:220px;-webkit-backdrop-filter:saturate(1.2) blur(4px);backdrop-filter:saturate(1.2) blur(4px)}
 #micMenu .mm-item{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:transparent;color:#e6eef8;border-radius:8px;cursor:pointer}
