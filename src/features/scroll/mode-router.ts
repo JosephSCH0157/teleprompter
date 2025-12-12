@@ -208,7 +208,7 @@ export function createScrollModeRouter(deps: LegacyDeps): ScrollModeRouter {
 
   currentMode = scrollModeSource.get();
   syncRehearsal(currentMode);
-  store?.subscribe?.(key, (v: unknown) => {
+  store?.subscribe?.(key, (_v: unknown) => {
     const next = scrollModeSource.get();
     currentMode = next;
     syncRehearsal(next);

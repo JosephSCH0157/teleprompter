@@ -1045,6 +1045,8 @@ export async function boot() {
 try {
   const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
   const rehearsal = installRehearsal();
+  void step;
+  void rehearsal;
   try { resolveInitialRehearsal(); } catch {}
 
   const store = (window as any).__tpStore || null;
@@ -1244,4 +1246,3 @@ try {
 } catch {}
 
 // Legacy HUD installer removed; TS HUD is canonical
-
