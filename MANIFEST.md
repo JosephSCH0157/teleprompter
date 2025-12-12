@@ -39,3 +39,4 @@ date: 2025-12-10
 - `ui-sanitize.js` is intentionally commented out in `teleprompter_pro.html`.
 - Display window no longer loads the main TS bundle; it hydrates via `tp_display` snapshots.
 - Forge config is injected via `forge-config.js` (sets `window.__forgeSupabaseUrl/__forgeSupabaseAnonKey`).
+- Dev/QA: HUD/diagnostics temporarily disabled (no `#hud-root`; HUD boot gated; hudLog is console-only) while HUD v2 is redesigned.
