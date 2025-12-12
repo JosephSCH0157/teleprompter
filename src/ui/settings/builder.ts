@@ -47,9 +47,9 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <h4>External Display Typography</h4>
           <div class="settings-inline-row" id="typographyPresetsRow">
             <span class="microcopy" style="color:#9fb4c9;font-size:12px">Presets:</span>
-            <button type="button" class="chip btn-chip" data-typo-preset="default">Default</button>
-            <button type="button" class="chip btn-chip" data-typo-preset="easyRead">EasyRead</button>
-            <button type="button" class="chip btn-chip" data-typo-preset="smoothComfort">SmoothComfort</button>
+            <button type="button" class="chip btn-chip" data-typo-preset="default" aria-pressed="false">Default</button>
+            <button type="button" class="chip btn-chip" data-typo-preset="easyRead" aria-pressed="false">EasyRead</button>
+            <button type="button" class="chip btn-chip" data-typo-preset="smoothComfort" aria-pressed="false">SmoothComfort</button>
             <label class="microcopy" style="margin-left:auto;display:flex;gap:8px;align-items:center;color:#9fb4c9;font-size:12px">
               <input type="checkbox" id="typoPresetApplyBoth" />
               Apply to main too
@@ -318,5 +318,6 @@ export function addAsrWizardCard(root: HTMLElement) {
     container.appendChild(sec);
   } catch {}
 }
+
 
 

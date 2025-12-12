@@ -25,9 +25,13 @@ function setNumber(id: string, value: number) {
 export function wireTypographyPresets(): void {
   const row = document.getElementById('typographyPresetsRow');
   if (!row) return;
+  const rowEl = row as HTMLElement;
+  // Prevent double-wiring if settings remounts or get re-injected
+  if (rowEl.dataset.wired === '1') return;
+  rowEl.dataset.wired = '1';
   const applyBoth = document.getElementById('typoPresetApplyBoth') as HTMLInputElement | null;
 
-  row.addEventListener('click', (ev) => {
+  rowEl.addEventListener('click', (ev) => {
     const btn = (ev.target as HTMLElement | null)?.closest?.('[data-typo-preset]') as HTMLElement | null;
     if (!btn) return;
     const preset = btn.getAttribute('data-typo-preset') as PresetName | null;
@@ -46,8 +50,10 @@ export function wireTypographyPresets(): void {
       setNumber('typoMaxCh-main', p.maxCh);
     }
 
-    row.querySelectorAll<HTMLElement>('[data-typo-preset]').forEach((b) => {
-      b.classList.toggle('active', b.getAttribute('data-typo-preset') === preset);
+    rowEl.querySelectorAll<HTMLElement>('[data-typo-preset]').forEach((b) => {
+      const isActive = b.getAttribute('data-typo-preset') === preset;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-pressed', String(isActive));
     });
   });
 }
