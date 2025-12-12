@@ -6,6 +6,23 @@ type PageStore = AppStore;
 
 let pageTabsWired = false;
 
+function getAllowedPages(): Set<PageName> {
+  const pages = new Set<PageName>();
+  document.querySelectorAll<HTMLElement>('.page-tab[data-tp-page]').forEach((btn) => {
+    const p = btn.getAttribute('data-tp-page') as PageName | null;
+    if (p) pages.add(p);
+  });
+  pages.add('scripts');
+  return pages;
+}
+
+function getRoutablePanels(allowed: Set<PageName>): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-tp-panel]')).filter((el) => {
+    const p = el.getAttribute('data-tp-panel') as PageName | null;
+    return !!p && allowed.has(p);
+  });
+}
+
 export function initPageTabs(store?: PageStore) {
   const S = store || ((window as any).__tpStore as AppStore | undefined);
   if (!S) {
@@ -25,20 +42,20 @@ export function initPageTabs(store?: PageStore) {
     return;
   }
 
-  const coerce = (v: unknown): PageName => (v === 'settings' || v === 'help' || v === 'hud' || v === 'scripts') ? v : 'scripts';
-
   const apply = (page: PageName) => {
-    const p = coerce(page);
+    const allowed = getAllowedPages();
+    const routedPanels = getRoutablePanels(allowed);
+    const p = allowed.has(page) ? page : 'scripts';
     buttons.forEach((btn) => {
-      const name = coerce(btn.dataset.tpPage);
+      const name = btn.getAttribute('data-tp-page') as PageName | null;
       const active = name === p;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
     });
-    panels.forEach((panel) => {
-      const name = coerce(panel.dataset.tpPanel);
+    routedPanels.forEach((panel) => {
+      const name = panel.getAttribute('data-tp-panel') as PageName | null;
       const visible = name === p;
       panel.classList.toggle('is-active', visible);
       panel.hidden = !visible;
@@ -55,7 +72,9 @@ export function initPageTabs(store?: PageStore) {
   });
   // If user focuses inside the Scripts panel (e.g., dropdown), ensure page state flips to scripts
   try {
-    const scriptsPanel = panels.find((p) => coerce(p.dataset.tpPanel) === 'scripts');
+    const allowed = getAllowedPages();
+    const routedPanels = getRoutablePanels(allowed);
+    const scriptsPanel = routedPanels.find((p) => p.getAttribute('data-tp-panel') === 'scripts');
     scriptsPanel?.addEventListener('focusin', () => {
       try { S.set('page', 'scripts' as PageName); } catch {}
     });
@@ -64,13 +83,17 @@ export function initPageTabs(store?: PageStore) {
   }
 
   const stored = (() => { try { return S.get?.('page') as PageName | undefined; } catch { return undefined; } })();
-  const initial = coerce(stored);
+  const initial = (() => {
+    const allowed = getAllowedPages();
+    const candidate = stored as PageName;
+    return allowed.has(candidate) ? candidate : 'scripts';
+  })();
   if (!stored) {
     try { S.set('page', initial); } catch {}
   }
   apply(initial);
 
-  try { S.subscribe('page', (v: PageName) => apply(coerce(v))); } catch {}
+  try { S.subscribe('page', (v: PageName) => apply(v)); } catch {}
 }
 
 export function ensurePageTabs(store: PageStore): void {
