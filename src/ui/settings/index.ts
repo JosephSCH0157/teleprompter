@@ -5,6 +5,7 @@ import { bindHybridGateSetting } from './hybridGate';
 import { bindTypographyPanel } from './typographyPanel';
 import { wireSettingsDynamic } from './wire';
 import { createAppStore, type AppStore } from '../../state/app-store';
+import { wireTypographyPresets } from './typography-presets';
 
 function getStore(store?: AppStore | null): AppStore | null {
   if (store) return store;
@@ -33,6 +34,7 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     // Bind new typography panels (main + display)
     try { bindTypographyPanel('main'); } catch {}
     try { bindTypographyPanel('display'); } catch {}
+    try { wireTypographyPresets(); } catch {}
     // Add ASR wizard card under Media tab and initialize it
     try { addAsrWizardCard(rootEl); } catch {}
     try { initAsrSettingsUI(); } catch {}

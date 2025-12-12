@@ -334,6 +334,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-card h4{margin:0 0 4px;font-size:15px}
 .settings-small{font-size:12px;color:var(--muted)}
 .settings-inline-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.settings-inline-row .chip.active{border-color:var(--accent);box-shadow:0 0 0 2px rgba(74,163,255,.25);}
 .settings-tabs{display:flex;gap:6px;margin:4px 0 4px;flex-wrap:wrap}
 .settings-tab{background:#0e141b;border:1px solid var(--edge);padding:6px 10px;border-radius:20px;font-size:12px;cursor:pointer}
 .settings-tab.active{background:#12202a;color:var(--accent);border-color:var(--accent)}
