@@ -1,6 +1,6 @@
 // src/ui/settings/typography-presets.ts
 
-type PresetName = 'default' | 'easyRead' | 'smoothComfort';
+export type PresetName = 'default' | 'easyRead' | 'smoothComfort';
 
 type Preset = {
   letter: number;
@@ -30,6 +30,24 @@ function setActivePreset(rowEl: HTMLElement, preset: PresetName): void {
   });
 }
 
+export function applyTypographyPresetByName(preset: PresetName, opts?: { applyToMain?: boolean }) {
+  const p = PRESETS[preset];
+  if (!p) return;
+
+  setNumber('typoLetter-display', p.letter);
+  setNumber('typoWord-display', p.word);
+  setNumber('typoMaxCh-display', p.maxCh);
+
+  if (opts?.applyToMain) {
+    setNumber('typoLetter-main', p.letter);
+    setNumber('typoWord-main', p.word);
+    setNumber('typoMaxCh-main', p.maxCh);
+  }
+
+  const rowEl = document.getElementById('typographyPresetsRow') as HTMLElement | null;
+  if (rowEl) setActivePreset(rowEl, preset);
+}
+
 export function wireTypographyPresets(): void {
   const row = document.getElementById('typographyPresetsRow');
   if (!row) return;
@@ -45,19 +63,8 @@ export function wireTypographyPresets(): void {
     const preset = btn.getAttribute('data-typo-preset') as PresetName | null;
     if (!preset) return;
 
-    const p = PRESETS[preset];
     const both = !!applyBoth?.checked;
 
-    setNumber('typoLetter-display', p.letter);
-    setNumber('typoWord-display', p.word);
-    setNumber('typoMaxCh-display', p.maxCh);
-
-    if (both) {
-      setNumber('typoLetter-main', p.letter);
-      setNumber('typoWord-main', p.word);
-      setNumber('typoMaxCh-main', p.maxCh);
-    }
-
-    setActivePreset(rowEl, preset);
+    applyTypographyPresetByName(preset, { applyToMain: both });
   });
 }
