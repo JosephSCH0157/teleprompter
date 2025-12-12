@@ -9,6 +9,33 @@
     const mockFolder = params.get('mockFolder') === '1';
     if (!isCi) return;
 
+    const fixtures = [
+      { id: 'ci-1', name: 'Fixture Episode · CI', text: '[s1] CI Fixture [/s1]\nLine 1\nLine 2' },
+      { id: 'ci-2', name: 'Mirror Script · CI', text: 'Mirror ready' },
+    ];
+
+    function seedSelects(): boolean {
+      try { (window as any).__tpMockFolderMode = true; } catch {}
+      const main = document.getElementById('scriptSelect') as HTMLSelectElement | null;
+      const side = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+      const apply = (sel: HTMLSelectElement | null) => {
+        if (!sel) return;
+        sel.innerHTML = '';
+        fixtures.forEach((f, idx) => {
+          const opt = new Option(f.name, f.id);
+          (opt as any).dataset.fixture = '1';
+          if (idx === 0) opt.selected = true;
+          sel.append(opt);
+        });
+        sel.disabled = false;
+        try { sel.dataset.count = String(fixtures.length); } catch {}
+      };
+      apply(main);
+      apply(side);
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: fixtures.length } })); } catch {}
+      return !!(main || side);
+    }
+
     // 1) Ensure a sample is visible in the editor so harness sees content
     if (uiMock) {
       try {
@@ -22,7 +49,7 @@
       } catch {}
     }
 
-    // 2) Reflect mock folder status in any visible label
+    // 2) Reflect mock folder status in any visible label and seed selects
     if (mockFolder) {
       try {
         const labelWrap = document.querySelector('[data-test-id="rec-folder-label"]') as HTMLElement | null;
@@ -33,21 +60,21 @@
         }
       } catch {}
 
-      // Also ensure script selects have at least one option if empty
-      try {
-        const main = document.getElementById('scriptSelect') as HTMLSelectElement | null;
-        const side = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-        const populate = (sel: HTMLSelectElement | null) => {
-          if (!sel) return;
-          if (sel.options.length > 0) return;
-          const opt = document.createElement('option');
-          opt.value = 'ci-sample';
-          opt.textContent = 'CI Sample Script';
-          sel.appendChild(opt);
-          sel.selectedIndex = 0;
-        };
-        populate(main); populate(side);
-      } catch {}
+      // Seed script selects with deterministic fixtures for CI mirrors
+      const trySeed = () => { try { seedSelects(); } catch {} };
+      trySeed();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', trySeed, { once: true });
+      } else {
+        setTimeout(trySeed, 350);
+      }
+      // Re-seed a few times to survive any late clears from mappers
+      let attempts = 0;
+      const iv = setInterval(() => {
+        attempts += 1;
+        trySeed();
+        if (attempts >= 4) clearInterval(iv);
+      }, 500);
     }
   } catch {}
 })();

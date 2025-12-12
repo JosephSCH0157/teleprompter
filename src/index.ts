@@ -47,6 +47,7 @@ import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
+import './dev/ci-mocks';
 
 import { bootstrap } from './boot/boot';
 
@@ -860,7 +861,7 @@ try {
 function __maybePopulateMockFolder() {
 	try {
 		const Q = new URLSearchParams(location.search || '');
-		const useMock = Q.has('mockFolder') || (navigator.webdriver === true);
+		const useMock = Q.has('mockFolder') || Q.has('uiMock') || (navigator.webdriver === true);
 		if (!useMock) return;
 		try { (window as any).__tpMockFolderMode = true; } catch {}
 		const main = document.getElementById('scriptSelect') as HTMLSelectElement | null;
