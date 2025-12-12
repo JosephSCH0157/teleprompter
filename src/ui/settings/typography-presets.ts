@@ -22,6 +22,14 @@ function setNumber(id: string, value: number) {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+function setActivePreset(rowEl: HTMLElement, preset: PresetName): void {
+  rowEl.querySelectorAll<HTMLElement>('[data-typo-preset]').forEach((b) => {
+    const isActive = b.getAttribute('data-typo-preset') === preset;
+    b.classList.toggle('active', isActive);
+    b.setAttribute('aria-pressed', String(isActive));
+  });
+}
+
 export function wireTypographyPresets(): void {
   const row = document.getElementById('typographyPresetsRow');
   if (!row) return;
@@ -50,10 +58,6 @@ export function wireTypographyPresets(): void {
       setNumber('typoMaxCh-main', p.maxCh);
     }
 
-    rowEl.querySelectorAll<HTMLElement>('[data-typo-preset]').forEach((b) => {
-      const isActive = b.getAttribute('data-typo-preset') === preset;
-      b.classList.toggle('active', isActive);
-      b.setAttribute('aria-pressed', String(isActive));
-    });
+    setActivePreset(rowEl, preset);
   });
 }
