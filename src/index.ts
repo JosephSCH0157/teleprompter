@@ -520,6 +520,15 @@ function isDisplayContext(): boolean {
 	}
 }
 
+function markReady(flags: Record<string, boolean>): void {
+	try {
+		const tgt = ((window as any).__TP_READY_FLAGS = (window as any).__TP_READY_FLAGS || {});
+		Object.assign(tgt, flags);
+	} catch {
+		/* ignore */
+	}
+}
+
 const ENABLE_HUD = false;
 
 function _ensureHud(store: any): void {
@@ -943,6 +952,14 @@ export async function boot() {
 								appStore.set?.('hudSupported', hasHudRoot);
 							} catch {}
           try { initOverlays(); } catch {}
+          try {
+            markReady({
+              settingsOverlay: !!document.getElementById('settingsOverlay'),
+              settingsCard: !!document.querySelector('.settings-card'),
+              scriptSidebar: !!document.getElementById('scriptSelectSidebar'),
+              presentToggle: !!document.querySelector('#presentBtn,[data-action=\"present-toggle\"]'),
+            });
+          } catch {}
           if (ENABLE_HUD && !isDisplayContext()) {
             try { _ensureHud(appStore); } catch {}
             try { initHudController(); } catch {}
