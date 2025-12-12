@@ -90,6 +90,10 @@ export function initPageTabs(store?: PageStore) {
   }
 
   const stored = (() => { try { return S.get?.('page') as PageName | undefined; } catch { return undefined; } })();
+  if (stored && stored !== FALLBACK_PAGE && !getAllowedPages().has(stored)) {
+    try { console.warn('[page-tabs] illegal page restored, forcing scripts:', stored); } catch {}
+    try { S.set('page', FALLBACK_PAGE as PageName); } catch {}
+  }
   const initial = (() => {
     const allowed = getAllowedPages();
     const candidate = stored as PageName;
