@@ -43,6 +43,8 @@ declare global {
 let __bc = null; try { __bc = new BroadcastChannel('prompter'); } catch {}
 
 const scrollWriter = getScrollWriter();
+const DISPLAY_TOGGLE_SELECTOR =
+  '#displayToggleBtn,#displayToggleBtnSidebar,[data-ci="display-toggle"],[data-action="display"],[data-action="display-toggle"]';
 
 export function on(
   el: EventTarget | null | undefined,
@@ -150,14 +152,14 @@ export function wireDisplayBridgeDelegated(onToggle?: () => void) {
   logDisplayDebug('wireDisplayBridge', {
     hasOpen,
     hasClose,
-    toggleCount: document.querySelectorAll('#displayToggleBtn').length,
+    toggleCount: document.querySelectorAll(DISPLAY_TOGGLE_SELECTOR).length,
   });
 
   document.addEventListener('click', (ev) => {
     const target = ev.target as HTMLElement | null;
     if (!target) return;
 
-    const btn = target.closest('#displayToggleBtn') as HTMLButtonElement | null;
+    const btn = target.closest(DISPLAY_TOGGLE_SELECTOR) as HTMLButtonElement | null;
     if (!btn) return;
 
     const hasWindow = !!(window.__tpDisplayWindow && !window.__tpDisplayWindow.closed);
@@ -209,7 +211,7 @@ export function wireDisplayBridge() {
   const getToggleBtns = () =>
     Array.from(
       document.querySelectorAll<HTMLButtonElement>(
-        '#displayToggleBtn,[data-ci="display-toggle"],[data-action="display"],[data-action="display-toggle"]',
+        DISPLAY_TOGGLE_SELECTOR,
       ),
     );
   const updateToggleState = () => {
@@ -898,7 +900,7 @@ export function bindStaticDom() {
     document.documentElement.dataset.uiWired = '1';
 
     // core feature wiring
-    const toggleCount = document.querySelectorAll('#displayToggleBtn').length;
+    const toggleCount = document.querySelectorAll(DISPLAY_TOGGLE_SELECTOR).length;
     logDisplayDebug('bindStaticDom:display-btn', {
       found: toggleCount > 0,
       count: toggleCount,
