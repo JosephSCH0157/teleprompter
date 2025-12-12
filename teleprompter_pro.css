@@ -588,9 +588,6 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Topbar hairline */
 .topbar { border-bottom: 1px solid rgba(255,255,255,.12); }
 
-/* Hide numeric speaker chip (we use colored legend instead) */
-#speakerIndexChip { display: none !important; }
-
 /* Overlays */
 .hidden { display: none !important; }
 .overlay {

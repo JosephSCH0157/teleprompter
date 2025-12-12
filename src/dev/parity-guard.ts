@@ -19,7 +19,7 @@ function checkParity() {
 
   must('.topbar', fails);
   must('#viewer', fails);
-  ['#presentBtn', '#settingsBtn,[data-action="settings-open"]', '#shortcutsBtn,[data-action="help-open"]', '#speakerIndexChip', '#settingsOverlay', '#settingsClose,[data-action="settings-close"]', '#shortcutsOverlay', '#shortcutsClose,[data-action="help-close"]'].forEach((id) => must(id, fails));
+  ['#presentBtn', '#settingsBtn,[data-action="settings-open"]', '#shortcutsBtn,[data-action="help-open"]', '#settingsOverlay', '#settingsClose,[data-action="settings-close"]', '#shortcutsOverlay', '#shortcutsClose,[data-action="help-close"]'].forEach((id) => must(id, fails));
 
   // Accept either legacy bottom meter (#dbMeter) or current top-bar meter (#dbMeterTop)
   const hasMeter = q('#dbMeterTop') || q('#dbMeter');
