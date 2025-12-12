@@ -1,5 +1,6 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
+import { loadScrollPrefs, saveScrollPrefs } from '../features/scroll/scroll-prefs';
 
 const DEVICE_KEY = 'tp_mic_device_v1';
 const OBS_ENABLED_KEY = 'tp_obs_enabled';
@@ -264,14 +265,18 @@ function buildInitialState(): AppStoreState {
     // Scroll router (persisted)
     scrollMode: (() => {
       try {
+        const prefs = loadScrollPrefs();
+        if (prefs?.mode) return prefs.mode;
+      } catch {}
+      try {
         return (
           localStorage.getItem(SCROLL_MODE_KEY) ||
           localStorage.getItem('tp_scroll_mode') ||
           localStorage.getItem('scrollMode') ||
-          'manual'
+          'hybrid'
         );
       } catch {
-        return 'manual';
+        return 'hybrid';
       }
     })(),
     timedSpeed: (() => {
@@ -442,6 +447,7 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
             } catch {}
           }
           if (key === 'scrollMode') {
+            saveScrollPrefs({ mode: String(value) as any });
             try { localStorage.setItem('tp_scroll_mode', String(value)); } catch {}
             try { localStorage.setItem('scrollMode', String(value)); } catch {}
           }

@@ -1,5 +1,6 @@
 import { getScrollBrain } from './brain-access';
 import { appStore } from '../state/app-store';
+import { loadScrollPrefs } from '../features/scroll/scroll-prefs';
 import type { ScrollMode } from './scroll-brain';
 
 function resolveModeFromValue(value: string): ScrollMode {
@@ -51,7 +52,11 @@ export function initScrollModeBridge(): void {
         const storeMode = (window as any).__tpStore?.get?.('scrollMode');
         if (storeMode) return String(storeMode);
       } catch {}
-      try { return localStorage.getItem('tp_scroll_mode_v1') || localStorage.getItem('scrollMode') || undefined; } catch { return undefined; }
+      try {
+        const prefs = loadScrollPrefs();
+        if (prefs?.mode) return prefs.mode;
+      } catch {}
+      return undefined;
     })();
 
     if (storedMode) {

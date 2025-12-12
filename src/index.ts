@@ -49,6 +49,7 @@ import { ensurePageTabs } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
 import { initAsrPersistence } from './features/asr/persistence';
+import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 
 import { bootstrap } from './boot/boot';
 
@@ -162,66 +163,37 @@ function bridgeLegacyScrollController() {
 	setTimeout(() => clearInterval(timer), 10_000);
 }
 
-// Ensure the scrollMode <select> reflects any stored preference before tests read it
-function hydrateScrollModeSelect(): void {
+const SCROLL_MODE_SELECT_ID = 'scrollMode';
+const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
+
+function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
+  const value = String(mode || '').toLowerCase() as UiScrollMode;
+  return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
+}
+
+function setScrollModeSelectValue(mode: UiScrollMode): void {
   try {
-    const el = document.getElementById('scrollMode') as HTMLSelectElement | null;
+    const el = document.getElementById(SCROLL_MODE_SELECT_ID) as HTMLSelectElement | null;
     if (!el) return;
-    const stored =
-      sessionStorage.getItem('tp_last_scroll_mode') ||
-      (appStore.get?.('scrollMode') as string | undefined) ||
-      localStorage.getItem('tp_scroll_mode_v1') ||
-      localStorage.getItem('tp_scroll_mode') ||
-      localStorage.getItem('scrollMode');
-    if (stored && Array.from(el.options).some((o) => o.value === stored)) {
-      el.value = stored;
+    const normalized = normalizeUiScrollMode(mode);
+    if (Array.from(el.options).some((o) => o.value === normalized)) {
+      el.value = normalized;
     }
   } catch {
     // ignore
   }
 }
 
-function storeScrollMode(): void {
-  try {
-    const el = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    if (!el) return;
-    const v = String(el.value || '');
-    localStorage.setItem('tp_scroll_mode_v1', v);
-    localStorage.setItem('tp_scroll_mode', v);
-    localStorage.setItem('scrollMode', v);
-    sessionStorage.setItem('tp_last_scroll_mode', v);
-    appStore.set?.('scrollMode', v as any);
-  } catch {
-    // ignore
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => hydrateScrollModeSelect(), { once: true });
-} else {
-  hydrateScrollModeSelect();
-}
-
-function persistScrollModeSelect(ev: Event): void {
-  const t = ev.target as HTMLSelectElement | null;
-  if (!t || t.id !== 'scrollMode') return;
-  storeScrollMode();
-  try { applyUiScrollMode(t.value as UiScrollMode); } catch {}
-}
-try { document.addEventListener('change', persistScrollModeSelect, { capture: true }); } catch {}
-try { window.addEventListener('beforeunload', storeScrollMode, { capture: true }); } catch {}
-try {
-  const timer = window.setInterval(() => storeScrollMode(), 500);
-  window.setTimeout(() => window.clearInterval(timer), 5000);
-} catch {}
-
-function applyUiScrollMode(mode: UiScrollMode) {
+function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {}) {
+  const normalized = normalizeUiScrollMode(mode);
   // Store the UI mode somewhere global so existing JS can still read it
-  (window as any).__tpUiScrollMode = mode;
+  (window as any).__tpUiScrollMode = normalized;
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
-  try { appStore.set?.('scrollMode', mode); } catch {}
+  if (!opts.skipStore) {
+    try { appStore.set?.('scrollMode', normalized); } catch {}
+  }
 
-  try { applyScrollModeUI(mode as any); } catch {}
+  try { applyScrollModeUI(normalized as any); } catch {}
 
 	const brain = getScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
@@ -236,7 +208,7 @@ function applyUiScrollMode(mode: UiScrollMode) {
   let asrEnabled = false;
   let autoEnabled = false;
 
-  switch (mode) {
+  switch (normalized) {
     case 'off':
       brainMode = 'manual';
       clampMode = 'free';
@@ -282,17 +254,17 @@ function applyUiScrollMode(mode: UiScrollMode) {
       break;
 	}
   // Apply decisions
-	brain.setMode(brainMode);
+  try { brain?.setMode(brainMode); } catch {}
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);
   if (auto && typeof auto.setEnabled === 'function') auto.setEnabled(autoEnabled);
 
   // HUD visibility: show all three layers for debugging
   try {
-    const summary = `UI: ${mode} | Brain: ${brainMode} | Clamp: ${clampMode}`;
+    const summary = `UI: ${normalized} | Brain: ${brainMode} | Clamp: ${clampMode}`;
     (window as any).HUD?.log?.('scroll:mode', { 
       summary,
-      ui: mode, 
+      ui: normalized, 
       brain: brainMode, 
       clamp: clampMode, 
       asrEnabled,
@@ -305,8 +277,46 @@ function applyUiScrollMode(mode: UiScrollMode) {
   }
 }
 
+function initScrollModeUiSync(): void {
+  const updateFromStore = (mode: string | undefined) => {
+    const normalized = normalizeUiScrollMode(mode);
+    setScrollModeSelectValue(normalized);
+    applyUiScrollMode(normalized, { skipStore: true });
+  };
+
+  const applyCurrent = () => {
+    try {
+      updateFromStore(appStore.get?.('scrollMode') as string | undefined);
+    } catch {}
+  };
+
+  applyCurrent();
+
+  try {
+    appStore.subscribe?.('scrollMode', (next: string) => updateFromStore(next));
+  } catch {}
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyCurrent, { once: true });
+  }
+
+  try {
+    document.addEventListener('change', (ev) => {
+      const t = ev.target as HTMLSelectElement | null;
+      if (!t || t.id !== SCROLL_MODE_SELECT_ID) return;
+      const mode = normalizeUiScrollMode(t.value);
+      try { appStore.set?.('scrollMode', mode as any); } catch {}
+      applyUiScrollMode(mode, { skipStore: true });
+    }, { capture: true });
+  } catch {
+    // ignore
+  }
+}
+
+initScrollModeUiSync();
+
 // Expose this function as the global router for existing JS
-(window as any).setScrollMode = applyUiScrollMode;
+(window as any).setScrollMode = (mode: UiScrollMode) => applyUiScrollMode(mode);
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
 
@@ -1008,9 +1018,10 @@ export async function boot() {
             }
           } catch {}
           // TS scroll router + UI wiring
-          try { initScrollFeature(); } catch {}
-          // Initialize features via idempotent wrappers
-          try { startPersistence(); } catch {}
+					try { initScrollFeature(); } catch {}
+					// Initialize features via idempotent wrappers
+					try { startPersistence(); } catch {}
+          try { initScrollPrefsPersistence(appStore); } catch {}
           try { initAsrPersistence(); } catch {}
 					try { startTelemetry(); } catch {}
 					try { startScroll(); } catch {}
@@ -1091,12 +1102,10 @@ try {
     get(): RouterMode {
       const raw =
         (store?.get?.('scrollMode') as string | undefined) ||
-        localStorage.getItem('tp_scroll_mode_v1') ||
-        localStorage.getItem('tp_scroll_mode') ||
-        localStorage.getItem('scrollMode') ||
+        loadScrollPrefs()?.mode ||
         'hybrid';
-      const val = String(raw || '').trim().toLowerCase();
-      if (val === 'auto') return 'hybrid';
+      const normalized = normalizeUiScrollMode(raw);
+      const val = normalized === 'auto' ? 'hybrid' : normalized;
       const allowed: RouterMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal'];
       return allowed.includes(val as RouterMode) ? (val as RouterMode) : 'hybrid';
     },
@@ -1120,13 +1129,14 @@ try {
   };
 
   // Ensure UI/store reflect initial mode
-  try { applyUiScrollMode(scrollModeSource.get() as any); } catch {}
+  try { applyUiScrollMode(scrollModeSource.get() as any, { skipStore: true }); } catch {}
   try { initWpmBindings(); } catch {}
 
   // Legacy setScrollMode bridge
   (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off'|'timed'|'wpm'|'hybrid') => {
-    try { applyUiScrollMode(mode as any); } catch {}
-    try { store?.set?.('scrollMode', mode); } catch {}
+    const normalized = normalizeUiScrollMode(mode);
+    try { store?.set?.('scrollMode', normalized); } catch {}
+    try { applyUiScrollMode(normalized, { skipStore: true }); } catch {}
     try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
   };
 } catch {}
