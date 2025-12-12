@@ -590,6 +590,7 @@ import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legac
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
 import { bindSettingsExportImport } from './ui/settings-export-import';
+import { triggerSettingsDownload } from './features/settings/exportSettings';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
@@ -1202,6 +1203,15 @@ try {
 							} catch {}
 							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
 							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
+							try {
+								const exportBtn = document.getElementById('btnExportSettings') as HTMLButtonElement | null;
+								if (exportBtn && exportBtn.dataset.settingsExportWired !== '1') {
+									exportBtn.dataset.settingsExportWired = '1';
+									exportBtn.addEventListener('click', () => {
+										try { triggerSettingsDownload(); } catch (err) { try { console.error('[settings-export] click error', err); } catch {} }
+									});
+								}
+							} catch {}
 						});
 					} catch {}
 
