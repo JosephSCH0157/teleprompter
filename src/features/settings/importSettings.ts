@@ -1,4 +1,6 @@
 // src/features/settings/importSettings.ts
+import { showToast } from '../../ui/toasts';
+
 export interface ExportedSettingsEnvelope {
   version: 1;
   createdAt: string;
@@ -47,18 +49,19 @@ export function triggerSettingsImport(): void {
         const text = String(reader.result || '');
         const parsed = JSON.parse(text) as ExportedSettingsEnvelope;
         applyEnvelopeToLocalStorage(parsed);
-        try { console.info('[settings-import] applied settings, reloading…'); } catch {}
+        try { console.info('[settings-import] applied settings, reloading'); } catch {}
+        showToast('Settings imported. Reloading...', { type: 'info' });
         window.location.reload();
       } catch (err) {
         try { console.error('[settings-import] failed to import settings', err); } catch {}
-        alert('Failed to import settings. Is this an Anvil settings file?');
+        showToast('Failed to import settings. Is this an Anvil settings file?', { type: 'error' });
       } finally {
         cleanup();
       }
     };
     reader.onerror = () => {
       try { console.error('[settings-import] file read error', reader.error); } catch {}
-      alert('Could not read settings file.');
+      showToast('Could not read settings file.', { type: 'error' });
       cleanup();
     };
     reader.readAsText(file);
