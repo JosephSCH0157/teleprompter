@@ -29,6 +29,7 @@ const STEP_PX_KEY = 'tp_scroll_step_px_v1';
 const REH_PUNCT_KEY = 'tp_scroll_reh_punct_v1';
 const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
 const PAGE_KEY = 'tp_page_v1';
+const ALLOWED_PAGES = new Set<PageName>(['scripts']);
 const HUD_ENABLED_KEY = 'tp_hud_enabled_v1';
 const OVERLAY_KEY = 'tp_overlay_v1';
 const CAMERA_KEY = 'tp_camera_enabled_v1';
@@ -241,8 +242,12 @@ function buildInitialState(): AppStoreState {
     })(),
     page: (() => {
       try {
-        const v = localStorage.getItem(PAGE_KEY) || 'scripts';
-        return (v === 'scripts' || v === 'settings' || v === 'help' || v === 'hud') ? v as PageName : 'scripts';
+        const v = (localStorage.getItem(PAGE_KEY) || 'scripts') as PageName;
+        if (!ALLOWED_PAGES.has(v)) {
+          try { localStorage.removeItem(PAGE_KEY); } catch {}
+          return 'scripts';
+        }
+        return v;
       } catch {
         return 'scripts';
       }
