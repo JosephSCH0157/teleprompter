@@ -221,10 +221,7 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
   }
 
   try {
-    settingsBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} showOverlay(settingsOverlay); });
-    settingsClose?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} hideOverlay(settingsOverlay); });
-    helpBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} showOverlay(shortcutsOverlay); });
-    helpClose?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} hideOverlay(shortcutsOverlay); });
+    // Legacy direct bindings removed in favor of exclusive handlers above
   } catch {
     /* ignore */
   }
