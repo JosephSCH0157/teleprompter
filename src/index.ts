@@ -46,6 +46,7 @@ import { initRecordingSession } from './features/recording-session';
 import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
+import { applyPagePanel } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
 import { initAsrPersistence } from './features/asr/persistence';
@@ -1313,8 +1314,9 @@ try {
 					try {
 						const hasActive = document.querySelector('.page-panel.is-active');
 						if (!hasActive) {
-							const scriptsTab = document.querySelector('[data-tp-page="scripts"]') as HTMLElement | null;
-							scriptsTab?.click();
+							const ensureScripts = () => { try { applyPagePanel('scripts'); } catch {} };
+							ensureScripts();
+							setTimeout(ensureScripts, 50);
 						}
 					} catch {}
 

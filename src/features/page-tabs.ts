@@ -24,6 +24,51 @@ function getRoutablePanels(allowed: Set<PageName>): HTMLElement[] {
   });
 }
 
+function closeOverlays(): void {
+  try { (window as any).__tpStore?.set?.('overlay', 'none'); } catch {}
+  try { document.body.removeAttribute('data-smoke-open'); } catch {}
+  ['settingsOverlay', 'shortcutsOverlay'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    try { el.classList.add('hidden'); } catch {}
+    try { el.setAttribute('aria-hidden', 'true'); } catch {}
+    try { el.style.display = 'none'; } catch {}
+  });
+}
+
+export function applyPagePanel(page: PageName): void {
+  const allowed = getAllowedPages();
+  const routedPanels = getRoutablePanels(allowed);
+  const panelByName = new Map<PageName, HTMLElement>();
+  routedPanels.forEach((panel) => {
+    const name = panel.getAttribute('data-tp-panel') as PageName | null;
+    if (name) panelByName.set(name, panel);
+  });
+  const targetPage = allowed.has(page) ? page : FALLBACK_PAGE;
+  const target = panelByName.get(targetPage) || panelByName.get(FALLBACK_PAGE);
+
+  const buttons = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-tp-page]'),
+  );
+
+  buttons.forEach((btn) => {
+    const name = btn.getAttribute('data-tp-page') as PageName | null;
+    const active = name === targetPage;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    btn.tabIndex = active ? 0 : -1;
+  });
+  routedPanels.forEach((panel) => {
+    const visible = panel === target;
+    panel.classList.toggle('is-active', visible);
+    panel.hidden = !visible;
+    panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  });
+
+  closeOverlays();
+}
+
 export function initPageTabs(store?: PageStore) {
   const S = store || ((window as any).__tpStore as AppStore | undefined);
   if (!S) {
@@ -43,38 +88,11 @@ export function initPageTabs(store?: PageStore) {
     return;
   }
 
-  const apply = (page: PageName) => {
-    const allowed = getAllowedPages();
-    const routedPanels = getRoutablePanels(allowed);
-    const panelByName = new Map<PageName, HTMLElement>();
-    routedPanels.forEach((panel) => {
-      const name = panel.getAttribute('data-tp-panel') as PageName | null;
-      if (name) panelByName.set(name, panel);
-    });
-    const targetPage = allowed.has(page) ? page : FALLBACK_PAGE;
-    const target = panelByName.get(targetPage) || panelByName.get(FALLBACK_PAGE);
-
-    buttons.forEach((btn) => {
-      const name = btn.getAttribute('data-tp-page') as PageName | null;
-      const active = name === targetPage;
-      btn.classList.toggle('is-active', active);
-      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
-      btn.tabIndex = active ? 0 : -1;
-    });
-    routedPanels.forEach((panel) => {
-      const visible = panel === target;
-      panel.classList.toggle('is-active', visible);
-      panel.hidden = !visible;
-      panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
-    });
-  };
-
   buttons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.tpPage;
       if (!target) return;
-      try { S.set('page', target); } catch {}
+      applyPagePanel(target as PageName);
     });
   });
   // If user focuses inside the Scripts panel (e.g., dropdown), ensure page state flips to scripts
@@ -92,19 +110,15 @@ export function initPageTabs(store?: PageStore) {
   const stored = (() => { try { return S.get?.('page') as PageName | undefined; } catch { return undefined; } })();
   if (stored && stored !== FALLBACK_PAGE && !getAllowedPages().has(stored)) {
     try { console.warn('[page-tabs] illegal page restored, forcing scripts:', stored); } catch {}
-    try { S.set('page', FALLBACK_PAGE as PageName); } catch {}
   }
   const initial = (() => {
     const allowed = getAllowedPages();
     const candidate = stored as PageName;
     return allowed.has(candidate) ? candidate : FALLBACK_PAGE;
   })();
-  if (!stored) {
-    try { S.set('page', initial); } catch {}
-  }
-  apply(initial);
+  applyPagePanel(initial);
 
-  try { S.subscribe('page', (v: PageName) => apply(v)); } catch {}
+  try { S.subscribe('page', (v: PageName) => applyPagePanel(v)); } catch {}
 }
 
 export function ensurePageTabs(store: PageStore): void {

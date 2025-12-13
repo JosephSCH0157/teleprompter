@@ -28,7 +28,6 @@ const HYB_IDLE_KEY = 'tp_scroll_hybrid_idle_v1';
 const STEP_PX_KEY = 'tp_scroll_step_px_v1';
 const REH_PUNCT_KEY = 'tp_scroll_reh_punct_v1';
 const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
-const PAGE_KEY = 'tp_page_v1';
 const ALLOWED_PAGES = new Set<PageName>(['scripts']);
 const ALLOWED_OVERLAYS = new Set<AppStoreState['overlay']>(['none', 'settings', 'help', 'shortcuts']);
 const HUD_ENABLED_KEY = 'tp_hud_enabled_v1';
@@ -47,7 +46,6 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   prerollSeconds: PREROLL_SEC_KEY,
   devHud: DEV_HUD_KEY,
   hudEnabledByUser: HUD_ENABLED_KEY,
-  page: PAGE_KEY,
   overlay: OVERLAY_KEY,
   cameraEnabled: CAMERA_KEY,
   // Scroll router persistence
