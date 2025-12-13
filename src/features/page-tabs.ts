@@ -69,9 +69,7 @@ export function applyPagePanel(page: PageName): void {
   closeOverlays();
 }
 
-export function initPageTabs(store?: PageStore): boolean {
-  const S = store || ((window as any).__tpStore as AppStore | undefined);
-
+export function initPageTabs(_store?: PageStore): boolean {
   const buttons = Array.from(
     document.querySelectorAll<HTMLElement>('[data-tp-page]'),
   );
@@ -94,31 +92,8 @@ export function initPageTabs(store?: PageStore): boolean {
     });
   });
 
-  // Choose initial page (store optional)
-  let initial: PageName = FALLBACK_PAGE;
-
-  if (S) {
-    const stored = (() => {
-      try { return S.get?.('page') as PageName | undefined; } catch { return undefined; }
-    })();
-
-    if (stored && stored !== FALLBACK_PAGE && !getAllowedPages().has(stored)) {
-      try { console.warn('[page-tabs] illegal page restored, forcing scripts:', stored); } catch {}
-    }
-
-    const allowed = getAllowedPages();
-    initial = stored && allowed.has(stored) ? stored : FALLBACK_PAGE;
-  }
-
-  // Always paint something
-  applyPagePanel(initial);
-
-  // Optional: keep store in sync if present
-  if (S) {
-    try { S.subscribe('page', (v: PageName) => applyPagePanel(v)); } catch {}
-  } else {
-    try { console.warn('[page-tabs] __tpStore not ready; tabs wired without store'); } catch {}
-  }
+  // Always paint something (default to scripts)
+  applyPagePanel(FALLBACK_PAGE);
 
   return true;
 }
