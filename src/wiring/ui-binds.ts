@@ -139,6 +139,24 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     return document.getElementById('shortcutsOverlay') as HTMLElement | null;
   }
 
+  function showOverlay(el: HTMLElement | null): void {
+    if (!el) return;
+    try { el.hidden = false; } catch {}
+    try { el.removeAttribute('hidden'); } catch {}
+    try { el.classList.remove('hidden'); } catch {}
+    try { el.style.display = ''; } catch {}
+    try { el.setAttribute('aria-hidden', 'false'); } catch {}
+  }
+
+  function hideOverlay(el: HTMLElement | null): void {
+    if (!el) return;
+    try { el.hidden = true; } catch {}
+    try { el.setAttribute('hidden', ''); } catch {}
+    try { el.classList.add('hidden'); } catch {}
+    try { el.style.display = 'none'; } catch {}
+    try { el.setAttribute('aria-hidden', 'true'); } catch {}
+  }
+
   function wireOverlay(
     openSel: string,
     closeSel: string,
@@ -164,20 +182,10 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
             const overlay = getOverlayEl(name);
 
             if (isOpen) {
-              if (overlay) {
-                overlay.classList.remove('hidden');
-                try { overlay.removeAttribute('hidden'); } catch {}
-                try { overlay.style.display = ''; } catch {}
-                try { overlay.setAttribute('aria-hidden', 'false'); } catch {}
-              }
+              showOverlay(overlay);
               markOpen(name);
             } else {
-              if (overlay) {
-                overlay.classList.add('hidden');
-                try { overlay.setAttribute('hidden', ''); } catch {}
-                try { overlay.style.display = 'none'; } catch {}
-                try { overlay.setAttribute('aria-hidden', 'true'); } catch {}
-              }
+              hideOverlay(overlay);
               markClose(name);
             }
           } catch {
@@ -195,7 +203,7 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
             if (e.key === 'Escape') {
               markClose(name);
               const overlay = getOverlayEl(name);
-              if (overlay) overlay.classList.add('hidden');
+              hideOverlay(overlay);
             }
           } catch {
             /* ignore */
