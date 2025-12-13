@@ -183,6 +183,43 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
   const settingsOverlay = document.getElementById('settingsOverlay');
   const shortcutsOverlay = document.getElementById('shortcutsOverlay');
 
+  function rebindExclusiveClick(el: HTMLElement | null, handler: (ev: MouseEvent) => void): HTMLElement | null {
+    if (!el) return null;
+    const clone = el.cloneNode(true) as HTMLElement;
+    el.replaceWith(clone);
+    clone.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); } catch {}
+      try { ev.stopImmediatePropagation(); } catch {}
+      handler(ev);
+    }, { capture: true });
+    return clone;
+  }
+
+  try {
+    if (settingsOverlay && settingsBtn) {
+      const btn = rebindExclusiveClick(settingsBtn, () => {
+        const isOpen = !settingsOverlay.hidden && !settingsOverlay.classList.contains('hidden') && settingsOverlay.style.display !== 'none';
+        if (isOpen) hideOverlay(settingsOverlay); else showOverlay(settingsOverlay);
+      }) || settingsBtn;
+      if (settingsClose) {
+        rebindExclusiveClick(settingsClose, () => hideOverlay(settingsOverlay));
+      }
+      try { btn.setAttribute('data-overlay-wired', 'ts'); } catch {}
+    }
+    if (shortcutsOverlay && helpBtn) {
+      const btn = rebindExclusiveClick(helpBtn, () => {
+        const isOpen = !shortcutsOverlay.hidden && !shortcutsOverlay.classList.contains('hidden') && shortcutsOverlay.style.display !== 'none';
+        if (isOpen) hideOverlay(shortcutsOverlay); else showOverlay(shortcutsOverlay);
+      }) || helpBtn;
+      if (helpClose) {
+        rebindExclusiveClick(helpClose, () => hideOverlay(shortcutsOverlay));
+      }
+      try { btn.setAttribute('data-overlay-wired', 'ts'); } catch {}
+    }
+  } catch {
+    /* ignore */
+  }
+
   try {
     settingsBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} showOverlay(settingsOverlay); });
     settingsClose?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} hideOverlay(settingsOverlay); });
