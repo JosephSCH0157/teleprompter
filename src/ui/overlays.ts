@@ -38,17 +38,7 @@ export function initOverlays(): void {
     });
   } catch {}
 
-  const wireBtn = (id: string, target: OverlayId) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      try { store.set('overlay', target); } catch {}
-    });
-  };
-  wireBtn('shortcutsBtn', 'shortcuts');
-  wireBtn('settingsBtn', 'settings');
-  wireBtn('settingsClose', 'none');
-  wireBtn('shortcutsClose', 'none');
+  // Button wiring handled centrally in ui-binds.ts (exclusive handlers)
 
   const initial = (() => {
     try {
