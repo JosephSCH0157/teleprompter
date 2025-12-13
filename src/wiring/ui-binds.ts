@@ -210,12 +210,6 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
       if (isOpen) hideOverlay(shortcutsOverlay); else showOverlay(shortcutsOverlay);
     });
     bindExclusive(helpClose, () => hideOverlay(shortcutsOverlay));
-    // Capture-phase guard to stop any late-attached legacy listeners
-    const guard = (handler: () => void) => (ev: Event) => { try { ev.preventDefault(); ev.stopImmediatePropagation(); } catch {} handler(); };
-    settingsBtn?.addEventListener('click', guard(() => { const isOpen = settingsOverlay ? (!settingsOverlay.hidden && !settingsOverlay.classList.contains('hidden') && settingsOverlay.style.display !== 'none') : false; isOpen ? hideOverlay(settingsOverlay) : showOverlay(settingsOverlay); }), { capture: true });
-    settingsClose?.addEventListener('click', guard(() => hideOverlay(settingsOverlay)), { capture: true });
-    helpBtn?.addEventListener('click', guard(() => { const isOpen = shortcutsOverlay ? (!shortcutsOverlay.hidden && !shortcutsOverlay.classList.contains('hidden') && shortcutsOverlay.style.display !== 'none') : false; isOpen ? hideOverlay(shortcutsOverlay) : showOverlay(shortcutsOverlay); }), { capture: true });
-    helpClose?.addEventListener('click', guard(() => hideOverlay(shortcutsOverlay)), { capture: true });
   } catch {
     /* ignore */
   }
