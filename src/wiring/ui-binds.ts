@@ -175,6 +175,23 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     try { el.setAttribute('aria-hidden', 'true'); } catch {}
   }
 
+  // Direct bindings for primary overlay buttons (defensive against legacy handlers)
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsClose = document.getElementById('settingsClose');
+  const helpBtn = document.getElementById('shortcutsBtn') || document.getElementById('helpBtn');
+  const helpClose = document.getElementById('shortcutsClose') || document.getElementById('helpClose');
+  const settingsOverlay = document.getElementById('settingsOverlay');
+  const shortcutsOverlay = document.getElementById('shortcutsOverlay');
+
+  try {
+    settingsBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} showOverlay(settingsOverlay); });
+    settingsClose?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} hideOverlay(settingsOverlay); });
+    helpBtn?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} showOverlay(shortcutsOverlay); });
+    helpClose?.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} hideOverlay(shortcutsOverlay); });
+  } catch {
+    /* ignore */
+  }
+
   function wireOverlay(
     openSel: string,
     closeSel: string,
