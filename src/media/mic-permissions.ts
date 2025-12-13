@@ -76,10 +76,16 @@ export function initMicPermissions(): void {
       'settings';
     btn.addEventListener('click', () => {
       try {
-        // If already granted/active, let other mic controls handle release/toggle without re-requesting.
-        if (!!appStore.get?.('micGranted')) return;
+        const granted = !!appStore.get?.('micGranted');
+        if (granted) {
+          try { (window as any).__tpMic?.releaseMic?.(); } catch {}
+          try { appStore.set?.('micGranted', false); } catch {}
+          try { (window as any).__tpMicGranted = false; } catch {}
+          applyState(false);
+          return;
+        }
       } catch {
-        // ignore
+        // ignore and fall through to request
       }
       void handleRequestMic(source);
     });
