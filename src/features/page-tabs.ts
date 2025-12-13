@@ -69,12 +69,8 @@ export function applyPagePanel(page: PageName): void {
   closeOverlays();
 }
 
-export function initPageTabs(store?: PageStore) {
+export function initPageTabs(store?: PageStore): boolean {
   const S = store || ((window as any).__tpStore as AppStore | undefined);
-  if (!S) {
-    try { console.warn('[page-tabs] __tpStore not ready; skipping init'); } catch {}
-    return;
-  }
 
   const buttons = Array.from(
     document.querySelectorAll<HTMLElement>('[data-tp-page]'),
@@ -85,40 +81,46 @@ export function initPageTabs(store?: PageStore) {
 
   if (!buttons.length || !panels.length) {
     try { console.warn('[page-tabs] no page tabs/panels found'); } catch {}
-    return;
+    return false;
   }
 
+  // Wire clicks (always)
   buttons.forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      try { e.preventDefault(); } catch {}
       const target = btn.dataset.tpPage;
       if (!target) return;
       applyPagePanel(target as PageName);
     });
   });
-  // If user focuses inside the Scripts panel (e.g., dropdown), ensure page state flips to scripts
-  try {
+
+  // Choose initial page (store optional)
+  let initial: PageName = FALLBACK_PAGE;
+
+  if (S) {
+    const stored = (() => {
+      try { return S.get?.('page') as PageName | undefined; } catch { return undefined; }
+    })();
+
+    if (stored && stored !== FALLBACK_PAGE && !getAllowedPages().has(stored)) {
+      try { console.warn('[page-tabs] illegal page restored, forcing scripts:', stored); } catch {}
+    }
+
     const allowed = getAllowedPages();
-    const routedPanels = getRoutablePanels(allowed);
-    const scriptsPanel = routedPanels.find((p) => p.getAttribute('data-tp-panel') === FALLBACK_PAGE);
-    scriptsPanel?.addEventListener('focusin', () => {
-      try { S.set('page', FALLBACK_PAGE as PageName); } catch {}
-    });
-  } catch {
-    // ignore
+    initial = stored && allowed.has(stored) ? stored : FALLBACK_PAGE;
   }
 
-  const stored = (() => { try { return S.get?.('page') as PageName | undefined; } catch { return undefined; } })();
-  if (stored && stored !== FALLBACK_PAGE && !getAllowedPages().has(stored)) {
-    try { console.warn('[page-tabs] illegal page restored, forcing scripts:', stored); } catch {}
-  }
-  const initial = (() => {
-    const allowed = getAllowedPages();
-    const candidate = stored as PageName;
-    return allowed.has(candidate) ? candidate : FALLBACK_PAGE;
-  })();
+  // Always paint something
   applyPagePanel(initial);
 
-  try { S.subscribe('page', (v: PageName) => applyPagePanel(v)); } catch {}
+  // Optional: keep store in sync if present
+  if (S) {
+    try { S.subscribe('page', (v: PageName) => applyPagePanel(v)); } catch {}
+  } else {
+    try { console.warn('[page-tabs] __tpStore not ready; tabs wired without store'); } catch {}
+  }
+
+  return true;
 }
 
 export function ensurePageTabs(store: PageStore): void {
@@ -133,7 +135,8 @@ export function ensurePageTabs(store: PageStore): void {
       const hasPanels = !!document.querySelector('[data-tp-panel]');
       const hasTabs = !!document.querySelector('[data-tp-page]');
       if (!hasPanels || !hasTabs) return false;
-      initPageTabs(store);
+      const ok = initPageTabs(store);
+      if (!ok) return false;
       pageTabsWired = true;
       return true;
     } catch {
