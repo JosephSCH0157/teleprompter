@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+Ôªø<!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -282,7 +282,7 @@
 <div id="fatalFallback" class="fatal-fallback" hidden>
   <div class="fatal-inner">
     <h1>There seems to be a problem lighting the fire.</h1>
-    <p>Possibly wet coal. Weíre looking into the issue.</p>
+    <p>Possibly wet coal. We‚Äôre looking into the issue.</p>
 
     <p class="fatal-hint">
       Try reloading Anvil. If this keeps happening, email
@@ -396,7 +396,7 @@
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
   </label>
-  <span class="chip" id="wpmPx">Ö px/s</span>
+  <span class="chip" id="wpmPx">‚Ä¶ px/s</span>
 </div>
 <div class="row visually-hidden" id="stepControlsRow" aria-hidden="true">
   <button id="stepPrevBtn" class="chip" type="button" title="Previous step">Step ?</button>
@@ -552,7 +552,7 @@
 <p class="status" id="status"></p>
 <h2>Script</h2>
 <textarea id="editor" data-editor placeholder="Use tags: [s1]?[/s1], [s2]?[/s2], [g1]?[/g1], [g2]?[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
-<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to beginÖ</em></p>
+<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin‚Ä¶</em></p>
 <!-- Camera preview fallback (binder expects #cameraPreview) already present later; duplicate guarded by ID uniqueness -->
 <!-- cameraPreview already defined later with proper classes; avoid duplicate -->
 <!-- (Removed legacy External Scripts + settings export/import UI: now injected into Settings overlay) -->
@@ -633,33 +633,33 @@
       <h5>Use interim results</h5>
       <p>Allows partial guesses before a sentence is done for faster scroll response.</p>
       <ul>
-        <li><strong>On:</strong> Faster, more ìliveî scroll; can be jumpy in noise.</li>
+        <li><strong>On:</strong> Faster, more ‚Äúlive‚Äù scroll; can be jumpy in noise.</li>
         <li><strong>Off:</strong> Waits for finalized phrases; smoother but slower.</li>
       </ul>
 
       <h5>Filter filler words</h5>
-      <p>Drop ìum/uh/likeÖî so scroll matches script better and jitters less.</p>
+      <p>Drop ‚Äúum/uh/like‚Ä¶‚Äù so scroll matches script better and jitters less.</p>
 
       <h4>Advanced Controls</h4>
       <h5>Confidence threshold</h5>
-      <p>Minimum confidence (0.0ñ1.0) before accepting words.</p>
+      <p>Minimum confidence (0.0‚Äì1.0) before accepting words.</p>
       <ul>
-        <li><strong>Higher (0.8ñ0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
-        <li><strong>Lower (0.4ñ0.6):</strong> More responsive; occasional wrong words.</li>
+        <li><strong>Higher (0.8‚Äì0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
+        <li><strong>Lower (0.4‚Äì0.6):</strong> More responsive; occasional wrong words.</li>
       </ul>
 
-      <h5>End-pointing (µs)</h5>
-      <p>Silence duration before a phrase finalizes (1,000,000 µs = 1s).</p>
+      <h5>End-pointing (¬µs)</h5>
+      <p>Silence duration before a phrase finalizes (1,000,000 ¬µs = 1s).</p>
       <ul>
-        <li><strong>Lower (200kñ400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
-        <li><strong>Higher (800kñ1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
+        <li><strong>Lower (200k‚Äì400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
+        <li><strong>Higher (800k‚Äì1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
       </ul>
 
       <h4>Suggested Starting Points</h4>
       <ul>
-        <li><strong>Podcast:</strong> Whisper Bridge; interim on; fillers on; threshold 0.55; end-pointing 900,000 µs.</li>
-        <li><strong>Fast live:</strong> Web Speech; interim on; fillers off; threshold 0.40; end-pointing 400,000 µs.</li>
-        <li><strong>Noisy room:</strong> Whisper Bridge; interim off; fillers on; threshold 0.70; end-pointing 1,000,000 µs.</li>
+        <li><strong>Podcast:</strong> Whisper Bridge; interim on; fillers on; threshold 0.55; end-pointing 900,000 ¬µs.</li>
+        <li><strong>Fast live:</strong> Web Speech; interim on; fillers off; threshold 0.40; end-pointing 400,000 ¬µs.</li>
+        <li><strong>Noisy room:</strong> Whisper Bridge; interim off; fillers on; threshold 0.70; end-pointing 1,000,000 ¬µs.</li>
       </ul>
       <p>Tweak to taste: raise threshold/end-pointing to calm jitter; lower them to speed up.</p>
     </section>
@@ -742,8 +742,7 @@
   </script>
   <script>
     (function () {
-      try {
-        var html = document.documentElement;
+      try {\n        if (window.__TP_TS_OVERLAYS) return;\n        var html = document.documentElement;
 
         var settingsOverlay = document.getElementById('settingsOverlay');
         var shortcutsOverlay = document.getElementById('shortcutsOverlay');
@@ -870,6 +869,7 @@
   </script>
 </body>
 </html>
+
 
 
 
