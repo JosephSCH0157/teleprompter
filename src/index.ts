@@ -1312,12 +1312,9 @@ try {
 
 					// Ensure a page panel is active (default to Scripts) to avoid blank UI when no panel is selected
 					try {
-						const hasActive = document.querySelector('.page-panel.is-active');
-						if (!hasActive) {
-							const ensureScripts = () => { try { applyPagePanel('scripts'); } catch {} };
-							ensureScripts();
-							setTimeout(ensureScripts, 50);
-						}
+						const ensureScripts = () => { try { applyPagePanel('scripts'); } catch {} };
+						ensureScripts();
+						setTimeout(ensureScripts, 50);
 					} catch {}
 
 					// Signal init completion so harness/tests can proceed
