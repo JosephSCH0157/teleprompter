@@ -1012,7 +1012,7 @@ export async function boot() {
 								const hasHudRoot = !!document.getElementById('hud-root') || !!document.getElementById('tp-speech-notes-hud');
 								appStore.set?.('hudSupported', hasHudRoot);
 							} catch {}
-          try { initOverlays(); } catch {}
+          // Overlays (settings/help) are wired exclusively via TS ui-binds; legacy overlays init disabled
           try {
             markReady({
               settingsOverlay: !!document.getElementById('settingsOverlay'),
