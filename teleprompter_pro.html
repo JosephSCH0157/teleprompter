@@ -742,119 +742,7 @@
     })();
   </script>
   <script>
-    (function () {
-      try {
-        return;
-        var html = document.documentElement;
-
-        var settingsOverlay = document.getElementById('settingsOverlay');
-        var shortcutsOverlay = document.getElementById('shortcutsOverlay');
-
-        var settingsBtn = document.getElementById('settingsBtn');
-        var settingsClose = document.getElementById('settingsClose');
-
-        var helpBtn = document.getElementById('shortcutsBtn');
-        var helpClose = document.getElementById('shortcutsClose');
-
-        function showOverlay(overlay, trigger) {
-          if (!overlay) return;
-          overlay.hidden = false;
-          overlay.classList.remove('hidden');
-          if (trigger) trigger.setAttribute('aria-expanded', 'true');
-        }
-
-        function hideOverlay(overlay, trigger) {
-          if (!overlay) return;
-          overlay.hidden = true;
-          overlay.classList.add('hidden');
-          if (trigger) trigger.setAttribute('aria-expanded', 'false');
-        }
-
-        // --- Settings open/close ---
-        if (settingsBtn && settingsOverlay && !settingsBtn.dataset.overlayWired) {
-          settingsBtn.dataset.overlayWired = '1';
-          settingsBtn.addEventListener('click', function (ev) {
-            try { ev.preventDefault(); } catch (e) {}
-            showOverlay(settingsOverlay, settingsBtn);
-          });
-        }
-
-        if (settingsClose && settingsOverlay && !settingsClose.dataset.overlayWired) {
-          settingsClose.dataset.overlayWired = '1';
-          settingsClose.addEventListener('click', function (ev) {
-            try { ev.preventDefault(); } catch (e) {}
-            hideOverlay(settingsOverlay, settingsBtn);
-          });
-        }
-
-        // --- Help / Shortcuts open/close ---
-        if (helpBtn && shortcutsOverlay && !helpBtn.dataset.overlayWired) {
-          helpBtn.dataset.overlayWired = '1';
-          helpBtn.addEventListener('click', function (ev) {
-            try { ev.preventDefault(); } catch (e) {}
-            showOverlay(shortcutsOverlay, helpBtn);
-          });
-        }
-
-        if (helpClose && shortcutsOverlay && !helpClose.dataset.overlayWired) {
-          helpClose.dataset.overlayWired = '1';
-          helpClose.addEventListener('click', function (ev) {
-            try { ev.preventDefault(); } catch (e) {}
-            hideOverlay(shortcutsOverlay, helpBtn);
-          });
-        }
-
-        // --- Click on overlay backdrop closes it ---
-        function bindOverlayBackdrop(overlay, trigger) {
-          if (!overlay || overlay.dataset.backdropWired) return;
-          overlay.dataset.backdropWired = '1';
-          overlay.addEventListener('click', function (ev) {
-            if (ev.target === overlay) {
-              hideOverlay(overlay, trigger);
-            }
-          });
-        }
-
-        bindOverlayBackdrop(settingsOverlay, settingsBtn);
-        bindOverlayBackdrop(shortcutsOverlay, helpBtn);
-
-        // --- Present Mode: Esc + exit button only *close* it ---
-        document.addEventListener('keydown', function (ev) {
-          var key = ev.key || ev.keyCode;
-          if (key === 'Escape' || key === 'Esc' || key === 27) {
-            // Close overlays if open
-            hideOverlay(settingsOverlay, settingsBtn);
-            hideOverlay(shortcutsOverlay, helpBtn);
-            // Exit present mode if active
-            if (html.classList.contains('tp-present')) {
-              html.classList.remove('tp-present');
-            }
-          }
-        });
-
-        // Create an emergency exit button if it doesn't exist yet.
-        var presentExit = document.querySelector('.present-exit');
-        if (!presentExit) {
-          presentExit = document.createElement('button');
-          presentExit.type = 'button';
-          presentExit.className = 'present-exit';
-          presentExit.textContent = 'Exit Present (Esc)';
-          presentExit.setAttribute('aria-label', 'Exit Present Mode');
-          document.body.appendChild(presentExit);
-        }
-        if (presentExit) {
-          presentExit.addEventListener('click', function (ev) {
-            try { ev.preventDefault(); } catch (e) {}
-            if (html.classList.contains('tp-present')) {
-              html.classList.remove('tp-present');
-            }
-          });
-        }
-      } catch (e) {
-        try { console.warn('[overlay-fallback] failed', e); } catch (e2) {}
-      }
-    })();
-  </script>
+    <!-- legacy overlay binder removed; TS owns overlays -->
   <script>
     (function(){
       try {
@@ -872,6 +760,7 @@
   </script>
 </body>
 </html>
+
 
 
 
