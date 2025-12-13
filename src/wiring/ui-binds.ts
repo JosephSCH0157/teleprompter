@@ -69,13 +69,6 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
       if (btn) {
         btn.textContent = isOn ? 'Exit Present' : 'Present Mode';
       }
-
-      // Persist across reloads
-      try {
-        window.localStorage.setItem('tp_present', isOn ? '1' : '0');
-      } catch {
-        /* ignore */
-      }
     } catch {
       /* ignore */
     }
@@ -88,13 +81,8 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     /* ignore */
   }
 
-  // Restore prior state from localStorage
-  try {
-    const prev = window.localStorage.getItem('tp_present') === '1';
-    applyPresent(prev);
-  } catch {
-    /* ignore */
-  }
+  // Always start in non-present mode (do not persist across reloads)
+  try { applyPresent(false); } catch { /* ignore */ }
 
   // Present button wiring
   try {
