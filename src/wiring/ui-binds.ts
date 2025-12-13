@@ -52,6 +52,24 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
   const presentSel = opts.presentBtnSelector || DEFAULT_PRESENT_SEL;
   const root = document.documentElement;
 
+  // Remove legacy inline overlay handlers by cloning buttons/close controls (drops attached listeners)
+  try {
+    const replace = (id: string) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const clone = el.cloneNode(true) as HTMLElement;
+      try { clone.removeAttribute('data-overlay-wired'); } catch {}
+      el.replaceWith(clone);
+      return clone;
+    };
+    replace('settingsBtn');
+    replace('settingsClose');
+    replace('shortcutsBtn');
+    replace('shortcutsClose');
+  } catch {
+    // best-effort; ignore failures
+  }
+
   function applyPresent(on: boolean): void {
     try {
       const isOn = !!on;
