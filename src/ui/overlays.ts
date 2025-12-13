@@ -2,12 +2,13 @@ import { getAppStore } from '../state/appStore';
 
 export type OverlayId = 'none' | 'settings' | 'help' | 'shortcuts';
 
+const DISABLE = typeof window !== 'undefined' && (window as any).__TP_TS_OVERLAYS === true;
+
 export function initOverlays(): void {
-  try {
-    if ((window as any).__TP_TS_OVERLAYS) return;
-  } catch {
-    // ignore
+  if (DISABLE) {
+    return;
   }
+
   const store = getAppStore();
   if (!store || typeof store.set !== 'function' || typeof store.subscribe !== 'function') return;
 
