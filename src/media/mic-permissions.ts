@@ -75,6 +75,12 @@ export function initMicPermissions(): void {
       (btn.getAttribute('data-tp-request-mic') as 'sidebar' | 'settings') ||
       'settings';
     btn.addEventListener('click', () => {
+      try {
+        // If already granted/active, let other mic controls handle release/toggle without re-requesting.
+        if (!!appStore.get?.('micGranted')) return;
+      } catch {
+        // ignore
+      }
       void handleRequestMic(source);
     });
   });
