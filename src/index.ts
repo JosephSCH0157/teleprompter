@@ -646,7 +646,6 @@ import { installGlobalIngestListener, installScriptIngest } from './features/scr
 import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
-import { bindSettingsExportImport } from './ui/settings-export-import';
 import { triggerSettingsDownload } from './features/settings/exportSettings';
 import { triggerSettingsImport } from './features/settings/importSettings';
 // ensure this file is executed in smoke runs
@@ -1260,7 +1259,6 @@ try {
 								window.addEventListener('tp:settings-folder:ready', () => { try { rebindFolderControls(); } catch {}; }, { capture: true });
 							} catch {}
 							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
-							try { bindSettingsExportImport('#btnExportSettings', '#btnImportSettings'); } catch {}
 							try {
 								const exportBtn = document.getElementById('btnExportSettings') as HTMLButtonElement | null;
 								if (exportBtn && exportBtn.dataset.settingsExportWired !== '1') {
@@ -1309,6 +1307,15 @@ try {
 								void handleChooseFolder(document);
 							} catch {}
 						}, { capture: true });
+					} catch {}
+
+					// Ensure a page panel is active (default to Scripts) to avoid blank UI when no panel is selected
+					try {
+						const hasActive = document.querySelector('.page-panel.is-active');
+						if (!hasActive) {
+							const scriptsTab = document.querySelector('[data-tp-page="scripts"]') as HTMLElement | null;
+							scriptsTab?.click();
+						}
 					} catch {}
 
 					// Signal init completion so harness/tests can proceed
