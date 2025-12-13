@@ -165,10 +165,20 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
             const overlay = getOverlayEl(name);
 
             if (isOpen) {
-              if (overlay) overlay.classList.remove('hidden');
+              if (overlay) {
+                overlay.classList.remove('hidden');
+                try { overlay.removeAttribute('hidden'); } catch {}
+                try { overlay.style.display = ''; } catch {}
+                try { overlay.setAttribute('aria-hidden', 'false'); } catch {}
+              }
               markOpen(name);
             } else {
-              if (overlay) overlay.classList.add('hidden');
+              if (overlay) {
+                overlay.classList.add('hidden');
+                try { overlay.setAttribute('hidden', ''); } catch {}
+                try { overlay.style.display = 'none'; } catch {}
+                try { overlay.setAttribute('aria-hidden', 'true'); } catch {}
+              }
               markClose(name);
             }
           } catch {
