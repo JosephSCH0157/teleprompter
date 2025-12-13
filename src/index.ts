@@ -37,7 +37,6 @@ import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
 import { initObsToggle } from './ui/obs-toggle';
-import { initOverlays } from './ui/overlays';
 import { wireRecordButtons } from './ui/recordButtons';
 import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
