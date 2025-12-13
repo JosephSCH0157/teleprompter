@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/adapters/hotkey.ts"],
+  "sourcesContent": ["// src/adapters/hotkey.ts - TS facade adapter\r\n\r\nfunction g(): any { return (window as any); }\r\n\r\nexport function enable() {\r\n  const w = g();\r\n  if (w.__tpHotkeysImpl?.enable) return w.__tpHotkeysImpl.enable();\r\n  if (w.hotkeys?.enable) return w.hotkeys.enable();\r\n  if (w.__tpHotkey?.enable) return w.__tpHotkey.enable();\r\n}\r\n\r\nexport function disable() {\r\n  const w = g();\r\n  if (w.__tpHotkeysImpl?.disable) return w.__tpHotkeysImpl.disable();\r\n  if (w.hotkeys?.disable) return w.hotkeys.disable();\r\n  if (w.__tpHotkey?.disable) return w.__tpHotkey.disable();\r\n}\r\n\r\nexport default { enable, disable };\r\n"],
+  "mappings": ";;;AAEA,SAAS,IAAS;AAAE,SAAQ;AAAgB;AAErC,SAAS,SAAS;AACvB,QAAM,IAAI,EAAE;AACZ,MAAI,EAAE,iBAAiB,OAAQ,QAAO,EAAE,gBAAgB,OAAO;AAC/D,MAAI,EAAE,SAAS,OAAQ,QAAO,EAAE,QAAQ,OAAO;AAC/C,MAAI,EAAE,YAAY,OAAQ,QAAO,EAAE,WAAW,OAAO;AACvD;AAEO,SAAS,UAAU;AACxB,QAAM,IAAI,EAAE;AACZ,MAAI,EAAE,iBAAiB,QAAS,QAAO,EAAE,gBAAgB,QAAQ;AACjE,MAAI,EAAE,SAAS,QAAS,QAAO,EAAE,QAAQ,QAAQ;AACjD,MAAI,EAAE,YAAY,QAAS,QAAO,EAAE,WAAW,QAAQ;AACzD;AAEA,IAAO,iBAAQ,EAAE,QAAQ,QAAQ;",
+  "names": []
+}
