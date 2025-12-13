@@ -245,9 +245,9 @@ function buildInitialState(): AppStoreState {
     })(),
     page: (() => {
       try {
-        const v = (localStorage.getItem(PAGE_KEY) || 'scripts') as PageName;
+        const v = ('scripts') as PageName;
         if (!ALLOWED_PAGES.has(v)) {
-          try { localStorage.removeItem(PAGE_KEY); } catch {}
+          // page is no longer persisted
           return 'scripts';
         }
         return v;
@@ -408,7 +408,6 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   // Clamp page to allowed set and clean persisted value if invalid
   if (!ALLOWED_PAGES.has(state.page as PageName)) {
     state.page = 'scripts';
-    try { localStorage.removeItem(PAGE_KEY); } catch {}
   }
   // Clamp overlay to allowed set and clear bad persisted values
   if (!ALLOWED_OVERLAYS.has(state.overlay)) {
