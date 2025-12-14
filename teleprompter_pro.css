@@ -801,6 +801,9 @@ html.tp-present .present-exit { display: inline-flex; }
 #wrap   .script p{
     font-size: var(--tp-font-size, 56px) !important;
     line-height: var(--tp-line-height, 1.4) !important;
+    color: var(--tp-fg, #e6eef8);
+    opacity: 1;
+    display: block;
 }
 
 /* Responsive script column (main #viewer and display #wrap) */
@@ -809,6 +812,7 @@ html.tp-present .present-exit { display: inline-flex; }
     /* center the column and keep some breathing room at the edges */
     margin-inline: auto;
     padding-inline: max(16px, 3vw);
+    color: var(--tp-fg, #e6eef8);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
