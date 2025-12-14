@@ -8,7 +8,7 @@ describe('scroll mode migration and normalization', () => {
   test('legacy "manual" persists as hybrid via canonical key', () => {
     localStorage.setItem('scrollMode', 'manual');
     jest.isolateModules(() => {
-      const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
+      const { appStore } = require('../../src/state/app-store') as { appStore: any };
       expect(appStore.get('scrollMode')).toBe('hybrid');
       expect(localStorage.getItem('scrollMode')).toBe('hybrid');
     });
@@ -17,7 +17,7 @@ describe('scroll mode migration and normalization', () => {
   test('legacy tp_scroll_mode key is migrated to canonical scrollMode', () => {
     localStorage.setItem('tp_scroll_mode', 'asr');
     jest.isolateModules(() => {
-      const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
+      const { appStore } = require('../../src/state/app-store') as { appStore: any };
       expect(appStore.get('scrollMode')).toBe('asr');
       expect(localStorage.getItem('scrollMode')).toBe('asr');
       expect(localStorage.getItem('tp_scroll_mode')).toBeNull();
@@ -27,7 +27,7 @@ describe('scroll mode migration and normalization', () => {
   test('legacy key migrates once and stays canonical thereafter', () => {
     localStorage.setItem('tp_scroll_mode', 'step');
     jest.isolateModules(() => {
-      const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
+      const { appStore } = require('../../src/state/app-store') as { appStore: any };
       expect(appStore.get('scrollMode')).toBe('step');
       expect(localStorage.getItem('scrollMode')).toBe('step');
       expect(localStorage.getItem('tp_scroll_mode')).toBeNull();

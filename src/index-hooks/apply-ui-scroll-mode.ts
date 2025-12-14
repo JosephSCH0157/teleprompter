@@ -89,6 +89,8 @@ export function applyUiScrollMode(
         console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
       } catch {}
       try { appStore.set?.('scrollMode', fallback as any); } catch {}
+    } else {
+      lastAsrReadyState = true;
     }
   }
   if (normalized !== 'asr' || readiness?.ready) {

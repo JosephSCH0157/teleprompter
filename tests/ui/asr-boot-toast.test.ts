@@ -28,9 +28,9 @@ describe('ASR gate does not toast on boot apply', () => {
   test('persisted ASR with not-ready mic reverts without toast when applied as boot', () => {
     localStorage.setItem('scrollMode', 'asr');
     // Import after setting skip boot so init code is suppressed
-    const { applyUiScrollMode } = require('../../src/index-hooks/apply-ui-scroll-mode') as typeof import('../../src/index-hooks/apply-ui-scroll-mode');
-    const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
-    const { showToast } = require('../../src/ui/toasts') as typeof import('../../src/ui/toasts');
+    const { applyUiScrollMode } = require('../../src/index-hooks/apply-ui-scroll-mode') as { applyUiScrollMode: any };
+    const { appStore } = require('../../src/state/app-store') as { appStore: any };
+    const { showToast } = require('../../src/ui/toasts') as { showToast: jest.Mock };
     const toastMock = showToast as jest.Mock;
     toastMock.mockClear();
     const initialCalls = toastMock.mock.calls.length;
