@@ -223,7 +223,7 @@ let lastAsrReadyState: boolean | null = null;
 
 function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').trim().toLowerCase() as UiScrollMode;
-  if (value === 'manual') return 'hybrid';
+  if (String(mode || '').toLowerCase() === 'manual') return 'hybrid';
   return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
 }
 
@@ -518,6 +518,7 @@ initScrollModeUiSync();
 (window as any).setScrollMode = (mode: UiScrollMode) => applyUiScrollMode(mode);
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
+export { applyUiScrollMode, appStore };
 
 // === Settings mirror + smoke helpers ===
 function installSettingsMirrors() {
@@ -1227,7 +1228,7 @@ export async function boot() {
 					try { initScrollFeature(); } catch {}
 					// Initialize features via idempotent wrappers
 					try { startPersistence(); } catch {}
-          try { initScrollPrefsPersistence(appStore); } catch {}
+try { initScrollPrefsPersistence(appStore as any); } catch {}
           try { initAsrPersistence(); } catch {}
 					try { startTelemetry(); } catch {}
 					try { startScroll(); } catch {}

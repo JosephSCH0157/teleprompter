@@ -2,6 +2,8 @@
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
 import { loadScrollPrefs, saveScrollPrefs } from '../features/scroll/scroll-prefs';
 
+const IS_TEST = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test';
+
 const DEVICE_KEY = 'tp_mic_device_v1';
 const OBS_ENABLED_KEY = 'tp_obs_enabled';
 const OBS_HOST_KEY = 'tp_obs_host';
@@ -152,6 +154,41 @@ function migrateAutoRecordFlag() {
 
 migrateAutoRecordFlag();
 
+function normalizeScrollMode(mode: string | null | undefined): string {
+  const v = String(mode || '').trim().toLowerCase();
+  if (!v) return 'hybrid';
+  if (v === 'manual') return 'hybrid';
+  return v;
+}
+
+function readAndMigrateScrollMode(): string {
+  const legacyKeys = ['tp_scroll_mode', 'tp_scroll_mode_v1', 'tp_scroll_mode_v2', 'tp_scroll_mode_backup'];
+  try {
+    // Prefer canonical if present
+    const canonical = localStorage.getItem(SCROLL_MODE_KEY);
+    if (canonical) {
+      const norm = normalizeScrollMode(canonical);
+      if (norm !== canonical) localStorage.setItem(SCROLL_MODE_KEY, norm);
+      // Clear legacy keys if canonical exists
+      legacyKeys.forEach((k) => { try { localStorage.removeItem(k); } catch {} });
+      return norm;
+    }
+    // Otherwise migrate from any legacy key once
+    for (const k of legacyKeys) {
+      const legacy = localStorage.getItem(k);
+      if (legacy) {
+        const norm = normalizeScrollMode(legacy);
+        localStorage.setItem(SCROLL_MODE_KEY, norm);
+        try { localStorage.removeItem(k); } catch {}
+        return norm;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return 'hybrid';
+}
+
 function buildInitialState(): AppStoreState {
   return {
     // UI / Settings
@@ -272,17 +309,17 @@ function buildInitialState(): AppStoreState {
 
     // Scroll router (persisted)
     scrollMode: (() => {
-      try {
-        const prefs = loadScrollPrefs();
-        if (prefs?.mode) return prefs.mode;
-      } catch {}
-      try {
-        const raw = localStorage.getItem(SCROLL_MODE_KEY) || '';
-        const value = String(raw || '').toLowerCase();
-        const allowed = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal'];
-        return allowed.includes(value) ? value : 'hybrid';
-      } catch {}
-      return 'hybrid';
+      const fromPrefs = (() => {
+        try {
+          const prefs = loadScrollPrefs();
+          if (prefs?.mode) return normalizeScrollMode(prefs.mode);
+        } catch {}
+        return null;
+      })();
+      const migrated = readAndMigrateScrollMode();
+      const chosen = normalizeScrollMode(fromPrefs || migrated);
+      try { localStorage.setItem(SCROLL_MODE_KEY, chosen); } catch {}
+      return chosen;
     })(),
     timedSpeed: (() => {
       try {
@@ -389,6 +426,10 @@ function buildInitialState(): AppStoreState {
 }
 
 function ensureExistingState(): Partial<AppStoreState> {
+  if (IS_TEST) {
+    try { delete (window as any).__tpStore; } catch {}
+    return {};
+  }
   try {
     const existing = (window as any).__tpStore;
     if (!existing || typeof existing !== 'object') return {};
@@ -531,18 +572,20 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
   };
 
   try {
-    const w = window as any;
-    const existing = w.__tpStore;
-    if (!existing || !existing.__tsOwned) {
-      try {
-        Object.defineProperty(w, '__tpStore', {
-          value: appStore,
-          writable: true,
-          configurable: true,
-          enumerable: true,
-        });
-      } catch {
-        w.__tpStore = appStore;
+    if (!IS_TEST) {
+      const w = window as any;
+      const existing = w.__tpStore;
+      if (!existing || !existing.__tsOwned) {
+        try {
+          Object.defineProperty(w, '__tpStore', {
+            value: appStore,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
+        } catch {
+          w.__tpStore = appStore;
+        }
       }
     }
   } catch {}
