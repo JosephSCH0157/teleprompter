@@ -23,4 +23,21 @@ describe('scroll mode migration and normalization', () => {
       expect(localStorage.getItem('tp_scroll_mode')).toBeNull();
     });
   });
+
+  test('legacy key migrates once and stays canonical thereafter', () => {
+    localStorage.setItem('tp_scroll_mode', 'step');
+    jest.isolateModules(() => {
+      const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
+      expect(appStore.get('scrollMode')).toBe('step');
+      expect(localStorage.getItem('scrollMode')).toBe('step');
+      expect(localStorage.getItem('tp_scroll_mode')).toBeNull();
+    });
+    // Second init should not resurrect legacy or change canonical
+    jest.isolateModules(() => {
+      const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
+      expect(appStore.get('scrollMode')).toBe('step');
+      expect(localStorage.getItem('scrollMode')).toBe('step');
+      expect(localStorage.getItem('tp_scroll_mode')).toBeNull();
+    });
+  });
 });

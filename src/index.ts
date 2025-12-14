@@ -222,7 +222,7 @@ let asrRejectionToastShown = false;
 let lastAsrReadyState: boolean | null = null;
 
 function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
-  const value = String(mode || '').toLowerCase() as UiScrollMode;
+  const value = String(mode || '').trim().toLowerCase() as UiScrollMode;
   if (value === 'manual') return 'hybrid';
   return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
 }
@@ -297,7 +297,11 @@ function setModeStatusLabel(mode: UiScrollMode): void {
   el.textContent = label;
 }
 
-function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {}) {
+function applyUiScrollMode(
+  mode: UiScrollMode,
+  opts: { skipStore?: boolean; allowToast?: boolean } = {},
+) {
+  const allowToast = opts.allowToast !== false;
   let normalized = normalizeUiScrollMode(mode);
   let readiness: { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } | null = null;
   if (normalized === 'asr') {
@@ -306,7 +310,7 @@ function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {
       const fallback = getSafeFallbackMode();
       normalized = fallback;
       setScrollModeSelectValue(fallback);
-      if (!asrRejectionToastShown) {
+      if (!asrRejectionToastShown && allowToast) {
         const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
         try { showToast(toastMsg, { type: 'info' }); } catch {}
         asrRejectionToastShown = true;
@@ -433,6 +437,7 @@ function initScrollModeUiSync(): void {
       const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
       if (current !== 'asr') lastStableUiMode = current;
       updateFromStore(current);
+      applyUiScrollMode(current, { skipStore: true, allowToast: false });
     } catch {}
   };
 
