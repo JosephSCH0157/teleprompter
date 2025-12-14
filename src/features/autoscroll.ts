@@ -579,22 +579,61 @@ if (typeof window !== 'undefined' && !isDisplayWindow()) {
       }
 
       const auto = initAutoScroll(() => viewer);
-      if (toggle && speed) {
-        auto.bindUI(toggle, speed);
+      let bound = false;
+      const tryBind = (warnIfMissing = false) => {
+        const maybeToggle =
+          (document.getElementById('autoToggle') as HTMLElement | null) ||
+          (document.getElementById('autoScrollToggle') as HTMLElement | null) ||
+          (document.querySelector('[data-auto-toggle]') as HTMLElement | null);
+
+        const maybeSpeed =
+          (document.getElementById('autoSpeed') as HTMLInputElement | null) ||
+          (document.querySelector('[data-auto-speed]') as HTMLInputElement | null);
+
+        if (maybeToggle && maybeSpeed) {
+          auto.bindUI(maybeToggle, maybeSpeed);
+          bound = true;
+          try {
+            console.log('[auto-scroll] boot: wired', {
+              viewer: true,
+              toggleId: maybeToggle.id,
+              speedId: maybeSpeed.id,
+            });
+          } catch {}
+          return true;
+        }
+
+        if (warnIfMissing) {
+          try {
+            console.warn('[auto-scroll] boot: missing toggle/speed; will keep watching', {
+              viewer: !!viewer,
+              toggle: !!maybeToggle,
+              speed: !!maybeSpeed,
+            });
+          } catch {}
+        }
+        return false;
+      };
+
+      // Try immediately
+      tryBind(false);
+
+      // Observe for late-rendered controls and bind once when available
+      if (!bound) {
+        const host =
+          (document.getElementById('settingsBody') as HTMLElement | null) ||
+          document.body;
         try {
-          console.log('[auto-scroll] boot: wired', {
-            viewer: true,
-            toggleId: toggle.id,
-            speedId: speed.id,
+          const obs = new MutationObserver(() => {
+            if (tryBind(false)) {
+              try { obs.disconnect(); } catch {}
+            }
           });
-        } catch {}
-      } else {
-        try {
-          console.warn('[auto-scroll] boot: missing toggle/speed; binding skipped', {
-            viewer: !!viewer,
-            toggle: !!toggle,
-            speed: !!speed,
-          });
+          obs.observe(host, { subtree: true, childList: true });
+          // Failsafe: warn once if still not bound after a short wait
+          setTimeout(() => {
+            if (!bound) tryBind(true);
+          }, 800);
         } catch {}
       }
       try { (window as any).__tpAuto = auto; } catch {}
@@ -612,4 +651,3 @@ if (typeof window !== 'undefined' && !isDisplayWindow()) {
     }
   }
 }
-
