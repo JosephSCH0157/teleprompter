@@ -219,11 +219,18 @@ type AsrNotReadyReason = 'NO_PERMISSION' | 'NO_DEVICE' | 'NOT_READY';
 type AsrWarnReason = 'NOT_CALIBRATED';
 let lastStableUiMode: UiScrollMode = 'hybrid';
 let asrRejectionToastShown = false;
+let lastAsrReadyState: boolean | null = null;
 
 function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').toLowerCase() as UiScrollMode;
   if (value === 'manual') return 'hybrid';
   return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
+}
+
+function getSafeFallbackMode(): UiScrollMode {
+  const candidate = normalizeUiScrollMode(lastStableUiMode);
+  if (candidate === 'asr') return 'hybrid';
+  return candidate;
 }
 
 function computeAsrReadiness(): { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } {
@@ -296,7 +303,7 @@ function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {
   if (normalized === 'asr') {
     readiness = computeAsrReadiness();
     if (!readiness.ready) {
-      const fallback = lastStableUiMode || 'hybrid';
+      const fallback = getSafeFallbackMode();
       normalized = fallback;
       setScrollModeSelectValue(fallback);
       if (!asrRejectionToastShown) {
@@ -446,7 +453,9 @@ function initScrollModeUiSync(): void {
     const opt = asrOption();
     const help = scrollModeHelp();
     const hint = scrollModeInlineHint();
-    if (ready) asrRejectionToastShown = false;
+    const transitionedToReady = lastAsrReadyState === false && ready;
+    lastAsrReadyState = ready;
+    if (transitionedToReady) asrRejectionToastShown = false;
     if (opt) {
       if (!defaultAsrLabel) defaultAsrLabel = opt.textContent || 'ASR';
       opt.disabled = !ready;
