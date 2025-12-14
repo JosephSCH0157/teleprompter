@@ -175,51 +175,6 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     try { el.setAttribute('aria-hidden', 'true'); } catch {}
   }
 
-  // Direct bindings for primary overlay buttons (defensive against legacy handlers)
-  const settingsBtn = document.getElementById('settingsBtn');
-  const settingsClose = document.getElementById('settingsClose');
-  const helpBtn = document.getElementById('shortcutsBtn') || document.getElementById('helpBtn');
-  const helpClose = document.getElementById('shortcutsClose') || document.getElementById('helpClose');
-  const settingsOverlay = document.getElementById('settingsOverlay');
-  const shortcutsOverlay = document.getElementById('shortcutsOverlay');
-
-  function bindExclusive(el: HTMLElement | null, handler: () => void): void {
-    if (!el) return;
-    try {
-      const clone = el.cloneNode(true) as HTMLElement;
-      el.replaceWith(clone);
-      clone.addEventListener('click', (ev) => {
-        try { ev.preventDefault(); } catch {}
-        try { ev.stopImmediatePropagation(); } catch {}
-        handler();
-      }, { capture: true });
-      try { clone.setAttribute('data-overlay-wired', 'ts'); } catch {}
-    } catch {
-      // ignore
-    }
-  }
-
-  try {
-    bindExclusive(settingsBtn, () => {
-      const isOpen = settingsOverlay ? (!settingsOverlay.hidden && !settingsOverlay.classList.contains('hidden') && settingsOverlay.style.display !== 'none') : false;
-      if (isOpen) hideOverlay(settingsOverlay); else showOverlay(settingsOverlay);
-    });
-    bindExclusive(settingsClose, () => hideOverlay(settingsOverlay));
-    bindExclusive(helpBtn, () => {
-      const isOpen = shortcutsOverlay ? (!shortcutsOverlay.hidden && !shortcutsOverlay.classList.contains('hidden') && shortcutsOverlay.style.display !== 'none') : false;
-      if (isOpen) hideOverlay(shortcutsOverlay); else showOverlay(shortcutsOverlay);
-    });
-    bindExclusive(helpClose, () => hideOverlay(shortcutsOverlay));
-  } catch {
-    /* ignore */
-  }
-
-  try {
-    // Legacy direct bindings removed in favor of exclusive handlers above
-  } catch {
-    /* ignore */
-  }
-
   function wireOverlay(
     openSel: string,
     closeSel: string,
