@@ -572,6 +572,32 @@
 <video id="cameraPreview" muted class="cam-preview" autoplay hidden></video>
 </main>
 </div>
+<script>
+  // Ensure the marker offset uses viewer scroll-padding so the first line sits on the marker after typography loads.
+  (function(){
+    function applyMarkerOffset(){
+      try {
+        const viewer = document.getElementById('viewer');
+        if (!viewer) return;
+        const pct = (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4);
+        const h = viewer.clientHeight || window.innerHeight || 0;
+        const offset = Math.max(0, Math.round(h * pct));
+        viewer.style.scrollPaddingTop = offset + 'px';
+        if (offset > (viewer.clientHeight || 0) * 2) {
+          console.warn('[MARKER] insane offset', { offset, h: viewer.clientHeight });
+        }
+      } catch (e) {
+        try { console.warn('[marker] scrollPadding apply failed', e); } catch {}
+      }
+    }
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      applyMarkerOffset();
+    } else {
+      document.addEventListener('DOMContentLoaded', applyMarkerOffset, { once: true });
+    }
+    window.addEventListener('resize', applyMarkerOffset);
+  })();
+</script>
 <!-- Pre-roll overlay (main window) -->
 <div id="countOverlay" class="inl-7">
 <div class="row" >
@@ -760,7 +786,6 @@
   </script>
 </body>
 </html>
-
 
 
 
