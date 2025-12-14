@@ -117,6 +117,9 @@
           #wrap   .script p{
             font-size: var(--tp-font-size, 56px) !important;
             line-height: var(--tp-line-height, 1.4) !important;
+            color: var(--tp-fg,#e6eef8);
+            opacity: 1;
+            display: block;
           }
           /* Responsive script column (main #viewer and display #wrap) */
           #viewer .script,
@@ -338,19 +341,27 @@
               }
             }
 
-            // Render helper: accept either raw script text or already-rendered HTML
-            function applyScriptSnapshot(text) {
-              // 1) Compute marker offset and apply as top padding
-              let markerOffset = 0;
+            // Compute marker offset onto the viewer (wrap) so lines align to marker without padding the script
+            function applyMarkerOffset() {
               try {
                 const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
                 const h = (wrap?.clientHeight || window.innerHeight || 0);
-                markerOffset = Math.max(0, Math.round(h * markerPct));
+                const offset = Math.max(0, Math.round(h * markerPct));
+                if (wrap) {
+                  wrap.style.scrollPaddingTop = `${offset}px`;
+                  if (offset > h * 2) console.warn('[display][marker] insane offset', { offset, h });
+                }
                 if (scriptEl) {
-                  scriptEl.style.paddingTop = `${markerOffset}px`;
-                  scriptEl.style.scrollPaddingTop = `${markerOffset}px`;
+                  scriptEl.style.paddingTop = '0px';
+                  scriptEl.style.scrollPaddingTop = '0px';
                 }
               } catch {}
+            }
+
+            // Render helper: accept either raw script text or already-rendered HTML
+            function applyScriptSnapshot(text) {
+              // 1) Compute marker offset on viewer
+              applyMarkerOffset();
 
               // 2) Render script content
               try {
