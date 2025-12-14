@@ -580,15 +580,37 @@ if (typeof window !== 'undefined' && !isDisplayWindow()) {
 
       const auto = initAutoScroll(() => viewer);
       let bound = false;
+      const ensureShadowSpeed = () => {
+        const existing = document.getElementById('autoSpeedShadow') as HTMLInputElement | null;
+        if (existing) return existing;
+        try {
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.id = 'autoSpeedShadow';
+          input.value = String(loadBaseSpeed());
+          input.style.position = 'absolute';
+          input.style.left = '-9999px';
+          document.body.appendChild(input);
+          return input;
+        } catch {
+          return null;
+        }
+      };
+
       const tryBind = (warnIfMissing = false) => {
         const maybeToggle =
           (document.getElementById('autoToggle') as HTMLElement | null) ||
           (document.getElementById('autoScrollToggle') as HTMLElement | null) ||
           (document.querySelector('[data-auto-toggle]') as HTMLElement | null);
 
-        const maybeSpeed =
+        let maybeSpeed =
           (document.getElementById('autoSpeed') as HTMLInputElement | null) ||
           (document.querySelector('[data-auto-speed]') as HTMLInputElement | null);
+
+        // If toggle exists but speed input is still loading, use a shadow input so hotkeys/UI can bind
+        if (maybeToggle && !maybeSpeed) {
+          maybeSpeed = ensureShadowSpeed();
+        }
 
         if (maybeToggle && maybeSpeed) {
           auto.bindUI(maybeToggle, maybeSpeed);
@@ -596,7 +618,7 @@ if (typeof window !== 'undefined' && !isDisplayWindow()) {
           try {
             console.log('[auto-scroll] boot: wired', {
               viewer: true,
-              toggleId: maybeToggle.id,
+              toggleId: maybeToggle.id || '(shadow)',
               speedId: maybeSpeed.id,
             });
           } catch {}
