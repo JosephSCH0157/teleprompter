@@ -244,7 +244,10 @@ let suppressSave = false;
 let saveTimer: number | null = null;
 let saving = false;
 let currentSettings: UserSettings = { app: {} };
+let lastUserChange = 0;
+let saveIndicatorTimer: number | null = null;
 const SETTINGS_SAVE_DEBOUNCE_MS = 900;
+const RECENT_CHANGE_WINDOW_MS = 10_000;
 
 function isDevMode(): boolean {
 	try {
@@ -261,6 +264,39 @@ function isDevMode(): boolean {
 function devLog(...args: any[]) {
 	if (!isDevMode()) return;
 	try { console.debug('[settings]', ...args); } catch {}
+}
+
+function ensureSettingsSavedDot(): HTMLElement | null {
+	try {
+		const btn = document.getElementById('settingsBtn');
+		if (!btn) return null;
+		btn.classList.add('tp-save-host');
+		let dot = btn.querySelector<HTMLElement>('.tp-save-dot');
+		if (!dot) {
+			dot = document.createElement('span');
+			dot.className = 'tp-save-dot';
+			dot.setAttribute('aria-hidden', 'true');
+			btn.appendChild(dot);
+		}
+		return dot;
+	} catch {
+		return null;
+	}
+}
+
+function flashSettingsSaved() {
+	try {
+		const btn = document.getElementById('settingsBtn');
+		const dot = ensureSettingsSavedDot();
+		if (!btn || !dot) return;
+		btn.classList.add('tp-save-flash');
+		if (saveIndicatorTimer) {
+			try { clearTimeout(saveIndicatorTimer); } catch {}
+		}
+		saveIndicatorTimer = window.setTimeout(() => {
+			try { btn.classList.remove('tp-save-flash'); } catch {}
+		}, 1600);
+	} catch {}
 }
 
 function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
@@ -310,6 +346,9 @@ function queueProfileSave(userId: string, store: typeof appStore) {
 			});
 			profileRev = rev;
 			devLog('save:flushed', { rev });
+			if (lastUserChange && Date.now() - lastUserChange <= RECENT_CHANGE_WINDOW_MS) {
+				flashSettingsSaved();
+			}
 		} catch (err) {
 			// On conflict or failure, try a single refresh
 			try {
@@ -331,9 +370,15 @@ function queueProfileSave(userId: string, store: typeof appStore) {
 
 function installSettingsPersistence(userId: string, store: typeof appStore) {
 	try {
+		const seenInit = new Set<string>();
 		SETTINGS_KEYS.forEach((k) => {
 			store.subscribe?.(k as any, (_v: any) => {
 				if (!profileHydrated || suppressSave) return;
+				if (!seenInit.has(k)) {
+					seenInit.add(k);
+					return;
+				}
+				lastUserChange = Date.now();
 				currentSettings.app = currentSettings.app || {};
 				(currentSettings.app as any)[k] = _v;
 				queueProfileSave(userId, store);

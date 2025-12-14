@@ -930,3 +930,26 @@ html.tp-mode-rehearsal::after{
   pointer-events:none;
   z-index:9999;
 }
+
+/* Settings save indicator (subtle dot on gear) */
+#settingsBtn.tp-save-host {
+  position: relative;
+}
+#settingsBtn .tp-save-dot {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #5ce0a3;
+  opacity: 0;
+  transform: scale(0.6);
+  box-shadow: 0 0 0 4px rgba(92, 224, 163, 0.18);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+#settingsBtn.tp-save-flash .tp-save-dot {
+  opacity: 1;
+  transform: scale(1);
+}
