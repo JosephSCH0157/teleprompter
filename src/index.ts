@@ -52,6 +52,7 @@ import './dev/ci-mocks';
 import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 import { showToast } from './ui/toasts';
+import { getAsrState } from './asr/store';
 
 function showFatalFallback(): void {
   try {
@@ -214,10 +215,36 @@ function bridgeLegacyScrollController() {
 
 const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
+type AsrNotReadyReason = 'NO_PERMISSION' | 'NO_DEVICE' | 'NOT_CALIBRATED' | 'NOT_READY';
+let lastStableUiMode: UiScrollMode = 'hybrid';
 
 function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').toLowerCase() as UiScrollMode;
+  if (value === 'manual') return 'hybrid';
   return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
+}
+
+function computeAsrReadiness(): { ready: true } | { ready: false; reason: AsrNotReadyReason } {
+  try {
+    const micGranted = !!appStore.get?.('micGranted');
+    if (!micGranted) return { ready: false, reason: 'NO_PERMISSION' };
+
+    const micDevice = String(appStore.get?.('micDevice') || '').trim();
+    const micOpen = !!(window as any).__tpMic?.__lastStream || !!(window as any).__tpMic?.isOpen?.();
+    if (!micDevice && !micOpen) return { ready: false, reason: 'NO_DEVICE' };
+
+    try {
+      const asrState = getAsrState?.();
+      const active = asrState?.activeProfileId && asrState.profiles?.[asrState.activeProfileId];
+      if (!active) return { ready: false, reason: 'NOT_CALIBRATED' };
+    } catch {
+      // ignore ASR state failures
+    }
+
+    return { ready: true };
+  } catch {
+    return { ready: true };
+  }
 }
 
 function setScrollModeSelectValue(mode: UiScrollMode): void {
@@ -233,8 +260,52 @@ function setScrollModeSelectValue(mode: UiScrollMode): void {
   }
 }
 
+function setModeStatusLabel(mode: UiScrollMode): void {
+  const el = document.getElementById('scrollModeStatus');
+  if (!el) return;
+  const m = String(mode || '').toLowerCase();
+  let label = 'Manual';
+  switch (m) {
+    case 'timed':
+      label = 'Timed';
+      break;
+    case 'wpm':
+      label = 'WPM';
+      break;
+    case 'hybrid':
+      label = 'Hybrid';
+      break;
+    case 'asr':
+      label = 'ASR';
+      break;
+    case 'step':
+      label = 'Step';
+      break;
+    case 'rehearsal':
+      label = 'Rehearsal';
+      break;
+  }
+  el.textContent = label;
+}
+
 function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {}) {
-  const normalized = normalizeUiScrollMode(mode);
+  let normalized = normalizeUiScrollMode(mode);
+  let readiness: { ready: true } | { ready: false; reason: AsrNotReadyReason } | null = null;
+  if (normalized === 'asr') {
+    readiness = computeAsrReadiness();
+    if (!readiness.ready) {
+      const fallback = lastStableUiMode || 'hybrid';
+      normalized = fallback;
+      setScrollModeSelectValue(fallback);
+      const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
+      try { showToast(toastMsg, { type: 'info' }); } catch {}
+      try {
+        console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
+      } catch {}
+      try { appStore.set?.('scrollMode', fallback as any); } catch {}
+    }
+  }
+  if (normalized !== 'asr' || readiness?.ready) lastStableUiMode = normalized;
   // Store the UI mode somewhere global so existing JS can still read it
   (window as any).__tpUiScrollMode = normalized;
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
@@ -243,6 +314,7 @@ function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {
   }
 
   try { applyScrollModeUI(normalized as any); } catch {}
+  try { setModeStatusLabel(normalized); } catch {}
 
 	const brain = getScrollBrain();
   const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
@@ -330,10 +402,10 @@ function initScrollModeUiSync(): void {
   const asrOption = () =>
     document.querySelector<HTMLOptionElement>('#scrollMode option[value="asr"]');
   const scrollModeHelp = () => document.getElementById('scrollModeHelpText') as HTMLElement | null;
+  const scrollModeInlineHint = () => document.getElementById('scrollModeInlineHint') as HTMLElement | null;
   const defaultHelpText = scrollModeHelp()?.textContent || '';
   const baseHelpText = (defaultHelpText || 'Scroll mode controls').trim();
   let defaultAsrLabel: string | null = null;
-  let asrFallbackToasted = false;
 
   const updateFromStore = (mode: string | undefined) => {
     const normalized = normalizeUiScrollMode(mode);
@@ -343,44 +415,55 @@ function initScrollModeUiSync(): void {
 
   const applyCurrent = () => {
     try {
-      updateFromStore(appStore.get?.('scrollMode') as string | undefined);
+      const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+      if (current !== 'asr') lastStableUiMode = current;
+      updateFromStore(current);
     } catch {}
   };
 
   applyCurrent();
 
-  const applyAsrAvailability = (granted: boolean) => {
+  const applyAsrAvailability = () => {
+    const readiness = computeAsrReadiness();
+    const ready = readiness.ready;
+    const reasonLabel = (() => {
+      if (ready) return '';
+      switch (readiness.reason) {
+        case 'NO_PERMISSION': return 'Request mic to enable ASR';
+        case 'NO_DEVICE': return 'Select a mic to enable ASR';
+        case 'NOT_CALIBRATED': return 'Calibrate mic to enable ASR';
+        default: return 'ASR not ready';
+      }
+    })();
     const opt = asrOption();
     const help = scrollModeHelp();
+    const hint = scrollModeInlineHint();
     if (opt) {
       if (!defaultAsrLabel) defaultAsrLabel = opt.textContent || 'ASR';
-      opt.disabled = !granted;
-      opt.title = granted ? '' : 'Request mic to enable ASR';
-      opt.textContent = granted ? defaultAsrLabel : `${defaultAsrLabel || 'ASR'} (mic locked)`;
+      opt.disabled = !ready;
+      opt.title = ready ? '' : reasonLabel;
+      opt.textContent = ready ? defaultAsrLabel : `${defaultAsrLabel || 'ASR'} (enable mic to use)`;
     }
     if (help) {
-      help.textContent = granted
+      help.textContent = ready
         ? defaultHelpText
-        : `${baseHelpText} - request mic to enable ASR.`;
+        : `${baseHelpText} - ${reasonLabel || 'enable mic to use ASR'}.`;
     }
-    if (!granted) {
-      const currentMode = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
-      if (currentMode === 'asr') {
-        try { appStore.set?.('scrollMode', 'hybrid' as any); } catch {}
-        if (!asrFallbackToasted) {
-          try { showToast('Request mic to enable ASR mode.', { type: 'info' }); } catch {}
-          asrFallbackToasted = true;
-        }
+    if (hint) {
+      if (ready) {
+        hint.hidden = true;
+      } else {
+        hint.hidden = false;
+        hint.textContent = reasonLabel || 'ASR is disabled until Mic is ready.';
       }
     }
   };
 
   try {
-    applyAsrAvailability(!!appStore.get?.('micGranted'));
-    appStore.subscribe?.('micGranted', (granted: unknown) => {
-      if (granted) asrFallbackToasted = false;
-      applyAsrAvailability(!!granted);
-    });
+    applyAsrAvailability();
+    appStore.subscribe?.('micGranted', () => applyAsrAvailability());
+    appStore.subscribe?.('micDevice', () => applyAsrAvailability());
+    window.addEventListener('tp:asrChanged', applyAsrAvailability, { capture: false });
   } catch {}
 
   try {

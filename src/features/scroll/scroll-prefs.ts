@@ -18,6 +18,7 @@ const LEGACY_KEYS = ['tp_scroll_prefs_v1', 'tp_scroll_mode_v1', 'tp_scroll_mode'
 
 function normalizeMode(mode: string | null | undefined): ScrollModePref | null {
   const v = String(mode || '').toLowerCase();
+  if (v === 'manual') return 'hybrid';
   const allowed: ScrollModePref[] = ['hybrid', 'timed', 'wpm', 'asr', 'step', 'rehearsal'];
   return allowed.includes(v as ScrollModePref) ? (v as ScrollModePref) : null;
 }
