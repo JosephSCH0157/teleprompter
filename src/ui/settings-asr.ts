@@ -5,6 +5,8 @@ import { speechStore, type SpeechState } from '../state/speech-store';
 import { appStore, type AppStore } from '../state/app-store';
 
 let asrSettingsWired = false;
+let asrSettingsObserverStarted = false;
+let asrSettingsWarned = false;
 
 function resolveStore(store?: AppStore | null): AppStore | null {
   if (store) return store;
@@ -101,20 +103,39 @@ export function ensureAsrSettingsWired(root: ParentNode = document, store?: AppS
       (root as Document | ParentNode)?.querySelector?.<HTMLElement>('.settings-card.asr');
 
     if (!card) {
-      try { console.warn('[ASR] settings card not found (will retry on tp:settings:rendered)'); } catch {}
-      return;
+      if (!asrSettingsWarned) {
+        asrSettingsWarned = true;
+        try { console.warn('[ASR] settings card not found (will retry)'); } catch {}
+      }
+      return false;
     }
 
     mountAsrSettings(root, store);
+    return true;
   };
 
-  tryMount();
+  if (tryMount()) return;
 
   document.addEventListener(
     'tp:settings:rendered',
     () => { tryMount(); },
     { once: true },
   );
+
+  if (!asrSettingsObserverStarted) {
+    asrSettingsObserverStarted = true;
+    const host = (root as Document | ParentNode)?.querySelector?.('#settingsBody') as HTMLElement | null
+      || (document.getElementById('settingsBody') as HTMLElement | null)
+      || document.body;
+    try {
+      const obs = new MutationObserver(() => {
+        if (tryMount()) {
+          try { obs.disconnect(); } catch {}
+        }
+      });
+      obs.observe(host || document.body, { subtree: true, childList: true });
+    } catch {}
+  }
 }
 
 function clamp(n: number, lo: number, hi: number) {
