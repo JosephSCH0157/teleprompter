@@ -1482,8 +1482,10 @@ try {
   }
 
 	const startBoot = () => { try { boot(); } catch (err) { try { console.error('[TP-FATAL:init]', err); } catch {} showFatalFallback(); } };
-	if ((window as any).__TP_SKIP_BOOT) {
-    try { console.info('[TP-BOOT] skipped via __TP_SKIP_BOOT'); } catch {}
+	const w = window as any;
+	const devFlag = !!w.__TP_DEV || !!w.__TP_DEV1;
+	if (w.__TP_TEST_SKIP_BOOT__ && devFlag) {
+    try { console.info('[TP-BOOT] skipped via __TP_TEST_SKIP_BOOT__'); } catch {}
   } else if (document.readyState !== 'loading') startBoot(); else document.addEventListener('DOMContentLoaded', () => { startBoot(); });
 } catch (err) {
   try { console.error('[TP-FATAL:init-outer]', err); } catch {}

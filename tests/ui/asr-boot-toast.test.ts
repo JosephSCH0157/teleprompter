@@ -7,7 +7,7 @@ jest.mock('../../src/ui/toasts', () => {
 
 describe('ASR gate does not toast on boot apply', () => {
   beforeAll(() => {
-    (global as any).__TP_SKIP_BOOT = true;
+    (global as any).__TP_TEST_SKIP_BOOT__ = true;
   });
 
   beforeEach(() => {
@@ -29,5 +29,11 @@ describe('ASR gate does not toast on boot apply', () => {
 
     expect(showToast).not.toHaveBeenCalled();
     expect(appStore.get('scrollMode')).toBe('hybrid');
+
+    // UX contract: ASR option disabled and hint visible
+    const asrOpt = document.querySelector<HTMLSelectElement>('#scrollMode option[value="asr"]');
+    const hint = document.getElementById('scrollModeInlineHint');
+    expect(asrOpt?.disabled).toBe(true);
+    expect(hint?.hidden).toBe(false);
   });
 });
