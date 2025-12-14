@@ -249,7 +249,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:0 0 0 8px}
 
     .viewer{position:relative;overflow:auto;min-height:0; background: var(--tp-bg, transparent);}
-    .script{max-width: calc(var(--tp-maxch, 60) * 1ch); margin:0 auto; padding:40px}
+    .script{
+        max-width: calc(var(--tp-maxch, 60) * 1ch);
+        margin:0 auto;
+        padding:0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
     .script p{
         font-family: var(--tp-font-family);
         font-size: var(--tp-font-size);

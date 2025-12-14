@@ -11,6 +11,8 @@ declare global {
 }
 
 const SIDEBAR_ID = 'scriptSelectSidebar';
+let loadInFlight = false;
+let lastLoadTs = 0;
 
 function getSidebarSelect(): HTMLSelectElement | null {
   return document.getElementById(SIDEBAR_ID) as HTMLSelectElement | null;
@@ -88,9 +90,17 @@ function getActiveScriptId(): string | null {
 }
 
 async function handleLoadClick(): Promise<void> {
+  const now = Date.now();
+  if (now - lastLoadTs < 150) return; // debounce accidental multi-fire
+  lastLoadTs = now;
+  if (loadInFlight) return;
+  loadInFlight = true;
   const id = getActiveScriptId();
   debugLog('[SCRIPT-EDITOR] Load click', { id });
-  if (!id) return;
+  if (!id) {
+    loadInFlight = false;
+    return;
+  }
   try {
     const rec = await ScriptStore.get(id);
     if (!rec || typeof rec.content !== 'string') return;
@@ -104,6 +114,9 @@ async function handleLoadClick(): Promise<void> {
     // Still emit tp:script-load for any listeners that rely on the event path
     try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text } })); } catch {}
   } catch {}
+  finally {
+    loadInFlight = false;
+  }
 }
 
 function wireLoadButton(): void {
@@ -139,8 +152,6 @@ if (typeof document !== 'undefined') {
 }
 
 export {};
-
-
 
 
 

@@ -582,6 +582,7 @@
         const pct = (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4);
         const h = viewer.clientHeight || window.innerHeight || 0;
         const offset = Math.max(0, Math.round(h * pct));
+        viewer.style.paddingTop = offset + 'px';
         viewer.style.scrollPaddingTop = offset + 'px';
         if (offset > (viewer.clientHeight || 0) * 2) {
           console.warn('[MARKER] insane offset', { offset, h: viewer.clientHeight });
@@ -786,7 +787,6 @@
   </script>
 </body>
 </html>
-
 
 
 
