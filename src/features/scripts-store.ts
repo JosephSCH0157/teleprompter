@@ -27,6 +27,22 @@ import { debugLog, hudLog } from '../env/logging';
 const scriptsById = new Map<string, ScriptRecord>();
 const mappedHandles = new Map<string, MappedHandle>();
 
+async function ensureReadPermission(handle: FileSystemHandle): Promise<boolean> {
+  try {
+    const h: any = handle as any;
+    const hasQuery = typeof h?.queryPermission === 'function';
+    const hasRequest = typeof h?.requestPermission === 'function';
+    if (!hasQuery && !hasRequest) return true;
+    const state = hasQuery ? await h.queryPermission({ mode: 'read' }) : null;
+    if (state === 'granted') return true;
+    if (!hasRequest) return true;
+    const req = await h.requestPermission({ mode: 'read' });
+    return req === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 function emitScriptsUpdated(): void {
   try {
     window.dispatchEvent(new CustomEvent('tp:scripts-updated'));
@@ -54,6 +70,12 @@ export const ScriptStore = {
     if (!mapped) return existing ?? null;
 
     try {
+      const ok = await ensureReadPermission(mapped.handle);
+      if (!ok) {
+        hudLog('script:permission:denied', { id });
+        try { (window as any).toast?.('Allow folder access to load scripts, then try Refresh.', { type: 'warning' }); } catch {}
+        return existing ?? null;
+      }
       const file = await (mapped.handle as any).getFile();
       const text = await readMappedFile(file);
       const rec: ScriptRecord = {
