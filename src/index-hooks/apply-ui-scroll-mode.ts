@@ -11,7 +11,6 @@ type ScrollModeSource = 'user' | 'boot' | 'store';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
 let lastStableUiMode: UiScrollMode = 'hybrid';
 let asrRejectionToastShown = false;
-let lastAsrReadyState: boolean | null = null;
 
 export function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').trim().toLowerCase() as UiScrollMode;
@@ -89,8 +88,6 @@ export function applyUiScrollMode(
         console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
       } catch {}
       try { appStore.set?.('scrollMode', fallback as any); } catch {}
-    } else {
-      lastAsrReadyState = true;
     }
   }
   if (normalized !== 'asr' || readiness?.ready) {

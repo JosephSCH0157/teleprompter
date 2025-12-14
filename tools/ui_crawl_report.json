@@ -10,7 +10,7 @@
     },
     {
       "id": "displayToggleBtn",
-      "text": "Display"
+      "text": "Display: Closed"
     },
     {
       "id": "settingsBtn",
@@ -21,7 +21,7 @@
       "text": "Help"
     },
     {
-      "id": "displayToggleBtn",
+      "id": "displayToggleBtnSidebar",
       "text": "Display: Closed"
     },
     {
@@ -43,6 +43,14 @@
     {
       "id": "autoToggle",
       "text": "Auto-scroll: Off"
+    },
+    {
+      "id": "stepPrevBtn",
+      "text": "Step ?"
+    },
+    {
+      "id": "stepNextBtn",
+      "text": "Step ?"
     },
     {
       "id": "enableObs",
@@ -86,19 +94,19 @@
     },
     {
       "id": "wrap-s1",
-      "text": "Wrap ➜ S1"
+      "text": "Wrap ? S1"
     },
     {
       "id": "wrap-s2",
-      "text": "Wrap ➜ S2"
+      "text": "Wrap ? S2"
     },
     {
       "id": "wrap-g1",
-      "text": "Wrap ➜ G1"
+      "text": "Wrap ? G1"
     },
     {
       "id": "wrap-g2",
-      "text": "Wrap ➜ G2"
+      "text": "Wrap ? G2"
     },
     {
       "id": "wrap-bold",
@@ -118,7 +126,7 @@
     },
     {
       "id": "wrap-color",
-      "text": "ColorGǪ"
+      "text": "ColorGO"
     },
     {
       "id": "scriptRefreshBtn",
@@ -134,7 +142,11 @@
     },
     {
       "id": "typoCopyMainToDisplay",
-      "text": "Copy ➜ Display"
+      "text": "Copy �?? Display"
+    },
+    {
+      "id": "typoPresetApplyBoth",
+      "text": null
     },
     {
       "id": "typoResetDisplay",
@@ -142,7 +154,7 @@
     },
     {
       "id": "typoCopyDisplayToMain",
-      "text": "Copy ➜ Main"
+      "text": "Copy �?? Main"
     },
     {
       "id": "openDisplayBtn",
@@ -151,14 +163,6 @@
     {
       "id": "closeDisplayBtn",
       "text": "Close Display (alias)"
-    },
-    {
-      "id": "asrInterim",
-      "text": null
-    },
-    {
-      "id": "asrFillers",
-      "text": null
     },
     {
       "checkboxIndex": 0
@@ -187,25 +191,32 @@
       "text": "Stop Camera"
     }
   ],
-  "errors": [
+  "errors": [],
+  "console": [
     {
-      "type": "pageerror",
-      "message": "TypeError: Cannot read properties of null (reading 'enabled')",
-      "stack": "TypeError: Cannot read properties of null (reading 'enabled')\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7744:28)\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7933:6)\n    at closeBridge (http://127.0.0.1:5180/dist/index.js?v=dev:7857:2)\n    at updateStatus (http://127.0.0.1:5180/dist/index.js?v=dev:7810:2)\n    at setObsStatus (http://127.0.0.1:5180/dist/index.js?v=dev:7793:2)\n    at notify (http://127.0.0.1:5180/dist/index.js?v=dev:7744:12)\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7744:28)\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7933:6)\n    at closeBridge (http://127.0.0.1:5180/dist/index.js?v=dev:7857:2)\n    at updateStatus (http://127.0.0.1:5180/dist/index.js?v=dev:7810:2)"
+      "type": "log",
+      "text": "[core-recorder] bridged to __tpRecording",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 25623,
+        "columnNumber": 14
+      }
     },
     {
-      "type": "pageerror",
-      "message": "TypeError: Cannot read properties of null (reading 'enabled')",
-      "stack": "TypeError: Cannot read properties of null (reading 'enabled')\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7744:28)\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7933:6)\n    at closeBridge (http://127.0.0.1:5180/dist/index.js?v=dev:7857:2)\n    at updateStatus (http://127.0.0.1:5180/dist/index.js?v=dev:7810:2)\n    at setObsStatus (http://127.0.0.1:5180/dist/index.js?v=dev:7793:2)\n    at notify (http://127.0.0.1:5180/dist/index.js?v=dev:7744:12)\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7744:28)\n    at <anonymous> (http://127.0.0.1:5180/dist/index.js?v=dev:7933:6)\n    at closeBridge (http://127.0.0.1:5180/dist/index.js?v=dev:7857:2)\n    at updateStatus (http://127.0.0.1:5180/dist/index.js?v=dev:7810:2)"
-    }
-  ],
-  "console": [
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
     {
       "type": "debug",
       "text": "[SCRIPT-EDITOR] wiring complete",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12669,
+        "lineNumber": 29243,
         "columnNumber": 12
       }
     },
@@ -214,7 +225,7 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 19817,
+        "lineNumber": 37029,
         "columnNumber": 10
       }
     },
@@ -223,8 +234,35 @@
       "text": "[TP-BOOT] TS index.ts booted",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 19824,
+        "lineNumber": 37036,
         "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] blocked (lazy): session not live or auto-on-live disabled",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30300,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] setEnabled(from hotkey) true",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30165,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] blocked: session not live or auto-on-live disabled",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30170,
+        "columnNumber": 20
       }
     },
     {
@@ -232,8 +270,62 @@
       "text": "[OBS-UI] wiring settings/sidebar controls",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 10017,
+        "lineNumber": 24207,
         "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] setEnabled(from hotkey) false",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30165,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 37405,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] setEnabled(from hotkey) false",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30165,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 37405,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] setEnabled(from hotkey) false",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30165,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 37405,
+        "columnNumber": 12
       }
     },
     {
@@ -241,7 +333,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 18007,
+        "lineNumber": 35904,
         "columnNumber": 10
       }
     },
@@ -250,16 +342,7 @@
       "text": "[display-debug] bindStaticDom:display-btn JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[display-debug] bindStaticDom:display-btn JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
+        "lineNumber": 34849,
         "columnNumber": 14
       }
     },
@@ -268,80 +351,26 @@
       "text": "[display-debug] wireDisplayBridge JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
+        "lineNumber": 34849,
         "columnNumber": 14
       }
     },
     {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
+      "type": "debug",
+      "text": "[scroll-session] stopping auto-scroll for phase idle",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 24910,
+        "columnNumber": 14
       }
     },
     {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
+      "type": "info",
+      "text": "[SCROLL] initOnce: scroll-router (viewer=true)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 38103,
+        "columnNumber": 22
       }
     },
     {
@@ -349,8 +378,26 @@
       "text": "[OBS-UI] wiring settings/sidebar controls",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 10017,
+        "lineNumber": 24207,
         "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "OBS connected.",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 22911,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 27311,
+        "columnNumber": 12
       }
     },
     {
@@ -358,7 +405,7 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6545,
+        "lineNumber": 20186,
         "columnNumber": 14
       }
     },
@@ -367,7 +414,7 @@
       "text": "[src/features/persistence] initPersistence",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12380,
+        "lineNumber": 28575,
         "columnNumber": 12
       }
     },
@@ -376,7 +423,7 @@
       "text": "[src/features/telemetry] initTelemetry",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12561,
+        "lineNumber": 28744,
         "columnNumber": 12
       }
     },
@@ -385,7 +432,7 @@
       "text": "[src/features/hotkeys] initHotkeys",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12372,
+        "lineNumber": 28567,
         "columnNumber": 12
       }
     },
@@ -394,7 +441,7 @@
       "text": "[src/features/toasts] initToasts",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12569,
+        "lineNumber": 28752,
         "columnNumber": 12
       }
     },
@@ -403,8 +450,26 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 20642,
+        "lineNumber": 38261,
         "columnNumber": 18
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] setEnabled(from hotkey) false",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30165,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 37405,
+        "columnNumber": 12
       }
     },
     {
@@ -412,15 +477,8 @@
       "text": "[TP-INIT] {\"tp_init_done\":true,\"reason\":\"ts:index:onReady\"}",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 10568,
+        "lineNumber": 26776,
         "columnNumber": 22
-      }
-    },
-    {
-      "type": "verbose",
-      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"username\"): (More info: https://goo.gl/9p2vKq) %o",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
       }
     },
     {
@@ -428,26 +486,8 @@
       "text": "[auto-scroll] boot: wired JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 13645,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 30408,
+        "columnNumber": 20
       }
     },
     {
@@ -455,186 +495,656 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 18203,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
+        "lineNumber": 36066,
         "columnNumber": 16
       }
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
       "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 26482,
+        "columnNumber": 12
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 27311,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[display-debug] display:click JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 34849,
+        "columnNumber": 14
       }
     },
     {
@@ -642,168 +1152,611 @@
       "text": "[display-bridge] openDisplay()",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 15482,
+        "lineNumber": 32342,
         "columnNumber": 16
       }
     },
     {
       "type": "debug",
-      "text": "[display-debug] display:click JSHandle@object",
+      "text": "[display-bridge] display window opened about:blank",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[display-debug] display:click JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
-        "columnNumber": 14
+        "lineNumber": 32363,
+        "columnNumber": 16
       }
     },
     {
       "type": "info",
-      "text": "[display-bridge] openDisplay()",
+      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 15482,
-        "columnNumber": 16
+        "lineNumber": 27311,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 26482,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
+        "lineNumber": 26489,
+        "columnNumber": 12
       }
     },
     {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
       "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
+        "lineNumber": 26482,
+        "columnNumber": 12
       }
     },
     {
-      "type": "debug",
+      "type": "log",
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26489,
         "columnNumber": 12
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
       "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
       }
     },
     {
@@ -811,52 +1764,34 @@
       "text": "[display-debug] display:click JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
+        "lineNumber": 34849,
         "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30086,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "Connecting to OBS at ws://127.0.0.1:4455",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 22911,
+        "columnNumber": 12
       }
     },
     {
       "type": "info",
-      "text": "[display-bridge] openDisplay()",
+      "text": "[OBS-UI] toggled JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 15482,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[display-debug] display:click JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 17035,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "Connecting to OBS at ws://127.0.0.1:4455…",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 9316,
+        "lineNumber": 24164,
         "columnNumber": 12
       }
     },
@@ -865,7 +1800,34 @@
       "text": "OBS: connected and ready.",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 9316,
+        "lineNumber": 22911,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
         "columnNumber": 12
       }
     },
@@ -887,168 +1849,980 @@
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
+        "lineNumber": 26482,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[HUD-CTRL] apply JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 16919,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
+        "lineNumber": 26489,
+        "columnNumber": 12
       }
     },
     {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
       "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
+        "lineNumber": 26482,
+        "columnNumber": 12
       }
     },
     {
-      "type": "debug",
+      "type": "log",
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
+        "lineNumber": 26489,
+        "columnNumber": 12
       }
     },
     {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26482,
         "columnNumber": 12
       }
     },
     {
       "type": "debug",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "text": "folder:cleared JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6756,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 6773,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 12592,
+        "lineNumber": 26489,
         "columnNumber": 12
       }
     },
     {
-      "type": "verbose",
-      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[OBS-UI] toggled JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 24164,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30086,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "info",
+      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 27311,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26482,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26489,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30086,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30086,
+        "columnNumber": 14
       }
     }
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 54 candidate controls"
+    "Found 58 candidate controls"
   ],
   "meta": {
     "target": {
@@ -1057,17 +2831,17 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "858f4fec21e212cb65ca32015711c200f757fafb",
+      "gitSha": "b8485d1ac73389bd7d2a0600daba0e1ce38cb378",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-05T13:23:43.914Z"
+      "buildTime": "2025-12-14T16:05:55.539Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
   "ci": true,
   "scrollMove": {
     "before": 0,
-    "after": 0,
-    "delta": 200
+    "after": 592,
+    "delta": 592
   },
   "contentLines": 70,
   "editorContentLines": 70,
@@ -1081,13 +2855,6 @@
     },
     {
       "id": "folderFallback",
-      "hidden": true,
-      "width": 0,
-      "height": 0,
-      "ariaLabel": null
-    },
-    {
-      "id": null,
       "hidden": true,
       "width": 0,
       "height": 0,
@@ -1113,11 +2880,11 @@
     }
   ],
   "renderProbe": {
-    "lineCount": 0,
-    "iHello": -1,
-    "iWorld": -1,
-    "cHello": null,
-    "cWorld": null
+    "lineCount": 3,
+    "iHello": 0,
+    "iWorld": 1,
+    "cHello": "rgb(229, 231, 235)",
+    "cWorld": "rgb(229, 231, 235)"
   },
   "hudProbe": {
     "isDevClass": false,
@@ -1148,25 +2915,25 @@
     "mainExists": true,
     "sideExists": true,
     "mainCount": 1,
-    "sideCount": 1,
+    "sideCount": 0,
     "mainBusy": "false",
     "sideBusy": "false",
     "sameValue": true
   },
-  "renderedLines": 0,
+  "renderedLines": 60,
   "scrollProbe": {
     "hasControls": true,
-    "delta": 31.333332061767578,
-    "label": "Auto-scroll: On (31px/s)"
+    "delta": 60,
+    "label": "Auto-scroll: Off"
   },
   "autoState": {
     "sawEvent": true,
     "intentOn": false,
     "gate": "manual",
     "speed": 0,
-    "label": "Auto-scroll: On (32px/s)",
+    "label": "Auto-scroll: Off",
     "chip": "",
-    "delta": 20
+    "delta": 0
   },
   "appVersionText": "v1.7.6",
   "screenshot": "tools\\ui_crawl_screenshot.png"

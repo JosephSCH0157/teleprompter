@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Anvil v1.7.6</title>
-  <meta name="description" content="Anvil Teleprompter Pro â€” speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="description" content="Anvil Teleprompter Pro â€" speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <!-- Prefer color-scheme-aware theme colors; add fallback, drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
@@ -31,19 +31,19 @@
         function setDirty(){
           try {
             saveChip.textContent = 'Draft: Modified';
-            saveChip.setAttribute('data-state','dirty');
+            saveChip.setAttribute('data-statedirty');
           } catch(e){}
         }
 
         function setSaved(){
           try {
             saveChip.textContent = 'Draft: Saved';
-            saveChip.setAttribute('data-state','saved');
+            saveChip.setAttribute('data-statesaved');
           } catch(e){}
         }
 
         // Initial state
-        try { saveChip.textContent = 'Draft: â€”'; saveChip.removeAttribute('data-state'); } catch(e){}
+        try { saveChip.textContent = 'Draft: â€"'; saveChip.removeAttribute('data-state'); } catch(e){}
 
         // Editor changes mark draft as modified
         try {
@@ -268,7 +268,7 @@
 
   async function handler(e){
       try {
-        var t = e && e.target && (e.target.closest ? e.target.closest(selTest+','+selAuto+','+selInc+','+selDec) : null);
+        var t = e && e.target && (e.target.closest ? e.target.closest(selTest++selAuto++selInc++selDec) : null);
         if (!t) return;
         // OBS Test connection
         if (t.matches && t.matches(selTest)) {
@@ -300,12 +300,12 @@
 <div class="topbar">
 <strong>Anvil - Teleprompter</strong>
 <span id="appVersion" class="version-badge" aria-label="App version">v1.7.6</span>
-<span class="chip" id="saveChip">Draft: â€”</span>
+<span class="chip" id="saveChip">Draft: â€"</span>
 <span class="chip" id="permChip">Mic: unknown</span>
 <span class="chip" id="displayChip">Display: closed</span>
 <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
 <span class="chip" id="scrollChip">Scroll: idle</span>
-<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor â€” â€¢ scrollTop â€”</span>
+<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor â€" â€¢ scrollTop â€"</span>
 <span class="chip" id="camRtcChip">CamRTC: idle</span>
 <!-- Mic level + calibration -->
 <div class="mic-block">
@@ -382,13 +382,13 @@
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
   </label>
-  <span class="chip" id="wpmPx">â‰ˆ â€” px/s</span>
+  <span class="chip" id="wpmPx">â‰ˆ â€" px/s</span>
   
 </div>
 <!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
 <select id="micDeviceSel" class="select-md" hidden></select>
  <div class="row" id="sidebarMediaHint">
-   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings â–¶ Recording/Media</span>
+   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings â-¶ Recording/Media</span>
  </div>
 <!-- OBS controls & Mic device selector moved into Settings overlay -->
 <h2 class="select-md" >Camera</h2>
@@ -540,8 +540,8 @@
 
     <div class="shortcuts-grid">
       <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-      <div><strong>â†‘ / â†“</strong></div><div>Adjust Auto-scroll speed (Â±1)</div>
-      <div><strong>Shift + â†‘ / â†“</strong></div><div>Adjust by Â±5</div>
+      <div><strong>â†‘ / â†"</strong></div><div>Adjust Auto-scroll speed (Â±1)</div>
+      <div><strong>Shift + â†‘ / â†"</strong></div><div>Adjust by Â±5</div>
       <div><strong>Mouse-wheel on speed field</strong></div><div>Â±1 (Shift: Â±5)</div>
       <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
       <div><strong>Shift + ?</strong></div><div>Open Help</div>
@@ -630,10 +630,12 @@
       try{
         var openAlias = document.getElementById('openDisplayBtn');
         var closeAlias = document.getElementById('closeDisplayBtn');
-        if (openAlias) openAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay==='function') window.__tpDisplay.openDisplay(); else window.open('display.html','TeleprompterDisplay','width=1000,height=700'); }catch(e){} });
+        if (openAlias) openAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay==='function') window.__tpDisplay.openDisplay(); else window.open('display.htmlTeleprompterDisplaywidth=1000,height=700'); }catch(e){} });
         if (closeAlias) closeAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay==='function') window.__tpDisplay.closeDisplay(); else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close(); }catch(e){} });
       }catch(e){}
     })();
   </script>
 </body>
 </html>
+
+

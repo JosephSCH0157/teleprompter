@@ -34,7 +34,7 @@ describe('scroll mode migration and normalization', () => {
     });
     // Second init should not resurrect legacy or change canonical
     jest.isolateModules(() => {
-      const { appStore } = require('../../src/state/app-store') as typeof import('../../src/state/app-store');
+      const { appStore } = require('../../src/state/app-store') as { appStore: any };
       expect(appStore.get('scrollMode')).toBe('step');
       expect(localStorage.getItem('scrollMode')).toBe('step');
       expect(localStorage.getItem('tp_scroll_mode')).toBeNull();
