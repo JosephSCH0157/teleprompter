@@ -29,6 +29,8 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     try {
       const html = buildFromBuilder(rootEl) || '';
       if (html) rootEl.innerHTML = html;
+      // Signal that settings DOM is now present so dependent UI can wire safely
+      try { document.dispatchEvent(new CustomEvent('tp:settings:rendered')); } catch {}
     } catch {}
     try { wireSettingsDynamic(rootEl, resolvedStore); } catch {}
     // Bind new typography panels (main + display)

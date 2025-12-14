@@ -4,6 +4,8 @@
 import { speechStore, type SpeechState } from '../state/speech-store';
 import { appStore, type AppStore } from '../state/app-store';
 
+let asrSettingsWired = false;
+
 function resolveStore(store?: AppStore | null): AppStore | null {
   if (store) return store;
   try { return (window as any).__tpStore || appStore || null; } catch { return appStore; }
@@ -19,6 +21,9 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
     try { console.warn('[ASR] settings card not found (skipping wiring)'); } catch {}
     return;
   }
+
+  if (asrSettingsWired) return;
+  asrSettingsWired = true;
 
   const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
   const eng = q<HTMLSelectElement>('#asrEngine');
@@ -87,6 +92,29 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
   fillers?.addEventListener('change', () => persist({ fillerFilter: fillers.checked }));
   thresh?.addEventListener('change', () => persist({ threshold: clamp(+thresh.value, 0, 1) }));
   endms?.addEventListener('change', () => persist({ endpointingMs: Math.max(200, Math.round(+endms.value)) }));
+}
+
+export function ensureAsrSettingsWired(root: ParentNode = document, store?: AppStore | null): void {
+  const tryMount = () => {
+    const card =
+      (root as Document | ParentNode)?.querySelector?.<HTMLElement>('#asrSettingsCard') ||
+      (root as Document | ParentNode)?.querySelector?.<HTMLElement>('.settings-card.asr');
+
+    if (!card) {
+      try { console.warn('[ASR] settings card not found (will retry on tp:settings:rendered)'); } catch {}
+      return;
+    }
+
+    mountAsrSettings(root, store);
+  };
+
+  tryMount();
+
+  document.addEventListener(
+    'tp:settings:rendered',
+    () => { tryMount(); },
+    { once: true },
+  );
 }
 
 function clamp(n: number, lo: number, hi: number) {

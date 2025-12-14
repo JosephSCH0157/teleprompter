@@ -3,14 +3,14 @@
 // =============================================================
 import { AsrMode } from '../features/asr-mode';
 import { installAsrHotkeys } from '../hotkeys/asr-hotkeys';
-import { mountAsrSettings } from '../ui/settings-asr';
+import { ensureAsrSettingsWired } from '../ui/settings-asr';
 import { AsrTopbar } from '../ui/topbar-asr';
 import { appStore } from '../state/app-store';
 export { AsrMode } from '../features/asr-mode';
 
 export function initAsrFeature() {
   // Wire UI settings
-  mountAsrSettings(document.getElementById('settingsBody') || document);
+  ensureAsrSettingsWired(document.getElementById('settingsBody') || document);
   installAsrHotkeys();
 
   // Create coordinator and topbar UI
