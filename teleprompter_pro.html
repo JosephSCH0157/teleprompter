@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Anvil v1.7.6</title>
-  <meta name="description" content="Anvil Teleprompter Pro G?? speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <meta name="description" content="Anvil Teleprompter Pro - speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
@@ -283,7 +283,7 @@
 <div id="fatalFallback" class="fatal-fallback" hidden>
   <div class="fatal-inner">
     <h1>There seems to be a problem lighting the fire.</h1>
-    <p>Possibly wet coal. We’re looking into the issue.</p>
+    <p>Possibly wet coal. We're looking into the issue.</p>
 
     <p class="fatal-hint">
       Try reloading Anvil. If this keeps happening, email
@@ -398,7 +398,7 @@
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
   </label>
-  <span class="chip" id="wpmPx">… px/s</span>
+  <span class="chip" id="wpmPx">... px/s</span>
 </div>
 <div class="row visually-hidden" id="stepControlsRow" aria-hidden="true">
   <button id="stepPrevBtn" class="chip" type="button" title="Previous step">Step ?</button>
@@ -554,7 +554,7 @@
 <p class="status" id="status"></p>
 <h2>Script</h2>
 <textarea id="editor" data-editor placeholder="Use tags: [s1]?[/s1], [s2]?[/s2], [g1]?[/g1], [g2]?[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
-<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin…</em></p>
+<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin...</em></p>
 <!-- Camera preview fallback (binder expects #cameraPreview) already present later; duplicate guarded by ID uniqueness -->
 <!-- cameraPreview already defined later with proper classes; avoid duplicate -->
 <!-- (Removed legacy External Scripts + settings export/import UI: now injected into Settings overlay) -->
@@ -662,26 +662,26 @@
       <h5>Use interim results</h5>
       <p>Allows partial guesses before a sentence is done for faster scroll response.</p>
       <ul>
-        <li><strong>On:</strong> Faster, more “live” scroll; can be jumpy in noise.</li>
+        <li><strong>On:</strong> Faster, more "live" scroll; can be jumpy in noise.</li>
         <li><strong>Off:</strong> Waits for finalized phrases; smoother but slower.</li>
       </ul>
 
       <h5>Filter filler words</h5>
-      <p>Drop “um/uh/like…” so scroll matches script better and jitters less.</p>
+      <p>Drop "um/uh/like..." so scroll matches script better and jitters less.</p>
 
       <h4>Advanced Controls</h4>
       <h5>Confidence threshold</h5>
-      <p>Minimum confidence (0.0–1.0) before accepting words.</p>
+      <p>Minimum confidence (0.0-1.0) before accepting words.</p>
       <ul>
-        <li><strong>Higher (0.8–0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
-        <li><strong>Lower (0.4–0.6):</strong> More responsive; occasional wrong words.</li>
+        <li><strong>Higher (0.8-0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
+        <li><strong>Lower (0.4-0.6):</strong> More responsive; occasional wrong words.</li>
       </ul>
 
       <h5>End-pointing (µs)</h5>
       <p>Silence duration before a phrase finalizes (1,000,000 µs = 1s).</p>
       <ul>
-        <li><strong>Lower (200k–400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
-        <li><strong>Higher (800k–1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
+        <li><strong>Lower (200k-400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
+        <li><strong>Higher (800k-1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
       </ul>
 
       <h4>Suggested Starting Points</h4>

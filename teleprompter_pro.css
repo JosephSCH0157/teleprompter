@@ -1,4 +1,4 @@
-/* Overlay sheet */
+﻿/* Overlay sheet */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px;z-index:9999}
 .overlay.hidden{display:none}
 .overlay .sheet{background:#0e141b;border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:720px;width:100%;padding:20px}
@@ -287,7 +287,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* Rehearsal watermark (main control window only) */
     body.mode-rehearsal::after{
-        content:'REHEARSAL • NO RECORDING';
+        content:'REHEARSAL â€¢ NO RECORDING';
         position:fixed; top:50%; left:50%; transform: translate(-50%, -50%) rotate(-15deg);
         opacity:.085; font-weight:800; font-size:min(7vw, 72px); letter-spacing:.18em;
         color:var(--fg, #e7ebf0);
@@ -346,7 +346,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 /* When active (not [hidden]), show the card as a flex column */
 .settings-card:not([hidden]){ display:flex; }
 
-/* Cross-fade animations; outgoing card shouldn’t push layout */
+/* Cross-fade animations; outgoing card shouldnâ€™t push layout */
 @keyframes cardFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 @keyframes cardFadeOut { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(4px); } }
 .anim-in{animation:cardFadeIn .22s ease-out}
@@ -727,7 +727,7 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Screen-reader only label helper */
 .sr-only{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap;border:0;padding:0;margin:-1px}
 
-/* Teleprompter typography — unified and future-proof (last wins)
+/* Teleprompter typography - unified and future-proof (last wins)
    Covers past/present/future markup by selecting any p/.line/.tp-line under script on main or display.
    We use !important on size/line-height/family until all upstream clamps are removed. */
 #viewer .script :is(p, .line, .tp-line),
