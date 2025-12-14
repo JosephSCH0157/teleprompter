@@ -32,7 +32,7 @@ import './scroll/adapter';
 import './index-hooks/preroll';
 import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
-import { ensureUserAndProfile } from './forge/authProfile';
+import { ensureUserAndProfile, loadProfileSettings, saveProfileSettings, applySettingsPatch, type PersistedAppKey, type UserSettings } from './forge/authProfile';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
@@ -145,15 +145,6 @@ try {
 } catch {}
 
 // Forge auth/profile gate: ensure session + profile; stash on window for legacy consumers.
-try {
-	ensureUserAndProfile()
-		.then(({ user, profile }) => {
-			try { (window as any).__forgeUser = user; } catch {}
-			try { (window as any).__forgeProfile = profile; } catch {}
-		})
-		.catch((err) => { try { console.error('[forge] auth/profile init failed', err); } catch {} });
-} catch {}
-
 try { ensurePageTabs(appStore); } catch {}
 
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
@@ -218,6 +209,114 @@ function bridgeLegacyScrollController() {
 const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
 let lastStableUiMode: UiScrollMode = 'hybrid';
+
+// --- Profile settings persistence (Supabase) ---
+const SETTINGS_KEYS: PersistedAppKey[] = [
+	'scrollMode',
+	'timedSpeed',
+	'wpmTarget',
+	'wpmBasePx',
+	'wpmMinPx',
+	'wpmMaxPx',
+	'wpmEwmaSec',
+	'hybridAttackMs',
+	'hybridReleaseMs',
+	'hybridIdleMs',
+	'stepPx',
+	'rehearsalPunct',
+	'rehearsalResumeMs',
+	'micDevice',
+	'obsEnabled',
+	'obsScene',
+	'obsReconnect',
+	'obsHost',
+	'autoRecord',
+	'prerollSeconds',
+	'devHud',
+	'hudEnabledByUser',
+	'cameraEnabled',
+	'settingsTab',
+];
+
+let profileHydrated = false;
+let profileRev = 0;
+let suppressSave = false;
+let saveTimer: number | null = null;
+let saving = false;
+let currentSettings: UserSettings = { app: {} };
+const SETTINGS_SAVE_DEBOUNCE_MS = 900;
+
+function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
+	if (!settings || typeof settings !== 'object') return;
+	const app = (settings as any).app || {};
+	suppressSave = true;
+	try {
+		SETTINGS_KEYS.forEach((k) => {
+			if (Object.prototype.hasOwnProperty.call(app, k)) {
+				try { store.set?.(k as any, (app as any)[k]); } catch {}
+			}
+		});
+		currentSettings = applySettingsPatch({ app: { ...(currentSettings.app || {}) } }, { app }) || { app: {} };
+	} catch {
+		// ignore apply failures
+	} finally {
+		suppressSave = false;
+	}
+}
+
+function snapshotAppSettings(store: typeof appStore): UserSettings {
+	const app: Record<string, any> = {};
+	SETTINGS_KEYS.forEach((k) => {
+		try { app[k] = store.get?.(k as any); } catch {}
+	});
+	return { app };
+}
+
+function queueProfileSave(userId: string, store: typeof appStore) {
+	if (!profileHydrated || suppressSave) return;
+	if (saveTimer) {
+		try { clearTimeout(saveTimer); } catch {}
+	}
+	saveTimer = window.setTimeout(async () => {
+		saveTimer = null;
+		if (saving) return;
+		saving = true;
+		try {
+			const merged = snapshotAppSettings(store);
+			currentSettings = merged;
+			const { rev } = await saveProfileSettings({
+				userId,
+				mergedSettings: merged,
+				expectedRev: profileRev,
+			});
+			profileRev = rev;
+		} catch (err) {
+			// On conflict or failure, try a single refresh
+			try {
+				const { settings, rev } = await loadProfileSettings(userId);
+				profileRev = rev;
+				applySettingsToStore(settings, store);
+			} catch (errReload) {
+				try { console.warn('[forge] settings save failed; reload also failed', err, errReload); } catch {}
+			}
+		} finally {
+			saving = false;
+		}
+	}, SETTINGS_SAVE_DEBOUNCE_MS);
+}
+
+function installSettingsPersistence(userId: string, store: typeof appStore) {
+	try {
+		SETTINGS_KEYS.forEach((k) => {
+			store.subscribe?.(k as any, (_v: any) => {
+				if (!profileHydrated || suppressSave) return;
+				currentSettings.app = currentSettings.app || {};
+				(currentSettings.app as any)[k] = _v;
+				queueProfileSave(userId, store);
+			});
+		});
+	} catch {}
+}
 let asrRejectionToastShown = false;
 let lastAsrReadyState: boolean | null = null;
 
@@ -1126,6 +1225,32 @@ export async function boot() {
 			try { initPrerollSession(); } catch {}
 			try { initScrollSessionRouter(); } catch {}
 			try { initRecordingSession(); } catch {}
+
+			// Profile/settings hydration (Supabase) before UI wiring
+			let profileUserId: string | null = null;
+			try {
+				const ctx = await ensureUserAndProfile();
+				try { (window as any).__forgeUser = ctx.user; } catch {}
+				try { (window as any).__forgeProfile = ctx.profile; } catch {}
+				profileUserId = ctx.user?.id || null;
+			} catch (err) {
+				try { console.warn('[forge] auth/profile init failed', err); } catch {}
+			}
+
+			if (profileUserId) {
+				try {
+					const { settings, rev } = await loadProfileSettings(profileUserId);
+					profileRev = rev;
+					applySettingsToStore(settings, appStore);
+					currentSettings = snapshotAppSettings(appStore);
+					profileHydrated = true;
+				} catch (err) {
+					try { console.warn('[forge] settings load failed; using defaults', err); } catch {}
+					currentSettings = snapshotAppSettings(appStore);
+					profileHydrated = true; // allow saves later even if load failed
+				}
+				installSettingsPersistence(profileUserId, appStore);
+			}
 
 			// Early: folder card injection + async watcher (before any user opens Settings)
           try { ensureSettingsFolderControls(); } catch {}

@@ -16,6 +16,109 @@ export interface ForgeSessionContext {
   profile: ForgeProfile;
 }
 
+export type PersistedAppKey =
+  | 'scrollMode'
+  | 'timedSpeed'
+  | 'wpmTarget'
+  | 'wpmBasePx'
+  | 'wpmMinPx'
+  | 'wpmMaxPx'
+  | 'wpmEwmaSec'
+  | 'hybridAttackMs'
+  | 'hybridReleaseMs'
+  | 'hybridIdleMs'
+  | 'stepPx'
+  | 'rehearsalPunct'
+  | 'rehearsalResumeMs'
+  | 'micDevice'
+  | 'obsEnabled'
+  | 'obsScene'
+  | 'obsReconnect'
+  | 'obsHost'
+  | 'autoRecord'
+  | 'prerollSeconds'
+  | 'devHud'
+  | 'hudEnabledByUser'
+  | 'cameraEnabled'
+  | 'settingsTab';
+
+export type UserSettings = {
+  app?: Partial<Record<PersistedAppKey, any>>;
+};
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  app: {},
+};
+
+// tiny deep merge (safe for plain objects)
+function deepMerge<T>(base: T, incoming: any): T {
+  if (!incoming || typeof incoming !== 'object') return base;
+  const out: any = Array.isArray(base) ? [...(base as any)] : { ...(base as any) };
+  for (const k of Object.keys(incoming)) {
+    const v = (incoming as any)[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && out[k] && typeof out[k] === 'object') {
+      out[k] = deepMerge(out[k], v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out as T;
+}
+
+export type ProfileSettingsRow = {
+  user_id: string;
+  settings: any;
+  settings_rev: number;
+  settings_updated_at: string;
+};
+
+export async function loadProfileSettings(userId: string): Promise<{
+  settings: UserSettings;
+  rev: number;
+}> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('settings, settings_rev')
+    .eq('user_id', userId)
+    .single();
+
+  if (error) throw error;
+
+  const merged = deepMerge(DEFAULT_SETTINGS, (data as any)?.settings ?? {});
+  const rev = Number((data as any)?.settings_rev ?? 0);
+  return { settings: merged, rev };
+}
+
+export async function saveProfileSettings(opts: {
+  userId: string;
+  mergedSettings: UserSettings;
+  expectedRev: number;
+}): Promise<{ rev: number }> {
+  const { userId, mergedSettings, expectedRev } = opts;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      settings: mergedSettings,
+      settings_rev: expectedRev + 1,
+      settings_updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('settings_rev', expectedRev)
+    .select('settings_rev')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return { rev: Number((data as any)?.settings_rev ?? expectedRev + 1) };
+}
+
+export function applySettingsPatch(current: UserSettings, patch: Partial<UserSettings>): UserSettings {
+  return deepMerge(current, patch);
+}
+
 function shouldBypassAuth(): boolean {
   try {
     const search = String(window.location.search || '');
