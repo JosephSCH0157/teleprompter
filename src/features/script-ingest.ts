@@ -18,10 +18,19 @@ let __displayCh: BroadcastChannel | null = null;
 const __isDisplayCtx = (() => {
   try { return (window as any).__TP_FORCE_DISPLAY === true; } catch { return false; }
 })();
+let __lastDisplayPayload = '';
+
+function looksHtml(str: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(str || '');
+}
 
 export function broadcastToDisplay(text: string): void {
   // Display window is receive-only; avoid echoing back to main
   if (__isDisplayCtx) return;
+  const raw = String(text || '');
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+
   let html = '';
   try {
     const scriptEl =
@@ -31,13 +40,19 @@ export function broadcastToDisplay(text: string): void {
       html = scriptEl.innerHTML;
     }
   } catch {}
+  const format = looksHtml(html || raw) ? 'html' : 'text';
+  const payloadKey = `${format}:${format === 'html' ? (html || raw) : raw}`;
+  if (payloadKey === __lastDisplayPayload) return;
+  __lastDisplayPayload = payloadKey;
+
   const payload = {
     type: 'tp:script',
     kind: 'tp:script',
     source: 'main',
-    text,
-    html,
-    textHash: String(text?.length || 0) + ':' + (text?.slice?.(0, 32) || ''),
+    format,
+    text: format === 'text' ? raw : '',
+    html: format === 'html' ? (html || raw) : '',
+    textHash: String(raw?.length || 0) + ':' + (raw?.slice?.(0, 32) || ''),
   };
   // BroadcastChannel preferred
   try {

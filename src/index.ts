@@ -966,29 +966,36 @@ try {
       // Ignore non-objects / noise early
       if (!m || typeof m !== 'object') return;
 
+      const renderPayload = (html: string, text: string, fmt?: string) => {
+        const format = (fmt || '').toLowerCase();
+        if (format === 'html' || (!format && html)) {
+          applyHtml(html || text, { fontSize: m.fontSize, lineHeight: m.lineHeight, resetScroll: true });
+          return true;
+        }
+        if (format === 'text' || text) {
+          applyText(text || html, { fontSize: m.fontSize, lineHeight: m.lineHeight });
+          return true;
+        }
+        return false;
+      };
+
       // Optional render payload (pre-rendered HTML or plain text)
       if (m.type === 'render') {
         const html = typeof m.html === 'string' ? m.html : '';
         const text = typeof m.text === 'string' ? m.text : '';
-        if (html) {
-          applyHtml(html, { fontSize: m.fontSize, lineHeight: m.lineHeight, resetScroll: true });
-          return;
-        }
-        if (text) {
-          applyText(text, { fontSize: m.fontSize, lineHeight: m.lineHeight });
-          return;
-        }
+        if (renderPayload(html, text, m.format)) return;
       }
 
       // Only handle the two script payload shapes; everything else is ignored
-      if (m.kind === 'tp:script' && m.source === 'main' && typeof m.text === 'string') {
-        applyHtml(m.text);
-        return;
+      if (m.kind === 'tp:script' && m.source === 'main') {
+        const html = typeof m.html === 'string' ? m.html : '';
+        const text = typeof m.text === 'string' ? m.text : '';
+        if (renderPayload(html, text, m.format)) return;
       }
 
-      if (m.type === 'script' && typeof m.text === 'string') {
-        applyText(m.text);
-        return;
+      if (m.type === 'script') {
+        const text = typeof m.text === 'string' ? m.text : '';
+        if (renderPayload('', text, m.format || 'text')) return;
       }
     };
 

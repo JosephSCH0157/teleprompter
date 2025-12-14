@@ -1,4 +1,5 @@
 let displayCh: BroadcastChannel | null = null;
+let lastSnapshotKey = '';
 
 function getDisplayChannel(): BroadcastChannel | null {
   if (displayCh) return displayCh;
@@ -15,12 +16,22 @@ export function pushDisplaySnapshot(text: string): void {
   if (typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY) {
     return; // do not echo from the display window itself
   }
+  const raw = String(text || '');
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+  const format = /<\/?[a-z][\s\S]*>/i.test(raw) ? 'html' : 'text';
+  const key = `${format}:${format === 'html' ? raw : trimmed}`;
+  if (key === lastSnapshotKey) return;
+  lastSnapshotKey = key;
+
   const payload = {
     type: 'tp:script',
     kind: 'tp:script',
     source: 'main',
-    text: text || '',
-    textHash: String(text?.length || 0) + ':' + (text?.slice?.(0, 32) || ''),
+    format,
+    text: format === 'text' ? raw : '',
+    html: format === 'html' ? raw : '',
+    textHash: String(raw?.length || 0) + ':' + (raw?.slice?.(0, 32) || ''),
   };
 
   const ch = getDisplayChannel();
@@ -64,6 +75,8 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   const isRequester = typeof opts.onApplyRemote === 'function';
   const isResponder = !isRequester;
   const isDisplay = typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY === true;
+  const looksHtml = (s: string) => /<\/?[a-z][\s\S]*>/i.test(s || '');
+  let lastSent = '';
   try {
     chan = new BroadcastChannel(chanName);
   } catch (err) {
@@ -93,15 +106,23 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   const push = () => {
     if (isDisplay) return; // display is receive-only to avoid loops
     try {
-      const text = opts.getText?.() || '';
+      const raw = String(opts.getText?.() || '');
+      const trimmed = raw.trim();
+      if (!trimmed) return;
       const anchor = opts.getAnchorRatio?.();
+      const format = looksHtml(raw) ? 'html' : 'text';
+      const key = `${format}:${format === 'html' ? raw : trimmed}`;
+      if (key === lastSent) return;
+      lastSent = key;
       const payload = {
         type: 'tp:script',
         kind: 'tp:script',
         source: 'main',
-        text,
+        format,
+        text: format === 'text' ? raw : '',
+        html: format === 'html' ? raw : '',
         anchorRatio: anchor,
-        textHash: String(text?.length || 0) + ':' + (text?.slice?.(0, 32) || ''),
+        textHash: String(raw?.length || 0) + ':' + (raw?.slice?.(0, 32) || ''),
       };
       try { chan?.postMessage(payload as any); } catch {}
       try { opts.getDisplayWindow?.()?.postMessage?.(payload as any, '*'); } catch {}

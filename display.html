@@ -359,8 +359,8 @@
               } catch {}
             }
 
-            // Render helper: accept either raw script text or already-rendered HTML
-            function applyScriptSnapshot(text) {
+            // Render helper: accept either raw script text or already-rendered HTML with explicit format
+            function applyScriptSnapshot(payload) {
               // 1) Compute marker offset on viewer
               applyMarkerOffset();
 
@@ -368,9 +368,13 @@
               try {
                 if (!scriptEl) return;
 
-                const source = String(text || '');
+                const fmt = (payload && payload.format) ? String(payload.format).toLowerCase() : '';
+                const html = fmt === 'html' ? String(payload?.html || payload?.text || '') : '';
+                const text = fmt === 'text' || !fmt ? String(payload?.text || '') : '';
+                const source = html || text || '';
+
                 const looksRendered = /<div[^>]+class=["']line\b/i.test(source);
-                const looksHtml = /<\/?[a-z][\s\S]*>/i.test(source);
+                const looksHtml = fmt === 'html' || /<\/?[a-z][\s\S]*>/i.test(source);
 
                 scriptEl.innerHTML = '';
 
@@ -402,7 +406,7 @@
                   const msg = e?.data || {};
                   // Script snapshots from main
                   if (msg && (msg.kind === 'tp:script' || msg.type === 'tp:script')) {
-                    applyScriptSnapshot(msg.html || msg.text || '');
+                    applyScriptSnapshot(msg);
                     applyScaled();
                     applyBottomPad();
                     return;
@@ -442,7 +446,7 @@
               }
               // Script snapshots via postMessage
               if (d && (d.kind === 'tp:script' || d.type === 'tp:script')) {
-                applyScriptSnapshot(d.html || d.text || '');
+                applyScriptSnapshot(d);
                 applyScaled();
                 applyBottomPad();
                 if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {

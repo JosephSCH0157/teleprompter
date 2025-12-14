@@ -13,6 +13,7 @@ declare global {
 const SIDEBAR_ID = 'scriptSelectSidebar';
 let loadInFlight = false;
 let lastLoadTs = 0;
+let sidebarAbort: AbortController | null = null;
 
 function getSidebarSelect(): HTMLSelectElement | null {
   return document.getElementById(SIDEBAR_ID) as HTMLSelectElement | null;
@@ -64,7 +65,7 @@ export function syncSidebarFromSettings(): void {
 
 function wireSidebarStoreSync(): void {
   const run = () => syncSidebarFromSettings();
-  try { window.addEventListener('tp:scripts-updated', run as any); } catch {}
+  try { window.addEventListener('tp:scripts-updated', run as any, { signal: sidebarAbort?.signal }); } catch {}
   run();
 }
 
@@ -77,7 +78,7 @@ function wireSidebarHandlers(): void {
       syncSidebarFromSettings();
       return;
     }
-  });
+  }, { signal: sidebarAbort?.signal });
 }
 
 function getActiveScriptId(): string | null {
@@ -119,22 +120,32 @@ async function handleLoadClick(): Promise<void> {
   }
 }
 
+function onLoadButtonClick(ev: Event): void {
+  const btn = (ev.target as HTMLElement | null)?.closest('#scriptLoadBtn') as HTMLButtonElement | null;
+  if (!btn) return;
+  const n = Number(btn.dataset.tpBoundLoad ?? '0') + 1;
+  btn.dataset.tpBoundLoad = String(n); // stamp for debug visibility (dev-only)
+  try { ev.preventDefault(); } catch {}
+  void handleLoadClick();
+}
+
 function wireLoadButton(): void {
-  document.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement | null)?.closest('#scriptLoadBtn') as HTMLButtonElement | null;
-    if (!btn) return;
-    try { ev.preventDefault(); } catch {}
-    void handleLoadClick();
-  }, { capture: true });
+  document.addEventListener('click', onLoadButtonClick, { capture: true, signal: sidebarAbort?.signal });
 }
 
 function installScriptEditor(): void {
   if (typeof document === 'undefined') return;
-  if ((window as any).__tpScriptEditorBound) {
+  const g = window as any;
+  g.__tpInit = g.__tpInit || {};
+  if (g.__tpInit.scriptSidebarWired) {
     try { console.debug('[SCRIPT-EDITOR] already bound'); } catch {}
     return;
   }
-  (window as any).__tpScriptEditorBound = true;
+  g.__tpInit.scriptSidebarWired = true;
+
+  // Abort any lingering listeners from previous inits, then create a fresh scope
+  try { sidebarAbort?.abort(); } catch {}
+  sidebarAbort = new AbortController();
 
   wireSidebarStoreSync();
   wireSidebarHandlers();
@@ -152,6 +163,4 @@ if (typeof document !== 'undefined') {
 }
 
 export {};
-
-
 
