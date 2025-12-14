@@ -53,6 +53,8 @@ import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 import { showToast } from './ui/toasts';
 import { computeAsrReadiness, type AsrWarnReason, type AsrNotReadyReason } from './asr/readiness';
+import { initMappedFolder, listScripts } from './fs/mapped-folder';
+import { ScriptStore } from './features/scripts-store';
 
 function showFatalFallback(): void {
   try {
@@ -273,6 +275,19 @@ function setModeStatusLabel(mode: UiScrollMode): void {
 }
 
 type ScrollModeSource = 'user' | 'boot' | 'store';
+
+async function refreshScriptsSidebar(): Promise<void> {
+  try {
+    await initMappedFolder();
+    const scripts = await listScripts();
+    const mappedEntries = scripts.map((s) => ({
+      id: s.name,
+      title: s.name,
+      handle: s.handle as any,
+    }));
+    ScriptStore.syncMapped(mappedEntries);
+  } catch {}
+}
 
 function applyUiScrollMode(
   mode: UiScrollMode,
@@ -1384,6 +1399,7 @@ try {
 							try {
 								const rebindFolderControls = () => {
 									try { bindMappedFolderUI({ button: '#chooseFolderBtn', select: '#scriptSelect', fallbackInput: '#folderFallback' }); } catch {}
+                  try { refreshScriptsSidebar(); } catch {}
 								};
 								rebindFolderControls();
 								window.addEventListener('tp:settings-folder:ready', () => { try { rebindFolderControls(); } catch {}; }, { capture: true });
@@ -1415,6 +1431,16 @@ try {
 					// Script ingest
 					try { installScriptIngest({}); } catch {}
 					try { installGlobalIngestListener(); } catch {}
+          // Sidebar scripts refresh (mapped folder) + refresh button wiring
+          try {
+            (window as any).__tpRefreshScriptsSidebar = refreshScriptsSidebar;
+            refreshScriptsSidebar();
+            const btn = document.getElementById('scriptRefreshBtn');
+            if (btn && !btn.dataset.refreshScriptsWired) {
+              btn.dataset.refreshScriptsWired = '1';
+              btn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {}; void refreshScriptsSidebar(); });
+            }
+          } catch {}
 
 					// Open Settings scroll into scripts card when sidebar button clicked
 					try {
