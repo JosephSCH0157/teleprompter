@@ -89,16 +89,24 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   const normalized = normalizeScript(raw).replace(/\r\n/g, '\n');
   const lines = normalized.split('\n');
   const frag = document.createDocumentFragment();
+  const viewer = (root.id === 'viewer' ? root : (root.closest('#viewer') as HTMLElement | null)) || null;
 
   // Set a top padding equal to the marker offset so the first line sits on the marker line
   try {
     const markerPct =
       typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4;
-    const h = root.clientHeight || window.innerHeight || 0;
+    const host = viewer || root;
+    const h = host.clientHeight || window.innerHeight || 0;
     const markerOffset = Math.max(0, Math.round(h * markerPct));
-    root.style.paddingTop = `${markerOffset}px`;
-    // scroll-padding helps browsers honor alignment when using scrollTo with behavior
-    (root as any).style.scrollPaddingTop = `${markerOffset}px`;
+    try { root.style.paddingTop = '0px'; } catch {}
+    try { root.style.scrollPaddingTop = ''; } catch {}
+    if (viewer) {
+      // scroll-padding helps browsers honor alignment when using scrollTo with behavior
+      viewer.style.scrollPaddingTop = `${markerOffset}px`;
+      if (markerOffset > (viewer.clientHeight || 0) * 2) {
+        try { console.warn('[MARKER] insane offset', { markerOffset, viewerHeight: viewer.clientHeight }); } catch {}
+      }
+    }
   } catch {}
 
   let currentSpeaker: SpeakerKey | null = null;
