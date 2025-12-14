@@ -508,6 +508,7 @@ body:has(#settingsOverlay:not(.hidden)) #scriptsQuickRow { opacity:.45; pointer-
     block-size: calc(100dvb - var(--topbar-h) - var(--statusbar-h));
     /* Fallback if dvb isn't supported: */
     height: calc(100vh - var(--topbar-h) - var(--statusbar-h));
+    scroll-padding-top: 0 !important;
 }
 
 /* Present Mode already overrides #viewer to full-viewport; keep that rule last */
@@ -812,6 +813,7 @@ html.tp-present .present-exit { display: inline-flex; }
     /* center the column and keep some breathing room at the edges */
     margin-inline: auto;
     padding-inline: max(16px, 3vw);
+    padding-top: 0 !important; /* prevent marker math from pushing content down */
     color: var(--tp-fg, #e6eef8);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
