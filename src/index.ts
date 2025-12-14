@@ -215,8 +215,10 @@ function bridgeLegacyScrollController() {
 
 const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
-type AsrNotReadyReason = 'NO_PERMISSION' | 'NO_DEVICE' | 'NOT_CALIBRATED' | 'NOT_READY';
+type AsrNotReadyReason = 'NO_PERMISSION' | 'NO_DEVICE' | 'NOT_READY';
+type AsrWarnReason = 'NOT_CALIBRATED';
 let lastStableUiMode: UiScrollMode = 'hybrid';
+let asrRejectionToastShown = false;
 
 function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').toLowerCase() as UiScrollMode;
@@ -224,7 +226,7 @@ function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
 }
 
-function computeAsrReadiness(): { ready: true } | { ready: false; reason: AsrNotReadyReason } {
+function computeAsrReadiness(): { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } {
   try {
     const micGranted = !!appStore.get?.('micGranted');
     if (!micGranted) return { ready: false, reason: 'NO_PERMISSION' };
@@ -236,7 +238,7 @@ function computeAsrReadiness(): { ready: true } | { ready: false; reason: AsrNot
     try {
       const asrState = getAsrState?.();
       const active = asrState?.activeProfileId && asrState.profiles?.[asrState.activeProfileId];
-      if (!active) return { ready: false, reason: 'NOT_CALIBRATED' };
+      if (!active) return { ready: true, warn: 'NOT_CALIBRATED' };
     } catch {
       // ignore ASR state failures
     }
@@ -290,22 +292,28 @@ function setModeStatusLabel(mode: UiScrollMode): void {
 
 function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {}) {
   let normalized = normalizeUiScrollMode(mode);
-  let readiness: { ready: true } | { ready: false; reason: AsrNotReadyReason } | null = null;
+  let readiness: { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } | null = null;
   if (normalized === 'asr') {
     readiness = computeAsrReadiness();
     if (!readiness.ready) {
       const fallback = lastStableUiMode || 'hybrid';
       normalized = fallback;
       setScrollModeSelectValue(fallback);
-      const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
-      try { showToast(toastMsg, { type: 'info' }); } catch {}
+      if (!asrRejectionToastShown) {
+        const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
+        try { showToast(toastMsg, { type: 'info' }); } catch {}
+        asrRejectionToastShown = true;
+      }
       try {
         console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
       } catch {}
       try { appStore.set?.('scrollMode', fallback as any); } catch {}
     }
   }
-  if (normalized !== 'asr' || readiness?.ready) lastStableUiMode = normalized;
+  if (normalized !== 'asr' || readiness?.ready) {
+    lastStableUiMode = normalized;
+    if (normalized !== 'asr') asrRejectionToastShown = false;
+  }
   // Store the UI mode somewhere global so existing JS can still read it
   (window as any).__tpUiScrollMode = normalized;
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
@@ -431,18 +439,21 @@ function initScrollModeUiSync(): void {
       switch (readiness.reason) {
         case 'NO_PERMISSION': return 'Request mic to enable ASR';
         case 'NO_DEVICE': return 'Select a mic to enable ASR';
-        case 'NOT_CALIBRATED': return 'Calibrate mic to enable ASR';
         default: return 'ASR not ready';
       }
     })();
+    const warnLabel = ready && readiness.warn === 'NOT_CALIBRATED' ? 'Calibration recommended' : '';
     const opt = asrOption();
     const help = scrollModeHelp();
     const hint = scrollModeInlineHint();
+    if (ready) asrRejectionToastShown = false;
     if (opt) {
       if (!defaultAsrLabel) defaultAsrLabel = opt.textContent || 'ASR';
       opt.disabled = !ready;
-      opt.title = ready ? '' : reasonLabel;
-      opt.textContent = ready ? defaultAsrLabel : `${defaultAsrLabel || 'ASR'} (enable mic to use)`;
+      opt.title = ready ? warnLabel : reasonLabel;
+      opt.textContent = ready
+        ? (warnLabel ? `${defaultAsrLabel || 'ASR'} (${warnLabel})` : defaultAsrLabel)
+        : `${defaultAsrLabel || 'ASR'} (enable mic to use)`;
     }
     if (help) {
       help.textContent = ready
