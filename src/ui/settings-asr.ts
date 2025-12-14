@@ -7,6 +7,7 @@ import { appStore, type AppStore } from '../state/app-store';
 let asrSettingsWired = false;
 let asrSettingsObserverStarted = false;
 let asrSettingsWarned = false;
+let asrSettingsRenderEventFired = false;
 
 function resolveStore(store?: AppStore | null): AppStore | null {
   if (store) return store;
@@ -97,13 +98,13 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
 }
 
 export function ensureAsrSettingsWired(root: ParentNode = document, store?: AppStore | null): void {
-  const tryMount = () => {
+  const tryMount = (warnIfMissing = false) => {
     const card =
       (root as Document | ParentNode)?.querySelector?.<HTMLElement>('#asrSettingsCard') ||
       (root as Document | ParentNode)?.querySelector?.<HTMLElement>('.settings-card.asr');
 
     if (!card) {
-      if (!asrSettingsWarned) {
+      if (warnIfMissing && !asrSettingsWarned) {
         asrSettingsWarned = true;
         try { console.warn('[ASR] settings card not found (will retry)'); } catch {}
       }
@@ -114,11 +115,14 @@ export function ensureAsrSettingsWired(root: ParentNode = document, store?: AppS
     return true;
   };
 
-  if (tryMount()) return;
+  if (tryMount(false)) return;
 
   document.addEventListener(
     'tp:settings:rendered',
-    () => { tryMount(); },
+    () => {
+      asrSettingsRenderEventFired = true;
+      tryMount(true);
+    },
     { once: true },
   );
 
@@ -129,7 +133,8 @@ export function ensureAsrSettingsWired(root: ParentNode = document, store?: AppS
       || document.body;
     try {
       const obs = new MutationObserver(() => {
-        if (tryMount()) {
+        const wired = tryMount(asrSettingsRenderEventFired);
+        if (wired) {
           try { obs.disconnect(); } catch {}
         }
       });
