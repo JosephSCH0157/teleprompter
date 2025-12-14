@@ -809,6 +809,9 @@ html.tp-present .present-exit { display: inline-flex; }
     /* center the column and keep some breathing room at the edges */
     margin-inline: auto;
     padding-inline: max(16px, 3vw);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 
     /* prefer character-based width, but flex to viewport */
     /* --tp-maxch is per-window (set by your Typography store) */
