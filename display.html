@@ -72,8 +72,15 @@
             z-index:9999;
             pointer-events:none;
           }
-          /* Match main app width for identical wrapping */
-          .script{max-width:900px;margin:0 auto;padding:40px}
+          /* Match main app width and whitespace handling for identical wrapping */
+          .script{
+            max-width:900px;
+            margin:0 auto;
+            padding:40px;
+            white-space:pre-wrap;
+            overflow-wrap:anywhere;
+            word-break:break-word;
+          }
           /* Match main app metrics exactly for consistent scroll physics */
           .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
           .u{text-decoration:underline}
