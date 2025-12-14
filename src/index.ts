@@ -52,7 +52,7 @@ import './dev/ci-mocks';
 import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 import { showToast } from './ui/toasts';
-import { getAsrState } from './asr/store';
+import { computeAsrReadiness, type AsrWarnReason, type AsrNotReadyReason } from './asr/readiness';
 
 function showFatalFallback(): void {
   try {
@@ -215,8 +215,6 @@ function bridgeLegacyScrollController() {
 
 const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
-type AsrNotReadyReason = 'NO_PERMISSION' | 'NO_DEVICE' | 'NOT_READY';
-type AsrWarnReason = 'NOT_CALIBRATED';
 let lastStableUiMode: UiScrollMode = 'hybrid';
 let asrRejectionToastShown = false;
 let lastAsrReadyState: boolean | null = null;
@@ -231,29 +229,6 @@ function getSafeFallbackMode(): UiScrollMode {
   const candidate = normalizeUiScrollMode(lastStableUiMode);
   if (candidate === 'asr') return 'hybrid';
   return candidate;
-}
-
-function computeAsrReadiness(): { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } {
-  try {
-    const micGranted = !!appStore.get?.('micGranted');
-    if (!micGranted) return { ready: false, reason: 'NO_PERMISSION' };
-
-    const micDevice = String(appStore.get?.('micDevice') || '').trim();
-    const micOpen = !!(window as any).__tpMic?.__lastStream || !!(window as any).__tpMic?.isOpen?.();
-    if (!micDevice && !micOpen) return { ready: false, reason: 'NO_DEVICE' };
-
-    try {
-      const asrState = getAsrState?.();
-      const active = asrState?.activeProfileId && asrState.profiles?.[asrState.activeProfileId];
-      if (!active) return { ready: true, warn: 'NOT_CALIBRATED' };
-    } catch {
-      // ignore ASR state failures
-    }
-
-    return { ready: true };
-  } catch {
-    return { ready: true };
-  }
 }
 
 function setScrollModeSelectValue(mode: UiScrollMode): void {
@@ -1511,3 +1486,6 @@ try {
 }
 
 // Legacy HUD installer removed; TS HUD is canonical
+
+// Explicit exports for tests
+export { computeAsrReadiness };
