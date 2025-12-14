@@ -98,11 +98,11 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     const host = viewer || root;
     const h = host.clientHeight || window.innerHeight || 0;
     const markerOffset = Math.max(0, Math.round(h * markerPct));
-    try { root.style.paddingTop = '0px'; } catch {}
+    try { root.style.paddingTop = `${markerOffset}px`; } catch {}
     try { root.style.scrollPaddingTop = ''; } catch {}
     if (viewer) {
-      // Apply padding on the viewer so the first rendered line aligns to the marker
-      viewer.style.paddingTop = `${markerOffset}px`;
+      // scroll-padding keeps scrollTo alignment without shifting the marker element
+      viewer.style.paddingTop = '0px';
       viewer.style.scrollPaddingTop = `${markerOffset}px`;
       if (markerOffset > (viewer.clientHeight || 0) * 2) {
         try { console.warn('[MARKER] insane offset', { markerOffset, viewerHeight: viewer.clientHeight }); } catch {}

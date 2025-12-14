@@ -348,12 +348,12 @@
                 const h = (wrap?.clientHeight || window.innerHeight || 0);
                 const offset = Math.max(0, Math.round(h * markerPct));
                 if (wrap) {
-                  wrap.style.paddingTop = `${offset}px`;
+                  wrap.style.paddingTop = '0px';
                   wrap.style.scrollPaddingTop = `${offset}px`;
                   if (offset > h * 2) console.warn('[display][marker] insane offset', { offset, h });
                 }
                 if (scriptEl) {
-                  scriptEl.style.paddingTop = '0px';
+                  scriptEl.style.paddingTop = `${offset}px`;
                   scriptEl.style.scrollPaddingTop = '0px';
                 }
               } catch {}

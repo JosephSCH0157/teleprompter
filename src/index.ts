@@ -927,9 +927,9 @@ try {
       if (!wrap || !script) return;
       const h = wrap.clientHeight || window.innerHeight || 0;
       const offset = Math.max(0, Math.round(h * markerPct));
-      wrap.style.paddingTop = `${offset}px`;
+      wrap.style.paddingTop = '0px';
       wrap.style.scrollPaddingTop = `${offset}px`;
-      script.style.paddingTop = '0px';
+      script.style.paddingTop = `${offset}px`;
     };
 
     const applyTypography = (fontSize?: string | number, lineHeight?: string | number) => {
