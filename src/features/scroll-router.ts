@@ -337,8 +337,8 @@ var getUiPrefs = () => state;
 var onUiPrefs = (fn) => (subs.add(fn), () => subs.delete(fn));
 
 // src/features/scroll-router.ts
-var LS_KEY = "tp_scroll_mode_v1";
-var LEGACY_LS_KEY = "scrollMode";
+var LS_KEY = "scrollMode";
+var LEGACY_LS_KEYS = ["tp_scroll_mode_v1", "tp_scroll_mode"];
 var DEFAULTS = {
   mode: "hybrid",
   step: { holdCreep: 8 },
@@ -357,15 +357,38 @@ var isHybridBypass = () => {
 function persistMode() {
   try {
     localStorage.setItem(LS_KEY, state2.mode);
-    // Keep legacy key in sync for older code paths
-    localStorage.setItem(LEGACY_LS_KEY, state2.mode);
+    LEGACY_LS_KEYS.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {
+      }
+    });
   } catch {
   }
 }
 function restoreMode() {
   try {
-    const m = localStorage.getItem(LS_KEY) || localStorage.getItem(LEGACY_LS_KEY);
-    if (m) state2.mode = m;
+    const legacy = LEGACY_LS_KEYS.map((k) => {
+      try {
+        return localStorage.getItem(k);
+      } catch {
+        return null;
+      }
+    }).find(Boolean);
+    const m = localStorage.getItem(LS_KEY) || legacy;
+    if (m) {
+      state2.mode = m;
+      try {
+        localStorage.setItem(LS_KEY, m);
+        LEGACY_LS_KEYS.forEach((k) => {
+          try {
+            localStorage.removeItem(k);
+          } catch {
+          }
+        });
+      } catch {
+      }
+    }
   } catch {
   }
 }
@@ -964,4 +987,3 @@ function installScrollRouter(opts) {
 export {
     installScrollRouter
 };
-

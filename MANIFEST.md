@@ -29,6 +29,7 @@ date: 2025-12-10
 **Legacy kept for compatibility (quarantined)**
 - Legacy HUD/debug and ASR stub: `legacy/debug-tools.legacy.js`, `legacy/debug-seed.legacy.js`, `legacy/asr-bridge-speech.legacy.js`
 - Legacy eggs: `legacy/eggs.legacy.js`
+- Archived pre-TS scroll/rehearsal helpers: `legacy/features/*.js`, `legacy/scroll/scroll-brain.js`
 - Other JS stubs still shipped for back-compat: `obs.js`, `hotkey.js`, `bridge.js`, `events.js`, `help.js`, `ui-sanitize.js`, `asr-types.js`
 - Generated logic helpers: `src/build-logic/*.js` (output of `npm run build:logic`)
 

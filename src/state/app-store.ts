@@ -15,7 +15,7 @@ const DEV_HUD_KEY = 'tp_dev_hud';
 const SETTINGS_TAB_KEY = 'tp_settings_tab';
 
 // Scroll router keys
-const SCROLL_MODE_KEY = 'tp_scroll_mode_v1';
+const SCROLL_MODE_KEY = 'scrollMode';
 const TIMED_SPEED_KEY = 'tp_scroll_timed_speed_v1';
 const WPM_TARGET_KEY = 'tp_scroll_wpm_target_v1';
 const WPM_BASEPX_KEY = 'tp_scroll_wpm_basepx_v1';
@@ -277,15 +277,12 @@ function buildInitialState(): AppStoreState {
         if (prefs?.mode) return prefs.mode;
       } catch {}
       try {
-        return (
-          localStorage.getItem(SCROLL_MODE_KEY) ||
-          localStorage.getItem('tp_scroll_mode') ||
-          localStorage.getItem('scrollMode') ||
-          'hybrid'
-        );
-      } catch {
-        return 'hybrid';
-      }
+        const raw = localStorage.getItem(SCROLL_MODE_KEY) || '';
+        const value = String(raw || '').toLowerCase();
+        const allowed = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal'];
+        return allowed.includes(value) ? value : 'hybrid';
+      } catch {}
+      return 'hybrid';
     })(),
     timedSpeed: (() => {
       try {
@@ -477,8 +474,6 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
           }
           if (key === 'scrollMode') {
             saveScrollPrefs({ mode: String(value) as any });
-            try { localStorage.setItem('tp_scroll_mode', String(value)); } catch {}
-            try { localStorage.setItem('scrollMode', String(value)); } catch {}
           }
         }
       } catch {}

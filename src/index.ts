@@ -51,6 +51,7 @@ import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
 import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
+import { showToast } from './ui/toasts';
 
 function showFatalFallback(): void {
   try {
@@ -326,6 +327,14 @@ function applyUiScrollMode(mode: UiScrollMode, opts: { skipStore?: boolean } = {
 }
 
 function initScrollModeUiSync(): void {
+  const asrOption = () =>
+    document.querySelector<HTMLOptionElement>('#scrollMode option[value="asr"]');
+  const scrollModeHelp = () => document.getElementById('scrollModeHelpText') as HTMLElement | null;
+  const defaultHelpText = scrollModeHelp()?.textContent || '';
+  const baseHelpText = (defaultHelpText || 'Scroll mode controls').trim();
+  let defaultAsrLabel: string | null = null;
+  let asrFallbackToasted = false;
+
   const updateFromStore = (mode: string | undefined) => {
     const normalized = normalizeUiScrollMode(mode);
     setScrollModeSelectValue(normalized);
@@ -339,6 +348,40 @@ function initScrollModeUiSync(): void {
   };
 
   applyCurrent();
+
+  const applyAsrAvailability = (granted: boolean) => {
+    const opt = asrOption();
+    const help = scrollModeHelp();
+    if (opt) {
+      if (!defaultAsrLabel) defaultAsrLabel = opt.textContent || 'ASR';
+      opt.disabled = !granted;
+      opt.title = granted ? '' : 'Request mic to enable ASR';
+      opt.textContent = granted ? defaultAsrLabel : `${defaultAsrLabel || 'ASR'} (mic locked)`;
+    }
+    if (help) {
+      help.textContent = granted
+        ? defaultHelpText
+        : `${baseHelpText} - request mic to enable ASR.`;
+    }
+    if (!granted) {
+      const currentMode = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+      if (currentMode === 'asr') {
+        try { appStore.set?.('scrollMode', 'hybrid' as any); } catch {}
+        if (!asrFallbackToasted) {
+          try { showToast('Request mic to enable ASR mode.', { type: 'info' }); } catch {}
+          asrFallbackToasted = true;
+        }
+      }
+    }
+  };
+
+  try {
+    applyAsrAvailability(!!appStore.get?.('micGranted'));
+    appStore.subscribe?.('micGranted', (granted: unknown) => {
+      if (granted) asrFallbackToasted = false;
+      applyAsrAvailability(!!granted);
+    });
+  } catch {}
 
   try {
     appStore.subscribe?.('scrollMode', (next: string) => updateFromStore(next));

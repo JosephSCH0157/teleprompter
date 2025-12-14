@@ -13,8 +13,8 @@ export interface ScrollStoreLike {
   subscribe?<T = unknown>(key: string, fn: (value: T) => void): () => void;
 }
 
-const STORAGE_KEY = 'tp_scroll_prefs_v1';
-const LEGACY_KEYS = ['tp_scroll_mode_v1', 'tp_scroll_mode', 'scrollMode'];
+const CANONICAL_KEY = 'scrollMode';
+const LEGACY_KEYS = ['tp_scroll_prefs_v1', 'tp_scroll_mode_v1', 'tp_scroll_mode'];
 
 function normalizeMode(mode: string | null | undefined): ScrollModePref | null {
   const v = String(mode || '').toLowerCase();
@@ -35,18 +35,50 @@ function safeParse(raw: string | null): ScrollPrefs | null {
   }
 }
 
+function readLegacyMode(key: string, raw: string | null): ScrollModePref | null {
+  if (!raw) return null;
+  if (key === 'tp_scroll_prefs_v1') {
+    return safeParse(raw)?.mode ?? null;
+  }
+  return normalizeMode(raw);
+}
+
+function cleanLegacyKeys(storage: Storage) {
+  LEGACY_KEYS.forEach((key) => {
+    try { storage.removeItem(key); } catch {}
+  });
+}
+
+function migrateLegacyScrollMode(): ScrollModePref | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const storage = window.localStorage;
+    const canonical = normalizeMode(storage.getItem(CANONICAL_KEY));
+    if (canonical) {
+      cleanLegacyKeys(storage);
+      return canonical;
+    }
+    for (const key of LEGACY_KEYS) {
+      const legacy = readLegacyMode(key, storage.getItem(key));
+      if (legacy) {
+        storage.setItem(CANONICAL_KEY, legacy);
+        cleanLegacyKeys(storage);
+        return legacy;
+      }
+    }
+    cleanLegacyKeys(storage);
+  } catch {
+    // swallow storage/migration failures
+  }
+  return null;
+}
+
 export function loadScrollPrefs(): ScrollPrefs | null {
   try {
     if (typeof window === 'undefined') return null;
-    const parsed = safeParse(window.localStorage.getItem(STORAGE_KEY));
-    if (parsed) return parsed;
-
-    // Legacy fallback: treat stored string keys as { mode }
-    for (const key of LEGACY_KEYS) {
-      const legacy = normalizeMode(window.localStorage.getItem(key));
-      if (legacy) return { mode: legacy };
-    }
-    return null;
+    const mode = migrateLegacyScrollMode();
+    if (!mode) return null;
+    return { mode };
   } catch {
     return null;
   }
@@ -57,7 +89,8 @@ export function saveScrollPrefs(next: ScrollPrefs): void {
     if (typeof window === 'undefined') return;
     const normalized = normalizeMode(next?.mode || null);
     if (!normalized) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode: normalized }));
+    window.localStorage.setItem(CANONICAL_KEY, normalized);
+    cleanLegacyKeys(window.localStorage);
   } catch {
     // storage failures are non-fatal
   }
@@ -68,7 +101,7 @@ export function initScrollPrefsPersistence(store: ScrollStoreLike | undefined | 
 
   const fromStore = normalizeMode(store.get?.('scrollMode') as string | undefined);
   const persisted = normalizeMode(loadScrollPrefs()?.mode);
-  const initial = persisted || fromStore || 'hybrid';
+  const initial = normalizeMode(fromStore || persisted || 'hybrid') || 'hybrid';
 
   try {
     if (!fromStore || fromStore !== initial) {
