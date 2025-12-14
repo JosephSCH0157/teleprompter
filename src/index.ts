@@ -272,11 +272,14 @@ function setModeStatusLabel(mode: UiScrollMode): void {
   el.textContent = label;
 }
 
+type ScrollModeSource = 'user' | 'boot' | 'store';
+
 function applyUiScrollMode(
   mode: UiScrollMode,
-  opts: { skipStore?: boolean; allowToast?: boolean } = {},
+  opts: { skipStore?: boolean; allowToast?: boolean; source?: ScrollModeSource } = {},
 ) {
   const allowToast = opts.allowToast !== false;
+  const source: ScrollModeSource = opts.source || 'user';
   let normalized = normalizeUiScrollMode(mode);
   let readiness: { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } | null = null;
   if (normalized === 'asr') {
@@ -285,7 +288,7 @@ function applyUiScrollMode(
       const fallback = getSafeFallbackMode();
       normalized = fallback;
       setScrollModeSelectValue(fallback);
-      if (!asrRejectionToastShown && allowToast) {
+      if (!asrRejectionToastShown && allowToast && source === 'user') {
         const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
         try { showToast(toastMsg, { type: 'info' }); } catch {}
         asrRejectionToastShown = true;
@@ -412,7 +415,7 @@ function initScrollModeUiSync(): void {
       const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
       if (current !== 'asr') lastStableUiMode = current;
       updateFromStore(current);
-      applyUiScrollMode(current, { skipStore: true, allowToast: false });
+      applyUiScrollMode(current, { skipStore: true, allowToast: false, source: 'boot' });
     } catch {}
   };
 
@@ -480,7 +483,7 @@ function initScrollModeUiSync(): void {
       if (!t || t.id !== SCROLL_MODE_SELECT_ID) return;
       const mode = normalizeUiScrollMode(t.value);
       try { appStore.set?.('scrollMode', mode as any); } catch {}
-      applyUiScrollMode(mode, { skipStore: true });
+      applyUiScrollMode(mode, { skipStore: true, source: 'user', allowToast: true });
     }, { capture: true });
   } catch {
     // ignore
@@ -1479,7 +1482,9 @@ try {
   }
 
 	const startBoot = () => { try { boot(); } catch (err) { try { console.error('[TP-FATAL:init]', err); } catch {} showFatalFallback(); } };
-	if (document.readyState !== 'loading') startBoot(); else document.addEventListener('DOMContentLoaded', () => { startBoot(); });
+	if ((window as any).__TP_SKIP_BOOT) {
+    try { console.info('[TP-BOOT] skipped via __TP_SKIP_BOOT'); } catch {}
+  } else if (document.readyState !== 'loading') startBoot(); else document.addEventListener('DOMContentLoaded', () => { startBoot(); });
 } catch (err) {
   try { console.error('[TP-FATAL:init-outer]', err); } catch {}
   showFatalFallback();
