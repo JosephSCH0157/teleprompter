@@ -246,9 +246,27 @@ let saving = false;
 let currentSettings: UserSettings = { app: {} };
 const SETTINGS_SAVE_DEBOUNCE_MS = 900;
 
+function isDevMode(): boolean {
+	try {
+		const params = new URLSearchParams(location.search || '');
+		if (params.has('dev')) return true;
+		if (localStorage.getItem('tp_dev_mode') === '1') return true;
+		const w = window as any;
+		return !!w.__TP_DEV || !!w.__TP_DEV1;
+	} catch {
+		return false;
+	}
+}
+
+function devLog(...args: any[]) {
+	if (!isDevMode()) return;
+	try { console.debug('[settings]', ...args); } catch {}
+}
+
 function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 	if (!settings || typeof settings !== 'object') return;
 	const app = (settings as any).app || {};
+	devLog('hydrate:apply', { keys: Object.keys(app).length });
 	suppressSave = true;
 	try {
 		SETTINGS_KEYS.forEach((k) => {
@@ -277,6 +295,7 @@ function queueProfileSave(userId: string, store: typeof appStore) {
 	if (saveTimer) {
 		try { clearTimeout(saveTimer); } catch {}
 	}
+	devLog('save:queue');
 	saveTimer = window.setTimeout(async () => {
 		saveTimer = null;
 		if (saving) return;
@@ -290,14 +309,19 @@ function queueProfileSave(userId: string, store: typeof appStore) {
 				expectedRev: profileRev,
 			});
 			profileRev = rev;
+			devLog('save:flushed', { rev });
 		} catch (err) {
 			// On conflict or failure, try a single refresh
 			try {
 				const { settings, rev } = await loadProfileSettings(userId);
 				profileRev = rev;
 				applySettingsToStore(settings, store);
+				devLog('save:conflict-reloaded', { rev });
 			} catch (errReload) {
-				try { console.warn('[forge] settings save failed; reload also failed', err, errReload); } catch {}
+				try {
+					console.warn('[forge] settings save failed; reload also failed', err, errReload);
+					devLog('save:conflict-reload-failed');
+				} catch {}
 			}
 		} finally {
 			saving = false;
@@ -1229,6 +1253,7 @@ export async function boot() {
 			// Profile/settings hydration (Supabase) before UI wiring
 			let profileUserId: string | null = null;
 			try {
+				devLog('hydrate:start');
 				const ctx = await ensureUserAndProfile();
 				try { (window as any).__forgeUser = ctx.user; } catch {}
 				try { (window as any).__forgeProfile = ctx.profile; } catch {}
@@ -1244,10 +1269,12 @@ export async function boot() {
 					applySettingsToStore(settings, appStore);
 					currentSettings = snapshotAppSettings(appStore);
 					profileHydrated = true;
+					devLog('hydrate:done', { rev });
 				} catch (err) {
 					try { console.warn('[forge] settings load failed; using defaults', err); } catch {}
 					currentSettings = snapshotAppSettings(appStore);
 					profileHydrated = true; // allow saves later even if load failed
+					devLog('hydrate:failed');
 				}
 				installSettingsPersistence(profileUserId, appStore);
 			}
