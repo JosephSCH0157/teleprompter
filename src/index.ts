@@ -280,12 +280,19 @@ async function refreshScriptsSidebar(): Promise<void> {
   try {
     await initMappedFolder();
     const scripts = await listScripts();
+    if (!scripts.length) {
+      const sel = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+      if (sel) sel.setAttribute('aria-busy', 'false');
+      return;
+    }
     const mappedEntries = scripts.map((s) => ({
       id: s.name,
       title: s.name,
       handle: s.handle as any,
     }));
     ScriptStore.syncMapped(mappedEntries);
+    const sel = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+    if (sel) sel.setAttribute('aria-busy', 'false');
   } catch {}
 }
 
