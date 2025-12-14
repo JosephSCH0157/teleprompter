@@ -30,6 +30,9 @@ Quick flags:
 - `?dev=1` or `localStorage.setItem('tp_dev_mode','1')` → dev HUD/logs
 - `?ci=1` or `localStorage.setItem('tp_ci','1')` → CI profile (`__TP_SKIP_BOOT_FOR_TESTS`)
 - `?mockFolder=1` → deterministic mapped-folder fixture list
+Test helper (dev/test only):
+- `window.__TP_TEST_SKIP_BOOT__ = true` lets unit tests import `src/index.ts` without running boot. Honored only when dev mode is enabled (`?dev=1`, `#dev`, or `localStorage.tp_dev_mode=1`).
+
 
 Scroll writes: main viewer scrolling goes through `window.__tpScrollWrite(y)`; direct `scrollTop` is lint-blocked outside the scheduler.
 
