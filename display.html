@@ -76,7 +76,7 @@
           .script{
             max-width:900px;
             margin:0 auto;
-            padding:40px;
+            padding:0;
             white-space:pre-wrap;
             overflow-wrap:anywhere;
             word-break:break-word;
@@ -369,27 +369,21 @@
 
                 const source = String(text || '');
                 const looksRendered = /<div[^>]+class=["']line\b/i.test(source);
+                const looksHtml = /<\/?[a-z][\s\S]*>/i.test(source);
 
-                if (!looksRendered && window.opener && typeof window.opener.renderScript === 'function') {
-                  const o = window.opener;
-                  const prev = o.__TP_SUPPRESS_DISPLAY_PUSH;
-                  o.__TP_SUPPRESS_DISPLAY_PUSH = true;
-                  o.renderScript(source, scriptEl);
-                  o.__TP_SUPPRESS_DISPLAY_PUSH = prev;
-                } else if (!looksRendered && typeof window.renderScript === 'function') {
+                scriptEl.innerHTML = '';
+
+                if (looksRendered || looksHtml) {
+                  const cont = document.createElement('div');
+                  cont.innerHTML = source || '';
+                  while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
+                } else if (typeof window.renderScript === 'function') {
+                  // Render locally; do not call opener to avoid re-entrant boot/loops
                   window.renderScript(source, scriptEl);
                 } else {
-                  scriptEl.innerHTML = '';
-                  const looksHtml = /<\/?[a-z][\s\S]*>/i.test(source);
-                  if (looksHtml) {
-                    const cont = document.createElement('div');
-                    cont.innerHTML = source || '';
-                    while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
-                  } else {
-                    const pre = document.createElement('pre');
-                    pre.textContent = source;
-                    scriptEl.appendChild(pre);
-                  }
+                  const pre = document.createElement('pre');
+                  pre.textContent = source;
+                  scriptEl.appendChild(pre);
                 }
               } catch (err) {
                 try { console.warn('[display] applyScriptSnapshot failed', err); } catch {}
