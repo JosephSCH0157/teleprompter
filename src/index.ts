@@ -1,6 +1,14 @@
 // DEV: sanity marker so we know TS entry is live.
 ;(window as any).__tpBootPath = 'ts:index';
 const TS_BOOT_OWNER = 'ts:index';
+const IS_CI_MODE = (() => {
+	try {
+		const params = new URLSearchParams(window.location.search || '');
+		return params.get('ci') === '1';
+	} catch {
+		return false;
+	}
+})();
 try { console.log('[TP-BOOT] TS index.ts booted'); } catch {}
 try { (window as any).__TP_TS_OVERLAYS = true; } catch {}
 
@@ -327,6 +335,7 @@ function snapshotAppSettings(store: typeof appStore): UserSettings {
 }
 
 function queueProfileSave(userId: string, store: typeof appStore) {
+	if (IS_CI_MODE) return;
 	if (!profileHydrated || suppressSave) return;
 	if (saveTimer) {
 		try { clearTimeout(saveTimer); } catch {}
@@ -1303,20 +1312,26 @@ export async function boot() {
 			}
 
 			if (profileUserId) {
-				try {
-					const { settings, rev } = await loadProfileSettings(profileUserId);
-					profileRev = rev;
-					applySettingsToStore(settings, appStore);
+				if (!IS_CI_MODE) {
+					try {
+						const { settings, rev } = await loadProfileSettings(profileUserId);
+						profileRev = rev;
+						applySettingsToStore(settings, appStore);
+						currentSettings = snapshotAppSettings(appStore);
+						profileHydrated = true;
+						devLog('hydrate:done', { rev });
+					} catch (err) {
+						try { console.warn('[forge] settings load failed; using defaults', err); } catch {}
+						currentSettings = snapshotAppSettings(appStore);
+						profileHydrated = true; // allow saves later even if load failed
+						devLog('hydrate:failed');
+					}
+					installSettingsPersistence(profileUserId, appStore);
+				} else {
 					currentSettings = snapshotAppSettings(appStore);
 					profileHydrated = true;
-					devLog('hydrate:done', { rev });
-				} catch (err) {
-					try { console.warn('[forge] settings load failed; using defaults', err); } catch {}
-					currentSettings = snapshotAppSettings(appStore);
-					profileHydrated = true; // allow saves later even if load failed
-					devLog('hydrate:failed');
+					devLog('hydrate:ci-skip');
 				}
-				installSettingsPersistence(profileUserId, appStore);
 			}
 
 			// Early: folder card injection + async watcher (before any user opens Settings)

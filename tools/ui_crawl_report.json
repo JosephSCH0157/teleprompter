@@ -234,7 +234,7 @@
       "text": "[TP-BOOT] TS index.ts booted",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 36992,
+        "lineNumber": 37000,
         "columnNumber": 10
       }
     },
@@ -288,7 +288,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37528,
+        "lineNumber": 37537,
         "columnNumber": 12
       }
     },
@@ -306,7 +306,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37528,
+        "lineNumber": 37537,
         "columnNumber": 12
       }
     },
@@ -324,7 +324,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37528,
+        "lineNumber": 37537,
         "columnNumber": 12
       }
     },
@@ -365,45 +365,11 @@
       }
     },
     {
-      "type": "log",
-      "text": "[auto-scroll] boot: wired JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30122,
-        "columnNumber": 20
-      }
-    },
-    {
-      "type": "table",
-      "text": "JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 35732,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "error",
-      "text": "Failed to load resource: the server responded with a status of 400 ()",
-      "location": {
-        "url": "https://wtvdjndyxegudufrompx.supabase.co/rest/v1/profiles?select=settings%2Csettings_rev&user_id=eq.test-user"
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[forge] settings load failed; using defaults JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38195,
-        "columnNumber": 18
-      }
-    },
-    {
       "type": "info",
       "text": "[SCROLL] initOnce: scroll-router (viewer=true)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38253,
+        "lineNumber": 38268,
         "columnNumber": 22
       }
     },
@@ -484,7 +450,16 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38411,
+        "lineNumber": 38426,
+        "columnNumber": 18
+      }
+    },
+    {
+      "type": "log",
+      "text": "[AUTO] setEnabled(from hotkey) false",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 29879,
         "columnNumber": 18
       }
     },
@@ -493,7 +468,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37528,
+        "lineNumber": 37537,
         "columnNumber": 12
       }
     },
@@ -504,6 +479,69 @@
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 26792,
         "columnNumber": 22
+      }
+    },
+    {
+      "type": "log",
+      "text": "[auto-scroll] boot: wired JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 30122,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "table",
+      "text": "JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 35732,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26498,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26498,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26505,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26498,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 26505,
+        "columnNumber": 12
       }
     },
     {
@@ -1795,29 +1833,6 @@
     },
     {
       "type": "error",
-      "text": "Failed to load resource: the server responded with a status of 400 ()",
-      "location": {
-        "url": "https://wtvdjndyxegudufrompx.supabase.co/rest/v1/profiles?user_id=eq.test-user&settings_rev=eq.0&select=settings_rev"
-      }
-    },
-    {
-      "type": "error",
-      "text": "Failed to load resource: the server responded with a status of 400 ()",
-      "location": {
-        "url": "https://wtvdjndyxegudufrompx.supabase.co/rest/v1/profiles?select=settings%2Csettings_rev&user_id=eq.test-user"
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[forge] settings save failed; reload also failed JSHandle@object JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37316,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
       "location": {
         "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
@@ -2001,29 +2016,6 @@
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 24025,
         "columnNumber": 12
-      }
-    },
-    {
-      "type": "error",
-      "text": "Failed to load resource: the server responded with a status of 400 ()",
-      "location": {
-        "url": "https://wtvdjndyxegudufrompx.supabase.co/rest/v1/profiles?user_id=eq.test-user&settings_rev=eq.0&select=settings_rev"
-      }
-    },
-    {
-      "type": "error",
-      "text": "Failed to load resource: the server responded with a status of 400 ()",
-      "location": {
-        "url": "https://wtvdjndyxegudufrompx.supabase.co/rest/v1/profiles?select=settings%2Csettings_rev&user_id=eq.test-user"
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[forge] settings save failed; reload also failed JSHandle@object JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37316,
-        "columnNumber": 18
       }
     },
     {
@@ -2839,9 +2831,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "7e7a02d63bf08517b7cf2ae5373f47dc82527a1d",
+      "gitSha": "ce4ba64ab775cd9ed2a4a508fbe6c8f5c783b3eb",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-15T12:45:34.382Z"
+      "buildTime": "2025-12-15T13:05:36.730Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
