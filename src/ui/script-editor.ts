@@ -105,15 +105,21 @@ async function handleLoadClick(): Promise<void> {
   try {
     const rec = await ScriptStore.get(id);
     if (!rec || typeof rec.content !== 'string') return;
-    const text = rec.content;
+    const raw = rec.content ?? '';
+    const editorEl = document.getElementById('editor') as HTMLTextAreaElement | null;
+    if (editorEl) {
+      editorEl.value = raw;
+    }
+    try { (window as any).__tpRawScript = raw; } catch {}
     // Render locally so viewer + display snapshot are refreshed immediately
-    if (typeof (window as any).renderScript === 'function') {
-      try { (window as any).renderScript(text); } catch {}
+    try { (window as any).renderScript ? (window as any).renderScript(raw) : undefined; } catch {}
+    if (editorEl) {
+      try { editorEl.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
     }
     // Explicitly mirror to display for sidebar loads
-    try { broadcastToDisplay(text); } catch {}
+    try { broadcastToDisplay(raw); } catch {}
     // Still emit tp:script-load for any listeners that rely on the event path
-    try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text } })); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text: raw } })); } catch {}
   } catch {}
   finally {
     loadInFlight = false;
@@ -163,4 +169,3 @@ if (typeof document !== 'undefined') {
 }
 
 export {};
-
