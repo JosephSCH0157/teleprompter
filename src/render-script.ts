@@ -1,7 +1,7 @@
 // src/render-script.ts
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
-import { pushDisplaySnapshot } from './features/display-sync';
+import { publishDisplayScript } from './features/display-sync';
 
 function _escapeHtml(input: string): string {
   return String(input || '')
@@ -221,7 +221,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try {
     const w = window as any;
     if (!w.__TP_SUPPRESS_DISPLAY_PUSH) {
-      pushDisplaySnapshot(raw);
+      publishDisplayScript(raw);
     }
   } catch {}
 }

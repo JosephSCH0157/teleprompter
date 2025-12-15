@@ -124,12 +124,6 @@ export {};
     displayReady = true; if (displayHelloTimer !== undefined) { window.clearInterval(displayHelloTimer); displayHelloTimer = undefined; }
     const chip3 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip3) chip3.textContent = 'Display: ready';
     try { const btn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (btn) (btn as HTMLButtonElement).disabled = false; } catch {}
-        // send initial render
-        try {
-          const fontSize = (document.getElementById('fontSize') as HTMLInputElement | null)?.value;
-          const lineHeight = (document.getElementById('lineHeight') as HTMLInputElement | null)?.value;
-          sendToDisplay({ type: 'render', html: document.getElementById('script')?.innerHTML, fontSize, lineHeight });
-        } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
       }
     } catch {}
@@ -137,19 +131,5 @@ export {};
 
     try { window.__tpDisplay = window.__tpDisplay || {}; window.__tpDisplay.openDisplay = openDisplay; window.__tpDisplay.closeDisplay = closeDisplay; window.__tpDisplay.sendToDisplay = sendToDisplay; window.__tpDisplay.handleMessage = handleMessage; } catch {}
 
-  // Mirror script render events to the display window
-  try {
-    const forwardRender = (ev: Event) => {
-      try {
-        const detail = (ev as CustomEvent)?.detail || {};
-        const html = detail.html ?? document.getElementById('script')?.innerHTML;
-        const fontSize = detail.fontSize ?? (document.getElementById('fontSize') as HTMLInputElement | null)?.value;
-        const lineHeight = detail.lineHeight ?? (document.getElementById('lineHeight') as HTMLInputElement | null)?.value;
-        if (!html) return;
-        sendToDisplay({ type: 'render', html, fontSize, lineHeight });
-      } catch {}
-    };
-    window.addEventListener('tp:script:rendered', forwardRender);
-    window.addEventListener('tp:script:updated', forwardRender);
-  } catch {}
+  // Script forwarding is disabled; canonical path is tp_display BroadcastChannel
 })();

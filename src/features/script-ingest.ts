@@ -1,4 +1,5 @@
 import { renderScript } from '../render-script';
+import { publishDisplayScript } from './display-sync';
 // src/features/script-ingest.ts
 // Wire mapped-folder file selection to teleprompter content.
 // Reads File or FileSystemFileHandle; injects into target or emits events.
@@ -14,15 +15,10 @@ export type IngestOpts = {
 let __ingestListening = false;
 let __docCh: BroadcastChannel | null = null;
 let __isRemote = false; // broadcast loop guard
-let __displayCh: BroadcastChannel | null = null;
 const __isDisplayCtx = (() => {
   try { return (window as any).__TP_FORCE_DISPLAY === true; } catch { return false; }
 })();
 let __lastDisplayPayload = '';
-
-function looksHtml(str: string): boolean {
-  return /<\/?[a-z][\s\S]*>/i.test(str || '');
-}
 
 export function broadcastToDisplay(text: string): void {
   // Display window is receive-only; avoid echoing back to main
@@ -30,42 +26,10 @@ export function broadcastToDisplay(text: string): void {
   const raw = String(text || '');
   const trimmed = raw.trim();
   if (!trimmed) return;
-
-  let html = '';
-  try {
-    const scriptEl =
-      (document.querySelector('#viewer #script') as HTMLElement | null) ||
-      (document.getElementById('script') as HTMLElement | null);
-    if (scriptEl && typeof scriptEl.innerHTML === 'string') {
-      html = scriptEl.innerHTML;
-    }
-  } catch {}
-  const format = looksHtml(html || raw) ? 'html' : 'text';
-  const payloadKey = `${format}:${format === 'html' ? (html || raw) : raw}`;
-  if (payloadKey === __lastDisplayPayload) return;
-  __lastDisplayPayload = payloadKey;
-
-  const payload = {
-    type: 'tp:script',
-    kind: 'tp:script',
-    source: 'main',
-    format,
-    text: format === 'text' ? raw : '',
-    html: format === 'html' ? (html || raw) : '',
-    textHash: String(raw?.length || 0) + ':' + (raw?.slice?.(0, 32) || ''),
-  };
-  // BroadcastChannel preferred
-  try {
-    if (!__displayCh) {
-      __displayCh = new BroadcastChannel('tp_display');
-    }
-    __displayCh?.postMessage(payload as any);
-    try { console.log('[display-sync] posted snapshot to tp_display', { len: text.length }); } catch {}
-  } catch (err) {
-    try { console.warn('[display-sync] postMessage on tp_display failed', err); } catch {}
-  }
-  // window.postMessage fallback (legacy display.html listener)
-  try { window.postMessage(payload as any, '*'); } catch {}
+  const key = `${raw.length}:${raw.slice(0, 64)}`;
+  if (key === __lastDisplayPayload) return;
+  __lastDisplayPayload = key;
+  publishDisplayScript(raw);
 }
 try {
   __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));

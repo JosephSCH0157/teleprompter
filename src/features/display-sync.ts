@@ -1,5 +1,8 @@
+// Single source of truth: BroadcastChannel transport for raw script text only
 let displayCh: BroadcastChannel | null = null;
-let lastSnapshotKey = '';
+let lastPayloadKey = '';
+let rev = 0;
+let latestRaw = '';
 
 function getDisplayChannel(): BroadcastChannel | null {
   if (displayCh) return displayCh;
@@ -12,39 +15,45 @@ function getDisplayChannel(): BroadcastChannel | null {
   return displayCh;
 }
 
-export function pushDisplaySnapshot(text: string): void {
-  if (typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY) {
-    return; // do not echo from the display window itself
-  }
-  const raw = String(text || '');
-  const trimmed = raw.trim();
-  if (!trimmed) return;
-  const format = /<\/?[a-z][\s\S]*>/i.test(raw) ? 'html' : 'text';
-  const key = `${format}:${format === 'html' ? raw : trimmed}`;
-  if (key === lastSnapshotKey) return;
-  lastSnapshotKey = key;
+function makeKey(raw: string): string {
+  const text = String(raw || '');
+  return `${text.length}:${text.slice(0, 64)}`;
+}
 
-  const payload = {
+export type DisplayScriptPayload = {
+  type: 'tp:script';
+  kind: 'tp:script';
+  source: 'main';
+  rawText: string;
+  rev: number;
+  textHash: string;
+};
+
+export function publishDisplayScript(rawText: string, opts?: { force?: boolean }): void {
+  if (typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY) return; // display is receive-only
+  const text = String(rawText || '');
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  const key = makeKey(text);
+  if (!opts?.force && key === lastPayloadKey) return;
+  lastPayloadKey = key;
+  latestRaw = text;
+  rev += 1;
+
+  const payload: DisplayScriptPayload = {
     type: 'tp:script',
     kind: 'tp:script',
     source: 'main',
-    format,
-    text: format === 'text' ? raw : '',
-    html: format === 'html' ? raw : '',
-    textHash: String(raw?.length || 0) + ':' + (raw?.slice?.(0, 32) || ''),
+    rawText: text,
+    rev,
+    textHash: key,
   };
 
   const ch = getDisplayChannel();
   if (ch) {
-    try {
-      ch.postMessage(payload as any);
-    } catch (err) {
-      try { console.warn('[display-sync] failed to post tp_display', err); } catch {}
-    }
+    try { ch.postMessage(payload as any); } catch (err) { try { console.warn('[display-sync] failed to post tp_display', err); } catch {} }
   }
-
-  // Legacy fallback for display.html postMessage listener
-  try { window.postMessage(payload as any, '*'); } catch {}
 }
 
 export type RecordState = 'idle' | 'armed' | 'recording';
@@ -55,28 +64,21 @@ export function pushDisplayRecordState(state: RecordState): void {
   if (ch) {
     try { ch.postMessage(payload as any); } catch {}
   }
-  try {
-    const w = (window as any).__tpDisplayWindow as Window | null;
-    if (w && !w.closed) w.postMessage(payload as any, '*');
-  } catch {}
 }
 
 export type DisplaySyncOpts = {
   getText: () => string;
-  getAnchorRatio?: () => number;
   onApplyRemote?: (_text: string) => void;
-  getDisplayWindow?: () => Window | null;
   channelName?: string;
 };
 
+// One transport: BroadcastChannel ('tp_display') for raw text + handshake
 export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   const chanName = opts.channelName || 'tp_display';
   let chan: BroadcastChannel | null = null;
-  const isRequester = typeof opts.onApplyRemote === 'function';
-  const isResponder = !isRequester;
   const isDisplay = typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY === true;
-  const looksHtml = (s: string) => /<\/?[a-z][\s\S]*>/i.test(s || '');
-  let lastSent = '';
+  let lastSeenRev = 0;
+
   try {
     chan = new BroadcastChannel(chanName);
   } catch (err) {
@@ -84,62 +86,37 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
     chan = null;
   }
 
+  const push = (force?: boolean) => {
+    if (isDisplay) return;
+    try { publishDisplayScript(opts.getText?.() || latestRaw || '', { force }); } catch {}
+  };
+
   const onMsg = (ev: MessageEvent) => {
     try {
       const msg = ev?.data || {};
-      // Display window asks for a fresh snapshot
-      if ((msg?.kind === 'tp:script:request' || msg?.type === 'tp:script:request' || msg?.request === 'snapshot') && isResponder) {
-        try { push(); } catch {}
+      if (msg?.type === 'display:hello' && !isDisplay) {
+        push(true);
         return;
       }
-      if (!msg || msg.kind !== 'tp:script') return;
-      // Display should only hydrate from main-origin snapshots
-      if (isDisplay && msg.source && msg.source !== 'main') return;
-      if (typeof msg.text === 'string' && typeof opts.onApplyRemote === 'function') {
-        opts.onApplyRemote(msg.text);
+      if (!isDisplay) return;
+      if (!msg || msg.type !== 'tp:script' || typeof msg.rawText !== 'string') return;
+      const incomingRev = typeof msg.rev === 'number' ? msg.rev : 0;
+      if (incomingRev && incomingRev <= lastSeenRev) return;
+      lastSeenRev = incomingRev || lastSeenRev;
+      if (typeof opts.onApplyRemote === 'function') {
+        opts.onApplyRemote(msg.rawText);
       }
     } catch {}
   };
 
   try { chan?.addEventListener('message', onMsg as any); } catch {}
 
-  const push = () => {
-    if (isDisplay) return; // display is receive-only to avoid loops
-    try {
-      const raw = String(opts.getText?.() || '');
-      const trimmed = raw.trim();
-      if (!trimmed) return;
-      const anchor = opts.getAnchorRatio?.();
-      const format = looksHtml(raw) ? 'html' : 'text';
-      const key = `${format}:${format === 'html' ? raw : trimmed}`;
-      if (key === lastSent) return;
-      lastSent = key;
-      const payload = {
-        type: 'tp:script',
-        kind: 'tp:script',
-        source: 'main',
-        format,
-        text: format === 'text' ? raw : '',
-        html: format === 'html' ? raw : '',
-        anchorRatio: anchor,
-        textHash: String(raw?.length || 0) + ':' + (raw?.slice?.(0, 32) || ''),
-      };
-      try { chan?.postMessage(payload as any); } catch {}
-      try { opts.getDisplayWindow?.()?.postMessage?.(payload as any, '*'); } catch {}
-    } catch {}
-  };
-
-  if (!isDisplay) {
+  if (isDisplay) {
+    try { chan?.postMessage({ type: 'display:hello', ts: Date.now() }); } catch {}
+  } else {
     try { window.addEventListener('tp:scriptChanged', push as any); } catch {}
     try { push(); } catch {}
   }
-
-  // Display side: immediately request the latest snapshot so late-opened display windows hydrate
-  try {
-    if (isRequester && isDisplay) {
-      chan?.postMessage({ kind: 'tp:script:request', from: 'display', ts: Date.now() } as any);
-    }
-  } catch {}
 
   return () => {
     try { window.removeEventListener('tp:scriptChanged', push as any); } catch {}

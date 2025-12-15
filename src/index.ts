@@ -1186,10 +1186,6 @@ try {
         channelName: 'tp_display',
         getText: () => {
           try {
-            const viewer = document.getElementById('viewer') as HTMLElement | null;
-            if (viewer && typeof viewer.innerHTML === 'string' && viewer.innerHTML.length) {
-              return viewer.innerHTML;
-            }
             const raw = (window as any).__tpRawScript;
             if (typeof raw === 'string' && raw.length) return raw;
             const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
@@ -1197,7 +1193,6 @@ try {
           } catch {}
           return '';
         },
-        getDisplayWindow: () => { try { return (window as any).__tpDisplayWindow || null; } catch { return null; } },
       });
     } catch {}
   }
@@ -1551,27 +1546,13 @@ try {
 							channelName: 'tp_display',
   							getText: () => {
   								try {
-  									// Prefer rendered HTML so display window preserves colors/markup
-  									const viewer = document.getElementById('viewer') as HTMLElement | null;
-  									if (viewer && typeof viewer.innerHTML === 'string' && viewer.innerHTML.length) {
-										return viewer.innerHTML;
-									}
-									const raw = (window as any).__tpRawScript;
-									if (typeof raw === 'string' && raw.length) return raw;
+  									const raw = (window as any).__tpRawScript;
+  									if (typeof raw === 'string' && raw.length) return raw;
 									const ed = document.getElementById('editor') as HTMLTextAreaElement | null;
 									if (ed && typeof ed.value === 'string') return ed.value;
 									return '';
 								} catch { return ''; }
-							},
-							getAnchorRatio: () => {
-								try {
-									const v = document.getElementById('viewer') as HTMLElement | null;
-									if (!v) return 0;
-									const max = Math.max(0, v.scrollHeight - v.clientHeight);
-									return max > 0 ? (v.scrollTop / max) : 0;
-								} catch { return 0; }
-							},
-							getDisplayWindow: () => { try { return (window as any).__tpDisplayWindow || null; } catch { return null; } },
+  							},
 						});
 						try { initLegend(appStore); } catch {}
 					} catch {}

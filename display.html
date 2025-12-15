@@ -32,6 +32,7 @@
       };
     } catch {}
   </script>
+  <script src="./dist/display-renderer.js"></script>
   <!-- TS bundle intentionally omitted in display window to keep it mirror-only and avoid double wiring -->
   <style>
           :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#60a5fa;--s2-color:#facc15;--g1-color:#34d399;--g2-color:#f472b6}
@@ -169,6 +170,11 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
+            try {
+              if (typeof window.renderScript !== 'function' && window.opener && typeof window.opener.renderScript === 'function') {
+                window.renderScript = window.opener.renderScript.bind(window.opener);
+              }
+            } catch {}
 
             // Speakers legend (display window)
             const legendEl = document.getElementById('legend');
@@ -359,35 +365,29 @@
               } catch {}
             }
 
-            // Render helper: accept either raw script text or already-rendered HTML with explicit format
+            // Render helper: accept raw script text only (SSOT)
             function applyScriptSnapshot(payload) {
               // 1) Compute marker offset on viewer
               applyMarkerOffset();
 
-              // 2) Render script content
+              const rawText = typeof payload === 'string'
+                ? payload
+                : String(payload?.rawText ?? payload?.text ?? '');
+
+              if (!rawText && payload && typeof payload !== 'string') {
+                try { console.warn('[display] ignored payload without rawText'); } catch {}
+                return;
+              }
+
+              // 2) Render script content via shared renderer
               try {
                 if (!scriptEl) return;
-
-                const fmt = (payload && payload.format) ? String(payload.format).toLowerCase() : '';
-                const html = fmt === 'html' ? String(payload?.html || payload?.text || '') : '';
-                const text = fmt === 'text' || !fmt ? String(payload?.text || '') : '';
-                const source = html || text || '';
-
-                const looksRendered = /<div[^>]+class=["']line\b/i.test(source);
-                const looksHtml = fmt === 'html' || /<\/?[a-z][\s\S]*>/i.test(source);
-
                 scriptEl.innerHTML = '';
-
-                if (looksRendered || looksHtml) {
-                  const cont = document.createElement('div');
-                  cont.innerHTML = source || '';
-                  while (cont.firstChild) scriptEl.appendChild(cont.firstChild);
-                } else if (typeof window.renderScript === 'function') {
-                  // Render locally; do not call opener to avoid re-entrant boot/loops
-                  window.renderScript(source, scriptEl);
+                if (typeof window.renderScript === 'function') {
+                  window.renderScript(rawText, scriptEl);
                 } else {
                   const pre = document.createElement('pre');
-                  pre.textContent = source;
+                  pre.textContent = rawText;
                   scriptEl.appendChild(pre);
                 }
               } catch (err) {
@@ -401,14 +401,19 @@
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
             try {
               const chan = new BroadcastChannel('tp_display');
+              try { chan.postMessage({ type: 'display:hello', ts: Date.now() }); } catch {}
               chan.addEventListener('message', (e) => {
                 try {
                   const msg = e?.data || {};
-                  // Script snapshots from main
-                  if (msg && (msg.kind === 'tp:script' || msg.type === 'tp:script')) {
-                    applyScriptSnapshot(msg);
-                    applyScaled();
-                    applyBottomPad();
+                  // Script snapshots from main (rawText only)
+                  if (msg && msg.type === 'tp:script' && typeof msg.rawText === 'string') {
+                    const rev = typeof msg.rev === 'number' ? msg.rev : 0;
+                    if (!window.__tpDisplayRev || rev > window.__tpDisplayRev) {
+                      window.__tpDisplayRev = rev;
+                      applyScriptSnapshot(msg);
+                      applyScaled();
+                      applyBottomPad();
+                    }
                     return;
                   }
                   // Typography updates
@@ -444,17 +449,6 @@
                 requestScroll(d.top);
                 return;
               }
-              // Script snapshots via postMessage
-              if (d && (d.kind === 'tp:script' || d.type === 'tp:script')) {
-                applyScriptSnapshot(d);
-                applyScaled();
-                applyBottomPad();
-                if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
-                }
-                return;
-              }
               if (d && d.kind === 'tp:record') {
                 applyRecordState(d.state || 'idle');
                 return;
@@ -485,21 +479,6 @@
                 applyScaled();
                 applyBottomPad();
                 return;
-              }
-              // New display-sync snapshot via postMessage fallback
-              if (d && (d.kind === 'tp:script' || d.type === 'tp:script') && d.source === 'main') {
-                try { window.__lastDisplayHash = d.textHash || ''; } catch {}
-                const payload = String(d.html || d.text || '');
-                if (payload) {
-                  applyScriptSnapshot(payload);
-                  applyScaled();
-                  applyBottomPad();
-                }
-                if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
-                }
-                return; // handled
               }
               // WebRTC camera offer/candidate handling
               if (!window.__camPC && (d.type === 'cam-offer')) {
