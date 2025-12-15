@@ -87,6 +87,12 @@ export function formatInlineMarkup(text: string): string {
   // Strip any leftover tags
   s = s.replace(/\[\/?(?:s1|s2|g1|g2)\]/gi, '');
 
+  // Highlight pacing cues so they feel rendered
+  s = s.replace(/\[(pause|beat|reflective pause)\]/gi, (_m, cue) => {
+    const normalized = String(cue || '').toLowerCase();
+    return `<span class="tp-cue" data-cue="${normalized}">[${cue}]</span>`;
+  });
+
   return s;
 }
 

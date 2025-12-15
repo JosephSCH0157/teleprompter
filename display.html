@@ -406,18 +406,13 @@
                 try {
                   const msg = e?.data || {};
                   // Script snapshots from main (raw text only)
-                  if (msg && msg.type === 'tp:script') {
-                    const format = (msg && msg.format) ? String(msg.format).toLowerCase() : '';
-                    if (format && format !== 'text') return;
-                    const raw = typeof msg.rawText === 'string' ? msg.rawText : (typeof msg.text === 'string' ? msg.text : '');
-                    if (!raw || !raw.trim()) return;
-                    const rev = typeof msg.rev === 'number' ? msg.rev : 0;
-                    if (!window.__tpDisplayRev || rev > window.__tpDisplayRev) {
-                      window.__tpDisplayRev = rev;
-                      applyScriptSnapshot({ rawText: raw, rev });
-                      applyScaled();
-                      applyBottomPad();
+                  if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
+                    const raw = msg.rawText ?? msg.text ?? '';
+                    if (raw) {
+                      applyScriptSnapshot(raw);
                     }
+                    applyScaled();
+                    applyBottomPad();
                     return;
                   }
                   // Typography updates
