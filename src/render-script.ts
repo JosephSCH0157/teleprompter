@@ -176,7 +176,8 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     (div as any).dataset.i = String(i);
 
     if (currentSpeaker) {
-      div.className += ` ${SPEAKER_CLASS[currentSpeaker]}`;
+      div.classList.add(SPEAKER_CLASS[currentSpeaker]);
+      (div as any).dataset.speaker = currentSpeaker;
     }
 
     const html = formatInline(rawLine);
