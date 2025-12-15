@@ -1,7 +1,6 @@
 // src/render-script.ts
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
-import { publishDisplayScript } from './features/display-sync';
 
 function _escapeHtml(input: string): string {
   return String(input || '')
@@ -217,13 +216,6 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   // Notify listeners (e.g., display sync) that script content changed
   try { window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { lineCount: lines.length } })); } catch {}
 
-  // Mirror to display window (tp_display channel + postMessage fallback)
-  try {
-    const w = window as any;
-    if (!w.__TP_SUPPRESS_DISPLAY_PUSH) {
-      publishDisplayScript(raw);
-    }
-  } catch {}
 }
 
 // Expose globally for callers that expect window.renderScript

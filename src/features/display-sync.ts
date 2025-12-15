@@ -31,6 +31,10 @@ export type DisplayScriptPayload = {
 
 export function publishDisplayScript(rawText: string, opts?: { force?: boolean }): void {
   if (typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY) return; // display is receive-only
+  const w = typeof window !== 'undefined' ? (window as any) : {};
+  if (w.__TP_PUBLISHING_DISPLAY) return; // reentrancy guard to break feedback loops
+  w.__TP_PUBLISHING_DISPLAY = true;
+
   const text = String(rawText || '');
   const trimmed = text.trim();
   if (!trimmed) return;
@@ -41,18 +45,22 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean }
   latestRaw = text;
   rev += 1;
 
-  const payload: DisplayScriptPayload = {
-    type: 'tp:script',
-    kind: 'tp:script',
-    source: 'main',
-    rawText: text,
-    rev,
-    textHash: key,
-  };
+  try {
+    const payload: DisplayScriptPayload = {
+      type: 'tp:script',
+      kind: 'tp:script',
+      source: 'main',
+      rawText: text,
+      rev,
+      textHash: key,
+    };
 
-  const ch = getDisplayChannel();
-  if (ch) {
-    try { ch.postMessage(payload as any); } catch (err) { try { console.warn('[display-sync] failed to post tp_display', err); } catch {} }
+    const ch = getDisplayChannel();
+    if (ch) {
+      try { ch.postMessage(payload as any); } catch (err) { try { console.warn('[display-sync] failed to post tp_display', err); } catch {} }
+    }
+  } finally {
+    w.__TP_PUBLISHING_DISPLAY = false;
   }
 }
 
