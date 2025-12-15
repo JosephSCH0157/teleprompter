@@ -34,8 +34,6 @@ export {};
   // Display bridge: open/close display window and handle handshake; exposes window.__tpDisplay
   let displayWin: Window | null = null;
   let displayReady = false;
-  let displayHelloTimer: number | undefined;
-  let displayHelloDeadline = 0;
   // ensure setStatus is defined to avoid ReferenceError; prefer window.setStatus if available
   const setStatus: (msg: string) => void =
     typeof window !== 'undefined' && typeof (window as any).setStatus === 'function'
@@ -66,27 +64,13 @@ export {};
       try {
         console.debug('[display-bridge] display window opened', displayWin?.location?.href || '');
       } catch {}
-      // Typography handled by TS runtime; no legacy script injection needed.
-      displayReady = false;
+      // Treat the window as ready immediately; tp_display handshake now owns hydration.
+      displayReady = true;
       const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
-      if (chip) chip.textContent = 'Display: open';
+      if (chip) chip.textContent = 'Display: ready';
       try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
       const closeDisplayBtn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) (closeDisplayBtn as HTMLButtonElement).disabled = false;
-      if (displayHelloTimer !== undefined) { window.clearInterval(displayHelloTimer); displayHelloTimer = undefined; }
-      displayHelloDeadline = performance.now() + 3000;
-      displayHelloTimer = window.setInterval(() => {
-        if (!displayWin || displayWin.closed || displayReady) {
-          if (displayHelloTimer !== undefined) window.clearInterval(displayHelloTimer);
-          displayHelloTimer = undefined;
-          return;
-        }
-        if (performance.now() > displayHelloDeadline) {
-          if (displayHelloTimer !== undefined) window.clearInterval(displayHelloTimer);
-          displayHelloTimer = undefined;
-          return;
-        }
-        try { sendToDisplay({ type: 'hello' }); } catch {}
-      }, 300);
+      try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
     } catch (e) {
       const msg = (e as any)?.message ?? e;
       setStatus && setStatus('Unable to open display window: ' + msg);
@@ -121,7 +105,7 @@ export {};
     try {
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
-    displayReady = true; if (displayHelloTimer !== undefined) { window.clearInterval(displayHelloTimer); displayHelloTimer = undefined; }
+    displayReady = true;
     const chip3 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip3) chip3.textContent = 'Display: ready';
     try { const btn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (btn) (btn as HTMLButtonElement).disabled = false; } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
