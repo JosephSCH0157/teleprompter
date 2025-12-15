@@ -79,6 +79,16 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
   const isDisplay = typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY === true;
   let lastSeenRev = 0;
 
+  // Dev-only duplication tripwire: count installs to catch double wiring
+  try {
+    const w = window as any;
+    w.__TP_INSTALL_DISPLAY_SYNC = (w.__TP_INSTALL_DISPLAY_SYNC || 0) + 1;
+    if (w.__TP_INSTALL_DISPLAY_SYNC > 1 && (w.__TP_DEV || w.__TP_DEV1)) {
+      console.warn('[display-sync] installDisplaySync called multiple times', w.__TP_INSTALL_DISPLAY_SYNC);
+      try { console.trace('[display-sync] install stack'); } catch {}
+    }
+  } catch {}
+
   try {
     chan = new BroadcastChannel(chanName);
   } catch (err) {
