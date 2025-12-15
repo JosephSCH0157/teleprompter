@@ -2831,9 +2831,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "ab13ef75b18b91f6899dabe0b57190d564c03aae",
+      "gitSha": "f4c9ea979469f9c3d51459935ce665fd744f7071",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-15T13:46:49.817Z"
+      "buildTime": "2025-12-15T14:13:40.562Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
