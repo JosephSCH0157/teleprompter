@@ -210,6 +210,7 @@ export function installGlobalIngestListener() {
   // 1) Primary ingest listener
   window.addEventListener('tp:script-load' as any, async (ev: any) => {
     try {
+      if ((window as any).__TP_LOADING_SCRIPT) return;
       const d = ev?.detail || {};
       let name = d?.name || 'Untitled';
       let text: string | null = null;

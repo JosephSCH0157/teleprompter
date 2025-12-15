@@ -963,7 +963,10 @@ export function bindStaticDom() {
       if (ed && !ed.dataset.renderWired) {
         ed.dataset.renderWired = '1';
         ed.addEventListener('input', () => {
-          try { if (typeof window.renderScript === 'function') window.renderScript(ed.value); } catch {}
+          try {
+            if ((window as any).__TP_LOADING_SCRIPT) return;
+            if (typeof window.renderScript === 'function') window.renderScript(ed.value);
+          } catch {}
         });
       }
     } catch {}

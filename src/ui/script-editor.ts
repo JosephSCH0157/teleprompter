@@ -96,12 +96,15 @@ async function handleLoadClick(): Promise<void> {
   lastLoadTs = now;
   if (loadInFlight) return;
   loadInFlight = true;
+  const w = window as any;
   const id = getActiveScriptId();
   debugLog('[SCRIPT-EDITOR] Load click', { id });
   if (!id) {
     loadInFlight = false;
     return;
   }
+  const resetFlag = () => { try { w.__TP_LOADING_SCRIPT = false; } catch {} };
+  try { w.__TP_LOADING_SCRIPT = true; } catch {}
   try {
     const rec = await ScriptStore.get(id);
     if (!rec || typeof rec.content !== 'string') return;
@@ -123,6 +126,7 @@ async function handleLoadClick(): Promise<void> {
   } catch {}
   finally {
     loadInFlight = false;
+    resetFlag();
   }
 }
 
