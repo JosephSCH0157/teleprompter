@@ -170,12 +170,6 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
-            try {
-              if (typeof window.renderScript !== 'function' && window.opener && typeof window.opener.renderScript === 'function') {
-                window.renderScript = window.opener.renderScript.bind(window.opener);
-              }
-            } catch {}
-
             // Speakers legend (display window)
             const legendEl = document.getElementById('legend');
             const legendState = {
