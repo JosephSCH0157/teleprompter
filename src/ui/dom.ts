@@ -3,6 +3,7 @@
 
 import { getScrollWriter } from '../scroll/scroll-writer';
 import { setSessionPhase } from '../state/session';
+import { applyScript } from '../features/apply-script';
 
 
 type AnyFn = (...args: any[]) => any;
@@ -965,7 +966,7 @@ export function bindStaticDom() {
         ed.addEventListener('input', () => {
           try {
             if ((window as any).__TP_LOADING_SCRIPT) return;
-            if (typeof window.renderScript === 'function') window.renderScript(ed.value);
+            applyScript(ed.value || '', 'editor', { updateEditor: false });
           } catch {}
         });
       }

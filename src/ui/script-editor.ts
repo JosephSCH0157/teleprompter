@@ -2,7 +2,7 @@
 // Sidebar now mirrors the ScriptStore directly (mapped entries) and triggers loads via the store.
 import { debugLog } from '../env/logging';
 import { ScriptStore } from '../features/scripts-store';
-import { broadcastToDisplay } from '../features/script-ingest';
+import { applyScript } from '../features/apply-script';
 
 declare global {
   interface Window {
@@ -109,18 +109,7 @@ async function handleLoadClick(): Promise<void> {
     const rec = await ScriptStore.get(id);
     if (!rec || typeof rec.content !== 'string') return;
     const raw = rec.content ?? '';
-    const editorEl = document.getElementById('editor') as HTMLTextAreaElement | null;
-    if (editorEl) {
-      editorEl.value = raw;
-    }
-    try { (window as any).__tpRawScript = raw; } catch {}
-    // Render locally so viewer + display snapshot are refreshed immediately
-    try { (window as any).renderScript ? (window as any).renderScript(raw) : undefined; } catch {}
-    if (editorEl) {
-      try { editorEl.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-    }
-    // Explicitly mirror to display for sidebar loads
-    try { broadcastToDisplay(raw); } catch {}
+    applyScript(raw, 'load', { updateEditor: true });
     // Still emit tp:script-load for any listeners that rely on the event path
     try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: rec.title, text: raw } })); } catch {}
   } catch {}

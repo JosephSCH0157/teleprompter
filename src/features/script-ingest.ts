@@ -1,5 +1,5 @@
-import { renderScript } from '../render-script';
 import { publishDisplayScript } from './display-sync';
+import { applyScript } from './apply-script';
 // src/features/script-ingest.ts
 // Wire mapped-folder file selection to teleprompter content.
 // Reads File or FileSystemFileHandle; injects into target or emits events.
@@ -18,19 +18,7 @@ let __isRemote = false; // broadcast loop guard
 const __isDisplayCtx = (() => {
   try { return (window as any).__TP_FORCE_DISPLAY === true; } catch { return false; }
 })();
-let __lastDisplayPayload = '';
 
-export function broadcastToDisplay(text: string): void {
-  // Display window is receive-only; avoid echoing back to main
-  if (__isDisplayCtx) return;
-  const raw = String(text || '');
-  const trimmed = raw.trim();
-  if (!trimmed) return;
-  const key = `${raw.length}:${raw.slice(0, 64)}`;
-  if (key === __lastDisplayPayload) return;
-  __lastDisplayPayload = key;
-  publishDisplayScript(raw);
-}
 try {
   __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));
   if (__docCh) {
@@ -44,15 +32,18 @@ try {
             try {
               const snap = getCurrentScriptSnapshot();
               __docCh?.postMessage({ type: 'script', ...snap });
-              broadcastToDisplay(snap.text || '');
+              publishDisplayScript(snap.text || '', { force: true, source: 'hydrate' });
             } catch {}
             return;
           }
           if (m?.type === 'script' && typeof m.text === 'string') {
             __isRemote = true;
-            try { (window as any).__tpCurrentName = m.name; } catch {}
-            try { renderScript(m.text); broadcastToDisplay(m.text); } catch {}
-            __isRemote = false;
+            try {
+              try { (window as any).__tpCurrentName = m.name; } catch {}
+              applyScript(m.text, 'hydrate', { updateEditor: true });
+            } finally {
+              __isRemote = false;
+            }
           }
         } catch {}
       };
@@ -144,7 +135,6 @@ function applyToTarget(target: HTMLElement, text: string) {
   try {
     if (target instanceof HTMLTextAreaElement || target.tagName === 'TEXTAREA') {
       (target as HTMLTextAreaElement).value = text;
-      target.dispatchEvent(new Event('input', { bubbles: true }));
       return;
     }
     if ((target as HTMLElement).isContentEditable) {
@@ -152,8 +142,6 @@ function applyToTarget(target: HTMLElement, text: string) {
       return;
     }
   } catch {}
-  // Fallback broadcast
-  try { window.dispatchEvent(new CustomEvent('tp:script-apply', { detail: { text } })); } catch {}
 }
 
 export function installScriptIngest(opts: IngestOpts = {}) {
@@ -162,8 +150,12 @@ export function installScriptIngest(opts: IngestOpts = {}) {
   async function handle(item: File | FileSystemFileHandle) {
     const { name, text } = await readAny(item);
     try {
-      if (opts.onApply) opts.onApply(text, name);
-      else if (tgt) applyToTarget(tgt, text);
+      if (opts.onApply) {
+        opts.onApply(text, name);
+      } else {
+        applyScript(text, 'ingest', { updateEditor: true });
+        if (tgt) applyToTarget(tgt, text);
+      }
       (window as any).HUD?.log?.('script:loaded', { name, chars: text.length });
       try { localStorage.setItem('tp_last_script_name', name); } catch {}
       window.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: text.length } }));
@@ -182,8 +174,12 @@ export function installScriptIngest(opts: IngestOpts = {}) {
         if (d && typeof d.text === 'string') {
           const name = typeof d.name === 'string' ? d.name : (function(){ try { return localStorage.getItem('tp_last_script_name') || 'Script.txt'; } catch { return 'Script.txt'; } })();
           const text = String(d.text);
-          if (opts.onApply) opts.onApply(text, name);
-          else if (tgt) applyToTarget(tgt, text);
+          if (opts.onApply) {
+            opts.onApply(text, name);
+          } else {
+            applyScript(text, 'ingest', { updateEditor: true });
+            if (tgt) applyToTarget(tgt, text);
+          }
           try { (window as any).HUD?.log?.('script:loaded', { name, chars: text.length }); } catch {}
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: text.length } })); } catch {}
@@ -204,7 +200,6 @@ export function installGlobalIngestListener() {
   if (__ingestListening) return;
   __ingestListening = true;
 
-  let settingEditor = false; // guard against loops when we set editor programmatically
   const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
 
   // 1) Primary ingest listener
@@ -229,9 +224,6 @@ export function installGlobalIngestListener() {
 
       if (typeof text !== 'string') return;
 
-      // Mirror into editor (for DEV/tests)
-      if (ed) { settingEditor = true; ed.value = text; settingEditor = false; }
-
       // Apply normalization if available so any entry path produces standard markup
       const skipNormalize = !!d?.skipNormalize;
       if (skipNormalize) return;
@@ -244,13 +236,11 @@ export function installGlobalIngestListener() {
 
       try { (window as any).__tpCurrentName = name; } catch {}
 
-      // Render locally
-      try { renderScript(text); } catch {}
+      try { applyScript(text, 'ingest', { updateEditor: true }); } catch {}
 
       // Broadcast to other windows only if local origin
       if (!__isRemote) {
         try { __docCh?.postMessage({ type: 'script', name, text }); } catch {}
-        try { broadcastToDisplay(text); } catch {}
       }
 
       // Signals for any legacy listeners
@@ -266,7 +256,7 @@ export function installGlobalIngestListener() {
       let tmr: any;
       ed.addEventListener('input', () => {
         try {
-          if (settingEditor || (window as any).__tpNormalizingScript) return;
+          if ((window as any).__tpNormalizingScript) return;
           clearTimeout(tmr);
           const text = ed.value || '';
           tmr = setTimeout(() => {

@@ -23,13 +23,13 @@ function makeKey(raw: string): string {
 export type DisplayScriptPayload = {
   type: 'tp:script';
   kind: 'tp:script';
-  source: 'main';
+  source: string;
   rawText: string;
   rev: number;
   textHash: string;
 };
 
-export function publishDisplayScript(rawText: string, opts?: { force?: boolean }): void {
+export function publishDisplayScript(rawText: string, opts?: { force?: boolean; source?: string }): void {
   if (typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY) return; // display is receive-only
   const w = typeof window !== 'undefined' ? (window as any) : {};
   if (w.__TP_PUBLISHING_DISPLAY) return; // reentrancy guard to break feedback loops
@@ -49,7 +49,7 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean }
     const payload: DisplayScriptPayload = {
       type: 'tp:script',
       kind: 'tp:script',
-      source: 'main',
+      source: opts?.source ?? 'main',
       rawText: text,
       rev,
       textHash: key,
