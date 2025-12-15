@@ -41,6 +41,10 @@ export function applyScript(rawIn: string, source: ApplySource, opts?: { updateE
   }
   window.__TP_LAST_APPLIED_HASH = h;
 
+  if ((window as any).__TP_DEV || (window as any).__TP_DEV1) {
+    console.debug('[applyScript]', { source, len: raw.length, hash: h.slice(0, 8) });
+  }
+
   const prevLoading = !!window.__TP_LOADING_SCRIPT;
   window.__TP_LOADING_SCRIPT = true;
 
