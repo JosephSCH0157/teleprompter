@@ -33,7 +33,6 @@ export {};
 (function () {
   // Display bridge: open/close display window and handle handshake; exposes window.__tpDisplay
   let displayWin: Window | null = null;
-  let displayReady = false;
   // ensure setStatus is defined to avoid ReferenceError; prefer window.setStatus if available
   const setStatus: (msg: string) => void =
     typeof window !== 'undefined' && typeof (window as any).setStatus === 'function'
@@ -65,7 +64,6 @@ export {};
         console.debug('[display-bridge] display window opened', displayWin?.location?.href || '');
       } catch {}
       // Treat the window as ready immediately; tp_display handshake now owns hydration.
-      displayReady = true;
       const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
       if (chip) chip.textContent = 'Display: ready';
       try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
@@ -79,7 +77,7 @@ export {};
 
   function closeDisplay(): void {
     try { if (displayWin && !displayWin.closed) displayWin.close(); } catch {}
-    displayWin = null; displayReady = false; try { window.__tpDisplayWindow = null; } catch {}
+    displayWin = null; try { window.__tpDisplayWindow = null; } catch {}
     const closeDisplayBtn2 = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn');
     if (closeDisplayBtn2) (closeDisplayBtn2 as HTMLButtonElement).disabled = true;
     const chip2 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
@@ -105,7 +103,6 @@ export {};
     try {
       if (!displayWin || e.source !== displayWin) return;
       if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
-    displayReady = true;
     const chip3 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip3) chip3.textContent = 'Display: ready';
     try { const btn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (btn) (btn as HTMLButtonElement).disabled = false; } catch {}
         try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
