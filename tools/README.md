@@ -21,6 +21,14 @@ npm run smoke:strict
 # no shim; uses the page's real recorder wiring
 ```
 
+## Gate & UI crawl
+
+```powershell
+npm run gate
+```
+
+Runs lint/type/build, the suite of smoke targets, then `node tools/ui_crawl.js` + `node tools/validate_ui_crawl.js` against `teleprompter_pro.html?ci=1`. The crawler currently skips Supabase hydration when `?ci=1` is present to keep the console clean.
+
 ## Flags
 
 --runSmoke    Print one-line JSON and exit.
