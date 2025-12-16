@@ -90,6 +90,7 @@ export type AppStoreState = {
   hudEnabledByUser: boolean;
   page: PageName;
   overlay: 'none' | 'settings' | 'help' | 'shortcuts';
+  asrLive: boolean;
 
   // Scroll router (persisted)
   scrollMode: string;
@@ -268,6 +269,7 @@ function buildInitialState(): AppStoreState {
         return true;
       }
     })(),
+    asrLive: false,
     overlay: (() => {
       try {
         const v = localStorage.getItem(OVERLAY_KEY) || 'none';
@@ -451,6 +453,9 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   if (!ALLOWED_OVERLAYS.has(state.overlay)) {
     state.overlay = 'none';
     try { localStorage.removeItem(OVERLAY_KEY); } catch {}
+  }
+  if (state.scrollMode === 'manual') {
+    state.scrollMode = 'step';
   }
   return state;
 }

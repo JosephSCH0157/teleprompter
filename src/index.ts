@@ -704,6 +704,7 @@ function initScrollModeUiSync(): void {
   } catch {}
 
   const updateOverlayFromEngineState = (engaged: boolean, reason?: string) => {
+    try { appStore.set?.('asrLive', engaged); } catch {}
     const previouslyPrefers = selectPrefersAsr;
     selectPrefersAsr = engaged;
     if (previouslyPrefers !== engaged) {
@@ -743,6 +744,9 @@ function initScrollModeUiSync(): void {
       try { localStorage.setItem('scrollMode', mode); } catch {}
       try { localStorage.setItem('tp_scroll_mode', mode); } catch {}
       try { appStore.set?.('scrollMode', mode as any); } catch {}
+      if (mode === 'asr') {
+        try { (window as any).__tpAuto?.setEnabled?.(false); } catch {}
+      }
       applyUiScrollMode(mode, { skipStore: true, source: 'user', allowToast: true });
     }, { capture: true });
   } catch {

@@ -67,6 +67,7 @@ function allowAuto(): boolean {
     const store = (window as any).__tpStore || appStore;
     const phase = store?.get?.('session.phase');
     const allow = store?.get?.('session.scrollAutoOnLive');
+    if (store?.get?.('asrLive')) return false;
     if (phase !== 'live') return false;
     return !!allow;
   } catch {
@@ -178,6 +179,11 @@ function hud(tag: string, data?: unknown): void {
 function tick(now: number) {
   if (!active) return;
 
+  if (isAsrLive()) {
+    haltAutoForAsr('tick');
+    return;
+  }
+
   if (lastTs == null) {
     lastTs = now;
   }
@@ -255,6 +261,12 @@ function updateToggleLabel() {
 }
 
 function start() {
+  if (isAsrLive()) {
+    try { console.log('[AUTO] start blocked: ASR live'); } catch {}
+    stop();
+    return;
+  }
+
   if (!allowAuto()) {
     try { console.log('[AUTO] start blocked: session not live or auto-on-live disabled'); } catch {}
     return;
@@ -547,6 +559,21 @@ export function setSpeed(pxPerSec: number): void {
 
 let lastAutoModeNormalized: string | null = null;
 
+function isAsrLive(): boolean {
+  try {
+    const store = (window as any).__tpStore || appStore;
+    return !!store?.get?.('asrLive');
+  } catch {
+    return false;
+  }
+}
+
+function haltAutoForAsr(reason: string): void {
+  if (!active) return;
+  try { console.log('[AUTO] stopping due to ASR', { reason }); } catch {}
+  stop();
+}
+
 function handleScrollModeChange(mode: string | null | undefined): void {
   const normalized = String(mode || '').trim().toLowerCase();
   if (!AUTO_SCROLL_MODES.has(normalized)) {
@@ -563,6 +590,11 @@ function handleScrollModeChange(mode: string | null | undefined): void {
 try {
   appStore.subscribe?.('scrollMode', (next) => handleScrollModeChange(next as string | undefined));
   handleScrollModeChange(appStore.get?.('scrollMode') as string | undefined);
+  appStore.subscribe?.('asrLive', (live) => {
+    if (live) {
+      haltAutoForAsr('asrLive');
+    }
+  });
 } catch {
   // ignore failures during early boot
 }

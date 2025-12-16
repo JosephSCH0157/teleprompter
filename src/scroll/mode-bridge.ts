@@ -21,8 +21,10 @@ function resolveModeFromValue(value: string): ScrollMode {
       return 'rehearsal';
     case 'off':
       return 'off';
+    case 'manual':
+      return 'step';
     default:
-      return 'manual';
+      return 'hybrid';
   }
 }
 
