@@ -13,6 +13,7 @@ function applySpeakerColorVars(): void {
       const value = input?.value?.trim();
       if (!value) continue;
       root.style.setProperty(`--tp-speaker-${key}`, value);
+      root.style.setProperty(`--${key}-color`, value);
     }
   } catch {
     // best-effort
