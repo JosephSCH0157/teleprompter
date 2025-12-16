@@ -67,6 +67,10 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean; 
   }
 }
 
+export function getLatestRawScript(): string {
+  return latestRaw;
+}
+
 export type RecordState = 'idle' | 'armed' | 'recording';
 
 export function pushDisplayRecordState(state: RecordState): void {

@@ -1,3 +1,5 @@
+import { getLatestRawScript, publishDisplayScript } from '../features/display-sync';
+
 export type DisplayPayload = { type?: string } & Record<string, unknown>;
 
 export interface DisplayBridgeApi {
@@ -75,6 +77,12 @@ export {};
         console.debug('[display-bridge] display window opened', displayWin?.location?.href || '');
       } catch {}
       // Treat the window as ready immediately; tp_display handshake now owns hydration.
+      try {
+        const cached = getLatestRawScript();
+        if (cached) {
+          publishDisplayScript(cached, { force: true, source: 'display:open' });
+        }
+      } catch {}
       const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
       if (chip) chip.textContent = 'Display: ready';
       try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
