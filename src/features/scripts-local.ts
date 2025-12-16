@@ -1,6 +1,9 @@
 // Local script manager for sidebar Save/Load buttons.
 // Uses localStorage to persist a small list of scripts (title + text).
 
+import { saveToMappedFolder } from '../fs/save-script-to-mapped-folder';
+import { getMappedFolder } from '../fs/mapped-folder';
+
 type ScriptEntry = { title: string; text: string; ts: number };
 
 const STORAGE_KEY = 'tp_local_scripts_v1';
@@ -118,13 +121,34 @@ function wireButton(id: string, handler: () => void): void {
 function initScriptsLocal(): void {
   wireButton('scriptSaveBtn', () => {
     const t = getTitleInput();
-    saveScript(t?.value);
+    const title = t?.value || 'Untitled';
+
+    if (getMappedFolder()) {
+      void (async () => {
+        const res = await saveToMappedFolder(title, getText());
+        if (!res.ok) {
+          saveScript(title);
+        }
+      })();
+      return;
+    }
+
+    saveScript(title);
   });
   wireButton('scriptSaveAsBtn', () => {
     const nm = prompt('Save script as:', getTitleInput()?.value || 'Untitled');
     if (nm) {
       const t = getTitleInput();
       if (t) t.value = nm;
+      if (getMappedFolder()) {
+        void (async () => {
+          const res = await saveToMappedFolder(nm, getText());
+          if (!res.ok) {
+            saveScript(nm);
+          }
+        })();
+        return;
+      }
       saveScript(nm);
     }
   });

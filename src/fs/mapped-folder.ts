@@ -98,6 +98,7 @@ function emit(why: 'init'|'pick'|'clear'|'sync'|'error') {
   try { window.dispatchEvent(new CustomEvent('tp:mapped-folder', { detail: { dir: _dir, why, ts: Date.now() } })); } catch {}
 }
 export function getMappedFolder(): FileSystemDirectoryHandle | null { return _dir; }
+export function refreshMappedFolder(): void { broadcast(); emit('sync'); }
 
 export async function initMappedFolder(): Promise<void> {
   try {
