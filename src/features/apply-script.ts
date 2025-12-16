@@ -3,7 +3,7 @@ import { publishDisplayScript } from './display-sync';
 import { normalizeToStandardText } from '../script/normalize';
 import { validateStandardTagsText } from '../script/validate';
 
-type ApplySource = 'load' | 'editor' | 'ingest' | 'hydrate';
+type ApplySource = 'load' | 'editor' | 'ingest' | 'hydrate' | 'sample';
 
 declare global {
   interface Window {

@@ -4,6 +4,7 @@
 import { getScrollWriter } from '../scroll/scroll-writer';
 import { setSessionPhase } from '../state/session';
 import { applyScript } from '../features/apply-script';
+import { getNextSampleScript } from '../content/sample-scripts';
 
 
 type AnyFn = (...args: any[]) => any;
@@ -414,9 +415,6 @@ export function wireCamera() {
 }
 
 export function wireLoadSample(doc: Document = document) {
-  // Simple sample text; swap later if desired
-  const sample = `Welcome to [b]Teleprompter Pro[/b].\n\nUse [s1]roles[/s1], [note]notes[/note], and colors like [color=#ff0]this[/color].\nTry scrolling, pausing, and switching speakers to get a feel for the tool.`;
-
   const btn = (doc.getElementById('loadSample') ||
     doc.querySelector('[data-action=\"load-sample\"]')) as HTMLElement | null;
   const ed = doc.getElementById('editor') as HTMLTextAreaElement | HTMLInputElement | null;
@@ -429,17 +427,9 @@ export function wireLoadSample(doc: Document = document) {
   btn.addEventListener('click', (e) => {
     try { e.preventDefault(); e.stopImmediatePropagation?.(); } catch {}
     try {
-      (ed as any).value = sample;
-      ed.dispatchEvent(new Event('input', { bubbles: true }));
-      if (typeof (window as any).renderScript === 'function') {
-        (window as any).renderScript((ed as any).value);
-      }
-      // Place caret at end
-      try {
-        ed.focus();
-        const len = (ed as any).value.length;
-        (ed as any).setSelectionRange?.(len, len);
-      } catch {}
+      const sample = getNextSampleScript();
+      if (!sample) return;
+      applyScript(sample, 'sample', { updateEditor: true });
     } catch {}
   }, { capture: true });
 }
