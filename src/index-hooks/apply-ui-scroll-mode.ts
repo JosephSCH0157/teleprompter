@@ -11,6 +11,7 @@ type ScrollModeSource = 'user' | 'boot' | 'store';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
 let lastStableUiMode: UiScrollMode = 'hybrid';
 let asrRejectionToastShown = false;
+let selectPrefersAsr = false;
 
 export function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').trim().toLowerCase() as UiScrollMode;
@@ -23,8 +24,11 @@ function setScrollModeSelectValue(mode: UiScrollMode): void {
     const el = document.getElementById('scrollMode') as HTMLSelectElement | null;
     if (!el) return;
     const normalized = normalizeUiScrollMode(mode);
-    if (Array.from(el.options).some((o) => o.value === normalized)) {
-      el.value = normalized;
+    const asrOption = Array.from(el.options).find((o) => o.value === 'asr');
+    const prefersAsr = selectPrefersAsr && !!asrOption && !asrOption.disabled;
+    const target = prefersAsr ? 'asr' : normalized;
+    if (Array.from(el.options).some((o) => o.value === target)) {
+      el.value = target;
     }
   } catch {
     // ignore
@@ -159,7 +163,8 @@ export function applyUiScrollMode(
       asrEnabled = false;
       autoEnabled = false;
       break;
-	}
+  }
+  selectPrefersAsr = asrEnabled;
   try { brain?.setMode(brainMode); } catch {}
   if (setClampMode) setClampMode(clampMode);
   if (asr && typeof asr.setEnabled === 'function') asr.setEnabled(asrEnabled);

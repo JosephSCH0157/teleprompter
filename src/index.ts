@@ -217,6 +217,7 @@ function bridgeLegacyScrollController() {
 const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
 let lastStableUiMode: UiScrollMode = 'hybrid';
+let selectPrefersAsr = false;
 
 // --- Profile settings persistence (Supabase) ---
 const SETTINGS_KEYS: PersistedAppKey[] = [
@@ -415,8 +416,11 @@ function setScrollModeSelectValue(mode: UiScrollMode): void {
     const el = document.getElementById(SCROLL_MODE_SELECT_ID) as HTMLSelectElement | null;
     if (!el) return;
     const normalized = normalizeUiScrollMode(mode);
-    if (Array.from(el.options).some((o) => o.value === normalized)) {
-      el.value = normalized;
+    const asrOption = Array.from(el.options).find((o) => o.value === 'asr');
+    const prefersAsr = selectPrefersAsr && !!asrOption && !asrOption.disabled;
+    const target = prefersAsr ? 'asr' : normalized;
+    if (Array.from(el.options).some((o) => o.value === target)) {
+      el.value = target;
     }
   } catch {
     // ignore
@@ -563,13 +567,14 @@ function applyUiScrollMode(
       autoEnabled = false;
       break;
 
-    case 'rehearsal':
+  case 'rehearsal':
       brainMode = 'rehearsal'; // no programmatic scroll
       clampMode = 'free';
       asrEnabled = false;
       autoEnabled = false;
       break;
 	}
+  selectPrefersAsr = asrEnabled;
   // Apply decisions
   try { brain?.setMode(brainMode); } catch {}
   if (setClampMode) setClampMode(clampMode);
