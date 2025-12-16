@@ -8,12 +8,19 @@ const SPEAKER_COLOR_SELECTORS: Array<readonly [string, string]> = [
 function applySpeakerColorVars(): void {
   try {
     const root = document.documentElement;
+    const colors: Record<string, string> = {};
     for (const [key, selector] of SPEAKER_COLOR_SELECTORS) {
       const input = document.querySelector<HTMLInputElement>(selector);
       const value = input?.value?.trim();
       if (!value) continue;
       root.style.setProperty(`--tp-speaker-${key}`, value);
       root.style.setProperty(`--${key}-color`, value);
+      colors[key] = value;
+    }
+    if (Object.keys(colors).length) {
+      try {
+        window.sendToDisplay?.({ type: 'speaker-colors', colors });
+      } catch {}
     }
   } catch {
     // best-effort

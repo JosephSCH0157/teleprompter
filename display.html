@@ -189,6 +189,7 @@
               const sanitized = sanitizeColorValue(nextColor);
               if (!sanitized) return;
               document.documentElement.style.setProperty(`--${role}-color`, sanitized);
+              legendState[role] = legendState[role] || { name: role.toUpperCase(), color: sanitized };
               legendState[role].color = sanitized;
             };
             const cssColor = (varName, fallback) => {
@@ -232,6 +233,15 @@
                 }
               };
             }
+            window.addEventListener('message', (ev) => {
+              try {
+                const payload = ev?.data || {};
+                if (payload?.type === 'speaker-colors' && payload.colors) {
+                  Object.entries(payload.colors).forEach(([role, color]) => applySpeakerColor(role, color));
+                  renderLegend();
+                }
+              } catch {}
+            });
             // TP: zoom-guard (display) + in-app Ctrl/Cmd + Wheel zoom
             try {
               window.addEventListener('wheel', (e)=>{
