@@ -218,6 +218,7 @@ const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
 let lastStableUiMode: UiScrollMode = 'hybrid';
 let selectPrefersAsr = false;
+let lastScrollModeSource: ScrollModeSource = 'boot';
 
 // --- Profile settings persistence (Supabase) ---
 const SETTINGS_KEYS: PersistedAppKey[] = [
@@ -246,6 +247,26 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
 	'cameraEnabled',
 	'settingsTab',
 ];
+
+function getAsrModeState(): string | null {
+	const asrMode = (window as any).__tpAsrMode;
+	if (asrMode && typeof asrMode.getState === 'function') {
+		try {
+			const state = asrMode.getState();
+			return typeof state === 'string' ? state.toLowerCase() : null;
+		} catch {}
+	}
+	return null;
+}
+
+function isAsrEngineEngaged(): boolean {
+	const state = getAsrModeState();
+	return state === 'running' || state === 'listening' || state === 'ready';
+}
+
+function isAsrOverlayActive(): boolean {
+	return selectPrefersAsr || isAsrEngineEngaged();
+}
 
 let profileHydrated = false;
 let profileRev = 0;
@@ -315,9 +336,17 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 	suppressSave = true;
 	try {
 		SETTINGS_KEYS.forEach((k) => {
-			if (Object.prototype.hasOwnProperty.call(app, k)) {
-				try { store.set?.(k as any, (app as any)[k]); } catch {}
+			if (!Object.prototype.hasOwnProperty.call(app, k)) return;
+			if (k === 'scrollMode') {
+				try {
+					const raw = String((app as any)[k] ?? '').trim().toLowerCase();
+					if (raw !== 'asr' && isAsrOverlayActive()) {
+						devLog('[ASR] hydrate skipped scrollMode override while engaged', { raw });
+						return;
+					}
+				} catch {}
 			}
+			try { store.set?.(k as any, (app as any)[k]); } catch {}
 		});
 		currentSettings = applySettingsPatch({ app: { ...(currentSettings.app || {}) } }, { app }) || { app: {} };
 	} catch {
@@ -455,7 +484,7 @@ function setModeStatusLabel(mode: UiScrollMode): void {
   el.textContent = label;
 }
 
-type ScrollModeSource = 'user' | 'boot' | 'store';
+type ScrollModeSource = 'user' | 'boot' | 'store' | 'router' | 'external' | 'hydrate' | 'fallback' | 'legacy';
 
 async function refreshScriptsSidebar(): Promise<void> {
   try {
@@ -483,6 +512,7 @@ function applyUiScrollMode(
 ) {
   const allowToast = opts.allowToast !== false;
   const source: ScrollModeSource = opts.source || 'user';
+  lastScrollModeSource = source;
   let normalized = normalizeUiScrollMode(mode);
   let readiness: { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } | null = null;
   if (normalized === 'asr') {
@@ -611,7 +641,7 @@ function initScrollModeUiSync(): void {
   const updateFromStore = (mode: string | undefined) => {
     const normalized = normalizeUiScrollMode(mode);
     setScrollModeSelectValue(normalized);
-    applyUiScrollMode(normalized, { skipStore: true });
+    applyUiScrollMode(normalized, { skipStore: true, source: 'store' });
   };
 
   const applyCurrent = () => {
@@ -673,6 +703,30 @@ function initScrollModeUiSync(): void {
     window.addEventListener('tp:asrChanged', applyAsrAvailability, { capture: false });
   } catch {}
 
+  const updateOverlayFromEngineState = (engaged: boolean, reason?: string) => {
+    const previouslyPrefers = selectPrefersAsr;
+    selectPrefersAsr = engaged;
+    if (previouslyPrefers !== engaged) {
+      setScrollModeSelectValue(lastStableUiMode);
+    }
+    if (!engaged && previouslyPrefers && lastScrollModeSource !== 'user') {
+      devLog('[ASR] disengaged by', lastScrollModeSource, { reason });
+    }
+  };
+
+  try {
+    const handleAsrStateEvent = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail || {};
+        const state = String(detail.state || '').toLowerCase();
+        const engaged = state === 'running' || state === 'listening';
+        updateOverlayFromEngineState(engaged, detail.reason);
+      } catch {}
+    };
+    updateOverlayFromEngineState(isAsrEngineEngaged(), 'init');
+    window.addEventListener('tp:asr:state', handleAsrStateEvent, { capture: false });
+  } catch {}
+
   try {
     appStore.subscribe?.('scrollMode', (next: string) => updateFromStore(next));
   } catch {}
@@ -699,7 +753,7 @@ function initScrollModeUiSync(): void {
 initScrollModeUiSync();
 
 // Expose this function as the global router for existing JS
-(window as any).setScrollMode = (mode: UiScrollMode) => applyUiScrollMode(mode);
+(window as any).setScrollMode = (mode: UiScrollMode) => applyUiScrollMode(mode, { source: 'external' });
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
 export { applyUiScrollMode, appStore };
@@ -1550,14 +1604,14 @@ try {
   };
 
   // Ensure UI/store reflect initial mode
-  try { applyUiScrollMode(scrollModeSource.get() as any, { skipStore: true }); } catch {}
+  try { applyUiScrollMode(scrollModeSource.get() as any, { skipStore: true, source: 'router' }); } catch {}
   try { initWpmBindings(); } catch {}
 
   // Legacy setScrollMode bridge
   (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off'|'timed'|'wpm'|'hybrid') => {
     const normalized = normalizeUiScrollMode(mode);
     try { store?.set?.('scrollMode', normalized); } catch {}
-    try { applyUiScrollMode(normalized, { skipStore: true }); } catch {}
+    try { applyUiScrollMode(normalized, { skipStore: true, source: 'legacy' }); } catch {}
     try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
   };
 } catch {}
