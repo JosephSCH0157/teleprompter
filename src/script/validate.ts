@@ -8,8 +8,8 @@ export function validateStandardTagsText(input = '') {
   const t = String(input || '');
   const problems = [];
 
-  // Only allowed tags
-  const badTag = t.match(/\[(?!\/?(?:s1|s2|note)\b)[^\]]+\]/i);
+  // Only allowed tags (including common cue markers)
+  const badTag = t.match(/\[(?!\/?(?:s1|s2|note|beat|pause|reflective pause)\b)[^\]]+\]/i);
   if (badTag) problems.push('Unknown tag: ' + badTag[0]);
 
   // Speaker tags on their own lines
