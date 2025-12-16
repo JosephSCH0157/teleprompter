@@ -1,3 +1,36 @@
+const SPEAKER_COLOR_SELECTORS: Array<readonly [string, string]> = [
+  ['s1', '#color-s1'],
+  ['s2', '#color-s2'],
+  ['g1', '#color-g1'],
+  ['g2', '#color-g2'],
+];
+
+function applySpeakerColorVars(): void {
+  try {
+    const root = document.documentElement;
+    for (const [key, selector] of SPEAKER_COLOR_SELECTORS) {
+      const input = document.querySelector<HTMLInputElement>(selector);
+      const value = input?.value?.trim();
+      if (!value) continue;
+      root.style.setProperty(`--tp-speaker-${key}`, value);
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+function wireSpeakerColorPickers(): void {
+  try {
+    for (const [, selector] of SPEAKER_COLOR_SELECTORS) {
+      const el = document.querySelector<HTMLInputElement>(selector);
+      if (!el) continue;
+      el.addEventListener('input', applySpeakerColorVars);
+      el.addEventListener('change', applySpeakerColorVars);
+    }
+    applySpeakerColorVars();
+  } catch {}
+}
+
 // Simple show/hide toggle for the Speakers panel using data hooks.
 export function initSpeakersPanel(): void {
   const panel = document.querySelector<HTMLElement>('[data-tp-speakers-panel]');
@@ -43,9 +76,11 @@ try {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       try { initSpeakersPanel(); } catch {}
+      try { wireSpeakerColorPickers(); } catch {}
     }, { once: true });
   } else {
     initSpeakersPanel();
+    wireSpeakerColorPickers();
   }
 } catch {
   // ignore
