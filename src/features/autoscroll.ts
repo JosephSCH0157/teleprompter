@@ -547,11 +547,6 @@ export function setSpeed(pxPerSec: number): void {
 
 let lastAutoModeNormalized: string | null = null;
 
-function isAutoScrollMode(mode: string | null | undefined): boolean {
-  const normalized = String(mode || '').trim().toLowerCase();
-  return AUTO_SCROLL_MODES.has(normalized);
-}
-
 function handleScrollModeChange(mode: string | null | undefined): void {
   const normalized = String(mode || '').trim().toLowerCase();
   if (!AUTO_SCROLL_MODES.has(normalized)) {
