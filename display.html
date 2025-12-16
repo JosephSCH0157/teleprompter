@@ -122,6 +122,22 @@
             opacity: 1;
             display: block;
           }
+          #wrap .script .line.speaker-s1,
+          #wrap .script .line[data-speaker="s1"]{
+            color: var(--tp-speaker-s1, var(--s1-color, #60a5fa));
+          }
+          #wrap .script .line.speaker-s2,
+          #wrap .script .line[data-speaker="s2"]{
+            color: var(--tp-speaker-s2, var(--s2-color, #facc15));
+          }
+          #wrap .script .line.speaker-guest1,
+          #wrap .script .line[data-speaker="g1"]{
+            color: var(--tp-speaker-g1, var(--g1-color, #34d399));
+          }
+          #wrap .script .line.speaker-guest2,
+          #wrap .script .line[data-speaker="g2"]{
+            color: var(--tp-speaker-g2, var(--g2-color, #f472b6));
+          }
           /* Responsive script column (main #viewer and display #wrap) */
           #viewer .script,
           #wrap   .script {
