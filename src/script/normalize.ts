@@ -2,6 +2,7 @@
 import {
   BLOCK_TAG_NAMES,
   CUE_TAG_NAMES,
+  INLINE_TAG_BASES,
   ALLOWED_NORMALIZED_TAG_NAMES,
 } from './tag-constants';
 
@@ -17,7 +18,12 @@ export {};
  */
 const BLOCK_TAG_PATTERN = BLOCK_TAG_NAMES.join('|');
 const CUE_TAG_PATTERN = CUE_TAG_NAMES.join('|');
+const INLINE_TAG_PATTERN = INLINE_TAG_BASES.join('|');
 const ALLOWED_TAG_SET = new Set(ALLOWED_NORMALIZED_TAG_NAMES);
+const INLINE_CANONICAL_REGEXP = new RegExp(
+  `\\[\\s*(\\/)?\\s*(${INLINE_TAG_PATTERN})(\\s*=\\s*[^\\]]+)?\\s*\\]`,
+  'gi',
+);
 
 export function normalizeToStandardText(input = '') {
   let text = String(input ?? '');
@@ -33,6 +39,20 @@ export function normalizeToStandardText(input = '') {
     .replace(new RegExp(`\\[\\s*(${BLOCK_TAG_PATTERN})\\s*\\]`, 'gi'), (_, tag) => `[${String(tag).toLowerCase()}]`)
     .replace(new RegExp(`\\[\\s*\\/\\s*(${BLOCK_TAG_PATTERN})\\s*\\]`, 'gi'), (_, tag) => `[/${String(tag).toLowerCase()}]`)
     .replace(new RegExp(`\\[\\s*(${CUE_TAG_PATTERN})\\s*\\]`, 'gi'), (_, tag) => `[${String(tag).toLowerCase()}]`);
+
+  text = text.replace(INLINE_CANONICAL_REGEXP, (_, slash, tag, attr) => {
+    const normalizedTag = String(tag).toLowerCase();
+    let attrStr = '';
+    if (attr) {
+      const eqIndex = attr.indexOf('=');
+      if (eqIndex >= 0) {
+        const value = attr.slice(eqIndex + 1).trim();
+        attrStr = '=' + value;
+      }
+    }
+    const prefix = slash ? '/' : '';
+    return `[${prefix}${normalizedTag}${attrStr}]`;
+  });
 
   // Strip unsupported inline tags (clean up before validation)
   text = text.replace(/\[([^\]]+)\]/g, (match, inner) => {
