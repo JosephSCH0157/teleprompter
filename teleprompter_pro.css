@@ -141,7 +141,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     /* Reserve fixed layout slots to prevent layout shifts (CLS) */
     :root{ --topbar-h:56px; --statusbar-h:28px; --sidebar-w:320px; --topbar-offset:2px; }
     /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
-    .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:var(--topbar-offset);background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10;height:var(--topbar-h);box-sizing:border-box}
+    .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:var(--topbar-offset);background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10;height:auto;min-height:var(--topbar-h);flex-wrap:wrap;box-sizing:border-box}
+    .page-tabs,.legend{flex:1 0 100%}
     .topbar strong{letter-spacing:.2px}
 
     /* Robust topbar hairline / overlay
