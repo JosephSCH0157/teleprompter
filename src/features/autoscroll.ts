@@ -530,6 +530,31 @@ export function setSpeed(pxPerSec: number): void {
   hud('auto:set-speed', { speed: clamped });
 }
 
+let lastAutoModeNormalized: string | null = null;
+
+function isAutoScrollMode(mode: string | null | undefined): boolean {
+  const normalized = String(mode || '').trim().toLowerCase();
+  return AUTO_SCROLL_MODES.has(normalized);
+}
+
+function handleScrollModeChange(mode: string | null | undefined): void {
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (!AUTO_SCROLL_MODES.has(normalized)) {
+    lastAutoModeNormalized = null;
+    return;
+  }
+  if (lastAutoModeNormalized === normalized) return;
+  lastAutoModeNormalized = normalized;
+  setSpeed(AUTO_SCROLL_START_SPEED);
+}
+
+try {
+  appStore.subscribe?.('scrollMode', (next) => handleScrollModeChange(next as string | undefined));
+  handleScrollModeChange(appStore.get?.('scrollMode') as string | undefined);
+} catch {
+  // ignore failures during early boot
+}
+
 export function inc(): void {
   initAutoscrollFeature();
   tweakSpeed(+0.5);
