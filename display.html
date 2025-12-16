@@ -176,6 +176,21 @@
               s1: { name: 'Joe', color: '#60a5fa' },
               s2: { name: 'Brad', color: '#facc15' },
             };
+            const sanitizeColorValue = (value) => {
+              try {
+                const txt = typeof value === 'string' ? value.trim() : '';
+                if (!txt) return '';
+                return txt.toLowerCase() === 'undefined' ? '' : txt;
+              } catch {
+                return '';
+              }
+            };
+            const applySpeakerColor = (role, nextColor) => {
+              const sanitized = sanitizeColorValue(nextColor);
+              if (!sanitized) return;
+              document.documentElement.style.setProperty(`--${role}-color`, sanitized);
+              legendState[role].color = sanitized;
+            };
             const cssColor = (varName, fallback) => {
               try {
                 const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
@@ -207,8 +222,8 @@
               bc.onmessage = (e) => {
                 const d = e?.data || {};
                 if (d.type === 'SPEAKER_COLORS') {
-                  if (d.s1) { document.documentElement.style.setProperty('--s1-color', d.s1); legendState.s1.color = d.s1; }
-                  if (d.s2) { document.documentElement.style.setProperty('--s2-color', d.s2); legendState.s2.color = d.s2; }
+                  try { applySpeakerColor('s1', d.s1); } catch {}
+                  try { applySpeakerColor('s2', d.s2); } catch {}
                   renderLegend();
                 } else if (d.type === 'SPEAKER_NAMES') {
                   if (typeof d.s1Name === 'string') { legendState.s1.name = d.s1Name; }
