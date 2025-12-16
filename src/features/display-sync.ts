@@ -35,20 +35,20 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean; 
   if (w.__TP_PUBLISHING_DISPLAY) return; // reentrancy guard to break feedback loops
   w.__TP_PUBLISHING_DISPLAY = true;
 
-  const text = String(rawText || '');
-  const trimmed = text.trim();
-  if (!trimmed) return;
   try {
-    console.log('[publishDisplayScript]', { rev, len: rawText.length });
-  } catch {}
+    const text = String(rawText || '');
+    const trimmed = text.trim();
+    if (!trimmed) return;
 
-  const key = makeKey(text);
-  if (!opts?.force && key === lastPayloadKey) return;
-  lastPayloadKey = key;
-  latestRaw = text;
-  rev += 1;
+    const key = makeKey(text);
+    if (!opts?.force && key === lastPayloadKey) return;
+    lastPayloadKey = key;
+    latestRaw = text;
+    rev += 1;
+    try {
+      console.log('[publishDisplayScript]', { rev, len: text.length });
+    } catch {}
 
-  try {
     const payload: DisplayScriptPayload = {
       type: 'tp:script',
       kind: 'tp:script',
