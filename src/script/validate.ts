@@ -4,25 +4,31 @@ export {};
 // src/script/validate.ts
 // Minimal validator for standard tags; returns a structured report used by tools-loader.
 
+const BLOCK_TAGS = ['s1', 's2', 'g1', 'g2', 'note'];
+const CUE_TAGS = ['pause', 'beat', 'reflective pause'];
+const SPEAKER_TAGS = ['s1', 's2', 'g1', 'g2'];
+
 export function validateStandardTagsText(input = '') {
   const t = String(input || '');
   const problems = [];
 
-  // Only allowed tags (including common cue markers)
-  const badTag = t.match(/\[(?!\/?(?:s1|s2|note|beat|pause|reflective pause)\b)[^\]]+\]/i);
+  const allowedTagPattern = [...BLOCK_TAGS, ...CUE_TAGS].join('|');
+  const badTag = t.match(new RegExp(`\\[(?!\\/?(?:${allowedTagPattern})\\b)[^\\]]+\\]`, 'i'));
   if (badTag) problems.push('Unknown tag: ' + badTag[0]);
 
-  // Speaker tags on their own lines
-  if (/\[(?:s1|s2)\]\s*\S/.test(t)) problems.push('Opening [s1]/[s2] must be on its own line.');
-  if (/\S\s*\[\/s[12]\]\s*$/im.test(t)) problems.push('Closing [/s1]/[/s2] must be on its own line.');
+  const speakerPattern = SPEAKER_TAGS.join('|');
+  if (new RegExp(`\\[(?:${speakerPattern})\\]\\s*\\S`, 'i').test(t))
+    problems.push('Opening speaker tags must be on their own line.');
+  if (new RegExp(`\\S\\s*\\[\\/(?:${speakerPattern})\\]\\s*$`, 'im').test(t))
+    problems.push('Closing speaker tags must be on their own line.');
 
   // Notes must not be inside speakers
-  if (/\[(s1|s2)\][\s\S]*?\[note\][\s\S]*?\[\/note\][\s\S]*?\[\/\1\]/i.test(t))
+  if (new RegExp(`\\[(${speakerPattern})\\][\\s\\S]*?\\[note\\][\\s\\S]*?\\[\\/note\\][\\s\\S]*?\\[\\/\\1\\]`, 'i').test(t))
     problems.push('[note] blocks must be outside speaker sections.');
 
   // Balance with a simple stack
   const stack = [];
-  const tagRe = /\[(\/)?(s1|s2|note)\]/gi;
+  const tagRe = new RegExp(`\\[(\\/)?(${BLOCK_TAGS.join('|')})\\]`, 'gi');
   let m;
   while ((m = tagRe.exec(t))) {
     const closing = !!m[1];

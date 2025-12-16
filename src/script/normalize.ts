@@ -18,10 +18,14 @@ export function normalizeToStandardText(input = '') {
     .replace(/[\u201C\u201D]/g, '"')       // curly double quotes → "
     .replace(/\u00A0/g, ' ');              // non-breaking space → regular space
 
+  const BLOCK_TAGS = 's1|s2|g1|g2|note';
+  const CUE_TAGS = 'pause|beat|reflective pause';
+
   // Canonicalize speaker/note tags: lowercase + trim spaces inside brackets
   text = text
-    .replace(/\[\s*(s1|s2|note)\s*\]/gi, (_, tag) => `[${String(tag).toLowerCase()}]`)
-    .replace(/\[\s*\/\s*(s1|s2|note)\s*\]/gi, (_, tag) => `[/${String(tag).toLowerCase()}]`);
+    .replace(new RegExp(`\\[\\s*(${BLOCK_TAGS})\\s*\\]`, 'gi'), (_, tag) => `[${String(tag).toLowerCase()}]`)
+    .replace(new RegExp(`\\[\\s*\\/\\s*(${BLOCK_TAGS})\\s*\\]`, 'gi'), (_, tag) => `[/${String(tag).toLowerCase()}]`)
+    .replace(new RegExp(`\\[\\s*(${CUE_TAGS})\\s*\\]`, 'gi'), (_, tag) => `[${String(tag).toLowerCase()}]`);
 
   // Normalize line endings and trim stray BOM
   text = text

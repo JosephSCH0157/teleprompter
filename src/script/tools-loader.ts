@@ -33,7 +33,8 @@ try {
     try {
       const ta = document.getElementById('editor');
       const src = String(ta?.value || '');
-      const out = validateStandardTagsText(src);
+      const normalized = normalizeToStandardText(src);
+      const out = validateStandardTagsText(normalized);
       if (!silent) {
         if (typeof window.showValidation === 'function') window.showValidation(out.report);
         else alert(out.report);
