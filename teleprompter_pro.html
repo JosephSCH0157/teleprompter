@@ -696,6 +696,154 @@
       </ul>
       <p>Tweak to taste: raise threshold/end-pointing to calm jitter; lower them to speed up.</p>
     </section>
+    <section id="help-speaker-tags">
+      <h3>Speaker Tags (Strict — scripts won’t render if invalid)</h3>
+      <p>Speaker tags must be on their own lines.</p>
+      <p><strong>✅ Correct:</strong></p>
+      <pre>[s1]
+(lines of text…)
+[/s1]</pre>
+      <p><strong>❌ Wrong:</strong> Intro [s1] or [s1] Hello</p>
+      <p>Every opening tag MUST have a matching closing tag.</p>
+      <p>[s1] must close with [/s1], [s2] with [/s2], [g1] with [/g1], [g2] with [/g2].</p>
+      <p>No overlaps / no crossing tags.</p>
+      <p><strong>❌ Wrong:</strong></p>
+      <pre>[s1]
+text…
+[s2]
+text…
+[/s1]
+[/s2]</pre>
+      <p>(This will fail validation and can render as a blank script.)</p>
+      <p>Notes are hidden in the teleprompter view:</p>
+      <p>Put production-only direction inside <code>[note] … [/note]</code> on their own lines.</p>
+      <p>Visible pacing cues must be bracketed:</p>
+      <p>Use <code>[pause]</code>, <code>[beat]</code>, <code>[reflective pause]</code> inline where you want the pause to happen.</p>
+      <p>Allowed inline styling (must be closed):</p>
+      <p><code>[color=red]…[/color]</code>, <code>[bg=#112233]…[/bg]</code>, <code>[b]…[/b]</code>, <code>[i]…[/i]</code>, <code>[u]…[/u]</code></p>
+      <p>Quick wrap shortcuts: 1 / 2 / 3 / 4 wraps selection with <code>[s1]/[s2]/[g1]/[g2]</code></p>
+      <pre>[s1]
+Hey folks. This is BS with Joe. [beat]
+Tonight we’re covering one idea.
+[/s1]
+
+[s2]
+Alright. [pause]
+Let’s do it.
+[/s2]
+
+[note]
+Cold open: keep it tight, smile, 2 seconds of silence before first line.
+[/note]</pre>
+    </section>
+    <section id="help-tag-errors">
+      <h3>Tag Validator Errors (What Went Wrong &amp; How to Fix It)</h3>
+      <p>If your script fails validation, nothing will display. Every error below stops rendering by design.</p>
+      <ol>
+        <li>
+          <strong>Missing Closing Tag</strong>
+          <p><span role="img" aria-label="error">❌</span> Missing closing tag: [s1] was opened but never closed.</p>
+          <p>You started a speaker block but forgot to end it. Add the matching closing tag on its own line.</p>
+          <pre>[s1]
+This line has a speaker.
+
+✅ Fix:
+
+[s1]
+This line has a speaker.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Closing Tag Without Opening Tag</strong>
+          <p><span role="img" aria-label="error">❌</span> Orphan closing tag: [/s2] found with no matching opening tag.</p>
+          <p>You closed a speaker that was never opened. Either remove the closing tag or add the correct opening tag above it.</p>
+        </li>
+        <li>
+          <strong>Overlapping / Crossed Speaker Tags</strong>
+          <p><span role="img" aria-label="error">❌</span> Invalid tag nesting: speaker tags cannot overlap or cross.</p>
+          <p>Start one speaker, close it, then start another — no nested/parallel blocks.</p>
+          <pre>[s1]
+Joe starts talking.
+[s2]
+Brad jumps in.
+[/s1]
+[/s2]</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Joe starts talking.
+[/s1]
+
+[s2]
+Brad jumps in.
+[/s2]</pre>
+        </li>
+        <li>
+          <strong>Speaker Tag Not on Its Own Line</strong>
+          <p><span role="img" aria-label="error">❌</span> Invalid speaker tag placement: [s1] must be on its own line.</p>
+          <p>Speaker tags cannot share a row with text.</p>
+          <pre>[s1] Hey folks, this is BS with Joe.</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Hey folks, this is BS with Joe.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Unknown or Unsupported Tag</strong>
+          <p><span role="img" aria-label="error">❌</span> Unknown tag detected: [speaker1]</p>
+          <p>Only these tags are valid:</p>
+          <p>Speakers: [s1]/[s2]/[g1]/[g2]</p>
+          <p>Notes/cues/inline: [note]/[pause]/[beat]/[reflective pause]/[color=…]/[bg=#hex]/[b]/[i]/[u]</p>
+        </li>
+        <li>
+          <strong>Unclosed Inline Style Tag</strong>
+          <p><span role="img" aria-label="error">❌</span> Unclosed inline tag: [color=red] was never closed.</p>
+          <p>Inline tags must be closed just like HTML.</p>
+          <pre>[color=red]This is emphasized text.</pre>
+          <p>Correct:</p>
+          <pre>[color=red]This is emphasized text.[/color]</pre>
+        </li>
+        <li>
+          <strong>Notes Tag Misuse</strong>
+          <p><span role="img" aria-label="error">❌</span> [note] tag must open and close on its own lines.</p>
+          <p>Notes are block-level only.</p>
+          <pre>[note]Camera tight shot[/note]</pre>
+          <p>Correct:</p>
+          <pre>[note]
+Camera tight shot.
+[/note]</pre>
+        </li>
+        <li>
+          <strong>Text Outside Any Speaker Block</strong>
+          <p><span role="img" aria-label="error">❌</span> Text found outside of a speaker block.</p>
+          <p>Every spoken line must live inside [s1]/[s2]/[g1]/[g2].</p>
+          <pre>Welcome back to the show.
+[s1]
+Joe starts here.
+[/s1]</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Welcome back to the show.
+Joe starts here.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Empty Speaker Block</strong>
+          <p><span role="img" aria-label="error">❌</span> Empty speaker block: [s2] contains no text.</p>
+          <p>Either add content or delete the empty block.</p>
+        </li>
+        <li>
+          <strong>Multiple Speaker Blocks Open at Once</strong>
+          <p><span role="img" aria-label="error">❌</span> Multiple active speaker blocks detected.</p>
+          <p>Speakers are sequential — you cannot have two blocks open simultaneously.</p>
+        </li>
+        <li>
+          <strong>Validation Halt (Why the Script Is Blank)</strong>
+          <p><span role="img" aria-label="error">⛔</span> Script validation failed. Rendering halted to prevent incorrect display.</p>
+          <p>The system refuses to guess. Fix the first listed error — many others disappear after that.</p>
+        </li>
+      </ol>
+      <p>Tip: If your script suddenly appears blank, check for a missing or crossed speaker tag. One incorrect tag stops the entire render.</p>
+    </section>
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
 </div><!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
