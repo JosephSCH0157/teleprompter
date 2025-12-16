@@ -679,6 +679,8 @@ export function wireOverlays() {
             ensureHelpContents();
           }
           dlg.classList.remove('hidden');
+          dlg.removeAttribute('hidden');
+          dlg.setAttribute('aria-hidden', 'false');
           btn && btn.setAttribute('aria-expanded', 'true');
         } catch {}
       };
@@ -688,7 +690,14 @@ export function wireOverlays() {
           const dlg = $id(name + 'Overlay');
           if (!dlg) return;
           dlg.classList.add('hidden');
+          dlg.hidden = true;
+          dlg.setAttribute('aria-hidden', 'true');
           btn && btn.setAttribute('aria-expanded', 'false');
+          const focused = document.activeElement as HTMLElement | null;
+          if (focused && dlg.contains(focused)) {
+            try { btn?.focus(); } catch {}
+            try { focused.blur(); } catch {}
+          }
         } catch {}
       };
 
