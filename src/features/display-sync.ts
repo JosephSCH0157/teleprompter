@@ -38,11 +38,9 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean; 
   const text = String(rawText || '');
   const trimmed = text.trim();
   if (!trimmed) return;
-  if ((window as any).__TP_DEV_MODE) {
-    try {
-      console.log('[publishDisplayScript]', { rev, len: rawText.length });
-    } catch {}
-  }
+  try {
+    console.log('[publishDisplayScript]', { rev, len: rawText.length });
+  } catch {}
 
   const key = makeKey(text);
   if (!opts?.force && key === lastPayloadKey) return;
