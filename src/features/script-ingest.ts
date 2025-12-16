@@ -1,4 +1,3 @@
-import { publishDisplayScript } from './display-sync';
 import { applyScript } from './apply-script';
 // src/features/script-ingest.ts
 // Wire mapped-folder file selection to teleprompter content.
@@ -28,11 +27,10 @@ try {
           const m = ev.data;
           // Respond to display hydration request
           if (m?.type === 'hello' && m.client === 'display') {
-            if (__isDisplayCtx) return; // display should not echo hello
+              if (__isDisplayCtx) return; // display should not echo hello
             try {
               const snap = getCurrentScriptSnapshot();
               __docCh?.postMessage({ type: 'script', ...snap });
-              publishDisplayScript(snap.text || '', { force: true, source: 'hydrate' });
             } catch {}
             return;
           }
