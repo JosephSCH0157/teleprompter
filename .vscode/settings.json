@@ -47,5 +47,18 @@
     "topbar",
     "wscript"
   ],
+  "files.watcherExclude": {
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/.next/**": true,
+    "**/.turbo/**": true,
+    "**/coverage/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/coverage/**": true
+  ],
   "chatgpt.runCodexInWindowsSubsystemForLinux": true
 }
