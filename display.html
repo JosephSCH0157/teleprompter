@@ -415,11 +415,11 @@
                 try {
                   const msg = e?.data || {};
                   // Script snapshots from main (raw text only)
-                  if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
-                    const raw = msg.rawText ?? msg.text ?? '';
-                    if (raw) {
-                      applyScriptSnapshot(raw);
-                    }
+              if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
+                const raw = msg.rawText ?? msg.text ?? msg.html ?? '';
+                if (raw) {
+                  applyScriptSnapshot(raw);
+                }
                     applyScaled();
                     applyBottomPad();
                     return;
