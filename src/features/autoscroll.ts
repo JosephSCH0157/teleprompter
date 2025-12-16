@@ -19,6 +19,8 @@ function isDisplayWindow(): boolean {
 }
 
 const AUTO_MIN_SPEED = 0.1;
+const AUTO_SCROLL_START_SPEED = 21;
+const AUTO_SCROLL_MODES = new Set(['timed', 'wpm', 'hybrid', 'auto']);
 
 export interface AutoScrollController {
   bindUI(toggleEl: HTMLElement | null, speedInput: HTMLInputElement | null): void;
@@ -88,9 +90,9 @@ function loadBaseSpeed(): number {
     const k = vpBaseKey();
     const v = localStorage.getItem(k) || localStorage.getItem('tp_base_speed_px_s');
     const n = Number(v ?? '');
-    return Number.isFinite(n) && n > 0 ? n : 120;
+    return Number.isFinite(n) && n > 0 ? n : AUTO_SCROLL_START_SPEED;
   } catch {
-    return 120;
+    return AUTO_SCROLL_START_SPEED;
   }
 }
 
@@ -519,13 +521,13 @@ export function setSpeed(pxPerSec: number): void {
   const ctrl = initAutoscrollFeature();
   if (!ctrl) return;
 
+  const clamped = Math.max(0, Math.min(200, Number(pxPerSec) || 0));
   if (speedInput) {
-    const clamped = Math.max(0, Math.min(200, Number(pxPerSec) || 0));
     speedInput.value = String(clamped);
-    saveBaseSpeed(clamped);
-    if (ctrl.isActive()) updateToggleLabel();
-    hud('auto:set-speed', { speed: clamped });
   }
+  saveBaseSpeed(clamped);
+  if (ctrl.isActive()) updateToggleLabel();
+  hud('auto:set-speed', { speed: clamped });
 }
 
 export function inc(): void {
