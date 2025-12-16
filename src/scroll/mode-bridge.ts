@@ -6,14 +6,21 @@ import type { ScrollMode } from './scroll-brain';
 function resolveModeFromValue(value: string): ScrollMode {
   switch ((value || '').toLowerCase()) {
     case 'auto':
-    case 'wpm':
       return 'auto';
+    case 'wpm':
+      return 'wpm';
+    case 'timed':
+      return 'timed';
     case 'hybrid':
       return 'hybrid';
+    case 'asr':
+      return 'asr';
     case 'step':
       return 'step';
     case 'rehearsal':
       return 'rehearsal';
+    case 'off':
+      return 'off';
     default:
       return 'manual';
   }
