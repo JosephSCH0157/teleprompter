@@ -23,9 +23,9 @@ export function validateStandardTagsText(input = '') {
   if (badTag) problems.push('Unknown tag: ' + badTag[0]);
 
   const speakerPattern = SPEAKER_TAG_NAMES.join('|');
-  if (new RegExp(`\\[(?:${speakerPattern})\\]\\s*\\S`, 'i').test(t))
+  if (new RegExp(`\\[(?:${speakerPattern})\\][ \\t]*\\S`, 'i').test(t))
     problems.push('Opening speaker tags must be on their own line.');
-  if (new RegExp(`\\S\\s*\\[\\/(?:${speakerPattern})\\]\\s*$`, 'im').test(t))
+  if (new RegExp(`\\S[ \\t]*\\[\\/(?:${speakerPattern})\\]`, 'i').test(t))
     problems.push('Closing speaker tags must be on their own line.');
 
   // Notes must not be inside speakers
