@@ -88,7 +88,11 @@ export type DisplaySyncOpts = {
 };
 
 // One transport: BroadcastChannel ('tp_display') for raw text + handshake
+let displaySyncInstalled = false;
+
 export function installDisplaySync(opts: DisplaySyncOpts): () => void {
+  if (displaySyncInstalled) return () => {};
+  displaySyncInstalled = true;
   const chanName = opts.channelName || 'tp_display';
   let chan: BroadcastChannel | null = null;
   const isDisplay = typeof window !== 'undefined' && (window as any).__TP_FORCE_DISPLAY === true;
