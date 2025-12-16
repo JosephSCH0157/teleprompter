@@ -67,7 +67,7 @@
     "prettier": "^3.3.0",
     "puppeteer": "^24.26.1",
     "ts-jest": "^29.2.5",
-    "typescript": "^5.5.4"
+    "typescript": "^5.9.3"
   },
   "lint-staged": {
     "*.{js,jsx}": [
