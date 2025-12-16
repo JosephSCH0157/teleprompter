@@ -2,7 +2,7 @@
 import {
   BLOCK_TAG_NAMES,
   CUE_TAG_NAMES,
-  INLINE_TAG_NAMES,
+  INLINE_ATTR_PATTERNS,
   SPEAKER_TAG_NAMES,
 } from './tag-constants';
 
@@ -14,7 +14,11 @@ export function validateStandardTagsText(input = '') {
   const t = String(input || '');
   const problems = [];
 
-  const allowedTagPattern = [...BLOCK_TAG_NAMES, ...CUE_TAG_NAMES, ...INLINE_TAG_NAMES].join('|');
+  const allowedTagPattern = [
+    ...BLOCK_TAG_NAMES,
+    ...CUE_TAG_NAMES,
+    ...INLINE_ATTR_PATTERNS,
+  ].join('|');
   const badTag = t.match(new RegExp(`\\[(?!\\/?(?:${allowedTagPattern})\\b)[^\\]]+\\]`, 'i'));
   if (badTag) problems.push('Unknown tag: ' + badTag[0]);
 
