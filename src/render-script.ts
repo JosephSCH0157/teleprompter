@@ -194,6 +194,17 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try { (root as any).dataset.lineCount = String(lines.length); } catch {}
   try { root.scrollTop = 0; } catch {}
 
+  try {
+    if ((window as any).__TP_DEV || (window as any).__TP_DEV1) {
+      const lineEls = Array.from(root.querySelectorAll<HTMLElement>('.line'));
+      if (lineEls.length && lineEls.every((el) => !el.dataset.speaker)) {
+        console.warn('[render] no speaker markers applied to rendered lines', {
+          lineCount: lineEls.length,
+        });
+      }
+    }
+  } catch {}
+
   // Snap the first line to the marker offset so the top aligns with the active line marker
   try {
     const firstLine = root.querySelector('.line') as HTMLElement | null;
