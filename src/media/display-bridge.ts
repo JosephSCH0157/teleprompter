@@ -47,7 +47,18 @@ export {};
         window.__tpDisplayDebug.push({ ts: now, t: now, tag: 'openDisplay()', data: undefined });
         console.info('[display-bridge] openDisplay()');
       } catch {}
-      displayWin = window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
+      const displayUrl = (() => {
+        try {
+          return new URL('display.html', window.location.href).toString();
+        } catch {
+          return 'display.html';
+        }
+      })();
+      try { console.debug('[display-bridge] opening', displayUrl); } catch {}
+      displayWin = window.open(displayUrl, 'TeleprompterDisplay', 'width=1000,height=700');
+      if (displayWin && displayWin.location && displayWin.location.href === 'about:blank') {
+        try { displayWin.location.href = displayUrl; } catch {}
+      }
       try {
         window.__tpDisplayDebug = window.__tpDisplayDebug || [];
         const now2 = Date.now();
