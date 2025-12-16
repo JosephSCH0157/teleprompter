@@ -108,6 +108,21 @@ function saveBaseSpeed(pxPerSec: number): void {
   }
 }
 
+function getStoredBaseSpeed(): number | null {
+  try {
+    const k = vpBaseKey();
+    const raw = localStorage.getItem(k) ?? localStorage.getItem('tp_base_speed_px_s') ?? '';
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasStoredBaseSpeed(): boolean {
+  return getStoredBaseSpeed() !== null;
+}
+
 function currentSpeedPx(): number {
   const store = (window as any).__tpStore || appStore;
   const base = (() => {
@@ -545,7 +560,9 @@ function handleScrollModeChange(mode: string | null | undefined): void {
   }
   if (lastAutoModeNormalized === normalized) return;
   lastAutoModeNormalized = normalized;
-  setSpeed(AUTO_SCROLL_START_SPEED);
+  if (!hasStoredBaseSpeed()) {
+    setSpeed(AUTO_SCROLL_START_SPEED);
+  }
 }
 
 try {
