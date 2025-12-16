@@ -157,7 +157,7 @@ migrateAutoRecordFlag();
 function normalizeScrollMode(mode: string | null | undefined): string {
   const v = String(mode || '').trim().toLowerCase();
   if (!v) return 'hybrid';
-  if (v === 'manual') return 'hybrid';
+  if (v === 'manual') return 'step';
   return v;
 }
 

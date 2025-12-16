@@ -399,9 +399,9 @@ let asrRejectionToastShown = false;
 let lastAsrReadyState: boolean | null = null;
 
 function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
-  const value = String(mode || '').trim().toLowerCase() as UiScrollMode;
-  if (String(mode || '').toLowerCase() === 'manual') return 'hybrid';
-  return (ALLOWED_SCROLL_MODES.includes(value) ? value : 'hybrid');
+  const raw = String(mode || '').trim().toLowerCase();
+  if (raw === 'manual') return 'step';
+  return (ALLOWED_SCROLL_MODES.includes(raw as UiScrollMode) ? (raw as UiScrollMode) : 'hybrid');
 }
 
 function getSafeFallbackMode(): UiScrollMode {
@@ -681,6 +681,8 @@ function initScrollModeUiSync(): void {
       const t = ev.target as HTMLSelectElement | null;
       if (!t || t.id !== SCROLL_MODE_SELECT_ID) return;
       const mode = normalizeUiScrollMode(t.value);
+      try { localStorage.setItem('scrollMode', mode); } catch {}
+      try { localStorage.setItem('tp_scroll_mode', mode); } catch {}
       try { appStore.set?.('scrollMode', mode as any); } catch {}
       applyUiScrollMode(mode, { skipStore: true, source: 'user', allowToast: true });
     }, { capture: true });

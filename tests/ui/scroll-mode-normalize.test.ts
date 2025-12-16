@@ -5,12 +5,12 @@ describe('scroll mode migration and normalization', () => {
     jest.resetModules();
   });
 
-  test('legacy "manual" persists as hybrid via canonical key', () => {
+  test('legacy "manual" persists as step via canonical key', () => {
     localStorage.setItem('scrollMode', 'manual');
     jest.isolateModules(() => {
       const { appStore } = require('../../src/state/app-store') as { appStore: any };
-      expect(appStore.get('scrollMode')).toBe('hybrid');
-      expect(localStorage.getItem('scrollMode')).toBe('hybrid');
+      expect(appStore.get('scrollMode')).toBe('step');
+      expect(localStorage.getItem('scrollMode')).toBe('step');
     });
   });
 
