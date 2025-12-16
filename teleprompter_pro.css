@@ -139,10 +139,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
     /* Reserve fixed layout slots to prevent layout shifts (CLS) */
-    :root{ --topbar-h:56px; --statusbar-h:28px; --sidebar-w:320px; --topbar-offset:2px; }
-    /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
-    .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:var(--topbar-offset);background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10;height:auto;min-height:var(--topbar-h);flex-wrap:wrap;box-sizing:border-box}
-    .page-tabs,.legend{flex:1 0 100%}
+    :root{ --tp-topbar-h:56px; --topbar-h:var(--tp-topbar-h); --statusbar-h:28px; --sidebar-w:320px; --topbar-offset:2px; }
+      /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
+      .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:var(--topbar-offset);background:linear-gradient(var(--bg),transparent);padding:6px 10px;border-bottom:1px solid var(--edge);z-index:10;height:auto;min-height:var(--tp-topbar-h);flex-wrap:nowrap;overflow-x:auto;box-sizing:border-box}
+      .topbar .chip{padding:2px 8px;font-size:12px}
+      .topbar button{padding:6px 10px}
+      .page-tabs,.legend{flex:0 0 auto;white-space:nowrap}
+      @media (max-width:720px){.topbar{flex-wrap:wrap}}
     .topbar strong{letter-spacing:.2px}
 
     /* Robust topbar hairline / overlay
@@ -210,7 +213,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* app contains sidebar + main viewer; topbar is outside .app in the DOM, so keep rows out of this grid */
     .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;flex:1 1 auto;min-height:0}
-    .sidebar{width:var(--sidebar-w); position: sticky; top: var(--topbar-h); align-self: start; height: calc(100vh - var(--topbar-h) - var(--statusbar-h)); overflow:auto}
+    .app,.page-panel,#viewerWrap{padding-top:var(--tp-topbar-h)}
+    .sidebar,#leftCol,#controlsCol{width:var(--sidebar-w); position: sticky; top: var(--tp-topbar-h); align-self: start; height: calc(100vh - var(--tp-topbar-h) - var(--statusbar-h)); overflow:auto}
     .statusbar{height:var(--statusbar-h);box-sizing:border-box}
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
     .panel h2{margin:0 0 12px;font-size:18px}
@@ -513,9 +517,9 @@ body:has(#settingsOverlay:not(.hidden)) #scriptsQuickRow { opacity:.45; pointer-
 /* Make viewer a constrained scroll area in normal mode */
 #viewer {
     /* Use dynamic viewport block to avoid mobile URL bar tricks; fallback below */
-    block-size: calc(100dvb - var(--topbar-h) - var(--statusbar-h));
+    block-size: calc(100dvb - var(--tp-topbar-h) - var(--statusbar-h));
     /* Fallback if dvb isn't supported: */
-    height: calc(100vh - var(--topbar-h) - var(--statusbar-h));
+    height: calc(100vh - var(--tp-topbar-h) - var(--statusbar-h));
 }
 
 /* Present Mode already overrides #viewer to full-viewport; keep that rule last */

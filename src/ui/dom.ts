@@ -61,6 +61,36 @@ export function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
   try { return document.getElementById(id) as T | null; } catch { return null; }
 }
 
+export function wireTopbarHeightVar(): void {
+  const topbar = document.querySelector<HTMLElement>('.topbar');
+  if (!topbar) return;
+
+  const apply = () => {
+    try {
+      const h = topbar.offsetHeight;
+      if (!h) return;
+      const root = document.documentElement;
+      root.style.setProperty('--tp-topbar-h', `${h}px`);
+      root.style.setProperty('--topbar-h', `${h}px`);
+    } catch {}
+  };
+
+  apply();
+  let ro: ResizeObserver | null = null;
+  try {
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => apply());
+      ro.observe(topbar);
+    }
+  } catch {}
+  try { window.addEventListener('load', apply, { passive: true }); } catch {}
+  try {
+    if (ro) {
+      window.addEventListener('beforeunload', () => { try { ro?.disconnect(); } catch {} }, { once: true });
+    }
+  } catch {}
+}
+
 function logDisplayDebug(tag: string, data?: unknown) {
   try {
     const arr = (window.__tpDisplayDebug = window.__tpDisplayDebug || []);

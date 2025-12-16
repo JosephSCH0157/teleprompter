@@ -887,7 +887,7 @@ import { bindCoreUI } from './wiring/ui-binds';
 import { initHudController } from './hud/controller';
 import { initHud } from './hud/loader';
 import { wireHudToggle } from './hud/toggle';
-import { bindStaticDom, initLegend } from './ui/dom';
+import { bindStaticDom, initLegend, wireTopbarHeightVar } from './ui/dom';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
@@ -1568,9 +1568,10 @@ try {
 									return '';
 								} catch { return ''; }
   							},
-						});
-						try { initLegend(appStore); } catch {}
-					} catch {}
+      });
+      try { initLegend(appStore); } catch {}
+      try { wireTopbarHeightVar(); } catch {}
+    } catch {}
 
 					// Typography
 					try {
