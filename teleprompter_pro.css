@@ -140,6 +140,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* Reserve fixed layout slots to prevent layout shifts (CLS) */
     :root{ --tp-topbar-h:56px; --topbar-h:var(--tp-topbar-h); --statusbar-h:28px; --sidebar-w:320px; --topbar-offset:2px; }
+    html,body{height:100%;overflow:hidden}
       /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
       .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:var(--topbar-offset);background:linear-gradient(var(--bg),transparent);padding:6px 10px;border-bottom:1px solid var(--edge);z-index:10;height:auto;min-height:var(--tp-topbar-h);flex-wrap:nowrap;overflow-x:auto;box-sizing:border-box}
       .topbar .chip{padding:2px 8px;font-size:12px}
@@ -213,6 +214,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* app contains sidebar + main viewer; topbar is outside .app in the DOM, so keep rows out of this grid */
     .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;flex:1 1 auto;min-height:0}
+    .app,#wrap{height:100%}
     .app,.page-panel,#viewerWrap{padding-top:var(--tp-topbar-h)}
     .sidebar,#leftCol,#controlsCol{width:var(--sidebar-w); position: sticky; top: var(--tp-topbar-h); align-self: start; height: calc(100vh - var(--tp-topbar-h) - var(--statusbar-h)); overflow:auto}
     .statusbar{height:var(--statusbar-h);box-sizing:border-box}
@@ -520,6 +522,12 @@ body:has(#settingsOverlay:not(.hidden)) #scriptsQuickRow { opacity:.45; pointer-
     block-size: calc(100dvb - var(--tp-topbar-h) - var(--statusbar-h));
     /* Fallback if dvb isn't supported: */
     height: calc(100vh - var(--tp-topbar-h) - var(--statusbar-h));
+    overflow:auto;
+}
+#viewer,#viewerWrap,#wrap .script,#viewer .script,.viewer {
+    overflow:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
 }
 
 /* Present Mode already overrides #viewer to full-viewport; keep that rule last */
