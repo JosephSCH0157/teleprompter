@@ -611,6 +611,7 @@ function installScrollRouter(opts) {
   }
   
   let userEnabled = false;
+  let userIntentOn = false;
   let dbGate = false;
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
@@ -639,7 +640,8 @@ function installScrollRouter(opts) {
       const gate = userEnabled ? enabledNow ? "on" : "paused" : "manual";
       const speed = getCurrentSpeed();
       const payload = {
-        intentOn: !!userEnabled,
+        mode: state2.mode,
+        intentOn: !!userIntentOn,
         gate,
         speed,
         label: "",
@@ -929,10 +931,20 @@ function installScrollRouter(opts) {
     window.addEventListener("tp:autoIntent", (e) => {
       try {
         const on = !!(e && e.detail && (e.detail.on ?? e.detail.enabled));
+        userIntentOn = on;
         userEnabled = !!on;
         applyGate();
       } catch {}
     });
+    const pending = (window as any).__tpAutoIntentPending;
+    if (typeof pending === "boolean") {
+      userIntentOn = pending;
+      userEnabled = pending;
+      applyGate();
+      try {
+        delete (window as any).__tpAutoIntentPending;
+      } catch {}
+    }
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;

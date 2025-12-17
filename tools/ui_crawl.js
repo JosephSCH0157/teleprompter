@@ -599,7 +599,7 @@ const cp = require('child_process');
         } catch {}
       }
       async function probeAutoStateAndMove(page) {
-        const res = { sawEvent: false, intentOn: false, gate: '', speed: 0, label: '', chip: '', delta: 0 };
+        const res = { sawEvent: false, intentOn: false, gate: '', speed: 0, label: '', chip: '', delta: 0, mode: '' };
         await page.evaluate(() => {
           // subscribe to router signal
           // @ts-ignore
@@ -631,7 +631,16 @@ const cp = require('child_process');
             const ds = (btn && btn.getAttribute && btn.getAttribute('data-state')) || (chip && chip.getAttribute && chip.getAttribute('data-state')) || '';
             const gate = ds === 'on' ? 'on' : (ds === 'paused' ? 'paused' : 'manual');
             const speed = (function(){ try { return Number(localStorage.getItem('tp_auto_speed')||'0')||0; } catch { return 0; } })();
-            const payload = { intentOn: ds === 'on', gate, speed, label: (btn && btn.textContent||'').trim(), chip: (chip && chip.textContent||'').trim() };
+            const modeEl = document.getElementById('scrollMode') || document.querySelector('[data-auto-mode]');
+            const mode = (modeEl && modeEl.value) || 'hybrid';
+            const payload = {
+              intentOn: ds === 'on',
+              gate,
+              speed,
+              mode,
+              label: (btn && btn.textContent||'').trim(),
+              chip: (chip && chip.textContent||'').trim(),
+            };
             // @ts-ignore
             if (typeof window.__tp_onAutoStateChange === 'function') window.__tp_onAutoStateChange(payload);
             // Also emit the DOM event variant for any listeners
@@ -650,6 +659,7 @@ const cp = require('child_process');
           res.speed = payload.speed || 0;
           res.label = payload.label || '';
           res.chip  = payload.chip  || '';
+          res.mode  = payload.mode  || 'hybrid';
         }
         return res;
       }

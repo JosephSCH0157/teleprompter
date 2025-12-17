@@ -43,6 +43,7 @@ declare global {
     tp_hud?: (evt: string, data?: unknown) => void;
 
     __tpMomentaryHandlers?: { onKey?: (e: KeyboardEvent) => void } | null;
+    __tpAutoIntentPending?: boolean;
   }
 }
 
@@ -73,6 +74,15 @@ function allowAuto(): boolean {
   } catch {
     return false;
   }
+}
+
+function dispatchAutoIntent(on: boolean): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.__tpAutoIntentPending = on;
+    }
+    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
+  } catch {}
 }
 
 // --- Helpers: base speed persistence (mirrors legacy behavior) -------------
@@ -428,13 +438,18 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
       incBtn?.addEventListener('click', () => tweakSpeed(+0.5));
 
       // Toggle button
-      if (toggleEl && !toggleEl.hasAttribute('data-autoscroll-wired')) {
-        toggleEl.setAttribute('data-autoscroll-wired', '1');
-        toggleEl.addEventListener('click', () => {
-          if (active) stop();
-          else start();
-        });
-      }
+        if (toggleEl && !toggleEl.hasAttribute('data-autoscroll-wired')) {
+          toggleEl.setAttribute('data-autoscroll-wired', '1');
+          toggleEl.addEventListener('click', () => {
+            if (active) {
+              stop();
+              dispatchAutoIntent(false);
+            } else {
+              start();
+              dispatchAutoIntent(true);
+            }
+          });
+        }
 
       // Initial label
       updateToggleLabel();

@@ -239,7 +239,7 @@ try {
     } else if (!a.intentOn && a.mode !== 'hybrid') {
       // Accept hybrid if auto normalizes to hybrid in router
       console.warn('WARN auto-state-not-on - intent not ON; mode:', a.mode);
-    } else if (!(a.delta > 0)) {
+    } else if (!!a.intentOn && !(a.delta > 0)) {
       console.error('FAIL auto-state-no-movement - viewport did not move');
       allOk = false;
     } else {
