@@ -20,6 +20,7 @@ try { (window as any).__TP_BOOT_OWNER = TS_BOOT_OWNER; } catch {}
 import './boot/compat-ids';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
+import { speechStore, type SpeechState } from './state/speech-store';
 import { initSession } from './state/session';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
@@ -421,37 +422,44 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 			try { store.set?.(k as any, (app as any)[k]); } catch {}
 		});
 		currentSettings = applySettingsPatch({ app: { ...(currentSettings.app || {}) } }, { app }) || { app: {} };
-		try {
-			const asrSettings = (settings as any).asrSettings;
-			if (asrSettings && typeof asrSettings === 'object') {
-				const mapping: Record<string, string> = {
-					engine: 'asr.engine',
-					language: 'asr.language',
-					useInterimResults: 'asr.useInterimResults',
-					filterFillers: 'asr.filterFillers',
-					threshold: 'asr.threshold',
-					endpointingMs: 'asr.endpointMs',
-				};
-				Object.keys(mapping).forEach((src) => {
-					const value = (asrSettings as any)[src];
-					if (typeof value !== 'undefined') {
-						try { store.set?.(mapping[src as keyof typeof mapping] as any, value as any); } catch {}
+			try {
+				const asrSettings = (settings as any).asrSettings;
+				if (asrSettings && typeof asrSettings === 'object') {
+					const mapping: Record<string, string> = {
+						engine: 'asr.engine',
+						language: 'asr.language',
+						useInterimResults: 'asr.useInterimResults',
+						filterFillers: 'asr.filterFillers',
+						threshold: 'asr.threshold',
+						endpointingMs: 'asr.endpointMs',
+					};
+					const patch: Partial<SpeechState> = {};
+					Object.keys(mapping).forEach((src) => {
+						const value = (asrSettings as any)[src];
+						if (typeof value !== 'undefined') {
+							try { store.set?.(mapping[src as keyof typeof mapping] as any, value as any); } catch {}
+							if (src in asrSettings) {
+								(patch as any)[src] = value;
+							}
+						}
+					});
+					if (Object.keys(patch).length) {
+						try { speechStore.set(patch); } catch {}
 					}
-				});
-			}
-			const asrProfiles = (settings as any).asrProfiles;
-			if (Array.isArray(asrProfiles)) {
-				const map: Record<string, unknown> = {};
-				asrProfiles.forEach((profile) => {
-					if (profile && typeof profile === 'object' && 'id' in profile) {
-						map[(profile as any).id] = profile;
-					}
-				});
-				try { store.set?.('asrProfiles', map); } catch {}
-			}
-			} catch {
-				// ignore ASR hydrate issues
-			}
+				}
+				const asrProfiles = (settings as any).asrProfiles;
+				if (Array.isArray(asrProfiles)) {
+					const map: Record<string, unknown> = {};
+					asrProfiles.forEach((profile) => {
+						if (profile && typeof profile === 'object' && 'id' in profile) {
+							map[(profile as any).id] = profile;
+						}
+					});
+					try { store.set?.('asrProfiles', map); } catch {}
+				}
+				} catch {
+					// ignore ASR hydrate issues
+				}
 		recordAsrApplied('hydrate');
 	} catch {
 		// ignore apply failures
@@ -832,6 +840,7 @@ function initScrollModeUiSync(): void {
 
   const applyOverlayMode = (mode: UiScrollMode) => {
     try {
+      if (mode !== 'asr') return;
       applyUiScrollMode(mode, { skipStore: true, allowToast: false, source: 'asr' });
     } catch {}
   };
