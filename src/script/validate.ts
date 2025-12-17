@@ -28,9 +28,30 @@ export function validateStandardTagsText(input = '') {
   if (new RegExp(`\\S[ \\t]*\\[\\/(?:${speakerPattern})\\]`, 'i').test(t))
     problems.push('Closing speaker tags must be on their own line.');
 
-  // Notes must not be inside speakers
-  if (new RegExp(`\\[(${speakerPattern})\\][\\s\\S]*?\\[note\\][\\s\\S]*?\\[\\/note\\][\\s\\S]*?\\[\\/\\1\\]`, 'i').test(t))
-    problems.push('[note] blocks must be outside speaker sections.');
+  const speakerEventRe = new RegExp(
+    `\\[(\\/)?(${speakerPattern})\\]|\\[note\\]|\\[\\/note\\]`,
+    'gi',
+  );
+  const speakerStack: string[] = [];
+  let speakerEventMatch: RegExpExecArray | null;
+  while ((speakerEventMatch = speakerEventRe.exec(t))) {
+    const token = speakerEventMatch[0].toLowerCase();
+    if (token === '[note]') {
+      if (speakerStack.length) {
+        problems.push('[note] blocks must be outside speaker sections.');
+        break;
+      }
+    } else if (token === '[/note]') {
+      continue;
+    } else {
+      const closing = !!speakerEventMatch[1];
+      if (!closing) {
+        speakerStack.push(speakerEventMatch[2].toLowerCase());
+      } else if (speakerStack.length) {
+        speakerStack.pop();
+      }
+    }
+  }
 
   // Balance with a simple stack
   const stack = [];
