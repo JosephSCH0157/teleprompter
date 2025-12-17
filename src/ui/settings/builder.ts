@@ -123,6 +123,10 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <input id="asrEndMs" type="number" min="200" step="50" title="How long ASR waits after silence before finalizing a phrase. Lower reacts faster; higher is smoother but delayed.">
           </label>
         </div>
+        <div class="settings-small asr-status-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+          <span id="asrSaveStatus" aria-live="polite"></span>
+          <span id="asrAppliedStatus" aria-live="polite"></span>
+        </div>
       </section>
 
       <h4>Hybrid Gate</h4>
@@ -326,4 +330,3 @@ export function addAsrWizardCard(root: HTMLElement) {
     container.appendChild(sec);
   } catch {}
 }
-

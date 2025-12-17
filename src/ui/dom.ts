@@ -5,6 +5,7 @@ import { getScrollWriter } from '../scroll/scroll-writer';
 import { setSessionPhase } from '../state/session';
 import { applyScript } from '../features/apply-script';
 import { getNextSampleScript } from '../content/sample-scripts';
+import { flushPendingSettingsEdits } from '../ui/settings';
 
 
 type AnyFn = (...args: any[]) => any;
@@ -719,6 +720,9 @@ export function wireOverlays() {
           const btn = $id(name + 'Btn');
           const dlg = $id(name + 'Overlay');
           if (!dlg) return;
+          if (name === 'settings') {
+            try { flushPendingSettingsEdits(); } catch {}
+          }
           dlg.classList.add('hidden');
           dlg.hidden = true;
           dlg.setAttribute('aria-hidden', 'true');
@@ -758,12 +762,8 @@ export function wireOverlays() {
       window.addEventListener('keydown', (e) => {
         try {
           if (e.key !== 'Escape') return;
-          $id('shortcutsOverlay')?.classList.add('hidden');
-          $id('settingsOverlay')?.classList.add('hidden');
-          $id('shortcutsBtn')?.setAttribute('aria-expanded','false');
-          $id('settingsBtn')?.setAttribute('aria-expanded','false');
-          try { document.querySelector('[data-action="help-open"]')?.setAttribute('aria-expanded','false'); } catch {}
-          try { document.querySelector('[data-action\="settings-open\"]')?.setAttribute('aria-expanded','false'); } catch {}
+          close('shortcuts');
+          close('settings');
         } catch {}
       });
     } catch {}

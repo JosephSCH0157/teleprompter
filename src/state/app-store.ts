@@ -45,6 +45,8 @@ const HUD_ENABLED_KEY = 'tp_hud_enabled_v1';
 const OVERLAY_KEY = 'tp_overlay_v1';
 const CAMERA_KEY = 'tp_camera_enabled_v1';
 
+type SaveStatusState = 'idle' | 'saving' | 'saved' | 'failed';
+
 const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   settingsTab: SETTINGS_TAB_KEY,
   micDevice: DEVICE_KEY,
@@ -135,6 +137,14 @@ export type AppStoreState = {
   'asr.endpointMs': number;
   asrProfiles: Record<string, unknown>;
   asrActiveProfileId: string | null;
+  asrLastAppliedAt: number;
+  asrLastAppliedSummary: Record<string, unknown>;
+  asrLastApplyOk: boolean;
+  settingsSaveStatus: {
+    state: SaveStatusState;
+    at: number;
+    error?: string;
+  };
 
   // Scroll router (persisted)
   scrollMode: string;
@@ -384,6 +394,10 @@ function buildInitialState(): AppStoreState {
       } catch {}
       return null;
     })(),
+    asrLastAppliedAt: 0,
+    asrLastAppliedSummary: {},
+    asrLastApplyOk: false,
+    settingsSaveStatus: { state: 'idle', at: 0 },
     overlay: (() => {
       try {
         const v = localStorage.getItem(OVERLAY_KEY) || 'none';
@@ -576,6 +590,18 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   }
   if (state.asrActiveProfileId && typeof state.asrActiveProfileId !== 'string') {
     state.asrActiveProfileId = null;
+  }
+  if (typeof state.asrLastAppliedAt !== 'number') {
+    state.asrLastAppliedAt = 0;
+  }
+  if (!state.asrLastAppliedSummary || typeof state.asrLastAppliedSummary !== 'object') {
+    state.asrLastAppliedSummary = {};
+  }
+  if (typeof state.asrLastApplyOk !== 'boolean') {
+    state.asrLastApplyOk = false;
+  }
+  if (!state.settingsSaveStatus || typeof state.settingsSaveStatus !== 'object') {
+    state.settingsSaveStatus = { state: 'idle', at: 0 };
   }
   return state;
 }

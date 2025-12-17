@@ -4,6 +4,7 @@ import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './bu
 import { bindHybridGateSetting } from './hybridGate';
 import { bindTypographyPanel } from './typographyPanel';
 import { wireSettingsDynamic } from './wire';
+import { flushAsrSettingsToStore } from './settings-asr';
 import { createAppStore, type AppStore } from '../../state/app-store';
 import { wireTypographyPresets } from './typography-presets';
 
@@ -185,6 +186,10 @@ export function syncSettingsValues(store?: AppStore | null) {
       if (settingsMic && micVal != null) settingsMic.value = String(micVal);
     } catch {}
   } catch {}
+}
+
+export function flushPendingSettingsEdits(store?: AppStore | null) {
+  flushAsrSettingsToStore(store);
 }
 
 // Minimal runtime shim for legacy code during migration

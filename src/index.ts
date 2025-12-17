@@ -313,6 +313,61 @@ function devLog(...args: any[]) {
 	try { console.debug('[settings]', ...args); } catch {}
 }
 
+type SettingsSaveState = 'idle' | 'saving' | 'saved' | 'failed';
+
+type SettingsSaveStatus = {
+	state: SettingsSaveState;
+	at: number;
+	error?: string;
+};
+
+type AsrHandshakeSummary = {
+	engine?: string;
+	lang?: string;
+	profileName?: string;
+	reason?: string;
+};
+
+function setSettingsSaveStatus(status: SettingsSaveStatus) {
+	try {
+		appStore.set?.('settingsSaveStatus', status as any);
+	} catch {}
+}
+
+function resolveActiveAsrProfileSummary(): string {
+	try {
+		const profiles = appStore.get?.('asrProfiles') as Record<string, any> | undefined;
+		const active = (appStore.get?.('asrActiveProfileId') || '') as string;
+		const candidate = active && profiles ? profiles[active] : null;
+		if (candidate && typeof candidate === 'object') {
+			return (candidate.label || candidate.name || active || 'default') as string;
+		}
+		return active || 'default';
+	} catch {
+		return 'default';
+	}
+}
+
+function recordAsrApplied(reason?: string) {
+	try {
+		const summary: AsrHandshakeSummary = {
+			engine: appStore.get?.('asr.engine'),
+			lang: appStore.get?.('asr.language'),
+			profileName: resolveActiveAsrProfileSummary(),
+			reason,
+		};
+		appStore.set?.('asrLastAppliedAt', Date.now() as any);
+		appStore.set?.('asrLastAppliedSummary', summary as any);
+		appStore.set?.('asrLastApplyOk', true as any);
+	} catch {}
+}
+
+try {
+	window.addEventListener('tp:asrChanged', () => {
+		recordAsrApplied('asr-changed');
+	});
+} catch {}
+
 function ensureSettingsSavedDot(): HTMLElement | null {
 	try {
 		const btn = document.getElementById('settingsBtn');
@@ -394,9 +449,10 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 				});
 				try { store.set?.('asrProfiles', map); } catch {}
 			}
-		} catch {
-			// ignore ASR hydrate issues
-		}
+			} catch {
+				// ignore ASR hydrate issues
+			}
+		recordAsrApplied('hydrate');
 	} catch {
 		// ignore apply failures
 	} finally {
@@ -429,26 +485,29 @@ function queueProfileSave(userId: string, store: typeof appStore) {
 		try { clearTimeout(saveTimer); } catch {}
 	}
 	devLog('save:queue');
-	saveTimer = window.setTimeout(async () => {
-		saveTimer = null;
-		if (saving) return;
-		saving = true;
-		try {
-			const merged = snapshotAppSettings(store);
-			currentSettings = merged;
-			const { rev } = await saveProfileSettings({
-				userId,
-				mergedSettings: merged,
-				expectedRev: profileRev,
-			});
-			profileRev = rev;
-			devLog('save:flushed', { rev });
-			if (lastUserChange && Date.now() - lastUserChange <= RECENT_CHANGE_WINDOW_MS) {
-				flashSettingsSaved();
-			}
-		} catch (err) {
-			// On conflict or failure, try a single refresh
+		saveTimer = window.setTimeout(async () => {
+			saveTimer = null;
+			if (saving) return;
+			saving = true;
 			try {
+				const merged = snapshotAppSettings(store);
+				currentSettings = merged;
+				setSettingsSaveStatus({ state: 'saving', at: Date.now() });
+				const { rev } = await saveProfileSettings({
+					userId,
+					mergedSettings: merged,
+					expectedRev: profileRev,
+				});
+				profileRev = rev;
+				devLog('save:flushed', { rev });
+				if (lastUserChange && Date.now() - lastUserChange <= RECENT_CHANGE_WINDOW_MS) {
+					flashSettingsSaved();
+				}
+				setSettingsSaveStatus({ state: 'saved', at: Date.now() });
+			} catch (err) {
+				setSettingsSaveStatus({ state: 'failed', at: Date.now(), error: String(err) });
+				// On conflict or failure, try a single refresh
+				try {
 				const { settings, rev } = await loadProfileSettings(userId);
 				profileRev = rev;
 				applySettingsToStore(settings, store);
