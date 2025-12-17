@@ -1138,7 +1138,6 @@ import { initObsUI } from './wiring/obs-wiring';
 import { bindCoreUI } from './wiring/ui-binds';
 // Render + ingest helpers
 // Side-effect debug / DOM helpers (legacy parity)
-import { initHudController } from './hud/controller';
 import { initHud } from './hud/loader';
 import { wireHudToggle } from './hud/toggle';
 import { bindStaticDom, initLegend, wireTopbarHeightVar } from './ui/dom';
@@ -1210,7 +1209,6 @@ function _ensureHud(store: any): void {
 			store,
 			root,
 		});
-		initHudController();
 		wireHudToggle();
 	} catch {
 		// HUD is optional; ignore failures
@@ -1644,7 +1642,6 @@ export async function boot() {
           } catch {}
           if (ENABLE_HUD && !isDisplayContext()) {
             try { _ensureHud(appStore); } catch {}
-            try { initHudController(); } catch {}
             try { wireHudToggle(); } catch {}
           }
           try { initObsToggle(); } catch {}

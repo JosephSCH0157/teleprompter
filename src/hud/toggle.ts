@@ -36,16 +36,38 @@ function wireButtons() {
   });
 }
 
+let hotkeysWired = false;
+
+function isTypingElement(target: EventTarget | null): boolean {
+  try {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select';
+  } catch {
+    return false;
+  }
+}
+
+function isOverlayOpen(): boolean {
+  try {
+    const settings = document.getElementById('settingsOverlay');
+    return !!settings && !settings.classList.contains('hidden');
+  } catch {
+    return false;
+  }
+}
+
 function wireHotkeys() {
+  if (hotkeysWired) return;
+  hotkeysWired = true;
   try {
     document.addEventListener('keydown', (e) => {
-      const key = e.key || '';
-      const lower = key.toLowerCase();
-      const isToggleKey =
-        key === 'Escape' ||
-        key === '`' ||
-        key === '~' ||
-        (e.ctrlKey && lower === 'p');
+      if (isTypingElement(e.target)) return;
+      if (isOverlayOpen()) return;
+      const lower = (e.key || '').toLowerCase();
+      const isToggleKey = e.ctrlKey && e.shiftKey && lower === 'h';
       if (!isToggleKey) return;
       try { e.preventDefault(); } catch {}
       toggleHudEnabled();
