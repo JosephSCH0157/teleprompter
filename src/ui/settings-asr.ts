@@ -169,8 +169,19 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
       saveStatusTimer = null;
     }
   };
+  const isMounted = () => {
+    try {
+      return card.isConnected && document.contains(card);
+    } catch {
+      return false;
+    }
+  };
 
   const renderSaveStatus = () => {
+    if (!isMounted()) {
+      clearSaveTimer();
+      return;
+    }
     if (!saveEl) return;
     const status = resolved?.get?.('settingsSaveStatus') as SettingsSaveStatus | undefined;
     if (!status || status.state === 'idle') {
@@ -212,6 +223,7 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
   };
 
   const renderAppliedStatus = () => {
+    if (!isMounted()) return;
     if (!appliedEl) return;
     const appliedAt = (resolved?.get?.('asrLastAppliedAt') as number) || 0;
     const summary = resolved?.get?.('asrLastAppliedSummary') as Record<string, unknown> | undefined;
