@@ -144,7 +144,7 @@ export function applyUiScrollMode(
       break;
 
     case 'asr':
-      brainMode = 'hybrid';
+      brainMode = 'asr';
       clampMode = 'follow';
       asrEnabled = true;
       autoEnabled = false;

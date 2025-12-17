@@ -770,7 +770,7 @@ function applyUiScrollMode(
       break;
 
     case 'asr':
-      brainMode = 'hybrid';    // auto + ASR corrections
+      brainMode = 'asr';       // ASR-only mode (speech-driven, no auto)
       clampMode = 'follow';    // monotonic clamp: no back-jogs
       asrEnabled = true;
       autoEnabled = false;      // Defer auto until session/router enables it

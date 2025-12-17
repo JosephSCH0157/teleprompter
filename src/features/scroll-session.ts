@@ -1,5 +1,9 @@
 import { appStore } from '../state/app-store';
 import { getSession, type SessionPhase } from '../state/session';
+import {
+  normalizeScrollMode,
+  shouldAutoStartForMode,
+} from './scroll/scroll-mode-utils';
 
 function startAutoScroll(): void {
   try {
@@ -50,7 +54,13 @@ function maybeStartOnLive(phase: SessionPhase): void {
     try { console.debug('[scroll-session] auto-scroll disabled for live phase'); } catch {}
     return;
   }
-  try { console.debug('[scroll-session] live phase with auto-on-live; starting auto-scroll'); } catch {}
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const canonicalMode = normalizeScrollMode(rawMode);
+  if (!shouldAutoStartForMode(rawMode)) {
+    try { console.debug('[scroll-session] auto-scroll not allowed for mode', canonicalMode); } catch {}
+    return;
+  }
+  try { console.debug('[scroll-session] live phase with auto-on-live; starting auto-scroll', { mode: canonicalMode }); } catch {}
   startAutoScroll();
 }
 
@@ -65,8 +75,8 @@ export function initScrollSessionRouter(): void {
 
   try {
     window.addEventListener('tp:preroll:done', (ev) => {
-      const session = getSession();
-      const detail = (ev as CustomEvent)?.detail || {};
+    const session = getSession();
+    const detail = (ev as CustomEvent)?.detail || {};
 
       try {
         console.debug('[scroll-session] preroll done', {
@@ -82,6 +92,12 @@ export function initScrollSessionRouter(): void {
       if (session.phase !== 'live') return;
       if (!session.scrollAutoOnLive) {
         try { console.debug('[scroll-session] auto-scroll disabled for this mode'); } catch {}
+        return;
+      }
+      const rawMode = appStore.get('scrollMode') as string | undefined;
+      const canonicalMode = normalizeScrollMode(rawMode);
+      if (!shouldAutoStartForMode(rawMode)) {
+        try { console.debug('[scroll-session] auto-scroll disabled for this mode (manual block)', { mode: canonicalMode }); } catch {}
         return;
       }
       startAutoScroll();

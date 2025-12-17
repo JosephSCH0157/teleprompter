@@ -5,6 +5,10 @@ import {
   type RecordReason,
 } from '../state/session';
 import { wantsAutoRecord as wantsAutoRecordStore } from '../recording/wantsAutoRecord';
+import {
+  normalizeScrollMode,
+  shouldAutoStartForMode,
+} from './scroll/scroll-mode-utils';
 
 function wantsAutoRecord(): boolean {
   try {
@@ -30,9 +34,8 @@ function wantsAutoRecord(): boolean {
 
 function computeScrollAutoOnLive(): boolean {
   try {
-    const mode = String(appStore.get('scrollMode') || '').toLowerCase();
-    if (mode === 'step' || mode === 'rehearsal') return false;
-    return true;
+    const mode = appStore.get('scrollMode') as string | undefined;
+    return shouldAutoStartForMode(mode);
   } catch {
     return true;
   }
@@ -106,7 +109,7 @@ function computeAsrReady(): boolean {
 }
 
 function snapshotPreroll(): void {
-  const mode = String(appStore.get('scrollMode') || 'manual');
+  const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
   const scrollAutoOnLive = computeScrollAutoOnLive();
   const { recordOnLive, reason } = computeRecordArmOnLive();
   const asrReady = computeAsrReady();
