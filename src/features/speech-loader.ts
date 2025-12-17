@@ -510,10 +510,12 @@ async function probeUrl(url: string): Promise<boolean> {
 }
 
 async function resolveOrchestratorUrl(): Promise<string> {
-  const rootUrl = `/speech/orchestrator.js?v=${Date.now()}`;
-  const distUrl = `/dist/speech/orchestrator.js?v=${Date.now()}`;
-  if (await probeUrl(rootUrl)) return rootUrl;
-  return distUrl;
+  const v = Date.now();
+  const primary = `/speech/orchestrator.js?v=${v}`;
+  const fallback = `/dist/speech/orchestrator.js?v=${v}`;
+  const chosen = (await probeUrl(primary)) ? primary : fallback;
+  try { console.log('[SPEECH] orchestrator resolved ->', chosen, chosen === fallback ? '(fallback)' : ''); } catch {}
+  return chosen;
 }
 
 (async () => {
@@ -571,7 +573,6 @@ async function resolveOrchestratorUrl(): Promise<string> {
         try {
           if (window.__tpSpeechCanDynImport) {
             const orchUrl = await resolveOrchestratorUrl();
-            try { console.log('[SPEECH] orchestrator resolved ->', orchUrl); } catch {}
             const mod = await import(/* @vite-ignore */ orchUrl);
             if (mod?.startOrchestrator) {
               const started = await mod.startOrchestrator();
