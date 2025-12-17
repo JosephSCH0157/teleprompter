@@ -532,6 +532,52 @@ function applyUiScrollMode(
   lastScrollModeSource = source;
   let normalized = normalizeUiScrollMode(mode);
   let readiness: { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } | null = null;
+  const auto = (window as any).__tpAuto as { setEnabled?(_v: boolean): void } | undefined;
+  const asrBridge = (window as any).__asrBridge as { start?: () => Promise<void> | void; stop?: () => Promise<void> | void } | undefined;
+  const dispatchAsrToggle = (armed: boolean) => {
+    try {
+      document.dispatchEvent(new CustomEvent('asr:toggle', { detail: { armed } }));
+    } catch {}
+  };
+  const dispatchAutoIntentEvent = (on: boolean) => {
+    try {
+      document.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
+    } catch {}
+  };
+  const hardStopAuto = () => {
+    try {
+      auto?.setEnabled?.(false);
+    } catch {}
+    dispatchAutoIntentEvent(false);
+    try {
+      console.debug('[ASR] autoscroll disabled for ASR selection');
+    } catch {}
+  };
+  const requestAsrStart = () => {
+    try {
+      console.debug('[ASR] start requested (scroll mode)');
+    } catch {}
+    dispatchAsrToggle(true);
+    try {
+      asrBridge?.start?.();
+    } catch (err) {
+      try {
+        console.warn('[ASR] bridge start failed', err);
+      } catch {}
+      dispatchAsrToggle(false);
+    }
+  };
+  const requestAsrStop = () => {
+    try {
+      asrBridge?.stop?.();
+    } catch (err) {
+      try {
+        console.warn('[ASR] bridge stop failed', err);
+      } catch {}
+    } finally {
+      dispatchAsrToggle(false);
+    }
+  };
   if (normalized === 'asr') {
     readiness = computeAsrReadiness();
     if (!readiness.ready) {
@@ -547,7 +593,13 @@ function applyUiScrollMode(
         console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
       } catch {}
       try { appStore.set?.('scrollMode', fallback as any); } catch {}
+      try { requestAsrStop(); } catch {}
+    } else if (source === 'user') {
+      hardStopAuto();
+      requestAsrStart();
     }
+  } else if (source === 'user') {
+    requestAsrStop();
   }
   if (normalized !== 'asr') {
     lastStableUiMode = normalized;
@@ -568,7 +620,6 @@ function applyUiScrollMode(
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
     | undefined;
-  const auto = (window as any).__tpAuto as { setEnabled?(_v: boolean): void } | undefined;
 
   // Defaults
   let brainMode: BrainMode = 'manual';
@@ -724,6 +775,12 @@ function initScrollModeUiSync(): void {
     appStore.subscribe?.('micGranted', () => applyAsrAvailability());
     appStore.subscribe?.('micDevice', () => applyAsrAvailability());
     window.addEventListener('tp:asrChanged', applyAsrAvailability, { capture: false });
+  } catch {}
+  try {
+    appStore.subscribe?.('asrLive', () => {
+      const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+      applyScrollModeUI(current);
+    });
   } catch {}
 
   const updateOverlayFromEngineState = (engaged: boolean, reason?: string) => {
