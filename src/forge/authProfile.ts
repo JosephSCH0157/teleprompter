@@ -78,6 +78,9 @@ export type ProfileSettingsRow = {
   settings: any;
   settings_rev: number;
   settings_updated_at: string;
+  asr_settings?: Record<string, unknown>;
+  asr_calibration_profiles?: unknown[];
+  asr_updated_at?: string;
 };
 
 export async function loadProfileSettings(userId: string): Promise<{
@@ -86,13 +89,22 @@ export async function loadProfileSettings(userId: string): Promise<{
 }> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('settings, settings_rev')
+    .select(
+      'settings, settings_rev, asr_settings, asr_calibration_profiles, asr_updated_at',
+    )
     .eq('user_id', userId)
     .single();
 
   if (error) throw error;
 
-  const merged = deepMerge(DEFAULT_SETTINGS, (data as any)?.settings ?? {});
+  const baseSettings = (data as any)?.settings ?? {};
+  const asrSettings = (data as any)?.asr_settings ?? {};
+  const asrProfiles = (data as any)?.asr_calibration_profiles ?? [];
+  const merged = deepMerge(DEFAULT_SETTINGS, {
+    ...baseSettings,
+    asrSettings,
+    asrProfiles,
+  });
   const rev = Number((data as any)?.settings_rev ?? 0);
   return { settings: merged, rev };
 }
@@ -104,12 +116,18 @@ export async function saveProfileSettings(opts: {
 }): Promise<{ rev: number }> {
   const { userId, mergedSettings, expectedRev } = opts;
 
+  const asrSettings = (mergedSettings as any)?.asrSettings ?? {};
+  const asrProfiles = (mergedSettings as any)?.asrProfiles ?? [];
+
   const { data, error } = await supabase
     .from('profiles')
     .update({
       settings: mergedSettings,
       settings_rev: expectedRev + 1,
       settings_updated_at: new Date().toISOString(),
+      asr_settings: asrSettings,
+      asr_calibration_profiles: asrProfiles,
+      asr_updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)
     .eq('settings_rev', expectedRev)
