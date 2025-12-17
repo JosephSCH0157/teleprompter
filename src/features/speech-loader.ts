@@ -487,7 +487,30 @@ export function installSpeech(): void {
   return;
   // Enable/disable the button based on browser support or orchestrator presence.
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
-  (async () => {
+const isSpeechDevMode = (() => {
+  try {
+    const qs = new URLSearchParams(location.search || '');
+    if (qs.get('dev') === '1') return true;
+    const hash = (location.hash || '').toLowerCase().replace(/^#/, '');
+    if (hash === 'dev' || hash === 'dev=1' || hash.includes('dev=1')) return true;
+    const w: any = window;
+    if (w.__TP_TS_MODE === true) return true;
+    if (w.__TP_TS_OVERLAYS === true) return true;
+  } catch {}
+  return false;
+})();
+
+async function resolveOrchestratorUrl(): Promise<string> {
+  if (isSpeechDevMode) return '/src/speech/orchestrator.ts';
+  const prodUrl = '/speech/orchestrator.js';
+  try {
+    const res = await fetch(prodUrl, { method: 'HEAD', cache: 'no-store' });
+    if (res.ok) return prodUrl;
+  } catch {}
+  return '/dist/speech/orchestrator.js';
+}
+
+(async () => {
     try {
       const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
       if (!btn) return;
@@ -541,8 +564,8 @@ export function installSpeech(): void {
         // Dynamic import if supported
         try {
           if (window.__tpSpeechCanDynImport) {
-            const orchUrl = '/speech/orchestrator.js';
-            const mod = await import(orchUrl);
+            const orchUrl = await resolveOrchestratorUrl();
+            const mod = await import(/* @vite-ignore */ orchUrl);
             if (mod?.startOrchestrator) {
               const started = await mod.startOrchestrator();
               rec = (started || null) as RecognizerLike | null;
@@ -700,8 +723,6 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
-
-
 
 
 
