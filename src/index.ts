@@ -366,6 +366,37 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 			try { store.set?.(k as any, (app as any)[k]); } catch {}
 		});
 		currentSettings = applySettingsPatch({ app: { ...(currentSettings.app || {}) } }, { app }) || { app: {} };
+		try {
+			const asrSettings = (settings as any).asrSettings;
+			if (asrSettings && typeof asrSettings === 'object') {
+				const mapping: Record<string, string> = {
+					engine: 'asr.engine',
+					language: 'asr.language',
+					useInterimResults: 'asr.useInterimResults',
+					filterFillers: 'asr.filterFillers',
+					threshold: 'asr.threshold',
+					endpointingMs: 'asr.endpointMs',
+				};
+				Object.keys(mapping).forEach((src) => {
+					const value = (asrSettings as any)[src];
+					if (typeof value !== 'undefined') {
+						try { store.set?.(mapping[src as keyof typeof mapping] as any, value as any); } catch {}
+					}
+				});
+			}
+			const asrProfiles = (settings as any).asrProfiles;
+			if (Array.isArray(asrProfiles)) {
+				const map: Record<string, unknown> = {};
+				asrProfiles.forEach((profile) => {
+					if (profile && typeof profile === 'object' && 'id' in profile) {
+						map[(profile as any).id] = profile;
+					}
+				});
+				try { store.set?.('asrProfiles', map); } catch {}
+			}
+		} catch {
+			// ignore ASR hydrate issues
+		}
 	} catch {
 		// ignore apply failures
 	} finally {
@@ -378,7 +409,17 @@ function snapshotAppSettings(store: typeof appStore): UserSettings {
 	SETTINGS_KEYS.forEach((k) => {
 		try { app[k] = store.get?.(k as any); } catch {}
 	});
-	return { app };
+	const asrSettings = {
+		engine: store.get?.('asr.engine'),
+		language: store.get?.('asr.language'),
+		useInterimResults: store.get?.('asr.useInterimResults'),
+		filterFillers: store.get?.('asr.filterFillers'),
+		threshold: store.get?.('asr.threshold'),
+		endpointingMs: store.get?.('asr.endpointMs'),
+	};
+	const rawProfiles = store.get?.('asrProfiles') as Record<string, unknown> | undefined;
+	const asrProfiles = rawProfiles ? Object.values(rawProfiles) : [];
+	return { app, asrSettings, asrProfiles };
 }
 
 function queueProfileSave(userId: string, store: typeof appStore) {

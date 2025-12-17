@@ -52,10 +52,14 @@ export type PersistedAppKey =
 
 export type UserSettings = {
   app?: Partial<Record<PersistedAppKey, any>>;
+  asrSettings?: Record<string, any>;
+  asrProfiles?: any[];
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
   app: {},
+  asrSettings: {},
+  asrProfiles: [],
 };
 
 // tiny deep merge (safe for plain objects)
