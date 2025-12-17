@@ -501,7 +501,7 @@ const isSpeechDevMode = (() => {
 })();
 
 async function resolveOrchestratorUrl(): Promise<string> {
-  if (isSpeechDevMode) return '/src/speech/orchestrator.ts';
+  if (isSpeechDevMode) return `/src/speech/orchestrator.ts?import&t=${Date.now()}`;
   const prodUrl = '/speech/orchestrator.js';
   try {
     const res = await fetch(prodUrl, { method: 'HEAD', cache: 'no-store' });
@@ -723,7 +723,6 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
-
 
 
 

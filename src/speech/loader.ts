@@ -61,7 +61,7 @@ export {};
 
     // high-level orchestrator (best-effort)
     const orch = await pick([
-      '/src/speech/orchestrator.ts',
+      '/src/speech/orchestrator.ts?import',
       '/speech/orchestrator.js',
       '/dist/speech/orchestrator.js',
     ]);
