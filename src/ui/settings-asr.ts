@@ -150,8 +150,22 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
   lang?.addEventListener('change', () => persist({ lang: lang.value }));
   interim?.addEventListener('change', () => persist({ interim: interim.checked }));
   fillers?.addEventListener('change', () => persist({ fillerFilter: fillers.checked }));
-  thresh?.addEventListener('change', () => persist({ threshold: clamp(+thresh.value, 0, 1) }));
-  endms?.addEventListener('change', () => persist({ endpointingMs: Math.max(200, Math.round(+endms.value)) }));
+  const persistThresh = () => {
+    if (!thresh) return;
+    const parsed = parseFloat(thresh.value);
+    if (Number.isNaN(parsed)) return;
+    persist({ threshold: clamp(parsed, 0, 1) });
+  };
+  const persistEndms = () => {
+    if (!endms) return;
+    const parsed = Math.round(+endms.value);
+    if (Number.isNaN(parsed)) return;
+    persist({ endpointingMs: Math.max(200, parsed) });
+  };
+  thresh?.addEventListener('input', persistThresh);
+  thresh?.addEventListener('change', persistThresh);
+  endms?.addEventListener('input', persistEndms);
+  endms?.addEventListener('change', persistEndms);
   wireAsrStatusIndicators(card, store);
 }
 
