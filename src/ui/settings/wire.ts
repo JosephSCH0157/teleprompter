@@ -251,6 +251,25 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
   // Wire media controls to TS mic API if available
   try {
     const micApi = (window as any).__tpMic;
+    const handleMicDeviceChange = async (deviceId?: string) => {
+      if (!micApi) return;
+      const normalized = deviceId || undefined;
+      const directMethods = ['selectDevice', 'setDevice', 'changeDevice'];
+      for (const method of directMethods) {
+        try {
+          const fn = micApi[method];
+          if (typeof fn === 'function') {
+            await fn.call(micApi, normalized);
+            return;
+          }
+        } catch (err) {
+          console.warn('[settings] mic change helper failed', err);
+        }
+      }
+      if (typeof micApi.requestMic === 'function') {
+        await micApi.requestMic(normalized);
+      }
+    };
     // Populate devices on open
     try {
       if (typeof micApi?.populateDevices === 'function') micApi.populateDevices();
@@ -308,10 +327,7 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
       micSel.addEventListener('change', () => {
         try {
           const chosen = micSel.value || undefined;
-          const api = (window as any).__tpMic;
-          if (api && typeof api.requestMic === 'function') {
-            void api.requestMic(chosen);
-          }
+          void handleMicDeviceChange(chosen);
         } catch (err) {
           console.warn('[settings] mic switch failed', err);
         }
@@ -324,12 +340,21 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
         try {
           const id = (camSel as HTMLSelectElement).value;
           const camApi = (window as any).__tpCamera;
-          if (camApi && typeof camApi.switchCamera === 'function') {
+          const isActive = typeof camApi?.isActive === 'function' ? !!camApi.isActive() : false;
+          if (isActive && id && typeof camApi?.switchCamera === 'function') {
             await camApi.switchCamera(id);
             return;
           }
-          if (camApi && typeof camApi.startCamera === 'function') {
-            await camApi.startCamera();
+          if (!isActive && typeof camApi?.startCamera === 'function') {
+            await camApi.startCamera(id || undefined);
+            return;
+          }
+          if (id && typeof camApi?.switchCamera === 'function') {
+            await camApi.switchCamera(id);
+            return;
+          }
+          if (typeof camApi?.startCamera === 'function') {
+            await camApi.startCamera(id || undefined);
           }
         } catch (err) {
           console.warn('[settings] camera switch failed', err);
