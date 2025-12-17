@@ -18,6 +18,7 @@ export type HudPopupApi = {
 const LS_POS = 'tp_hud_popup_pos_v1';
 const LS_OPEN = 'tp_hud_popup_open_v1';
 const LS_FROZEN = 'tp_hud_popup_frozen_v1';
+const LS_POPOUT = 'tp_hud_popup_popout_v1';
 
 function safeJson(v: any): string {
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
@@ -100,9 +101,11 @@ export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
   const btnCopy = makeBtn('Copy');
   const btnClear = makeBtn('Clear');
   const btnFreeze = makeBtn('Freeze');
+  const btnPopout = makeBtn('Pop out');
+  const btnDock = makeBtn('Dock');
   const btnClose = makeBtn('×', 'tp-hud-btn--close');
 
-  btns.append(btnDump, btnCopy, btnClear, btnFreeze, btnClose);
+  btns.append(btnDump, btnCopy, btnClear, btnFreeze, btnPopout, btnDock, btnClose);
   head.append(title, btns);
 
   const body = document.createElement('div');
@@ -144,7 +147,120 @@ export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
     btnFreeze.textContent = frozen ? 'Frozen' : 'Freeze';
   }
 
+  let popWin: Window | null = null;
+  let poppedOut = loadBool(LS_POPOUT, false);
+
+  const setPopButtons = () => {
+    btnPopout.style.display = poppedOut ? 'none' : '';
+    btnDock.style.display = poppedOut ? '' : 'none';
+  };
+
+  const isPopOpen = () => !!popWin && !popWin.closed;
+
+  const sendToPop = (type: string, payload: any) => {
+    if (!isPopOpen()) return;
+    try {
+      popWin!.postMessage({ __tpHudPop: true, type, payload }, '*');
+    } catch {}
+  };
+
+  const setPoppedOut = (next: boolean) => {
+    poppedOut = next;
+    saveBool(LS_POPOUT, next);
+    setPopButtons();
+  };
+
+  const dockBack = () => {
+    setPoppedOut(false);
+    if (isPopOpen()) {
+      try { popWin!.close(); } catch {}
+    }
+    popWin = null;
+  };
+
+  const openPopout = () => {
+    if (isPopOpen()) {
+      popWin!.focus();
+      return;
+    }
+    popWin = window.open('', 'tp_hud_popout', 'width=700,height=420,resizable=yes,scrollbars=no');
+    if (!popWin) return;
+    setPoppedOut(true);
+
+    popWin.document.open();
+    popWin.document.write(`
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Anvil HUD</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1117;color:#eaf3ff;font-family:system-ui,'Segoe UI',Roboto,Arial}
+  .head{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.12)}
+  .btns{display:flex;gap:6px}
+  button{font:600 12px/1 system-ui;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.08);color:rgba(235,245,255,.92);border:1px solid rgba(255,255,255,.16);cursor:pointer}
+  button:hover{background:rgba(255,255,255,.12)}
+  textarea{width:calc(100% - 20px);height:calc(100% - 56px);margin:10px;resize:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);color:rgba(235,245,255,.92);font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:10px;outline:none}
+</style>
+<script>
+  const clearBtn = document.getElementById('clearBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const dockBtn = document.getElementById('dockBtn');
+  const ta = document.getElementById('ta');
+  clearBtn.onclick = () => ta.value = '';
+  copyBtn.onclick = async () => {
+    ta.focus(); ta.select();
+    try { await navigator.clipboard.writeText(ta.value || ''); } catch {}
+  };
+  dockBtn.onclick = () => {
+    window.opener?.postMessage({ __tpHudPop: true, type: 'dock' }, '*');
+  };
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || !m.__tpHudPop) return;
+    if (m.type === 'append') {
+      ta.value += (ta.value ? '\\n' : '') + m.payload;
+      ta.scrollTop = ta.scrollHeight;
+    }
+    if (m.type === 'set') {
+      ta.value = String(m.payload || '');
+      ta.scrollTop = ta.scrollHeight;
+    }
+  });
+</script>
+</head>
+<body>
+  <div class="head">
+    <div><b>HUD Log</b></div>
+    <div class="btns">
+      <button id="copyBtn">Copy</button>
+      <button id="clearBtn">Clear</button>
+      <button id="dockBtn">Dock</button>
+    </div>
+  </div>
+  <textarea id="ta" spellcheck="false" wrap="off"></textarea>
+</body>
+</html>
+    `);
+    popWin.document.close();
+    sendToPop('set', ta.value);
+    try {
+      popWin.addEventListener('beforeunload', () => {
+        setPoppedOut(false);
+        popWin = null;
+      });
+    } catch {}
+  };
+
+  btnPopout.addEventListener('click', openPopout);
+  btnDock.addEventListener('click', dockBack);
+  setPoppedOut(poppedOut);
+
   function appendLine(line: string) {
+    if (poppedOut && isPopOpen()) {
+      sendToPop('append', line);
+      return;
+    }
     const existing = ta.value ? ta.value.split('\n') : [];
     existing.push(line);
     if (existing.length > maxLines) {
@@ -241,6 +357,26 @@ export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
   });
 
   root.appendChild(wrap);
+
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || !m.__tpHudPop) return;
+    if (m.type === 'dock') dockBack();
+  });
+
+  const handleHotkey = (e: KeyboardEvent) => {
+    try {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['input', 'textarea', 'select'].includes((target.tagName || '').toLowerCase()))) {
+        return;
+      }
+      const isTilde = e.code === 'Backquote' && e.shiftKey || e.key === '`' || e.key === '~';
+      if (!isTilde) return;
+      setOpen(!open);
+      e.preventDefault();
+    } catch {}
+  };
+  window.addEventListener('keydown', handleHotkey, { capture: true });
 
   return {
     isOpen: () => open,
