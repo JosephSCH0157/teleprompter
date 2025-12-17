@@ -3,7 +3,8 @@ module.exports = {
 	testMatch: [
 		'**/tests/ui/**/*.test.ts',
 		'**/tests/recording/**/*.test.ts',
-		'**/tests/adapters/**/*.test.ts'
+		'**/tests/adapters/**/*.test.ts',
+		'**/tests/hud/**/*.test.ts'
 	],
 	setupFiles: ['<rootDir>/tests/setup-jest.ts'],
 	transform: {
