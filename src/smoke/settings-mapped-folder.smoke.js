@@ -1,7 +1,30 @@
 // Smoke probe: verify mapped-folder controls present in Settings panel.
-(function(){
-  const choose = document.querySelector('#chooseFolderBtn');
-  const scripts = document.querySelector('#scriptSelect');
-  const ok = !!choose && !!scripts;
-  console.log('[settings-mapped-folder:smoke]', { ok, haveChoose: !!choose, haveScripts: !!scripts });
+(function runMappedFolderSmokeWhenReady() {
+  const start = performance.now();
+  const MAX = 4000;
+  const selectors = {
+    choose: '#chooseFolderBtn, [data-testid="choose-folder"], button[data-action="choose-folder"]',
+    scripts: '#scriptSelect, select[data-role="script-picker"]',
+  };
+
+  const check = () => {
+    const choose = document.querySelector(selectors.choose);
+    const scripts = document.querySelector(selectors.scripts);
+    const haveChoose = !!choose;
+    const haveScripts = !!(scripts && scripts.querySelectorAll('option').length > 0);
+    const ok = haveChoose;
+    console.log('[settings-mapped-folder:smoke]', { ok, haveChoose, haveScripts });
+    if (haveChoose || performance.now() - start > MAX) return;
+    requestAnimationFrame(check);
+  };
+
+  const schedule = () => requestAnimationFrame(check);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('tp:settings-folder:ready', schedule, { once: true });
+    document.addEventListener('tp:settings:rendered', schedule, { once: true });
+    document.addEventListener('DOMContentLoaded', schedule, { once: true });
+  } else {
+    schedule();
+  }
 })();
