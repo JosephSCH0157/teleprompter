@@ -500,14 +500,20 @@ const isSpeechDevMode = (() => {
   return false;
 })();
 
-async function resolveOrchestratorUrl(): Promise<string> {
-  if (isSpeechDevMode) return `/speech/orchestrator.js?v=${Date.now()}`;
-  const prodUrl = '/speech/orchestrator.js';
+async function probeUrl(url: string): Promise<boolean> {
   try {
-    const res = await fetch(prodUrl, { method: 'HEAD', cache: 'no-store' });
-    if (res.ok) return prodUrl;
-  } catch {}
-  return '/dist/speech/orchestrator.js';
+    const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    return Boolean(res && res.ok);
+  } catch {
+    return false;
+  }
+}
+
+async function resolveOrchestratorUrl(): Promise<string> {
+  const rootUrl = `/speech/orchestrator.js?v=${Date.now()}`;
+  const distUrl = `/dist/speech/orchestrator.js?v=${Date.now()}`;
+  if (await probeUrl(rootUrl)) return rootUrl;
+  return distUrl;
 }
 
 (async () => {
@@ -723,5 +729,4 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
-
 
