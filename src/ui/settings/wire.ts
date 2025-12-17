@@ -260,6 +260,9 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
     const relBtn = document.getElementById('settingsReleaseMicBtn');
     const startDb = document.getElementById('settingsStartDbBtn');
     const stopDb = document.getElementById('settingsStopDbBtn');
+    const micSel = document.getElementById('settingsMicSel') as HTMLSelectElement | null;
+    const camSel =
+      (window as any).$id?.('settingsCamSel') ?? document.getElementById('settingsCamSel');
 
     if (reqBtn)
       reqBtn.addEventListener('click', async () => {
@@ -299,6 +302,40 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
           console.warn(e);
         }
       });
+
+    if (micSel && micSel.dataset.tpChangeWired !== '1') {
+      micSel.dataset.tpChangeWired = '1';
+      micSel.addEventListener('change', () => {
+        try {
+          const chosen = micSel.value || undefined;
+          const api = (window as any).__tpMic;
+          if (api && typeof api.requestMic === 'function') {
+            void api.requestMic(chosen);
+          }
+        } catch (err) {
+          console.warn('[settings] mic switch failed', err);
+        }
+      });
+    }
+
+    if (camSel && camSel.dataset.tpChangeWired !== '1') {
+      camSel.dataset.tpChangeWired = '1';
+      camSel.addEventListener('change', async () => {
+        try {
+          const id = (camSel as HTMLSelectElement).value;
+          const camApi = (window as any).__tpCamera;
+          if (camApi && typeof camApi.switchCamera === 'function') {
+            await camApi.switchCamera(id);
+            return;
+          }
+          if (camApi && typeof camApi.startCamera === 'function') {
+            await camApi.startCamera();
+          }
+        } catch (err) {
+          console.warn('[settings] camera switch failed', err);
+        }
+      });
+    }
 
   } catch {}
 
