@@ -76,6 +76,7 @@ export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
   const maxLines = opts.maxLines ?? 600;
   const isPopout = opts.popout ?? !!(window as any).__TP_HUD_POPOUT__;
   const bridge = createHudBridge();
+  try { (window as any).__tpHudBridge = bridge; } catch {}
   const storeLines: string[] = [];
   let snapshotText = '';
 

@@ -140,17 +140,22 @@ let popoutPoll: number | null = null;
     return popupApi;
   };
 
-  startPopoutClosedPoll();
-
   const startPopoutClosedPoll = () => {
     if (popoutPoll) return;
+    const popupState = (window as any).__tpHudPopup?.getState?.();
+    if (!popupState?.popout) return;
     popoutPoll = window.setInterval(() => {
-      const popupState = (window as any).__tpHudPopup?.getState?.();
-      if (!popupState?.popout) return;
       const w = (window as any).__tpHudPopoutWin as Window | null | undefined;
       if (w && w.closed) {
         (window as any).__tpHudPopup?.setPopout?.(false);
         (window as any).__tpHudPopoutWin = null;
+        try {
+          (window as any).__tpHudBridge?.send?.({
+            type: 'hud:state',
+            state: (window as any).__tpHudPopup?.getState?.(),
+          });
+        } catch {}
+        stopPopoutClosedPoll();
       }
     }, 1000);
   };
@@ -160,6 +165,24 @@ let popoutPoll: number | null = null;
     try { window.clearInterval(popoutPoll); } catch {}
     popoutPoll = null;
   };
+
+  const subscribePopoutBridge = () => {
+    popoutBridgeUnsub?.();
+    const bridge = (window as any).__tpHudBridge;
+    if (!bridge?.on) return;
+    popoutBridgeUnsub = bridge.on((msg: any) => {
+      if (msg.type === 'hud:state') {
+        if (msg.state?.popout) {
+          startPopoutClosedPoll();
+        } else {
+          stopPopoutClosedPoll();
+        }
+      }
+    });
+  };
+
+  startPopoutClosedPoll();
+  subscribePopoutBridge();
 
   const showHudRoot = () => {
     try {
@@ -180,17 +203,19 @@ let popoutPoll: number | null = null;
     } catch {}
   };
 
-  function destroy() {
-    hideHudRoot();
-    speechNotesApi?.destroy?.();
-    subs.forEach((unsub) => {
-      try { unsub(); } catch {}
-    });
-    asrStats?.destroy?.();
-    recStats?.destroy?.();
-    scrollStrip?.destroy?.();
-    stopPopoutClosedPoll();
-  }
+function destroy() {
+  hideHudRoot();
+  speechNotesApi?.destroy?.();
+  subs.forEach((unsub) => {
+    try { unsub(); } catch {}
+  });
+  asrStats?.destroy?.();
+  recStats?.destroy?.();
+  scrollStrip?.destroy?.();
+  stopPopoutClosedPoll();
+  popoutBridgeUnsub?.();
+  popoutBridgeUnsub = null;
+}
 
   try {
     (window as any).__tpHud = { bus, root, show: showHudRoot, hide: hideHudRoot };
