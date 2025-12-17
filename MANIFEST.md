@@ -41,3 +41,4 @@ date: 2025-12-10
 - Display window no longer loads the main TS bundle; it hydrates via `tp_display` snapshots.
 - Forge config is injected via `forge-config.js` (sets `window.__forgeSupabaseUrl/__forgeSupabaseAnonKey`).
 - Dev/QA: HUD/diagnostics temporarily disabled (no `#hud-root`; HUD boot gated; hudLog is console-only) while HUD v2 is redesigned.
+- Settings invariants: single overlay (`#settingsBody`), `mountSettings` rebuilds + wires once, `wireSettingsDynamic` guarded by `data-tpSettingsWired`, every card stores a `data-wired` flag, mic/cam selects use the helpers added in `src/ui/settings/wire.ts`, closing Settings is purely visual, and `npm run gate` (which rewrites `tools/ui_crawl_report.json`) must pass before landing.

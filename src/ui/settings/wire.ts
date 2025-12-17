@@ -322,19 +322,33 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
         }
         return false;
       };
-      const isActive = (() => {
+      const previewState = (() => {
         try {
-          if (typeof camApi.isActive === 'function') return !!camApi.isActive();
-          if (typeof camApi.isRunning === 'function') return !!camApi.isRunning();
           const camVideo = document.getElementById('camVideo') as HTMLVideoElement | null;
-          return !!camVideo?.srcObject;
+          const hasVideo = !!camVideo;
+          const videoLive =
+            hasVideo &&
+            camVideo?.srcObject instanceof MediaStream &&
+            camVideo.readyState >= 2 &&
+            !camVideo.paused;
+          const apiActive = typeof camApi.isActive === 'function' ? !!camApi.isActive() : false;
+          const apiRunning = typeof camApi.isRunning === 'function' ? !!camApi.isRunning() : false;
+          const previewActive = videoLive || (hasVideo && (apiActive || apiRunning));
+          return { videoLive, previewActive };
         } catch {
-          return false;
+          return { videoLive: false, previewActive: false };
         }
       })();
-      if (isActive && (await trySwitch())) return;
+      if (previewState.previewActive) {
+        if (await trySwitch()) return;
+        if (await tryStart()) return;
+        try {
+          console.warn('[settings] camera switch failed, start fallback ran');
+        } catch {}
+        return;
+      }
       if (await tryStart()) return;
-      if (!isActive && (await trySwitch())) return;
+      if (await trySwitch()) return;
       try {
         console.warn('[settings] camera device change has no supported handler');
       } catch {}
