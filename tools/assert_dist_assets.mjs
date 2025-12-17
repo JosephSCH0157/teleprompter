@@ -7,6 +7,9 @@ const requiredFiles = [
   'dist/hud_popout.html',
   'dist/hud/debug.js',
   'dist/hud/popout-entry.js',
+  'dist/speech/recognizer.js',
+  'dist/speech/matcher.js',
+  'dist/speech/orchestrator.js',
 ];
 
 const missing = requiredFiles.filter((relative) => !fs.existsSync(path.resolve(relative)));
