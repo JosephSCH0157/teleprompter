@@ -151,6 +151,19 @@ export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult 
 
     // Convert line delta to px error so the adaptive governor can respond
     try {
+      const currentIdx = Number((window as any).currentIndex ?? 0);
+      const bestIdx = Number(res.bestIdx ?? 0);
+      try {
+        console.log('[ASR] match res', {
+          currentIndex: currentIdx,
+          bestIdx,
+          bestSim: res.bestSim,
+          sim: (res as any)?.sim,
+          conf: (res as any)?.confidence,
+          deltaLines: bestIdx - currentIdx,
+          sample: typeof text === 'string' ? text.slice(0, 80) : text,
+        });
+      } catch {}
       const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
       if (deltaLines) {
         const conf = Math.max(0, Math.min(1, res.bestSim || 0)) * (isFinal ? 1 : 0.6);
