@@ -1,7 +1,7 @@
 // src/features/scroll/mode-router.ts
 // Central router that turns engines on/off based on scrollMode + session state.
 
-export type ScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'auto';
+export type ScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'auto' | 'off';
 
 export interface SessionState {
   state: 'idle' | 'preroll' | 'live' | 'stopping' | 'stopped';

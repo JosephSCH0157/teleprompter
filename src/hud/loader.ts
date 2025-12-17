@@ -92,6 +92,7 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
 let speechNotesApi: ReturnType<typeof initSpeechNotesHud> | null = null;
 const subs: Array<() => void> = [];
 let popoutPoll: number | null = null;
+let popoutBridgeUnsub: (() => void) | null = null;
 
   const hasSpeechNotesOptIn = (snap: AppStoreState) => {
     try {

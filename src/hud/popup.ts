@@ -21,6 +21,7 @@ export type HudPopupApi = {
   getState?: () => HudState;
   openPopout?: () => void;
   closePopout?: () => void;
+  setPopout?: (open: boolean) => void;
 };
 
 const LS_STATE = 'tp_hud_state_v2';

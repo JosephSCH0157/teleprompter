@@ -487,19 +487,6 @@ export function installSpeech(): void {
   return;
   // Enable/disable the button based on browser support or orchestrator presence.
   // Honor a dev force-enable escape hatch via localStorage.tp_speech_force === '1'.
-const isSpeechDevMode = (() => {
-  try {
-    const qs = new URLSearchParams(location.search || '');
-    if (qs.get('dev') === '1') return true;
-    const hash = (location.hash || '').toLowerCase().replace(/^#/, '');
-    if (hash === 'dev' || hash === 'dev=1' || hash.includes('dev=1')) return true;
-    const w: any = window;
-    if (w.__TP_TS_MODE === true) return true;
-    if (w.__TP_TS_OVERLAYS === true) return true;
-  } catch {}
-  return false;
-})();
-
 async function probeUrl(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
