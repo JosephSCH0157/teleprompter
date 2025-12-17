@@ -582,6 +582,15 @@
     },
     {
       "type": "log",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 38778,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
       "text": "[auto-scroll] boot: wired JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
@@ -838,15 +847,6 @@
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 28447,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38778,
         "columnNumber": 12
       }
     },
@@ -3335,9 +3335,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "00ddc0bf047d56ea4a61e8344898d3de6aeeda57",
+      "gitSha": "603bf307d091e34216a9fe4b548b021ce3dd95be",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-17T23:21:12.654Z"
+      "buildTime": "2025-12-17T23:25:48.700Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
