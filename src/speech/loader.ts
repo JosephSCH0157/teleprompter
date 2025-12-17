@@ -8,8 +8,9 @@ export {};
     try {
       const qs = new URLSearchParams(location.search || '');
       if (qs.get('dev') === '1') return true;
-      const hash = location.hash || '';
-      if (hash.includes('dev=1')) return true;
+      const hash = (location.hash || '').toLowerCase();
+      if (hash.includes('dev=1') || hash.includes('dev')) return true;
+      if (localStorage?.getItem('tp_dev_mode') === '1') return true;
     } catch {}
     return false;
   })();
