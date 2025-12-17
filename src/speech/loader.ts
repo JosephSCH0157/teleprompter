@@ -14,12 +14,12 @@ export {};
     };
 
     const recMod = await pick([
-      '/dist/speech/recognizer.js',
       '/speech/recognizer.js',
+      '/dist/speech/recognizer.js',
     ]);
     const matchMod = await pick([
-      '/dist/speech/matcher.js',
       '/speech/matcher.js',
+      '/dist/speech/matcher.js',
     ]);
 
     if (recMod) {
@@ -37,8 +37,8 @@ export {};
 
     // high-level orchestrator (best-effort)
     const orch = await pick([
-      '/dist/speech/orchestrator.js',
       '/speech/orchestrator.js',
+      '/dist/speech/orchestrator.js',
     ]);
     if (orch) {
       (window).__tpSpeech = (window).__tpSpeech || {};
