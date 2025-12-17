@@ -3,6 +3,7 @@ import { initAsrStatsHud } from './asr-stats';
 import { initRecStatsHud } from './rec-stats';
 import { initScrollStripHud } from './scroll-strip';
 import { attachHudDrag } from './drag';
+import { mountHudPopup, type HudPopupApi } from './popup';
 import type { AppStore, AppStoreState } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
 import { shouldShowHud } from './shouldShowHud';
@@ -54,6 +55,7 @@ function createHudBus(): HudBus {
 
 let didInit = false;
 let cachedHud: HudLoaderApi | null = null;
+let popupApi: HudPopupApi | null = null;
 
 export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpStore ?? null }): HudLoaderApi {
   if (didInit && cachedHud) return cachedHud;
@@ -125,10 +127,28 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
 
   refreshSpeechNotes();
 
+  const ensurePopup = (): HudPopupApi | null => {
+    if (popupApi) return popupApi;
+    if (!root) return null;
+    popupApi = mountHudPopup({
+      root,
+      getStore: () => (window as any).__tpStore,
+      dev: !!(window as any).__TP_DEV || /[?#]dev=1/.test(location.href),
+    });
+    (window as any).__tpHudPopup = popupApi;
+    return popupApi;
+  };
+
   const showHudRoot = () => {
     try {
       root.style.display = '';
       root.removeAttribute('aria-hidden');
+      try {
+        const p = ensurePopup();
+        if (p && !p.isOpen()) p.setOpen(true);
+        p?.log('HUD mounted');
+        p?.dumpSnapshot('BOOT');
+      } catch {}
     } catch {}
   };
   const hideHudRoot = () => {

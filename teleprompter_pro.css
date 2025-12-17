@@ -995,3 +995,74 @@ html.tp-mode-rehearsal::after{
 #hud-root > * {
   pointer-events: auto;
 }
+
+/* Draggable clipboard HUD */
+.tp-hud-popup{
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  height: 300px;
+  max-height: calc(100vh - 96px);
+  position: fixed;
+  background: rgba(10,14,18,0.92);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  backdrop-filter: blur(6px);
+}
+
+.tp-hud-popup__head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.10);
+  user-select:none;
+}
+
+.tp-hud-popup__title{
+  font:600 12px/1.2 system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  color:rgba(235,245,255,0.92);
+  letter-spacing:0.2px;
+}
+
+.tp-hud-popup__btns{
+  display:flex;
+  gap:6px;
+}
+
+.tp-hud-btn{
+  font:600 11px/1 system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  color:rgba(235,245,255,0.88);
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:8px;
+  padding:6px 8px;
+  cursor:pointer;
+}
+
+.tp-hud-btn:hover{
+  background:rgba(255,255,255,0.10);
+}
+
+.tp-hud-btn--close{
+  width:32px;
+  text-align:center;
+}
+
+.tp-hud-popup__body{
+  height:calc(100% - 42px);
+  padding:8px 10px 10px;
+}
+
+.tp-hud-popup__text{
+  width:100%;
+  height:100%;
+  resize:none;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px;
+  background:rgba(0,0,0,0.18);
+  color:rgba(235,245,255,0.92);
+  font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  padding:10px;
+  outline:none;
+}
