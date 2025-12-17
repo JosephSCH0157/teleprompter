@@ -97,7 +97,7 @@ function getExpectedLineText(): string | undefined {
   try { return (window as any).__tpScript?.currentExpectedText?.(); } catch { return undefined; }
 }
 
-function dispatchTranscript(text: string, final: boolean) {
+function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchResult) {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
@@ -105,9 +105,12 @@ function dispatchTranscript(text: string, final: boolean) {
       text,
       final,
       timestamp: Date.now(),
-      sim,
+      sim: match?.bestSim ?? sim,
+      line: match?.bestIdx,
+      candidates: match?.topScores,
       source: 'orchestrator' as const,
     };
+    try { if (match) { console.log('[ASR] dispatchMatch', { line: match.bestIdx, sim: match.bestSim }); } } catch {}
     try { console.log('[ASR] dispatchTranscript', detail); } catch {}
     window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
   } catch {}
@@ -194,9 +197,9 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
       console.log('[ASR] calling recognizer.start()');
       _rec.start((transcript: string, isFinal: boolean) => {
         try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
-        const text = transcript || '';
-        matchBatch(text, isFinal);
-        dispatchTranscript(text, isFinal);
+      const text = transcript || '';
+      const match = matchBatch(text, isFinal);
+      dispatchTranscript(text, isFinal, match);
       });
       try { console.log('[ASR] recognizer.start() returned without throwing'); } catch {}
     } catch (err) {
