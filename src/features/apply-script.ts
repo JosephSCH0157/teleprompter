@@ -2,6 +2,7 @@ import { renderScript } from '../render-script';
 import { publishDisplayScript } from './display-sync';
 import { normalizeToStandardText } from '../script/normalize';
 import { validateStandardTagsText } from '../script/validate';
+import { buildLegacyAsrStateFromStandardScript } from '../speech/build-legacy-asr-state';
 
 type ApplySource = 'load' | 'editor' | 'ingest' | 'hydrate' | 'sample';
 
@@ -68,9 +69,10 @@ export function applyScript(rawIn: string, source: ApplySource, opts?: { updateE
   const prevLoading = !!window.__TP_LOADING_SCRIPT;
   window.__TP_LOADING_SCRIPT = true;
 
-  try {
-    // 1) Canonical SSOT
-    window.__tpRawScript = normalized;
+    try {
+      // 1) Canonical SSOT
+      window.__tpRawScript = normalized;
+      buildLegacyAsrStateFromStandardScript(normalized);
 
     // 2) Keep editor in sync (only when appropriate)
     const updateEditor = opts?.updateEditor ?? (source === 'load' || source === 'ingest' || source === 'hydrate');

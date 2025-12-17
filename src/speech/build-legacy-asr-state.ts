@@ -1,0 +1,51 @@
+export function buildLegacyAsrStateFromStandardScript(canon: string) {
+  const w: any = window;
+
+  // 1) remove [note] sections entirely
+  let t = canon.replace(/\[note\][\s\S]*?\[\/note\]/gi, '\n');
+
+  // 2) strip speaker markers that sit on their own line
+  t = t.replace(/^\[(s1|s2|g1|g2)\]\s*$/gmi, '');
+  t = t.replace(/^\[\/(s1|s2|g1|g2)\]\s*$/gmi, '');
+
+  // 3) remove inline style tags like [color=...], [b], [/b], [i], etc.
+  t = t.replace(/\[(\/?)(color|bg|b|i|u)(=[^\]]+)?\]/gi, '');
+
+  // 4) collapse pacing cues/pause tags
+  t = t.replace(/\[(pause|beat|reflective pause)\]/gi, ' ');
+
+  // 5) normalize whitespace/newlines
+  t = t.replace(/\r/g, '').replace(/[ \t]+/g, ' ');
+
+  const scriptWords = t
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const paraIndex: number[] = [];
+  {
+    let wordIdx = 0;
+    for (const line of t.split('\n')) {
+      paraIndex.push(wordIdx);
+      const count = line
+        .split(/\s+/)
+        .map((x) => x.trim())
+        .filter(Boolean).length;
+      wordIdx += count;
+    }
+  }
+
+  w.scriptWords = scriptWords;
+  w.paraIndex = paraIndex;
+  if (typeof w.currentIndex !== 'number' || Number.isNaN(w.currentIndex)) {
+    w.currentIndex = 0;
+  }
+
+  try {
+    console.log('[ASR] legacy state built', {
+      scriptWords: w.scriptWords?.length ?? 0,
+      paraIndex: w.paraIndex?.length ?? 0,
+      currentIndex: w.currentIndex,
+    });
+  } catch {}
+}
