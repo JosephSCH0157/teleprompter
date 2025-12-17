@@ -57,9 +57,21 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
   const bus = opts.bus ?? createHudBus();
   const root = opts.root ?? document.getElementById('hud-root') ?? document.body;
 
+  try {
+    if ((window as any).__TP_DEV) console.debug('[HUD] initHud() called');
+  } catch {}
+
   if (!root) {
     throw new Error('[HUD] No root element found');
   }
+
+  try {
+    if ((window as any).__TP_DEV) {
+      const hudSupported = !!document.getElementById('hud-root') || !!document.getElementById('tp-speech-notes-hud');
+      const hudEnabledByUser = !!store?.get?.('hudEnabledByUser');
+      console.debug('[HUD] mounting…', { hudSupported, hudEnabledByUser });
+    }
+  } catch {}
 
   try {
     root.classList.add('tp-hud-root');
