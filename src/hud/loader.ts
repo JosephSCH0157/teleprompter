@@ -52,7 +52,11 @@ function createHudBus(): HudBus {
   return bus;
 }
 
-export function initHud(opts: HudLoaderOptions): HudLoaderApi {
+let didInit = false;
+let cachedHud: HudLoaderApi | null = null;
+
+export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpStore ?? null }): HudLoaderApi {
+  if (didInit && cachedHud) return cachedHud;
   const { store } = opts;
   const bus = opts.bus ?? createHudBus();
   const root = opts.root ?? document.getElementById('hud-root') ?? document.body;
@@ -161,5 +165,11 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
     /* ignore */
   }
 
-  return { destroy, bus };
+  cachedHud = { destroy, bus };
+  didInit = true;
+  return cachedHud;
 }
+
+try {
+  initHud();
+} catch {}
