@@ -2,7 +2,7 @@
 import { runCalibration } from '../../asr/calibration';
 import { getAsrState, onAsr, setActiveProfile, upsertProfile } from '../../asr/store';
 import type { AsrProfile as SchemaAsrProfile, AsrProfileId } from '../../asr/schema';
-import { showToast } from '../toasts';
+import { showToast, type ToastOptions } from '../toasts';
 
 export type AsrProfile = SchemaAsrProfile;
 
@@ -19,9 +19,9 @@ function $(id: string): HTMLElement | null {
   return document.getElementById(id);
 }
 
-function toast(msg: string): void {
+function toast(msg: string, opts?: ToastOptions): void {
   try {
-    showToast(msg);
+    showToast(msg, opts);
   } catch {
     try {
       console.log('[ASR]', msg);
