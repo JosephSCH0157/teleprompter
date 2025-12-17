@@ -492,7 +492,16 @@ function setModeStatusLabel(mode: UiScrollMode): void {
   el.textContent = label;
 }
 
-type ScrollModeSource = 'user' | 'boot' | 'store' | 'router' | 'external' | 'hydrate' | 'fallback' | 'legacy';
+type ScrollModeSource =
+  | 'user'
+  | 'boot'
+  | 'store'
+  | 'router'
+  | 'external'
+  | 'hydrate'
+  | 'fallback'
+  | 'legacy'
+  | 'asr';
 
 async function refreshScriptsSidebar(): Promise<void> {
   try {
@@ -540,9 +549,9 @@ function applyUiScrollMode(
       try { appStore.set?.('scrollMode', fallback as any); } catch {}
     }
   }
-  if (normalized !== 'asr' || readiness?.ready) {
+  if (normalized !== 'asr') {
     lastStableUiMode = normalized;
-    if (normalized !== 'asr') asrRejectionToastShown = false;
+    asrRejectionToastShown = false;
   }
   // Store the UI mode somewhere global so existing JS can still read it
   (window as any).__tpUiScrollMode = normalized;
@@ -661,6 +670,12 @@ function initScrollModeUiSync(): void {
     } catch {}
   };
 
+  const applyOverlayMode = (mode: UiScrollMode) => {
+    try {
+      applyUiScrollMode(mode, { skipStore: true, allowToast: false, source: 'asr' });
+    } catch {}
+  };
+
   applyCurrent();
 
   const applyAsrAvailability = () => {
@@ -715,9 +730,9 @@ function initScrollModeUiSync(): void {
     try { appStore.set?.('asrLive', engaged); } catch {}
     const previouslyPrefers = selectPrefersAsr;
     selectPrefersAsr = engaged;
-    if (previouslyPrefers !== engaged) {
-      setScrollModeSelectValue(lastStableUiMode);
-    }
+    const overlayMode = engaged ? 'asr' : getSafeFallbackMode();
+    setScrollModeSelectValue(overlayMode);
+    applyOverlayMode(overlayMode);
     if (!engaged && previouslyPrefers && lastScrollModeSource !== 'user') {
       devLog('[ASR] disengaged by', lastScrollModeSource, { reason });
     }
