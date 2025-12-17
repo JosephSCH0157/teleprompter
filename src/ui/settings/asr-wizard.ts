@@ -172,7 +172,7 @@ function renderDerived(profile: AsrProfile): void {
   }
 }
 
-let profileSelectorWired = false;
+let profileSelectorSubbed = false;
 
 function getProfileSelect(): HTMLSelectElement | null {
   return document.getElementById('asrProfileSelect') as HTMLSelectElement | null;
@@ -205,11 +205,11 @@ function renderProfileOptions(): void {
 }
 
 function wireProfileSelector(): void {
-  if (profileSelectorWired) return;
-  profileSelectorWired = true;
   try {
     const select = getProfileSelect();
     if (!select) return;
+    if (select.dataset.tpAsrProfileWired === '1') return;
+    select.dataset.tpAsrProfileWired = '1';
     select.addEventListener('change', () => {
       const id = select.value;
       if (!id) return;
@@ -219,7 +219,10 @@ function wireProfileSelector(): void {
       } catch {}
       renderProfileOptions();
     });
-    onAsr(() => renderProfileOptions());
+    if (!profileSelectorSubbed) {
+      profileSelectorSubbed = true;
+      onAsr(() => renderProfileOptions());
+    }
   } catch {
     // ignore
   }

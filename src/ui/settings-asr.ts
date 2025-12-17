@@ -4,7 +4,6 @@
 import { speechStore, type SpeechState } from '../state/speech-store';
 import { appStore, type AppStore } from '../state/app-store';
 
-let asrSettingsWired = false;
 let asrSettingsObserverStarted = false;
 let asrSettingsWarned = false;
 let asrSettingsRenderEventFired = false;
@@ -25,8 +24,8 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
     return;
   }
 
-  if (asrSettingsWired) return;
-  asrSettingsWired = true;
+  if (card.dataset.tpAsrWired === '1') return;
+  card.dataset.tpAsrWired = '1';
 
   const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
   const eng = q<HTMLSelectElement>('#asrEngine');

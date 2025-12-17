@@ -43,6 +43,7 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     try { initAsrSettingsUI(); } catch {}
     // Bind Hybrid gate preference select
     try { bindHybridGateSetting(rootEl); } catch {}
+    try { syncSettingsValues(resolvedStore); } catch {}
 
     // Inline link: Hybrid row → jump to ASR settings card
     try {
