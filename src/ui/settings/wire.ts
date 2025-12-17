@@ -6,6 +6,10 @@ import {
 } from '../../../recorders';
 import type { AppStore } from '../../state/app-store';
 
+const DATASET_SETTINGS_WIRED = 'tpSettingsWired';
+const DATASET_CHANGE_WIRED = 'tpChangeWired';
+const DATASET_CARD_WIRED = 'wired';
+
 function onStoreReady(preferred: AppStore | null, cb: (store: AppStore) => void, { delayMs = 50, maxAttempts = 200 } = {}) {
   let attempts = 0;
   const wait = () => {
@@ -136,8 +140,8 @@ async function pickFolder({ force }: { force?: boolean } = {}) {
     } catch {}
   };
 
-  if (chk && !chk.dataset.wired) {
-    chk.dataset.wired = '1';
+  if (chk && !chk.dataset[DATASET_CARD_WIRED]) {
+    chk.dataset[DATASET_CARD_WIRED] = '1';
     try {
       chk.checked = !!getAutoRecordEnabled();
     } catch {}
@@ -164,14 +168,14 @@ async function pickFolder({ force }: { force?: boolean } = {}) {
     });
   });
 
-  if (pickBtn && !pickBtn.dataset.wired) {
-    pickBtn.dataset.wired = '1';
+  if (pickBtn && !pickBtn.dataset[DATASET_CARD_WIRED]) {
+    pickBtn.dataset[DATASET_CARD_WIRED] = '1';
     pickBtn.addEventListener('click', () => {
       pickFolder({ force: true });
     });
   }
-  if (clearBtn && !clearBtn.dataset.wired) {
-    clearBtn.dataset.wired = '1';
+  if (clearBtn && !clearBtn.dataset[DATASET_CARD_WIRED]) {
+    clearBtn.dataset[DATASET_CARD_WIRED] = '1';
     clearBtn.addEventListener('click', async () => {
       try {
         await ensureRecDirReady();
@@ -215,20 +219,20 @@ function wireRecorderAdapters(rootEl: HTMLElement) {
     }
   };
 
-  if (coreCb && !coreCb.dataset.wired) {
-    coreCb.dataset.wired = '1';
+  if (coreCb && !coreCb.dataset[DATASET_CARD_WIRED]) {
+    coreCb.dataset[DATASET_CARD_WIRED] = '1';
     coreCb.addEventListener('change', applySelection);
   }
-  if (obsCb && !obsCb.dataset.wired) {
-    obsCb.dataset.wired = '1';
+  if (obsCb && !obsCb.dataset[DATASET_CARD_WIRED]) {
+    obsCb.dataset[DATASET_CARD_WIRED] = '1';
     obsCb.addEventListener('change', applySelection);
   }
-  if (modeCb && !modeCb.dataset.wired) {
-    modeCb.dataset.wired = '1';
+  if (modeCb && !modeCb.dataset[DATASET_CARD_WIRED]) {
+    modeCb.dataset[DATASET_CARD_WIRED] = '1';
     modeCb.addEventListener('change', applySelection);
   }
-  if (refreshBtn && !refreshBtn.dataset.wired) {
-    refreshBtn.dataset.wired = '1';
+  if (refreshBtn && !refreshBtn.dataset[DATASET_CARD_WIRED]) {
+    refreshBtn.dataset[DATASET_CARD_WIRED] = '1';
     refreshBtn.addEventListener('click', syncFromSettings);
   }
 
@@ -237,9 +241,12 @@ function wireRecorderAdapters(rootEl: HTMLElement) {
 
 export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore | null) {
   if (!rootEl) return;
+  if ((window as any).__TP_DEV) {
+    try { console.count('wireSettingsDynamic'); } catch {}
+  }
   try {
-    if (rootEl.dataset.tpSettingsWired === '1') return;
-    rootEl.dataset.tpSettingsWired = '1';
+    if (rootEl.dataset[DATASET_SETTINGS_WIRED] === '1') return;
+    rootEl.dataset[DATASET_SETTINGS_WIRED] = '1';
   } catch {}
   try { wireSettingsTabs(rootEl, store); } catch {}
   // attach a minimal mutation observer to demonstrate wiring
@@ -384,8 +391,8 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
         }
       });
 
-    if (micSel && micSel.dataset.tpChangeWired !== '1') {
-      micSel.dataset.tpChangeWired = '1';
+    if (micSel && micSel.dataset[DATASET_CHANGE_WIRED] !== '1') {
+      micSel.dataset[DATASET_CHANGE_WIRED] = '1';
       micSel.addEventListener('change', () => {
         try {
           const chosen = micSel.value || undefined;
@@ -396,8 +403,8 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
       });
     }
 
-    if (camSel && camSel.dataset.tpChangeWired !== '1') {
-      camSel.dataset.tpChangeWired = '1';
+    if (camSel && camSel.dataset[DATASET_CHANGE_WIRED] !== '1') {
+      camSel.dataset[DATASET_CHANGE_WIRED] = '1';
       camSel.addEventListener('change', async () => {
         try {
           const id = (camSel as HTMLSelectElement).value;

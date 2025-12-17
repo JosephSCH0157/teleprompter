@@ -20,6 +20,9 @@ function getStore(store?: AppStore | null): AppStore | null {
 export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | null) {
   const resolvedStore = getStore(store) || createAppStore();
   try {
+    if ((window as any).__TP_DEV) {
+      try { console.count('mountSettings'); } catch {}
+    }
     if (!rootEl) return;
     // Clear any leftover legacy/fallback content before rebuilding
     try {
