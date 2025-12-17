@@ -22,6 +22,7 @@
           var target = 'teleprompter_pro.html';
           var q = window.location.search || '';
           var h = window.location.hash || '';
+          console.info('[SSOT] Redirecting index.html → teleprompter_pro.html');
           window.location.replace(target + q + h);
         } catch (e) {
           console.warn('[SSOT] index.html redirect failed:', e);
