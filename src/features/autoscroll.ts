@@ -593,6 +593,7 @@ function handleScrollModeChange(mode: string | null | undefined): void {
   const normalized = String(mode || '').trim().toLowerCase();
   if (!AUTO_SCROLL_MODES.has(normalized)) {
     lastAutoModeNormalized = null;
+    setEnabled(false);
     return;
   }
   if (lastAutoModeNormalized === normalized) return;
