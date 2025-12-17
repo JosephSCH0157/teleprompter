@@ -12,6 +12,7 @@ const shared = {
 
 const entries = [
   { in: 'src/hud/debug.ts', outbase: 'src/hud' },
+  { in: 'src/hud/popout-entry.ts', outbase: 'src/hud' },
 ];
 
 const ctx = await esbuild.context({

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Anvil — HUD</title>
+  <link rel="stylesheet" href="./teleprompter_pro.css" />
+  <style>
+    body { margin: 0; background: #0b0f14; }
+    #hud-root { position: relative !important; pointer-events: auto !important; inset: auto !important; }
+    #hud-popout-root {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: start;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud-popout-root">
+    <div id="hud-root"></div>
+  </div>
+  <script type="module">
+    import { initHudPopout } from './src/hud/popout-entry.ts';
+    initHudPopout();
+  </script>
+</body>
+</html>

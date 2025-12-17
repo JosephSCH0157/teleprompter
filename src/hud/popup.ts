@@ -1,9 +1,11 @@
-// src/hud/popup.ts
+import { createHudBridge, type HudState } from './bridge';
+
 type HudPopupOpts = {
-  root: HTMLElement;
+  root?: HTMLElement | null;
   getStore?: () => any;
   dev?: boolean;
   maxLines?: number;
+  popout?: boolean;
 };
 
 export type HudPopupApi = {
@@ -13,12 +15,15 @@ export type HudPopupApi = {
   dumpSnapshot: (label?: string) => void;
   clear: () => void;
   setFrozen: (frozen: boolean) => void;
+  appendLines?: (lines: string[]) => void;
+  setSnapshotText?: (text: string) => void;
+  copyText?: (text: string) => void;
+  getState?: () => HudState;
+  openPopout?: () => void;
+  closePopout?: () => void;
 };
 
-const LS_POS = 'tp_hud_popup_pos_v1';
-const LS_OPEN = 'tp_hud_popup_open_v1';
-const LS_FROZEN = 'tp_hud_popup_frozen_v1';
-const LS_POPOUT = 'tp_hud_popup_popout_v1';
+const LS_STATE = 'tp_hud_state_v2';
 
 function safeJson(v: any): string {
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
@@ -36,32 +41,6 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-function loadPos(): { x: number; y: number } | null {
-  try {
-    const raw = localStorage.getItem(LS_POS);
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (typeof obj?.x !== 'number' || typeof obj?.y !== 'number') return null;
-    return { x: obj.x, y: obj.y };
-  } catch { return null; }
-}
-
-function savePos(x: number, y: number): void {
-  try { localStorage.setItem(LS_POS, JSON.stringify({ x, y })); } catch {}
-}
-
-function loadBool(key: string, fallback: boolean): boolean {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw == null) return fallback;
-    return raw === '1' || raw === 'true';
-  } catch { return fallback; }
-}
-
-function saveBool(key: string, v: boolean): void {
-  try { localStorage.setItem(key, v ? '1' : '0'); } catch {}
-}
-
 function storeGet(store: any, key: string): any {
   try {
     if (store?.get) return store.get(key);
@@ -70,28 +49,58 @@ function storeGet(store: any, key: string): any {
   return undefined;
 }
 
-export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
-  const { root, getStore, dev = false } = opts;
-  const maxLines = opts.maxLines ?? 600;
+function loadState(): HudState {
+  try {
+    const raw = localStorage.getItem(LS_STATE);
+    if (!raw) throw new Error('no state');
+    const parsed = JSON.parse(raw);
+    return {
+      open: !!parsed.open,
+      frozen: !!parsed.frozen,
+      popout: !!parsed.popout,
+      x: Number.isFinite(parsed.x) ? parsed.x : 12,
+      y: Number.isFinite(parsed.y) ? parsed.y : 120,
+    };
+  } catch {
+    return { open: false, frozen: false, popout: false, x: 12, y: 120 };
+  }
+}
 
+function saveState(state: HudState) {
+  try { localStorage.setItem(LS_STATE, JSON.stringify(state)); } catch {}
+}
+
+export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
+  const root = opts.root ?? document.getElementById('hud-root') ?? document.body;
+  const getStore = opts.getStore;
+  const maxLines = opts.maxLines ?? 600;
+  const isPopout = opts.popout ?? !!(window as any).__TP_HUD_POPOUT__;
+  const bridge = createHudBridge();
+  const storeLines: string[] = [];
+  let snapshotText = '';
+
+  const state = loadState();
   const wrap = document.createElement('div');
   wrap.className = 'tp-hud-popup';
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-label', 'Debug HUD');
+  wrap.style.position = 'fixed';
+  wrap.style.left = `${state.x}px`;
+  wrap.style.top = `${state.y}px`;
+  wrap.style.display = state.open ? 'block' : 'none';
+  wrap.dataset.open = state.open ? '1' : '0';
 
   const head = document.createElement('div');
   head.className = 'tp-hud-popup__head';
-
   const title = document.createElement('div');
   title.className = 'tp-hud-popup__title';
   title.textContent = 'HUD Log';
-
   const btns = document.createElement('div');
   btns.className = 'tp-hud-popup__btns';
 
   const makeBtn = (text: string, extra = '') => {
     const btn = document.createElement('button');
-    btn.className = 'tp-hud-btn ' + extra;
+    btn.className = 'tp-hud-btn' + (extra ? ` ${extra}` : '');
     btn.type = 'button';
     btn.textContent = text;
     return btn;
@@ -105,216 +114,37 @@ export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
   const btnDock = makeBtn('Dock');
   const btnClose = makeBtn('×', 'tp-hud-btn--close');
 
+  btnFreeze.dataset.on = state.frozen ? '1' : '0';
+  btnFreeze.textContent = state.frozen ? 'Frozen' : 'Freeze';
+  btnPopout.style.display = state.popout ? 'none' : '';
+  btnDock.style.display = state.popout ? '' : 'none';
+
   btns.append(btnDump, btnCopy, btnClear, btnFreeze, btnPopout, btnDock, btnClose);
   head.append(title, btns);
 
   const body = document.createElement('div');
   body.className = 'tp-hud-popup__body';
-
   const ta = document.createElement('textarea');
   ta.className = 'tp-hud-popup__text';
   ta.spellcheck = false;
   ta.wrap = 'off';
-  ta.value = '';
-
   body.appendChild(ta);
+
   wrap.append(head, body);
   wrap.style.pointerEvents = 'auto';
+  root.appendChild(wrap);
 
-  const pos = loadPos() ?? { x: 12, y: 120 };
-  wrap.style.left = `${pos.x}px`;
-  wrap.style.top = `${pos.y}px`;
-
-  let open = loadBool(LS_OPEN, false);
-  wrap.dataset.open = open ? '1' : '0';
-  wrap.style.display = open ? 'block' : 'none';
-
-  let frozen = loadBool(LS_FROZEN, false);
-  btnFreeze.dataset.on = frozen ? '1' : '0';
-  btnFreeze.textContent = frozen ? 'Frozen' : 'Freeze';
-
-  function setOpen(next: boolean) {
-    open = next;
-    saveBool(LS_OPEN, open);
-    wrap.dataset.open = open ? '1' : '0';
-    wrap.style.display = open ? 'block' : 'none';
-  }
-
-  function setFrozen(next: boolean) {
-    frozen = next;
-    saveBool(LS_FROZEN, frozen);
-    btnFreeze.dataset.on = frozen ? '1' : '0';
-    btnFreeze.textContent = frozen ? 'Frozen' : 'Freeze';
-  }
-
-  let popWin: Window | null = null;
-  let poppedOut = loadBool(LS_POPOUT, false);
-
-  const setPopButtons = () => {
-    btnPopout.style.display = poppedOut ? 'none' : '';
-    btnDock.style.display = poppedOut ? '' : 'none';
+  const ensureInsideViewport = () => {
+    const maxX = Math.max(0, window.innerWidth - 260);
+    const maxY = Math.max(0, window.innerHeight - 160);
+    const x = clamp(Number(wrap.style.left) || 0, 0, maxX);
+    const y = clamp(Number(wrap.style.top) || 0, 0, maxY);
+    wrap.style.left = `${x}px`;
+    wrap.style.top = `${y}px`;
+    state.x = x;
+    state.y = y;
+    saveState(state);
   };
-
-  const isPopOpen = () => !!popWin && !popWin.closed;
-
-  const sendToPop = (type: string, payload: any) => {
-    if (!isPopOpen()) return;
-    try {
-      popWin!.postMessage({ __tpHudPop: true, type, payload }, '*');
-    } catch {}
-  };
-
-  const setPoppedOut = (next: boolean) => {
-    poppedOut = next;
-    saveBool(LS_POPOUT, next);
-    setPopButtons();
-  };
-
-  const dockBack = () => {
-    setPoppedOut(false);
-    if (isPopOpen()) {
-      try { popWin!.close(); } catch {}
-    }
-    popWin = null;
-  };
-
-  const openPopout = () => {
-    if (isPopOpen()) {
-      popWin!.focus();
-      return;
-    }
-    popWin = window.open('', 'tp_hud_popout', 'width=700,height=420,resizable=yes,scrollbars=no');
-    if (!popWin) return;
-    setPoppedOut(true);
-
-    popWin.document.open();
-    popWin.document.write(`
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Anvil HUD</title>
-<style>
-  html,body{margin:0;height:100%;background:#0b1117;color:#eaf3ff;font-family:system-ui,'Segoe UI',Roboto,Arial}
-  .head{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.12)}
-  .btns{display:flex;gap:6px}
-  button{font:600 12px/1 system-ui;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.08);color:rgba(235,245,255,.92);border:1px solid rgba(255,255,255,.16);cursor:pointer}
-  button:hover{background:rgba(255,255,255,.12)}
-  textarea{width:calc(100% - 20px);height:calc(100% - 56px);margin:10px;resize:none;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);color:rgba(235,245,255,.92);font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:10px;outline:none}
-</style>
-<script>
-  const clearBtn = document.getElementById('clearBtn');
-  const copyBtn = document.getElementById('copyBtn');
-  const dockBtn = document.getElementById('dockBtn');
-  const ta = document.getElementById('ta');
-  clearBtn.onclick = () => ta.value = '';
-  copyBtn.onclick = async () => {
-    ta.focus(); ta.select();
-    try { await navigator.clipboard.writeText(ta.value || ''); } catch {}
-  };
-  dockBtn.onclick = () => {
-    window.opener?.postMessage({ __tpHudPop: true, type: 'dock' }, '*');
-  };
-  window.addEventListener('message', (e) => {
-    const m = e.data;
-    if (!m || !m.__tpHudPop) return;
-    if (m.type === 'append') {
-      ta.value += (ta.value ? '\\n' : '') + m.payload;
-      ta.scrollTop = ta.scrollHeight;
-    }
-    if (m.type === 'set') {
-      ta.value = String(m.payload || '');
-      ta.scrollTop = ta.scrollHeight;
-    }
-  });
-</script>
-</head>
-<body>
-  <div class="head">
-    <div><b>HUD Log</b></div>
-    <div class="btns">
-      <button id="copyBtn">Copy</button>
-      <button id="clearBtn">Clear</button>
-      <button id="dockBtn">Dock</button>
-    </div>
-  </div>
-  <textarea id="ta" spellcheck="false" wrap="off"></textarea>
-</body>
-</html>
-    `);
-    popWin.document.close();
-    sendToPop('set', ta.value);
-    try {
-      popWin.addEventListener('beforeunload', () => {
-        setPoppedOut(false);
-        popWin = null;
-      });
-    } catch {}
-  };
-
-  btnPopout.addEventListener('click', openPopout);
-  btnDock.addEventListener('click', dockBack);
-  setPoppedOut(poppedOut);
-
-  function appendLine(line: string) {
-    if (poppedOut && isPopOpen()) {
-      sendToPop('append', line);
-      return;
-    }
-    const existing = ta.value ? ta.value.split('\n') : [];
-    existing.push(line);
-    if (existing.length > maxLines) {
-      const drop = existing.length - maxLines;
-      existing.splice(0, drop);
-    }
-    ta.value = existing.join('\n');
-    ta.scrollTop = ta.scrollHeight;
-  }
-
-  function log(line: string, data?: any) {
-    if (!open || frozen) return;
-    const prefix = `[${nowStamp()}] `;
-    appendLine(prefix + line);
-    if (data !== undefined) {
-      const text = typeof data === 'string' ? data : safeJson(data);
-      text.split('\n').forEach((l) => appendLine(prefix + '  ' + l));
-    }
-  }
-
-  function dumpSnapshot(label = 'SNAPSHOT') {
-    const store = getStore?.();
-    const snap = {
-      label,
-      scrollMode: storeGet(store, 'scrollMode'),
-      clamp: storeGet(store, 'scrollClamp'),
-      asrEnabled: storeGet(store, 'asrEnabled'),
-      asrLive: storeGet(store, 'asrLive'),
-      autoEnabled: storeGet(store, 'autoScrollEnabled'),
-      autoSpeed: storeGet(store, 'autoSpeed'),
-      wpmTarget: storeGet(store, 'wpmTarget'),
-      speechReady: storeGet(store, 'speechReady'),
-      micAllowed: storeGet(store, 'micAllowed'),
-      hudEnabledByUser: storeGet(store, 'hudEnabledByUser'),
-      hudSupported: storeGet(store, 'hudSupported'),
-    };
-    log(`[HUD ${label}]`, snap);
-  }
-
-  btnClose.addEventListener('click', () => setOpen(false));
-  btnFreeze.addEventListener('click', () => setFrozen(!frozen));
-  btnClear.addEventListener('click', () => { ta.value = ''; });
-  btnCopy.addEventListener('click', async () => {
-    try {
-      ta.focus();
-      ta.select();
-      const text = ta.value || '';
-      await navigator.clipboard.writeText(text);
-      if (dev) log('Copied HUD text to clipboard');
-    } catch (e) {
-      if (dev) log('Copy failed; text selected for Ctrl+C', String(e));
-    }
-  });
-  btnDump.addEventListener('click', () => dumpSnapshot('DUMP'));
 
   let dragging = false;
   let startX = 0;
@@ -324,7 +154,7 @@ export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
 
   head.style.cursor = 'grab';
   head.addEventListener('pointerdown', (ev) => {
-    if ((ev.target as HTMLElement)?.closest('button')) return;
+    if ((ev.target as HTMLElement | null)?.closest('button')) return;
     dragging = true;
     head.setPointerCapture(ev.pointerId);
     head.style.cursor = 'grabbing';
@@ -351,39 +181,241 @@ export function mountHudPopup(opts: HudPopupOpts): HudPopupApi {
     if (!dragging) return;
     dragging = false;
     head.style.cursor = 'grab';
-    const x = parseFloat(wrap.style.left || '0') || 0;
-    const y = parseFloat(wrap.style.top || '0') || 0;
-    savePos(x, y);
+    ensureInsideViewport();
   });
 
-  root.appendChild(wrap);
+  const appendLine = (line: string) => {
+    const existing = ta.value ? ta.value.split('\n') : [];
+    existing.push(line);
+    if (existing.length > maxLines) {
+      const drop = existing.length - maxLines;
+      existing.splice(0, drop);
+    }
+    ta.value = existing.join('\n');
+    ta.scrollTop = ta.scrollHeight;
+    storeLines.length = existing.length;
+    existing.forEach((l, idx) => storeLines[idx] = l);
+    if (!isPopout) {
+      broadcastAppend([line]);
+    }
+  };
+
+  const log = (line: string, data?: any) => {
+    if (!state.open || state.frozen) return;
+    const prefix = `[${nowStamp()}] `;
+    appendLine(prefix + line);
+    if (data !== undefined) {
+      const text = typeof data === 'string' ? data : safeJson(data);
+      text.split('\n').forEach((l) => appendLine(prefix + '  ' + l));
+    }
+  };
+
+  const dumpSnapshot = (label = 'SNAPSHOT') => {
+    const store = getStore?.();
+    const snap = {
+      label,
+      scrollMode: store ? storeGet(store, 'scrollMode') : undefined,
+      clamp: store ? storeGet(store, 'scrollClamp') : undefined,
+      asrEnabled: store ? storeGet(store, 'asrEnabled') : undefined,
+      asrLive: store ? storeGet(store, 'asrLive') : undefined,
+      autoEnabled: store ? storeGet(store, 'autoScrollEnabled') : undefined,
+      autoSpeed: store ? storeGet(store, 'autoSpeed') : undefined,
+      wpmTarget: store ? storeGet(store, 'wpmTarget') : undefined,
+      speechReady: store ? storeGet(store, 'speechReady') : undefined,
+      micAllowed: store ? storeGet(store, 'micAllowed') : undefined,
+      hudEnabledByUser: store ? storeGet(store, 'hudEnabledByUser') : undefined,
+      hudSupported: store ? storeGet(store, 'hudSupported') : undefined,
+    };
+    log(`[HUD ${label}]`, snap);
+    snapshotText = JSON.stringify(snap, null, 2);
+    if (!isPopout) broadcastSnapshot(snapshotText);
+  };
+
+  const clear = () => {
+    ta.value = '';
+    storeLines.length = 0;
+    snapshotText = '';
+    if (!isPopout) bridge.send({ type: 'hud:clear' });
+  };
+
+  const copyText = async (text?: string) => {
+    const content = String(text ?? ta.value);
+    if (!content) return;
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch {
+      const temp = document.createElement('textarea');
+      temp.value = content;
+      document.body.appendChild(temp);
+      temp.select();
+      try { document.execCommand('copy'); } catch {}
+      temp.remove();
+    }
+  };
+
+  const setSnapshotText = (text: string) => {
+    snapshotText = text || '';
+    if (!isPopout) broadcastSnapshot(snapshotText);
+  };
+
+  const setOpen = (next: boolean) => {
+    state.open = next;
+    wrap.dataset.open = next ? '1' : '0';
+    wrap.style.display = next ? 'block' : 'none';
+    saveState(state);
+    if (!isPopout) {
+      broadcastState();
+    }
+  };
+
+  const setFrozen = (next: boolean) => {
+    state.frozen = next;
+    btnFreeze.dataset.on = next ? '1' : '0';
+    btnFreeze.textContent = next ? 'Frozen' : 'Freeze';
+    saveState(state);
+    if (!isPopout) broadcastState();
+  };
+
+  const setPopout = (next: boolean) => {
+    state.popout = next;
+    btnPopout.style.display = next ? 'none' : '';
+    btnDock.style.display = next ? '' : 'none';
+    saveState(state);
+    if (!isPopout) broadcastState();
+  };
+
+  const openPopout = () => {
+    if (state.popout) return;
+    const features = [
+      'popup=yes',
+      'width=520',
+      'height=700',
+      'resizable=yes',
+      'scrollbars=yes',
+    ].join(',');
+    const win = window.open('./hud_popout.html', 'tpHudPopout', features);
+    if (!win) return;
+    (window as any).__tpHudPopoutWin = win;
+    setPopout(true);
+    bridge.send({ type: 'hud:state', state });
+  };
+
+  const closePopout = () => {
+    setPopout(false);
+    if (isPopout) return;
+    const win = (window as any).__tpHudPopoutWin;
+    if (win && !win.closed) {
+      try { win.close(); } catch {}
+    }
+  };
+
+  const broadcastState = () => {
+    bridge.send({ type: 'hud:state', state });
+  };
+
+  const broadcastAppend = (lines: string[]) => {
+    if (!lines.length) return;
+    bridge.send({ type: 'hud:append', lines });
+  };
+
+  const broadcastSnapshot = (text: string) => {
+    bridge.send({ type: 'hud:snapshot', text });
+  };
+
+  bridge.on((msg) => {
+    if (isPopout) {
+      switch (msg.type) {
+        case 'hud:state':
+          setOpen(msg.state.open);
+          setFrozen(msg.state.frozen);
+          break;
+        case 'hud:append':
+          msg.lines.forEach((line) => appendLine(line));
+          break;
+        case 'hud:snapshot':
+          setSnapshotText(msg.text);
+          break;
+        case 'hud:clear':
+          clear();
+          break;
+        case 'hud:setFrozen':
+          setFrozen(msg.frozen);
+          break;
+        case 'hud:copy':
+          copyText(msg.text);
+          break;
+        case 'hud:requestSync':
+          // popout ignores this direction
+          break;
+      }
+      return;
+    }
+
+    switch (msg.type) {
+      case 'hud:requestSync':
+        broadcastState();
+        if (storeLines.length) bridge.send({ type: 'hud:append', lines: [...storeLines] });
+        if (snapshotText) bridge.send({ type: 'hud:snapshot', text: snapshotText });
+        break;
+      case 'hud:clear':
+        clear();
+        break;
+      case 'hud:setFrozen':
+        setFrozen(msg.frozen);
+        break;
+      case 'hud:copy':
+        copyText(msg.text);
+        break;
+    }
+  });
+
+  btnClose.addEventListener('click', () => setOpen(false));
+  btnFreeze.addEventListener('click', () => setFrozen(!state.frozen));
+  btnClear.addEventListener('click', () => clear());
+  btnCopy.addEventListener('click', () => copyText());
+  btnDump.addEventListener('click', () => dumpSnapshot('DUMP'));
+  btnPopout.addEventListener('click', openPopout);
+  btnDock.addEventListener('click', closePopout);
+
+  window.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.isContentEditable || ['input', 'textarea', 'select'].includes((target.tagName || '').toLowerCase()))) {
+      return;
+    }
+    const isTilde = e.shiftKey ? e.code === 'Backquote' : e.key === '`' || e.key === '~';
+    if (!isTilde) return;
+    setOpen(!state.open);
+    e.preventDefault();
+  }, { capture: true });
 
   window.addEventListener('message', (e) => {
     const m = e.data;
     if (!m || !m.__tpHudPop) return;
-    if (m.type === 'dock') dockBack();
+    if (m.type === 'dock') {
+      setPopout(false);
+    }
   });
 
-  const handleHotkey = (e: KeyboardEvent) => {
-    try {
-      const target = e.target as HTMLElement | null;
-      if (target && (target.isContentEditable || ['input', 'textarea', 'select'].includes((target.tagName || '').toLowerCase()))) {
-        return;
-      }
-      const isTilde = e.code === 'Backquote' && e.shiftKey || e.key === '`' || e.key === '~';
-      if (!isTilde) return;
-      setOpen(!open);
-      e.preventDefault();
-    } catch {}
-  };
-  window.addEventListener('keydown', handleHotkey, { capture: true });
+  if (!state.popout && state.open) {
+    broadcastState();
+  }
+
+  window.addEventListener('beforeunload', () => {
+    bridge.close();
+  });
 
   return {
-    isOpen: () => open,
+    isOpen: () => state.open,
     setOpen,
     log,
     dumpSnapshot,
-    clear: () => { ta.value = ''; },
+    clear,
     setFrozen,
+    appendLines: (lines: string[]) => lines.forEach((line) => appendLine(line)),
+    setSnapshotText,
+    copyText,
+    getState: () => ({ ...state }),
+    openPopout,
+    closePopout,
   };
 }

@@ -3,7 +3,7 @@ import { initAsrStatsHud } from './asr-stats';
 import { initRecStatsHud } from './rec-stats';
 import { initScrollStripHud } from './scroll-strip';
 import { attachHudDrag } from './drag';
-import { mountHudPopup, type HudPopupApi } from './popup';
+import { initHudPopup, type HudPopupApi } from './popup';
 import type { AppStore, AppStoreState } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
 import { shouldShowHud } from './shouldShowHud';
@@ -130,7 +130,7 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
   const ensurePopup = (): HudPopupApi | null => {
     if (popupApi) return popupApi;
     if (!root) return null;
-    popupApi = mountHudPopup({
+    popupApi = initHudPopup({
       root,
       getStore: () => (window as any).__tpStore,
       dev: !!(window as any).__TP_DEV || /[?#]dev=1/.test(location.href),
