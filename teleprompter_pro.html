@@ -390,14 +390,14 @@
 <button id="micToggleBtn" class="chip mic-idle" type="button" data-tp-request-mic="sidebar">Request Mic</button>
 <button disabled="" id="recBtn" class="btn-primary btn-start" data-action="start-speech">Start speech sync</button>
 </div>
-<div class="row">
-  <label>Auto-scroll (px/s)
-    <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
-  </label>
-  <button id="autoDec" class="chip" title="-1 (Shift: -5)">-</button>
-  <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
-  <button id="autoToggle">Auto-scroll: Off</button>
-</div>
+  <div class="row" id="autoRow" data-role="auto-row" aria-hidden="false">
+    <label>Auto-scroll (px/s)
+      <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
+    </label>
+    <button id="autoDec" class="chip" title="-1 (Shift: -5)">-</button>
+    <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
+    <button id="autoToggle">Auto-scroll: Off</button>
+  </div>
 <div class="row visually-hidden" id="wpmRow" aria-hidden="true">
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
@@ -939,6 +939,5 @@ Joe starts here.
   </script>
 </body>
 </html>
-
 
 

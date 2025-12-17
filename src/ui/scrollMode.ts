@@ -6,9 +6,10 @@ function findAutoControls(root: ParentNode) {
   const autoSpeed = root.querySelector<HTMLInputElement>('#autoSpeed');
   const autoSpeedLabel = autoSpeed?.closest('label') as HTMLLabelElement | null;
   const autoToggle = root.querySelector<HTMLButtonElement>('#autoToggle');
+  const autoRow = root.querySelector<HTMLElement>('#autoRow');
   const wpmRow = root.querySelector<HTMLElement>('#wpmRow');
   const stepRow = root.querySelector<HTMLElement>('#stepControlsRow');
-  return { autoSpeed, autoSpeedLabel, autoToggle, wpmRow, stepRow };
+  return { autoSpeed, autoSpeedLabel, autoToggle, autoRow, wpmRow, stepRow };
 }
 
 function setRowVisibility(row: HTMLElement | null, visible: boolean) {
@@ -18,7 +19,7 @@ function setRowVisibility(row: HTMLElement | null, visible: boolean) {
 }
 
 export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement = document): void {
-  const { autoSpeed, autoSpeedLabel, autoToggle, wpmRow, stepRow } = findAutoControls(root);
+  const { autoSpeed, autoSpeedLabel, autoToggle, autoRow, wpmRow, stepRow } = findAutoControls(root);
 
   try {
     const rootEl = root instanceof Document ? root.documentElement : root.ownerDocument?.documentElement || document.documentElement;
@@ -33,6 +34,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
     autoToggle.textContent = 'Auto-scroll: Off';
   }
   const asrLive = !!appStore.get?.('asrLive');
+  setRowVisibility(autoRow as HTMLElement | null, true);
   setRowVisibility(wpmRow as HTMLElement | null, false);
   setRowVisibility(stepRow as HTMLElement | null, false);
 
@@ -41,15 +43,18 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       // Baseline px/s
       break;
     case 'wpm':
+      setRowVisibility(autoRow as HTMLElement | null, true);
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
       if (!asrLive) setRowVisibility(wpmRow as HTMLElement | null, true);
       break;
     case 'hybrid':
       // Treat UI like auto but with WPM target visible
+      setRowVisibility(autoRow as HTMLElement | null, true);
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
       if (!asrLive) setRowVisibility(wpmRow as HTMLElement | null, true);
       break;
     case 'asr':
+      setRowVisibility(autoRow as HTMLElement | null, false);
       if (autoSpeed) autoSpeed.disabled = true;
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'ASR controls speed';
       if (autoToggle) {
@@ -65,6 +70,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
         autoToggle.disabled = false;
         autoToggle.textContent = 'Step';
       }
+      setRowVisibility(autoRow as HTMLElement | null, false);
       setRowVisibility(stepRow as HTMLElement | null, true);
       break;
     case 'rehearsal':
@@ -74,6 +80,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
         autoToggle.disabled = true;
         autoToggle.textContent = 'Auto-scroll disabled';
       }
+      setRowVisibility(autoRow as HTMLElement | null, false);
       setRowVisibility(wpmRow as HTMLElement | null, false);
       setRowVisibility(stepRow as HTMLElement | null, false);
       break;
