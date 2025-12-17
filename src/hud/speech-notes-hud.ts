@@ -28,7 +28,7 @@ type Note = { text: string; final: boolean; ts: number; sim?: number };
 const HUD_ID = 'tp-speech-notes-hud';
 const LS_KEY = 'tp_hud_speech_notes_v1';
 
-function isDevSession(): boolean {
+function _isDevSession(): boolean {
   try {
     if ((window as any).__TP_DEV) return true;
     const sp = new URLSearchParams(location.search);
@@ -48,7 +48,7 @@ function savingEnabled(): boolean {
   }
 }
 
-function prodHudOptIn(): boolean {
+function _prodHudOptIn(): boolean {
   try {
     return localStorage.getItem('tp_hud_prod') === '1';
   } catch {
