@@ -7,7 +7,7 @@ const shared = {
   platform: 'browser',
   sourcemap: true,
   target: ['es2020'],
-  outdir: 'speech',            // served at /speech/*.js
+  outdir: 'dist/speech',            // served at /speech/*.js
 };
 
 const entries = [
