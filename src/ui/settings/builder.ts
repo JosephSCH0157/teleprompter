@@ -1,4 +1,4 @@
-﻿export function buildSettingsContent(rootEl: HTMLElement | null) {
+export function buildSettingsContent(rootEl: HTMLElement | null) {
   if (!rootEl) return '';
   // Render a compact settings body with tab content placeholders.
   // The media tab contains mic device selector and mic controls which
@@ -36,7 +36,7 @@
           </div>
           <div class="settings-inline-row">
             <button id="typoResetMain" class="chip">Reset to Default</button>
-            <button id="typoCopyMainToDisplay" class="chip">Copy �?? Display</button>
+            <button id="typoCopyMainToDisplay" class="chip">Copy ??? Display</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="readable">Readable</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="studio">Studio</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="bigroom">Big Room</button>
@@ -70,7 +70,7 @@
           </div>
           <div class="settings-inline-row">
             <button id="typoResetDisplay" class="chip">Reset to Default</button>
-            <button id="typoCopyDisplayToMain" class="chip">Copy �?? Main</button>
+            <button id="typoCopyDisplayToMain" class="chip">Copy ??? Main</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="readable">Readable</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="studio">Studio</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="bigroom">Big Room</button>
@@ -112,7 +112,7 @@
             </select>
           </label>
           <label>Language
-            <input id="asrLang" type="text" placeholder="en-US" title="Language you�ll speak during recording so ASR can interpret correctly.">
+            <input id="asrLang" type="text" placeholder="en-US" title="Language you'll speak during recording so ASR can interpret correctly.">
           </label>
           <label><input id="asrInterim" type="checkbox" title="Show partial speech results before a sentence finishes for faster scroll response."> Use interim results</label>
           <label><input id="asrFillers" type="checkbox" title="Remove filler words like um/uh/like so scroll aligns better with your script."> Filter filler words</label>
@@ -148,7 +148,7 @@
         </div>
         <div class="row" id="autoRecordFolderRow">
           <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>
-          <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder�?�</button>
+          <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder</button>
           <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>
         </div>
       </div>
@@ -183,7 +183,7 @@
           <button id="settingsObsTest" data-action="obs-test" class="chip btn-chip" type="button">Test connection</button>
           <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>
         </div>
-        <small class="muted">OBS �?? Tools �?? WebSocket Server Settings (default port 4455). Use this host and password.</small>
+        <small class="muted">OBS ??? Tools ??? WebSocket Server Settings (default port 4455). Use this host and password.</small>
       </div>
 
       <div class="settings-card anim-in">
@@ -209,7 +209,7 @@
         <div class="settings-card anim-in">
           <h4>Pricing</h4>
           <p>
-            You�??re currently using a pre-release build of Anvil. During this phase,
+            You???re currently using a pre-release build of Anvil. During this phase,
             all features are available to invited testers.
           </p>
           <ul>
@@ -319,7 +319,7 @@ export function addAsrWizardCard(root: HTMLElement) {
         id="asrCalStatus"
         hidden
       >
-        Click �??Start calibration�?� to begin. We�??ll ask you to stay quiet, then speak in your normal voice.
+        Click ???Start calibration??? to begin. We???ll ask you to stay quiet, then speak in your normal voice.
       </div>
       <small class="muted">Tip: Use headphones; leave NS/AGC off for best timing. Enable AEC only if using speakers.</small>
     `;

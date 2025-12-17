@@ -138,25 +138,6 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
       }
     } catch {}
 
-    // Legacy-ID compatibility: alias legacy IDs used in monolith
-    try {
-      const legacyMap: Record<string,string> = {
-        'settingsReqMic': 'settingsRequestMicBtn',
-        'settingsReqMicBtn': 'settingsRequestMicBtn'
-      };
-      Object.keys(legacyMap).forEach((legacyId) => {
-        try {
-          const modern = legacyMap[legacyId];
-          const modernEl = rootEl.querySelector('#' + modern) as HTMLElement | null;
-          if (modernEl && !document.getElementById(legacyId)) {
-            // expose as a window reference for legacy codepaths instead of duplicating IDs
-            (window as any).__tpLegacyRefs = (window as any).__tpLegacyRefs || {};
-            (window as any).__tpLegacyRefs[legacyId] = modernEl;
-          }
-        } catch {}
-      });
-    } catch {}
-
     // Ensure the Scripts Folder card is present after builder render (builder may overwrite earlier injection)
     try { ensureSettingsFolderControls(); } catch {}
   } catch {}
