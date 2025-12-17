@@ -46,11 +46,11 @@
     },
     {
       "id": "stepPrevBtn",
-      "text": "Step ?"
+      "text": "Step ↑"
     },
     {
       "id": "stepNextBtn",
-      "text": "Step ?"
+      "text": "Step ↓"
     },
     {
       "id": "enableObs",
