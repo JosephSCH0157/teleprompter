@@ -1,22 +1,46 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Anvil Teleprompter</title>
-  <meta http-equiv="refresh" content="0; url=teleprompter_pro.html" />
-  <script>
-    (function () {
-      try {
-        var dest = 'teleprompter_pro.html' + window.location.search + window.location.hash;
-        window.location.replace(dest);
-      } catch (err) {
-        console.error('[redirect] Teleprompter shell redirect failed', err);
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0; url=teleprompter_pro.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redirecting…</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 24px;
       }
-    })();
-  </script>
-</head>
-<body>
-  <p>Redirecting to <a href="teleprompter_pro.html">teleprompter_pro.html</a>…</p>
-</body>
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
+    <script>
+      (function () {
+        try {
+          var target = 'teleprompter_pro.html';
+          var q = window.location.search || '';
+          var h = window.location.hash || '';
+          window.location.replace(target + q + h);
+        } catch (e) {
+          console.warn('[SSOT] index.html redirect failed:', e);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to <code>teleprompter_pro.html</code>…</p>
+    <p>
+      If you are not redirected,
+      <a id="fallbackLink" href="teleprompter_pro.html">click here</a>.
+    </p>
+    <script>
+      (function () {
+        var a = document.getElementById('fallbackLink');
+        if (!a) return;
+        a.href = 'teleprompter_pro.html' + (location.search || '') + (location.hash || '');
+      })();
+    </script>
+  </body>
 </html>
