@@ -383,13 +383,27 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
         }
       });
     if (startDb)
-      startDb.addEventListener('click', () => {
+      startDb.addEventListener('click', async () => {
         try {
           const api = (window as any).__tpMic;
-          if (api && typeof api.startDbMeter === 'function') {
-            const s = (api as any).__lastStream as MediaStream | undefined;
-            if (s) api.startDbMeter(s);
-            else console.warn('no known stream to start dB meter');
+          if (!api || typeof api.startDbMeter !== 'function') return;
+          const startMeterWith = (stream: MediaStream | undefined | null) => {
+            if (stream) {
+              api.startDbMeter(stream);
+              return true;
+            }
+            return false;
+          };
+          if (startMeterWith((api as any).__lastStream)) return;
+          if (micApi && typeof micApi.requestMic === 'function') {
+            try {
+              const stream = await micApi.requestMic();
+              startMeterWith(stream);
+            } catch (err) {
+              console.warn('[settings] startDbMeter request failed', err);
+            }
+          } else {
+            console.warn('no known stream to start dB meter');
           }
         } catch (e) {
           console.warn(e);
