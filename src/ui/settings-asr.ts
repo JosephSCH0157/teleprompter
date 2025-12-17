@@ -160,6 +160,15 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
   const appliedEl = card.querySelector<HTMLElement>('#asrAppliedStatus');
   if (!saveEl && !appliedEl) return;
   const resolved = resolveStore(store);
+  const SAVE_STALE_MS = 15_000;
+  let saveStatusTimer: number | null = null;
+
+  const clearSaveTimer = () => {
+    if (saveStatusTimer) {
+      try { clearTimeout(saveStatusTimer); } catch {}
+      saveStatusTimer = null;
+    }
+  };
 
   const renderSaveStatus = () => {
     if (!saveEl) return;
@@ -167,17 +176,36 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
     if (!status || status.state === 'idle') {
       saveEl.textContent = '';
       saveEl.hidden = true;
+      clearSaveTimer();
+      delete saveEl.dataset.stale;
       return;
     }
     let text = '';
     if (status.state === 'saving') {
       text = 'Saving to account...';
+      clearSaveTimer();
+      delete saveEl.dataset.stale;
     } else if (status.state === 'saved') {
       const when = formatRelativeTime(status.at);
-      text = `Saved to account [OK]${when ? ` (${when})` : ''}`;
+      const elapsed = Date.now() - status.at;
+      const isStale = elapsed >= SAVE_STALE_MS;
+      if (isStale) {
+        text = 'Saved';
+        saveEl.dataset.stale = '1';
+        clearSaveTimer();
+      } else {
+        text = `Saved to account [OK]${when ? ` (${when})` : ''}`;
+        delete saveEl.dataset.stale;
+        clearSaveTimer();
+        saveStatusTimer = window.setTimeout(() => {
+          try { renderSaveStatus(); } catch {}
+        }, Math.max(SAVE_STALE_MS - elapsed, 0));
+      }
     } else if (status.state === 'failed') {
       const errSuffix = status.error ? `: ${status.error}` : '';
       text = `Save failed${errSuffix}`;
+      clearSaveTimer();
+      delete saveEl.dataset.stale;
     }
     saveEl.textContent = text;
     saveEl.hidden = !text;
@@ -188,6 +216,14 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
     const appliedAt = (resolved?.get?.('asrLastAppliedAt') as number) || 0;
     const summary = resolved?.get?.('asrLastAppliedSummary') as Record<string, unknown> | undefined;
     const ok = !!resolved?.get?.('asrLastApplyOk');
+    const status = resolved?.get?.('settingsSaveStatus') as SettingsSaveStatus | undefined;
+    const lastSaveAt = status?.state === 'saved' ? status.at : 0;
+    const asrRunning = !!resolved?.get?.('asrLive');
+    if (!asrRunning && lastSaveAt && lastSaveAt > appliedAt) {
+      appliedEl.textContent = 'Pending application (ASR not running)';
+      appliedEl.hidden = false;
+      return;
+    }
     if (!appliedAt) {
       appliedEl.textContent = 'ASR has not applied any settings yet.';
       appliedEl.hidden = false;
@@ -216,6 +252,7 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
     resolved.subscribe('asrLastAppliedAt', renderAppliedStatus);
     resolved.subscribe('asrLastAppliedSummary', renderAppliedStatus);
     resolved.subscribe('asrLastApplyOk', renderAppliedStatus);
+    resolved.subscribe('asrLive', renderAppliedStatus);
   }
 }
 
