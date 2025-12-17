@@ -315,8 +315,12 @@ export async function startAsrWizard(): Promise<void> {
 
 function wire(): void {
   try {
-    const startBtn = $('asrStartBtn');
-    startBtn?.addEventListener('click', () => startAsrWizard());
+    const attachStart = (id: string) => {
+      const btn = $(id);
+      btn?.addEventListener('click', () => startAsrWizard());
+    };
+    attachStart('asrStartBtn');
+    attachStart('asrCalibBtn');
 
     $('asrPreviewBtn')?.addEventListener('click', () => current?.preview());
     $('asrPreviewStop')?.addEventListener('click', () => current?.preview(true));

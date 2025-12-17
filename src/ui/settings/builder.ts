@@ -6,7 +6,7 @@
   try { console.info('[settings-builder] renderSettingsBody TS v2025-12-07'); } catch {}
   const html = `
     <div class="settings-body-root" data-settings-source="ts-builder-2025-12-07">
-    <div class="settings-tabs" role="tablist">
+    <div id="settingsTabs" class="settings-tabs" role="tablist">
       <button type="button" class="settings-tab active" data-settings-tab="general" aria-pressed="true">General</button>
       <button type="button" class="settings-tab" data-settings-tab="media" aria-pressed="false">Media</button>
       <button type="button" class="settings-tab" data-settings-tab="recording" aria-pressed="false">Recording</button>
@@ -308,6 +308,7 @@ export function addAsrWizardCard(root: HTMLElement) {
 
       <div class="row gap">
         <button id="asrStartBtn" class="btn primary">Start calibration</button>
+        <button id="asrCalibBtn" type="button" hidden aria-hidden="true">Calibrate (hidden)</button>
         <button id="asrPreviewBtn" class="btn">Preview (gate)</button>
         <button id="asrPreviewStop" class="btn">Stop preview</button>
         <button id="asrSaveBtn" class="btn success">Save profile</button>
@@ -325,5 +326,4 @@ export function addAsrWizardCard(root: HTMLElement) {
     container.appendChild(sec);
   } catch {}
 }
-
 

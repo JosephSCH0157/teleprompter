@@ -216,7 +216,7 @@
       "text": "[SCRIPT-EDITOR] wiring complete",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 29408,
+        "lineNumber": 29413,
         "columnNumber": 12
       }
     },
@@ -225,7 +225,7 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37660,
+        "lineNumber": 37665,
         "columnNumber": 10
       }
     },
@@ -234,7 +234,7 @@
       "text": "[TP-BOOT] TS index.ts booted",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 37675,
+        "lineNumber": 37680,
         "columnNumber": 10
       }
     },
@@ -243,7 +243,7 @@
       "text": "[AUTO] setEnabled(from hotkey) true",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30367,
+        "lineNumber": 30372,
         "columnNumber": 18
       }
     },
@@ -252,7 +252,7 @@
       "text": "[AUTO] blocked: session not live or auto-on-live disabled",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30372,
+        "lineNumber": 30377,
         "columnNumber": 20
       }
     },
@@ -261,7 +261,7 @@
       "text": "[AUTO] setEnabled(from hotkey) true",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30367,
+        "lineNumber": 30372,
         "columnNumber": 18
       }
     },
@@ -270,7 +270,7 @@
       "text": "[AUTO] blocked: session not live or auto-on-live disabled",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30372,
+        "lineNumber": 30377,
         "columnNumber": 20
       }
     },
@@ -288,7 +288,7 @@
       "text": "[AUTO] setEnabled(from hotkey) false",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30367,
+        "lineNumber": 30372,
         "columnNumber": 18
       }
     },
@@ -297,7 +297,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38254,
+        "lineNumber": 38259,
         "columnNumber": 12
       }
     },
@@ -306,7 +306,7 @@
       "text": "[AUTO] setEnabled(from hotkey) false",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30367,
+        "lineNumber": 30372,
         "columnNumber": 18
       }
     },
@@ -315,7 +315,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38254,
+        "lineNumber": 38259,
         "columnNumber": 12
       }
     },
@@ -324,7 +324,7 @@
       "text": "[AUTO] setEnabled(from hotkey) false",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30367,
+        "lineNumber": 30372,
         "columnNumber": 18
       }
     },
@@ -333,7 +333,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38254,
+        "lineNumber": 38259,
         "columnNumber": 12
       }
     },
@@ -342,7 +342,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 36245,
+        "lineNumber": 36250,
         "columnNumber": 10
       }
     },
@@ -351,7 +351,7 @@
       "text": "[display-debug] bindStaticDom:display-btn JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 35187,
+        "lineNumber": 35192,
         "columnNumber": 14
       }
     },
@@ -360,7 +360,7 @@
       "text": "[display-debug] wireDisplayBridge JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 35187,
+        "lineNumber": 35192,
         "columnNumber": 14
       }
     },
@@ -378,7 +378,7 @@
       "text": "[SCROLL] initOnce: scroll-router (viewer=true)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 39027,
+        "lineNumber": 39032,
         "columnNumber": 22
       }
     },
@@ -405,7 +405,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 27712,
+        "lineNumber": 27716,
         "columnNumber": 12
       }
     },
@@ -423,7 +423,7 @@
       "text": "[src/features/persistence] initPersistence",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 28983,
+        "lineNumber": 28988,
         "columnNumber": 12
       }
     },
@@ -432,7 +432,7 @@
       "text": "[src/features/telemetry] initTelemetry",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 29152,
+        "lineNumber": 29157,
         "columnNumber": 12
       }
     },
@@ -441,7 +441,7 @@
       "text": "[src/features/hotkeys] initHotkeys",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 28975,
+        "lineNumber": 28980,
         "columnNumber": 12
       }
     },
@@ -450,7 +450,7 @@
       "text": "[src/features/toasts] initToasts",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 29160,
+        "lineNumber": 29165,
         "columnNumber": 12
       }
     },
@@ -459,7 +459,7 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 39185,
+        "lineNumber": 39190,
         "columnNumber": 18
       }
     },
@@ -468,7 +468,7 @@
       "text": "[AUTO] setEnabled(from hotkey) false",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30367,
+        "lineNumber": 30372,
         "columnNumber": 18
       }
     },
@@ -477,7 +477,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 38254,
+        "lineNumber": 38259,
         "columnNumber": 12
       }
     },
@@ -495,7 +495,7 @@
       "text": "[auto-scroll] boot: wired JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30649,
+        "lineNumber": 30654,
         "columnNumber": 20
       }
     },
@@ -504,7 +504,7 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 36408,
+        "lineNumber": 36413,
         "columnNumber": 16
       }
     },
@@ -738,7 +738,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 27712,
+        "lineNumber": 27716,
         "columnNumber": 12
       }
     },
@@ -1170,7 +1170,7 @@
       "text": "[display-debug] display:click JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 35187,
+        "lineNumber": 35192,
         "columnNumber": 14
       }
     },
@@ -1179,7 +1179,7 @@
       "text": "[display-bridge] openDisplay()",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 32580,
+        "lineNumber": 32585,
         "columnNumber": 16
       }
     },
@@ -1188,7 +1188,7 @@
       "text": "[display-bridge] opening http://127.0.0.1:5180/display.html",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 32591,
+        "lineNumber": 32596,
         "columnNumber": 16
       }
     },
@@ -1197,7 +1197,7 @@
       "text": "[display-bridge] display window opened about:blank",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 32618,
+        "lineNumber": 32623,
         "columnNumber": 16
       }
     },
@@ -1224,7 +1224,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 27712,
+        "lineNumber": 27716,
         "columnNumber": 12
       }
     },
@@ -1818,7 +1818,7 @@
       "text": "[display-debug] display:click JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 35187,
+        "lineNumber": 35192,
         "columnNumber": 14
       }
     },
@@ -1827,7 +1827,7 @@
       "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30288,
+        "lineNumber": 30293,
         "columnNumber": 14
       }
     },
@@ -2158,7 +2158,7 @@
       "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30288,
+        "lineNumber": 30293,
         "columnNumber": 14
       }
     },
@@ -2167,7 +2167,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 27712,
+        "lineNumber": 27716,
         "columnNumber": 12
       }
     },
@@ -2950,7 +2950,7 @@
       "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30288,
+        "lineNumber": 30293,
         "columnNumber": 14
       }
     },
@@ -2959,7 +2959,7 @@
       "text": "[AUTO] start blocked: session not live or auto-on-live disabled",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30288,
+        "lineNumber": 30293,
         "columnNumber": 14
       }
     }
@@ -2975,9 +2975,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "5d5fbf657a1e53fb592530c767a90987f4d9f218",
+      "gitSha": "5d2cee954b1f1e96a266b5597718ef99ea6908f0",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-17T00:22:01.194Z"
+      "buildTime": "2025-12-17T00:26:15.119Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -3042,11 +3042,11 @@
   },
   "settingsProbe": {
     "hasBody": true,
-    "tabs": 0,
-    "hasMedia": false,
+    "tabs": 6,
+    "hasMedia": true,
     "hasMicSel": true,
     "hasMicLevel": false,
-    "hasAsrCalibBtn": false
+    "hasAsrCalibBtn": true
   },
   "obsTestProbe": {
     "hasBtn": true,
