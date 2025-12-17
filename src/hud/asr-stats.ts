@@ -27,18 +27,7 @@ function isDev(): boolean {
 function ensureHudRoot(root?: HTMLElement | null): HTMLElement | null {
   if (root) return root;
   try {
-    let r = document.getElementById('hud-root');
-    if (!r) {
-      r = document.createElement('div');
-      r.id = 'hud-root';
-      r.classList.add('tp-hud-root', 'hidden');
-      r.setAttribute('aria-hidden', 'true');
-      r.setAttribute('data-tp-hud', '');
-      r.setAttribute('data-role', 'hud-root');
-      r.setAttribute('inert', '');
-      document.body.appendChild(r);
-    }
-    return r;
+    return document.getElementById('hud-root');
   } catch {
     return null;
   }

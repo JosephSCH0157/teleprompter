@@ -27,18 +27,7 @@ function isDev(): boolean {
 function ensureHudRoot(root?: HTMLElement | null): HTMLElement | null {
   if (root) return root;
   try {
-    let r = document.getElementById('hud-root');
-    if (!r) {
-      r = document.createElement('div');
-      r.id = 'hud-root';
-      r.classList.add('tp-hud-root', 'hidden');
-      r.setAttribute('aria-hidden', 'true');
-      r.setAttribute('data-tp-hud', '');
-      r.setAttribute('data-role', 'hud-root');
-      r.setAttribute('inert', '');
-      document.body.appendChild(r);
-    }
-    return r;
+    return document.getElementById('hud-root');
   } catch {
     return null;
   }
@@ -65,13 +54,6 @@ export function initRecStatsHud(opts: RecStatsHudOptions = {}): RecStatsHudApi |
     span.textContent = '…';
     panel.appendChild(span);
     root.appendChild(panel);
-    try {
-      root.classList.remove('hidden');
-      root.removeAttribute('aria-hidden');
-      root.removeAttribute('inert');
-    } catch {
-      /* ignore */
-    }
   }
 
   const textEl = document.getElementById(TEXT_ID) as HTMLElement | null;
@@ -104,7 +86,7 @@ export function initRecStatsHud(opts: RecStatsHudOptions = {}): RecStatsHudApi |
   }
 
   const destroy = () => {
-    window.removeEventListener('rec:stats', onWindowStats, true);
+    window.removeEventListener('rec:stats', onWindowStats);
     try {
       bus?.off?.('rec:stats', handleStats);
     } catch {
