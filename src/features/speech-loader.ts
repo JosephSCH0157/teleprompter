@@ -1,6 +1,7 @@
 import { getSession, setSessionPhase } from '../state/session';
 import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
+import { stopAsrRuntime } from '../speech/runtime-control';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -667,8 +668,9 @@ async function resolveOrchestratorUrl(): Promise<string> {
       }
 
       async function stopSpeech() {
-        try {
-          try { rec?.stop?.(); } catch {}
+      try {
+        try { stopAsrRuntime(); } catch {}
+        try { rec?.stop?.(); } catch {}
           setActiveRecognizer(null);
           running = false;
           try { document.body.classList.remove('listening'); } catch {}

@@ -25,6 +25,7 @@ import { initSession } from './state/session';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
 import './speech/loader';
+import { stopAsrRuntime } from './speech/runtime-control';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
@@ -737,6 +738,9 @@ function applyUiScrollMode(
     }
   };
   const requestAsrStop = () => {
+    try {
+      stopAsrRuntime();
+    } catch {}
     try {
       asrBridge?.stop?.();
     } catch (err) {
