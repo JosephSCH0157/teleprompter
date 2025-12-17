@@ -294,7 +294,7 @@ export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
       'resizable=yes',
       'scrollbars=yes',
     ].join(',');
-    const win = window.open('./hud_popout.html', 'tpHudPopout', features);
+    const win = window.open('./dist/hud_popout.html', 'tpHudPopout', features);
     if (!win) {
       setPopout(false);
       const message = 'HUD popout blocked — allow popups for this site.';
