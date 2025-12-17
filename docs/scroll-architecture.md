@@ -213,14 +213,16 @@ If any of these are not true, scroll cleanup is **not done**.
   - `src/features/scroll-router.ts:372-407` `stepOnce`/`holdCreepStart` mutate `viewer.scrollTop` directly; route through the scroll writer/brain.
   - `src/features/scroll-router.ts:963-968` keyboard +/- handler nudges `vp.scrollTop` for visibility; switch to the writer or a brain helper.
   - `src/features/scroll/step-scroll.ts:100-115,298-302` manual `scrollTop` jumps (line/block, Home/End) with optional helper fallback; replace with writer requests.
-  - `src/ui/dom.ts:433-440` `resetRun` forces `scroller.scrollTop = 0` and emits display scroll; call the writer/brain instead of direct DOM writes.
-  - `src/index-hooks/asr-legacy.ts:396-423,598-599` ASR legacy `scrollToLine` uses `window.scrollTo`/`scroller.scrollTo` with rAF smoothing; wrap to the TS scroll API or retire after migration.
-  - `src/features/autoscroll.ts:121-124` still falls back to `viewer.scrollTop` if `__tpScrollWrite` is absent; drop this once the writer is guaranteed to exist.
+- `src/ui/dom.ts:433-440` `resetRun` forces `scroller.scrollTop = 0` and emits display scroll; call the writer/brain instead of direct DOM writes.
+- `src/index-hooks/asr-legacy.ts:396-423,598-599` ASR legacy `scrollToLine` uses `window.scrollTo`/`scroller.scrollTo` with rAF smoothing; wrap to the TS scroll API or retire after migration.
+- `src/features/autoscroll.ts:121-124` still falls back to `viewer.scrollTop` if `__tpScrollWrite` is absent; drop this once the writer is guaranteed to exist.
+
+Canonical runtime shell: `teleprompter_pro.html` (the legacy `index.html` now redirects here for backward compatibility).
 
 - Deleted ? direct DOM writes to remove:
   - `display.html:11-34` scroll channel writes `wrap.scrollTop` / `wrap.scrollTo` when applying display packets.
-  - `index.html:57-59` fallback sets `document.scrollingElement.scrollTop` during manual jumps.
-  - `teleprompter_pro.html:57-59` same fallback jump handler in the legacy shell.
+- `index.html:57-59` fallback sets `document.scrollingElement.scrollTop` during manual jumps (now a redirect stub to `teleprompter_pro.html`).
+- `teleprompter_pro.html:57-59` same fallback jump handler in the legacy shell.
 
 ---
 

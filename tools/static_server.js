@@ -50,8 +50,13 @@ const server = http.createServer((req, res) => {
         res.end('Not found');
         return;
       }
-      if (st.isDirectory()) {
-        file = path.join(file, 'index.html');
+    if (st.isDirectory()) {
+        const candidate = path.join(file, 'teleprompter_pro.html');
+        if (fs.existsSync(candidate)) {
+          file = candidate;
+        } else {
+          file = path.join(file, 'index.html');
+        }
       }
       fs.readFile(file, (err2, data) => {
         if (err2) {
@@ -99,4 +104,3 @@ process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 module.exports = server;
-
