@@ -110,11 +110,7 @@ function micActive(store?: AppStore | null): boolean {
 
 export function initSpeechNotesHud(options: SpeechNotesHudOptions = {}): SpeechNotesHudApi | null {
   const { bus = null, store = null } = options;
-
-  // gating: dev or explicit opt-in
-  if (!isDevSession() && !prodHudOptIn()) return null;
   if (document.getElementById(HUD_ID)) return null;
-
   const root = options.root || document.body;
   if (!root) return null;
 
@@ -280,20 +276,7 @@ export function initSpeechNotesHud(options: SpeechNotesHudOptions = {}): SpeechN
   if (closeBtn) {
     closeBtn.onclick = (ev) => {
       try { ev.preventDefault(); ev.stopPropagation(); } catch {}
-      // Prefer hiding the shared HUD root so all HUD widgets disappear
-      const rootEl =
-        (window as any).HUD?.root ||
-        panel.closest('.tp-hud-root') ||
-        document.getElementById('hud-root') ||
-        null;
-
-      const target = (rootEl as HTMLElement | null) || panel;
-      try {
-        target.style.display = 'none';
-        target.setAttribute('aria-hidden', 'true');
-        target.classList.add('tp-hud-closed');
-      } catch {}
-      try { (window as any).HUD?.hide?.(); } catch {}
+      destroy();
     };
   }
   if (finalsChk) finalsChk.onchange = render;
@@ -367,6 +350,9 @@ export function initSpeechNotesHud(options: SpeechNotesHudOptions = {}): SpeechN
   };
   const destroy = () => {
     hide();
+    if (panel.parentNode) {
+      try { panel.parentNode.removeChild(panel); } catch {}
+    }
     window.removeEventListener('tp:speech-state', onSpeechState, true);
     window.removeEventListener('tp:scroll:mode', updateStatus, true);
     window.removeEventListener('tp:speech:transcript', onTranscript, true);

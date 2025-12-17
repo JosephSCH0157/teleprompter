@@ -42,6 +42,7 @@ const REH_RESUME_KEY = 'tp_scroll_reh_resume_v1';
 const ALLOWED_PAGES = new Set<PageName>(['scripts']);
 const ALLOWED_OVERLAYS = new Set<AppStoreState['overlay']>(['none', 'settings', 'help', 'shortcuts']);
 const HUD_ENABLED_KEY = 'tp_hud_enabled_v1';
+const HUD_SPEECH_NOTES_KEY = 'tp_hud_speech_notes_v1';
 const OVERLAY_KEY = 'tp_overlay_v1';
 const CAMERA_KEY = 'tp_camera_enabled_v1';
 
@@ -59,6 +60,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   prerollSeconds: PREROLL_SEC_KEY,
   devHud: DEV_HUD_KEY,
   hudEnabledByUser: HUD_ENABLED_KEY,
+  hudSpeechNotesEnabledByUser: HUD_SPEECH_NOTES_KEY,
   overlay: OVERLAY_KEY,
   cameraEnabled: CAMERA_KEY,
   // Scroll router persistence
@@ -126,6 +128,7 @@ export type AppStoreState = {
   devHud: boolean;
   hudSupported: boolean;
   hudEnabledByUser: boolean;
+  hudSpeechNotesEnabledByUser: boolean;
   page: PageName;
   overlay: 'none' | 'settings' | 'help' | 'shortcuts';
   asrLive: boolean;
@@ -322,6 +325,13 @@ function buildInitialState(): AppStoreState {
         return localStorage.getItem(HUD_ENABLED_KEY) !== '0';
       } catch {
         return true;
+      }
+    })(),
+    hudSpeechNotesEnabledByUser: (() => {
+      try {
+        return localStorage.getItem(HUD_SPEECH_NOTES_KEY) === '1';
+      } catch {
+        return false;
       }
     })(),
     asrLive: false,

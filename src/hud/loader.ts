@@ -3,8 +3,9 @@ import { initAsrStatsHud } from './asr-stats';
 import { initRecStatsHud } from './rec-stats';
 import { initScrollStripHud } from './scroll-strip';
 import { attachHudDrag } from './drag';
-import type { AppStore } from '../state/app-store';
+import type { AppStore, AppStoreState } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
+import { shouldShowHud } from './shouldShowHud';
 
 export interface HudLoaderOptions {
   root?: HTMLElement | null;
@@ -67,10 +68,46 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
 
   try { attachHudDrag(root); } catch {}
 
-  const speechNotes = initSpeechNotesHud({ root, bus, store });
   const asrStats = initAsrStatsHud({ root, bus, store });
   const recStats = initRecStatsHud({ root, bus, store });
   const scrollStrip = initScrollStripHud({ root });
+  let speechNotesApi: ReturnType<typeof initSpeechNotesHud> | null = null;
+  const subs: Array<() => void> = [];
+
+  const hasSpeechNotesOptIn = (snap: AppStoreState) => {
+    try {
+      if (snap.hudSpeechNotesEnabledByUser) return true;
+    } catch {}
+    try {
+      return localStorage.getItem('tp_hud_speech_notes_v1') === '1';
+    } catch {
+      return false;
+    }
+  };
+
+  const refreshSpeechNotes = () => {
+    if (!store) return;
+    const snap = store.getSnapshot() as AppStoreState;
+    if (!shouldShowHud(snap) || !hasSpeechNotesOptIn(snap)) {
+      speechNotesApi?.destroy?.();
+      speechNotesApi = null;
+      return;
+    }
+    if (!speechNotesApi) {
+      speechNotesApi = initSpeechNotesHud({ root, bus, store });
+    }
+  };
+
+  try {
+    ['hudSupported', 'hudEnabledByUser', 'page', 'hudSpeechNotesEnabledByUser'].forEach((key) => {
+      const unsub = store?.subscribe?.(key as any, () => {
+        try { refreshSpeechNotes(); } catch {}
+      });
+      if (typeof unsub === 'function') subs.push(unsub);
+    });
+  } catch {}
+
+  refreshSpeechNotes();
 
   const showHudRoot = () => {
     try {
@@ -87,7 +124,10 @@ export function initHud(opts: HudLoaderOptions): HudLoaderApi {
 
   function destroy() {
     hideHudRoot();
-    speechNotes?.destroy?.();
+    speechNotesApi?.destroy?.();
+    subs.forEach((unsub) => {
+      try { unsub(); } catch {}
+    });
     asrStats?.destroy?.();
     recStats?.destroy?.();
     scrollStrip?.destroy?.();
