@@ -10,7 +10,8 @@ function findAutoControls(root: ParentNode) {
   const autoRow = root.querySelector<HTMLElement>('#autoRow');
   const wpmRow = root.querySelector<HTMLElement>('#wpmRow');
   const stepRow = root.querySelector<HTMLElement>('#stepControlsRow');
-  return { autoSpeed, autoSpeedLabel, autoSpeedWrap, autoToggle, autoRow, wpmRow, stepRow };
+  const helpText = root.querySelector<HTMLElement>('#scrollModeHelpText');
+  return { autoSpeed, autoSpeedLabel, autoSpeedWrap, autoToggle, autoRow, wpmRow, stepRow, helpText };
 }
 
 function setRowVisibility(row: HTMLElement | null, visible: boolean) {
@@ -20,7 +21,8 @@ function setRowVisibility(row: HTMLElement | null, visible: boolean) {
 }
 
 export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement = document): void {
-  const { autoSpeed, autoSpeedLabel, autoSpeedWrap, autoToggle, autoRow, wpmRow, stepRow } = findAutoControls(root);
+  const { autoSpeed, autoSpeedLabel, autoSpeedWrap, autoToggle, autoRow, wpmRow, stepRow, helpText } =
+    findAutoControls(root);
 
   try {
     const rootEl = root instanceof Document ? root.documentElement : root.ownerDocument?.documentElement || document.documentElement;
@@ -39,6 +41,12 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
   setRowVisibility(autoSpeedWrap as HTMLElement | null, true);
   setRowVisibility(wpmRow as HTMLElement | null, false);
   setRowVisibility(stepRow as HTMLElement | null, false);
+  const defaultHelpText = helpText?.textContent?.trim() || '';
+  const setHelp = (content: string) => {
+    if (!helpText) return;
+    helpText.textContent = content;
+  };
+  setHelp(defaultHelpText);
 
   switch (mode) {
     case 'timed':
@@ -46,12 +54,14 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       setRowVisibility(autoRow as HTMLElement | null, true);
       setRowVisibility(autoSpeedWrap as HTMLElement | null, true);
       setRowVisibility(wpmRow as HTMLElement | null, false);
+      setHelp('Timed scroll runs at the px/s value above.');
       break;
     case 'wpm':
       setRowVisibility(autoRow as HTMLElement | null, true);
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
       setRowVisibility(autoSpeedWrap as HTMLElement | null, false);
       if (!asrLive) setRowVisibility(wpmRow as HTMLElement | null, true);
+      setHelp('WPM mode uses this target pace to drive auto-scroll.');
       break;
     case 'hybrid':
       // Treat UI like auto but with WPM target visible
@@ -59,6 +69,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
       setRowVisibility(autoSpeedWrap as HTMLElement | null, true);
       if (!asrLive) setRowVisibility(wpmRow as HTMLElement | null, true);
+      setHelp('Hybrid keeps a WPM baseline while ASR can nudge ahead.');
       break;
     case 'asr':
       setRowVisibility(autoRow as HTMLElement | null, false);
@@ -79,6 +90,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       }
       setRowVisibility(autoRow as HTMLElement | null, false);
       setRowVisibility(stepRow as HTMLElement | null, true);
+      setHelp('Step mode follows the manual step controls.');
       break;
     case 'rehearsal':
       if (autoSpeed) autoSpeed.disabled = true;
@@ -90,6 +102,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       setRowVisibility(autoRow as HTMLElement | null, false);
       setRowVisibility(wpmRow as HTMLElement | null, false);
       setRowVisibility(stepRow as HTMLElement | null, false);
+      setHelp('Rehearsal is manual-only; auto-scroll is disabled.');
       break;
   }
 }

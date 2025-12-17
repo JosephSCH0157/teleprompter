@@ -729,7 +729,7 @@ function applyUiScrollMode(
     try { appStore.set?.('scrollMode', normalized); } catch {}
   }
 
-  try { applyScrollModeUI(toBrainScrollMode(normalized)); } catch {}
+  try { applyScrollModeUI(normalized as any); } catch {}
   try { setModeStatusLabel(normalized); } catch {}
 
 	const brain = getScrollBrain();
@@ -905,8 +905,8 @@ function initScrollModeUiSync(): void {
   } catch {}
   try {
     appStore.subscribe?.('asrLive', () => {
-      const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
-      applyScrollModeUI(toBrainScrollMode(current));
+        const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+        applyScrollModeUI(current as any);
     });
   } catch {}
 
