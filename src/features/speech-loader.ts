@@ -571,6 +571,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
         try {
           if (window.__tpSpeechCanDynImport) {
             const orchUrl = await resolveOrchestratorUrl();
+            try { console.log('[SPEECH] orchestrator resolved ->', orchUrl); } catch {}
             const mod = await import(/* @vite-ignore */ orchUrl);
             if (mod?.startOrchestrator) {
               const started = await mod.startOrchestrator();
@@ -582,6 +583,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
                 }
               } catch {}
               try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+              try { console.log('[SPEECH] shim', { start: !!window.__tpSpeech?.startRecognizer, match: !!window.__tpSpeech?.matchBatch }); } catch {}
               return;
             }
           }
@@ -729,4 +731,3 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
-
