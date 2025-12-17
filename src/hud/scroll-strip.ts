@@ -43,6 +43,8 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   const speedEl = container.querySelector<HTMLElement>('[data-hud-scroll-speed]');
   const posEl = container.querySelector<HTMLElement>('[data-hud-scroll-pos]');
 
+  let lastMode: ScrollMode | null = null;
+
   function updateFromStatus(detail: ScrollStatusDetail) {
     if (modeEl) {
       const label = (() => {
@@ -73,13 +75,16 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
 
   function updateFromCommit(detail: ScrollCommitDetail) {
     if (speedEl) {
-      speedEl.textContent = `Speed: Δ${detail.delta.toFixed(1)} px`;
+      const delta = Number.isFinite(detail.delta) ? detail.delta : 0;
+      const label = lastMode === 'step' ? 'Advance' : 'Speed';
+      speedEl.textContent = `${label}: Δ${delta.toFixed(1)} px`;
     }
   }
 
   function handleStatus(ev: Event) {
     const detail = (ev as CustomEvent<ScrollStatusDetail>).detail;
     if (!detail) return;
+    lastMode = detail.mode;
     updateFromStatus(detail);
   }
 
