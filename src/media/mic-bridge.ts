@@ -22,9 +22,7 @@ function getMicSelect(): HTMLSelectElement | null {
 
 export function bindMicUI() {
   const micBtn = document.getElementById('micBtn') as HTMLButtonElement | null;
-  const releaseBtn =
-    (document.getElementById('settingsReleaseMicBtn') as HTMLButtonElement | null) ||
-    (document.getElementById('releaseMicBtn') as HTMLButtonElement | null);
+  const releaseBtn = document.getElementById('releaseMicBtn') as HTMLButtonElement | null;
   const permChip = document.getElementById('permChip');
 
   if (micBtn) {
