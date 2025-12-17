@@ -4,7 +4,7 @@ import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './bu
 import { bindHybridGateSetting } from './hybridGate';
 import { bindTypographyPanel } from './typographyPanel';
 import { wireSettingsDynamic } from './wire';
-import { flushAsrSettingsToStore } from './settings-asr';
+import { flushAsrSettingsToStore } from '../settings-asr';
 import { createAppStore, type AppStore } from '../../state/app-store';
 import { wireTypographyPresets } from './typography-presets';
 
