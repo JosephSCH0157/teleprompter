@@ -840,7 +840,16 @@ function initScrollModeUiSync(): void {
 
   const applyOverlayMode = (mode: UiScrollMode) => {
     try {
-      if (mode !== 'asr') return;
+      const shouldApply = mode === 'asr';
+      if (!shouldApply) {
+        try {
+          if ((window as any).__TP_DEV) console.debug('[Scroll Mode] overlay guard: skipping', { mode });
+        } catch {}
+        return;
+      }
+      try {
+        if ((window as any).__TP_DEV) console.debug('[Scroll Mode] overlay guard: applying ASR overlay');
+      } catch {}
       applyUiScrollMode(mode, { skipStore: true, allowToast: false, source: 'asr' });
     } catch {}
   };
