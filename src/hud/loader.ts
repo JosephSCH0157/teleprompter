@@ -89,8 +89,9 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
   const asrStats = initAsrStatsHud({ root, bus, store });
   const recStats = initRecStatsHud({ root, bus, store });
   const scrollStrip = initScrollStripHud({ root });
-  let speechNotesApi: ReturnType<typeof initSpeechNotesHud> | null = null;
-  const subs: Array<() => void> = [];
+let speechNotesApi: ReturnType<typeof initSpeechNotesHud> | null = null;
+const subs: Array<() => void> = [];
+let popoutPoll: number | null = null;
 
   const hasSpeechNotesOptIn = (snap: AppStoreState) => {
     try {
@@ -139,6 +140,27 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
     return popupApi;
   };
 
+  startPopoutClosedPoll();
+
+  const startPopoutClosedPoll = () => {
+    if (popoutPoll) return;
+    popoutPoll = window.setInterval(() => {
+      const popupState = (window as any).__tpHudPopup?.getState?.();
+      if (!popupState?.popout) return;
+      const w = (window as any).__tpHudPopoutWin as Window | null | undefined;
+      if (w && w.closed) {
+        (window as any).__tpHudPopup?.setPopout?.(false);
+        (window as any).__tpHudPopoutWin = null;
+      }
+    }, 1000);
+  };
+
+  const stopPopoutClosedPoll = () => {
+    if (!popoutPoll) return;
+    try { window.clearInterval(popoutPoll); } catch {}
+    popoutPoll = null;
+  };
+
   const showHudRoot = () => {
     try {
       root.style.display = '';
@@ -167,6 +189,7 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
     asrStats?.destroy?.();
     recStats?.destroy?.();
     scrollStrip?.destroy?.();
+    stopPopoutClosedPoll();
   }
 
   try {

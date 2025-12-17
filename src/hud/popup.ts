@@ -294,7 +294,12 @@ export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
       'scrollbars=yes',
     ].join(',');
     const win = window.open('./hud_popout.html', 'tpHudPopout', features);
-    if (!win) return;
+    if (!win) {
+      setPopout(false);
+      const message = 'HUD popout blocked — allow popups for this site.';
+      (window as any).__tpToast?.warn?.(message) ?? console.warn(message);
+      return;
+    }
     (window as any).__tpHudPopoutWin = win;
     setPopout(true);
     bridge.send({ type: 'hud:state', state });
@@ -417,5 +422,6 @@ export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
     getState: () => ({ ...state }),
     openPopout,
     closePopout,
+    setPopout,
   };
 }
