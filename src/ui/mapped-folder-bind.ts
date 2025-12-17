@@ -58,38 +58,58 @@ type BindOpts = {
 };
 
 export async function handleChooseFolder(doc: Document = document): Promise<void> {
-  try {
-    await initMappedFolder();
-  } catch (err) {
+  const handleInitFailure = (err: any) => {
     try {
       console.warn('[mapped-folder] initMappedFolder failed', err);
+    } catch {}
+    try {
       const toastFn = (window as any).toast;
       if (typeof toastFn === 'function') {
         toastFn('Could not initialize mapped folder. Check console for details.');
       }
     } catch {}
-    return;
-  }
+  };
+
+  const initGuard = initMappedFolder().catch((err) => {
+    handleInitFailure(err);
+    throw err;
+  });
+  const awaitInit = async () => {
+    try {
+      await initGuard;
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const hasFS = typeof (window as any).showDirectoryPicker === 'function';
   const fallback = doc.getElementById('folderFallback') as HTMLInputElement | null;
+  let picked = false;
 
   if (hasFS) {
     try {
       await pickMappedFolder();
-      return;
+      picked = true;
     } catch (err) {
       try { console.info('[mapped-folder] directory picker cancelled/failed, falling back', err); } catch {}
     }
   }
 
-  if (fallback) {
+  if (!picked && fallback) {
     try {
       fallback.click();
-      return;
+      picked = true;
     } catch (err) {
       try { console.warn('[mapped-folder] folderFallback click failed', err); } catch {}
     }
+  }
+
+  const initOk = await awaitInit();
+  if (!initOk) return;
+
+  if (picked) {
+    return;
   }
 
   try {
@@ -500,7 +520,6 @@ function maybeAutoLoad(sel: HTMLSelectElement) {
     }
   } catch {}
 }
-
 
 
 
