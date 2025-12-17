@@ -280,6 +280,13 @@ export function addAsrWizardCard(root: HTMLElement) {
       </div>
 
       <div class="row">
+        <label class="grow">Profile
+          <select id="asrProfileSelect"></select>
+        </label>
+      </div>
+      <small class="muted">Choose a saved ASR profile to restore calibration values.</small>
+
+      <div class="row">
         <label><input id="asrAEC" type="checkbox"> Echo cancellation</label>
         <label><input id="asrNS"  type="checkbox"> Noise suppression</label>
         <label><input id="asrAGC" type="checkbox"> Auto gain</label>
@@ -318,6 +325,5 @@ export function addAsrWizardCard(root: HTMLElement) {
     container.appendChild(sec);
   } catch {}
 }
-
 
 

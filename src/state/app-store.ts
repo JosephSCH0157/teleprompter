@@ -15,6 +15,15 @@ const LEGACY_AUTO_RECORD_KEY = 'tp_auto_record';
 const PREROLL_SEC_KEY = 'tp_preroll_seconds';
 const DEV_HUD_KEY = 'tp_dev_hud';
 const SETTINGS_TAB_KEY = 'tp_settings_tab';
+const LEGACY_ASR_SETTINGS_KEY = 'tp_asr_settings_v1';
+const ASR_ENGINE_KEY = 'tp_asr_engine_v1';
+const ASR_LANG_KEY = 'tp_asr_language_v1';
+const ASR_INTERIM_KEY = 'tp_asr_interim_v1';
+const ASR_FILTER_KEY = 'tp_asr_filter_v1';
+const ASR_THRESHOLD_KEY = 'tp_asr_threshold_v1';
+const ASR_ENDPOINT_KEY = 'tp_asr_endpoint_v1';
+const ASR_PROFILES_KEY = 'tp_asr_profiles_v1';
+const ASR_ACTIVE_PROFILE_KEY = 'tp_asr_active_profile_v1';
 
 // Scroll router keys
 const SCROLL_MODE_KEY = 'scrollMode';
@@ -64,7 +73,34 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   stepPx: STEP_PX_KEY,
   rehearsalPunct: REH_PUNCT_KEY,
   rehearsalResumeMs: REH_RESUME_KEY,
+  'asr.engine': ASR_ENGINE_KEY,
+  'asr.language': ASR_LANG_KEY,
+  'asr.useInterimResults': ASR_INTERIM_KEY,
+  'asr.threshold': ASR_THRESHOLD_KEY,
+  'asr.endpointMs': ASR_ENDPOINT_KEY,
+  'asr.filterFillers': ASR_FILTER_KEY,
+  asrProfiles: ASR_PROFILES_KEY,
+  asrActiveProfileId: ASR_ACTIVE_PROFILE_KEY,
 };
+
+function parseJson<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function loadLegacyAsrSettings() {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(LEGACY_ASR_SETTINGS_KEY);
+    return parseJson<Partial<Record<string, any>>>(raw);
+  } catch {
+    return null;
+  }
+}
 
 export type PageName = string;
 
@@ -91,6 +127,14 @@ export type AppStoreState = {
   page: PageName;
   overlay: 'none' | 'settings' | 'help' | 'shortcuts';
   asrLive: boolean;
+  'asr.engine': string;
+  'asr.language': string;
+  'asr.useInterimResults': boolean;
+  'asr.filterFillers': boolean;
+  'asr.threshold': number;
+  'asr.endpointMs': number;
+  asrProfiles: Record<string, unknown>;
+  asrActiveProfileId: string | null;
 
   // Scroll router (persisted)
   scrollMode: string;
@@ -191,6 +235,7 @@ function readAndMigrateScrollMode(): string {
 }
 
 function buildInitialState(): AppStoreState {
+  const legacyAsrSettings = loadLegacyAsrSettings();
   return {
     // UI / Settings
     settingsTab: (() => {
@@ -270,6 +315,75 @@ function buildInitialState(): AppStoreState {
       }
     })(),
     asrLive: false,
+    'asr.engine': (() => {
+      try {
+        const raw = localStorage.getItem(ASR_ENGINE_KEY);
+        if (raw) return raw;
+        if (legacyAsrSettings?.engine && typeof legacyAsrSettings.engine === 'string') {
+          return legacyAsrSettings.engine;
+        }
+      } catch {}
+      return 'webspeech';
+    })(),
+    'asr.language': (() => {
+      try {
+        const raw = localStorage.getItem(ASR_LANG_KEY);
+        if (raw) return raw;
+        if (legacyAsrSettings?.lang && typeof legacyAsrSettings.lang === 'string') {
+          return legacyAsrSettings.lang;
+        }
+      } catch {}
+      return 'en-US';
+    })(),
+    'asr.useInterimResults': (() => {
+      try {
+        const raw = localStorage.getItem(ASR_INTERIM_KEY);
+        if (raw !== null) return raw === '1';
+        if (legacyAsrSettings?.interim !== undefined) return !!legacyAsrSettings.interim;
+      } catch {}
+      return true;
+    })(),
+    'asr.filterFillers': (() => {
+      try {
+        const raw = localStorage.getItem(ASR_FILTER_KEY);
+        if (raw !== null) return raw === '1';
+        if (legacyAsrSettings?.filterFillers !== undefined) return !!legacyAsrSettings.filterFillers;
+      } catch {}
+      return true;
+    })(),
+    'asr.threshold': (() => {
+      try {
+        const raw = localStorage.getItem(ASR_THRESHOLD_KEY);
+        const num = Number(raw);
+        if (raw !== null && !Number.isNaN(num)) return num;
+        if (legacyAsrSettings?.threshold !== undefined) return Number(legacyAsrSettings.threshold) || 0.6;
+      } catch {}
+      return 0.6;
+    })(),
+    'asr.endpointMs': (() => {
+      try {
+        const raw = localStorage.getItem(ASR_ENDPOINT_KEY);
+        const num = Number(raw);
+        if (raw !== null && !Number.isNaN(num)) return num;
+        if (legacyAsrSettings?.endpointMs !== undefined) return Number(legacyAsrSettings.endpointMs) || 700;
+      } catch {}
+      return 700;
+    })(),
+    asrProfiles: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_PROFILES_KEY);
+        const parsed = parseJson<Record<string, unknown>>(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {}
+      return {};
+    })(),
+    asrActiveProfileId: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_ACTIVE_PROFILE_KEY);
+        if (raw) return raw;
+      } catch {}
+      return null;
+    })(),
     overlay: (() => {
       try {
         const v = localStorage.getItem(OVERLAY_KEY) || 'none';
@@ -457,6 +571,12 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   if (state.scrollMode === 'manual') {
     state.scrollMode = 'step';
   }
+  if (!state.asrProfiles || typeof state.asrProfiles !== 'object') {
+    state.asrProfiles = {};
+  }
+  if (state.asrActiveProfileId && typeof state.asrActiveProfileId !== 'string') {
+    state.asrActiveProfileId = null;
+  }
   return state;
 }
 
@@ -505,14 +625,20 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
       state[key] = value;
       try {
         const storageKey = persistMap[key];
-        if (storageKey) {
-          if (typeof value === 'boolean') {
-            localStorage.setItem(storageKey, value ? '1' : '0');
-          } else if (value === null || typeof value === 'undefined') {
-            localStorage.removeItem(storageKey);
-          } else {
-            localStorage.setItem(storageKey, String(value));
+      if (storageKey) {
+        if (value === null || typeof value === 'undefined') {
+          localStorage.removeItem(storageKey);
+        } else if (typeof value === 'boolean') {
+          localStorage.setItem(storageKey, value ? '1' : '0');
+        } else if (typeof value === 'object') {
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(value));
+          } catch {
+            // ignore serialization failures
           }
+        } else {
+          localStorage.setItem(storageKey, String(value));
+        }
           if (key === 'autoRecord') {
             try {
               localStorage.removeItem(LEGACY_AUTO_RECORD_KEY);

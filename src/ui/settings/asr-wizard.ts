@@ -1,7 +1,7 @@
 ﻿// src/ui/settings/asr-wizard.ts
 import { runCalibration } from '../../asr/calibration';
-import { getAsrState, setActiveProfile, upsertProfile } from '../../asr/store';
-import type { AsrProfile as SchemaAsrProfile } from '../../asr/schema';
+import { getAsrState, onAsr, setActiveProfile, upsertProfile } from '../../asr/store';
+import type { AsrProfile as SchemaAsrProfile, AsrProfileId } from '../../asr/schema';
 import { showToast } from '../toasts';
 
 export type AsrProfile = SchemaAsrProfile;
@@ -172,6 +172,59 @@ function renderDerived(profile: AsrProfile): void {
   }
 }
 
+let profileSelectorWired = false;
+
+function getProfileSelect(): HTMLSelectElement | null {
+  return document.getElementById('asrProfileSelect') as HTMLSelectElement | null;
+}
+
+function renderProfileOptions(): void {
+  try {
+    const select = getProfileSelect();
+    if (!select) return;
+    const state = getAsrState();
+    const entries = Object.entries(state.profiles || {}) as Array<[AsrProfileId, AsrProfile]>;
+    select.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = entries.length ? 'Default settings (no profile)' : 'No saved profiles yet';
+    select.appendChild(placeholder);
+    entries
+      .sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0))
+      .forEach(([id, profile]) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = profile.label || id;
+        select.appendChild(opt);
+      });
+    const active = state.activeProfileId;
+    select.value = active && entries.some(([id]) => id === active) ? active : '';
+  } catch {
+    // ignore
+  }
+}
+
+function wireProfileSelector(): void {
+  if (profileSelectorWired) return;
+  profileSelectorWired = true;
+  try {
+    const select = getProfileSelect();
+    if (!select) return;
+    select.addEventListener('change', () => {
+      const id = select.value;
+      if (!id) return;
+      try {
+        setActiveProfile(id as AsrProfileId);
+        toast('ASR profile selected', { type: 'info' });
+      } catch {}
+      renderProfileOptions();
+    });
+    onAsr(() => renderProfileOptions());
+  } catch {
+    // ignore
+  }
+}
+
 type AsrPreviewDetail = {
   rmsDbfs?: number;
   gate?: boolean;
@@ -274,6 +327,7 @@ function wire(): void {
         upsertProfile(current.profile);
         setActiveProfile(current.profile.id);
         toast('ASR profile saved and activated.');
+        renderProfileOptions();
       } catch {
         // ignore
       }
@@ -313,6 +367,8 @@ function wire(): void {
     });
 
     updateFlagsBadge();
+    renderProfileOptions();
+    wireProfileSelector();
 
     $('asrRefreshDevs')?.addEventListener('click', () => { void populateMicSelect(); });
     $('asrGrantPerm')?.addEventListener('click', () => { void grantMicLabels(); });
@@ -355,5 +411,3 @@ try {
 } catch {
   // ignore - e.g., non-browser env
 }
-
-

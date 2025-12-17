@@ -38,9 +38,17 @@ export type PersistedAppKey =
   | 'autoRecord'
   | 'prerollSeconds'
   | 'devHud'
-  | 'hudEnabledByUser'
-  | 'cameraEnabled'
-  | 'settingsTab';
+| 'hudEnabledByUser'
+| 'cameraEnabled'
+| 'settingsTab';
+ | 'asr.engine'
+ | 'asr.language'
+ | 'asr.useInterimResults'
+ | 'asr.filterFillers'
+ | 'asr.threshold'
+ | 'asr.endpointMs'
+ | 'asrProfiles'
+ | 'asrActiveProfileId';
 
 export type UserSettings = {
   app?: Partial<Record<PersistedAppKey, any>>;

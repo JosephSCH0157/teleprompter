@@ -242,10 +242,18 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
 	'obsHost',
 	'autoRecord',
 	'prerollSeconds',
-	'devHud',
-	'hudEnabledByUser',
-	'cameraEnabled',
-	'settingsTab',
+ 'devHud',
+ 'hudEnabledByUser',
+ 'cameraEnabled',
+  'asr.engine',
+  'asr.language',
+  'asr.useInterimResults',
+  'asr.filterFillers',
+  'asr.threshold',
+  'asr.endpointMs',
+  'asrProfiles',
+  'asrActiveProfileId',
+ 'settingsTab',
 ];
 
 function getAsrModeState(): string | null {
