@@ -23,6 +23,7 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     if (!rootEl) return;
     // Clear any leftover legacy/fallback content before rebuilding
     try {
+      rootEl.dataset.tpSettingsWired = '';
       rootEl.innerHTML = '';
     } catch {}
     // Use the lightweight builder to prepare content (string or DOM insertion)

@@ -237,6 +237,10 @@ function wireRecorderAdapters(rootEl: HTMLElement) {
 
 export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore | null) {
   if (!rootEl) return;
+  try {
+    if (rootEl.dataset.tpSettingsWired === '1') return;
+    rootEl.dataset.tpSettingsWired = '1';
+  } catch {}
   try { wireSettingsTabs(rootEl, store); } catch {}
   // attach a minimal mutation observer to demonstrate wiring
   try {
