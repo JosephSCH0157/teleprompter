@@ -24,6 +24,7 @@ import { speechStore, type SpeechState } from './state/speech-store';
 import { initSession } from './state/session';
 // Auto-record SSOT helpers (bridge UI + TS core + legacy flags)
 import './state/auto-record-ssot';
+import './speech/loader';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
@@ -610,6 +611,43 @@ function setModeStatusLabel(mode: UiScrollMode): void {
   el.textContent = label;
 }
 
+type SpeechTranscriptCallback = (text: string, final?: boolean) => void;
+
+function startSpeechRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  const w: any = window;
+  const emitSpeech = typeof w.__tpEmitSpeech === 'function'
+    ? (text: string, final?: boolean) => {
+      try { w.__tpEmitSpeech(text, final); } catch {}
+    }
+    : (_text: string, _final?: boolean) => {};
+  const cb: SpeechTranscriptCallback = (text, final) => emitSpeech(text, final);
+  const opts = typeof w.__tpSpeechLang === 'string' ? { lang: w.__tpSpeechLang } : {};
+
+  try {
+    const tpSpeech = w.__tpSpeech;
+    if (tpSpeech && typeof tpSpeech.startRecognizer === 'function') {
+      tpSpeech.startRecognizer(cb, opts);
+      return true;
+    }
+  } catch (err) {
+    try { console.warn('[ASR] orchestrator startRecognizer failed', err); } catch {}
+  }
+
+  try {
+    const factory = w.__tpRecognizer;
+    if (typeof factory === 'function') {
+      const rec = factory(opts);
+      rec?.start?.(cb);
+      return true;
+    }
+  } catch (err) {
+    try { console.warn('[ASR] fallback recognizer start failed', err); } catch {}
+  }
+
+  return false;
+}
+
 type ScrollModeSource =
   | 'user'
   | 'boot'
@@ -672,9 +710,22 @@ function applyUiScrollMode(
     } catch {}
   };
   const requestAsrStart = () => {
+    const w = typeof window !== 'undefined' ? window as any : null;
+    const hasTpSpeechStartRecognizer = !!(w?.__tpSpeech?.startRecognizer);
+    const hasTpRecognizer = typeof w?.__tpRecognizer === 'function';
+    const hasTpMatcher = !!w?.__tpMatcher;
     try {
-      console.debug('[ASR] start requested (scroll mode)');
+      console.debug('[ASR] start requested (scroll mode)', {
+        hasTpSpeechStartRecognizer,
+        hasTpRecognizer,
+        hasTpMatcher,
+      });
     } catch {}
+
+    const startedSpeech = startSpeechRuntime();
+    if (!startedSpeech) {
+      try { console.warn('[ASR] no speech runtime available to start'); } catch {}
+    }
     dispatchAsrToggle(true);
     try {
       asrBridge?.start?.();
