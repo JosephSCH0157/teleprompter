@@ -98,7 +98,11 @@ export class Recognizer {
 
       const shouldHandle = () => this.acceptEvents && runGeneration === this.generation;
 
-      this.recog.onstart = () => {};
+      this.recog.onstart = () => {
+        if (IS_DEV_MODE) {
+          try { console.debug('[speech] onstart'); } catch {}
+        }
+      };
       this.recog.onerror = (ev: any) => {
         if (!shouldHandle()) return;
         this.logSpeechError(ev);
@@ -109,6 +113,9 @@ export class Recognizer {
       };
       this.recog.onend = () => {
         if (!shouldHandle()) return;
+        if (IS_DEV_MODE) {
+          try { console.debug('[speech] onend'); } catch {}
+        }
         if (!this.shouldRun) return;
         if (this.restartTimer !== null) return;
         this.scheduleRestart(500);
@@ -116,6 +123,20 @@ export class Recognizer {
 
       this.recog.onresult = (e: any) => {
         if (!shouldHandle()) return;
+        if (IS_DEV_MODE) {
+          try {
+            const first = e?.results?.[e.resultIndex]?.[0]?.transcript || '';
+            const finals = Array.from(e?.results || [])
+              .filter((res: any) => res.isFinal)
+              .map((res: any) => res[0]?.transcript || '')
+              .join(' ');
+            const interim = Array.from(e?.results || [])
+              .filter((res: any) => !res.isFinal)
+              .map((res: any) => res[0]?.transcript || '')
+              .join(' ');
+            console.debug('[speech] onresult', { interim: interim.trim(), finals: finals.trim(), first: (first || '').trim() });
+          } catch {}
+        }
         let interim = '';
         let finals = '';
         for (let i = e.resultIndex; i < e.results.length; i++) {

@@ -681,26 +681,7 @@ function applyUiScrollMode(
     } catch {}
   };
   const requestAsrStart = () => {
-    const w = typeof window !== 'undefined' ? window as any : null;
-    const hasTpSpeechStartRecognizer = !!(w?.__tpSpeech?.startRecognizer);
-    const hasTpRecognizer = typeof w?.__tpRecognizer === 'function';
-    const hasTpMatcher = !!w?.__tpMatcher;
-    try {
-      console.debug('[ASR] start requested (scroll mode)', {
-        hasTpSpeechStartRecognizer,
-        hasTpRecognizer,
-        hasTpMatcher,
-      });
-    } catch {}
     dispatchAsrToggle(true);
-    try {
-      asrBridge?.start?.();
-    } catch (err) {
-      try {
-        console.warn('[ASR] bridge start failed', err);
-      } catch {}
-      dispatchAsrToggle(false);
-    }
   };
   const requestAsrStop = () => {
     try {

@@ -405,6 +405,20 @@ function shouldAutoRestartSpeech(): boolean {
   return running && (mode === 'asr' || mode === 'hybrid') && isAutoRestartEnabled();
 }
 
+function isDevMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1 || w.__tpDevMode) return true;
+    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.has('dev')) return true;
+    const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hash === 'dev' || hash === 'dev=1' || hash.includes('dev=1')) return true;
+  } catch {}
+  return false;
+}
+
 const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
 let asrScrollDriver: AsrScrollDriver | null = null;
 let transcriptListener: ((event: Event) => void) | null = null;
@@ -599,6 +613,15 @@ async function resolveOrchestratorUrl(): Promise<string> {
       try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
 
       async function startBackend() {
+        if (isDevMode()) {
+          const w = typeof window !== 'undefined' ? (window as any) : null;
+          const info = {
+            hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
+            hasRecognizerStart: typeof w?.__tpSpeech?.startRecognizer === 'function',
+            hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+          };
+          console.log('[ASR] lifecycle startBackend: invoking backend', info);
+        }
         // Prefer orchestrator if available
         try {
           if (window.__tpSpeechOrchestrator?.start) {
@@ -701,6 +724,16 @@ async function resolveOrchestratorUrl(): Promise<string> {
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
           // NOTE: Do NOT start auto-scroll yet - wait for countdown to finish
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
+          if (isDevMode()) {
+            const w = typeof window !== 'undefined' ? (window as any) : null;
+            const info = {
+              mode,
+              hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
+              hasRecognizerStart: typeof w?.__tpSpeech?.startRecognizer === 'function',
+              hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+            };
+            console.log('[ASR] lifecycle start: willStartBackend', info);
+          }
           await beginCountdownThen(sec, async () => {
             // NOW start auto-scroll after countdown completes
             try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
