@@ -6,7 +6,7 @@ import { emit } from '../events';
 import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
-import { speechStore } from '../state/speech-store';
+import { speechStore, type SpeechState } from '../state/speech-store';
 
 // How many lines the viewport is allowed to jump per ASR advance
 const ASR_MAX_VISUAL_LEAP = 3;
@@ -14,6 +14,82 @@ const ASR_MAX_VISUAL_LEAP = 3;
 let asrDisplayIndex = 0;
 
 const RESCUE_JUMPS_ENABLED = false; // temp gate: log rescues without forcing hard jumps
+
+declare global {
+  interface Window {
+    __tpAsrDebug?: { dump: () => AsrDebugConfig | null };
+  }
+}
+
+interface AsrDebugConfig {
+  engine: string;
+  lang: string;
+  useInterimResults: boolean;
+  filterFillers: boolean;
+  threshold: number;
+  endpointingMs: number;
+  timestamp: number;
+}
+
+const asrDebugState: { config: AsrDebugConfig | null } = { config: null };
+
+function updateAsrDebugConfig(state: SpeechState): AsrDebugConfig {
+  const snapshot: AsrDebugConfig = {
+    engine: state.engine,
+    lang: state.lang,
+    useInterimResults: state.interim,
+    filterFillers: state.fillerFilter,
+    threshold: state.threshold,
+    endpointingMs: state.endpointingMs,
+    timestamp: Date.now(),
+  };
+  asrDebugState.config = snapshot;
+  return snapshot;
+}
+
+function dumpAsrDebugConfig(): AsrDebugConfig | null {
+  const cfg = asrDebugState.config;
+  if (cfg) {
+    try { console.table(cfg); } catch {}
+  }
+  return cfg;
+}
+
+if (typeof window !== 'undefined') {
+  const win = window as any;
+  if (!win.__tpAsrDebug) {
+    win.__tpAsrDebug = { dump: dumpAsrDebugConfig };
+  }
+}
+
+function isTpDevMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const win = window as any;
+    const params = new URLSearchParams(win.location.search || '');
+    if (params.has('dev')) return true;
+    const hash = (win.location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hash === 'dev' || hash === 'dev=1' || hash.includes('dev=1')) return true;
+    if (win.__TP_DEV || win.__TP_DEV1 || win.__tpDevMode) return true;
+    if (win?.localStorage?.getItem('tp_dev_mode') === '1') return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function logAsrDebug(label: string, data: unknown): void {
+  if (!isTpDevMode()) return;
+  try { console.log(label, data); } catch {}
+}
+
+function logAsrEndpoint(action: string): void {
+  if (!isTpDevMode()) return;
+  try {
+    const { endpointingMs } = speechStore.get();
+    console.log('[ASR endpoint]', { action, endpointMs: endpointingMs });
+  } catch {}
+}
 
 export type AsrState = 'idle' | 'ready' | 'listening' | 'running' | 'error';
 
@@ -65,6 +141,8 @@ export class AsrMode {
 
   async start(): Promise<void> {
     const s = speechStore.get();
+    const cfgSnapshot = updateAsrDebugConfig(s);
+    logAsrDebug('[ASR session start cfg]', cfgSnapshot);
     this.engine = createEngine(s.engine as AsrEngineName);
     bindEngine(this.engine, (e: AsrEvent) => this.onEngineEvent(e));
 
@@ -78,9 +156,11 @@ export class AsrMode {
       endpointingMs: s.endpointingMs,
       profanityFilter: false,
     });
+    logAsrEndpoint('ARM');
   }
 
   async stop(): Promise<void> {
+    logAsrEndpoint('CLEAR');
     await this.engine?.stop();
     this.setState('idle', 'manual-stop');
   }
@@ -147,7 +227,12 @@ export class AsrMode {
 
   private prepareText(s: string): string {
     const st = speechStore.get();
-    return st.fillerFilter ? stripFillers(s) : normalizeText(s);
+    const normalized = normalizeText(s);
+    const filtered = st.fillerFilter ? stripFillers(s) : normalized;
+    if (st.fillerFilter && filtered !== normalized) {
+      logAsrDebug('[ASR fillers]', { raw: normalized, filtered });
+    }
+    return filtered;
   }
   
   /**
@@ -162,6 +247,13 @@ export class AsrMode {
    */
   private emitTranscript(detail: Omit<TranscriptEvent, 'timestamp'>): void {
     if (!this.shouldEmitTx()) return;
+    const currentState = speechStore.get();
+    logAsrDebug('[ASR cfg]', { useInterimResults: currentState.interim });
+    logAsrDebug('[ASR event]', {
+      final: detail.final,
+      len: typeof detail.text === 'string' ? detail.text.trim().length : 0,
+      text: detail.text,
+    });
     const now = performance.now();
     if (now - this.lastTxAt < this.TX_MIN_INTERVAL_MS && !detail.final) return; // throttle partials
     this.lastTxAt = now;
@@ -196,6 +288,14 @@ export class AsrMode {
       const score = coverage * confidence;
       if (score > bestScore) { bestScore = score; bestIdx = i; }
     }
+    logAsrDebug('[ASR threshold]', {
+      threshold,
+      bestScore,
+      bestIdx,
+      accepted: bestScore >= threshold,
+      idx0,
+      isFinal,
+    });
 
     if (bestIdx >= 0 && bestScore >= threshold) {
       let newIdx = idx0 + bestIdx;
