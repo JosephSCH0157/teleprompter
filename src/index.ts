@@ -192,17 +192,7 @@ import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode } from './scroll/scroll-brain';
 import { getScrollBrain } from './scroll/brain-access';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
-
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal' | 'wpm' | 'hybrid' | 'timed';
-type BrainScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal';
-
-function toBrainScrollMode(mode: UiScrollMode): BrainScrollMode {
-  if (mode === 'auto' || mode === 'off') return 'hybrid';
-  if (mode === 'timed' || mode === 'wpm' || mode === 'hybrid' || mode === 'asr' || mode === 'step' || mode === 'rehearsal') {
-    return mode;
-  }
-  return 'hybrid';
-}
 
 function bridgeLegacyScrollController() {
 	if (typeof window === 'undefined') return;

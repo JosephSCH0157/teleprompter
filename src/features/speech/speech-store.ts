@@ -1,4 +1,5 @@
 import { speechStore, type SpeechState } from '../../state/speech-store';
+export type { SpeechState } from '../../state/speech-store';
 
 type AsrSettingsPatch = Partial<SpeechState>;
 
