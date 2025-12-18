@@ -291,6 +291,15 @@ let saveIndicatorTimer: number | null = null;
 const SETTINGS_SAVE_DEBOUNCE_MS = 900;
 const RECENT_CHANGE_WINDOW_MS = 10_000;
 
+function isSettingsHydrating(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!(window as any).__tpSettingsHydrating;
+  } catch {
+    return false;
+  }
+}
+
 function isDevMode(): boolean {
 	try {
 		const params = new URLSearchParams(location.search || '');
@@ -483,6 +492,7 @@ function snapshotAppSettings(store: typeof appStore): UserSettings {
 function queueProfileSave(userId: string, store: typeof appStore) {
 	if (IS_CI_MODE) return;
 	if (!profileHydrated || suppressSave) return;
+	if (isSettingsHydrating()) return;
 	if (saveTimer) {
 		try { clearTimeout(saveTimer); } catch {}
 	}
@@ -532,6 +542,7 @@ function installSettingsPersistence(userId: string, store: typeof appStore) {
 		SETTINGS_KEYS.forEach((k) => {
 			store.subscribe?.(k as any, (_v: any) => {
 				if (!profileHydrated || suppressSave) return;
+				if (isSettingsHydrating()) return;
 				if (!seenInit.has(k)) {
 					seenInit.add(k);
 					return;
@@ -601,43 +612,6 @@ function setModeStatusLabel(mode: UiScrollMode): void {
       break;
   }
   el.textContent = label;
-}
-
-type SpeechTranscriptCallback = (text: string, final?: boolean) => void;
-
-function startSpeechRuntime(): boolean {
-  if (typeof window === 'undefined') return false;
-  const w: any = window;
-  const emitSpeech = typeof w.__tpEmitSpeech === 'function'
-    ? (text: string, final?: boolean) => {
-      try { w.__tpEmitSpeech(text, final); } catch {}
-    }
-    : (_text: string, _final?: boolean) => {};
-  const cb: SpeechTranscriptCallback = (text, final) => emitSpeech(text, final);
-  const opts = typeof w.__tpSpeechLang === 'string' ? { lang: w.__tpSpeechLang } : {};
-
-  try {
-    const tpSpeech = w.__tpSpeech;
-    if (tpSpeech && typeof tpSpeech.startRecognizer === 'function') {
-      tpSpeech.startRecognizer(cb, opts);
-      return true;
-    }
-  } catch (err) {
-    try { console.warn('[ASR] orchestrator startRecognizer failed', err); } catch {}
-  }
-
-  try {
-    const factory = w.__tpRecognizer;
-    if (typeof factory === 'function') {
-      const rec = factory(opts);
-      rec?.start?.(cb);
-      return true;
-    }
-  } catch (err) {
-    try { console.warn('[ASR] fallback recognizer start failed', err); } catch {}
-  }
-
-  return false;
 }
 
 type ScrollModeSource =
@@ -713,11 +687,6 @@ function applyUiScrollMode(
         hasTpMatcher,
       });
     } catch {}
-
-    const startedSpeech = startSpeechRuntime();
-    if (!startedSpeech) {
-      try { console.warn('[ASR] no speech runtime available to start'); } catch {}
-    }
     dispatchAsrToggle(true);
     try {
       asrBridge?.start?.();

@@ -29,6 +29,74 @@ function findAsrCard(root: ParentNode = document): HTMLElement | null {
   );
 }
 
+type AsrInputs = {
+  eng?: HTMLSelectElement | null;
+  lang?: HTMLInputElement | null;
+  interim?: HTMLInputElement | null;
+  fillers?: HTMLInputElement | null;
+  thresh?: HTMLInputElement | null;
+  endms?: HTMLInputElement | null;
+};
+
+function queryAsrInputs(card: HTMLElement): AsrInputs {
+  const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
+  return {
+    eng: q<HTMLSelectElement>('#asrEngine'),
+    lang: q<HTMLInputElement>('#asrLang'),
+    interim: q<HTMLInputElement>('#asrInterim'),
+    fillers: q<HTMLInputElement>('#asrFillers'),
+    thresh: q<HTMLInputElement>('#asrThresh'),
+    endms: q<HTMLInputElement>('#asrEndMs'),
+  };
+}
+
+function applyAsrStateToInputs(inputs: AsrInputs, state: SpeechState): void {
+  const { eng, lang, interim, fillers, thresh, endms } = inputs;
+  if (eng && typeof state.engine === 'string') {
+    try { eng.value = state.engine; } catch {}
+  }
+  if (lang && typeof state.lang === 'string') {
+    lang.value = state.lang;
+  }
+  if (interim) interim.checked = !!state.interim;
+  if (fillers) fillers.checked = !!state.fillerFilter;
+  if (thresh && typeof state.threshold === 'number') {
+    thresh.value = String(state.threshold);
+  }
+  if (endms && typeof state.endpointingMs === 'number') {
+    endms.value = String(state.endpointingMs);
+  }
+}
+
+function attachAsrInputListeners(inputs: AsrInputs): void {
+  const { eng, lang, interim, fillers, thresh, endms } = inputs;
+  const persist = (patch: Partial<SpeechState>) => {
+    if (isHydratingAsrSettings) return;
+    persistAsrPatch(patch);
+  };
+
+  const clampThreshold = (value: string | number) => {
+    const parsed = typeof value === 'number' ? value : parseFloat(String(value));
+    if (Number.isNaN(parsed)) return;
+    persist({ threshold: clamp(parsed, 0, 1) });
+  };
+
+  const clampEndpoint = (value: string | number) => {
+    const parsed = typeof value === 'number' ? Math.round(value) : Math.round(parseFloat(String(value)));
+    if (Number.isNaN(parsed)) return;
+    persist({ endpointingMs: Math.max(200, parsed) });
+  };
+
+  eng?.addEventListener('change', () => persist({ engine: eng.value as any }));
+  lang?.addEventListener('change', () => persist({ lang: lang.value }));
+  interim?.addEventListener('change', () => persist({ interim: interim.checked }));
+  fillers?.addEventListener('change', () => persist({ fillerFilter: fillers.checked }));
+  thresh?.addEventListener('input', () => clampThreshold(thresh.value));
+  thresh?.addEventListener('change', () => clampThreshold(thresh.value));
+  endms?.addEventListener('input', () => clampEndpoint(endms.value));
+  endms?.addEventListener('change', () => clampEndpoint(endms.value));
+}
+
 function withAsrHydration(fn: () => void): void {
   isHydratingAsrSettings = true;
   try {
@@ -91,73 +159,40 @@ function formatRelativeTime(timestamp?: number): string {
 }
 
 // Wire the existing ASR settings card rendered by the TS builder (Media panel).
-export function mountAsrSettings(root: ParentNode = document, store?: AppStore | null): void {
+export function wireAsrSettingsCard(root: ParentNode = document, store?: AppStore | null): HTMLElement | null {
   const card =
     root.querySelector<HTMLElement>('#asrSettingsCard') ||
     root.querySelector<HTMLElement>('.settings-card.asr');
 
   if (!card) {
-    try { console.warn('[ASR] settings card not found (skipping wiring)'); } catch {}
-    return;
+    if (!asrSettingsWarned) {
+      asrSettingsWarned = true;
+      try { console.warn('[ASR] settings card not found (skipping wiring)'); } catch {}
+    }
+    return null;
   }
 
-  if (card.dataset.tpAsrWired === '1') return;
+  if (card.dataset.tpAsrWired === '1') return card;
   card.dataset.tpAsrWired = '1';
 
-  const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
-  const eng = q<HTMLSelectElement>('#asrEngine');
-  const lang = q<HTMLInputElement>('#asrLang');
-  const interim = q<HTMLInputElement>('#asrInterim');
-  const fillers = q<HTMLInputElement>('#asrFillers');
-  const thresh = q<HTMLInputElement>('#asrThresh');
-  const endms = q<HTMLInputElement>('#asrEndMs');
-
-  const persist = (patch: Partial<SpeechState>) => {
-    if (isHydratingAsrSettings) return;
-    persistAsrPatch(patch);
-  };
-
-  const applyState = (s: SpeechState) => {
-    if (eng && typeof s.engine === 'string') {
-      try { eng.value = s.engine; } catch {}
-    }
-    if (lang && typeof s.lang === 'string') {
-      lang.value = s.lang;
-    }
-    if (interim) interim.checked = !!s.interim;
-    if (fillers) fillers.checked = !!s.fillerFilter;
-    if (thresh && typeof s.threshold === 'number') {
-      thresh.value = String(s.threshold);
-    }
-    if (endms && typeof s.endpointingMs === 'number') {
-      endms.value = String(s.endpointingMs);
-    }
-  };
-
-  const seeded = getAsrSettings();
-  withAsrHydration(() => applyState(seeded));
-
-  eng?.addEventListener('change', () => persist({ engine: eng.value as any }));
-  lang?.addEventListener('change', () => persist({ lang: lang.value }));
-  interim?.addEventListener('change', () => persist({ interim: interim.checked }));
-  fillers?.addEventListener('change', () => persist({ fillerFilter: fillers.checked }));
-  const persistThresh = () => {
-    if (!thresh) return;
-    const parsed = parseFloat(thresh.value);
-    if (Number.isNaN(parsed)) return;
-    persist({ threshold: clamp(parsed, 0, 1) });
-  };
-  const persistEndms = () => {
-    if (!endms) return;
-    const parsed = Math.round(+endms.value);
-    if (Number.isNaN(parsed)) return;
-    persist({ endpointingMs: Math.max(200, parsed) });
-  };
-  thresh?.addEventListener('input', persistThresh);
-  thresh?.addEventListener('change', persistThresh);
-  endms?.addEventListener('input', persistEndms);
-  endms?.addEventListener('change', persistEndms);
+  const inputs = queryAsrInputs(card);
+  attachAsrInputListeners(inputs);
   wireAsrStatusIndicators(card, store);
+  return card;
+}
+
+export function hydrateAsrSettingsCard(root: ParentNode = document): void {
+  const card = findAsrCard(root);
+  if (!card) return;
+  const inputs = queryAsrInputs(card);
+  const state = getAsrSettings();
+  withAsrHydration(() => applyAsrStateToInputs(inputs, state));
+}
+
+export function mountAsrSettings(root: ParentNode = document, store?: AppStore | null): void {
+  const card = wireAsrSettingsCard(root, store);
+  if (!card) return;
+  hydrateAsrSettingsCard(root);
 }
 
 function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): void {

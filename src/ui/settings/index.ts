@@ -4,10 +4,33 @@ import { addAsrWizardCard, buildSettingsContent as buildFromBuilder } from './bu
 import { bindHybridGateSetting } from './hybridGate';
 import { bindTypographyPanel } from './typographyPanel';
 import { wireSettingsDynamic } from './wire';
-import { flushAsrSettingsToStore } from '../settings-asr';
+import {
+  flushAsrSettingsToStore,
+  hydrateAsrSettingsCard,
+  wireAsrSettingsCard,
+} from '../settings-asr';
 import { createAppStore, type AppStore } from '../../state/app-store';
 import { speechStore } from '../../state/speech-store';
 import { wireTypographyPresets } from './typography-presets';
+
+function setSettingsHydrating(value: boolean) {
+  try {
+    (window as any).__tpSettingsHydrating = value;
+  } catch {
+    // ignore if window not available
+  }
+}
+
+function scheduleSettingsHydrationComplete() {
+  const clear = () => setSettingsHydrating(false);
+  if (typeof queueMicrotask === 'function') {
+    queueMicrotask(clear);
+  } else if (typeof Promise !== 'undefined' && typeof Promise.resolve === 'function') {
+    Promise.resolve().then(clear);
+  } else {
+    setTimeout(clear, 0);
+  }
+}
 
 function getStore(store?: AppStore | null): AppStore | null {
   if (store) return store;
@@ -58,9 +81,10 @@ function logSettingsHydrationSnapshot(store: AppStore | null): void {
 
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | null) {
-  const resolvedStore = getStore(store) || createAppStore();
-  logSettingsHydrationSnapshot(resolvedStore);
+  setSettingsHydrating(true);
   try {
+    const resolvedStore = getStore(store) || createAppStore();
+    logSettingsHydrationSnapshot(resolvedStore);
     if ((window as any).__TP_DEV) {
       try { console.count('mountSettings'); } catch {}
     }
@@ -87,6 +111,8 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     try { initAsrSettingsUI(); } catch {}
     // Bind Hybrid gate preference select
     try { bindHybridGateSetting(rootEl); } catch {}
+    try { wireAsrSettingsCard(rootEl, resolvedStore); } catch {}
+    try { hydrateAsrSettingsCard(rootEl); } catch {}
     try { syncSettingsValues(resolvedStore); } catch {}
 
     // Inline link: Hybrid row → jump to ASR settings card
@@ -185,6 +211,9 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     // Ensure the Scripts Folder card is present after builder render (builder may overwrite earlier injection)
     try { ensureSettingsFolderControls(); } catch {}
   } catch {}
+  finally {
+    scheduleSettingsHydrationComplete();
+  }
 }
 
 export function wireSettings(options?: { root?: HTMLElement | null; store?: AppStore | null; force?: boolean }) {
