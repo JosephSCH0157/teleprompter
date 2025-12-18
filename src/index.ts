@@ -71,6 +71,7 @@ import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 import { showToast } from './ui/toasts';
 import { computeAsrReadiness, type AsrWarnReason, type AsrNotReadyReason } from './asr/readiness';
+import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
 
@@ -650,9 +651,18 @@ async function refreshScriptsSidebar(): Promise<void> {
   } catch {}
 }
 
+export type ApplyUiScrollModeOptions = {
+  skipStore?: boolean;
+  allowToast?: boolean;
+  source?: ScrollModeSource;
+  __permissionRetry?: boolean;
+};
+
+type GateReason = AsrNotReadyReason | 'MIC_ERROR';
+
 function applyUiScrollMode(
   mode: UiScrollMode,
-  opts: { skipStore?: boolean; allowToast?: boolean; source?: ScrollModeSource } = {},
+  opts: ApplyUiScrollModeOptions = {},
 ) {
   const allowToast = opts.allowToast !== false;
   const source: ScrollModeSource = opts.source || 'user';
@@ -670,6 +680,44 @@ function applyUiScrollMode(
     try {
       document.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
     } catch {}
+  };
+  let micPermissionCheckPending = false;
+  const isPermissionRetry = opts.__permissionRetry === true;
+  const handleAsrBlock = (reason: GateReason) => {
+    const fallback = reason === 'NO_PERMISSION' ? 'hybrid' : getSafeFallbackMode();
+    normalized = fallback;
+    setScrollModeSelectValue(fallback);
+    if (allowToast && source === 'user') {
+      if (reason === 'NO_PERMISSION') {
+        try { showToast('ASR blocked: microphone permission denied', { type: 'warning' }); } catch {}
+      } else if (!asrRejectionToastShown) {
+        const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
+        try { showToast(toastMsg, { type: 'info' }); } catch {}
+      }
+      asrRejectionToastShown = true;
+    }
+    try {
+      console.debug('[Scroll Mode] ASR rejected', { reason, fallback });
+    } catch {}
+    try { appStore.set?.('scrollMode', fallback as any); } catch {}
+    try { requestAsrStop(); } catch {}
+  };
+  const ensureMicPermissionThenRetry = () => {
+    if (micPermissionCheckPending) return;
+    micPermissionCheckPending = true;
+    ensureMicAccess()
+      .then((res) => {
+        micPermissionCheckPending = false;
+        if (res.allowed) {
+          applyUiScrollMode('asr', { ...opts, __permissionRetry: true });
+          return;
+        }
+        handleAsrBlock(res.reason);
+      })
+      .catch(() => {
+        micPermissionCheckPending = false;
+        handleAsrBlock('MIC_ERROR');
+      });
   };
   const hardStopAuto = () => {
     try {
@@ -700,20 +748,14 @@ function applyUiScrollMode(
   if (normalized === 'asr') {
     readiness = computeAsrReadiness();
     if (!readiness.ready) {
-      const fallback = getSafeFallbackMode();
-      normalized = fallback;
-      setScrollModeSelectValue(fallback);
-      if (!asrRejectionToastShown && allowToast && source === 'user') {
-        const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
-        try { showToast(toastMsg, { type: 'info' }); } catch {}
-        asrRejectionToastShown = true;
+      if (!isPermissionRetry && readiness.reason === 'NO_PERMISSION') {
+        ensureMicPermissionThenRetry();
+        return;
       }
-      try {
-        console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
-      } catch {}
-      try { appStore.set?.('scrollMode', fallback as any); } catch {}
-      try { requestAsrStop(); } catch {}
-    } else if (source === 'user') {
+      handleAsrBlock(readiness.reason);
+      return;
+    }
+    if (source === 'user') {
       hardStopAuto();
       requestAsrStart();
     }
