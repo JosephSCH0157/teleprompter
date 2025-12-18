@@ -4,7 +4,7 @@ export type { SpeechState } from '../../state/speech-store';
 type AsrSettingsPatch = Partial<SpeechState>;
 
 const MIN_ENDPOINT_MS = 100;
-const MAX_ENDPOINT_MS = 60000;
+const MAX_ENDPOINT_MS = 900000;
 
 function clampEndpoint(value?: number | null): number | undefined {
   if (value === undefined || value === null) return undefined;
