@@ -1,6 +1,8 @@
 // src/features/asr/persistence.ts
-import { speechStore, type SpeechState } from '../../state/speech-store';
+import { getSpeechStore, type SpeechState } from '../speech/speech-store';
 import { getAppStore } from '../../state/appStore';
+
+const speechStore = getSpeechStore();
 
 export interface PersistedAsrSettings {
   engine?: string;

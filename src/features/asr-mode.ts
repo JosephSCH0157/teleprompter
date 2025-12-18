@@ -6,7 +6,7 @@ import { emit } from '../events';
 import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
-import { speechStore, type SpeechState } from '../state/speech-store';
+import { getSpeechStore, type SpeechState } from './speech/speech-store';
 
 // How many lines the viewport is allowed to jump per ASR advance
 const ASR_MAX_VISUAL_LEAP = 3;
@@ -86,7 +86,7 @@ function logAsrDebug(label: string, data: unknown): void {
 function logAsrEndpoint(action: string): void {
   if (!isTpDevMode()) return;
   try {
-    const { endpointingMs } = speechStore.get();
+    const { endpointingMs } = getSpeechStore().get();
     console.log('[ASR endpoint]', { action, endpointMs: endpointingMs });
   } catch {}
 }
@@ -140,7 +140,7 @@ export class AsrMode {
   }
 
   async start(): Promise<void> {
-    const s = speechStore.get();
+    const s = getSpeechStore().get();
     const cfgSnapshot = updateAsrDebugConfig(s);
     logAsrDebug('[ASR session start cfg]', cfgSnapshot);
     this.engine = createEngine(s.engine as AsrEngineName);
@@ -226,7 +226,7 @@ export class AsrMode {
   }
 
   private prepareText(s: string): string {
-    const st = speechStore.get();
+    const st = getSpeechStore().get();
     const normalized = normalizeText(s);
     const filtered = st.fillerFilter ? stripFillers(s) : normalized;
     if (st.fillerFilter && filtered !== normalized) {
@@ -247,7 +247,7 @@ export class AsrMode {
    */
   private emitTranscript(detail: Omit<TranscriptEvent, 'timestamp'>): void {
     if (!this.shouldEmitTx()) return;
-    const currentState = speechStore.get();
+    const currentState = getSpeechStore().get();
     logAsrDebug('[ASR cfg]', { useInterimResults: currentState.interim });
     logAsrDebug('[ASR event]', {
       final: detail.final,
@@ -280,7 +280,7 @@ export class AsrMode {
 
   private tryAdvance(hyp: string, isFinal: boolean, confidence: number) {
     const { lines, idx0 } = this.getWindow();
-    const threshold = speechStore.get().threshold;
+    const threshold = getSpeechStore().get().threshold;
 
     let bestIdx = -1; let bestScore = 0;
     for (let i = 0; i < lines.length; i++) {

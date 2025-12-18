@@ -1,8 +1,9 @@
 // =============================================================
 // File: src/ui/settings-asr.ts
 // =============================================================
-import { speechStore, type SpeechState } from '../state/speech-store';
+import type { SpeechState } from '../state/speech-store';
 import { appStore, type AppStore } from '../state/app-store';
+import { getAsrSettings, setAsrSettings } from '../features/speech/speech-store';
 
 let asrSettingsObserverStarted = false;
 let asrSettingsWarned = false;
@@ -75,18 +76,8 @@ function readAsrPatchFromCard(card: HTMLElement): Partial<SpeechState> {
   return patch;
 }
 
-function persistAsrPatch(patch: Partial<SpeechState>, store?: AppStore | null): void {
-  try { speechStore.set(patch); } catch {}
-  try {
-    const resolved = resolveStore(store);
-    if (!resolved) return;
-    if (patch.engine !== undefined) resolved.set('asr.engine', patch.engine as any);
-    if (patch.lang !== undefined) resolved.set('asr.language', patch.lang as any);
-    if (patch.interim !== undefined) resolved.set('asr.useInterimResults', !!patch.interim as any);
-    if (patch.fillerFilter !== undefined) resolved.set('asr.filterFillers', !!patch.fillerFilter as any);
-    if (patch.threshold !== undefined) resolved.set('asr.threshold', patch.threshold as any);
-    if (patch.endpointingMs !== undefined) resolved.set('asr.endpointMs', patch.endpointingMs as any);
-  } catch {}
+function persistAsrPatch(patch: Partial<SpeechState>): void {
+  setAsrSettings(patch);
 }
 
 function formatRelativeTime(timestamp?: number): string {
@@ -121,19 +112,9 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
   const thresh = q<HTMLInputElement>('#asrThresh');
   const endms = q<HTMLInputElement>('#asrEndMs');
 
-  const storeRef = resolveStore(store);
-  const storeGet = <T>(key: string, fallback: T): T => {
-    try {
-      const got = storeRef?.get?.(key as any);
-      return (got as T) ?? fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
   const persist = (patch: Partial<SpeechState>) => {
     if (isHydratingAsrSettings) return;
-    persistAsrPatch(patch, storeRef);
+    persistAsrPatch(patch);
   };
 
   const applyState = (s: SpeechState) => {
@@ -153,16 +134,7 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
     }
   };
 
-  // Seed from store (if present) otherwise speech store defaults
-  const snapshot = speechStore.get();
-  const seeded: SpeechState = {
-    engine: storeGet('asr.engine', snapshot.engine),
-    lang: storeGet('asr.language', snapshot.lang),
-    interim: storeGet('asr.useInterimResults', snapshot.interim),
-    fillerFilter: storeGet('asr.filterFillers', snapshot.fillerFilter),
-    threshold: storeGet('asr.threshold', snapshot.threshold),
-    endpointingMs: storeGet('asr.endpointMs', snapshot.endpointingMs),
-  };
+  const seeded = getAsrSettings();
   withAsrHydration(() => applyState(seeded));
 
   eng?.addEventListener('change', () => persist({ engine: eng.value as any }));
@@ -301,12 +273,12 @@ function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): vo
   }
 }
 
-export function flushAsrSettingsToStore(store?: AppStore | null): void {
+export function flushAsrSettingsToStore(_store?: AppStore | null): void {
   try {
     const card = findAsrCard();
     if (!card) return;
     const patch = readAsrPatchFromCard(card);
-    persistAsrPatch(patch, store);
+    persistAsrPatch(patch);
   } catch {}
 }
 
