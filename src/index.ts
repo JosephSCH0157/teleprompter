@@ -9,6 +9,11 @@ const IS_CI_MODE = (() => {
 		return false;
 	}
 })();
+try {
+  const stamp = `asr-scroll-${new Date().toISOString()}`;
+  (window as any).__TP_BUILD_STAMP = stamp;
+  console.log('[build]', stamp);
+} catch {}
 try { console.log('[TP-BOOT] TS index.ts booted'); } catch {}
 try { (window as any).__TP_TS_OVERLAYS = true; } catch {}
 

@@ -240,10 +240,19 @@
     },
     {
       "type": "log",
+      "text": "[build] asr-scroll-<DATE>",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 39781,
+        "columnNumber": 10
+      }
+    },
+    {
+      "type": "log",
       "text": "[TP-BOOT] TS index.ts booted",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 39779,
+        "lineNumber": 39785,
         "columnNumber": 10
       }
     },
@@ -315,7 +324,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 40540,
+        "lineNumber": 40546,
         "columnNumber": 12
       }
     },
@@ -342,7 +351,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 40540,
+        "lineNumber": 40546,
         "columnNumber": 12
       }
     },
@@ -369,7 +378,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 40540,
+        "lineNumber": 40546,
         "columnNumber": 12
       }
     },
@@ -414,7 +423,7 @@
       "text": "[SCROLL] initOnce: scroll-router (viewer=true)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 41337,
+        "lineNumber": 41343,
         "columnNumber": 22
       }
     },
@@ -504,7 +513,7 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 41491,
+        "lineNumber": 41497,
         "columnNumber": 18
       }
     },
@@ -531,7 +540,7 @@
       "text": "[Scroll Mode] UI: hybrid | Brain: hybrid | Clamp: follow | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 40540,
+        "lineNumber": 40546,
         "columnNumber": 12
       }
     },
@@ -3344,9 +3353,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "782da89a7092f740e759c4caab4b99a827c900b6",
+      "gitSha": "aa8a78a6141cf4b588ed68a3d801b6cd17e0aa87",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-18T14:10:08.671Z"
+      "buildTime": "2025-12-18T14:27:47.948Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
