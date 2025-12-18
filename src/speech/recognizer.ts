@@ -8,12 +8,30 @@ export type RecognizerOptions = {
 
 type ResultCallback = (_transcript: string, _isFinal: boolean) => void;
 
+const IS_DEV_MODE = (() => {
+  try {
+    const win = typeof window !== 'undefined' ? (window as Window & Record<string, any>) : undefined;
+    const loc = win?.location;
+    if (loc) {
+      const params = new URLSearchParams(loc.search || '');
+      if (params.has('dev')) return true;
+      const hash = (loc.hash || '').replace(/^#/, '').toLowerCase();
+      if (hash === 'dev' || hash === 'dev=1' || hash.includes('dev=1')) return true;
+    }
+    if (win && win.__TP_DEV) return true;
+    if (win?.localStorage?.getItem('tp_dev_mode') === '1') return true;
+  } catch {}
+  return false;
+})();
+
 export class Recognizer {
   private recog: any | null = null;
   private cb: ResultCallback | null = null;
   private opts: RecognizerOptions;
   private _lastInterimAt = 0;
   private shouldRun = false;
+  private acceptEvents = false;
+  private generation = 0;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: RecognizerOptions = {}) {
@@ -21,6 +39,7 @@ export class Recognizer {
   }
 
   private logSpeechError(ev: any) {
+    if (!IS_DEV_MODE) return;
     try {
       console.log('[speech] error', ev);
     } catch {}
@@ -67,6 +86,8 @@ export class Recognizer {
         }
       } catch {}
       this.shouldRun = true;
+      this.acceptEvents = true;
+      const runGeneration = ++this.generation;
       this.clearRestartTimer();
       this.recog.continuous = true;
       this.recog.interimResults = true;
@@ -75,8 +96,11 @@ export class Recognizer {
         this.recog.maxAlternatives = Math.max(2, this.recog.maxAlternatives || 0, this.opts.maxAlternatives || 2);
       } catch {}
 
+      const shouldHandle = () => this.acceptEvents && runGeneration === this.generation;
+
       this.recog.onstart = () => {};
       this.recog.onerror = (ev: any) => {
+        if (!shouldHandle()) return;
         this.logSpeechError(ev);
         if (!ev || ev.error !== 'network') return;
         if (!this.shouldRun) return;
@@ -84,12 +108,14 @@ export class Recognizer {
         this.scheduleRestart(800, { stopFirst: true });
       };
       this.recog.onend = () => {
+        if (!shouldHandle()) return;
         if (!this.shouldRun) return;
         if (this.restartTimer !== null) return;
         this.scheduleRestart(500);
       };
 
       this.recog.onresult = (e: any) => {
+        if (!shouldHandle()) return;
         let interim = '';
         let finals = '';
         for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -114,6 +140,8 @@ export class Recognizer {
     } catch (err) {
       this.shouldRun = false;
       this.clearRestartTimer();
+      this.acceptEvents = false;
+      this.generation++;
       this.recog = null;
       throw err;
     }
@@ -122,8 +150,16 @@ export class Recognizer {
   stop() {
     try {
       this.shouldRun = false;
+      this.acceptEvents = false;
+      this.generation++;
       this.clearRestartTimer();
       if (this.recog) {
+        try {
+          this.recog.onresult = null;
+          this.recog.onerror = null;
+          this.recog.onend = null;
+        } catch {}
+        try { this.recog.abort?.(); } catch {}
         try { this.recog.stop(); } catch {}
       }
     } finally {

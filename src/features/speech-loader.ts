@@ -670,6 +670,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
       async function stopSpeech() {
       try {
         try { stopAsrRuntime(); } catch {}
+        try { window.__tpMic?.releaseMic?.(); } catch {}
         try { rec?.stop?.(); } catch {}
           setActiveRecognizer(null);
           running = false;
