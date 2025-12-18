@@ -21,6 +21,26 @@
   <div id="hud-popout-root">
     <div id="hud-root"></div>
   </div>
-  <script type="module" src="./hud/popout-entry.js"></script>
+  <script type="module">
+    (async () => {
+      const fallback = '/dist/hud/popout-entry.js';
+      const useRelative =
+        (location.pathname || '').split('/').includes('dist');
+      const entry = useRelative ? './hud/popout-entry.js' : fallback;
+      try {
+        await import(/* @vite-ignore */ entry);
+      } catch (err) {
+        if (entry !== fallback) {
+          try {
+            await import(/* @vite-ignore */ fallback);
+          } catch (innerErr) {
+            console.error('[HUD POPUP] failed to load entry module', innerErr);
+          }
+        } else {
+          console.error('[HUD POPUP] failed to load entry module', err);
+        }
+      }
+    })();
+  </script>
 </body>
 </html>
