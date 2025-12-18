@@ -42,7 +42,11 @@ declare global {
     __tpHud?: { log?: AnyFn };
     __tpStore?: AppStore;
     __tpScrollMode?: { getMode?: () => string };
-    __tpMic?: { isOpen?: () => boolean; requestMic?: () => Promise<MediaStream> } & Record<string, unknown>;
+    __tpMic?: {
+      isOpen?: () => boolean;
+      requestMic?: () => Promise<MediaStream>;
+      releaseMic?: () => void;
+    } & Record<string, unknown>;
     __tpRecording?: {
       start?: () => unknown;
       stop?: () => unknown;
