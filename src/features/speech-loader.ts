@@ -2,6 +2,7 @@ import { getSession, setSessionPhase } from '../state/session';
 import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
 import { stopAsrRuntime } from '../speech/runtime-control';
+import { createAsrScrollDriver, type AsrScrollDriver } from '../features/asr/asr-scroll-driver';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -404,6 +405,56 @@ function shouldAutoRestartSpeech(): boolean {
   return running && (mode === 'asr' || mode === 'hybrid') && isAutoRestartEnabled();
 }
 
+const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
+let asrScrollDriver: AsrScrollDriver | null = null;
+let transcriptListener: ((event: Event) => void) | null = null;
+let sessionStopHooked = false;
+
+function attachAsrScrollDriver(): void {
+  if (typeof window === 'undefined') return;
+  if (!asrScrollDriver) {
+    asrScrollDriver = createAsrScrollDriver();
+  }
+  if (transcriptListener) return;
+  transcriptListener = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const detectedMode = typeof detail.mode === 'string' ? detail.mode.toLowerCase() : '';
+    const effectiveMode = detectedMode || getScrollMode();
+    if (effectiveMode !== 'asr' && effectiveMode !== 'hybrid') return;
+    const text = typeof detail.text === 'string' ? detail.text : '';
+    if (!text) return;
+    const isFinal = Boolean(detail.isFinal ?? detail.final);
+    asrScrollDriver?.ingest(text, isFinal);
+  };
+  window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
+}
+
+function detachAsrScrollDriver(): void {
+  if (typeof window !== 'undefined' && transcriptListener) {
+    window.removeEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
+  }
+  transcriptListener = null;
+  if (asrScrollDriver) {
+    asrScrollDriver.dispose();
+    asrScrollDriver = null;
+  }
+}
+
+function ensureSessionStopHooked(): void {
+  if (sessionStopHooked) return;
+  sessionStopHooked = true;
+  if (typeof window === 'undefined') return;
+  window.addEventListener('tp:session:stop', () => {
+    detachAsrScrollDriver();
+  }, TRANSCRIPT_EVENT_OPTIONS);
+}
+
+try {
+  ensureSessionStopHooked();
+} catch {
+  // ignore
+}
+
 function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
   if (!sr) return;
   sr.onend = (event: Event) => {
@@ -614,31 +665,34 @@ async function resolveOrchestratorUrl(): Promise<string> {
       }
 
       async function startSpeech() {
-        try {
-          const mode = getScrollMode();
-          const wantsSpeech = mode === 'hybrid' || mode === 'asr';
-          const S = window.__tpStore;
-          const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
+          try {
+            const mode = getScrollMode();
+            const wantsSpeech = mode === 'hybrid' || mode === 'asr';
+            const S = window.__tpStore;
+            const sec = (S && S.get) ? Number(S.get('prerollSeconds') || 0) : 0;
+            detachAsrScrollDriver();
 
-          if (!wantsSpeech) {
-            // Non-ASR modes: just run pre-roll and start auto-scroll
+            if (!wantsSpeech) {
+              // Non-ASR modes: just run pre-roll and start auto-scroll
+              running = true;
+              setListeningUi(true);
+              try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
+              await beginCountdownThen(sec, async () => {
+                try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+                try {
+                  window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
+                    detail: { source: 'auto-only', preroll: sec }
+                  }));
+                } catch {}
+              });
+              if (btn) btn.disabled = false;
+              return;
+            }
+
+            attachAsrScrollDriver();
+
             running = true;
-            setListeningUi(true);
-            try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
-            await beginCountdownThen(sec, async () => {
-              try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
-              try {
-                window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
-                  detail: { source: 'auto-only', preroll: sec }
-                }));
-              } catch {}
-            });
-            if (btn) btn.disabled = false;
-            return;
-          }
-
-          running = true;
-          rememberMode(mode);
+            rememberMode(mode);
           // Flip UI + legacy speech gate immediately
           try { document.body.classList.add('listening'); } catch {}
           try { window.HUD?.bus?.emit?.('speech:toggle', true); } catch {}
@@ -673,6 +727,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
 
       async function stopSpeech() {
       try {
+        detachAsrScrollDriver();
         try { stopAsrRuntime(); } catch {}
         try { window.__tpMic?.releaseMic?.(); } catch {}
         try { rec?.stop?.(); } catch {}
