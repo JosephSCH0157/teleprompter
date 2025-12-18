@@ -283,10 +283,11 @@ export function addAsrWizardCard(root: HTMLElement) {
         <button id="asrGrantPerm" class="btn">Grant mic access</button>
       </div>
 
-      <div class="row">
+      <div class="row" style="gap:8px;align-items:center;">
         <label class="grow">Profile
           <select id="asrProfileSelect"></select>
         </label>
+        <button id="asrProfileReload" class="chip btn-chip" type="button">Reload profiles</button>
       </div>
       <small class="muted">Choose a saved ASR profile to restore calibration values.</small>
 

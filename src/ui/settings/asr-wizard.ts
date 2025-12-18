@@ -223,6 +223,22 @@ function wireProfileSelector(): void {
       profileSelectorSubbed = true;
       onAsr(() => renderProfileOptions());
     }
+    renderProfileOptions();
+    wireProfileReloadButton();
+  } catch {
+    // ignore
+  }
+}
+
+function wireProfileReloadButton(): void {
+  try {
+    const btn = document.getElementById('asrProfileReload') as HTMLButtonElement | null;
+    if (!btn || btn.dataset.tpAsrProfileReloadWired === '1') return;
+    btn.dataset.tpAsrProfileReloadWired = '1';
+    btn.addEventListener('click', () => {
+      renderProfileOptions();
+      toast('ASR profile list refreshed', { type: 'info' });
+    });
   } catch {
     // ignore
   }
