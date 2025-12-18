@@ -148,6 +148,14 @@ export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult 
     }
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState();
     const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
+    try { console.log('[ASR] matchBatch res:', res); } catch {}
+    try {
+      const cur = Number.isFinite((window as any).currentIndex) ? (window as any).currentIndex : 0;
+      const bestIdxLog = (res as any)?.bestIdx ?? null;
+      const bestSimLog = (res as any)?.bestSim ?? null;
+      const keys = res ? Object.keys(res as any) : null;
+      console.log('[ASR] idx', { cur, bestIdx: bestIdxLog, bestSim: bestSimLog, keys });
+    } catch {}
 
     // Convert line delta to px error so the adaptive governor can respond
     try {
