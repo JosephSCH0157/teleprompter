@@ -224,20 +224,30 @@ function wireProfileSelector(): void {
       onAsr(() => renderProfileOptions());
     }
     renderProfileOptions();
-    wireProfileReloadButton();
+    wireProfileLoadButton();
   } catch {
     // ignore
   }
 }
 
-function wireProfileReloadButton(): void {
+function wireProfileLoadButton(): void {
   try {
-    const btn = document.getElementById('asrProfileReload') as HTMLButtonElement | null;
-    if (!btn || btn.dataset.tpAsrProfileReloadWired === '1') return;
-    btn.dataset.tpAsrProfileReloadWired = '1';
+    const btn = document.getElementById('asrProfileLoad') as HTMLButtonElement | null;
+    if (!btn || btn.dataset.tpAsrProfileLoadWired === '1') return;
+    btn.dataset.tpAsrProfileLoadWired = '1';
     btn.addEventListener('click', () => {
+      const select = getProfileSelect();
+      if (!select) return;
+      const id = select.value;
+      if (!id) {
+        toast('Select a profile first', { type: 'warning' });
+        return;
+      }
+      try {
+        setActiveProfile(id as AsrProfileId);
+        toast('ASR profile applied', { type: 'info' });
+      } catch {}
       renderProfileOptions();
-      toast('ASR profile list refreshed', { type: 'info' });
     });
   } catch {
     // ignore

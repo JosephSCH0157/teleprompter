@@ -287,7 +287,7 @@ export function addAsrWizardCard(root: HTMLElement) {
         <label class="grow">Profile
           <select id="asrProfileSelect"></select>
         </label>
-        <button id="asrProfileReload" class="chip btn-chip" type="button">Reload profiles</button>
+        <button id="asrProfileLoad" class="chip btn-chip" type="button">Load profile</button>
       </div>
       <small class="muted">Choose a saved ASR profile to restore calibration values.</small>
 
