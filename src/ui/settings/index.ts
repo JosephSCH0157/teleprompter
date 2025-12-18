@@ -6,6 +6,7 @@ import { bindTypographyPanel } from './typographyPanel';
 import { wireSettingsDynamic } from './wire';
 import { flushAsrSettingsToStore } from '../settings-asr';
 import { createAppStore, type AppStore } from '../../state/app-store';
+import { speechStore } from '../../state/speech-store';
 import { wireTypographyPresets } from './typography-presets';
 
 function getStore(store?: AppStore | null): AppStore | null {
@@ -17,9 +18,48 @@ function getStore(store?: AppStore | null): AppStore | null {
   }
 }
 
+function isSettingsDebugMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1 || w.__tpDevMode) return true;
+    if (w?.localStorage?.getItem('tp_dev_mode') === '1') return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.has('dev')) return true;
+    const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hash === 'dev' || hash === 'dev=1' || hash.includes('dev=1')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function buildAsrSnapshot(store: AppStore | null): Record<string, unknown> {
+  const speechState = speechStore.get();
+  const snapshot = store
+    ? {
+        engine: store.get?.('asr.engine'),
+        lang: store.get?.('asr.language'),
+        useInterimResults: store.get?.('asr.useInterimResults'),
+        filterFillers: store.get?.('asr.filterFillers'),
+        threshold: store.get?.('asr.threshold'),
+        endpointingMs: store.get?.('asr.endpointMs'),
+      }
+    : null;
+  return { store: snapshot, speechStore: speechState };
+}
+
+function logSettingsHydrationSnapshot(store: AppStore | null): void {
+  if (!isSettingsDebugMode()) return;
+  try {
+    console.log('SettingsOpen: hydrating from SSOT snapshot', { asr: buildAsrSnapshot(store) });
+  } catch {}
+}
+
 // Core mount function used internally
 export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | null) {
   const resolvedStore = getStore(store) || createAppStore();
+  logSettingsHydrationSnapshot(resolvedStore);
   try {
     if ((window as any).__TP_DEV) {
       try { console.count('mountSettings'); } catch {}

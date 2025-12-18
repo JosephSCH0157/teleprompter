@@ -7,6 +7,7 @@ import { appStore, type AppStore } from '../state/app-store';
 let asrSettingsObserverStarted = false;
 let asrSettingsWarned = false;
 let asrSettingsRenderEventFired = false;
+let isHydratingAsrSettings = false;
 
 function resolveStore(store?: AppStore | null): AppStore | null {
   if (store) return store;
@@ -25,6 +26,24 @@ function findAsrCard(root: ParentNode = document): HTMLElement | null {
     (root as Document | ParentNode)?.querySelector?.<HTMLElement>('.settings-card.asr') ||
     null
   );
+}
+
+function withAsrHydration(fn: () => void): void {
+  isHydratingAsrSettings = true;
+  try {
+    fn();
+  } finally {
+    const scheduleClear = () => { isHydratingAsrSettings = false; };
+    try {
+      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        window.setTimeout(scheduleClear, 0);
+      } else {
+        setTimeout(scheduleClear, 0);
+      }
+    } catch {
+      scheduleClear();
+    }
+  }
 }
 
 function readAsrPatchFromCard(card: HTMLElement): Partial<SpeechState> {
@@ -113,6 +132,7 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
   };
 
   const persist = (patch: Partial<SpeechState>) => {
+    if (isHydratingAsrSettings) return;
     persistAsrPatch(patch, storeRef);
   };
 
@@ -143,8 +163,7 @@ export function mountAsrSettings(root: ParentNode = document, store?: AppStore |
     threshold: storeGet('asr.threshold', snapshot.threshold),
     endpointingMs: storeGet('asr.endpointMs', snapshot.endpointingMs),
   };
-  persist(seeded);
-  applyState(seeded);
+  withAsrHydration(() => applyState(seeded));
 
   eng?.addEventListener('change', () => persist({ engine: eng.value as any }));
   lang?.addEventListener('change', () => persist({ lang: lang.value }));
