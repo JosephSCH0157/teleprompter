@@ -215,6 +215,13 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
       return;
     }
     try {
+      try {
+        console.debug('[ASR] willStartRecognizer', {
+          phase: 'startRecognizer',
+          mode: (window as any).__tpUiScrollMode,
+          hasSR: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+        });
+      } catch {}
       console.log('[ASR] calling recognizer.start()');
       _rec.start((transcript: string, isFinal: boolean) => {
         try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}

@@ -154,8 +154,11 @@ export class Recognizer {
       };
 
       try {
+        console.debug('[ASR] recognizer.start() about to run');
         this.recog.start();
+        console.debug('[ASR] recognizer.start() returned');
       } catch (e) {
+        console.error('[ASR] recognizer.start() threw', e);
         // Chrome may throw if start is requested too soon; rely on onerror/onend.
         this.logSpeechError(e);
       }

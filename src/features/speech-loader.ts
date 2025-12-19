@@ -612,7 +612,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
       // Stash a flag for start path to decide whether to attempt dynamic import (no probe by default)
       try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
 
-      async function startBackend() {
+      async function startBackend(): Promise<boolean> {
         if (isDevMode()) {
           const w = typeof window !== 'undefined' ? (window as any) : null;
           const info = {
@@ -632,7 +632,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
               try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
             }
             try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
-            return;
+            return true;
           }
         } catch {}
         // Dynamic import if supported
@@ -651,7 +651,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
               } catch {}
               try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
               try { console.log('[SPEECH] shim', { start: !!window.__tpSpeech?.startRecognizer, match: !!window.__tpSpeech?.matchBatch }); } catch {}
-              return;
+              return true;
             }
           }
         } catch {}
@@ -685,6 +685,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
         try { sr.start(); } catch {}
         rec = { stop: () => { try { sr.stop(); } catch {} } };
         try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+        return true;
       }
 
       async function startSpeech() {
@@ -734,10 +735,20 @@ async function resolveOrchestratorUrl(): Promise<string> {
             };
             console.log('[ASR] lifecycle start: willStartBackend', info);
           }
+          console.debug('[ASR] willStartRecognizer', {
+            phase: 'startSpeech',
+            mode,
+            hasSR: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+          });
           await beginCountdownThen(sec, async () => {
             // NOW start auto-scroll after countdown completes
             try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
-            await startBackend();
+            const ok = await startBackend();
+            console.debug('[ASR] didCallStartRecognizer', { ok });
+            console.debug('[ASR] recognizerRef', {
+              hasRef: !!rec,
+              state: (rec as any)?.state,
+            });
             // Signal that pre-roll + speech sync are ready
             try {
               window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
