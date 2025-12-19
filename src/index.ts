@@ -998,7 +998,10 @@ function initScrollModeUiSync(): void {
       if (mode === 'asr') {
         try { (window as any).__tpAuto?.setEnabled?.(false); } catch {}
       }
-      applyUiScrollMode(mode, { skipStore: true, source: 'user', allowToast: true });
+      applyUiScrollMode(mode, { source: 'user', allowToast: true });
+      try {
+        console.log('[mode] user selection', { mode, store: appStore.get?.('scrollMode') });
+      } catch {}
     }, { capture: true });
   } catch {
     // ignore
