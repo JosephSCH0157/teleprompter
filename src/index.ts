@@ -65,7 +65,7 @@ import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
-import { applyUiScrollMode as applyUiScrollModeHook } from './index-hooks/apply-ui-scroll-mode';
+import * as scrollModeHooks from './index-hooks/apply-ui-scroll-mode';
 import './dev/ci-mocks';
 import './hud/loader';
 import { initAsrPersistence } from './features/asr/persistence';
@@ -999,7 +999,7 @@ function initScrollModeUiSync(): void {
       if (mode === 'asr') {
         try { (window as any).__tpAuto?.setEnabled?.(false); } catch {}
       }
-      applyUiScrollModeHook(mode, { source: 'user', allowToast: true });
+      scrollModeHooks.applyUiScrollMode(mode, { source: 'user', allowToast: true });
       try {
         console.log('[mode] user selection', { mode, store: appStore.get?.('scrollMode') });
       } catch {}
@@ -1013,10 +1013,10 @@ initScrollModeUiSync();
 
 // Expose this function as the global router for existing JS
 try { (window as any).__tpAppStore = appStore; } catch {}
-(window as any).setScrollMode = (mode: UiScrollMode) => applyUiScrollModeHook(mode, { source: 'external' });
+(window as any).setScrollMode = (mode: UiScrollMode) => scrollModeHooks.applyUiScrollMode(mode, { source: 'external' });
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
-try { (window as any).__tpApplyUiScrollMode = applyUiScrollModeHook; } catch {}
+try { (window as any).__tpApplyUiScrollMode = scrollModeHooks.applyUiScrollMode; } catch {}
 try { (window as any).__tpApplyUiScrollModeLegacy = applyUiScrollMode; } catch {}
 export { applyUiScrollMode, appStore };
 
