@@ -72,7 +72,28 @@ function saveState(state: HudState) {
 }
 
 export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
-  const root = opts.root ?? document.getElementById('hud-root') ?? document.body;
+  const root =
+    opts.root ??
+    document.getElementById('hud-popout-root') ??
+    document.getElementById('hud-root');
+  if (!root) {
+    console.error('[HUD] no mount root found (expected #hud-popout-root or #hud-root)');
+    return {
+      isOpen: () => false,
+      setOpen: () => {},
+      log: () => {},
+      dumpSnapshot: () => {},
+      clear: () => {},
+      setFrozen: () => {},
+      appendLines: () => {},
+      setSnapshotText: () => {},
+      copyText: () => {},
+      getState: () => ({ open: false, frozen: false, popout: false, x: 0, y: 0 }),
+      openPopout: () => {},
+      closePopout: () => {},
+      setPopout: () => {},
+    };
+  }
   const getStore = opts.getStore;
   const maxLines = opts.maxLines ?? 600;
   const isPopout = opts.popout ?? !!(window as any).__TP_HUD_POPOUT__;
@@ -82,6 +103,10 @@ export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
   let snapshotText = '';
 
   const state = loadState();
+  if (isPopout) {
+    state.open = true;
+    state.popout = true;
+  }
   const wrap = document.createElement('div');
   wrap.className = 'tp-hud-popup';
   wrap.setAttribute('role', 'dialog');
