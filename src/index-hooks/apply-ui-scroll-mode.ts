@@ -219,11 +219,11 @@ function applyModeNow(
   try {
     console.log('[mode] applied', { ui: normalized, brain: brainMode });
   } catch {}
+  const detail = { mode: normalized, brain: brainMode, clamp: clampMode, asr: asrEnabled };
   try {
-    window.dispatchEvent(
-      new CustomEvent('tp:scrollModeChange', {
-        detail: { mode: normalized, brain: brainMode, clamp: clampMode, asr: asrEnabled },
-      }),
-    );
+    window.dispatchEvent(new CustomEvent('tp:scrollModeChange', { detail }));
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('tp:scrollModeChange', { detail }));
+    }
   } catch {}
 }
