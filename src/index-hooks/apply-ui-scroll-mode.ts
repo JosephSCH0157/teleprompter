@@ -71,36 +71,50 @@ function getSafeFallbackMode(): UiScrollMode {
   return candidate;
 }
 
-export async function applyUiScrollMode(
+export function applyUiScrollMode(
   mode: UiScrollMode,
   opts: { skipStore?: boolean; allowToast?: boolean; source?: ScrollModeSource } = {},
 ) {
-  const normalizedRequest = normalizeUiScrollMode(mode);
+  const normalized = normalizeUiScrollMode(mode);
   const currentMode = ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? lastStableUiMode;
+  if (normalized !== 'asr') {
+    asrProbeToken++;
+    asrRejectionToastShown = false;
+  }
+
   try {
-    console.log('[mode] request', { from: currentMode, to: normalizedRequest, token: asrProbeToken });
+    console.log('[mode] request', { from: currentMode, to: normalized, token: asrProbeToken });
   } catch {}
 
-  const allowToast = opts.allowToast !== false;
-  const source: ScrollModeSource = opts.source || 'user';
-  const needsAsrProbe = normalizedRequest === 'asr' || normalizedRequest === 'hybrid';
-  if (!needsAsrProbe) {
-    asrProbeToken++;
-    return applyModeNow(mode, opts);
+  if (normalized !== 'asr') {
+    return applyModeNow(normalized, opts);
   }
 
-  const token = ++asrProbeToken;
-  const micAccess = await ensureMicAccess();
-  if (token !== asrProbeToken) return;
-  if (!micAccess.allowed) {
-    if (!asrRejectionToastShown && allowToast && source === 'user') {
-      const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
-      try { showToast(toastMsg, { type: 'info' }); } catch {}
-      asrRejectionToastShown = true;
-    }
-    return applyModeNow(getSafeFallbackMode(), opts);
+  const readiness = computeAsrReadiness();
+  if (readiness.ready) {
+    return applyModeNow('asr', opts);
   }
-  return applyModeNow(mode, opts);
+
+  if (readiness.reason === 'NO_PERMISSION') {
+    const token = ++asrProbeToken;
+    setScrollModeSelectValue('asr');
+    ensureMicAccess().then((result) => {
+      if (token !== asrProbeToken) return;
+      if (!result.allowed) {
+        const fallback = result.reason === 'NO_PERMISSION' ? 'hybrid' : getSafeFallbackMode();
+        try { (window as any).toast?.('ASR blocked: microphone permission denied'); } catch {}
+        setScrollModeSelectValue(fallback);
+        try { appStore.set?.('scrollMode', fallback as any); } catch {}
+        return applyModeNow(fallback, opts);
+      }
+      setScrollModeSelectValue('asr');
+      try { appStore.set?.('scrollMode', 'asr' as any); } catch {}
+      return applyModeNow('asr', opts);
+    }).catch(() => {});
+    return;
+  }
+
+  return applyModeNow(getSafeFallbackMode(), opts);
 }
 
 function applyModeNow(
