@@ -219,4 +219,11 @@ function applyModeNow(
   try {
     console.log('[mode] applied', { ui: normalized, brain: brainMode });
   } catch {}
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:scrollModeChange', {
+        detail: { mode: normalized, brain: brainMode, clamp: clampMode, asr: asrEnabled },
+      }),
+    );
+  } catch {}
 }

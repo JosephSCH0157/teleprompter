@@ -1014,6 +1014,8 @@ initScrollModeUiSync();
 (window as any).setScrollMode = (mode: UiScrollMode) => applyUiScrollMode(mode, { source: 'external' });
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
+try { (window as any).__tpAppStore = appStore; } catch {}
+try { (window as any).__tpApplyUiScrollMode = applyUiScrollMode; } catch {}
 export { applyUiScrollMode, appStore };
 
 // === Settings mirror + smoke helpers ===
