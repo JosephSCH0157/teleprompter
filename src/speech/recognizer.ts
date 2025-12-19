@@ -83,6 +83,7 @@ export class Recognizer {
       try {
         if (typeof window !== 'undefined') {
           (window as any).recog = this.recog;
+          (window as any).__tpRecognizer = this.recog;
         }
       } catch {}
       this.shouldRun = true;
