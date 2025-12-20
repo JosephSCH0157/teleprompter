@@ -93,7 +93,7 @@ export function computeLineSimilarity(spokenTokens: string[], scriptText: string
 export function matchBatch(
   spokenTokens: string[],
   scriptWords: string[],
-  paraIndex: Array<{ start: number; end: number; key: string; isMeta?: boolean; isNonSpoken?: boolean }>,
+  paraIndex: Array<{ start: number; end: number; key: string; line?: number; isMeta?: boolean; isNonSpoken?: boolean }>,
   vParaIndex: string[] | null,
   cfg: MatchConfig,
   currentIndex: number,
@@ -110,12 +110,15 @@ export function matchBatch(
   const scores: Record<number, number> = {};
   const candidateArray = Array.from(candidates);
   for (const j of candidateArray) {
-    const para = vParaIndex ? vParaIndex[j] : paraIndex[j]?.key;
+    const entry = paraIndex[j];
+    const lineIdx = typeof entry?.line === 'number' ? entry.line : j;
+    if (scores[lineIdx] != null) continue;
+    const para = vParaIndex ? vParaIndex[j] : entry?.key;
     if (!para) continue;
     let sc = computeLineSimilarity(batch, String(para));
-    if (paraIndex[j]?.isMeta) sc = sc * 0.5 - 0.2;
-    else if (paraIndex[j]?.isNonSpoken) sc = sc - 0.6;
-    scores[j] = sc;
+    if (entry?.isMeta) sc = sc * 0.5 - 0.2;
+    else if (entry?.isNonSpoken) sc = sc - 0.6;
+    scores[lineIdx] = sc;
   }
 
   const top = Object.entries(scores)
@@ -127,7 +130,9 @@ export function matchBatch(
   // Unless the top candidate is very strong (>= 0.82), prefer a candidate within ±40.
   const radius = 40;
   const bandStart = Math.max(0, Math.floor(currentIndex) - radius);
-  const bandEnd = Math.min((vParaIndex ? vParaIndex.length : paraIndex.length) - 1, Math.floor(currentIndex) + radius);
+  const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
+  const lineCount = vParaIndex ? vParaIndex.length : ((typeof lastEntry?.line === 'number' ? lastEntry.line + 1 : paraIndex.length));
+  const bandEnd = Math.min(lineCount - 1, Math.floor(currentIndex) + radius);
   let best = top[0] || { idx: Math.max(0, currentIndex), score: 0 };
   if (best && (best.idx < bandStart || best.idx > bandEnd) && (best.score as number) < 0.82) {
     const inBand = top.find(t => t.idx >= bandStart && t.idx <= bandEnd);

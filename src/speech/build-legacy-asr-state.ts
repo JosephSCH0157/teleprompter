@@ -25,6 +25,7 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
   const paraIndex: Array<{ start: number; end: number; key: string }> = new Array(scriptWords.length);
   {
     let wordIdx = 0;
+    let lineIdx = 0;
     for (const line of t.split('\n')) {
       const tokens = line
         .split(/\s+/)
@@ -34,12 +35,13 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
       if (count > 0) {
         const start = wordIdx;
         const end = wordIdx + count - 1;
-        const entry = { start, end, key: line.trim() };
+        const entry = { start, end, key: line.trim(), line: lineIdx };
         for (let i = start; i <= end; i++) {
           paraIndex[i] = entry;
         }
       }
       wordIdx += count;
+      lineIdx += 1;
     }
   }
 

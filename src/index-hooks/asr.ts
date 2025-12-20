@@ -53,8 +53,15 @@ export function initAsrFeature() {
     }
     return asrMode;
   };
+  const isSettingsHydrating = (): boolean => {
+    try { return !!(window as any).__tpSettingsHydrating; } catch { return false; }
+  };
   const start = async () => {
     if (asrActive) return;
+    if (isSettingsHydrating()) {
+      try { console.debug('[ASR] start blocked during settings hydration'); } catch {}
+      return;
+    }
     const m = await ensureMode();
     try { holdAuto(); await m.start(); asrActive = true; }
     catch (err) { asrActive = false; releaseAuto(); try { console.warn('[ASR] start failed, staying on non-ASR sync', err); } catch {} }

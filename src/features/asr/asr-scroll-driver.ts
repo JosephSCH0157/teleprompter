@@ -15,6 +15,8 @@ type DriverOptions = {
 export interface AsrScrollDriver {
   ingest(text: string, isFinal: boolean): void;
   dispose(): void;
+  setLastLineIndex(index: number): void;
+  getLastLineIndex(): number;
 }
 
 const DEFAULT_MIN_LINE_ADVANCE = 1;
@@ -78,6 +80,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastLineIndex = -1;
   let lastSeekTs = 0;
   let disposed = false;
+  let desyncWarned = false;
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -97,8 +100,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const rawIdx = Number(match.bestIdx);
     const conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
     const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
+    const currentIdx = Number((window as any)?.currentIndex ?? -1);
 
     logDev('ingest', { text: normalized, isFinal, idx: rawIdx, conf, threshold, requiredThreshold });
+
+    if (!desyncWarned && Number.isFinite(currentIdx) && rawIdx + 5 < lastLineIndex && currentIdx + 5 < lastLineIndex) {
+      desyncWarned = true;
+      try { console.warn('[ASR] index desync detected; resyncing', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
+      lastLineIndex = Math.max(0, Math.floor(rawIdx));
+      try { (window as any).currentIndex = Math.max(0, Math.floor(rawIdx)); } catch {}
+    }
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
       const allowLowConfidence = isFinal && tokenCount >= 3;
@@ -137,5 +148,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   };
 
-  return { ingest, dispose };
+  const setLastLineIndex = (index: number) => {
+    if (!Number.isFinite(index)) return;
+    lastLineIndex = Math.max(0, Math.floor(index));
+    lastSeekTs = 0;
+  };
+  const getLastLineIndex = () => lastLineIndex;
+
+  return { ingest, dispose, setLastLineIndex, getLastLineIndex };
 }

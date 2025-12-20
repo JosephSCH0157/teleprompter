@@ -632,7 +632,16 @@ export function initAsrFeature() {
     try { window.dispatchEvent(new CustomEvent('autoscroll:enable', { detail: 'asr' })); } catch {}
   };
   const ensureMode = async () => { if (!asrMode) asrMode = new AsrMode({}); return asrMode; };
-  const start = async () => { if (asrActive) return; try { const m = await ensureMode(); holdAuto(); await m.start(); asrActive = true; } catch (err) { asrActive = false; releaseAuto(); try { console.warn('[ASR] start failed', err); } catch {} } };
+  const isSettingsHydrating = () => { try { return !!(window as any).__tpSettingsHydrating; } catch { return false; } };
+  const start = async () => {
+    if (asrActive) return;
+    if (isSettingsHydrating()) {
+      try { console.debug('[ASR] start blocked during settings hydration'); } catch {}
+      return;
+    }
+    try { const m = await ensureMode(); holdAuto(); await m.start(); asrActive = true; }
+    catch (err) { asrActive = false; releaseAuto(); try { console.warn('[ASR] start failed', err); } catch {} }
+  };
   const stop  = async () => { if (!asrActive) return; try { await asrMode?.stop?.(); } finally { asrActive = false; releaseAuto(); } };
 
   window.addEventListener('tp:speech-state', (ev) => {

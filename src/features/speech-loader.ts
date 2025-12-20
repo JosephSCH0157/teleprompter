@@ -424,6 +424,51 @@ function isDevMode(): boolean {
   return false;
 }
 
+function isSettingsHydrating(): boolean {
+  try { return !!(window as any).__tpSettingsHydrating; } catch { return false; }
+}
+
+function computeMarkerLineIndex(): number {
+  try {
+    const viewer =
+      document.getElementById('viewer') ||
+      document.getElementById('scriptScrollContainer') ||
+      document.getElementById('script');
+    const lineEls = Array.from(
+      (viewer || document).querySelectorAll<HTMLElement>('.line'),
+    );
+    if (!lineEls.length) return 0;
+    const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+      ? (window as any).__TP_MARKER_PCT
+      : 0.4;
+    const rect = viewer ? viewer.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
+    const markerY = rect.top + (viewer ? viewer.clientHeight : window.innerHeight) * markerPct;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < lineEls.length; i++) {
+      const el = lineEls[i];
+      const r = el.getBoundingClientRect();
+      const y = r.top + r.height * 0.5;
+      const d = Math.abs(y - markerY);
+      if (d < bestDist) {
+        bestDist = d;
+        const dataIdx = el.dataset.i || el.dataset.index || el.getAttribute('data-line-idx');
+        bestIdx = dataIdx ? Math.max(0, Number(dataIdx) || 0) : i;
+      }
+    }
+    return Math.max(0, Math.floor(bestIdx));
+  } catch {
+    return 0;
+  }
+}
+
+function syncAsrIndices(startIdx: number, reason: string): void {
+  const idx = Math.max(0, Math.floor(Number(startIdx) || 0));
+  try { (window as any).currentIndex = idx; } catch {}
+  try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
+  try { console.debug('[ASR] index sync', { idx, reason }); } catch {}
+}
+
 const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
 let asrScrollDriver: AsrScrollDriver | null = null;
 let transcriptListener: ((event: Event) => void) | null = null;
@@ -511,6 +556,10 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
 }
 
 async function startBackendForSession(mode: string, reason?: string): Promise<boolean> {
+  if (isSettingsHydrating()) {
+    try { console.debug('[ASR] startBackend blocked during settings hydration', { mode, reason }); } catch {}
+    return false;
+  }
   if (isDevMode()) {
     const w = typeof window !== 'undefined' ? (window as any) : null;
     const info = {
@@ -583,9 +632,15 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   const mode = (info?.mode || getScrollMode()).toLowerCase();
   const wantsSpeech = mode === 'asr' || mode === 'hybrid';
   if (!wantsSpeech) return false;
+  if (isSettingsHydrating()) {
+    try { console.debug('[ASR] startSpeech blocked during settings hydration', { mode, reason: info?.reason }); } catch {}
+    return false;
+  }
   if (running) return true;
 
   attachAsrScrollDriver();
+  const startIdx = computeMarkerLineIndex();
+  syncAsrIndices(startIdx, 'session-start');
   running = true;
   rememberMode(mode);
   try { document.body.classList.add('listening'); } catch {}
