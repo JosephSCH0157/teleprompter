@@ -4,6 +4,10 @@ import {
   normalizeScrollMode,
   shouldAutoStartForMode,
 } from './scroll/scroll-mode-utils';
+import {
+  startSpeechBackendForSession,
+  stopSpeechBackendForSession,
+} from './speech-loader';
 
 function startAutoScroll(): void {
   try {
@@ -46,16 +50,36 @@ function maybeStartOnLive(phase: SessionPhase): void {
   if (phase !== 'live') {
     try { console.debug('[scroll-session] stopping auto-scroll for phase', phase); } catch {}
     stopAutoScroll();
+    stopSpeechBackendForSession('phase-change');
     return;
   }
 
   const session = getSession();
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const canonicalMode = normalizeScrollMode(rawMode);
+  try {
+    console.debug('[ASR] live entered', {
+      mode: canonicalMode,
+      scrollAutoOnLive: session.scrollAutoOnLive,
+      brain: appStore.get('scrollBrain'),
+    });
+  } catch {}
+
+  const brain = String(appStore.get('scrollBrain') || '').toLowerCase();
+  const shouldStartSpeech =
+    session.asrReady ||
+    canonicalMode === 'asr' ||
+    canonicalMode === 'hybrid' ||
+    brain === 'asr';
+  if (shouldStartSpeech) {
+    try { console.debug('[ASR] about to call startSpeech/startBackend', { mode: canonicalMode, reason: 'live-enter' }); } catch {}
+    void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode });
+  }
+
   if (!session.scrollAutoOnLive) {
     try { console.debug('[scroll-session] auto-scroll disabled for live phase'); } catch {}
     return;
   }
-  const rawMode = appStore.get('scrollMode') as string | undefined;
-  const canonicalMode = normalizeScrollMode(rawMode);
   if (!shouldAutoStartForMode(rawMode)) {
     try { console.debug('[scroll-session] auto-scroll not allowed for mode', canonicalMode); } catch {}
     return;

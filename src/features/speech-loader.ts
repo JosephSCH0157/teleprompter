@@ -60,6 +60,10 @@ declare global {
     __tpAutoRecord?: { start?: () => Promise<unknown> | unknown; stop?: () => Promise<unknown> | unknown };
     __tpSpeechOrchestrator?: { start?: () => Promise<RecognizerLike | void> | RecognizerLike | void };
     __tpSpeechCanDynImport?: boolean;
+    __tpSpeech?: {
+      startRecognizer?: (cb: AnyFn, opts?: { lang?: string }) => void;
+      stopRecognizer?: () => void;
+    };
     __tpEmitSpeech?: (t: string, final?: boolean) => void;
     __tpSendToDisplay?: (payload: unknown) => void;
     __tpGetActiveRecognizer?: () => RecognizerLike | null;
@@ -503,6 +507,132 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
       emitAsrState('idle', 'recognition-error');
     }
   };
+}
+
+async function startBackendForSession(mode: string, reason?: string): Promise<boolean> {
+  if (isDevMode()) {
+    const w = typeof window !== 'undefined' ? (window as any) : null;
+    const info = {
+      mode,
+      reason,
+      hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
+      hasRecognizerStart: typeof w?.__tpSpeech?.startRecognizer === 'function',
+      hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+    };
+    try { console.log('[ASR] lifecycle startBackend: invoking backend', info); } catch {}
+  }
+
+  try {
+    if (window.__tpSpeechOrchestrator?.start) {
+      const started = await window.__tpSpeechOrchestrator.start();
+      rec = (started || null) as RecognizerLike | null;
+      if (rec && typeof rec.on === 'function') {
+        try { rec.on('final', (t: any) => routeTranscript(String(t || ''), true)); } catch {}
+        try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
+      }
+      try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+      if (rec && typeof rec.start === 'function') {
+        setActiveRecognizer(rec);
+      }
+      return true;
+    }
+  } catch {}
+
+  try {
+    const startRecognizer = window.__tpSpeech?.startRecognizer;
+    if (typeof startRecognizer === 'function') {
+      startRecognizer(() => {}, { lang: 'en-US' });
+      rec = { stop: () => { try { window.__tpSpeech?.stopRecognizer?.(); } catch {} } };
+      return true;
+    }
+  } catch {}
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) throw new Error('NoSpeechBackend');
+  const sr = new SR();
+  sr.interimResults = true;
+  sr.continuous = true;
+  attachWebSpeechLifecycle(sr);
+  setActiveRecognizer(sr);
+  let _lastInterimAt = 0;
+  sr.onresult = (e: any) => {
+    try {
+      let interim = '', finals = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) finals += res[0].transcript;
+        else interim += res[0].transcript;
+      }
+      if (finals) routeTranscript(finals, true);
+      const now = performance.now();
+      if (interim && (now - _lastInterimAt) > 120) {
+        _lastInterimAt = now;
+        routeTranscript(interim, false);
+      }
+    } catch {}
+  };
+  sr.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
+  try { sr.start(); } catch {}
+  rec = { stop: () => { try { sr.stop(); } catch {} } };
+  try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+  return true;
+}
+
+export async function startSpeechBackendForSession(info?: { reason?: string; mode?: string }): Promise<boolean> {
+  const mode = (info?.mode || getScrollMode()).toLowerCase();
+  const wantsSpeech = mode === 'asr' || mode === 'hybrid';
+  if (!wantsSpeech) return false;
+  if (running) return true;
+
+  attachAsrScrollDriver();
+  running = true;
+  rememberMode(mode);
+  try { document.body.classList.add('listening'); } catch {}
+  try { window.HUD?.bus?.emit?.('speech:toggle', true); } catch {}
+  try { window.speechOn = true; } catch {}
+  setListeningUi(true);
+  try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
+
+  try {
+    console.debug('[ASR] willStartRecognizer', {
+      phase: 'session-live',
+      mode,
+      hasSR: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    });
+  } catch {}
+
+  try {
+    const ok = await startBackendForSession(mode, info?.reason);
+    try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
+    try { await window.__tpMic?.requestMic?.(); } catch {}
+    return ok;
+  } catch (e) {
+    running = false;
+    setActiveRecognizer(null);
+    setListeningUi(false);
+    setReadyUi();
+    return false;
+  }
+}
+
+export function stopSpeechBackendForSession(reason?: string): void {
+  if (!running && !rec) {
+    detachAsrScrollDriver();
+    return;
+  }
+  detachAsrScrollDriver();
+  try { stopAsrRuntime(); } catch {}
+  try { window.__tpMic?.releaseMic?.(); } catch {}
+  try { rec?.stop?.(); } catch {}
+  try { window.__tpSpeech?.stopRecognizer?.(); } catch {}
+  setActiveRecognizer(null);
+  running = false;
+  try { document.body.classList.remove('listening'); } catch {}
+  try { window.HUD?.bus?.emit?.('speech:toggle', false); } catch {}
+  try { window.speechOn = false; } catch {}
+  setListeningUi(false);
+  setReadyUi();
+  try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false, reason } })); } catch {}
 }
 
 export function installSpeech(): void {
