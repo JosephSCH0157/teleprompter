@@ -1,4 +1,18 @@
 # Teleprompter Pro — Changelog
+## [1.7.8] - 2025-12-20
+
+Release: v1.7.8
+
+### Changed
+
+- ASR scroll driver now forward-biases matches to the scroll cursor and keeps matcher state in sync even on same-line hits.
+- ASR scrolling steps in controlled 30px increments with snap-tail handling; display mirror uses the same stepped scroll behavior.
+- Added limited final-only backward recovery plus same-line/stagnation nudges to prevent late-script stalls.
+
+### Fixed
+
+- HUD popout direct URL now bootstraps reliably with fallback loader messaging instead of black screen.
+
 
 ## [1.7.7-pre-stabilization] - 2025-12-06
 
