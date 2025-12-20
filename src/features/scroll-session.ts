@@ -9,6 +9,11 @@ import {
   stopSpeechBackendForSession,
 } from './speech-loader';
 
+try {
+  (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v3-2025-12-19-a';
+  console.log('SCROLL_SESSION_FINGERPRINT', (window as any).__TP_SCROLL_SESSION_FINGERPRINT);
+} catch {}
+
 function startAutoScroll(): void {
   try {
     const auto: any = (window as any).__tpAuto;
