@@ -3362,9 +3362,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "0138deae5076fb5e37ca44257005367a40f9ca92",
+      "gitSha": "e89066dc89e34bace2e348148ae3614fa2937076",
       "branch": "feature/settings-mount",
-      "buildTime": "2025-12-20T15:52:57.313Z"
+      "buildTime": "2025-12-20T16:03:37.762Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -3467,6 +3467,6 @@
     "delta": 0,
     "mode": "hybrid"
   },
-  "appVersionText": "v1.7.6",
+  "appVersionText": "v1.7.8",
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }
