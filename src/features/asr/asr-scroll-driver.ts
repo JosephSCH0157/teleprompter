@@ -12,6 +12,12 @@ type DriverOptions = {
   interimConfidenceScale?: number;
 };
 
+type PendingMatch = {
+  line: number;
+  conf: number;
+  isFinal: boolean;
+};
+
 export interface AsrScrollDriver {
   ingest(text: string, isFinal: boolean): void;
   dispose(): void;
@@ -20,11 +26,11 @@ export interface AsrScrollDriver {
 }
 
 const DEFAULT_MIN_LINE_ADVANCE = 1;
-const DEFAULT_SEEK_THROTTLE_MS = 200;
+const DEFAULT_SEEK_THROTTLE_MS = 120;
 const DEFAULT_INTERIM_SCALE = 0.6;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
-const DEFAULT_BACKTRACK_COOLDOWN_MS = 1500;
+const DEFAULT_BACKTRACK_COOLDOWN_MS = 1000;
 const DEFAULT_MAX_BACKTRACK_PX = 120;
 const DEFAULT_FORWARD_STEP_PX = 30;
 const DEFAULT_BACKWARD_STEP_PX = 15;
@@ -120,6 +126,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let desyncWarned = false;
   let stepTarget: number | null = null;
   let stepRaf = 0;
+  let pendingMatch: PendingMatch | null = null;
+  let pendingRaf = 0;
 
   const forwardStepPx = DEFAULT_FORWARD_STEP_PX;
   const backwardStepPx = DEFAULT_BACKWARD_STEP_PX;
@@ -176,6 +184,89 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     ensureStepLoop();
   };
 
+  const schedulePending = () => {
+    if (pendingRaf) return;
+    pendingRaf = window.requestAnimationFrame(() => {
+      pendingRaf = 0;
+      if (disposed) return;
+      const pending = pendingMatch;
+      if (!pending) return;
+      pendingMatch = null;
+
+      const scroller = getScroller();
+      if (!scroller) return;
+
+      const now = Date.now();
+      const { line, conf, isFinal } = pending;
+      const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
+      const strongMatch = conf >= requiredThreshold;
+      if (!strongMatch) return;
+
+      const targetLine = Math.max(0, Math.floor(line));
+      const deltaLines = targetLine - lastLineIndex;
+      const targetTop = resolveTargetTop(scroller, targetLine);
+      const currentTop = scroller.scrollTop || 0;
+      const deltaPx = targetTop != null ? targetTop - currentTop : 0;
+
+      if (targetLine === lastLineIndex) {
+        try { (window as any).currentIndex = targetLine; } catch {}
+        if (lastStableLine === targetLine) {
+          stableHitCount += 1;
+        } else {
+          lastStableLine = targetLine;
+          stableHitCount = 1;
+        }
+        const sinceLastMove = lastMoveAt ? now - lastMoveAt : Number.POSITIVE_INFINITY;
+        if ((now - lastSameLineNudgeTs) >= sameLineThrottleMs && targetTop != null) {
+          const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+          const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
+          if (nudgeTarget > currentTop) {
+            lastSameLineNudgeTs = now;
+            stepToTarget(nudgeTarget);
+            logDev('same-line nudge', { line: targetLine, px: sameLineStepPx, conf, stableHits: stableHitCount, sinceMove: sinceLastMove });
+          }
+        }
+        if (stableHitCount >= stableHitLimit && sinceLastMove >= stallMs && targetTop != null) {
+          const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+          const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
+          if (nudgeTarget > currentTop) {
+            lastSameLineNudgeTs = now;
+            stableHitCount = 0;
+            stepToTarget(nudgeTarget);
+            logDev('stagnation watchdog fired', { line: targetLine, px: sameLineStepPx, conf });
+          }
+        }
+        return;
+      }
+
+      if (deltaLines > 0) {
+        if (deltaLines < minLineAdvance) return;
+        if (now - lastSeekTs < seekThrottleMs) return;
+        lastLineIndex = targetLine;
+        lastSeekTs = now;
+        try { (window as any).currentIndex = targetLine; } catch {}
+        logDev('forward seek', { fromLine: targetLine - deltaLines, toLine: targetLine, pxDelta: deltaPx });
+        if (targetTop != null) {
+          stepToTarget(targetTop);
+        } else {
+          centerLine(targetLine);
+          lastMoveAt = Date.now();
+        }
+        return;
+      }
+
+      if (deltaLines < 0 && isFinal) {
+        if (now - lastBacktrackTs < backtrackCooldownMs) return;
+        if (targetTop == null || deltaPx >= 0 || Math.abs(deltaPx) > maxBacktrackPx) return;
+        lastLineIndex = targetLine;
+        lastBacktrackTs = now;
+        try { (window as any).currentIndex = targetLine; } catch {}
+        logDev('recovery backtrack', { px: Math.abs(deltaPx), conf, cooldownMs: backtrackCooldownMs });
+        stepToTarget(targetTop);
+      }
+    });
+  };
+
   const ingest = (text: string, isFinal: boolean) => {
     if (disposed) return;
     const normalized = String(text || '').trim();
@@ -198,8 +289,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
     const currentIdx = Number((window as any)?.currentIndex ?? -1);
 
-    logDev('ingest', { text: normalized, isFinal, idx: rawIdx, conf, threshold, requiredThreshold });
-
     if (!desyncWarned && Number.isFinite(currentIdx) && rawIdx + 5 < lastLineIndex && currentIdx + 5 < lastLineIndex) {
       desyncWarned = true;
       try { console.warn('[ASR] index desync detected; resyncing', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
@@ -208,113 +297,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
-      const allowLowConfidence = isFinal && tokenCount >= 3;
-      if (!allowLowConfidence) {
-        logDev('confidence below threshold, skipping', { tokenCount });
-        return;
-      }
-      logDev('low confidence fallback', { conf, requiredThreshold, tokenCount });
+      return;
     }
 
     if (!Number.isFinite(rawIdx)) return;
-    const targetLine = Math.max(0, Math.floor(rawIdx));
-    const deltaLines = targetLine - lastLineIndex;
-    const now = Date.now();
-    const strongMatch = isFinal ? conf >= threshold : conf >= requiredThreshold;
-
-    const scroller = getScroller();
-    const targetTop = scroller ? resolveTargetTop(scroller, targetLine) : null;
-    const currentTop = scroller ? (scroller.scrollTop || 0) : 0;
-    const deltaPx = targetTop != null ? targetTop - currentTop : 0;
-    const allowSoftAccept = strongMatch && targetLine === lastLineIndex;
-    const allowBacktrack =
-      deltaLines < 0 &&
-      isFinal &&
-      strongMatch &&
-      targetTop != null &&
-      Math.abs(deltaPx) <= maxBacktrackPx &&
-      (now - lastBacktrackTs) >= backtrackCooldownMs;
-
-    if (allowSoftAccept) {
-      try { (window as any).currentIndex = targetLine; } catch {}
-      if (lastStableLine === targetLine) {
-        stableHitCount += 1;
-      } else {
-        lastStableLine = targetLine;
-        stableHitCount = 1;
-      }
-      const sinceLastMove = lastMoveAt ? now - lastMoveAt : Number.POSITIVE_INFINITY;
-      if ((now - lastSameLineNudgeTs) >= sameLineThrottleMs && scroller) {
-        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-        const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
-        if (nudgeTarget > currentTop) {
-          lastSameLineNudgeTs = now;
-          stepToTarget(nudgeTarget);
-          logDev('same-line nudge', { targetLine, deltaPx, stableHitCount, sinceLastMoveMs: sinceLastMove });
-        }
-      }
-      if (stableHitCount >= stableHitLimit && sinceLastMove >= stallMs && scroller) {
-        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-        const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
-        if (nudgeTarget > currentTop) {
-          lastSameLineNudgeTs = now;
-          stableHitCount = 0;
-          stepToTarget(nudgeTarget);
-          logDev('stagnation nudge', { targetLine, deltaPx, stableHitCount, sinceLastMoveMs: sinceLastMove });
-        }
-      }
-      return;
-    }
-
-    if (deltaLines === 0) {
-      logDev('no line change', { targetLine, lastLineIndex });
-      return;
-    }
-
-    if (now - lastSeekTs < seekThrottleMs) {
-      logDev('throttled seek', { elapsed: now - lastSeekTs, throttle: seekThrottleMs });
-      return;
-    }
-
-    let accepted = false;
-    if (deltaLines > 0) {
-      if (deltaLines < minLineAdvance) {
-        logDev('not enough forward progress', { targetLine, lastLineIndex, minLineAdvance });
-        return;
-      }
-      accepted = true;
-    } else if (allowBacktrack) {
-      accepted = true;
-      lastBacktrackTs = now;
-    }
-
-    logDev('match gate', {
-      lastLineIndex,
-      matcherIndex: currentIdx,
-      bestIdx: targetLine,
-      bestSim: conf,
+    if (tokenCount === 0) return;
+    pendingMatch = {
+      line: Math.max(0, Math.floor(rawIdx)),
+      conf,
       isFinal,
-      accepted,
-    });
-
-    if (!accepted) return;
-
-    lastLineIndex = targetLine;
-    lastSeekTs = now;
-    if (lastStableLine === targetLine) {
-      stableHitCount += 1;
-    } else {
-      lastStableLine = targetLine;
-      stableHitCount = 1;
-    }
-    try { (window as any).currentIndex = targetLine; } catch {}
-    logDev('seeking to line', targetLine, { conf, deltaLines, deltaPx });
-    if (targetTop != null && scroller) {
-      stepToTarget(targetTop);
-    } else {
-      centerLine(targetLine);
-      lastMoveAt = Date.now();
-    }
+    };
+    schedulePending();
   };
 
   const dispose = () => {
