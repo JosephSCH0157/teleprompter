@@ -90,6 +90,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (disposed) return;
     const normalized = String(text || '').trim();
     if (!normalized) return;
+    const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
 
     const match = matchBatch(normalized, !!isFinal);
     if (!match) return;
@@ -100,8 +101,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     logDev('ingest', { text: normalized, isFinal, idx: rawIdx, conf, threshold, requiredThreshold });
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
-      logDev('confidence below threshold, skipping');
-      return;
+      const allowLowConfidence = isFinal && tokenCount >= 3;
+      if (!allowLowConfidence) {
+        logDev('confidence below threshold, skipping', { tokenCount });
+        return;
+      }
+      logDev('low confidence fallback', { conf, requiredThreshold, tokenCount });
     }
 
     if (!Number.isFinite(rawIdx)) return;
