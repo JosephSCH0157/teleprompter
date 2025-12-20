@@ -22,15 +22,23 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const paraIndex: number[] = [];
+  const paraIndex: Array<{ start: number; end: number; key: string }> = new Array(scriptWords.length);
   {
     let wordIdx = 0;
     for (const line of t.split('\n')) {
-      paraIndex.push(wordIdx);
-      const count = line
+      const tokens = line
         .split(/\s+/)
         .map((x) => x.trim())
-        .filter(Boolean).length;
+        .filter(Boolean);
+      const count = tokens.length;
+      if (count > 0) {
+        const start = wordIdx;
+        const end = wordIdx + count - 1;
+        const entry = { start, end, key: line.trim() };
+        for (let i = start; i <= end; i++) {
+          paraIndex[i] = entry;
+        }
+      }
       wordIdx += count;
     }
   }
