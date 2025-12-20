@@ -365,12 +365,45 @@
               }, { passive:true });
             })();
 
+            const scrollStepForward = 30;
+            const scrollStepBackward = 15;
+            const scrollSnapThreshold = 1500;
+            const scrollSnapTail = 300;
+            let scrollTargetTop = null;
+            let scrollRaf = 0;
+
+            function ensureScrollStep() {
+              if (scrollRaf) return;
+              scrollRaf = requestAnimationFrame(() => {
+                scrollRaf = 0;
+                if (!wrap || scrollTargetTop == null) return;
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                const target = Math.max(0, Math.min(max, scrollTargetTop | 0));
+                const current = wrap.scrollTop || 0;
+                const delta = target - current;
+                if (Math.abs(delta) <= 1) {
+                  wrap.scrollTop = target;
+                  scrollTargetTop = null;
+                  return;
+                }
+                if (Math.abs(delta) >= scrollSnapThreshold) {
+                  wrap.scrollTop = target - Math.sign(delta) * scrollSnapTail;
+                  ensureScrollStep();
+                  return;
+                }
+                const cap = delta >= 0 ? scrollStepForward : scrollStepBackward;
+                wrap.scrollTop = current + Math.sign(delta) * Math.min(Math.abs(delta), cap);
+                ensureScrollStep();
+              });
+            }
+
             // requestScroll: absolute pixels in the same container as viewer
             function requestScroll(value) {
               const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
               const targetTop = Math.max(0, Math.min(max, value | 0));
-              wrap.scrollTop = targetTop;
-              logScrollCommand(targetTop, wrap.scrollTop, targetTop - wrap.scrollTop, 'N/A', 'applied');
+              scrollTargetTop = targetTop;
+              ensureScrollStep();
+              logScrollCommand(targetTop, wrap.scrollTop, targetTop - (wrap.scrollTop || 0), 'N/A', 'stepping');
             }
 
             function applyScrollPayload(payload) {

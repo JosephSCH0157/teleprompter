@@ -22,6 +22,14 @@ export interface AsrScrollDriver {
 const DEFAULT_MIN_LINE_ADVANCE = 1;
 const DEFAULT_SEEK_THROTTLE_MS = 200;
 const DEFAULT_INTERIM_SCALE = 0.6;
+const DEFAULT_MATCH_BACKTRACK_LINES = 2;
+const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
+const DEFAULT_BACKTRACK_COOLDOWN_MS = 1500;
+const DEFAULT_MAX_BACKTRACK_PX = 120;
+const DEFAULT_FORWARD_STEP_PX = 30;
+const DEFAULT_BACKWARD_STEP_PX = 15;
+const DEFAULT_SNAP_THRESHOLD_PX = 1500;
+const DEFAULT_SNAP_TAIL_PX = 300;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -65,6 +73,26 @@ function logDev(...args: any[]) {
   }
 }
 
+function getScroller(): HTMLElement | null {
+  return (
+    (document.getElementById('viewer') as HTMLElement | null) ||
+    (document.querySelector('[data-role="viewer"]') as HTMLElement | null)
+  );
+}
+
+function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
+  if (!scroller) return null;
+  const idx = Math.max(0, Math.floor(lineIndex));
+  const line =
+    scroller.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.line[data-index="${idx}"]`);
+  if (!line) return null;
+  const offset = Math.max(0, (scroller.clientHeight - line.offsetHeight) / 2);
+  const raw = (line.offsetTop || 0) - offset;
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  return clamp(raw, 0, max);
+}
+
 export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDriver {
   const minLineAdvance = Number.isFinite(options.minLineAdvance ?? DEFAULT_MIN_LINE_ADVANCE)
     ? Math.max(0, options.minLineAdvance ?? DEFAULT_MIN_LINE_ADVANCE)
@@ -79,8 +107,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let threshold = resolveThreshold();
   let lastLineIndex = -1;
   let lastSeekTs = 0;
+  let lastBacktrackTs = 0;
   let disposed = false;
   let desyncWarned = false;
+  let stepTarget: number | null = null;
+  let stepRaf = 0;
+
+  const forwardStepPx = DEFAULT_FORWARD_STEP_PX;
+  const backwardStepPx = DEFAULT_BACKWARD_STEP_PX;
+  const snapThresholdPx = DEFAULT_SNAP_THRESHOLD_PX;
+  const snapTailPx = DEFAULT_SNAP_TAIL_PX;
+  const maxBacktrackPx = DEFAULT_MAX_BACKTRACK_PX;
+  const backtrackCooldownMs = DEFAULT_BACKTRACK_COOLDOWN_MS;
+  const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
+  const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -89,13 +129,54 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   });
 
+  const ensureStepLoop = () => {
+    if (stepRaf) return;
+    stepRaf = window.requestAnimationFrame(() => {
+      stepRaf = 0;
+      const scroller = getScroller();
+      if (!scroller || stepTarget == null) return;
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const target = clamp(stepTarget, 0, max);
+      const current = scroller.scrollTop || 0;
+      const delta = target - current;
+      if (Math.abs(delta) <= 1) {
+        scroller.scrollTop = target;
+        stepTarget = null;
+        return;
+      }
+      if (Math.abs(delta) >= snapThresholdPx) {
+        scroller.scrollTop = target - Math.sign(delta) * snapTailPx;
+        ensureStepLoop();
+        return;
+      }
+      const cap = delta >= 0 ? forwardStepPx : backwardStepPx;
+      const next = current + Math.sign(delta) * Math.min(Math.abs(delta), cap);
+      scroller.scrollTop = next;
+      ensureStepLoop();
+    });
+  };
+
+  const stepToTarget = (targetTop: number) => {
+    stepTarget = targetTop;
+    ensureStepLoop();
+  };
+
   const ingest = (text: string, isFinal: boolean) => {
     if (disposed) return;
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
 
-    const match = matchBatch(normalized, !!isFinal);
+    const anchorIdx = lastLineIndex >= 0
+      ? lastLineIndex
+      : Number((window as any)?.currentIndex ?? 0);
+    try { (window as any).currentIndex = Math.max(0, Math.floor(anchorIdx)); } catch {}
+
+    const match = matchBatch(normalized, !!isFinal, {
+      currentIndex: Math.max(0, Math.floor(anchorIdx)),
+      windowBack: matchBacktrackLines,
+      windowAhead: matchLookaheadLines,
+    });
     if (!match) return;
     const rawIdx = Number(match.bestIdx);
     const conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
@@ -122,8 +203,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     if (!Number.isFinite(rawIdx)) return;
     const targetLine = Math.max(0, Math.floor(rawIdx));
-    if (targetLine - lastLineIndex < minLineAdvance) {
-      logDev('not enough forward progress', { targetLine, lastLineIndex, minLineAdvance });
+    const deltaLines = targetLine - lastLineIndex;
+    if (deltaLines === 0) {
+      logDev('no line change', { targetLine, lastLineIndex });
       return;
     }
     const now = Date.now();
@@ -132,10 +214,51 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
 
+    const scroller = getScroller();
+    const targetTop = scroller ? resolveTargetTop(scroller, targetLine) : null;
+    const currentTop = scroller ? (scroller.scrollTop || 0) : 0;
+    const deltaPx = targetTop != null ? targetTop - currentTop : 0;
+    const strongMatch = isFinal && conf >= Math.max(0.6, threshold);
+    const allowBacktrack =
+      deltaLines < 0 &&
+      isFinal &&
+      strongMatch &&
+      targetTop != null &&
+      Math.abs(deltaPx) <= maxBacktrackPx &&
+      (now - lastBacktrackTs) >= backtrackCooldownMs;
+
+    let accepted = false;
+    if (deltaLines > 0) {
+      if (deltaLines < minLineAdvance) {
+        logDev('not enough forward progress', { targetLine, lastLineIndex, minLineAdvance });
+        return;
+      }
+      accepted = true;
+    } else if (allowBacktrack) {
+      accepted = true;
+      lastBacktrackTs = now;
+    }
+
+    logDev('match gate', {
+      lastLineIndex,
+      matcherIndex: currentIdx,
+      bestIdx: targetLine,
+      bestSim: conf,
+      isFinal,
+      accepted,
+    });
+
+    if (!accepted) return;
+
     lastLineIndex = targetLine;
     lastSeekTs = now;
-    logDev('seeking to line', targetLine, { conf });
-    centerLine(targetLine);
+    try { (window as any).currentIndex = targetLine; } catch {}
+    logDev('seeking to line', targetLine, { conf, deltaLines, deltaPx });
+    if (targetTop != null && scroller) {
+      stepToTarget(targetTop);
+    } else {
+      centerLine(targetLine);
+    }
   };
 
   const dispose = () => {
@@ -152,6 +275,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!Number.isFinite(index)) return;
     lastLineIndex = Math.max(0, Math.floor(index));
     lastSeekTs = 0;
+    try { (window as any).currentIndex = lastLineIndex; } catch {}
   };
   const getLastLineIndex = () => lastLineIndex;
 

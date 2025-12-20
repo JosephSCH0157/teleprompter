@@ -74,6 +74,12 @@ export interface MatchEvent {
   isFinal: boolean;
 }
 
+export type MatchBatchOptions = {
+  currentIndex?: number;
+  windowBack?: number;
+  windowAhead?: number;
+};
+
 let _rec: Recognizer | null = null;
 let _cb: ((_evt: MatchEvent) => void) | null = null;
 
@@ -116,24 +122,30 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
   } catch {}
 }
 
-function _getRuntimeScriptState() {
+function _getRuntimeScriptState(opts?: MatchBatchOptions) {
   // runtime stores these globals (legacy). Use safe access and sensible defaults.
   const w: any = window as any;
   const scriptWords: string[] = Array.isArray(w.scriptWords) ? w.scriptWords : [];
   const paraIndex: any[] = Array.isArray(w.paraIndex) ? w.paraIndex : [];
   const vParaIndex = Array.isArray(w.__vParaIndex) ? w.__vParaIndex : null;
   const cfg = {
-    MATCH_WINDOW_AHEAD: typeof w.MATCH_WINDOW_AHEAD === 'number' ? w.MATCH_WINDOW_AHEAD : 240,
-    MATCH_WINDOW_BACK: typeof w.MATCH_WINDOW_BACK === 'number' ? w.MATCH_WINDOW_BACK : 40,
+    MATCH_WINDOW_AHEAD: typeof opts?.windowAhead === 'number'
+      ? opts.windowAhead
+      : (typeof w.MATCH_WINDOW_AHEAD === 'number' ? w.MATCH_WINDOW_AHEAD : 240),
+    MATCH_WINDOW_BACK: typeof opts?.windowBack === 'number'
+      ? opts.windowBack
+      : (typeof w.MATCH_WINDOW_BACK === 'number' ? w.MATCH_WINDOW_BACK : 40),
     SIM_THRESHOLD: typeof w.SIM_THRESHOLD === 'number' ? w.SIM_THRESHOLD : 0.46,
     MAX_JUMP_AHEAD_WORDS: typeof w.MAX_JUMP_AHEAD_WORDS === 'number' ? w.MAX_JUMP_AHEAD_WORDS : 18,
   } as matcher.MatchConfig;
-  const currentIndex = typeof (w.currentIndex) === 'number' ? w.currentIndex : 0;
+  const currentIndex = typeof opts?.currentIndex === 'number'
+    ? opts.currentIndex
+    : (typeof (w.currentIndex) === 'number' ? w.currentIndex : 0);
   const viterbiState = w.__viterbiIPred || null;
   return { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState };
 }
 
-export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult {
+export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOptions): matcher.MatchResult {
   try {
     try {
       console.log('[ASR] matchBatch', {
@@ -146,7 +158,7 @@ export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult 
     if (spokenTokens.length) {
       noteAsrSpeechActivity(text);
     }
-    const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState();
+    const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState(opts);
     const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
     try { console.log('[ASR] matchBatch res:', res); } catch {}
     try {
