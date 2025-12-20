@@ -30,6 +30,10 @@ const DEFAULT_FORWARD_STEP_PX = 30;
 const DEFAULT_BACKWARD_STEP_PX = 15;
 const DEFAULT_SNAP_THRESHOLD_PX = 1500;
 const DEFAULT_SNAP_TAIL_PX = 300;
+const DEFAULT_SAME_LINE_STEP_PX = 30;
+const DEFAULT_SAME_LINE_THROTTLE_MS = 160;
+const DEFAULT_STABLE_HIT_LIMIT = 6;
+const DEFAULT_STALL_MS = 800;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -108,6 +112,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastLineIndex = -1;
   let lastSeekTs = 0;
   let lastBacktrackTs = 0;
+  let lastSameLineNudgeTs = 0;
+  let lastMoveAt = 0;
+  let lastStableLine = -1;
+  let stableHitCount = 0;
   let disposed = false;
   let desyncWarned = false;
   let stepTarget: number | null = null;
@@ -121,6 +129,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const backtrackCooldownMs = DEFAULT_BACKTRACK_COOLDOWN_MS;
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
+  const sameLineStepPx = DEFAULT_SAME_LINE_STEP_PX;
+  const sameLineThrottleMs = DEFAULT_SAME_LINE_THROTTLE_MS;
+  const stableHitLimit = DEFAULT_STABLE_HIT_LIMIT;
+  const stallMs = DEFAULT_STALL_MS;
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -141,17 +153,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const delta = target - current;
       if (Math.abs(delta) <= 1) {
         scroller.scrollTop = target;
+        lastMoveAt = Date.now();
         stepTarget = null;
         return;
       }
       if (Math.abs(delta) >= snapThresholdPx) {
         scroller.scrollTop = target - Math.sign(delta) * snapTailPx;
+        lastMoveAt = Date.now();
         ensureStepLoop();
         return;
       }
       const cap = delta >= 0 ? forwardStepPx : backwardStepPx;
       const next = current + Math.sign(delta) * Math.min(Math.abs(delta), cap);
       scroller.scrollTop = next;
+      if (next !== current) lastMoveAt = Date.now();
       ensureStepLoop();
     });
   };
@@ -204,21 +219,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!Number.isFinite(rawIdx)) return;
     const targetLine = Math.max(0, Math.floor(rawIdx));
     const deltaLines = targetLine - lastLineIndex;
-    if (deltaLines === 0) {
-      logDev('no line change', { targetLine, lastLineIndex });
-      return;
-    }
     const now = Date.now();
-    if (now - lastSeekTs < seekThrottleMs) {
-      logDev('throttled seek', { elapsed: now - lastSeekTs, throttle: seekThrottleMs });
-      return;
-    }
+    const strongMatch = isFinal ? conf >= threshold : conf >= requiredThreshold;
 
     const scroller = getScroller();
     const targetTop = scroller ? resolveTargetTop(scroller, targetLine) : null;
     const currentTop = scroller ? (scroller.scrollTop || 0) : 0;
     const deltaPx = targetTop != null ? targetTop - currentTop : 0;
-    const strongMatch = isFinal && conf >= Math.max(0.6, threshold);
+    const allowSoftAccept = strongMatch && targetLine === lastLineIndex;
     const allowBacktrack =
       deltaLines < 0 &&
       isFinal &&
@@ -226,6 +234,47 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       targetTop != null &&
       Math.abs(deltaPx) <= maxBacktrackPx &&
       (now - lastBacktrackTs) >= backtrackCooldownMs;
+
+    if (allowSoftAccept) {
+      try { (window as any).currentIndex = targetLine; } catch {}
+      if (lastStableLine === targetLine) {
+        stableHitCount += 1;
+      } else {
+        lastStableLine = targetLine;
+        stableHitCount = 1;
+      }
+      const sinceLastMove = lastMoveAt ? now - lastMoveAt : Number.POSITIVE_INFINITY;
+      if ((now - lastSameLineNudgeTs) >= sameLineThrottleMs && scroller) {
+        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
+        if (nudgeTarget > currentTop) {
+          lastSameLineNudgeTs = now;
+          stepToTarget(nudgeTarget);
+          logDev('same-line nudge', { targetLine, deltaPx, stableHitCount, sinceLastMoveMs: sinceLastMove });
+        }
+      }
+      if (stableHitCount >= stableHitLimit && sinceLastMove >= stallMs && scroller) {
+        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
+        if (nudgeTarget > currentTop) {
+          lastSameLineNudgeTs = now;
+          stableHitCount = 0;
+          stepToTarget(nudgeTarget);
+          logDev('stagnation nudge', { targetLine, deltaPx, stableHitCount, sinceLastMoveMs: sinceLastMove });
+        }
+      }
+      return;
+    }
+
+    if (deltaLines === 0) {
+      logDev('no line change', { targetLine, lastLineIndex });
+      return;
+    }
+
+    if (now - lastSeekTs < seekThrottleMs) {
+      logDev('throttled seek', { elapsed: now - lastSeekTs, throttle: seekThrottleMs });
+      return;
+    }
 
     let accepted = false;
     if (deltaLines > 0) {
@@ -252,12 +301,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     lastLineIndex = targetLine;
     lastSeekTs = now;
+    if (lastStableLine === targetLine) {
+      stableHitCount += 1;
+    } else {
+      lastStableLine = targetLine;
+      stableHitCount = 1;
+    }
     try { (window as any).currentIndex = targetLine; } catch {}
     logDev('seeking to line', targetLine, { conf, deltaLines, deltaPx });
     if (targetTop != null && scroller) {
       stepToTarget(targetTop);
     } else {
       centerLine(targetLine);
+      lastMoveAt = Date.now();
     }
   };
 
@@ -275,6 +331,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!Number.isFinite(index)) return;
     lastLineIndex = Math.max(0, Math.floor(index));
     lastSeekTs = 0;
+    lastStableLine = lastLineIndex;
+    stableHitCount = 0;
     try { (window as any).currentIndex = lastLineIndex; } catch {}
   };
   const getLastLineIndex = () => lastLineIndex;
