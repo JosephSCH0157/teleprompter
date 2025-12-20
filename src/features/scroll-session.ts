@@ -67,15 +67,15 @@ function maybeStartOnLive(phase: SessionPhase): void {
       mode: canonicalMode,
       scrollAutoOnLive: session.scrollAutoOnLive,
       brain: appStore.get('scrollBrain'),
+      asrDesired: session.asrDesired,
+      asrArmed: session.asrArmed,
     });
   } catch {}
 
   const brain = String(appStore.get('scrollBrain') || '').toLowerCase();
   const shouldStartSpeech =
-    session.asrReady ||
-    canonicalMode === 'asr' ||
-    canonicalMode === 'hybrid' ||
-    brain === 'asr';
+    session.asrArmed &&
+    (canonicalMode === 'asr' || canonicalMode === 'hybrid' || brain === 'asr');
   if (shouldStartSpeech) {
     try { console.debug('[ASR] about to call startSpeech/startBackend', { mode: canonicalMode, reason: 'live-enter' }); } catch {}
     void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode });

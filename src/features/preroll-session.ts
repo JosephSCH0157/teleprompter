@@ -4,6 +4,7 @@ import {
   type SessionPhase,
   type RecordReason,
 } from '../state/session';
+import { computeAsrReadiness } from '../asr/readiness';
 import { wantsAutoRecord as wantsAutoRecordStore } from '../recording/wantsAutoRecord';
 import {
   normalizeScrollMode,
@@ -99,10 +100,20 @@ function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason
   }
 }
 
-function computeAsrReady(): boolean {
+function computeAsrDesired(): boolean {
   try {
     const mode = String(appStore.get('scrollMode') || '').toLowerCase();
     return mode === 'asr' || mode === 'hybrid';
+  } catch {
+    return false;
+  }
+}
+
+function computeAsrArmed(desired: boolean): boolean {
+  if (!desired) return false;
+  try {
+    const readiness = computeAsrReadiness();
+    return !!readiness.ready;
   } catch {
     return false;
   }
@@ -112,20 +123,23 @@ function snapshotPreroll(): void {
   const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
   const scrollAutoOnLive = computeScrollAutoOnLive();
   const { recordOnLive, reason } = computeRecordArmOnLive();
-  const asrReady = computeAsrReady();
+  const asrDesired = computeAsrDesired();
+  const asrArmed = computeAsrArmed(asrDesired);
   const autoRecord = !!appStore.get('autoRecord');
   const hasMic = hasMicDevice();
 
   appStore.set('session.scrollAutoOnLive', scrollAutoOnLive);
   appStore.set('session.recordOnLive', recordOnLive);
   appStore.set('session.recordReason', reason);
-  appStore.set('session.asrReady', asrReady);
+  appStore.set('session.asrDesired', asrDesired);
+  appStore.set('session.asrArmed', asrArmed);
+  appStore.set('session.asrReady', asrArmed);
 
   try {
     console.debug(
       '[session/preroll]',
       { mode, autoRecord, hasMic },
-      { scrollAutoOnLive, recordOnLive, recordReason: reason, asrReady },
+      { scrollAutoOnLive, recordOnLive, recordReason: reason, asrDesired, asrArmed },
     );
   } catch {
     // ignore

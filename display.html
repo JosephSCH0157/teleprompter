@@ -373,6 +373,22 @@
               logScrollCommand(targetTop, wrap.scrollTop, targetTop - wrap.scrollTop, 'N/A', 'applied');
             }
 
+            function applyScrollPayload(payload) {
+              const ratio = payload && typeof payload.ratio === 'number' && isFinite(payload.ratio) ? payload.ratio : null;
+              if (ratio != null) {
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                const clamped = Math.max(0, Math.min(1, ratio));
+                requestScroll(Math.round(clamped * max));
+                return true;
+              }
+              const top = payload && typeof payload.top === 'number' && isFinite(payload.top) ? payload.top : null;
+              if (top != null) {
+                requestScroll(Math.max(0, top | 0));
+                return true;
+              }
+              return false;
+            }
+
             // Log scroll commands to HUD
             function logScrollCommand(cmdTop, curTop, delta, sim, status) {
               const logEl = document.getElementById('scrollLog');
@@ -431,6 +447,17 @@
 
               // 3) Ensure we start at the top (marker line)
               try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+              try {
+                requestAnimationFrame(() => {
+                  applyMarkerOffset();
+                  applyBottomPad();
+                  try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+                });
+                setTimeout(() => {
+                  applyMarkerOffset();
+                  applyBottomPad();
+                }, 120);
+              } catch {}
             }
 
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
@@ -479,10 +506,6 @@
             window.addEventListener('message', ev => {
               const d = ev.data||{};
               // Scroll mirror: obey main window scroll commands
-              if (d && d.type === 'scroll' && typeof d.top === 'number') {
-                requestScroll(d.top);
-                return;
-              }
               if (d && d.kind === 'tp:record') {
                 applyRecordState(d.state || 'idle');
                 return;
@@ -569,16 +592,7 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
-                if (typeof d.top === 'number' && isFinite(d.top)) {
-                  requestScroll(Math.max(0, d.top | 0));
-                  return;
-                }
-                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  const absoluteValue = Math.round(d.ratio * max);
-                  requestScroll(absoluteValue);
-                  return;
-                }
+                if (applyScrollPayload(d)) return;
               }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }

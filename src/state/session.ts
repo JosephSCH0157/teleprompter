@@ -16,6 +16,8 @@ export interface SessionState {
   recordOnLive: boolean;
   recordReason: RecordReason;
   asrReady: boolean;
+  asrDesired: boolean;
+  asrArmed: boolean;
 }
 
 export function initSession(): void {
@@ -24,6 +26,8 @@ export function initSession(): void {
   appStore.set('session.recordOnLive', false);
   appStore.set('session.recordReason', null);
   appStore.set('session.asrReady', false);
+  appStore.set('session.asrDesired', false);
+  appStore.set('session.asrArmed', false);
 }
 
 export function setSessionPhase(phase: SessionPhase): void {
@@ -44,5 +48,7 @@ export function getSession(): SessionState {
     recordOnLive: !!appStore.get('session.recordOnLive'),
     recordReason: (appStore.get('session.recordReason') as RecordReason) || null,
     asrReady: !!appStore.get('session.asrReady'),
+    asrDesired: !!appStore.get('session.asrDesired'),
+    asrArmed: !!appStore.get('session.asrArmed'),
   };
 }
