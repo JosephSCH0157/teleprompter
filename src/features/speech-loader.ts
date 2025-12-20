@@ -63,6 +63,7 @@ declare global {
     __tpSpeech?: {
       startRecognizer?: (cb: AnyFn, opts?: { lang?: string }) => void;
       stopRecognizer?: () => void;
+      matchBatch?: AnyFn;
     };
     __tpEmitSpeech?: (t: string, final?: boolean) => void;
     __tpSendToDisplay?: (payload: unknown) => void;
@@ -606,7 +607,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
     try { await window.__tpMic?.requestMic?.(); } catch {}
     return ok;
-  } catch (e) {
+  } catch {
     running = false;
     setActiveRecognizer(null);
     setListeningUi(false);
@@ -888,12 +889,12 @@ async function resolveOrchestratorUrl(): Promise<string> {
             // Ensure mic stream is granted so Hybrid gates (dB/VAD) can open
             try { await window.__tpMic?.requestMic?.(); } catch {}
           });
-        } catch (e) {
+        } catch (err) {
           running = false;
           setActiveRecognizer(null);
           setListeningUi(false);
           setReadyUi();
-          const msg = e instanceof Error ? e.message : String(e);
+          const msg = err instanceof Error ? err.message : String(err);
           try { (window.HUD?.log || console.warn)?.('speech', { startError: msg }); } catch {}
         } finally {
         }

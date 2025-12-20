@@ -7,7 +7,7 @@ import { getScrollBrain } from '../scroll/brain-access';
 import type { ScrollMode as BrainMode } from '../scroll/scroll-brain';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal' | 'wpm' | 'hybrid' | 'timed';
-type ScrollModeSource = 'user' | 'boot' | 'store';
+type ScrollModeSource = 'user' | 'boot' | 'store' | 'external';
 
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
 let lastStableUiMode: UiScrollMode = 'hybrid';
