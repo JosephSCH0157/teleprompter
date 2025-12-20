@@ -25,7 +25,7 @@ describe('ASR gate does not toast on boot apply', () => {
     (window as any)._document = document;
   });
 
-  test('persisted ASR with not-ready mic reverts without toast when applied as boot', () => {
+  test('persisted ASR with not-ready mic stays as ASR without toast when applied as boot', () => {
     localStorage.setItem('scrollMode', 'asr');
     // Import after setting skip boot so init code is suppressed
     const { applyUiScrollMode } = require('../../src/index-hooks/apply-ui-scroll-mode') as { applyUiScrollMode: any };
@@ -57,7 +57,7 @@ describe('ASR gate does not toast on boot apply', () => {
     hintEl.hidden = false;
 
     expect(toastMock.mock.calls.length).toBe(initialCalls);
-    expect(appStore.get('scrollMode')).toBe('hybrid');
+    expect(appStore.get('scrollMode')).toBe('asr');
 
     // UX contract: ASR option disabled and hint visible
     const asrOpt = document.querySelector<HTMLSelectElement>('#scrollMode option[value="asr"]');
