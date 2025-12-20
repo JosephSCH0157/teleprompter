@@ -409,13 +409,14 @@ export function initHudPopup(opts: HudPopupOpts = {}): HudPopupApi {
   btnPopout.addEventListener('click', openPopout);
   btnDock.addEventListener('click', closePopout);
 
-  window.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e) => {
     const target = e.target as HTMLElement | null;
     if (target && (target.isContentEditable || ['input', 'textarea', 'select'].includes((target.tagName || '').toLowerCase()))) {
       return;
     }
-    const isTilde = e.shiftKey ? e.code === 'Backquote' : e.key === '`' || e.key === '~';
-    if (!isTilde) return;
+    if (e.repeat) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.code !== 'Backquote') return;
     setOpen(!state.open);
     e.preventDefault();
   }, { capture: true });
