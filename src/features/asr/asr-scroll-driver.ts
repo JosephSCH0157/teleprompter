@@ -30,12 +30,19 @@ const DEFAULT_SEEK_THROTTLE_MS = 120;
 const DEFAULT_INTERIM_SCALE = 0.6;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
-const DEFAULT_SAME_LINE_THROTTLE_MS = 160;
+const DEFAULT_SAME_LINE_THROTTLE_MS = 500;
 const DEFAULT_CREEP_PX = 8;
+const DEFAULT_CREEP_NEAR_PX = 28;
+const DEFAULT_CREEP_BUDGET_PX = 40;
 const DEFAULT_DEADBAND_PX = 32;
-const DEFAULT_MAX_VEL_PX_PER_SEC = 120;
-const DEFAULT_MAX_ACCEL_PX_PER_SEC2 = 600;
+const DEFAULT_MAX_VEL_PX_PER_SEC = 110;
+const DEFAULT_MAX_VEL_MED_PX_PER_SEC = 170;
+const DEFAULT_MAX_VEL_CATCHUP_PX_PER_SEC = 240;
+const DEFAULT_MAX_ACCEL_PX_PER_SEC2 = 800;
 const DEFAULT_MIN_STEP_PX = 6;
+const DEFAULT_MAX_STEP_PX = 10;
+const DEFAULT_CATCHUP_MED_MIN_PX = 80;
+const DEFAULT_CATCHUP_FAST_MIN_PX = 250;
 const DEFAULT_MAX_TARGET_JUMP_PX = 120;
 const DEFAULT_STRONG_WINDOW_MS = 700;
 const DEFAULT_FINAL_EVIDENCE_LEAD_LINES = 2;
@@ -49,6 +56,9 @@ const DEFAULT_LAG_HIT_LIMIT = 4;
 const DEFAULT_LAG_LOOKBACK_LINES = 3;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
+const DEFAULT_RESYNC_COOLDOWN_MS = 2400;
+const DEFAULT_BEHIND_STRONG_CONF = 0.92;
+const DEFAULT_BEHIND_CONFIRM_WINDOW_MS = 1300;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -145,6 +155,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastBackRecoverIdx = -1;
   let lastBackRecoverHitAt = 0;
   let backRecoverStreak = 0;
+  let creepBudgetLine = -1;
+  let creepBudgetUsed = 0;
+  let lastResyncAt = 0;
+  let lastBehindStrongIdx = -1;
+  let lastBehindStrongAt = 0;
+  let behindStrongCount = 0;
   let pendingMatch: PendingMatch | null = null;
   let pendingRaf = 0;
 
@@ -152,10 +168,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
   const sameLineThrottleMs = DEFAULT_SAME_LINE_THROTTLE_MS;
   const creepPx = DEFAULT_CREEP_PX;
+  const creepNearPx = DEFAULT_CREEP_NEAR_PX;
+  const creepBudgetPx = DEFAULT_CREEP_BUDGET_PX;
   const deadbandPx = DEFAULT_DEADBAND_PX;
   const maxVelPxPerSec = DEFAULT_MAX_VEL_PX_PER_SEC;
+  const maxVelMedPxPerSec = DEFAULT_MAX_VEL_MED_PX_PER_SEC;
+  const maxVelCatchupPxPerSec = DEFAULT_MAX_VEL_CATCHUP_PX_PER_SEC;
   const maxAccelPxPerSec2 = DEFAULT_MAX_ACCEL_PX_PER_SEC2;
   const minStepPx = DEFAULT_MIN_STEP_PX;
+  const maxStepPx = Math.max(DEFAULT_MAX_STEP_PX, minStepPx);
+  const catchupMedMinPx = DEFAULT_CATCHUP_MED_MIN_PX;
+  const catchupFastMinPx = DEFAULT_CATCHUP_FAST_MIN_PX;
   const maxTargetJumpPx = DEFAULT_MAX_TARGET_JUMP_PX;
   const strongWindowMs = DEFAULT_STRONG_WINDOW_MS;
   const finalEvidenceLeadLines = DEFAULT_FINAL_EVIDENCE_LEAD_LINES;
@@ -169,6 +192,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const lagLookbackLines = DEFAULT_LAG_LOOKBACK_LINES;
   const resyncWindowMs = DEFAULT_RESYNC_WINDOW_MS;
   const resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
+  const resyncCooldownMs = DEFAULT_RESYNC_COOLDOWN_MS;
+  const behindStrongConf = DEFAULT_BEHIND_STRONG_CONF;
+  const behindConfirmWindowMs = DEFAULT_BEHIND_CONFIRM_WINDOW_MS;
   const strongHits: Array<{ ts: number; idx: number; conf: number; isFinal: boolean }> = [];
 
   const unsubscribe = speechStore.subscribe((state) => {
@@ -202,6 +228,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     } catch {}
   };
 
+  const resolveMaxVel = (errPx: number) => {
+    if (errPx >= catchupFastMinPx) return maxVelCatchupPxPerSec;
+    if (errPx >= catchupMedMinPx) return maxVelMedPxPerSec;
+    return maxVelPxPerSec;
+  };
+
   const tickController = () => {
     if (!controllerActive || disposed) return;
     const scroller = getScroller();
@@ -233,10 +265,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
 
-    velPxPerSec = Math.min(maxVelPxPerSec, velPxPerSec + maxAccelPxPerSec2 * dt);
+    const maxVelForErr = resolveMaxVel(err);
+    if (velPxPerSec > maxVelForErr) {
+      velPxPerSec = maxVelForErr;
+    }
+    velPxPerSec = Math.min(maxVelForErr, velPxPerSec + maxAccelPxPerSec2 * dt);
     let move = velPxPerSec * dt;
     move = Math.max(minStepPx, move);
-    move = Math.min(err, move);
+    move = Math.min(err, move, maxStepPx);
 
     if (move > 0) {
       scroller.scrollTop = current + move;
@@ -279,17 +315,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
+          if (deltaPx < 0 || deltaPx > creepNearPx) return;
           if (now - lastSameLineNudgeTs >= sameLineThrottleMs) {
+            if (creepBudgetLine !== targetLine) {
+              creepBudgetLine = targetLine;
+              creepBudgetUsed = 0;
+            }
+            if (creepBudgetUsed >= creepBudgetPx) return;
             const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
             const base = targetTopPx == null ? currentTop : targetTopPx;
-            const creepTarget = clamp(base + creepPx, 0, max);
+            const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed);
+            const creepTarget = clamp(base + creepStep, 0, max);
             const limitedTarget = Math.min(creepTarget, base + maxTargetJumpPx);
             if (limitedTarget > base) {
               targetTopPx = limitedTarget;
               lastSameLineNudgeTs = now;
               lastEvidenceAt = now;
+              creepBudgetUsed += Math.max(0, limitedTarget - base);
               ensureControllerActive();
-              logDev('same-line creep', { line: targetLine, px: creepPx, conf });
+              logDev('same-line creep', { line: targetLine, px: creepStep, conf });
               updateDebugState('same-line-creep');
             }
           }
@@ -332,6 +376,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const limitedTarget = Math.min(candidate, base + maxTargetJumpPx);
       targetTopPx = Math.max(base, limitedTarget);
       lastLineIndex = Math.max(lastLineIndex, targetLine);
+      creepBudgetLine = -1;
+      creepBudgetUsed = 0;
       lastSeekTs = now;
       lastEvidenceAt = now;
       try { (window as any).currentIndex = lastLineIndex; } catch {}
@@ -369,6 +415,34 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
     const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
     const currentIdx = Number((window as any)?.currentIndex ?? -1);
+    if (!Number.isFinite(rawIdx)) return;
+
+    const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const behindBy = cursorLine - rawIdx;
+    const behindTooFar = behindBy > 2;
+    if (behindTooFar) {
+      const strongBehind = isFinal && conf >= Math.max(behindStrongConf, requiredThreshold);
+      if (strongBehind) {
+        if (
+          Math.abs(rawIdx - lastBehindStrongIdx) <= 1 &&
+          now - lastBehindStrongAt <= behindConfirmWindowMs
+        ) {
+          behindStrongCount += 1;
+        } else {
+          behindStrongCount = 1;
+        }
+        lastBehindStrongIdx = rawIdx;
+        lastBehindStrongAt = now;
+      } else {
+        behindStrongCount = 0;
+      }
+      if (!strongBehind || behindStrongCount < 2) {
+        logDev('behind match ignored', { line: rawIdx, conf, cursorLine, isFinal });
+        return;
+      }
+    } else {
+      behindStrongCount = 0;
+    }
 
     if (Number.isFinite(rawIdx) && lastLineIndex >= 0 && rawIdx < lastLineIndex - lagLines) {
       lagHitCount += 1;
@@ -378,23 +452,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     if (lagHitCount >= lagHitLimit) {
       lagHitCount = 0;
-      resyncUntil = now + resyncWindowMs;
-      resyncAnchorIdx = Math.max(0, Math.floor(lastLineIndex - lagLookbackLines));
-      if (!desyncWarned) {
-        desyncWarned = true;
-        try { console.warn('[ASR] matcher lagging; realigning window', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
+      if (now - lastResyncAt >= resyncCooldownMs) {
+        resyncUntil = now + resyncWindowMs;
+        resyncAnchorIdx = Math.max(0, Math.floor(lastLineIndex - lagLookbackLines));
+        lastResyncAt = now;
+        if (!desyncWarned) {
+          desyncWarned = true;
+          try { console.warn('[ASR] matcher lagging; realigning window', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
+        }
+        logDev('realign matcher window', { anchor: resyncAnchorIdx, windowAhead: matchLookaheadLines + resyncLookaheadBonus });
       }
-      logDev('realign matcher window', { anchor: resyncAnchorIdx, windowAhead: matchLookaheadLines + resyncLookaheadBonus });
     }
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
       return;
     }
-
-    if (!Number.isFinite(rawIdx)) return;
     if (tokenCount === 0) return;
 
-    const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     strongHits.push({ ts: now, idx: rawIdx, conf, isFinal });
     while (strongHits.length && strongHits[0].ts < now - strongWindowMs) {
       strongHits.shift();
@@ -447,6 +521,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBackRecoverIdx = -1;
     lastBackRecoverHitAt = 0;
     backRecoverStreak = 0;
+    creepBudgetLine = -1;
+    creepBudgetUsed = 0;
+    lastResyncAt = 0;
+    lastBehindStrongIdx = -1;
+    lastBehindStrongAt = 0;
+    behindStrongCount = 0;
     strongHits.length = 0;
     try { (window as any).currentIndex = lastLineIndex; } catch {}
     updateDebugState('sync-index');
