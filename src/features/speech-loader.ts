@@ -108,6 +108,7 @@ let pendingManualRestartCount = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
+const ASR_WATCHDOG_THRESHOLD_MS = 4000;
 
 function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -193,18 +194,22 @@ function startSpeechWatchdog(): void {
     if (!shouldAutoRestartSpeech()) return;
     if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return;
     const idleFor = Date.now() - (lastResultTs || 0);
-    if (lastResultTs && idleFor > WATCHDOG_THRESHOLD_MS) {
-      try { console.warn('[speech] watchdog: no results for', idleFor, 'ms – restarting recognition'); } catch {}
+    const mode = lastScrollMode || getScrollMode();
+    const thresholdMs = (mode === 'asr' || mode === 'hybrid') ? ASR_WATCHDOG_THRESHOLD_MS : WATCHDOG_THRESHOLD_MS;
+    if (lastResultTs && idleFor > thresholdMs) {
+      try { console.warn('[speech] watchdog: no results for', idleFor, 'ms; restarting recognition'); } catch {}
       const restarted = requestRecognizerRestart('idle-watchdog');
       if (!restarted) {
         emitAsrState('idle', 'recognition-watchdog-failed');
         running = false;
         setActiveRecognizer(null);
+        _showToast('ASR recovery failed: recognizer restart blocked.');
+      } else {
+        _showToast('ASR recovered (no results).');
       }
     }
   }, WATCHDOG_INTERVAL_MS);
 }
-
 function setActiveRecognizer(instance: RecognizerLike | null): void {
   activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
   pendingManualRestartCount = 0;
@@ -1011,3 +1016,4 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
+

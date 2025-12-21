@@ -33,6 +33,8 @@ export class Recognizer {
   private acceptEvents = false;
   private generation = 0;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private restartBackoffMs = 250;
+  private readonly restartBackoffMaxMs = 1000;
 
   constructor(opts: RecognizerOptions = {}) {
     this.opts = Object.assign({ lang: 'en-US', interimIntervalMs: 150, maxAlternatives: 2 }, opts);
@@ -50,6 +52,14 @@ export class Recognizer {
       clearTimeout(this.restartTimer);
       this.restartTimer = null;
     }
+  }
+
+  private bumpRestartBackoff() {
+    this.restartBackoffMs = Math.min(this.restartBackoffMaxMs, this.restartBackoffMs * 2);
+  }
+
+  private resetRestartBackoff() {
+    this.restartBackoffMs = 250;
   }
 
   private scheduleRestart(delayMs: number, opts: { stopFirst?: boolean } = {}) {
@@ -103,14 +113,19 @@ export class Recognizer {
         if (IS_DEV_MODE) {
           try { console.debug('[speech] onstart'); } catch {}
         }
+        this.resetRestartBackoff();
       };
       this.recog.onerror = (ev: any) => {
         if (!shouldHandle()) return;
         this.logSpeechError(ev);
-        if (!ev || ev.error !== 'network') return;
         if (!this.shouldRun) return;
+        const code = ev?.error;
+        const restartable = code === 'network' || code === 'no-speech' || code === 'audio-capture' || code === 'aborted';
+        if (!restartable) return;
         this.clearRestartTimer();
-        this.scheduleRestart(800, { stopFirst: true });
+        const delay = this.restartBackoffMs;
+        this.scheduleRestart(delay, { stopFirst: true });
+        this.bumpRestartBackoff();
       };
       this.recog.onend = () => {
         if (!shouldHandle()) return;
@@ -119,7 +134,9 @@ export class Recognizer {
         }
         if (!this.shouldRun) return;
         if (this.restartTimer !== null) return;
-        this.scheduleRestart(500);
+        const delay = this.restartBackoffMs;
+        this.scheduleRestart(delay);
+        this.bumpRestartBackoff();
       };
 
       this.recog.onresult = (e: any) => {
@@ -151,6 +168,7 @@ export class Recognizer {
           this._lastInterimAt = now;
           if (this.cb) this.cb(interim.trim(), false);
         }
+        this.resetRestartBackoff();
       };
 
       try {

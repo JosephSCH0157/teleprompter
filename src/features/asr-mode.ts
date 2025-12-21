@@ -83,11 +83,12 @@ function logAsrDebug(label: string, data: unknown): void {
   try { console.log(label, data); } catch {}
 }
 
-function logAsrEndpoint(action: string): void {
+function logAsrEndpoint(action: string, detail?: Record<string, unknown>): void {
   if (!isTpDevMode()) return;
   try {
     const { endpointingMs } = getSpeechStore().get();
-    console.log('[ASR endpoint]', { action, endpointMs: endpointingMs });
+    const scrollState = (window as any).__tpAsrScrollState;
+    console.log('[ASR endpoint]', { action, endpointMs: endpointingMs, scroll: scrollState, ...detail });
   } catch {}
 }
 
@@ -150,17 +151,18 @@ export class AsrMode {
     asrDisplayIndex = this.currentIdx;
 
     this.setState('ready');
+    const endpointingMs = Math.max(1400, s.endpointingMs);
     await this.engine.start({
       lang: s.lang,
       interim: s.interim,
-      endpointingMs: s.endpointingMs,
+      endpointingMs,
       profanityFilter: false,
     });
-    logAsrEndpoint('ARM');
+    logAsrEndpoint('ARM', { state: this.state });
   }
 
   async stop(): Promise<void> {
-    logAsrEndpoint('CLEAR');
+    logAsrEndpoint('STOP', { state: this.state, reason: 'manual-stop', scope: 'session-stop' });
     await this.engine?.stop();
     this.setState('idle', 'manual-stop');
   }
