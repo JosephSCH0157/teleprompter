@@ -36,7 +36,14 @@ export function getAsrConfig(store: StoreLike | null): AsrConfig {
   const threshold = typeof thresholdRaw === 'number' ? thresholdRaw : 0.55;
 
   const endpointRaw = store.get('asr.endpointMicros');
-  const endpointMicros = typeof endpointRaw === 'number' ? endpointRaw : 900_000;
+  const endpointMicros = (() => {
+    if (typeof endpointRaw === 'number' && Number.isFinite(endpointRaw)) return endpointRaw;
+    const endpointMs = store.get('asr.endpointMs');
+    if (typeof endpointMs === 'number' && Number.isFinite(endpointMs)) {
+      return Math.max(0, Math.round(endpointMs * 1000));
+    }
+    return 900_000;
+  })();
 
   const engineNorm: AsrEngineId =
     engine === 'offline' ? 'offline' : engine === 'whisper' ? 'whisper' : 'web-speech';
