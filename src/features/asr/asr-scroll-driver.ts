@@ -39,7 +39,14 @@ const DEFAULT_SNAP_TAIL_PX = 300;
 const DEFAULT_SAME_LINE_STEP_PX = 30;
 const DEFAULT_SAME_LINE_THROTTLE_MS = 160;
 const DEFAULT_STABLE_HIT_LIMIT = 6;
-const DEFAULT_STALL_MS = 800;
+const DEFAULT_STALL_MS = 2200;
+const DEFAULT_INGEST_ALIVE_MS = 1800;
+const DEFAULT_STALL_STEP_COOLDOWN_MS = 250;
+const DEFAULT_LAG_LINES = 6;
+const DEFAULT_LAG_HIT_LIMIT = 4;
+const DEFAULT_LAG_LOOKBACK_LINES = 3;
+const DEFAULT_RESYNC_WINDOW_MS = 1600;
+const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -120,10 +127,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastBacktrackTs = 0;
   let lastSameLineNudgeTs = 0;
   let lastMoveAt = 0;
+  let lastIngestAt = 0;
+  let lastStallStepAt = 0;
   let lastStableLine = -1;
   let stableHitCount = 0;
   let disposed = false;
   let desyncWarned = false;
+  let lagHitCount = 0;
+  let resyncUntil = 0;
+  let resyncAnchorIdx: number | null = null;
   let stepTarget: number | null = null;
   let stepRaf = 0;
   let pendingMatch: PendingMatch | null = null;
@@ -141,6 +153,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const sameLineThrottleMs = DEFAULT_SAME_LINE_THROTTLE_MS;
   const stableHitLimit = DEFAULT_STABLE_HIT_LIMIT;
   const stallMs = DEFAULT_STALL_MS;
+  const ingestAliveMs = DEFAULT_INGEST_ALIVE_MS;
+  const stallStepCooldownMs = DEFAULT_STALL_STEP_COOLDOWN_MS;
+  const lagLines = DEFAULT_LAG_LINES;
+  const lagHitLimit = DEFAULT_LAG_HIT_LIMIT;
+  const lagLookbackLines = DEFAULT_LAG_LOOKBACK_LINES;
+  const resyncWindowMs = DEFAULT_RESYNC_WINDOW_MS;
+  const resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -272,16 +291,41 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
+    const now = Date.now();
+    const prevIngestAt = lastIngestAt;
+    lastIngestAt = now;
+
+    const scroller = getScroller();
+    if (
+      scroller &&
+      lastMoveAt > 0 &&
+      now - lastMoveAt > stallMs &&
+      now - prevIngestAt <= ingestAliveMs &&
+      now - lastStallStepAt >= stallStepCooldownMs
+    ) {
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const currentTop = scroller.scrollTop || 0;
+      const nudgeTarget = clamp(currentTop + sameLineStepPx, 0, max);
+      if (nudgeTarget > currentTop) {
+        lastStallStepAt = now;
+        stepToTarget(nudgeTarget);
+        logDev('stall watchdog step', { px: sameLineStepPx, sinceMove: now - lastMoveAt });
+      }
+    }
 
     const anchorIdx = lastLineIndex >= 0
       ? lastLineIndex
       : Number((window as any)?.currentIndex ?? 0);
-    try { (window as any).currentIndex = Math.max(0, Math.floor(anchorIdx)); } catch {}
+    const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
+    const effectiveAnchor = resyncActive
+      ? Math.max(0, Math.floor(resyncAnchorIdx as number))
+      : Math.max(0, Math.floor(anchorIdx));
+    try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
     const match = matchBatch(normalized, !!isFinal, {
-      currentIndex: Math.max(0, Math.floor(anchorIdx)),
+      currentIndex: effectiveAnchor,
       windowBack: matchBacktrackLines,
-      windowAhead: matchLookaheadLines,
+      windowAhead: resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines,
     });
     if (!match) return;
     const rawIdx = Number(match.bestIdx);
@@ -289,11 +333,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
     const currentIdx = Number((window as any)?.currentIndex ?? -1);
 
-    if (!desyncWarned && Number.isFinite(currentIdx) && rawIdx + 5 < lastLineIndex && currentIdx + 5 < lastLineIndex) {
-      desyncWarned = true;
-      try { console.warn('[ASR] index desync detected; resyncing', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
-      lastLineIndex = Math.max(0, Math.floor(rawIdx));
-      try { (window as any).currentIndex = Math.max(0, Math.floor(rawIdx)); } catch {}
+    if (Number.isFinite(rawIdx) && lastLineIndex >= 0 && rawIdx < lastLineIndex - lagLines) {
+      lagHitCount += 1;
+    } else {
+      lagHitCount = 0;
+    }
+
+    if (lagHitCount >= lagHitLimit) {
+      lagHitCount = 0;
+      resyncUntil = now + resyncWindowMs;
+      resyncAnchorIdx = Math.max(0, Math.floor(lastLineIndex - lagLookbackLines));
+      if (!desyncWarned) {
+        desyncWarned = true;
+        try { console.warn('[ASR] matcher lagging; realigning window', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
+      }
+      logDev('realign matcher window', { anchor: resyncAnchorIdx, windowAhead: matchLookaheadLines + resyncLookaheadBonus });
     }
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
