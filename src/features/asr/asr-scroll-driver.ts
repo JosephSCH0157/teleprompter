@@ -74,6 +74,9 @@ const DEFAULT_OFFSCRIPT_RECOVER_HITS = 2;
 const DEFAULT_OFFSCRIPT_RECOVER_BEHIND_LINES = 1;
 const DEFAULT_OFFSCRIPT_CREEP_PX = 4;
 const DEFAULT_OFFSCRIPT_CREEP_MS = 400;
+const DEFAULT_MIN_TOKEN_COUNT = 3;
+const DEFAULT_SHORT_TOKEN_MAX = 4;
+const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -229,6 +232,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const offScriptRecoverBehindLines = DEFAULT_OFFSCRIPT_RECOVER_BEHIND_LINES;
   const offScriptCreepPx = DEFAULT_OFFSCRIPT_CREEP_PX;
   const offScriptCreepMs = DEFAULT_OFFSCRIPT_CREEP_MS;
+  const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
+  const shortTokenMax = DEFAULT_SHORT_TOKEN_MAX;
+  const shortTokenBoost = DEFAULT_SHORT_TOKEN_BOOST;
   const ambiguitySimDelta = DEFAULT_AMBIGUITY_SIM_DELTA;
   const ambiguityNearLines = DEFAULT_AMBIGUITY_NEAR_LINES;
   const ambiguityFarLines = DEFAULT_AMBIGUITY_FAR_LINES;
@@ -481,6 +487,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const now = Date.now();
     lastIngestAt = now;
     updateDebugState('ingest');
+    if (tokenCount < minTokenCount) {
+      logDev('short utterance ignored', { tokenCount, isFinal });
+      if (offScript) {
+        const scroller = getScroller();
+        if (scroller) maybeOffScriptCreep(scroller, now);
+      }
+      return;
+    }
 
     const anchorIdx = matchAnchorIdx >= 0
       ? matchAnchorIdx
@@ -499,7 +513,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!match) return;
     const rawIdx = Number(match.bestIdx);
     const conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
-    const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
+    const baseThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
+    const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
+    const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
     const currentIdx = Number((window as any)?.currentIndex ?? -1);
     if (!Number.isFinite(rawIdx)) return;
 
@@ -595,7 +611,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     const aheadBy = rawIdx - cursorLine;
-    if (aheadBy >= realignLeadLines && conf >= realignSim) {
+    if (aheadBy >= realignLeadLines && conf >= Math.max(realignSim, requiredThreshold)) {
       if (now - lastResyncAt >= resyncCooldownMs) {
         resyncUntil = now + resyncWindowMs;
         resyncAnchorIdx = Math.max(0, Math.floor(rawIdx - realignLookbackLines));

@@ -54,7 +54,7 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
   try {
     console.log('[ASR] legacy state built', {
       scriptWords: w.scriptWords?.length ?? 0,
-      paraIndex: w.paraIndex?.length ?? 0,
+      paraIndexEntries: w.paraIndex?.length ?? 0,
       currentIndex: w.currentIndex,
     });
   } catch {}

@@ -178,15 +178,17 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
           currentIndex: currentIdx,
           bestIdx,
           bestSim: res.bestSim,
-          sim: (res as any)?.sim,
-          conf: (res as any)?.confidence,
+          sim: res.bestSim,
+          conf: res.bestSim,
           deltaLines: bestIdx - currentIdx,
           sample: typeof text === 'string' ? text.slice(0, 80) : text,
         });
       } catch {}
       const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
-      if (deltaLines) {
-        const conf = Math.max(0, Math.min(1, res.bestSim || 0)) * (isFinal ? 1 : 0.6);
+      const simScore = Number(res.bestSim);
+      const allowSync = Number.isFinite(simScore) && simScore >= cfg.SIM_THRESHOLD;
+      if (deltaLines && allowSync) {
+        const conf = Math.max(0, Math.min(1, simScore || 0)) * (isFinal ? 1 : 0.6);
         emitAsrSyncFromLineDelta(deltaLines, conf);
       }
     } catch {
