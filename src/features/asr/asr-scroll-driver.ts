@@ -51,14 +51,18 @@ const DEFAULT_BACK_RECOVERY_COOLDOWN_MS = 5000;
 const DEFAULT_BACK_RECOVERY_HIT_LIMIT = 2;
 const DEFAULT_BACK_RECOVERY_WINDOW_MS = 1200;
 const DEFAULT_BACK_RECOVERY_STRONG_CONF = 0.75;
-const DEFAULT_LAG_LINES = 6;
-const DEFAULT_LAG_HIT_LIMIT = 4;
-const DEFAULT_LAG_LOOKBACK_LINES = 3;
+const DEFAULT_REALIGN_LEAD_LINES = 6;
+const DEFAULT_REALIGN_LOOKBACK_LINES = 3;
+const DEFAULT_REALIGN_SIM = 0.7;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
-const DEFAULT_RESYNC_COOLDOWN_MS = 2400;
-const DEFAULT_BEHIND_STRONG_CONF = 0.92;
-const DEFAULT_BEHIND_CONFIRM_WINDOW_MS = 1300;
+const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
+const DEFAULT_STRONG_BACK_SIM = 0.92;
+const DEFAULT_BACK_CONFIRM_HITS = 2;
+const DEFAULT_BACK_CONFIRM_WINDOW_MS = 1300;
+const DEFAULT_AMBIGUITY_SIM_DELTA = 0.06;
+const DEFAULT_AMBIGUITY_NEAR_LINES = 6;
+const DEFAULT_AMBIGUITY_FAR_LINES = 20;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -141,7 +145,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastIngestAt = 0;
   let disposed = false;
   let desyncWarned = false;
-  let lagHitCount = 0;
   let resyncUntil = 0;
   let resyncAnchorIdx: number | null = null;
   let matchAnchorIdx = -1;
@@ -187,14 +190,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const backRecoverHitLimit = DEFAULT_BACK_RECOVERY_HIT_LIMIT;
   const backRecoverWindowMs = DEFAULT_BACK_RECOVERY_WINDOW_MS;
   const backRecoverStrongConf = DEFAULT_BACK_RECOVERY_STRONG_CONF;
-  const lagLines = DEFAULT_LAG_LINES;
-  const lagHitLimit = DEFAULT_LAG_HIT_LIMIT;
-  const lagLookbackLines = DEFAULT_LAG_LOOKBACK_LINES;
+  const realignLeadLines = DEFAULT_REALIGN_LEAD_LINES;
+  const realignLookbackLines = DEFAULT_REALIGN_LOOKBACK_LINES;
+  const realignSim = DEFAULT_REALIGN_SIM;
   const resyncWindowMs = DEFAULT_RESYNC_WINDOW_MS;
   const resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
   const resyncCooldownMs = DEFAULT_RESYNC_COOLDOWN_MS;
-  const behindStrongConf = DEFAULT_BEHIND_STRONG_CONF;
-  const behindConfirmWindowMs = DEFAULT_BEHIND_CONFIRM_WINDOW_MS;
+  const strongBackSim = DEFAULT_STRONG_BACK_SIM;
+  const backConfirmHits = DEFAULT_BACK_CONFIRM_HITS;
+  const backConfirmWindowMs = DEFAULT_BACK_CONFIRM_WINDOW_MS;
+  const ambiguitySimDelta = DEFAULT_AMBIGUITY_SIM_DELTA;
+  const ambiguityNearLines = DEFAULT_AMBIGUITY_NEAR_LINES;
+  const ambiguityFarLines = DEFAULT_AMBIGUITY_FAR_LINES;
   const strongHits: Array<{ ts: number; idx: number; conf: number; isFinal: boolean }> = [];
 
   const unsubscribe = speechStore.subscribe((state) => {
@@ -418,14 +425,35 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!Number.isFinite(rawIdx)) return;
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
+    if (topScores.length >= 2) {
+      let near: { idx: number; score: number; dist: number } | null = null;
+      let far: { idx: number; score: number; dist: number } | null = null;
+      for (const entry of topScores) {
+        const idx = Number(entry.idx);
+        const score = Number(entry.score);
+        if (!Number.isFinite(idx) || !Number.isFinite(score)) continue;
+        const dist = Math.abs(idx - cursorLine);
+        if (dist <= ambiguityNearLines && (!near || score > near.score)) {
+          near = { idx, score, dist };
+        }
+        if (dist >= ambiguityFarLines && (!far || score > far.score)) {
+          far = { idx, score, dist };
+        }
+      }
+      if (near && far && Math.abs(near.score - far.score) <= ambiguitySimDelta) {
+        logDev('ambiguous match', { near, far, cursorLine });
+        return;
+      }
+    }
+
     const behindBy = cursorLine - rawIdx;
-    const behindTooFar = behindBy > 2;
-    if (behindTooFar) {
-      const strongBehind = isFinal && conf >= Math.max(behindStrongConf, requiredThreshold);
+    if (behindBy > 0) {
+      const strongBehind = conf >= Math.max(strongBackSim, requiredThreshold);
       if (strongBehind) {
         if (
           Math.abs(rawIdx - lastBehindStrongIdx) <= 1 &&
-          now - lastBehindStrongAt <= behindConfirmWindowMs
+          now - lastBehindStrongAt <= backConfirmWindowMs
         ) {
           behindStrongCount += 1;
         } else {
@@ -436,7 +464,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       } else {
         behindStrongCount = 0;
       }
-      if (!strongBehind || behindStrongCount < 2) {
+      if (!strongBehind || behindStrongCount < backConfirmHits) {
         logDev('behind match ignored', { line: rawIdx, conf, cursorLine, isFinal });
         return;
       }
@@ -444,21 +472,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       behindStrongCount = 0;
     }
 
-    if (Number.isFinite(rawIdx) && lastLineIndex >= 0 && rawIdx < lastLineIndex - lagLines) {
-      lagHitCount += 1;
-    } else {
-      lagHitCount = 0;
-    }
-
-    if (lagHitCount >= lagHitLimit) {
-      lagHitCount = 0;
+    const aheadBy = rawIdx - cursorLine;
+    if (aheadBy >= realignLeadLines && conf >= realignSim) {
       if (now - lastResyncAt >= resyncCooldownMs) {
         resyncUntil = now + resyncWindowMs;
-        resyncAnchorIdx = Math.max(0, Math.floor(lastLineIndex - lagLookbackLines));
+        resyncAnchorIdx = Math.max(0, Math.floor(rawIdx - realignLookbackLines));
         lastResyncAt = now;
         if (!desyncWarned) {
           desyncWarned = true;
-          try { console.warn('[ASR] matcher lagging; realigning window', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
+          try { console.warn('[ASR] realigning matcher window', { targetLine: rawIdx, lastLineIndex, currentIndex: currentIdx }); } catch {}
         }
         logDev('realign matcher window', { anchor: resyncAnchorIdx, windowAhead: matchLookaheadLines + resyncLookaheadBonus });
       }
