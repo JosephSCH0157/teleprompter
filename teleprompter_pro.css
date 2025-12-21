@@ -834,8 +834,9 @@ html.tp-present .present-exit { display: inline-flex; }
     padding-inline: max(16px, 3vw);
     color: var(--tp-fg, #e6eef8);
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
+    min-width: min(20ch, 100%);
 
     /* prefer character-based width, but flex to viewport */
     /* --tp-maxch is per-window (set by your Typography store) */

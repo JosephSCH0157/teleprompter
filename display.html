@@ -79,8 +79,9 @@
             margin:0 auto;
             padding:0;
             white-space:pre-wrap;
-            overflow-wrap:anywhere;
-            word-break:break-word;
+            overflow-wrap:break-word;
+            word-break:normal;
+            min-width:min(20ch, 100%);
           }
           /* Match main app metrics exactly for consistent scroll physics */
           .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
@@ -143,6 +144,7 @@
           #wrap   .script {
             margin-inline: auto;
             padding-inline: max(16px, 3vw);
+            min-width: min(20ch, 100%);
             max-width: min(
               calc(var(--tp-maxch, 95) * 1ch),
               calc(100vw - 2 * max(16px, 3vw))
