@@ -1,4 +1,5 @@
 import { matchBatch } from '../../speech/orchestrator';
+import { normTokens } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
 
@@ -68,7 +69,7 @@ const DEFAULT_REALIGN_SIM = 0.7;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
 const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
-const DEFAULT_STRONG_BACK_SIM = 0.92;
+const DEFAULT_STRONG_BACK_SIM = 0.72;
 const DEFAULT_BACK_CONFIRM_HITS = 2;
 const DEFAULT_BACK_CONFIRM_WINDOW_MS = 1300;
 const DEFAULT_AMBIGUITY_SIM_DELTA = 0.06;
@@ -85,7 +86,10 @@ const DEFAULT_OFFSCRIPT_RECOVER_HITS = 2;
 const DEFAULT_OFFSCRIPT_RECOVER_BEHIND_LINES = 1;
 const DEFAULT_OFFSCRIPT_CREEP_PX = 4;
 const DEFAULT_OFFSCRIPT_CREEP_MS = 400;
-const DEFAULT_MIN_TOKEN_COUNT = 3;
+const DEFAULT_MIN_TOKEN_COUNT = 6;
+const DEFAULT_MIN_EVIDENCE_CHARS = 40;
+const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
+const DEFAULT_INTERIM_STABLE_REPEATS = 2;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 const EVENT_RING_MAX = 50;
@@ -202,6 +206,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lowSimStreak = 0;
   let scatterStreak = 0;
   let lastBestIdx = -1;
+  let lastInterimBestIdx = -1;
+  let interimRepeatCount = 0;
   let lastForwardEvidenceAt = 0;
   let offScriptRecoverStreak = 0;
   let lastOffScriptCreepAt = 0;
@@ -256,6 +262,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const offScriptCreepPx = DEFAULT_OFFSCRIPT_CREEP_PX;
   const offScriptCreepMs = DEFAULT_OFFSCRIPT_CREEP_MS;
   const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
+  const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
+  const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
+  const interimStableRepeats = DEFAULT_INTERIM_STABLE_REPEATS;
   const shortTokenMax = DEFAULT_SHORT_TOKEN_MAX;
   const shortTokenBoost = DEFAULT_SHORT_TOKEN_BOOST;
   const ambiguitySimDelta = DEFAULT_AMBIGUITY_SIM_DELTA;
@@ -553,13 +562,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (disposed) return;
     const normalized = String(text || '').trim();
     if (!normalized) return;
-    const snippet = formatLogSnippet(normalized, 60);
-    const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
+    const compacted = normalized.replace(/\s+/g, ' ').trim();
+    const snippet = formatLogSnippet(compacted, 60);
+    const tokenCount = normTokens(compacted).length;
+    const evidenceChars = compacted.length;
     const now = Date.now();
     lastIngestAt = now;
     updateDebugState('ingest');
-    if (tokenCount < minTokenCount) {
-      logDev('short utterance ignored', { tokenCount, isFinal });
+    if (!isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars) {
+      logDev('short utterance ignored', { tokenCount, evidenceChars, isFinal });
       if (offScript) {
         const scroller = getScroller();
         if (scroller) maybeOffScriptCreep(scroller, now);
@@ -576,7 +587,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : Math.max(0, Math.floor(anchorIdx));
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
-    const match = matchBatch(normalized, !!isFinal, {
+    const match = matchBatch(compacted, !!isFinal, {
       currentIndex: effectiveAnchor,
       windowBack: matchBacktrackLines,
       windowAhead: resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines,
@@ -587,11 +598,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const baseThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
     const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
     const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
+    const interimHighThreshold = clamp(threshold + shortBoost + interimHysteresisBonus, 0, 1);
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     if (!Number.isFinite(rawIdx)) return;
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    let interimEligible = true;
+    if (!isFinal) {
+      if (conf < interimHighThreshold) {
+        lastInterimBestIdx = -1;
+        interimRepeatCount = 0;
+        interimEligible = false;
+      } else {
+        if (rawIdx === lastInterimBestIdx) {
+          interimRepeatCount += 1;
+        } else {
+          lastInterimBestIdx = rawIdx;
+          interimRepeatCount = 1;
+        }
+        interimEligible = interimRepeatCount >= interimStableRepeats;
+      }
+    } else {
+      lastInterimBestIdx = -1;
+      interimRepeatCount = 0;
+    }
     recordEvent({
       ts: new Date(now).toISOString(),
       currentIndex: currentIdx,
@@ -668,6 +699,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const behindBy = cursorLine - rawIdx;
     if (behindBy > 0) {
+      if (!isFinal) {
+        behindStrongCount = 0;
+        lastBehindStrongIdx = -1;
+        lastBehindStrongAt = 0;
+        logDev('behind match ignored', { line: rawIdx, conf, cursorLine, isFinal, reason: 'interim' });
+        return;
+      }
       const strongBehind = conf >= Math.max(strongBackSim, requiredThreshold);
       if (strongBehind) {
         if (
@@ -684,7 +722,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
       }
       if (!strongBehind || behindStrongCount < backConfirmHits) {
-        logDev('behind match ignored', { line: rawIdx, conf, cursorLine, isFinal });
+        logDev('behind match ignored', {
+          line: rawIdx,
+          conf,
+          cursorLine,
+          isFinal,
+          reason: strongBehind ? 'confirm' : 'weak',
+        });
         return;
       }
     } else {
@@ -724,9 +768,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         hasPairEvidence = true;
       }
     }
-    const hasEvidence =
-      hasPairEvidence ||
-      (isFinal && rawIdx >= cursorLine + finalEvidenceLeadLines);
+    const hasEvidence = isFinal
+      ? (hasPairEvidence || rawIdx >= cursorLine + finalEvidenceLeadLines)
+      : (hasPairEvidence && interimEligible);
     pendingMatch = {
       line: Math.max(0, Math.floor(rawIdx)),
       conf,
@@ -770,6 +814,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lowSimStreak = 0;
     scatterStreak = 0;
     lastBestIdx = -1;
+    lastInterimBestIdx = -1;
+    interimRepeatCount = 0;
     lastForwardEvidenceAt = 0;
     offScriptRecoverStreak = 0;
     lastOffScriptCreepAt = 0;

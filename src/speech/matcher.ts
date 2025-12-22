@@ -19,16 +19,19 @@ export type MatchResult = {
 // Minimal similarity helpers (kept pure for unit testing)
 export function normTokens(s: string): string[] {
   // Align with sanitizeForMatch semantics: strip bracketed cues and normalize punctuation.
-  return String(s || '')
+  const normalized = String(s || '')
     .toLowerCase()
-    .replace(/\[[^\]]+]/g, '')      // strip [pause]/[beat]/[note]
-    .replace(/[“”"']/g, '')          // remove quotes
-    .replace(/[—–]/g, '-')            // normalize dashes
-    .replace(/[^\w\s-]/g, ' ')      // drop other punctuation
+    .replace(/\[[^\]]+]/g, ' ') // strip [pause]/[beat]/[note]
+    .replace(/[\u2018\u2019\u201B\u2032]/g, "'") // normalize apostrophes
+    .replace(/[\u201C\u201D\u201F\u2033]/g, '"') // normalize quotes
+    .replace(/[\u2010-\u2015]/g, '-') // normalize dashes
+    .replace(/[^a-z0-9\s'-]/g, ' ') // drop other punctuation
+    .replace(/'/g, '') // drop apostrophes entirely
+    .replace(/-/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter(Boolean);
+    .trim();
+  if (!normalized) return [];
+  return normalized.split(' ').filter(Boolean);
 }
 
 export function getNgrams(tokens: string[], n: number) {
@@ -140,3 +143,4 @@ export function matchBatch(
   }
   return { bestIdx: best.idx, bestSim: best.score as number, topScores: top };
 }
+
