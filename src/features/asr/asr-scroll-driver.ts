@@ -109,6 +109,12 @@ function formatLogScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : '?';
 }
 
+function warnGuardLine(parts: Array<string | number | null | undefined>) {
+  try {
+    console.warn(parts.filter(Boolean).join(' '));
+  } catch {}
+}
+
 function resolveThreshold(): number {
   try {
     const stored = getAsrSettings();
@@ -506,6 +512,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       if (!hasEvidence) {
+        warnGuardLine([
+          '🧱 ASR_GUARD BLOCKED noEvidence',
+          `current=${lastLineIndex}`,
+          `best=${line}`,
+          `delta=${line - lastLineIndex}`,
+          `sim=${formatLogScore(conf)}`,
+          `final=${isFinal ? 1 : 0}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
         return;
       }
 
@@ -570,6 +585,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastIngestAt = now;
     updateDebugState('ingest');
     if (!isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars) {
+      const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
+      warnGuardLine([
+        '🧱 ASR_GUARD BLOCKED minEvidence',
+        `cursor=${cursor}`,
+        `tokens=${tokenCount}`,
+        `chars=${evidenceChars}`,
+        `final=${isFinal ? 1 : 0}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
       logDev('short utterance ignored', { tokenCount, evidenceChars, isFinal });
       if (offScript) {
         const scroller = getScroller();
@@ -610,6 +634,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         lastInterimBestIdx = -1;
         interimRepeatCount = 0;
         interimEligible = false;
+        warnGuardLine([
+          '🧱 ASR_GUARD BLOCKED interimHysteresis',
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `delta=${rawIdx - cursorLine}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(interimHighThreshold)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
       } else {
         if (rawIdx === lastInterimBestIdx) {
           interimRepeatCount += 1;
@@ -618,6 +651,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           interimRepeatCount = 1;
         }
         interimEligible = interimRepeatCount >= interimStableRepeats;
+        if (!interimEligible) {
+          warnGuardLine([
+            '🧱 ASR_GUARD BLOCKED interimStable',
+            `current=${cursorLine}`,
+            `best=${rawIdx}`,
+            `delta=${rawIdx - cursorLine}`,
+            `sim=${formatLogScore(conf)}`,
+            `repeats=${interimRepeatCount}`,
+            `need=${interimStableRepeats}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+        }
       }
     } else {
       lastInterimBestIdx = -1;
@@ -703,6 +748,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
         lastBehindStrongIdx = -1;
         lastBehindStrongAt = 0;
+        warnGuardLine([
+          '🧱 ASR_GUARD BLOCKED noBackInterim',
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `delta=${rawIdx - cursorLine}`,
+          `sim=${formatLogScore(conf)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
         logDev('behind match ignored', { line: rawIdx, conf, cursorLine, isFinal, reason: 'interim' });
         return;
       }
@@ -722,6 +775,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
       }
       if (!strongBehind || behindStrongCount < backConfirmHits) {
+        warnGuardLine([
+          '🧱 ASR_GUARD BLOCKED noBackConfirm',
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `delta=${rawIdx - cursorLine}`,
+          `sim=${formatLogScore(conf)}`,
+          `hits=${behindStrongCount}`,
+          `need=${backConfirmHits}`,
+          `strong=${strongBehind ? 1 : 0}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
         logDev('behind match ignored', {
           line: rawIdx,
           conf,
@@ -750,6 +814,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
+      warnGuardLine([
+        '🧱 ASR_GUARD BLOCKED lowSim',
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `sim=${formatLogScore(conf)}`,
+        `need=${formatLogScore(requiredThreshold)}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
       return;
     }
     if (tokenCount === 0) return;
