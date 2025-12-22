@@ -231,7 +231,7 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       const bandRadius = 40;
       const { bandStart, bandEnd } = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
       const line = [
-        '🧠 ASR_MATCH',
+        '?? ASR_MATCH',
         `current=${curIdx}`,
         `best=${bestIdx}`,
         `delta=${deltaLines}`,
@@ -249,8 +249,6 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
 
     // Convert line delta to px error so the adaptive governor can respond
     try {
-      const currentIdx = Number((window as any).currentIndex ?? 0);
-      const bestIdx = Number(res.bestIdx ?? 0);
       const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
       const simScore = Number(res.bestSim);
       const allowSync = Number.isFinite(simScore) && simScore >= cfg.SIM_THRESHOLD;
@@ -350,3 +348,6 @@ export function stopRecognizer() {
     // noop
   }
 })();
+
+
+

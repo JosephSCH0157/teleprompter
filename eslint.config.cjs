@@ -16,6 +16,7 @@ module.exports = [
       'node_modules/**',
       '.vscode/**',
       '**/*.d.ts',
+      'src/index-hooks/asr.js',
       'src/build-logic/**',
     ],
   },
