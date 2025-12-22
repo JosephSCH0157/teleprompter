@@ -16,6 +16,17 @@ type PendingMatch = {
   conf: number;
   isFinal: boolean;
   hasEvidence: boolean;
+  snippet: string;
+};
+
+type AsrEventSnapshot = {
+  ts: string;
+  currentIndex: number;
+  lastLineIndex: number;
+  bestIdx: number;
+  sim: number;
+  isFinal: boolean;
+  snippet: string;
 };
 
 export interface AsrScrollDriver {
@@ -77,9 +88,21 @@ const DEFAULT_OFFSCRIPT_CREEP_MS = 400;
 const DEFAULT_MIN_TOKEN_COUNT = 3;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
+const EVENT_RING_MAX = 50;
+const EVENT_DUMP_COUNT = 12;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function formatLogSnippet(value: string, maxLen: number) {
+  const compact = String(value || '').replace(/\s+/g, ' ').trim();
+  if (compact.length <= maxLen) return compact;
+  return `${compact.slice(0, maxLen)}...`;
+}
+
+function formatLogScore(value: number) {
+  return Number.isFinite(value) ? value.toFixed(2) : '?';
 }
 
 function resolveThreshold(): number {
@@ -239,6 +262,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const ambiguityNearLines = DEFAULT_AMBIGUITY_NEAR_LINES;
   const ambiguityFarLines = DEFAULT_AMBIGUITY_FAR_LINES;
   const strongHits: Array<{ ts: number; idx: number; conf: number; isFinal: boolean }> = [];
+  const eventRing: AsrEventSnapshot[] = [];
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -271,6 +295,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         offScriptSince,
       };
     } catch {}
+  };
+
+  const recordEvent = (entry: AsrEventSnapshot) => {
+    eventRing.push(entry);
+    if (eventRing.length > EVENT_RING_MAX) eventRing.shift();
+  };
+
+  const dumpRecentEvents = (label: string) => {
+    const recent = eventRing.slice(-EVENT_DUMP_COUNT);
+    try {
+      console.warn(`🧱 ASR_GUARD BLOCKED ${label} dumping last ${recent.length}`);
+    } catch {}
+    try {
+      console.table(recent);
+    } catch {
+      try { console.warn(JSON.stringify(recent)); } catch {}
+    }
   };
 
   const freezeMotion = () => {
@@ -393,7 +434,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (offScript) return;
 
       const now = Date.now();
-      const { line, conf, isFinal, hasEvidence } = pending;
+      const { line, conf, isFinal, hasEvidence, snippet } = pending;
       const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
       const strongMatch = conf >= requiredThreshold;
       if (!strongMatch) return;
@@ -459,9 +500,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
 
-      if (targetLine - lastLineIndex < minLineAdvance) return;
+      const forwardDelta = targetLine - lastLineIndex;
+      if (forwardDelta < minLineAdvance) {
+        const reason = 'not-enough-forward-progress';
+        const guardLine = [
+          '🧱 ASR_GUARD BLOCKED forwardProgress',
+          `lastLineIndex=${lastLineIndex}`,
+          `bestIdx=${line}`,
+          `targetLine=${targetLine}`,
+          `delta=${forwardDelta}`,
+          `sim=${formatLogScore(conf)}`,
+          `reason=${reason}`,
+          snippet ? `clue="${snippet}"` : '',
+        ].filter(Boolean).join(' ');
+        try { console.warn(guardLine); } catch {}
+        dumpRecentEvents('forwardProgress');
+        return;
+      }
       if (now - lastSeekTs < seekThrottleMs) return;
 
+      const prevLineIndex = lastLineIndex;
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const base = targetTopPx == null ? currentTop : targetTopPx;
       const candidate = clamp(targetTop, 0, max);
@@ -474,6 +532,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastEvidenceAt = now;
       try { (window as any).currentIndex = lastLineIndex; } catch {}
       ensureControllerActive();
+      try {
+        const commitLine = [
+          'ASR_COMMIT',
+          `line=${targetLine}`,
+          `prev=${prevLineIndex}`,
+          `delta=${targetLine - prevLineIndex}`,
+          `sim=${formatLogScore(conf)}`,
+          `final=${isFinal ? 1 : 0}`,
+          snippet ? `clue="${snippet}"` : '',
+        ].filter(Boolean).join(' ');
+        console.log(commitLine);
+      } catch {}
       logDev('target update', { line: targetLine, conf, pxDelta: deltaPx, targetTop: targetTopPx });
       updateDebugState('target-update');
     });
@@ -483,6 +553,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (disposed) return;
     const normalized = String(text || '').trim();
     if (!normalized) return;
+    const snippet = formatLogSnippet(normalized, 60);
     const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
     const now = Date.now();
     lastIngestAt = now;
@@ -516,10 +587,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const baseThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
     const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
     const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
-    const currentIdx = Number((window as any)?.currentIndex ?? -1);
+    const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
+    const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     if (!Number.isFinite(rawIdx)) return;
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    recordEvent({
+      ts: new Date(now).toISOString(),
+      currentIndex: currentIdx,
+      lastLineIndex,
+      bestIdx: rawIdx,
+      sim: conf,
+      isFinal,
+      snippet,
+    });
     if (conf < offScriptLowSim) {
       lowSimStreak += 1;
     } else {
@@ -651,6 +732,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       conf,
       isFinal,
       hasEvidence,
+      snippet,
     };
     schedulePending();
   };

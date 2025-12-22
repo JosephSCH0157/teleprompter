@@ -83,6 +83,9 @@ export type MatchBatchOptions = {
 let _rec: Recognizer | null = null;
 let _cb: ((_evt: MatchEvent) => void) | null = null;
 
+const MATCH_LOG_THROTTLE_MS = 250;
+let lastMatchLogAt = 0;
+
 // Lightweight cosine similarity for HUD transcript enrichment (dev only usage)
 function simCosine(a: string, b: string): number {
   try {
@@ -145,45 +148,87 @@ function _getRuntimeScriptState(opts?: MatchBatchOptions) {
   return { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState };
 }
 
+function formatMatchScore(value: number | null | undefined): string {
+  return Number.isFinite(value as number) ? (value as number).toFixed(2) : '?';
+}
+
+function formatTopScores(topScores: Array<{ idx: number; score: number }>): string {
+  if (!topScores.length) return '[]';
+  return `[${topScores.map((entry) => {
+    const idx = Number.isFinite(entry.idx) ? Math.floor(entry.idx) : '?';
+    const score = Number.isFinite(entry.score) ? entry.score.toFixed(2) : '?';
+    return `${idx}:${score}`;
+  }).join(',')}]`;
+}
+
+function compactClue(tokens: string[], maxTokens: number): string {
+  if (!tokens.length) return '';
+  return tokens
+    .slice(Math.max(0, tokens.length - maxTokens))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/"/g, '')
+    .trim();
+}
+
+function resolveBandRange(
+  currentIndex: number,
+  paraIndex: Array<{ line?: number }>,
+  vParaIndex: string[] | null,
+  radius: number
+) {
+  const cur = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
+  const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
+  const lineCount = vParaIndex
+    ? vParaIndex.length
+    : (typeof lastEntry?.line === 'number' ? lastEntry.line + 1 : paraIndex.length);
+  const safeCount = Math.max(0, lineCount);
+  const bandStart = Math.max(0, cur - radius);
+  const bandEnd = safeCount ? Math.min(safeCount - 1, cur + radius) : 0;
+  return { bandStart, bandEnd };
+}
+
 export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOptions): matcher.MatchResult {
   try {
-    try {
-      console.log('[ASR] matchBatch', {
-        text,
-        isFinal,
-        len: typeof text === 'string' ? text.length : 0,
-      });
-    } catch {}
     const spokenTokens = matcher.normTokens(text || '');
     if (spokenTokens.length) {
       noteAsrSpeechActivity(text);
     }
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState(opts);
     const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
-    try { console.log('[ASR] matchBatch res:', res); } catch {}
-    try {
-      const cur = Number.isFinite((window as any).currentIndex) ? (window as any).currentIndex : 0;
-      const bestIdxLog = (res as any)?.bestIdx ?? null;
-      const bestSimLog = (res as any)?.bestSim ?? null;
-      const keys = res ? Object.keys(res as any) : null;
-      console.log('[ASR] idx', { cur, bestIdx: bestIdxLog, bestSim: bestSimLog, keys });
-    } catch {}
+
+    // Compact matcher log (throttled)
+    const now = Date.now();
+    if (now - lastMatchLogAt >= MATCH_LOG_THROTTLE_MS) {
+      lastMatchLogAt = now;
+      const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
+      const bestIdx = Number.isFinite(res?.bestIdx) ? Math.floor(res.bestIdx) : 0;
+      const deltaLines = bestIdx - curIdx;
+      const topScores = Array.isArray(res?.topScores) ? res.topScores : [];
+      const clue = compactClue(spokenTokens, 6);
+      const bandRadius = 40;
+      const { bandStart, bandEnd } = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const line = [
+        '🧠 ASR_MATCH',
+        `current=${curIdx}`,
+        `best=${bestIdx}`,
+        `delta=${deltaLines}`,
+        `sim=${formatMatchScore(res?.bestSim)}`,
+        `top=${formatTopScores(topScores)}`,
+        `winBack=${cfg.MATCH_WINDOW_BACK}`,
+        `winAhead=${cfg.MATCH_WINDOW_AHEAD}`,
+        `band=${bandRadius}`,
+        `bandStart=${bandStart}`,
+        `bandEnd=${bandEnd}`,
+        clue ? `clue="${clue}"` : '',
+      ].filter(Boolean).join(' ');
+      try { console.log(line); } catch {}
+    }
 
     // Convert line delta to px error so the adaptive governor can respond
     try {
       const currentIdx = Number((window as any).currentIndex ?? 0);
       const bestIdx = Number(res.bestIdx ?? 0);
-      try {
-        console.log('[ASR] match res', {
-          currentIndex: currentIdx,
-          bestIdx,
-          bestSim: res.bestSim,
-          sim: res.bestSim,
-          conf: res.bestSim,
-          deltaLines: bestIdx - currentIdx,
-          sample: typeof text === 'string' ? text.slice(0, 80) : text,
-        });
-      } catch {}
       const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
       const simScore = Number(res.bestSim);
       const allowSync = Number.isFinite(simScore) && simScore >= cfg.SIM_THRESHOLD;
