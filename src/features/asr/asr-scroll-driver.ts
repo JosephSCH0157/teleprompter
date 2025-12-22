@@ -91,6 +91,8 @@ const DEFAULT_MIN_EVIDENCE_CHARS = 40;
 const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
 const DEFAULT_INTERIM_STABLE_REPEATS = 2;
 const DEFAULT_FORWARD_TIE_EPS = 0.03;
+const DEFAULT_OFFSCRIPT_MATCH_BACKTRACK_LINES = 12;
+const DEFAULT_OFFSCRIPT_MATCH_LOOKAHEAD_LINES = 120;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
@@ -316,6 +318,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const offScriptRecoverBehindLines = DEFAULT_OFFSCRIPT_RECOVER_BEHIND_LINES;
   const offScriptCreepPx = DEFAULT_OFFSCRIPT_CREEP_PX;
   const offScriptCreepMs = DEFAULT_OFFSCRIPT_CREEP_MS;
+  const offScriptMatchBacktrackLines = DEFAULT_OFFSCRIPT_MATCH_BACKTRACK_LINES;
+  const offScriptMatchLookaheadLines = DEFAULT_OFFSCRIPT_MATCH_LOOKAHEAD_LINES;
   const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
   const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
   const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
@@ -720,6 +724,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       return;
     }
+    if (offScript && !isFinal) {
+      const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
+      warnGuard('off_script_final_only', [
+        `cursor=${cursor}`,
+        `tokens=${tokenCount}`,
+        `chars=${evidenceChars}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      const scroller = getScroller();
+      if (scroller) maybeOffScriptCreep(scroller, now);
+      return;
+    }
 
     const anchorIdx = matchAnchorIdx >= 0
       ? matchAnchorIdx
@@ -730,10 +746,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : Math.max(0, Math.floor(anchorIdx));
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
+    const windowAheadBase = resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines;
+    const windowBack = offScript ? Math.max(matchBacktrackLines, offScriptMatchBacktrackLines) : matchBacktrackLines;
+    const windowAhead = offScript ? Math.max(windowAheadBase, offScriptMatchLookaheadLines) : windowAheadBase;
     const match = matchBatch(compacted, !!isFinal, {
       currentIndex: effectiveAnchor,
-      windowBack: matchBacktrackLines,
-      windowAhead: resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines,
+      windowBack,
+      windowAhead,
     });
     if (!match) {
       warnGuard('no_match', [
@@ -883,7 +902,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         if (scroller) maybeOffScriptCreep(scroller, now);
         return;
       }
-      exitOffScript(now, 'recover');
+      warnGuard('off_script_exit', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `sim=${formatLogScore(conf)}`,
+        `reason=reanchor`,
+      ]);
+      exitOffScript(now, 'reanchor');
     }
 
     if (topScores.length >= 2) {

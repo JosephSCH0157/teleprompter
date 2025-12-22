@@ -231,7 +231,7 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       const bandRadius = 40;
       const { bandStart, bandEnd } = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
       const line = [
-        '?? ASR_MATCH',
+        '🧠 ASR_MATCH',
         `current=${curIdx}`,
         `best=${bestIdx}`,
         `delta=${deltaLines}`,
@@ -348,6 +348,7 @@ export function stopRecognizer() {
     // noop
   }
 })();
+
 
 
 
