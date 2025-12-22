@@ -85,6 +85,18 @@ let _cb: ((_evt: MatchEvent) => void) | null = null;
 
 const MATCH_LOG_THROTTLE_MS = 250;
 let lastMatchLogAt = 0;
+const MATCH_TOKEN_WINDOW = 18;
+
+const META_PHRASES: RegExp[] = [
+  /\bit(?:'s| is) not keeping up\b/gi,
+  /\bit(?:'s| is) not moving\b/gi,
+  /\bit(?:'s| is) not scrolling\b/gi,
+  /\bhas(?:n't| not) moved\b/gi,
+  /\bokay so\b/gi,
+  /\byou know\b/gi,
+  /\bi think\b/gi,
+  /\blet(?:'s| us) see\b/gi,
+];
 
 // Lightweight cosine similarity for HUD transcript enrichment (dev only usage)
 function simCosine(a: string, b: string): number {
@@ -171,6 +183,14 @@ function compactClue(tokens: string[], maxTokens: number): string {
     .trim();
 }
 
+function stripMetaPhrases(text: string): string {
+  let out = String(text || '');
+  for (const rx of META_PHRASES) {
+    out = out.replace(rx, ' ');
+  }
+  return out;
+}
+
 function resolveBandRange(
   currentIndex: number,
   paraIndex: Array<{ line?: number }>,
@@ -190,12 +210,14 @@ function resolveBandRange(
 
 export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOptions): matcher.MatchResult {
   try {
-    const spokenTokens = matcher.normTokens(text || '');
+    const scrubbed = stripMetaPhrases(text || '');
+    const spokenTokens = matcher.normTokens(scrubbed);
+    const matchTokens = spokenTokens.slice(-MATCH_TOKEN_WINDOW);
     if (spokenTokens.length) {
       noteAsrSpeechActivity(text);
     }
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState(opts);
-    const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
+    const res = matcher.matchBatch(matchTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
 
     // Compact matcher log (throttled)
     const now = Date.now();
@@ -205,7 +227,7 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       const bestIdx = Number.isFinite(res?.bestIdx) ? Math.floor(res.bestIdx) : 0;
       const deltaLines = bestIdx - curIdx;
       const topScores = Array.isArray(res?.topScores) ? res.topScores : [];
-      const clue = compactClue(spokenTokens, 6);
+      const clue = compactClue(matchTokens, 6);
       const bandRadius = 40;
       const { bandStart, bandEnd } = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
       const line = [

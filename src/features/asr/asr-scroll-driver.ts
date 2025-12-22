@@ -90,6 +90,8 @@ const DEFAULT_MIN_TOKEN_COUNT = 6;
 const DEFAULT_MIN_EVIDENCE_CHARS = 40;
 const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
 const DEFAULT_INTERIM_STABLE_REPEATS = 2;
+const DEFAULT_FORWARD_TIE_EPS = 0.03;
+const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 const EVENT_RING_MAX = 50;
@@ -109,9 +111,16 @@ function formatLogScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : '?';
 }
 
-function warnGuardLine(parts: Array<string | number | null | undefined>) {
+const guardLastAt = new Map<string, number>();
+
+function warnGuard(reason: string, parts: Array<string | number | null | undefined>) {
+  const now = Date.now();
+  const last = guardLastAt.get(reason) ?? 0;
+  if (now - last < GUARD_THROTTLE_MS) return;
+  guardLastAt.set(reason, now);
   try {
-    console.warn(parts.filter(Boolean).join(' '));
+    const line = ['🧱 ASR_GUARD', `reason=${reason}`, ...parts.filter(Boolean)];
+    console.warn(line.join(' '));
   } catch {}
 }
 
@@ -171,6 +180,45 @@ function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | nu
   const raw = (line.offsetTop || 0) - offset;
   const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   return clamp(raw, 0, max);
+}
+
+function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number): HTMLElement | null {
+  if (!scroller) return null;
+  const idx = Math.max(0, Math.floor(lineIndex));
+  return (
+    scroller.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.line[data-index="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.line[data-line-idx="${idx}"]`)
+  );
+}
+
+function computeMarkerLineIndex(scroller: HTMLElement | null): number {
+  try {
+    const viewer = scroller || document.getElementById('viewer') || document.getElementById('scriptScrollContainer');
+    const lineEls = Array.from((viewer || document).querySelectorAll<HTMLElement>('.line'));
+    if (!lineEls.length) return 0;
+    const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+      ? (window as any).__TP_MARKER_PCT
+      : 0.4;
+    const rect = viewer ? viewer.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
+    const markerY = rect.top + (viewer ? viewer.clientHeight : window.innerHeight) * markerPct;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < lineEls.length; i++) {
+      const el = lineEls[i];
+      const r = el.getBoundingClientRect();
+      const y = r.top + r.height * 0.5;
+      const d = Math.abs(y - markerY);
+      if (d < bestDist) {
+        bestDist = d;
+        const dataIdx = el.dataset.i || el.dataset.index || el.getAttribute('data-line-idx');
+        bestIdx = dataIdx ? Math.max(0, Number(dataIdx) || 0) : i;
+      }
+    }
+    return Math.max(0, Math.floor(bestIdx));
+  } catch {
+    return 0;
+  }
 }
 
 export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDriver {
@@ -256,6 +304,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const strongBackSim = DEFAULT_STRONG_BACK_SIM;
   const backConfirmHits = DEFAULT_BACK_CONFIRM_HITS;
   const backConfirmWindowMs = DEFAULT_BACK_CONFIRM_WINDOW_MS;
+  const forwardTieEps = DEFAULT_FORWARD_TIE_EPS;
   const offScriptLowSim = DEFAULT_OFFSCRIPT_LOW_SIM;
   const offScriptLowSimHits = DEFAULT_OFFSCRIPT_LOW_SIM_HITS;
   const offScriptNoEvidenceMs = DEFAULT_OFFSCRIPT_NO_EVIDENCE_MS;
@@ -319,9 +368,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const dumpRecentEvents = (label: string) => {
     const recent = eventRing.slice(-EVENT_DUMP_COUNT);
-    try {
-      console.warn(`🧱 ASR_GUARD BLOCKED ${label} dumping last ${recent.length}`);
-    } catch {}
+    warnGuard(`dump_${label}`, [`dumping=${recent.length}`]);
     try {
       console.table(recent);
     } catch {
@@ -445,31 +492,79 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       pendingMatch = null;
 
       const scroller = getScroller();
-      if (!scroller) return;
-      if (offScript) return;
+      if (!scroller) {
+        warnGuard('no_scroller', []);
+        return;
+      }
+      if (offScript) {
+        warnGuard('off_script', []);
+        return;
+      }
 
       const now = Date.now();
       const { line, conf, isFinal, hasEvidence, snippet } = pending;
       const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
       const strongMatch = conf >= requiredThreshold;
-      if (!strongMatch) return;
+      if (!strongMatch) {
+        warnGuard('low_sim', [
+          `current=${lastLineIndex}`,
+          `best=${line}`,
+          `delta=${line - lastLineIndex}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(requiredThreshold)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        return;
+      }
 
       const targetLine = Math.max(0, Math.floor(line));
       const targetTop = resolveTargetTop(scroller, targetLine);
       const currentTop = scroller.scrollTop || 0;
       const deltaPx = targetTop != null ? targetTop - currentTop : 0;
 
-      if (targetTop == null) return;
+      if (targetTop == null) {
+        warnGuard('no_target', [
+          `current=${lastLineIndex}`,
+          `best=${targetLine}`,
+          `delta=${targetLine - lastLineIndex}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        return;
+      }
 
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
-          if (deltaPx < 0 || deltaPx > creepNearPx) return;
+          if (deltaPx < 0 || deltaPx > creepNearPx) {
+            warnGuard('same_line_noop', [
+              `current=${lastLineIndex}`,
+              `best=${targetLine}`,
+              `deltaPx=${Math.round(deltaPx)}`,
+              `nearPx=${creepNearPx}`,
+              snippet ? `clue="${snippet}"` : '',
+            ]);
+            return;
+          }
+          if (now - lastSameLineNudgeTs < sameLineThrottleMs) {
+            warnGuard('same_line_throttle', [
+              `line=${targetLine}`,
+              `since=${now - lastSameLineNudgeTs}`,
+              `throttle=${sameLineThrottleMs}`,
+            ]);
+            return;
+          }
           if (now - lastSameLineNudgeTs >= sameLineThrottleMs) {
             if (creepBudgetLine !== targetLine) {
               creepBudgetLine = targetLine;
               creepBudgetUsed = 0;
             }
-            if (creepBudgetUsed >= creepBudgetPx) return;
+            if (creepBudgetUsed >= creepBudgetPx) {
+              warnGuard('creep_budget', [
+                `line=${targetLine}`,
+                `used=${Math.round(creepBudgetUsed)}`,
+                `budget=${creepBudgetPx}`,
+              ]);
+              return;
+            }
             const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
             const base = targetTopPx == null ? currentTop : targetTopPx;
             const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed);
@@ -508,12 +603,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } else {
           backRecoverStreak = 0;
         }
+        warnGuard('behind_blocked', [
+          `current=${lastLineIndex}`,
+          `best=${targetLine}`,
+          `delta=${targetLine - lastLineIndex}`,
+          `sim=${formatLogScore(conf)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
         return;
       }
 
       if (!hasEvidence) {
-        warnGuardLine([
-          '🧱 ASR_GUARD BLOCKED noEvidence',
+        warnGuard('no_evidence', [
           `current=${lastLineIndex}`,
           `best=${line}`,
           `delta=${line - lastLineIndex}`,
@@ -526,22 +627,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       const forwardDelta = targetLine - lastLineIndex;
       if (forwardDelta < minLineAdvance) {
-        const reason = 'not-enough-forward-progress';
-        const guardLine = [
-          '🧱 ASR_GUARD BLOCKED forwardProgress',
+        warnGuard('forward_progress', [
           `lastLineIndex=${lastLineIndex}`,
           `bestIdx=${line}`,
           `targetLine=${targetLine}`,
           `delta=${forwardDelta}`,
           `sim=${formatLogScore(conf)}`,
-          `reason=${reason}`,
           snippet ? `clue="${snippet}"` : '',
-        ].filter(Boolean).join(' ');
-        try { console.warn(guardLine); } catch {}
+        ]);
         dumpRecentEvents('forwardProgress');
         return;
       }
-      if (now - lastSeekTs < seekThrottleMs) return;
+      if (now - lastSeekTs < seekThrottleMs) {
+        warnGuard('seek_throttle', [
+          `current=${lastLineIndex}`,
+          `best=${targetLine}`,
+          `delta=${targetLine - lastLineIndex}`,
+          `since=${now - lastSeekTs}`,
+          `throttle=${seekThrottleMs}`,
+        ]);
+        return;
+      }
 
       const prevLineIndex = lastLineIndex;
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
@@ -557,6 +663,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       try { (window as any).currentIndex = lastLineIndex; } catch {}
       ensureControllerActive();
       try {
+        const markerIdx = computeMarkerLineIndex(scroller);
+        const currentEl = getLineElementByIndex(scroller, prevLineIndex);
+        const bestEl = getLineElementByIndex(scroller, targetLine);
+        const markerEl = getLineElementByIndex(scroller, markerIdx);
+        const currentText = currentEl ? formatLogSnippet(currentEl.textContent || '', 60) : '';
+        const bestText = bestEl ? formatLogSnippet(bestEl.textContent || '', 60) : '';
+        const markerText = markerEl ? formatLogSnippet(markerEl.textContent || '', 60) : '';
+        const lineHeight = bestEl?.offsetHeight || currentEl?.offsetHeight || 0;
         const commitLine = [
           'ASR_COMMIT',
           `line=${targetLine}`,
@@ -564,6 +678,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `delta=${targetLine - prevLineIndex}`,
           `sim=${formatLogScore(conf)}`,
           `final=${isFinal ? 1 : 0}`,
+          `marker=${markerIdx}`,
+          `scrollTop=${Math.round(scroller.scrollTop || 0)}`,
+          `lineH=${lineHeight}`,
+          currentText ? `currentText="${currentText}"` : '',
+          bestText ? `bestText="${bestText}"` : '',
+          markerText ? `markerText="${markerText}"` : '',
           snippet ? `clue="${snippet}"` : '',
         ].filter(Boolean).join(' ');
         console.log(commitLine);
@@ -586,8 +706,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     updateDebugState('ingest');
     if (!isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars) {
       const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
-      warnGuardLine([
-        '🧱 ASR_GUARD BLOCKED minEvidence',
+      warnGuard('min_evidence', [
         `cursor=${cursor}`,
         `tokens=${tokenCount}`,
         `chars=${evidenceChars}`,
@@ -616,26 +735,60 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       windowBack: matchBacktrackLines,
       windowAhead: resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines,
     });
-    if (!match) return;
-    const rawIdx = Number(match.bestIdx);
-    const conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
+    if (!match) {
+      warnGuard('no_match', [
+        `current=${effectiveAnchor}`,
+        `final=${isFinal ? 1 : 0}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      return;
+    }
+    let rawIdx = Number(match.bestIdx);
+    let conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
     const baseThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
     const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
     const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
     const interimHighThreshold = clamp(threshold + shortBoost + interimHysteresisBonus, 0, 1);
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
-    if (!Number.isFinite(rawIdx)) return;
+    if (!Number.isFinite(rawIdx)) {
+      warnGuard('invalid_match', [
+        `current=${currentIdx}`,
+        `final=${isFinal ? 1 : 0}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      return;
+    }
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
+    if (rawIdx < cursorLine && topScores.length) {
+      const forward = topScores.find((entry) => Number(entry.idx) >= cursorLine);
+      if (forward && Number.isFinite(Number(forward.score))) {
+        const forwardScore = Number(forward.score);
+        const diff = Math.abs(conf - forwardScore);
+        if (diff <= forwardTieEps) {
+          const before = rawIdx;
+          rawIdx = Number(forward.idx);
+          conf = forwardScore;
+          warnGuard('tie_forward', [
+            `current=${cursorLine}`,
+            `best=${before}`,
+            `forward=${rawIdx}`,
+            `sim=${formatLogScore(conf)}`,
+            `eps=${forwardTieEps}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+        }
+      }
+    }
     let interimEligible = true;
     if (!isFinal) {
       if (conf < interimHighThreshold) {
         lastInterimBestIdx = -1;
         interimRepeatCount = 0;
         interimEligible = false;
-        warnGuardLine([
-          '🧱 ASR_GUARD BLOCKED interimHysteresis',
+        warnGuard('interim_unstable', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
           `delta=${rawIdx - cursorLine}`,
@@ -652,8 +805,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
         interimEligible = interimRepeatCount >= interimStableRepeats;
         if (!interimEligible) {
-          warnGuardLine([
-            '🧱 ASR_GUARD BLOCKED interimStable',
+          warnGuard('interim_unstable', [
             `current=${cursorLine}`,
             `best=${rawIdx}`,
             `delta=${rawIdx - cursorLine}`,
@@ -699,6 +851,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const reason = lowSimStreak >= offScriptLowSimHits
         ? 'low-sim'
         : (noForwardEvidence ? 'no-forward' : 'scatter');
+      warnGuard('off_script_enter', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `sim=${formatLogScore(conf)}`,
+        `cause=${reason}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
       enterOffScript(now, reason);
       const scroller = getScroller();
       if (scroller) maybeOffScriptCreep(scroller, now);
@@ -713,6 +872,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         offScriptRecoverStreak = 0;
       }
       if (offScriptRecoverStreak < offScriptRecoverHits) {
+        warnGuard('off_script', [
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `sim=${formatLogScore(conf)}`,
+          `hits=${offScriptRecoverStreak}`,
+          `need=${offScriptRecoverHits}`,
+        ]);
         const scroller = getScroller();
         if (scroller) maybeOffScriptCreep(scroller, now);
         return;
@@ -720,7 +886,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       exitOffScript(now, 'recover');
     }
 
-    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     if (topScores.length >= 2) {
       let near: { idx: number; score: number; dist: number } | null = null;
       let far: { idx: number; score: number; dist: number } | null = null;
@@ -737,6 +902,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
       if (near && far && Math.abs(near.score - far.score) <= ambiguitySimDelta) {
+        warnGuard('ambiguous', [
+          `current=${cursorLine}`,
+          `near=${near.idx}:${formatLogScore(near.score)}`,
+          `far=${far.idx}:${formatLogScore(far.score)}`,
+          `delta=${Math.abs(near.score - far.score).toFixed(2)}`,
+        ]);
         logDev('ambiguous match', { near, far, cursorLine });
         return;
       }
@@ -748,8 +919,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
         lastBehindStrongIdx = -1;
         lastBehindStrongAt = 0;
-        warnGuardLine([
-          '🧱 ASR_GUARD BLOCKED noBackInterim',
+        warnGuard('behind_blocked', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
           `delta=${rawIdx - cursorLine}`,
@@ -775,8 +945,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
       }
       if (!strongBehind || behindStrongCount < backConfirmHits) {
-        warnGuardLine([
-          '🧱 ASR_GUARD BLOCKED noBackConfirm',
+        warnGuard('behind_blocked', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
           `delta=${rawIdx - cursorLine}`,
@@ -814,8 +983,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     if (requiredThreshold > 0 && conf < requiredThreshold) {
-      warnGuardLine([
-        '🧱 ASR_GUARD BLOCKED lowSim',
+      warnGuard('low_sim', [
         `current=${cursorLine}`,
         `best=${rawIdx}`,
         `delta=${rawIdx - cursorLine}`,
@@ -825,7 +993,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
       return;
     }
-    if (tokenCount === 0) return;
+    if (tokenCount === 0) {
+      warnGuard('min_evidence', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `tokens=${tokenCount}`,
+      ]);
+      return;
+    }
 
     strongHits.push({ ts: now, idx: rawIdx, conf, isFinal });
     while (strongHits.length && strongHits[0].ts < now - strongWindowMs) {

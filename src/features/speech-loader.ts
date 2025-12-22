@@ -467,6 +467,30 @@ function computeMarkerLineIndex(): number {
   }
 }
 
+function getLineSnapshot(index: number) {
+  try {
+    const viewer =
+      document.getElementById('viewer') ||
+      document.getElementById('scriptScrollContainer') ||
+      document.getElementById('script');
+    const idx = Math.max(0, Math.floor(index));
+    const line =
+      viewer?.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
+      viewer?.querySelector<HTMLElement>(`.line[data-index="${idx}"]`) ||
+      viewer?.querySelector<HTMLElement>(`.line[data-line-idx="${idx}"]`);
+    if (!line) return null;
+    const text = String(line.textContent || '').replace(/\s+/g, ' ').trim();
+    const snippet = text.length > 60 ? `${text.slice(0, 60)}...` : text;
+    return {
+      snippet,
+      lineHeight: line.offsetHeight || line.clientHeight || 0,
+      scrollTop: (viewer as HTMLElement | null)?.scrollTop ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function syncAsrIndices(startIdx: number, reason: string): void {
   const idx = Math.max(0, Math.floor(Number(startIdx) || 0));
   try { (window as any).currentIndex = idx; } catch {}
@@ -646,6 +670,21 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   attachAsrScrollDriver();
   const startIdx = computeMarkerLineIndex();
   syncAsrIndices(startIdx, 'session-start');
+  try {
+    const currentIdx = Number((window as any).currentIndex ?? startIdx);
+    const markerSnap = getLineSnapshot(startIdx);
+    const currentSnap = getLineSnapshot(currentIdx);
+    const anchorLine = [
+      'ASR_ANCHOR',
+      `current=${currentIdx}`,
+      `marker=${startIdx}`,
+      markerSnap?.snippet ? `markerText="${markerSnap.snippet}"` : '',
+      currentSnap?.snippet ? `currentText="${currentSnap.snippet}"` : '',
+      `scrollTop=${Math.round(currentSnap?.scrollTop ?? 0)}`,
+      `lineH=${currentSnap?.lineHeight ?? 0}`,
+    ].filter(Boolean).join(' ');
+    console.warn(anchorLine);
+  } catch {}
   running = true;
   rememberMode(mode);
   try { document.body.classList.add('listening'); } catch {}
