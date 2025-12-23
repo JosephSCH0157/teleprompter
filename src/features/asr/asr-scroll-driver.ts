@@ -42,6 +42,11 @@ const DEFAULT_SEEK_THROTTLE_MS = 120;
 const DEFAULT_INTERIM_SCALE = 1.15;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
+const DEFAULT_MATCH_LOOKAHEAD_STEPS = [DEFAULT_MATCH_LOOKAHEAD_LINES, 120, 200, 400];
+const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
+const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
+const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
+const DEFAULT_LOOKAHEAD_STALL_MS = 2500;
 const DEFAULT_SAME_LINE_THROTTLE_MS = 500;
 const DEFAULT_CREEP_PX = 8;
 const DEFAULT_CREEP_NEAR_PX = 28;
@@ -262,6 +267,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastSameLineNudgeTs = 0;
   let lastMoveAt = 0;
   let lastIngestAt = 0;
+  let lastForwardCommitAt = Date.now();
   let disposed = false;
   let desyncWarned = false;
   let resyncUntil = 0;
@@ -285,12 +291,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastBehindStrongIdx = -1;
   let lastBehindStrongAt = 0;
   let behindStrongCount = 0;
+  let lookaheadStepIndex = 0;
+  let lastLookaheadBumpAt = 0;
+  let behindHitCount = 0;
+  let behindHitWindowStart = 0;
   let pendingMatch: PendingMatch | null = null;
   let pendingRaf = 0;
   let bootLogged = false;
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
+  const matchLookaheadSteps =
+    DEFAULT_MATCH_LOOKAHEAD_STEPS.length > 0 ? DEFAULT_MATCH_LOOKAHEAD_STEPS : [matchLookaheadLines];
+  const lookaheadBumpCooldownMs = DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS;
+  const lookaheadBehindHits = DEFAULT_LOOKAHEAD_BEHIND_HITS;
+  const lookaheadBehindWindowMs = DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS;
+  const lookaheadStallMs = DEFAULT_LOOKAHEAD_STALL_MS;
+  const matchLookaheadMax = matchLookaheadSteps[matchLookaheadSteps.length - 1] || matchLookaheadLines;
   const sameLineThrottleMs = DEFAULT_SAME_LINE_THROTTLE_MS;
   const creepPx = DEFAULT_CREEP_PX;
   const creepNearPx = DEFAULT_CREEP_NEAR_PX;
@@ -378,6 +395,48 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     } catch {
       try { console.warn(JSON.stringify(recent)); } catch {}
     }
+  };
+
+  const resolveLookahead = (resyncActive: boolean) => {
+    const base = matchLookaheadSteps[Math.min(lookaheadStepIndex, matchLookaheadSteps.length - 1)] || matchLookaheadLines;
+    const boosted = resyncActive ? base + resyncLookaheadBonus : base;
+    return clamp(boosted, matchLookaheadLines, matchLookaheadMax + resyncLookaheadBonus);
+  };
+
+  const bumpLookahead = (reason: string, now: number) => {
+    if (lookaheadStepIndex >= matchLookaheadSteps.length - 1) return;
+    if (now - lastLookaheadBumpAt < lookaheadBumpCooldownMs) return;
+    lookaheadStepIndex += 1;
+    lastLookaheadBumpAt = now;
+    behindHitCount = 0;
+    behindHitWindowStart = 0;
+    logDev('lookahead bump', { reason, windowAhead: resolveLookahead(false) });
+  };
+
+  const resetLookahead = (reason: string) => {
+    if (lookaheadStepIndex === 0) return;
+    lookaheadStepIndex = 0;
+    behindHitCount = 0;
+    behindHitWindowStart = 0;
+    logDev('lookahead reset', { reason, windowAhead: resolveLookahead(false) });
+  };
+
+  const noteBehindBlocked = (now: number) => {
+    if (!behindHitWindowStart || now - behindHitWindowStart > lookaheadBehindWindowMs) {
+      behindHitWindowStart = now;
+      behindHitCount = 1;
+    } else {
+      behindHitCount += 1;
+    }
+    if (behindHitCount >= lookaheadBehindHits) {
+      bumpLookahead('behind_blocked', now);
+    }
+  };
+
+  const maybeBumpForStall = (now: number) => {
+    const lastProgressAt = Math.max(lastForwardCommitAt || 0, lastEvidenceAt || 0);
+    if (now - lastProgressAt < lookaheadStallMs) return;
+    bumpLookahead('stall', now);
   };
 
 
@@ -506,7 +565,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
-          if (deltaPx < 0 || deltaPx > creepNearPx) {
+          if (deltaPx < 0) {
             warnGuard('same_line_noop', [
               `current=${lastLineIndex}`,
               `best=${targetLine}`,
@@ -521,6 +580,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               `line=${targetLine}`,
               `since=${now - lastSameLineNudgeTs}`,
               `throttle=${sameLineThrottleMs}`,
+            ]);
+            return;
+          }
+          if (deltaPx > creepNearPx) {
+            const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+            const base = targetTopPx == null ? currentTop : targetTopPx;
+            const desired = clamp(targetTop, 0, max);
+            const limitedTarget = Math.min(desired, base + maxTargetJumpPx);
+            if (limitedTarget > base) {
+              targetTopPx = limitedTarget;
+              lastSameLineNudgeTs = now;
+              lastEvidenceAt = now;
+              ensureControllerActive();
+              logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
+              updateDebugState('same-line-recenter');
+              return;
+            }
+            warnGuard('same_line_noop', [
+              `current=${lastLineIndex}`,
+              `best=${targetLine}`,
+              `deltaPx=${Math.round(deltaPx)}`,
+              `nearPx=${creepNearPx}`,
+              snippet ? `clue="${snippet}"` : '',
             ]);
             return;
           }
@@ -630,6 +712,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
       creepBudgetUsed = 0;
+      lastForwardCommitAt = now;
+      resetLookahead('forward_commit');
       lastSeekTs = now;
       lastEvidenceAt = now;
       try { (window as any).currentIndex = lastLineIndex; } catch {}
@@ -726,6 +810,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
 
+    maybeBumpForStall(now);
+
     const anchorIdx = matchAnchorIdx >= 0
       ? matchAnchorIdx
       : (lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0));
@@ -735,9 +821,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : Math.max(0, Math.floor(anchorIdx));
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
-    const windowAheadBase = resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines;
     const windowBack = matchBacktrackLines;
-    const windowAhead = windowAheadBase;
+    const windowAhead = resolveLookahead(resyncActive);
     const match = matchBatch(compacted, !!isFinal, {
       currentIndex: effectiveAnchor,
       windowBack,
@@ -899,6 +984,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
         lastBehindStrongIdx = -1;
         lastBehindStrongAt = 0;
+        noteBehindBlocked(now);
         warnGuard('behind_blocked', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
@@ -925,6 +1011,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
       }
       if (!strongBehind || behindStrongCount < backConfirmHits) {
+        noteBehindBlocked(now);
         warnGuard('behind_blocked', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
@@ -1043,6 +1130,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;
     behindStrongCount = 0;
+    lastForwardCommitAt = Date.now();
+    resetLookahead('sync-index');
     if (pendingRaf) {
       try { cancelAnimationFrame(pendingRaf); } catch {}
       pendingRaf = 0;
