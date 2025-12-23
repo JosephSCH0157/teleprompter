@@ -2,6 +2,9 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  GIT_SUBMODULES = "false"
+
 # Optional but recommended: make the teleprompter the default entry.
 [[redirects]]
   from = "/"
