@@ -615,10 +615,20 @@ function getLineSnapshot(index: number) {
 }
 
 function syncAsrIndices(startIdx: number, reason: string): void {
-  const idx = Math.max(0, Math.floor(Number(startIdx) || 0));
+  const viewer =
+    document.getElementById('viewer') ||
+    document.getElementById('scriptScrollContainer');
+  const root = document.getElementById('script') || viewer;
+  const scroller = resolveActiveScroller(viewer, root);
+  const scrollTop = scroller?.scrollTop ?? 0;
+  const lineEl = (root || viewer || document).querySelector<HTMLElement>('.line');
+  const lineHeight = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+  const topEpsilon = Math.max(24, lineHeight * 0.5);
+  const clamped = scrollTop <= topEpsilon;
+  const idx = clamped ? 0 : Math.max(0, Math.floor(Number(startIdx) || 0));
   try { (window as any).currentIndex = idx; } catch {}
   try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
-  try { console.debug('[ASR] index sync', { idx, reason }); } catch {}
+  try { console.debug('[ASR] index sync', { idx, reason, clamped, scrollTop, topEpsilon }); } catch {}
 }
 
 const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
@@ -810,6 +820,15 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     const topEpsilon = Math.max(24, firstLineHeight * 0.5);
     const markerSnap = getLineSnapshot(startIdx);
     const currentSnap = getLineSnapshot(currentIdx);
+    try {
+      console.warn('ASR_START_STATE', {
+        anchorIndex: startIdx,
+        cursorLine: currentIdx,
+        scrollTop: Math.round(scrollerTop),
+        scroller: describeElement(scroller),
+        topEps: Math.round(topEpsilon),
+      });
+    } catch {}
     const anchorLine = [
       'ASR_ANCHOR',
       `current=${currentIdx}`,

@@ -1043,6 +1043,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;
     behindStrongCount = 0;
+    if (pendingRaf) {
+      try { cancelAnimationFrame(pendingRaf); } catch {}
+      pendingRaf = 0;
+    }
+    pendingMatch = null;
     strongHits.length = 0;
     try { (window as any).currentIndex = lastLineIndex; } catch {}
     updateDebugState('sync-index');
