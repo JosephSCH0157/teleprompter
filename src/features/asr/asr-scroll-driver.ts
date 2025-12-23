@@ -8,7 +8,7 @@ type DriverOptions = {
   minLineAdvance?: number;
   /** Minimum milliseconds between seeks (throttle) */
   seekThrottleMs?: number;
-  /** Scale applied to the confidence threshold when processing interim results. */
+  /** Scale applied to the confidence threshold when processing interim results (values >1 tighten). */
   interimConfidenceScale?: number;
 };
 
@@ -39,7 +39,7 @@ export interface AsrScrollDriver {
 
 const DEFAULT_MIN_LINE_ADVANCE = 1;
 const DEFAULT_SEEK_THROTTLE_MS = 120;
-const DEFAULT_INTERIM_SCALE = 0.6;
+const DEFAULT_INTERIM_SCALE = 1.15;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
 const DEFAULT_SAME_LINE_THROTTLE_MS = 500;
@@ -75,24 +75,11 @@ const DEFAULT_BACK_CONFIRM_WINDOW_MS = 1300;
 const DEFAULT_AMBIGUITY_SIM_DELTA = 0.06;
 const DEFAULT_AMBIGUITY_NEAR_LINES = 6;
 const DEFAULT_AMBIGUITY_FAR_LINES = 20;
-const DEFAULT_OFFSCRIPT_LOW_SIM = 0.45;
-const DEFAULT_OFFSCRIPT_LOW_SIM_HITS = 6;
-const DEFAULT_OFFSCRIPT_NO_EVIDENCE_MS = 2000;
-const DEFAULT_OFFSCRIPT_SCATTER_SIM = 0.6;
-const DEFAULT_OFFSCRIPT_SCATTER_JUMP_LINES = 10;
-const DEFAULT_OFFSCRIPT_SCATTER_HITS = 3;
-const DEFAULT_OFFSCRIPT_RECOVER_SIM = 0.7;
-const DEFAULT_OFFSCRIPT_RECOVER_HITS = 2;
-const DEFAULT_OFFSCRIPT_RECOVER_BEHIND_LINES = 1;
-const DEFAULT_OFFSCRIPT_CREEP_PX = 4;
-const DEFAULT_OFFSCRIPT_CREEP_MS = 400;
 const DEFAULT_MIN_TOKEN_COUNT = 6;
 const DEFAULT_MIN_EVIDENCE_CHARS = 40;
 const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
 const DEFAULT_INTERIM_STABLE_REPEATS = 2;
 const DEFAULT_FORWARD_TIE_EPS = 0.03;
-const DEFAULT_OFFSCRIPT_MATCH_BACKTRACK_LINES = 12;
-const DEFAULT_OFFSCRIPT_MATCH_LOOKAHEAD_LINES = 120;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
@@ -231,7 +218,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     ? Math.max(0, options.seekThrottleMs ?? DEFAULT_SEEK_THROTTLE_MS)
     : DEFAULT_SEEK_THROTTLE_MS;
   const interimScale = Number.isFinite(options.interimConfidenceScale ?? DEFAULT_INTERIM_SCALE)
-    ? clamp(options.interimConfidenceScale ?? DEFAULT_INTERIM_SCALE, 0, 1)
+    ? Math.max(0, options.interimConfidenceScale ?? DEFAULT_INTERIM_SCALE)
     : DEFAULT_INTERIM_SCALE;
 
   let threshold = resolveThreshold();
@@ -257,16 +244,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let backRecoverStreak = 0;
   let creepBudgetLine = -1;
   let creepBudgetUsed = 0;
-  let offScript = false;
-  let offScriptSince = 0;
-  let lowSimStreak = 0;
-  let scatterStreak = 0;
-  let lastBestIdx = -1;
   let lastInterimBestIdx = -1;
   let interimRepeatCount = 0;
-  let lastForwardEvidenceAt = 0;
-  let offScriptRecoverStreak = 0;
-  let lastOffScriptCreepAt = 0;
   let lastResyncAt = 0;
   let lastBehindStrongIdx = -1;
   let lastBehindStrongAt = 0;
@@ -307,19 +286,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const backConfirmHits = DEFAULT_BACK_CONFIRM_HITS;
   const backConfirmWindowMs = DEFAULT_BACK_CONFIRM_WINDOW_MS;
   const forwardTieEps = DEFAULT_FORWARD_TIE_EPS;
-  const offScriptLowSim = DEFAULT_OFFSCRIPT_LOW_SIM;
-  const offScriptLowSimHits = DEFAULT_OFFSCRIPT_LOW_SIM_HITS;
-  const offScriptNoEvidenceMs = DEFAULT_OFFSCRIPT_NO_EVIDENCE_MS;
-  const offScriptScatterSim = DEFAULT_OFFSCRIPT_SCATTER_SIM;
-  const offScriptScatterJumpLines = DEFAULT_OFFSCRIPT_SCATTER_JUMP_LINES;
-  const offScriptScatterHits = DEFAULT_OFFSCRIPT_SCATTER_HITS;
-  const offScriptRecoverSim = DEFAULT_OFFSCRIPT_RECOVER_SIM;
-  const offScriptRecoverHits = DEFAULT_OFFSCRIPT_RECOVER_HITS;
-  const offScriptRecoverBehindLines = DEFAULT_OFFSCRIPT_RECOVER_BEHIND_LINES;
-  const offScriptCreepPx = DEFAULT_OFFSCRIPT_CREEP_PX;
-  const offScriptCreepMs = DEFAULT_OFFSCRIPT_CREEP_MS;
-  const offScriptMatchBacktrackLines = DEFAULT_OFFSCRIPT_MATCH_BACKTRACK_LINES;
-  const offScriptMatchLookaheadLines = DEFAULT_OFFSCRIPT_MATCH_LOOKAHEAD_LINES;
   const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
   const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
   const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
@@ -359,8 +325,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetTopPx,
         appliedTopPx,
         lastMoveAt,
-        offScript,
-        offScriptSince,
       };
     } catch {}
   };
@@ -380,51 +344,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   };
 
-  const freezeMotion = () => {
-    velPxPerSec = 0;
-    controllerActive = false;
-    targetTopPx = null;
-  };
-
-  const enterOffScript = (now: number, reason: string) => {
-    if (offScript) return;
-    offScript = true;
-    offScriptSince = now;
-    offScriptRecoverStreak = 0;
-    if (pendingRaf) {
-      try { cancelAnimationFrame(pendingRaf); } catch {}
-      pendingRaf = 0;
-    }
-    pendingMatch = null;
-    freezeMotion();
-    logDev('off-script enter', { reason });
-    updateDebugState('off-script');
-  };
-
-  const exitOffScript = (now: number, reason: string) => {
-    if (!offScript) return;
-    offScript = false;
-    offScriptSince = 0;
-    lowSimStreak = 0;
-    scatterStreak = 0;
-    offScriptRecoverStreak = 0;
-    lastOffScriptCreepAt = now;
-    logDev('off-script exit', { reason });
-    updateDebugState('off-script-exit');
-  };
-
-  const maybeOffScriptCreep = (scroller: HTMLElement, now: number) => {
-    if (offScriptCreepPx <= 0 || offScriptCreepMs <= 0) return;
-    if (now - lastOffScriptCreepAt < offScriptCreepMs) return;
-    const current = scroller.scrollTop || 0;
-    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const next = clamp(current + offScriptCreepPx, 0, max);
-    if (next > current) {
-      scroller.scrollTop = next;
-      lastMoveAt = Date.now();
-      lastOffScriptCreepAt = now;
-    }
-  };
 
   const resolveMaxVel = (errPx: number) => {
     if (errPx >= catchupFastMinPx) return maxVelCatchupPxPerSec;
@@ -500,14 +419,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         warnGuard('no_scroller', []);
         return;
       }
-      if (offScript) {
-        warnGuard('off_script', []);
-        return;
-      }
 
       const now = Date.now();
       const { line, conf, isFinal, hasEvidence, snippet } = pending;
-      const requiredThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
+      const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
       const strongMatch = conf >= requiredThreshold;
       if (!strongMatch) {
         warnGuard('low_sim', [
@@ -718,22 +633,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         snippet ? `clue="${snippet}"` : '',
       ]);
       logDev('short utterance ignored', { tokenCount, evidenceChars, isFinal });
-      if (offScript) {
-        const scroller = getScroller();
-        if (scroller) maybeOffScriptCreep(scroller, now);
-      }
-      return;
-    }
-    if (offScript && !isFinal) {
-      const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
-      warnGuard('off_script_final_only', [
-        `cursor=${cursor}`,
-        `tokens=${tokenCount}`,
-        `chars=${evidenceChars}`,
-        snippet ? `clue="${snippet}"` : '',
-      ]);
-      const scroller = getScroller();
-      if (scroller) maybeOffScriptCreep(scroller, now);
       return;
     }
 
@@ -747,8 +646,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
     const windowAheadBase = resyncActive ? matchLookaheadLines + resyncLookaheadBonus : matchLookaheadLines;
-    const windowBack = offScript ? Math.max(matchBacktrackLines, offScriptMatchBacktrackLines) : matchBacktrackLines;
-    const windowAhead = offScript ? Math.max(windowAheadBase, offScriptMatchLookaheadLines) : windowAheadBase;
+    const windowBack = matchBacktrackLines;
+    const windowAhead = windowAheadBase;
     const match = matchBatch(compacted, !!isFinal, {
       currentIndex: effectiveAnchor,
       windowBack,
@@ -764,10 +663,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     let rawIdx = Number(match.bestIdx);
     let conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
-    const baseThreshold = isFinal ? threshold : Math.max(0, threshold * interimScale);
+    const baseThreshold = isFinal ? threshold : threshold * interimScale;
     const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
     const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
-    const interimHighThreshold = clamp(threshold + shortBoost + interimHysteresisBonus, 0, 1);
+    const interimHighThreshold = clamp(baseThreshold + shortBoost + interimHysteresisBonus, 0, 1);
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     if (!Number.isFinite(rawIdx)) {
@@ -781,15 +680,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     const topScores = Array.isArray(match.topScores) ? match.topScores : [];
-    if (rawIdx < cursorLine && topScores.length) {
-      const forward = topScores.find((entry) => Number(entry.idx) >= cursorLine);
-      if (forward && Number.isFinite(Number(forward.score))) {
-        const forwardScore = Number(forward.score);
-        const diff = Math.abs(conf - forwardScore);
-        if (diff <= forwardTieEps) {
+    if (topScores.length) {
+      const bestScore = conf;
+      const forwardCandidates = topScores
+        .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
+        .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+        .filter((entry) => entry.idx >= cursorLine && entry.score >= bestScore - forwardTieEps)
+        .sort((a, b) => a.idx - b.idx || b.score - a.score);
+      if (forwardCandidates.length) {
+        const next = forwardCandidates[0];
+        if (next.idx !== rawIdx || next.score !== conf) {
           const before = rawIdx;
-          rawIdx = Number(forward.idx);
-          conf = forwardScore;
+          rawIdx = next.idx;
+          conf = next.score;
           warnGuard('tie_forward', [
             `current=${cursorLine}`,
             `best=${before}`,
@@ -848,69 +751,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal,
       snippet,
     });
-    if (conf < offScriptLowSim) {
-      lowSimStreak += 1;
-    } else {
-      lowSimStreak = 0;
-    }
-    const jump = lastBestIdx >= 0 ? Math.abs(rawIdx - lastBestIdx) : 0;
-    if (conf < offScriptScatterSim && jump >= offScriptScatterJumpLines) {
-      scatterStreak += 1;
-    } else {
-      scatterStreak = 0;
-    }
-    lastBestIdx = rawIdx;
-    if (conf >= requiredThreshold && rawIdx >= cursorLine - offScriptRecoverBehindLines) {
-      lastForwardEvidenceAt = now;
-    }
-
-    const noForwardEvidence =
-      lastForwardEvidenceAt > 0 && now - lastForwardEvidenceAt >= offScriptNoEvidenceMs;
-    if (!offScript && (lowSimStreak >= offScriptLowSimHits || noForwardEvidence || scatterStreak >= offScriptScatterHits)) {
-      const reason = lowSimStreak >= offScriptLowSimHits
-        ? 'low-sim'
-        : (noForwardEvidence ? 'no-forward' : 'scatter');
-      warnGuard('off_script_enter', [
-        `current=${cursorLine}`,
-        `best=${rawIdx}`,
-        `sim=${formatLogScore(conf)}`,
-        `cause=${reason}`,
-        snippet ? `clue="${snippet}"` : '',
-      ]);
-      enterOffScript(now, reason);
-      const scroller = getScroller();
-      if (scroller) maybeOffScriptCreep(scroller, now);
-      return;
-    }
-    if (offScript) {
-      const recoverEligible =
-        conf >= offScriptRecoverSim && rawIdx >= cursorLine - offScriptRecoverBehindLines;
-      if (recoverEligible) {
-        offScriptRecoverStreak += 1;
-      } else {
-        offScriptRecoverStreak = 0;
-      }
-      if (offScriptRecoverStreak < offScriptRecoverHits) {
-        warnGuard('off_script', [
-          `current=${cursorLine}`,
-          `best=${rawIdx}`,
-          `sim=${formatLogScore(conf)}`,
-          `hits=${offScriptRecoverStreak}`,
-          `need=${offScriptRecoverHits}`,
-        ]);
-        const scroller = getScroller();
-        if (scroller) maybeOffScriptCreep(scroller, now);
-        return;
-      }
-      warnGuard('off_script_exit', [
-        `current=${cursorLine}`,
-        `best=${rawIdx}`,
-        `sim=${formatLogScore(conf)}`,
-        `reason=reanchor`,
-      ]);
-      exitOffScript(now, 'reanchor');
-    }
-
     if (topScores.length >= 2) {
       let near: { idx: number; score: number; dist: number } | null = null;
       let far: { idx: number; score: number; dist: number } | null = null;
@@ -934,7 +774,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `delta=${Math.abs(near.score - far.score).toFixed(2)}`,
         ]);
         logDev('ambiguous match', { near, far, cursorLine });
-        return;
       }
     }
 
@@ -1082,16 +921,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     backRecoverStreak = 0;
     creepBudgetLine = -1;
     creepBudgetUsed = 0;
-    offScript = false;
-    offScriptSince = 0;
-    lowSimStreak = 0;
-    scatterStreak = 0;
-    lastBestIdx = -1;
     lastInterimBestIdx = -1;
     interimRepeatCount = 0;
-    lastForwardEvidenceAt = 0;
-    offScriptRecoverStreak = 0;
-    lastOffScriptCreepAt = 0;
     lastResyncAt = 0;
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;
