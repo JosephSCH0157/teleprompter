@@ -47,9 +47,29 @@ let lastPassword = '';
 let lastEnabled = false;
 let wiredEvents = false;
 let bridgeArmed = false;
+let connectInFlight: Promise<void> | null = null;
+let connectQueued = false;
+let bridgeRetryTimer = 0;
+let lastBridgeMissingToastAt = 0;
+
+const BRIDGE_RETRY_MS = 1200;
+const BRIDGE_MISSING_TOAST_COOLDOWN_MS = 8000;
 
 function updateStatus(status: RecorderStatus, err?: string) {
   setObsStatus(status, err ?? null);
+}
+
+function toastObs(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): void {
+  if (shouldSilenceObsLogs) return;
+  try {
+    const w = window as any;
+    const toast = w._toast || w.toast;
+    if (typeof toast === 'function') {
+      toast(msg, { type });
+      return;
+    }
+  } catch {}
+  try { console.log(msg); } catch {}
 }
 
 function wireBridgeEvents(): void {
@@ -68,37 +88,111 @@ function wireBridgeEvents(): void {
 }
 
 function closeBridge(reason?: string): void {
+  if (bridgeRetryTimer) {
+    try { clearTimeout(bridgeRetryTimer); } catch {}
+    bridgeRetryTimer = 0;
+  }
+  connectQueued = false;
+  connectInFlight = null;
   const bridge = getBridge();
   if (reason === 'disabled' && !bridgeArmed) return; // already idle; avoid log spam
   logObsCommand('close', { reason });
-  try { bridge?.enableAutoReconnect?.(false); } catch {}
-  try { bridge?.setArmed?.(false); } catch {}
-  try { bridge?.disconnect?.(); } catch {}
+  try { void Promise.resolve(bridge?.enableAutoReconnect?.(false)).catch(() => {}); } catch {}
+  try { void Promise.resolve(bridge?.setArmed?.(false)).catch(() => {}); } catch {}
+  try { void Promise.resolve(bridge?.disconnect?.()).catch(() => {}); } catch {}
   bridgeArmed = false;
   updateStatus('disconnected', reason);
 }
 
+async function safeInvoke<T>(label: string, fn?: () => T | Promise<T>): Promise<{ ok: boolean; value?: T; error?: unknown }> {
+  if (!fn) return { ok: false };
+  try {
+    const value = await fn();
+    return { ok: true, value };
+  } catch (err) {
+    logObsCommand(`bridge:${label}:error`, { error: String((err as any)?.message || err) });
+    return { ok: false, error: err };
+  }
+}
+
+function notifyBridgeMissing(): void {
+  updateStatus('error', 'OBS bridge unavailable');
+  const now = Date.now();
+  if (now - lastBridgeMissingToastAt >= BRIDGE_MISSING_TOAST_COOLDOWN_MS) {
+    lastBridgeMissingToastAt = now;
+    toastObs('OBS bridge unavailable. Install/enable the OBS bridge to connect.', 'warn');
+  } else {
+    try { console.warn('[OBS] bridge unavailable'); } catch {}
+  }
+}
+
+function scheduleBridgeRetry(reason: string): void {
+  if (bridgeRetryTimer) return;
+  if (!getRecorderSettings().enabled.obs) return;
+  bridgeRetryTimer = window.setTimeout(() => {
+    bridgeRetryTimer = 0;
+    connectViaBridge();
+  }, BRIDGE_RETRY_MS);
+  logObsCommand('bridge:retry', { reason, delayMs: BRIDGE_RETRY_MS });
+}
+
 function connectViaBridge(): void {
-  const state = getRecorderSettings();
-  if (!state.enabled.obs) {
-    closeBridge();
+  if (connectInFlight) {
+    connectQueued = true;
     return;
   }
+  const run = async () => {
+    const state = getRecorderSettings();
+    if (!state.enabled.obs) {
+      closeBridge();
+      return;
+    }
 
-  const bridge = getBridge();
-  wireBridgeEvents();
-  if (!bridge) {
-    updateStatus('error', 'OBS bridge unavailable');
-    return;
-  }
+    const bridge = getBridge();
+    wireBridgeEvents();
+    if (!bridge) {
+      notifyBridgeMissing();
+      scheduleBridgeRetry('missing-bridge');
+      return;
+    }
 
-  try { bridge?.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }); logObsCommand('configure', { url: state.configs.obs.url }); } catch {}
-  try { bridge?.setArmed?.(true); logObsCommand('setArmed', { armed: true }); bridgeArmed = true; } catch {}
-  try { bridge?.enableAutoReconnect?.(true); logObsCommand('enableAutoReconnect', { on: true }); } catch {}
+    await safeInvoke('configure', () =>
+      bridge.configure?.({ url: state.configs.obs.url, password: state.configs.obs.password || '' }),
+    );
+    logObsCommand('configure', { url: state.configs.obs.url });
 
-  updateStatus('connecting');
-  try { bridge?.maybeConnect?.(); logObsCommand('connect:maybe'); } catch {}
-  try { bridge?.connect?.(); logObsCommand('connect:explicit'); } catch {}
+    await safeInvoke('setArmed', () => bridge.setArmed?.(true));
+    bridgeArmed = true;
+    logObsCommand('setArmed', { armed: true });
+
+    await safeInvoke('enableAutoReconnect', () => bridge.enableAutoReconnect?.(true));
+    logObsCommand('enableAutoReconnect', { on: true });
+
+    updateStatus('connecting');
+    await safeInvoke('maybeConnect', () => bridge.maybeConnect?.());
+    logObsCommand('connect:maybe');
+
+    const connectRes = await safeInvoke('connect', () => bridge.connect?.());
+    logObsCommand('connect:explicit');
+    if (connectRes.error || connectRes.value === false) {
+      updateStatus('disconnected', 'OBS connection failed');
+      toastObs('OBS connection failed. Make sure OBS is running.', 'warn');
+      return;
+    }
+  };
+
+  connectInFlight = run()
+    .catch((err) => {
+      updateStatus('disconnected', 'OBS connection failed');
+      try { console.warn('[OBS] connect failed', err); } catch {}
+    })
+    .finally(() => {
+      connectInFlight = null;
+      if (connectQueued) {
+        connectQueued = false;
+        connectViaBridge();
+      }
+    });
 }
 
 export function initObsConnection(): void {
