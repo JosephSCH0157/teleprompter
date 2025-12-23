@@ -457,6 +457,98 @@ function describeElement(el: HTMLElement | null): string {
   return `${el.tagName.toLowerCase()}${id}${cls}` || el.tagName.toLowerCase();
 }
 
+function parsePx(value: string | null | undefined): number {
+  const parsed = Number.parseFloat(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getMarkerOffset(viewer: HTMLElement | null, root: HTMLElement | null) {
+  const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+    ? (window as any).__TP_MARKER_PCT
+    : 0.4;
+  const host = viewer || root;
+  const hostHeight = host?.clientHeight || 0;
+  const markerOffset = Math.max(0, Math.round(hostHeight * markerPct));
+  return { markerPct, host, hostHeight, markerOffset };
+}
+
+function checkAsrLayoutReady() {
+  const viewer =
+    document.getElementById('viewer') ||
+    document.getElementById('scriptScrollContainer');
+  const root = document.getElementById('script') || viewer;
+  const container = root || viewer;
+  if (!container) return { ready: false, reason: 'no-container' as const };
+  const lineEl = container.querySelector<HTMLElement>('.line');
+  if (!lineEl) return { ready: false, reason: 'no-lines' as const };
+  const lineHeight = lineEl.offsetHeight || lineEl.clientHeight || 0;
+  if (lineHeight <= 0) return { ready: false, reason: 'line-height' as const, lineHeight };
+  const { markerPct, host, hostHeight, markerOffset } = getMarkerOffset(viewer, root);
+  if (!host || hostHeight <= 0) {
+    return { ready: false, reason: 'host-height' as const, hostHeight, markerPct };
+  }
+  const rootPadding = root ? parsePx(getComputedStyle(root).paddingTop) : 0;
+  const viewerScrollPadding = viewer ? parsePx(getComputedStyle(viewer).scrollPaddingTop) : 0;
+  const paddingReady =
+    markerOffset <= 0 ||
+    Math.abs(rootPadding - markerOffset) <= 1 ||
+    Math.abs(viewerScrollPadding - markerOffset) <= 1;
+  if (!paddingReady) {
+    return {
+      ready: false,
+      reason: 'marker-padding' as const,
+      markerOffset,
+      rootPadding,
+      viewerScrollPadding,
+      markerPct,
+      hostHeight,
+    };
+  }
+  return {
+    ready: true,
+    markerOffset,
+    lineHeight,
+    markerPct,
+    hostHeight,
+  };
+}
+
+const ASR_LAYOUT_READY_MAX_MS = 1200;
+let pendingLayoutReady: Promise<boolean> | null = null;
+
+async function waitForAsrLayoutReady(reason?: string): Promise<boolean> {
+  if (typeof window === 'undefined') return true;
+  if (pendingLayoutReady) return pendingLayoutReady;
+  pendingLayoutReady = (async () => {
+    const raf = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16);
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    let lastCheck = checkAsrLayoutReady();
+    while (!lastCheck.ready) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - start >= ASR_LAYOUT_READY_MAX_MS) break;
+      await new Promise<void>((resolve) => raf(() => resolve()));
+      lastCheck = checkAsrLayoutReady();
+    }
+    if (!lastCheck.ready) {
+      try {
+        console.warn('[ASR] layout not ready', {
+          reason,
+          cause: lastCheck.reason,
+          ...lastCheck,
+        });
+      } catch {}
+    }
+    return lastCheck.ready;
+  })();
+  try {
+    return await pendingLayoutReady;
+  } finally {
+    pendingLayoutReady = null;
+  }
+}
+
 function computeMarkerLineIndex(): number {
   try {
     const viewer =
@@ -696,6 +788,10 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     try { console.debug('[ASR] startSpeech blocked during settings hydration', { mode, reason: info?.reason }); } catch {}
     return false;
   }
+  if (running) return true;
+
+  const layoutReady = await waitForAsrLayoutReady(info?.reason);
+  if (!layoutReady) return false;
   if (running) return true;
 
   attachAsrScrollDriver();
