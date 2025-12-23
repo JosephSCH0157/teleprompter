@@ -1,6 +1,8 @@
-// src/features/scroll/step-scroll.ts
+﻿// src/features/scroll/step-scroll.ts
 // Step-by-line / Step-by-block scroller for the Teleprompter viewer.
 // Non-invasive: uses existing #viewer, marker %, and scroll helpers if present.
+
+import { getScrollWriter } from '../../scroll/scroll-writer';
 
 export interface StepScrollConfig {
   stepLines?: number;
@@ -34,7 +36,6 @@ declare global {
     };
 
     __lastScrollTarget?: number;
-    sendToDisplay?(msg: any): void;
 
     __scrollCtl?: {
       stopAutoCatchup?(): void;
@@ -88,22 +89,31 @@ function getScrollHelpers():
   return (window as Window).__scrollHelpers || null;
 }
 
+const scrollWriter = getScrollWriter();
+
 function scrollToEl(el: HTMLElement, offsetPx: number): void {
   const sh = getScrollHelpers();
   if (sh?.scrollToEl) {
     sh.scrollToEl(el, offsetPx);
   } else {
     const sc = getViewer();
-    if (!sc) return;
     const y = (el.offsetTop || 0) - offsetPx;
+    if (!sc) {
+      scrollWriter.scrollTo(Math.max(0, y), { behavior: 'auto' });
+      return;
+    }
     const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-    sc.scrollTop = Math.max(0, Math.min(y, max));
+    const target = Math.max(0, Math.min(y, max));
+    try { scrollWriter.scrollTo(target, { behavior: 'auto' }); } catch {}
   }
 }
 
 function scrollByPx(px: number): void {
   const sc = getViewer();
-  if (!sc) return;
+  if (!sc) {
+    scrollWriter.scrollBy(px, { behavior: 'auto' });
+    return;
+  }
 
   const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
   const next = Math.max(0, Math.min(sc.scrollTop + px, max));
@@ -112,7 +122,7 @@ function scrollByPx(px: number): void {
   if (sh?.requestScroll) {
     sh.requestScroll(next);
   } else {
-    sc.scrollTop = next;
+    try { scrollWriter.scrollTo(next, { behavior: 'auto' }); } catch {}
   }
 
   // Mirror to display if available
@@ -189,6 +199,19 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
   const enableF = cfg.enableFKeys ?? true;
 
   let mode: 'on' | 'off' = 'off';
+  let uiWrap: HTMLElement | null = null;
+
+  function shouldShowStepUi(scrollMode: string | undefined | null): boolean {
+    if (!scrollMode) return false;
+    const m = scrollMode.toLowerCase();
+    return (
+      m === 'step' ||
+      m === 'step-timed' ||
+      m === 'step-wpm' ||
+      m === 'step-asr' ||
+      m === 'step-hybrid'
+    );
+  }
 
   const root =
     (document.getElementById('script') as HTMLElement | null) ||
@@ -280,13 +303,11 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
       safePreventDefault(e);
       stepLinesFn(+1, pageLinesN);
     } else if (key === 'Home') {
-      const v = getViewer();
-      if (!v) return;
-      v.scrollTop = 0;
+      scrollWriter.scrollTo(0, { behavior: 'auto' });
     } else if (key === 'End') {
       const v = getViewer();
-      if (!v) return;
-      v.scrollTop = Math.max(0, v.scrollHeight - v.clientHeight);
+      const max = v ? Math.max(0, v.scrollHeight - v.clientHeight) : 0;
+      scrollWriter.scrollTo(max, { behavior: 'auto' });
     }
   };
 
@@ -302,7 +323,7 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     document.removeEventListener('keydown', onKey, { capture: true });
   }
 
-  // Optional tiny UI chips if host page doesn’t add them
+  // Optional tiny UI chips if host page does not add them
   (function ensureButtons() {
     try {
       const bar =
@@ -315,6 +336,8 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
       wrap.setAttribute('data-step-ui', '1');
       wrap.style.cssText =
         'display:inline-flex;gap:.4rem;margin-left:.5rem;';
+      uiWrap = wrap;
+      uiWrap.style.display = 'none';
 
       const mkBtn = (label: string, dir: 1 | -1) => {
         const b = document.createElement('button');
@@ -335,6 +358,22 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     }
   })();
 
+  // Keep chip visibility aligned with scrollMode in the store
+  try {
+    const s = (window as any).__tpStore;
+    if (s && typeof s.subscribe === 'function') {
+      const initial = s.get?.('scrollMode');
+      if (uiWrap) uiWrap.style.display = shouldShowStepUi(initial) ? '' : 'none';
+      s.subscribe('scrollMode', (next: string) => {
+        if (!uiWrap) return;
+        uiWrap.style.display = shouldShowStepUi(next) ? '' : 'none';
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+
   const api: StepScrollAPI = {
     enable,
     disable,
@@ -354,3 +393,6 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
 }
 
 export default installStepScroll;
+
+
+

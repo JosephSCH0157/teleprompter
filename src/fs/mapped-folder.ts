@@ -98,6 +98,11 @@ function emit(why: 'init'|'pick'|'clear'|'sync'|'error') {
   try { window.dispatchEvent(new CustomEvent('tp:mapped-folder', { detail: { dir: _dir, why, ts: Date.now() } })); } catch {}
 }
 export function getMappedFolder(): FileSystemDirectoryHandle | null { return _dir; }
+export function refreshMappedFolder(): void {
+  try { console.debug('[mapped-folder] refresh requested'); } catch {}
+  broadcast();
+  emit('sync');
+}
 
 export async function initMappedFolder(): Promise<void> {
   try {
@@ -145,7 +150,9 @@ export async function listScripts(extensions = ['.txt', '.docx', '.md']): Promis
       if (entry?.kind === 'file') {
         const name: string = entry.name || '';
         const lower = name.toLowerCase();
-        if (extensions.some(ext => lower.endsWith(ext))) out.push({ name, handle: entry, kind: 'file' });
+        const hasExt = extensions.some(ext => lower.endsWith(ext));
+        const noExt = !lower.includes('.');
+        if (hasExt || noExt) out.push({ name, handle: entry, kind: 'file' });
       }
     }
   } catch {}

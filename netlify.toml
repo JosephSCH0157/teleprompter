@@ -1,34 +1,18 @@
 [build]
-  publish = "."
-  # Build the router (dist) so module import '/dist/features/scroll-router.js' resolves in production.
-  # Keep lightweight; add other bundles here if needed later.
-  command = "npm run build:router"  
+  command = "npm run build"
+  publish = "dist"
 
-# Land on the app even if there's no index.html
+[build.environment]
+  GIT_SUBMODULES = "false"
+
+# Optional but recommended: make the teleprompter the default entry.
 [[redirects]]
   from = "/"
   to = "/teleprompter_pro.html"
   status = 200
 
-# SPA-style fallback: serve the app for unknown routes,
-# but existing files (JS/CSS/images) still win.
-[[redirects]]
-  from = "/*"
-  to = "/teleprompter_pro.html"
-  status = 200
-
-# Caching: don't cache HTML, do cache static assets
-[[headers]]
-  for = "/teleprompter_pro.html"
-  [headers.values]
-    Cache-Control = "no-store"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+# If you ever add SPA routes later, keep this OFF for now unless you need it.
+# [[redirects]]
+#   from = "/*"
+#   to = "/teleprompter_pro.html"
+#   status = 200

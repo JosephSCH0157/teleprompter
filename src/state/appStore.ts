@@ -1,14 +1,4 @@
-export interface AppStoreSnapshot {
-  autoRecord?: boolean;
-  obsEnabled?: boolean;
-  [key: string]: unknown;
-}
-
-export interface AppStore {
-  getSnapshot?: () => AppStoreSnapshot;
-  state?: AppStoreSnapshot;
-  get?: (key: string) => unknown;
-}
+import type { AppStore } from './app-store';
 
 /**
  * Helper to read the global app store exposed via window.__tpStore.

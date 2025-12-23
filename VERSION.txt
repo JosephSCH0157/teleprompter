@@ -1,4 +1,4 @@
-1.7.5c
-ANVIL build: 2025-11-16 00:00
+1.7.7-pre
+ANVIL build: 2025-12-06 00:00
 Baseline: v1.7.x
-Notes: Rehearsal UX and preroll plumbing. Camera toggle spinner, tp:preroll:done event, auto-scroll defers to preroll, clean mode-switch preroll (no auto-record), block switching into Rehearsal while Speech is running, and auto-enable auto-scroll after leaving Rehearsal.
+Notes: Session-first preroll/scroll pipeline stable; display mirroring uses single scroll/render channel with marker padding parity; OBS/settings hooks aligned; checkpoint before final 1.7.7 cut.

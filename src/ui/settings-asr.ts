@@ -1,59 +1,368 @@
 // =============================================================
 // File: src/ui/settings-asr.ts
 // =============================================================
-import { speechStore } from '../state/speech-store';
+import type { SpeechState } from '../state/speech-store';
+import { appStore, type AppStore } from '../state/app-store';
+import { getAsrSettings, setAsrSettings } from '../features/speech/speech-store';
 
-export function mountAsrSettings(containerSelector = '#settingsSpeech, #settings, body') {
-  const host = document.querySelector(containerSelector) || document.body;
-  const box = document.createElement('section');
-  box.className = 'settings-card asr';
-  box.innerHTML = `
-    <h3>ASR</h3>
-    <div class="grid" style="gap:8px;grid-template-columns: repeat(auto-fit,minmax(160px,1fr));">
-      <label>Engine
-        <select id="asrEngine">
-          <option value="webspeech">Web Speech (browser)</option>
-          <option value="vosk">Offline (WASM)</option>
-          <option value="whisper">Server (Whisper bridge)</option>
-        </select>
-      </label>
-      <label>Language
-        <input id="asrLang" type="text" placeholder="en-US" />
-      </label>
-      <label><input id="asrInterim" type="checkbox" /> Use interim results</label>
-      <label><input id="asrFillers" type="checkbox" /> Filter filler words</label>
-      <label>Threshold
-        <input id="asrThresh" type="number" step="0.01" min="0" max="1" />
-      </label>
-      <label>Endpointing (ms)
-        <input id="asrEndMs" type="number" min="200" step="50" />
-      </label>
-    </div>
-  `;
-  host.appendChild(box);
+let asrSettingsObserverStarted = false;
+let asrSettingsWarned = false;
+let asrSettingsRenderEventFired = false;
+let isHydratingAsrSettings = false;
 
-  const $ = <T extends HTMLElement>(id: string) => box.querySelector<T>(id)!;
-  const eng = $('#asrEngine') as HTMLSelectElement;
-  const lang = $('#asrLang') as HTMLInputElement;
-  const interim = $('#asrInterim') as HTMLInputElement;
-  const fillers = $('#asrFillers') as HTMLInputElement;
-  const thresh = $('#asrThresh') as HTMLInputElement;
-  const endms = $('#asrEndMs') as HTMLInputElement;
-
-  const s = speechStore.get();
-  eng.value = s.engine;
-  lang.value = s.lang;
-  interim.checked = s.interim;
-  fillers.checked = s.fillerFilter;
-  thresh.value = String(s.threshold);
-  endms.value = String(s.endpointingMs);
-
-  eng.addEventListener('change', () => speechStore.set({ engine: eng.value as any }));
-  lang.addEventListener('change', () => speechStore.set({ lang: lang.value }));
-  interim.addEventListener('change', () => speechStore.set({ interim: interim.checked }));
-  fillers.addEventListener('change', () => speechStore.set({ fillerFilter: fillers.checked }));
-  thresh.addEventListener('change', () => speechStore.set({ threshold: clamp(+thresh.value, 0, 1) }));
-  endms.addEventListener('change', () => speechStore.set({ endpointingMs: Math.max(200, Math.round(+endms.value)) }));
+function resolveStore(store?: AppStore | null): AppStore | null {
+  if (store) return store;
+  try { return (window as any).__tpStore || appStore || null; } catch { return appStore; }
 }
 
-function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
+type SettingsSaveStatus = {
+  state: 'idle' | 'saving' | 'saved' | 'failed';
+  at: number;
+  error?: string;
+};
+
+function findAsrCard(root: ParentNode = document): HTMLElement | null {
+  return (
+    (root as Document | ParentNode)?.querySelector?.<HTMLElement>('#asrSettingsCard') ||
+    (root as Document | ParentNode)?.querySelector?.<HTMLElement>('.settings-card.asr') ||
+    null
+  );
+}
+
+type AsrInputs = {
+  eng?: HTMLSelectElement | null;
+  lang?: HTMLInputElement | null;
+  interim?: HTMLInputElement | null;
+  fillers?: HTMLInputElement | null;
+  thresh?: HTMLInputElement | null;
+  endms?: HTMLInputElement | null;
+};
+
+function queryAsrInputs(card: HTMLElement): AsrInputs {
+  const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
+  return {
+    eng: q<HTMLSelectElement>('#asrEngine'),
+    lang: q<HTMLInputElement>('#asrLang'),
+    interim: q<HTMLInputElement>('#asrInterim'),
+    fillers: q<HTMLInputElement>('#asrFillers'),
+    thresh: q<HTMLInputElement>('#asrThresh'),
+    endms: q<HTMLInputElement>('#asrEndMs'),
+  };
+}
+
+function applyAsrStateToInputs(inputs: AsrInputs, state: SpeechState): void {
+  const { eng, lang, interim, fillers, thresh, endms } = inputs;
+  if (eng && typeof state.engine === 'string') {
+    try { eng.value = state.engine; } catch {}
+  }
+  if (lang && typeof state.lang === 'string') {
+    lang.value = state.lang;
+  }
+  if (interim) interim.checked = !!state.interim;
+  if (fillers) fillers.checked = !!state.fillerFilter;
+  if (thresh && typeof state.threshold === 'number') {
+    thresh.value = String(state.threshold);
+  }
+  if (endms && typeof state.endpointingMs === 'number') {
+    endms.value = String(state.endpointingMs);
+  }
+}
+
+function attachAsrInputListeners(inputs: AsrInputs): void {
+  const { eng, lang, interim, fillers, thresh, endms } = inputs;
+  const persist = (patch: Partial<SpeechState>) => {
+    if (isHydratingAsrSettings) return;
+    persistAsrPatch(patch);
+  };
+
+  const clampThreshold = (value: string | number) => {
+    const parsed = typeof value === 'number' ? value : parseFloat(String(value));
+    if (Number.isNaN(parsed)) return;
+    persist({ threshold: clamp(parsed, 0, 1) });
+  };
+
+  const clampEndpoint = (value: string | number) => {
+    const parsed = typeof value === 'number' ? Math.round(value) : Math.round(parseFloat(String(value)));
+    if (Number.isNaN(parsed)) return;
+    persist({ endpointingMs: Math.max(200, parsed) });
+  };
+
+  eng?.addEventListener('change', () => persist({ engine: eng.value as any }));
+  lang?.addEventListener('change', () => persist({ lang: lang.value }));
+  interim?.addEventListener('change', () => persist({ interim: interim.checked }));
+  fillers?.addEventListener('change', () => persist({ fillerFilter: fillers.checked }));
+  thresh?.addEventListener('input', () => clampThreshold(thresh.value));
+  thresh?.addEventListener('change', () => clampThreshold(thresh.value));
+  endms?.addEventListener('input', () => clampEndpoint(endms.value));
+  endms?.addEventListener('change', () => clampEndpoint(endms.value));
+}
+
+function withAsrHydration(fn: () => void): void {
+  isHydratingAsrSettings = true;
+  try {
+    fn();
+  } finally {
+    const scheduleClear = () => { isHydratingAsrSettings = false; };
+    try {
+      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        window.setTimeout(scheduleClear, 0);
+      } else {
+        setTimeout(scheduleClear, 0);
+      }
+    } catch {
+      scheduleClear();
+    }
+  }
+}
+
+function readAsrPatchFromCard(card: HTMLElement): Partial<SpeechState> {
+  const patch: Partial<SpeechState> = {};
+  const q = <T extends HTMLElement>(selector: string) => card.querySelector<T>(selector);
+  const eng = q<HTMLSelectElement>('#asrEngine');
+  const lang = q<HTMLInputElement>('#asrLang');
+  const interim = q<HTMLInputElement>('#asrInterim');
+  const fillers = q<HTMLInputElement>('#asrFillers');
+  const thresh = q<HTMLInputElement>('#asrThresh');
+  const endms = q<HTMLInputElement>('#asrEndMs');
+
+  if (eng) patch.engine = eng.value || '';
+  if (lang) patch.lang = lang.value || '';
+  if (interim) patch.interim = !!interim.checked;
+  if (fillers) patch.fillerFilter = !!fillers.checked;
+  if (thresh) {
+    const val = parseFloat(thresh.value);
+    if (!Number.isNaN(val)) {
+      patch.threshold = clamp(val, 0, 1);
+    }
+  }
+  if (endms) {
+    const val = Math.round(+endms.value);
+    if (!Number.isNaN(val)) {
+      patch.endpointingMs = Math.max(200, val);
+    }
+  }
+  return patch;
+}
+
+function persistAsrPatch(patch: Partial<SpeechState>): void {
+  setAsrSettings(patch);
+}
+
+function formatRelativeTime(timestamp?: number): string {
+  if (!timestamp || Number.isNaN(timestamp)) return 'just now';
+  const delta = Date.now() - timestamp;
+  if (delta < 1000) return 'just now';
+  if (delta < 60_000) return `${Math.round(delta / 1000)}s ago`;
+  if (delta < 3_600_000) return `${Math.round(delta / 60_000)}m ago`;
+  if (delta < 86_400_000) return `${Math.round(delta / 3_600_000)}h ago`;
+  return `${Math.round(delta / 86_400_000)}d ago`;
+}
+
+// Wire the existing ASR settings card rendered by the TS builder (Media panel).
+export function wireAsrSettingsCard(root: ParentNode = document, store?: AppStore | null): HTMLElement | null {
+  const card =
+    root.querySelector<HTMLElement>('#asrSettingsCard') ||
+    root.querySelector<HTMLElement>('.settings-card.asr');
+
+  if (!card) {
+    if (!asrSettingsWarned) {
+      asrSettingsWarned = true;
+      try { console.warn('[ASR] settings card not found (skipping wiring)'); } catch {}
+    }
+    return null;
+  }
+
+  if (card.dataset.tpAsrWired === '1') return card;
+  card.dataset.tpAsrWired = '1';
+
+  const inputs = queryAsrInputs(card);
+  attachAsrInputListeners(inputs);
+  wireAsrStatusIndicators(card, store);
+  return card;
+}
+
+export function hydrateAsrSettingsCard(root: ParentNode = document): void {
+  const card = findAsrCard(root);
+  if (!card) return;
+  const inputs = queryAsrInputs(card);
+  const state = getAsrSettings();
+  withAsrHydration(() => applyAsrStateToInputs(inputs, state));
+}
+
+export function mountAsrSettings(root: ParentNode = document, store?: AppStore | null): void {
+  const card = wireAsrSettingsCard(root, store);
+  if (!card) return;
+  hydrateAsrSettingsCard(root);
+}
+
+function wireAsrStatusIndicators(card: HTMLElement, store?: AppStore | null): void {
+  const saveEl = card.querySelector<HTMLElement>('#asrSaveStatus');
+  const appliedEl = card.querySelector<HTMLElement>('#asrAppliedStatus');
+  if (!saveEl && !appliedEl) return;
+  const resolved = resolveStore(store);
+  const SAVE_STALE_MS = 15_000;
+  let saveStatusTimer: number | null = null;
+
+  const clearSaveTimer = () => {
+    if (saveStatusTimer) {
+      try { clearTimeout(saveStatusTimer); } catch {}
+      saveStatusTimer = null;
+    }
+  };
+  const isMounted = () => {
+    try {
+      return card.isConnected && document.contains(card);
+    } catch {
+      return false;
+    }
+  };
+
+  const renderSaveStatus = () => {
+    if (!isMounted()) {
+      clearSaveTimer();
+      return;
+    }
+    if (!saveEl) return;
+    const status = resolved?.get?.('settingsSaveStatus') as SettingsSaveStatus | undefined;
+    if (!status || status.state === 'idle') {
+      saveEl.textContent = '';
+      saveEl.hidden = true;
+      clearSaveTimer();
+      delete saveEl.dataset.stale;
+      return;
+    }
+    let text = '';
+    if (status.state === 'saving') {
+      text = 'Saving to account...';
+      clearSaveTimer();
+      delete saveEl.dataset.stale;
+    } else if (status.state === 'saved') {
+      const when = formatRelativeTime(status.at);
+      const elapsed = Date.now() - status.at;
+      const isStale = elapsed >= SAVE_STALE_MS;
+      if (isStale) {
+        text = 'Saved';
+        saveEl.dataset.stale = '1';
+        clearSaveTimer();
+      } else {
+        text = `Saved to account [OK]${when ? ` (${when})` : ''}`;
+        delete saveEl.dataset.stale;
+        clearSaveTimer();
+        saveStatusTimer = window.setTimeout(() => {
+          try { renderSaveStatus(); } catch {}
+        }, Math.max(SAVE_STALE_MS - elapsed, 0));
+      }
+    } else if (status.state === 'failed') {
+      const errSuffix = status.error ? `: ${status.error}` : '';
+      text = `Save failed${errSuffix}`;
+      clearSaveTimer();
+      delete saveEl.dataset.stale;
+    }
+    saveEl.textContent = text;
+    saveEl.hidden = !text;
+  };
+
+  const renderAppliedStatus = () => {
+    if (!isMounted()) return;
+    if (!appliedEl) return;
+    const appliedAt = (resolved?.get?.('asrLastAppliedAt') as number) || 0;
+    const summary = resolved?.get?.('asrLastAppliedSummary') as Record<string, unknown> | undefined;
+    const ok = !!resolved?.get?.('asrLastApplyOk');
+    const status = resolved?.get?.('settingsSaveStatus') as SettingsSaveStatus | undefined;
+    const lastSaveAt = status?.state === 'saved' ? status.at : 0;
+    const asrRunning = !!resolved?.get?.('asrLive');
+    if (!asrRunning && lastSaveAt && lastSaveAt > appliedAt) {
+      appliedEl.textContent = 'Pending application (ASR not running)';
+      appliedEl.hidden = false;
+      return;
+    }
+    if (!appliedAt) {
+      appliedEl.textContent = 'ASR has not applied any settings yet.';
+      appliedEl.hidden = false;
+      return;
+    }
+    const parts: string[] = [];
+    if (summary) {
+      const engine = summary.engine || (summary as any).eng;
+      if (engine) parts.push(String(engine));
+      if (summary.lang) parts.push(String(summary.lang));
+      if (summary.profileName) parts.push(String(summary.profileName));
+      if (summary.reason) parts.push(String(summary.reason));
+    }
+    const base = parts.length ? parts.join(' | ') : 'default';
+    const symbol = ok ? '[applied]' : '[warn]';
+    const relative = formatRelativeTime(appliedAt);
+    appliedEl.textContent = `Applied to ASR: ${symbol} ${base}${relative ? ` (${relative})` : ''}`;
+    appliedEl.hidden = false;
+  };
+
+  renderSaveStatus();
+  renderAppliedStatus();
+
+  if (resolved?.subscribe) {
+    resolved.subscribe('settingsSaveStatus', renderSaveStatus);
+    resolved.subscribe('asrLastAppliedAt', renderAppliedStatus);
+    resolved.subscribe('asrLastAppliedSummary', renderAppliedStatus);
+    resolved.subscribe('asrLastApplyOk', renderAppliedStatus);
+    resolved.subscribe('asrLive', renderAppliedStatus);
+  }
+}
+
+export function flushAsrSettingsToStore(_store?: AppStore | null): void {
+  try {
+    const card = findAsrCard();
+    if (!card) return;
+    const patch = readAsrPatchFromCard(card);
+    persistAsrPatch(patch);
+  } catch {}
+}
+
+export function ensureAsrSettingsWired(root: ParentNode = document, store?: AppStore | null): void {
+  const tryMount = (warnIfMissing = false) => {
+    const card =
+      (root as Document | ParentNode)?.querySelector?.<HTMLElement>('#asrSettingsCard') ||
+      (root as Document | ParentNode)?.querySelector?.<HTMLElement>('.settings-card.asr');
+
+    if (!card) {
+      if (warnIfMissing && !asrSettingsWarned) {
+        asrSettingsWarned = true;
+        try { console.warn('[ASR] settings card not found (will retry)'); } catch {}
+      }
+      return false;
+    }
+
+    mountAsrSettings(root, store);
+    return true;
+  };
+
+  if (tryMount(false)) return;
+
+  document.addEventListener(
+    'tp:settings:rendered',
+    () => {
+      asrSettingsRenderEventFired = true;
+      tryMount(true);
+    },
+    { once: true },
+  );
+
+  if (!asrSettingsObserverStarted) {
+    asrSettingsObserverStarted = true;
+    const host = (root as Document | ParentNode)?.querySelector?.('#settingsBody') as HTMLElement | null
+      || (document.getElementById('settingsBody') as HTMLElement | null)
+      || document.body;
+    try {
+      const obs = new MutationObserver(() => {
+        const wired = tryMount(asrSettingsRenderEventFired);
+        if (wired) {
+          try { obs.disconnect(); } catch {}
+        }
+      });
+      obs.observe(host || document.body, { subtree: true, childList: true });
+    } catch {}
+  }
+}
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}

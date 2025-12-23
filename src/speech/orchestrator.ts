@@ -74,8 +74,29 @@ export interface MatchEvent {
   isFinal: boolean;
 }
 
+export type MatchBatchOptions = {
+  currentIndex?: number;
+  windowBack?: number;
+  windowAhead?: number;
+};
+
 let _rec: Recognizer | null = null;
 let _cb: ((_evt: MatchEvent) => void) | null = null;
+
+const MATCH_LOG_THROTTLE_MS = 250;
+let lastMatchLogAt = 0;
+const MATCH_TOKEN_WINDOW = 18;
+
+const META_PHRASES: RegExp[] = [
+  /\bit(?:'s| is) not keeping up\b/gi,
+  /\bit(?:'s| is) not moving\b/gi,
+  /\bit(?:'s| is) not scrolling\b/gi,
+  /\bhas(?:n't| not) moved\b/gi,
+  /\bokay so\b/gi,
+  /\byou know\b/gi,
+  /\bi think\b/gi,
+  /\blet(?:'s| us) see\b/gi,
+];
 
 // Lightweight cosine similarity for HUD transcript enrichment (dev only usage)
 function simCosine(a: string, b: string): number {
@@ -97,7 +118,7 @@ function getExpectedLineText(): string | undefined {
   try { return (window as any).__tpScript?.currentExpectedText?.(); } catch { return undefined; }
 }
 
-function dispatchTranscript(text: string, final: boolean) {
+function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchResult) {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
@@ -105,52 +126,134 @@ function dispatchTranscript(text: string, final: boolean) {
       text,
       final,
       timestamp: Date.now(),
-      sim,
+      sim: match?.bestSim ?? sim,
+      line: match?.bestIdx,
+      candidates: match?.topScores,
       source: 'orchestrator' as const,
     };
+    try { if (match) { console.log('[ASR] dispatchMatch', { line: match.bestIdx, sim: match.bestSim }); } } catch {}
     try { console.log('[ASR] dispatchTranscript', detail); } catch {}
     window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
   } catch {}
 }
 
-function _getRuntimeScriptState() {
+function _getRuntimeScriptState(opts?: MatchBatchOptions) {
   // runtime stores these globals (legacy). Use safe access and sensible defaults.
   const w: any = window as any;
   const scriptWords: string[] = Array.isArray(w.scriptWords) ? w.scriptWords : [];
   const paraIndex: any[] = Array.isArray(w.paraIndex) ? w.paraIndex : [];
   const vParaIndex = Array.isArray(w.__vParaIndex) ? w.__vParaIndex : null;
   const cfg = {
-    MATCH_WINDOW_AHEAD: typeof w.MATCH_WINDOW_AHEAD === 'number' ? w.MATCH_WINDOW_AHEAD : 240,
-    MATCH_WINDOW_BACK: typeof w.MATCH_WINDOW_BACK === 'number' ? w.MATCH_WINDOW_BACK : 40,
+    MATCH_WINDOW_AHEAD: typeof opts?.windowAhead === 'number'
+      ? opts.windowAhead
+      : (typeof w.MATCH_WINDOW_AHEAD === 'number' ? w.MATCH_WINDOW_AHEAD : 240),
+    MATCH_WINDOW_BACK: typeof opts?.windowBack === 'number'
+      ? opts.windowBack
+      : (typeof w.MATCH_WINDOW_BACK === 'number' ? w.MATCH_WINDOW_BACK : 40),
     SIM_THRESHOLD: typeof w.SIM_THRESHOLD === 'number' ? w.SIM_THRESHOLD : 0.46,
     MAX_JUMP_AHEAD_WORDS: typeof w.MAX_JUMP_AHEAD_WORDS === 'number' ? w.MAX_JUMP_AHEAD_WORDS : 18,
   } as matcher.MatchConfig;
-  const currentIndex = typeof (w.currentIndex) === 'number' ? w.currentIndex : 0;
+  const currentIndex = typeof opts?.currentIndex === 'number'
+    ? opts.currentIndex
+    : (typeof (w.currentIndex) === 'number' ? w.currentIndex : 0);
   const viterbiState = w.__viterbiIPred || null;
   return { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState };
 }
 
-export function matchBatch(text: string, isFinal: boolean): matcher.MatchResult {
+function formatMatchScore(value: number | null | undefined): string {
+  return Number.isFinite(value as number) ? (value as number).toFixed(2) : '?';
+}
+
+function formatTopScores(topScores: Array<{ idx: number; score: number }>): string {
+  if (!topScores.length) return '[]';
+  return `[${topScores.map((entry) => {
+    const idx = Number.isFinite(entry.idx) ? Math.floor(entry.idx) : '?';
+    const score = Number.isFinite(entry.score) ? entry.score.toFixed(2) : '?';
+    return `${idx}:${score}`;
+  }).join(',')}]`;
+}
+
+function compactClue(tokens: string[], maxTokens: number): string {
+  if (!tokens.length) return '';
+  return tokens
+    .slice(Math.max(0, tokens.length - maxTokens))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/"/g, '')
+    .trim();
+}
+
+function stripMetaPhrases(text: string): string {
+  let out = String(text || '');
+  for (const rx of META_PHRASES) {
+    out = out.replace(rx, ' ');
+  }
+  return out;
+}
+
+function resolveBandRange(
+  currentIndex: number,
+  paraIndex: Array<{ line?: number }>,
+  vParaIndex: string[] | null,
+  radius: number
+) {
+  const cur = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
+  const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
+  const lineCount = vParaIndex
+    ? vParaIndex.length
+    : (typeof lastEntry?.line === 'number' ? lastEntry.line + 1 : paraIndex.length);
+  const safeCount = Math.max(0, lineCount);
+  const bandStart = Math.max(0, cur - radius);
+  const bandEnd = safeCount ? Math.min(safeCount - 1, cur + radius) : 0;
+  return { bandStart, bandEnd };
+}
+
+export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOptions): matcher.MatchResult {
   try {
-    try {
-      console.log('[ASR] matchBatch', {
-        text,
-        isFinal,
-        len: typeof text === 'string' ? text.length : 0,
-      });
-    } catch {}
-    const spokenTokens = matcher.normTokens(text || '');
+    const scrubbed = stripMetaPhrases(text || '');
+    const spokenTokens = matcher.normTokens(scrubbed);
+    const matchTokens = spokenTokens.slice(-MATCH_TOKEN_WINDOW);
     if (spokenTokens.length) {
       noteAsrSpeechActivity(text);
     }
-    const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState();
-    const res = matcher.matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
+    const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState(opts);
+    const res = matcher.matchBatch(matchTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
+
+    // Compact matcher log (throttled)
+    const now = Date.now();
+    if (now - lastMatchLogAt >= MATCH_LOG_THROTTLE_MS) {
+      lastMatchLogAt = now;
+      const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
+      const bestIdx = Number.isFinite(res?.bestIdx) ? Math.floor(res.bestIdx) : 0;
+      const deltaLines = bestIdx - curIdx;
+      const topScores = Array.isArray(res?.topScores) ? res.topScores : [];
+      const clue = compactClue(matchTokens, 6);
+      const bandRadius = 40;
+      const { bandStart, bandEnd } = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const line = [
+        '🧠 ASR_MATCH',
+        `current=${curIdx}`,
+        `best=${bestIdx}`,
+        `delta=${deltaLines}`,
+        `sim=${formatMatchScore(res?.bestSim)}`,
+        `top=${formatTopScores(topScores)}`,
+        `winBack=${cfg.MATCH_WINDOW_BACK}`,
+        `winAhead=${cfg.MATCH_WINDOW_AHEAD}`,
+        `band=${bandRadius}`,
+        `bandStart=${bandStart}`,
+        `bandEnd=${bandEnd}`,
+        clue ? `clue="${clue}"` : '',
+      ].filter(Boolean).join(' ');
+      try { console.log(line); } catch {}
+    }
 
     // Convert line delta to px error so the adaptive governor can respond
     try {
       const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
-      if (deltaLines) {
-        const conf = Math.max(0, Math.min(1, res.bestSim || 0)) * (isFinal ? 1 : 0.6);
+      const simScore = Number(res.bestSim);
+      const allowSync = Number.isFinite(simScore) && simScore >= cfg.SIM_THRESHOLD;
+      if (deltaLines && allowSync) {
+        const conf = Math.max(0, Math.min(1, simScore || 0)) * (isFinal ? 1 : 0.6);
         emitAsrSyncFromLineDelta(deltaLines, conf);
       }
     } catch {
@@ -191,12 +294,19 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
       return;
     }
     try {
+      try {
+        console.debug('[ASR] willStartRecognizer', {
+          phase: 'startRecognizer',
+          mode: (window as any).__tpUiScrollMode,
+          hasSR: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+        });
+      } catch {}
       console.log('[ASR] calling recognizer.start()');
       _rec.start((transcript: string, isFinal: boolean) => {
         try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
-        const text = transcript || '';
-        matchBatch(text, isFinal);
-        dispatchTranscript(text, isFinal);
+      const text = transcript || '';
+      const match = matchBatch(text, isFinal);
+      dispatchTranscript(text, isFinal, match);
       });
       try { console.log('[ASR] recognizer.start() returned without throwing'); } catch {}
     } catch (err) {
@@ -238,3 +348,7 @@ export function stopRecognizer() {
     // noop
   }
 })();
+
+
+
+

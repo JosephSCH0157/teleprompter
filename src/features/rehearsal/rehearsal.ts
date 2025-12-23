@@ -94,7 +94,6 @@ function injectCssOnce(): void {
   body.is-rehearsal #rehearsalWatermark{ display:flex; }
   body.is-rehearsal [data-role=start-rec],
   body.is-rehearsal #startRecBtn,
-  body.is-rehearsal #recBtn,
   body.is-rehearsal #micBtn,
   body.is-rehearsal #releaseMicBtn,
   body.is-rehearsal #startCam,
@@ -243,7 +242,6 @@ function restorePrev(): void {
 
 function markUiDisabled(on: boolean): void {
   const ids = [
-    'recBtn',
     'micBtn',
     'releaseMicBtn',
     'startCam',
@@ -288,27 +286,6 @@ function confirmExit(): boolean {
   }
 }
 
-function handleDropdownChange(e: Event): void {
-  try {
-    const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    if (!sel) return;
-
-    const val = sel.value;
-    if ((window as any).__TP_REHEARSAL && val !== 'rehearsal') {
-      if (!confirmExit()) {
-        sel.value = 'rehearsal';
-        safePreventDefault(e);
-        return;
-      }
-      disable();
-    } else if (!(window as any).__TP_REHEARSAL && val === 'rehearsal') {
-      enable();
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
 interface SelectModeDetail {
   mode?: string;
 }
@@ -337,15 +314,6 @@ function wireSelectObserversOnce(): void {
   wiredSelectListeners = true;
 
   try {
-    const sel = document.getElementById('scrollMode');
-    sel?.addEventListener('change', handleDropdownChange, {
-      capture: true,
-    });
-  } catch {
-    /* ignore */
-  }
-
-  try {
     document.addEventListener('tp:selectMode' as any, handleSelectModeEvent, {
       capture: true,
     });
@@ -362,25 +330,6 @@ function enable(): void {
   ensureWatermark();
   installScrollGuard();
   setState(true);
-
-  // Assign a session id for HUD grouping
-  try {
-    const sid = new Date().toISOString().replace(/[:.]/g, '');
-    try {
-      localStorage.setItem('tp_hud_session', sid);
-    } catch {
-      /* ignore */
-    }
-    try {
-      window.dispatchEvent(
-        new CustomEvent('tp:session:start', { detail: { sid } }),
-      );
-    } catch {
-      /* ignore */
-    }
-  } catch {
-    /* ignore */
-  }
 
   stopAllRecordingPaths();
   markUiDisabled(true);
@@ -444,14 +393,6 @@ export function installRehearsal(_store?: unknown): RehearsalApi {
     /* ignore */
   }
 
-  // Auto-wire if dropdown already selected at boot
-  try {
-    const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-    if (sel && sel.value === 'rehearsal') enable();
-  } catch {
-    /* ignore */
-  }
-
   return api;
 }
 
@@ -472,12 +413,6 @@ export function resolveInitialRehearsal(): void {
   }
 
   if (should) {
-    try {
-      const sel = document.getElementById('scrollMode') as HTMLSelectElement | null;
-      if (sel) sel.value = 'rehearsal';
-    } catch {
-      /* ignore */
-    }
     if (!(window as any).__TP_REHEARSAL) enable();
   }
 }
@@ -496,14 +431,6 @@ export function syncRehearsalFromMode(
   }
   if (!wants && on) {
     if (!confirmExit()) {
-      try {
-        const sel = document.getElementById(
-          'scrollMode',
-        ) as HTMLSelectElement | null;
-        if (sel) sel.value = 'rehearsal';
-      } catch {
-        /* ignore */
-      }
       try {
         revert?.('rehearsal');
       } catch {

@@ -1,17 +1,23 @@
-/* Overlay sheet */
+﻿/* Overlay sheet */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:40px;z-index:9999}
 .overlay.hidden{display:none}
-.overlay .sheet{background:#0e141b;border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:720px;width:100%;padding:20px}
+.overlay .sheet{background:#0e141b;border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:92vw;width:100%;padding:20px}
 
-/* --- HUD (SSOT) ----------------------------------------------------------- */
-#hud-root.hud-root{
-    position:fixed; left:8px; bottom:8px; max-height:40vh; width:42vw;
-    overflow:auto; background:rgba(0,0,0,.8); color:#0f0; z-index:999999;
-    font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    padding:8px; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,.4);
-}
-#hud-root.hidden{ display:none; }
-#hud-root .hud-line{ margin:0; white-space:pre-wrap; }
+.fatal-fallback{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at top,#202020 0,#050505 60%,#000 100%);color:#f5f5f5;z-index:999999;padding:2rem;text-align:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.fatal-fallback .fatal-inner{max-width:540px;padding:2rem 2.5rem;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,10,10,.9);box-shadow:0 18px 45px rgba(0,0,0,.7)}
+.fatal-fallback h1{font-size:1.5rem;margin-bottom:1rem}
+.fatal-fallback p{margin:.35rem 0}
+.fatal-fallback .fatal-hint{margin-top:.75rem;font-size:.95rem;opacity:.9}
+.fatal-fallback .fatal-note{margin-top:.25rem;font-size:.9rem;opacity:.7}
+.fatal-fallback a{color:#ffb44c;text-decoration:underline}
+.fatal-fallback .btn.btn-primary{margin-top:1.25rem}
+.tp-fatal body>*:not(#fatalFallback){display:none!important}
+
+/* Honor the HTML hidden attribute everywhere */
+[hidden] { display: none !important; }
+
+/* Extra safety for the fatal fallback */
+#fatalFallback[hidden] { display: none !important; }
 
 /* Mic pill popover menu (compact) */
 #micMenu{font:13px/1.2 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#e6eef8;background:rgba(12,16,24,.98);border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.45);padding:6px 6px;min-width:220px;-webkit-backdrop-filter:saturate(1.2) blur(4px);backdrop-filter:saturate(1.2) blur(4px)}
@@ -103,15 +109,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inl-5{display:none}
 .inl-6{min-width:200px}
 .inl-7{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:9999}
-.rec-indicator{display:inline-flex;align-items:center;gap:4px;margin-left:12px;padding:4px 8px;background:#dc2626;color:#fff;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:.5px;animation:rec-pulse 1.5s ease-in-out infinite}
-.rec-indicator.hidden{display:none}
-@keyframes rec-pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.rec-pill{display:none;align-items:center;justify-content:center;height:24px;padding:0 12px;border-radius:999px;font-size:.84rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 180ms ease,transform 180ms ease,color 160ms ease,background-color 160ms ease;pointer-events:none;user-select:none}
+.rec-pill.is-visible{opacity:1;transform:scale(1)}
+.rec-pill.rec-pill--armed{background:#ffd54f;color:#1a1f27}
+.rec-pill.rec-pill--recording{background:#ef5350;color:#fff;animation:recPulse 2s ease-in-out infinite}
+.rec-pill-host{display:inline-flex;align-items:center;margin-left:10px;margin-right:10px}
+.rec-pill-live{min-width:1px;min-height:1px}
+@keyframes recPulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.03);opacity:.95}100%{transform:scale(1);opacity:1}}
 .inl-8{background:#0e141b;border:1px solid var(--edge);padding:24px 32px;border-radius:16px;text-align:center}
 .inl-9{font-size:14px;color:#96a0aa}
 .inl-10{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
 
-
-        :root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#2ea8ff; --s2-color:#ff6b6b; 
+:root{ --bg:#0b0d10; --fg:#e7ebf0; --muted:#96a0aa; --accent:#7cc4ff; --card:#151a20; --edge:#22303d; --s1-color:#60a5fa; --s2-color:#facc15; --g1-color:#34d399; --g2-color:#f472b6; 
             /* Typography tokens (runtime-updated via CSS variables) */
             --tp-font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
             --tp-font-size: 56px;
@@ -130,9 +139,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";min-height:100svh;min-height:100dvh;display:flex;flex-direction:column}
 
     /* Reserve fixed layout slots to prevent layout shifts (CLS) */
-    :root{ --topbar-h:56px; --statusbar-h:28px; --sidebar-w:320px; }
-    /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
-    .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:0;background:linear-gradient(var(--bg),transparent);padding:8px 16px;border-bottom:1px solid var(--edge);z-index:10;height:var(--topbar-h);box-sizing:border-box}
+    :root{ --tp-topbar-h:56px; --topbar-h:var(--tp-topbar-h); --statusbar-h:28px; --sidebar-w:320px; --topbar-offset:2px; }
+    html,body{height:100%;overflow:hidden}
+      /* topbar: align chips to timer/marker baseline; use 8px spacing multiples */
+      .topbar{display:flex;align-items:center;gap:8px;position:sticky;top:var(--topbar-offset);background:linear-gradient(var(--bg),transparent);padding:6px 10px;border-bottom:1px solid var(--edge);z-index:10;height:auto;min-height:var(--tp-topbar-h);flex-wrap:nowrap;overflow-x:auto;box-sizing:border-box}
+      .topbar .chip{padding:2px 8px;font-size:12px}
+      .topbar button{padding:6px 10px}
+      .page-tabs,.legend{flex:0 0 auto;white-space:nowrap}
+      @media (max-width:720px){.topbar{flex-wrap:wrap}}
     .topbar strong{letter-spacing:.2px}
 
     /* Robust topbar hairline / overlay
@@ -172,6 +186,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     .chip{font-size:0.9rem;font-weight:600;color:var(--muted);border-radius:.5rem;padding:6px 8px}
     #micToggleBtn.mic-idle{ background: #0e141b; color: var(--fg); border:1px solid var(--edge); }
     #micToggleBtn.mic-active{ background: #0b3; color:#fff; border-color: #0b3; }
+.mic-active{ color:#0b3; font-weight:600; }
     #debugPosChip{font-family:monospace; width:160px; flex-shrink:0; text-align:center}
 .legend{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
 .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--edge);border-radius:999px;font-size:12px;background:#0e141b}
@@ -199,7 +214,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* app contains sidebar + main viewer; topbar is outside .app in the DOM, so keep rows out of this grid */
     .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;flex:1 1 auto;min-height:0}
-    .sidebar{width:var(--sidebar-w); position: sticky; top: var(--topbar-h); align-self: start; height: calc(100vh - var(--topbar-h) - var(--statusbar-h)); overflow:auto}
+    .app,#wrap{height:100%}
+    .app,.page-panel,#viewerWrap{padding-top:var(--tp-topbar-h)}
+    .sidebar,#leftCol,#controlsCol{width:var(--sidebar-w); position: sticky; top: var(--tp-topbar-h); align-self: start; height: calc(100vh - var(--tp-topbar-h) - var(--statusbar-h)); overflow:auto}
     .statusbar{height:var(--statusbar-h);box-sizing:border-box}
     .panel{padding:16px;border-right:1px solid var(--edge);overflow:auto;background:var(--card);min-height:0}
     .panel h2{margin:0 0 12px;font-size:18px}
@@ -239,7 +256,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     .timer{font-variant-numeric:tabular-nums;font-size:28px;margin:0 0 0 8px}
 
     .viewer{position:relative;overflow:auto;min-height:0; background: var(--tp-bg, transparent);}
-    .script{max-width: calc(var(--tp-maxch, 60) * 1ch); margin:0 auto; padding:40px}
+    .script{
+        max-width: calc(var(--tp-maxch, 60) * 1ch);
+        margin:0 auto;
+        padding:0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
     .script p{
         font-family: var(--tp-font-family);
         font-size: var(--tp-font-size);
@@ -270,7 +294,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     /* Rehearsal watermark (main control window only) */
     body.mode-rehearsal::after{
-        content:'REHEARSAL • NO RECORDING';
+        content:'REHEARSAL â€¢ NO RECORDING';
         position:fixed; top:50%; left:50%; transform: translate(-50%, -50%) rotate(-15deg);
         opacity:.085; font-weight:800; font-size:min(7vw, 72px); letter-spacing:.18em;
         color:var(--fg, #e7ebf0);
@@ -329,7 +353,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 /* When active (not [hidden]), show the card as a flex column */
 .settings-card:not([hidden]){ display:flex; }
 
-/* Cross-fade animations; outgoing card shouldn’t push layout */
+/* Cross-fade animations; outgoing card shouldnâ€™t push layout */
 @keyframes cardFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 @keyframes cardFadeOut { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(4px); } }
 .anim-in{animation:cardFadeIn .22s ease-out}
@@ -340,6 +364,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-card h4{margin:0 0 4px;font-size:15px}
 .settings-small{font-size:12px;color:var(--muted)}
 .settings-inline-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.settings-inline-row .chip.active{border-color:var(--accent);box-shadow:0 0 0 2px rgba(74,163,255,.25);}
 .settings-tabs{display:flex;gap:6px;margin:4px 0 4px;flex-wrap:wrap}
 .settings-tab{background:#0e141b;border:1px solid var(--edge);padding:6px 10px;border-radius:20px;font-size:12px;cursor:pointer}
 .settings-tab.active{background:#12202a;color:var(--accent);border-color:var(--accent)}
@@ -400,6 +425,19 @@ body.ck::after{
 /* Camera busy spinner (shown while starting) */
 #cameraToggleBtn .spinner{display:none;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:camSpin .8s linear infinite;margin-left:6px;vertical-align:middle}
 #cameraToggleBtn.busy .spinner{display:inline-block}
+#cameraToggleBtn .cam-label{display:inline-block;color:var(--fg);vertical-align:middle}
+
+/* Sidebar media hint row */
+#sidebarMediaHint {
+  margin-top: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.sidebar-hint {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  white-space: normal;
+}
 @keyframes camSpin{to{transform:rotate(360deg)}}
 .obs-test-icon{
     display:inline-block; margin-left:6px; font-style:normal; font-weight:700; opacity:0; transform: translateY(-2px) scale(0.9);
@@ -481,9 +519,15 @@ body:has(#settingsOverlay:not(.hidden)) #scriptsQuickRow { opacity:.45; pointer-
 /* Make viewer a constrained scroll area in normal mode */
 #viewer {
     /* Use dynamic viewport block to avoid mobile URL bar tricks; fallback below */
-    block-size: calc(100dvb - var(--topbar-h) - var(--statusbar-h));
+    block-size: calc(100dvb - var(--tp-topbar-h) - var(--statusbar-h));
     /* Fallback if dvb isn't supported: */
-    height: calc(100vh - var(--topbar-h) - var(--statusbar-h));
+    height: calc(100vh - var(--tp-topbar-h) - var(--statusbar-h));
+    overflow:auto;
+}
+#viewer,#viewerWrap,#wrap .script,#viewer .script,.viewer {
+    overflow:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
 }
 
 /* Present Mode already overrides #viewer to full-viewport; keep that rule last */
@@ -515,6 +559,39 @@ html.tp-present #viewer {
     font: 600 12px/1 system-ui, sans-serif;
 }
 html.tp-present .present-exit { display: inline-flex; }
+
+/* Present / HUD bottom bar */
+.tp-hud-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:8px 16px;
+    border-top:1px solid var(--edge);
+    background:rgba(5, 9, 16, 0.9);
+    font-size:13px;
+    color:var(--muted);
+}
+.tp-hud-footer-left,
+.tp-hud-footer-right{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+.tp-hud-footer-center{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    text-align:center;
+}
+.tp-hud-footer .chip,
+.tp-hud-footer button{
+    font-size:12px;
+    padding:4px 8px;
+}
+
 
 /* Top-bar: clearer separator and dB meter visibility */
 .topbar { border-bottom: 1px solid var(--hairline, #2a2a2a); }
@@ -548,9 +625,6 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Topbar hairline */
 .topbar { border-bottom: 1px solid rgba(255,255,255,.12); }
 
-/* Hide numeric speaker chip (we use colored legend instead) */
-#speakerIndexChip { display: none !important; }
-
 /* Overlays */
 .hidden { display: none !important; }
 .overlay {
@@ -558,7 +632,7 @@ html.tp-present .present-exit { display: inline-flex; }
     background: rgba(0,0,0,.55); z-index: 9990;
 }
 .overlay .sheet {
-    max-width: min(900px, 92vw); max-height: 86vh; overflow: auto;
+    max-width: 92vw; max-height: 86vh; overflow: auto;
     background: #0f1115; border: 1px solid rgba(255,255,255,.15); border-radius: 14px;
     padding: 16px 18px;
 }
@@ -649,7 +723,7 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Inline tag styles */
 .tp-u { text-decoration: underline; }
 .tp-bg { padding: 0 .12em; border-radius: .18em; }
-.tp-cue { opacity: .85; border: 1px solid var(--edge); border-radius: .5rem; padding: 0 .35rem; margin: 0 .2rem; font-size: .9em; }
+.tp-cue { opacity: .85; border: 1px solid var(--edge); border-radius: .5rem; padding: 0 .35rem; margin: 0 .2rem; font-size: .9em; color: var(--cue-color, #a78bfa); font-weight: 700; }
 .tp-cue[data-cue="beat"] { font-style: italic; }
 .tp-cue[data-cue="pause"] { letter-spacing: .02em; }
 /* Quick: hide legacy Mode chip (pill) everywhere */
@@ -666,7 +740,7 @@ html.tp-present .present-exit { display: inline-flex; }
 /* Screen-reader only label helper */
 .sr-only{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap;border:0;padding:0;margin:-1px}
 
-/* Teleprompter typography — unified and future-proof (last wins)
+/* Teleprompter typography - unified and future-proof (last wins)
    Covers past/present/future markup by selecting any p/.line/.tp-line under script on main or display.
    We use !important on size/line-height/family until all upstream clamps are removed. */
 #viewer .script :is(p, .line, .tp-line),
@@ -747,6 +821,9 @@ html.tp-present .present-exit { display: inline-flex; }
 #wrap   .script p{
     font-size: var(--tp-font-size, 56px) !important;
     line-height: var(--tp-line-height, 1.4) !important;
+    color: var(--tp-fg, #e6eef8);
+    opacity: 1;
+    display: block;
 }
 
 /* Responsive script column (main #viewer and display #wrap) */
@@ -755,6 +832,11 @@ html.tp-present .present-exit { display: inline-flex; }
     /* center the column and keep some breathing room at the edges */
     margin-inline: auto;
     padding-inline: max(16px, 3vw);
+    color: var(--tp-fg, #e6eef8);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: normal;
+    min-width: min(20ch, 100%);
 
     /* prefer character-based width, but flex to viewport */
     /* --tp-maxch is per-window (set by your Typography store) */
@@ -771,4 +853,217 @@ html.tp-present .present-exit { display: inline-flex; }
 #helpOverlay[hidden] {
     display: none !important;
     pointer-events: none !important;
+}
+
+[data-script-view] .line{padding:2px 0;}
+
+/* Teleprompter viewer speaker styling */
+#viewer .script .line.speaker-s1,
+#viewer .script .line[data-speaker="s1"],
+#wrap .script .line.speaker-s1,
+#wrap .script .line[data-speaker="s1"] {
+  color: var(--tp-speaker-s1, var(--s1-color, #4fc3f7));
+  font-weight: 600;
+}
+#viewer .script .line.speaker-s2,
+#viewer .script .line[data-speaker="s2"],
+#wrap .script .line.speaker-s2,
+#wrap .script .line[data-speaker="s2"] {
+  color: var(--tp-speaker-s2, var(--s2-color, #ffb74d));
+  font-weight: 600;
+}
+#viewer .script .line.speaker-guest1,
+#viewer .script .line[data-speaker="guest1"],
+#wrap .script .line.speaker-guest1,
+#wrap .script .line[data-speaker="guest1"] {
+  color: #aed581;
+  font-weight: 600;
+}
+#viewer .script .line.speaker-guest2,
+#viewer .script .line[data-speaker="guest2"],
+#wrap .script .line.speaker-guest2,
+#wrap .script .line[data-speaker="guest2"] {
+  color: #ce93d8;
+  font-weight: 600;
+}
+[data-script-view] .speaker-tag{text-transform:uppercase;letter-spacing:0.08em;font-size:0.8em;opacity:.8;margin-right:0.5rem;}
+[data-script-view] .line.line-empty{min-height:1.2em;}
+.asr-status-banner {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  background: rgba(80, 160, 255, 0.12);
+  border: 1px solid rgba(80, 160, 255, 0.4);
+  color: var(--fg);
+}
+
+/* HUD scroll strip */
+[data-tp-hud-strip] {
+  position: fixed;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 1100;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.tp-hud-strip {
+  display: flex;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  pointer-events: none;
+}
+.tp-hud-strip-inner {
+  display: inline-flex;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(10, 10, 20, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+.tp-hud-pill {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(240, 244, 255, 0.9);
+  white-space: nowrap;
+}
+
+/* HUD hide state disabled (HUD removed) */
+/*
+#hud-root[aria-hidden="true"],
+.tp-hud-root[aria-hidden="true"],
+.tp-hud-root.tp-hud-closed{
+  display:none !important;
+  pointer-events:none !important;
+}
+*/
+
+/* Rehearsal watermark */
+html.tp-mode-rehearsal::after{
+  content:'REHEARSAL MODE';
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:4rem;
+  font-weight:700;
+  letter-spacing:0.2em;
+  color:rgba(255,255,255,0.15);
+  pointer-events:none;
+  z-index:9999;
+}
+
+/* Settings save indicator (subtle dot on gear) */
+#settingsBtn.tp-save-host {
+  position: relative;
+}
+#settingsBtn .tp-save-dot {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #5ce0a3;
+  opacity: 0;
+  transform: scale(0.6);
+  box-shadow: 0 0 0 4px rgba(92, 224, 163, 0.18);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+#settingsBtn.tp-save-flash .tp-save-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+#hud-root {
+  position: fixed;
+  top: 64px;
+  right: 12px;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+#hud-root > * {
+  pointer-events: auto;
+}
+
+/* Draggable clipboard HUD */
+.tp-hud-popup{
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  height: 300px;
+  max-height: calc(100vh - 96px);
+  position: fixed;
+  background: rgba(10,14,18,0.92);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  backdrop-filter: blur(6px);
+}
+
+.tp-hud-popup__head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.10);
+  user-select:none;
+}
+
+.tp-hud-popup__title{
+  font:600 12px/1.2 system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  color:rgba(235,245,255,0.92);
+  letter-spacing:0.2px;
+}
+
+.tp-hud-popup__btns{
+  display:flex;
+  gap:6px;
+}
+
+.tp-hud-btn{
+  font:600 11px/1 system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  color:rgba(235,245,255,0.88);
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:8px;
+  padding:6px 8px;
+  cursor:pointer;
+}
+
+.tp-hud-btn:hover{
+  background:rgba(255,255,255,0.10);
+}
+
+.tp-hud-btn--close{
+  width:32px;
+  text-align:center;
+}
+
+.tp-hud-popup__body{
+  height:calc(100% - 42px);
+  padding:8px 10px 10px;
+}
+
+.tp-hud-popup__text{
+  width:100%;
+  height:100%;
+  resize:none;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px;
+  background:rgba(0,0,0,0.18);
+  color:rgba(235,245,255,0.92);
+  font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  padding:10px;
+  outline:none;
 }

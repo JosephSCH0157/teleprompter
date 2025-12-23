@@ -54,18 +54,51 @@ export function hasPendingWrites(): boolean {
 // Optional install hook expected by boot.ts; keep minimal/no-op here.
 export function installScrollScheduler(): void {
   try {
-    // Legacy/global bridge for scroll writers that don't import TS
-    (window as any).__tpScrollWrite = function(y: number){
-      try {
-        const sc: any = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
-        if (!sc) return;
-        requestWrite(() => {
-          try { sc.scrollTo ? sc.scrollTo({ top: y, behavior: 'auto' }) : (sc.scrollTop = y); } catch {}
-        });
-      } catch {}
+    // Legacy/global bridge for scroll writers that don't import TS.
+    // Provide an object shape with scrollTo/scrollBy so downstream callers
+    // don't have to guard for a bare function.
+    const existing = (window as any).__tpScrollWrite;
+    if (existing && typeof existing === 'object' && typeof (existing as any).scrollTo === 'function') {
+      return;
+    }
+    (window as any).__tpScrollWrite = {
+      scrollTo(y: number) {
+        try {
+          const sc: any = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+          if (!sc) return;
+          requestWrite(() => {
+            try { sc.scrollTo ? sc.scrollTo({ top: y, behavior: 'auto' }) : (sc.scrollTop = y); } catch {}
+          });
+        } catch {}
+      },
+      scrollBy(dy: number) {
+        try {
+          const sc: any = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+          if (!sc) return;
+          const next = (sc.scrollTop || 0) + (Number(dy) || 0);
+          requestWrite(() => {
+            try { sc.scrollTo ? sc.scrollTo({ top: next, behavior: 'auto' }) : (sc.scrollTop = next); } catch {}
+          });
+        } catch {}
+      },
     };
   } catch {}
 }
+
+// Keep legacy alias in place for any callers still expecting a function.
+try {
+  const maybe = (window as any).__tpScrollWrite;
+  if (typeof maybe === 'function') {
+    (window as any).__tpScrollWrite = {
+      scrollTo(y: number) { try { (maybe as any)(y); } catch {} },
+      scrollBy(dy: number) {
+      try {
+        (maybe as any)(((Number(dy) || 0) as number) + 0);
+      } catch {}
+      },
+    };
+  }
+} catch {}
 
 // Install global request helpers for legacy JS callers
 declare global {

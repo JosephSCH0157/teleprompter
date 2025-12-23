@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Anvil — HUD</title>
+  <link rel="stylesheet" href="./teleprompter_pro.css" />
+  <link rel="icon" href="/favicon2.png" />
+  <style>
+    body { margin: 0; background: #0b0f14; }
+    #hud-root { position: relative !important; pointer-events: auto !important; inset: auto !important; }
+    #hud-popout-root {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: start;
+      padding: 12px;
+    }
+    #hud-popout-status {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 9999;
+      max-width: 520px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(15, 20, 27, 0.9);
+      border: 1px solid #233041;
+      color: #c9d4de;
+      font: 12px/1.4 system-ui;
+      letter-spacing: 0.02em;
+    }
+    #hud-popout-status[data-error="1"] { color: #ffb3b3; border-color: #4c1c1c; }
+  </style>
+</head>
+<body>
+  <div id="hud-popout-root">
+    <div id="hud-popout-status">Loading HUD...</div>
+    <div id="hud-root"></div>
+  </div>
+  <script type="module">
+    const status = document.getElementById('hud-popout-status');
+    const tried = [];
+    const candidates = [
+      '/dist/hud/popout-entry.js',
+      './dist/hud/popout-entry.js',
+      './hud/popout-entry.js',
+      '/hud/popout-entry.js',
+    ];
+
+    const setStatus = (text, isError) => {
+      if (!status) return;
+      status.textContent = text;
+      status.dataset.error = isError ? '1' : '0';
+    };
+
+    const hideStatus = () => {
+      if (!status) return;
+      status.style.display = 'none';
+    };
+
+    const attachWaitForSync = () => {
+      if (!status) return;
+      setStatus('HUD popout loaded. Waiting for Anvil connection...', false);
+      const onMsg = (ev) => {
+        try {
+          const data = ev?.data || {};
+          if (!data || typeof data.type !== 'string') return;
+          hideStatus();
+          window.removeEventListener('message', onMsg);
+        } catch {}
+      };
+      window.addEventListener('message', onMsg);
+      try {
+        const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('tp_hud_bridge') : null;
+        if (bc) {
+          bc.onmessage = () => {
+            hideStatus();
+            try { bc.close(); } catch {}
+          };
+        }
+      } catch {}
+    };
+
+    async function tryImport(url) {
+      tried.push(url);
+      try {
+        return await import(url);
+      } catch (err) {
+        try { console.warn('[hud-popout] failed to load', url, err); } catch {}
+        return null;
+      }
+    }
+
+    (async () => {
+      setStatus('Loading HUD...', false);
+      for (const url of candidates) {
+        const mod = await tryImport(url);
+        if (!mod) continue;
+        const init = mod.initHudPopout || window.initHudPopout;
+        if (typeof init !== 'function') {
+          setStatus('HUD bundle loaded but init function is missing.', true);
+          return;
+        }
+        try {
+          init();
+        } catch (err) {
+          setStatus('HUD init failed. Check console.', true);
+          return;
+        }
+        if (window.opener && !window.opener.closed) {
+          hideStatus();
+        } else {
+          attachWaitForSync();
+        }
+        return;
+      }
+      if (status) status.title = tried.join('\n');
+      setStatus('HUD popout failed to load. Check console for tried URLs.', true);
+    })();
+  </script>
+</body>
+</html>

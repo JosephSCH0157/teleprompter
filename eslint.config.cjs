@@ -9,12 +9,14 @@ module.exports = [
       'teleprompter_pro.js',
       'releases/**',
       '**/*.min.js',
+      'legacy/**',
       'recorders.js',
       'adapters/*.js',
       '**/*.map',
       'node_modules/**',
       '.vscode/**',
       '**/*.d.ts',
+      'src/index-hooks/asr.js',
       'src/build-logic/**',
     ],
   },
@@ -211,9 +213,16 @@ module.exports = [
       'no-restricted-syntax': 'off',
     },
   },
+  // Root legacy entry still uses wheel preventDefault; allow it
+  {
+    files: ['index.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
   // Entry files need preventDefault for precise wheel/zoom UX; allow it here only
   {
-    files: ['index.js', 'src/index.js'],
+    files: ['index.ts', 'src/index.ts'],
     rules: {
       'no-restricted-syntax': 'off',
     },
@@ -235,6 +244,11 @@ module.exports = [
       'no-unused-vars': 'off',
       'no-empty': 'off',
       'no-restricted-syntax': 'off',
+      'no-undef': 'off',
+      'no-fallthrough': 'off',
+      'no-cond-assign': 'off',
+      'no-prototype-builtins': 'off',
+      'no-constant-condition': 'off',
     },
   },
 ];

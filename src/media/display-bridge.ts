@@ -1,0 +1,135 @@
+import { getLatestRawScript, publishDisplayScript } from '../features/display-sync';
+
+export type DisplayPayload = { type?: string } & Record<string, unknown>;
+
+export interface DisplayBridgeApi {
+  openDisplay(): void;
+  closeDisplay(): void;
+  sendToDisplay(payload: DisplayPayload): void;
+  handleMessage(e: MessageEvent): void;
+  currentWindow?: Window | null;
+}
+
+export interface DisplayDebugEntry {
+  ts: number;
+  t?: number;
+  tag: string;
+  data?: unknown;
+}
+
+declare global {
+  interface Window {
+    __tpDisplayWindow?: Window | null;
+    __tpDisplay?: Partial<DisplayBridgeApi>;
+    __tpDisplayDebug?: DisplayDebugEntry[];
+    __tpScrollSeq?: number;
+    openDisplay?: () => void;
+    closeDisplay?: () => void;
+    tpArmWatchdog?: (on: boolean) => void;
+    $id?: <T extends HTMLElement = HTMLElement>(..._ids: string[]) => T | null;
+  }
+}
+
+export {};
+
+(function () {
+  // Display bridge: open/close display window and handle handshake; exposes window.__tpDisplay
+  let displayWin: Window | null = null;
+  // ensure setStatus is defined to avoid ReferenceError; prefer window.setStatus if available
+  const setStatus: (msg: string) => void =
+    typeof window !== 'undefined' && typeof (window as any).setStatus === 'function'
+      ? (window as any).setStatus.bind(window)
+      : () => {};
+
+  function openDisplay(): void {
+    try {
+      try {
+        window.__tpDisplayDebug = window.__tpDisplayDebug || [];
+        const now = Date.now();
+        window.__tpDisplayDebug.push({ ts: now, t: now, tag: 'openDisplay()', data: undefined });
+        console.info('[display-bridge] openDisplay()');
+      } catch {}
+      const displayUrl = (() => {
+        try {
+          return new URL('display.html', window.location.href).toString();
+        } catch {
+          return 'display.html';
+        }
+      })();
+      try { console.debug('[display-bridge] opening', displayUrl); } catch {}
+      displayWin = window.open(displayUrl, 'TeleprompterDisplay', 'width=1000,height=700');
+      if (displayWin && displayWin.location && displayWin.location.href === 'about:blank') {
+        try { displayWin.location.href = displayUrl; } catch {}
+      }
+      try {
+        window.__tpDisplayDebug = window.__tpDisplayDebug || [];
+        const now2 = Date.now();
+        window.__tpDisplayDebug.push({ ts: now2, t: now2, tag: 'window.open returned', data: { ok: !!displayWin } });
+      } catch {}
+      try { window.__tpDisplayWindow = displayWin || null; } catch {}
+      if (!displayWin) {
+        setStatus && setStatus('Pop-up blocked. Allow pop-ups and try again.');
+        const chipBlocked = document.getElementById('displayChip');
+        if (chipBlocked) chipBlocked.textContent = 'Display: blocked';
+        return;
+      }
+      try {
+        console.debug('[display-bridge] display window opened', displayWin?.location?.href || '');
+      } catch {}
+      // Treat the window as ready immediately; tp_display handshake now owns hydration.
+      try {
+        const cached = getLatestRawScript();
+        if (cached) {
+          publishDisplayScript(cached, { force: true, source: 'display:open' });
+        }
+      } catch {}
+      const chip = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
+      if (chip) chip.textContent = 'Display: ready';
+      try { window.tpArmWatchdog && window.tpArmWatchdog(true); } catch {}
+      const closeDisplayBtn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (closeDisplayBtn) (closeDisplayBtn as HTMLButtonElement).disabled = false;
+      try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
+    } catch (e) {
+      const msg = (e as any)?.message ?? e;
+      setStatus && setStatus('Unable to open display window: ' + msg);
+    }
+  }
+
+  function closeDisplay(): void {
+    try { if (displayWin && !displayWin.closed) displayWin.close(); } catch {}
+    displayWin = null; try { window.__tpDisplayWindow = null; } catch {}
+    const closeDisplayBtn2 = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn');
+    if (closeDisplayBtn2) (closeDisplayBtn2 as HTMLButtonElement).disabled = true;
+    const chip2 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip');
+    if (chip2) chip2.textContent = 'Display: closed';
+    try { window.tpArmWatchdog && window.tpArmWatchdog(false); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:display:closed')); } catch {}
+  }
+
+  function sendToDisplay(payload: DisplayPayload): void {
+    try {
+      if (!displayWin || displayWin.closed) return;
+      if (payload && payload.type === 'scroll') {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const seq = (window.__tpScrollSeq ||= 0) + 1; window.__tpScrollSeq = seq;
+        payload = { ...payload, seq, ts: now };
+      }
+      displayWin.postMessage(payload, '*');
+    } catch {}
+  }
+
+  // message handler must be attached by the main runtime; provide helper to process incoming messages
+  function handleMessage(e: MessageEvent): void {
+    try {
+      if (!displayWin || e.source !== displayWin) return;
+      if (e.data === 'DISPLAY_READY' || e.data?.type === 'display-ready') {
+    const chip3 = (window.$id && window.$id('displayChip')) || document.getElementById('displayChip'); if (chip3) chip3.textContent = 'Display: ready';
+    try { const btn = (window.$id && window.$id('closeDisplayBtn')) || document.getElementById('closeDisplayBtn'); if (btn) (btn as HTMLButtonElement).disabled = false; } catch {}
+        try { window.dispatchEvent(new CustomEvent('tp:display:opened')); } catch {}
+      }
+    } catch {}
+  }
+
+    try { window.__tpDisplay = window.__tpDisplay || {}; window.__tpDisplay.openDisplay = openDisplay; window.__tpDisplay.closeDisplay = closeDisplay; window.__tpDisplay.sendToDisplay = sendToDisplay; window.__tpDisplay.handleMessage = handleMessage; } catch {}
+
+  // Script forwarding is disabled; canonical path is tp_display BroadcastChannel
+})();

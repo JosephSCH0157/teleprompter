@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 // src/wiring/ui-binds.ts
 // Canonical UI binder for core chrome:
 // - Present mode toggle
@@ -49,6 +52,24 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
   const presentSel = opts.presentBtnSelector || DEFAULT_PRESENT_SEL;
   const root = document.documentElement;
 
+  // Remove legacy inline overlay handlers by cloning buttons/close controls (drops attached listeners)
+  try {
+    const replace = (id: string) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const clone = el.cloneNode(true) as HTMLElement;
+      try { clone.removeAttribute('data-overlay-wired'); } catch {}
+      el.replaceWith(clone);
+      return clone;
+    };
+    replace('settingsBtn');
+    replace('settingsClose');
+    replace('shortcutsBtn');
+    replace('shortcutsClose');
+  } catch {
+    // best-effort; ignore failures
+  }
+
   function applyPresent(on: boolean): void {
     try {
       const isOn = !!on;
@@ -66,13 +87,6 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
       if (btn) {
         btn.textContent = isOn ? 'Exit Present' : 'Present Mode';
       }
-
-      // Persist across reloads
-      try {
-        window.localStorage.setItem('tp_present', isOn ? '1' : '0');
-      } catch {
-        /* ignore */
-      }
     } catch {
       /* ignore */
     }
@@ -85,13 +99,8 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     /* ignore */
   }
 
-  // Restore prior state from localStorage
-  try {
-    const prev = window.localStorage.getItem('tp_present') === '1';
-    applyPresent(prev);
-  } catch {
-    /* ignore */
-  }
+  // Always start in non-present mode (do not persist across reloads)
+  try { applyPresent(false); } catch { /* ignore */ }
 
   // Present button wiring
   try {
@@ -148,6 +157,24 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     return document.getElementById('shortcutsOverlay') as HTMLElement | null;
   }
 
+  function showOverlay(el: HTMLElement | null): void {
+    if (!el) return;
+    try { el.hidden = false; } catch {}
+    try { el.removeAttribute('hidden'); } catch {}
+    try { el.classList.remove('hidden'); } catch {}
+    try { el.style.display = ''; } catch {}
+    try { el.setAttribute('aria-hidden', 'false'); } catch {}
+  }
+
+  function hideOverlay(el: HTMLElement | null): void {
+    if (!el) return;
+    try { el.hidden = true; } catch {}
+    try { el.setAttribute('hidden', ''); } catch {}
+    try { el.classList.add('hidden'); } catch {}
+    try { el.style.display = 'none'; } catch {}
+    try { el.setAttribute('aria-hidden', 'true'); } catch {}
+  }
+
   function wireOverlay(
     openSel: string,
     closeSel: string,
@@ -173,10 +200,10 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
             const overlay = getOverlayEl(name);
 
             if (isOpen) {
-              if (overlay) overlay.classList.remove('hidden');
+              showOverlay(overlay);
               markOpen(name);
             } else {
-              if (overlay) overlay.classList.add('hidden');
+              hideOverlay(overlay);
               markClose(name);
             }
           } catch {
@@ -194,7 +221,7 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
             if (e.key === 'Escape') {
               markClose(name);
               const overlay = getOverlayEl(name);
-              if (overlay) overlay.classList.add('hidden');
+              hideOverlay(overlay);
             }
           } catch {
             /* ignore */

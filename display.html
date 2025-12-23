@@ -1,28 +1,88 @@
-<script>
-  // … your existing code …
-  document.addEventListener('DOMContentLoaded', function() {
-    window.opener && window.opener.postMessage('DISPLAY_READY', '*');
-  });
-</script>
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/anvil-favicon.png">
   <title>Display</title>
-  <script type="module" src="typography-bridge.js"></script>
+  <!-- Force display window into passive mirror mode before any bundles run -->
+  <script>
+    try {
+      // Mark as display explicitly (belt + suspenders)
+      window.__TP_FORCE_DISPLAY = true;
+      // Neuter any auto-scroll controllers that might boot in display context
+      window.__tpAuto = {
+        start() {},
+        stop() {},
+        set() {},
+        setEnabled() {},
+        setSpeed() {},
+        startFromPreroll() {},
+        isActive() { return false; },
+        getState() { return { enabled: false, speed: 0 }; },
+      };
+      // Disable any local scroll writer so the main window remains the SSOT for movement
+      window.__tpScrollWrite = {
+        scrollTo() { /* display is mirror-only */ },
+        scrollBy() { /* display is mirror-only */ },
+      };
+      // Freeze mode routing in display to manual so no local timers kick in
+      window.__tpMode = {
+        getMode: () => 'manual',
+        get: () => 'manual',
+        set: () => {},
+        on: (fn) => { try { fn && fn('manual'); } catch {} return () => {}; },
+      };
+    } catch {}
+  </script>
+  <script src="./dist/display-renderer.js"></script>
+  <!-- TS bundle intentionally omitted in display window to keep it mirror-only and avoid double wiring -->
   <style>
-          :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#2ea8ff;--s2-color:#ff6b6b}
-          html,body{height:100%}
-          body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
+          :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#60a5fa;--s2-color:#facc15;--g1-color:#34d399;--g2-color:#f472b6}
+          html,body{height:100%;margin:0;overflow:hidden}
+          body{background:var(--bg);color:var(--fg);font:16px/1.5 system-ui}
           .wrap{height:100%;overflow:auto}
-          /* Top bar legend */
+          /* Speaker colors (match main app defaults / CSS vars) */
+          .speaker-s1{color:var(--s1-color,#60a5fa);font-weight:600;}
+          .speaker-s2{color:var(--s2-color,#facc15);font-weight:600;}
+          .speaker-guest1{color:var(--g1-color,#34d399);font-weight:600;}
+          .speaker-guest2{color:var(--g2-color,#f472b6);font-weight:600;}
+
+          /* Top bar legend (match main) */
           #displayTopbar{position:fixed;top:0;left:0;right:0;height:36px;display:flex;align-items:center;pointer-events:none;z-index:1000;padding:0 10px}
-          #legend{display:flex;gap:14px;align-items:center;font-size:12px;opacity:.95;margin-left:4px;background:rgba(14,20,27,.72);border:1px solid var(--edge);padding:4px 8px;border-radius:999px}
-          #legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;box-shadow:0 0 4px rgba(0,0,0,.3)}
-          #legend .lbl{font-size:12px;color:var(--muted);margin-right:10px}
-          #legend .dot.s1{background:var(--s1-color)}
-          #legend .dot.s2{background:var(--s2-color)}
-          /* Match main app width for identical wrapping */
-          .script{max-width:900px;margin:0 auto;padding:40px}
+          .legend{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+          .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--edge);border-radius:999px;font-size:12px;background:#0e141b}
+          .tag .dot{width:10px;height:10px;border-radius:50%}
+          #displayTopbar{display:flex;align-items:center;justify-content:flex-start;gap:12px}
+          #displayRecPill{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.6);color:#ffb3b3;text-transform:uppercase}
+          #displayRecPill::before{content:'●';font-size:10px}
+          #displayRecPill.hidden{display:none}
+          #displayRecPill.armed{background:rgba(255,215,0,.18);color:#ffe28a}
+          #displayRecPill.live{background:rgba(220,53,69,.35);color:#ffd6d6}
+          /* Override to ensure bullet renders consistently */
+          #displayRecPill::before{content:'\2022';font-size:10px}
+          /* Rehearsal watermark (display) */
+          html.tp-mode-rehearsal::before{
+            content:'REHEARSAL';
+            position:fixed;
+            top:1rem;
+            right:1rem;
+            font-size:1.25rem;
+            font-weight:600;
+            padding:0.4rem 0.8rem;
+            border-radius:999px;
+            background:rgba(255,255,255,0.08);
+            color:rgba(255,255,255,0.9);
+            z-index:9999;
+            pointer-events:none;
+          }
+          /* Match main app width and whitespace handling for identical wrapping */
+          .script{
+            max-width:900px;
+            margin:0 auto;
+            padding:0;
+            white-space:pre-wrap;
+            overflow-wrap:break-word;
+            word-break:normal;
+            min-width:min(20ch, 100%);
+          }
           /* Match main app metrics exactly for consistent scroll physics */
           .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
           .u{text-decoration:underline}
@@ -38,6 +98,15 @@
           #preRoll .num{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
           /* CK watermark */
           body.ck::after{content:"CK";position:fixed;left:10px;bottom:10px;z-index:9999;font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;letter-spacing:2px;color:#d67d2d;opacity:.18;pointer-events:none}
+          /* Recorder pill overrides */
+          #displayRecPill{all: unset; display:none;}
+          .rec-pill{display:none;align-items:center;justify-content:center;height:22px;padding:0 12px;border-radius:999px;font-size:0.82rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 500ms ease,transform 500ms ease,color 320ms ease,background-color 320ms ease;pointer-events:none;user-select:none}
+          .rec-pill.is-visible{opacity:1;transform:scale(1)}
+          .rec-pill.rec-pill--armed{background:#ffd54f;color:#1a1f27}
+          .rec-pill.rec-pill--recording{background:#ef5350;color:#fff;animation:recPulse 2.5s ease-in-out infinite}
+          .rec-pill--display{height:18px;padding:0 10px;font-size:11px}
+          #displayRecPill::before{content:'\2022';font-size:10px;margin-right:6px}
+          @keyframes recPulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.03);opacity:.95}100%{transform:scale(1);opacity:1}}
           /* Remote camera preview styles */
           #mirrorCamWrap{position:fixed;left:12px;bottom:12px;width:240px;max-width:28vw;z-index:1200;}
           #mirrorCamVideo{width:100%;max-width:100%;border:1px solid var(--edge);border-radius:12px;box-shadow:0 4px 18px -4px #000c;background:#000;display:block;}
@@ -50,12 +119,32 @@
           #wrap   .script p{
             font-size: var(--tp-font-size, 56px) !important;
             line-height: var(--tp-line-height, 1.4) !important;
+            color: var(--tp-fg,#e6eef8);
+            opacity: 1;
+            display: block;
+          }
+          #wrap .script .line.speaker-s1,
+          #wrap .script .line[data-speaker="s1"]{
+            color: var(--tp-speaker-s1, var(--s1-color, #60a5fa));
+          }
+          #wrap .script .line.speaker-s2,
+          #wrap .script .line[data-speaker="s2"]{
+            color: var(--tp-speaker-s2, var(--s2-color, #facc15));
+          }
+          #wrap .script .line.speaker-guest1,
+          #wrap .script .line[data-speaker="g1"]{
+            color: var(--tp-speaker-g1, var(--g1-color, #34d399));
+          }
+          #wrap .script .line.speaker-guest2,
+          #wrap .script .line[data-speaker="g2"]{
+            color: var(--tp-speaker-g2, var(--g2-color, #f472b6));
           }
           /* Responsive script column (main #viewer and display #wrap) */
           #viewer .script,
           #wrap   .script {
             margin-inline: auto;
             padding-inline: max(16px, 3vw);
+            min-width: min(20ch, 100%);
             max-width: min(
               calc(var(--tp-maxch, 95) * 1ch),
               calc(100vw - 2 * max(16px, 3vw))
@@ -64,10 +153,8 @@
         </style></head>
         <body>
           <header id="displayTopbar">
-            <div id="legend">
-              <span class="dot s1"></span><span class="lbl" id="lbl-s1">Joe</span>
-              <span class="dot s2"></span><span class="lbl" id="lbl-s2">Brad</span>
-            </div>
+              <div class="legend" id="legend"></div>
+              <span id="displayRecPill" class="rec-pill rec-pill--display">REC</span>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
           <div class="hud">
@@ -79,7 +166,7 @@
           </div>
           <div id="mirrorCamWrap" hidden>
             <video id="mirrorCamVideo" autoplay muted></video>
-            <div id="mirrorCamLoading">Connecting camera…</div>
+            <div id="mirrorCamLoading">Connecting camera...</div>
           </div>
           <div id="preRoll"><div class="card"><div class="hint">Begin speaking in</div><div class="num" id="preRollNum">3</div></div></div>
           <script>
@@ -101,22 +188,78 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
-            // Color sync via BroadcastChannel
+            // Speakers legend (display window)
+            const legendEl = document.getElementById('legend');
+            const legendState = {
+              s1: { name: 'Joe', color: '#60a5fa' },
+              s2: { name: 'Brad', color: '#facc15' },
+            };
+            const sanitizeColorValue = (value) => {
+              try {
+                const txt = typeof value === 'string' ? value.trim() : '';
+                if (!txt) return '';
+                return txt.toLowerCase() === 'undefined' ? '' : txt;
+              } catch {
+                return '';
+              }
+            };
+            const applySpeakerColor = (role, nextColor) => {
+              const sanitized = sanitizeColorValue(nextColor);
+              if (!sanitized) return;
+              document.documentElement.style.setProperty(`--${role}-color`, sanitized);
+              legendState[role] = legendState[role] || { name: role.toUpperCase(), color: sanitized };
+              legendState[role].color = sanitized;
+            };
+            const cssColor = (varName, fallback) => {
+              try {
+                const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+                return v || fallback;
+              } catch { return fallback; }
+            };
+            function renderLegend() {
+              if (!legendEl) return;
+              legendEl.innerHTML = '';
+              (['s1','s2']).forEach((key) => {
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                const dot = document.createElement('span');
+                dot.className = 'dot';
+                dot.style.background = legendState[key].color || cssColor(`--${key}-color`, '#60a5fa');
+                const lbl = document.createElement('span');
+                lbl.id = `lbl-${key}`;
+                lbl.textContent = legendState[key].name;
+                tag.appendChild(dot);
+                tag.appendChild(lbl);
+                legendEl.appendChild(tag);
+              });
+            }
+            renderLegend();
+
+            // Color/name sync via BroadcastChannel
             let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
             if (bc) {
-              const lblS1 = () => document.getElementById('lbl-s1');
-              const lblS2 = () => document.getElementById('lbl-s2');
               bc.onmessage = (e) => {
                 const d = e?.data || {};
                 if (d.type === 'SPEAKER_COLORS') {
-                  if (d.s1) document.documentElement.style.setProperty('--s1-color', d.s1);
-                  if (d.s2) document.documentElement.style.setProperty('--s2-color', d.s2);
+                  try { applySpeakerColor('s1', d.s1); } catch {}
+                  try { applySpeakerColor('s2', d.s2); } catch {}
+                  renderLegend();
                 } else if (d.type === 'SPEAKER_NAMES') {
-                  if (typeof d.s1Name === 'string') { const n = lblS1(); if (n) n.textContent = d.s1Name; }
-                  if (typeof d.s2Name === 'string') { const n = lblS2(); if (n) n.textContent = d.s2Name; }
+                  if (typeof d.s1Name === 'string') { legendState.s1.name = d.s1Name; }
+                  if (typeof d.s2Name === 'string') { legendState.s2.name = d.s2Name; }
+                  renderLegend();
                 }
               };
             }
+            window.addEventListener('message', (ev) => {
+              try {
+                const payload = ev?.data || {};
+                if (payload?.type === 'speaker-colors' && payload.colors) {
+                  Object.entries(payload.colors).forEach(([role, color]) => applySpeakerColor(role, color));
+                  renderLegend();
+                }
+              } catch {}
+            });
             // TP: zoom-guard (display) + in-app Ctrl/Cmd + Wheel zoom
             try {
               window.addEventListener('wheel', (e)=>{
@@ -186,6 +329,26 @@
               }catch{}
             }
 
+            const recPill = document.getElementById('displayRecPill');
+            function applyRecordState(state){
+              if (!recPill) return;
+              recPill.classList.remove('rec-pill--armed','rec-pill--recording','is-visible');
+              recPill.style.display = 'none';
+              recPill.setAttribute('aria-hidden','true');
+              if (state === 'armed') {
+                recPill.textContent = 'REC ARMED';
+                recPill.classList.add('rec-pill--armed','is-visible');
+                recPill.style.display = 'inline-flex';
+                recPill.setAttribute('aria-hidden','false');
+              } else if (state === 'recording') {
+                recPill.textContent = 'REC';
+                recPill.classList.add('rec-pill--recording','is-visible');
+                recPill.style.display = 'inline-flex';
+                recPill.setAttribute('aria-hidden','false');
+              }
+            }
+            const mapRecState = (s) => (s === 'armed' ? 'armed' : s === 'recording' ? 'recording' : 'idle');
+
             // Call on resize (debounced 150ms; only adjust if focus changed)
             (function(){
               let startActive = null; let t = null;
@@ -204,29 +367,61 @@
               }, { passive:true });
             })();
 
+            const scrollStepForward = 30;
+            const scrollStepBackward = 15;
+            const scrollSnapThreshold = 1500;
+            const scrollSnapTail = 300;
+            let scrollTargetTop = null;
+            let scrollRaf = 0;
+
+            function ensureScrollStep() {
+              if (scrollRaf) return;
+              scrollRaf = requestAnimationFrame(() => {
+                scrollRaf = 0;
+                if (!wrap || scrollTargetTop == null) return;
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                const target = Math.max(0, Math.min(max, scrollTargetTop | 0));
+                const current = wrap.scrollTop || 0;
+                const delta = target - current;
+                if (Math.abs(delta) <= 1) {
+                  wrap.scrollTop = target;
+                  scrollTargetTop = null;
+                  return;
+                }
+                if (Math.abs(delta) >= scrollSnapThreshold) {
+                  wrap.scrollTop = target - Math.sign(delta) * scrollSnapTail;
+                  ensureScrollStep();
+                  return;
+                }
+                const cap = delta >= 0 ? scrollStepForward : scrollStepBackward;
+                wrap.scrollTop = current + Math.sign(delta) * Math.min(Math.abs(delta), cap);
+                ensureScrollStep();
+              });
+            }
+
             // requestScroll: absolute pixels in the same container as viewer
             function requestScroll(value) {
               const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-              const targetTop = Math.max(0, Math.min(max, value|0));
-              const currentTop = wrap.scrollTop;
-              const delta = targetTop - currentTop;
+              const targetTop = Math.max(0, Math.min(max, value | 0));
+              scrollTargetTop = targetTop;
+              ensureScrollStep();
+              logScrollCommand(targetTop, wrap.scrollTop, targetTop - (wrap.scrollTop || 0), 'N/A', 'stepping');
+            }
 
-              // Hysteresis: ignore tiny corrections
-              if (Math.abs(delta) < 2) {
-                logScrollCommand(targetTop, currentTop, delta, 'N/A', 'tiny');
-                return;
+            function applyScrollPayload(payload) {
+              const ratio = payload && typeof payload.ratio === 'number' && isFinite(payload.ratio) ? payload.ratio : null;
+              if (ratio != null) {
+                const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+                const clamped = Math.max(0, Math.min(1, ratio));
+                requestScroll(Math.round(clamped * max));
+                return true;
               }
-
-              // Monotonic guard: don't allow backward movement unless jump back is >200px
-              const backJumpPx = currentTop - targetTop;
-              const allowBack = backJumpPx >= 200;
-              if (targetTop < currentTop && !allowBack) {
-                logScrollCommand(targetTop, currentTop, delta, 'N/A', 'blocked');
-                return;
+              const top = payload && typeof payload.top === 'number' && isFinite(payload.top) ? payload.top : null;
+              if (top != null) {
+                requestScroll(Math.max(0, top | 0));
+                return true;
               }
-
-              logScrollCommand(targetTop, currentTop, delta, 'N/A', 'allowed');
-              wrap.scrollTo({ top: targetTop, behavior: 'auto' });
+              return false;
             }
 
             // Log scroll commands to HUD
@@ -238,63 +433,106 @@
               }
             }
 
+            // Compute marker offset onto the viewer (wrap) so lines align to marker without padding the script
+            function applyMarkerOffset() {
+              try {
+                const markerPct = (window.__TP_MARKER_PCT ?? 0.4);
+                const h = (wrap?.clientHeight || window.innerHeight || 0);
+                const offset = Math.max(0, Math.round(h * markerPct));
+                if (wrap) {
+                  wrap.style.paddingTop = '0px';
+                  wrap.style.scrollPaddingTop = `${offset}px`;
+                  if (offset > h * 2) console.warn('[display][marker] insane offset', { offset, h });
+                }
+                if (scriptEl) {
+                  scriptEl.style.paddingTop = `${offset}px`;
+                  scriptEl.style.scrollPaddingTop = '0px';
+                }
+              } catch {}
+            }
+
+            // Render helper: accept raw script text only (SSOT)
+            function applyScriptSnapshot(payload) {
+              // 1) Compute marker offset on viewer
+              applyMarkerOffset();
+
+              const rawText = typeof payload === 'string'
+                ? payload
+                : String(payload?.rawText ?? payload?.text ?? '');
+
+              if (!rawText && payload && typeof payload !== 'string') {
+                try { console.warn('[display] ignored payload without rawText'); } catch {}
+                return;
+              }
+
+              // 2) Render script content via shared renderer
+              try {
+                if (!scriptEl) return;
+                scriptEl.innerHTML = '';
+                if (typeof window.renderScript === 'function') {
+                  window.renderScript(rawText, scriptEl);
+                } else {
+                  const pre = document.createElement('pre');
+                  pre.textContent = rawText;
+                  scriptEl.appendChild(pre);
+                }
+              } catch (err) {
+                try { console.warn('[display] applyScriptSnapshot failed', err); } catch {}
+              }
+
+              // 3) Ensure we start at the top (marker line)
+              try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+              try {
+                requestAnimationFrame(() => {
+                  applyMarkerOffset();
+                  applyBottomPad();
+                  try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+                });
+                setTimeout(() => {
+                  applyMarkerOffset();
+                  applyBottomPad();
+                }, 120);
+              } catch {}
+            }
+
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
             try {
               const chan = new BroadcastChannel('tp_display');
+              try { chan.postMessage({ type: 'display:hello', ts: Date.now() }); } catch {}
               chan.addEventListener('message', (e) => {
                 try {
                   const msg = e?.data || {};
-                  // Lightweight mirror/diagnostic channel
-                  if (msg && msg.t === 'display:ping') {
-                    try { chan.postMessage({ t: 'display:pong' }); } catch {}
-                    return;
-                  }
-                  if (msg && msg.t === 'scrollTop') {
-                    try {
-                      const top = Math.max(0, Number(msg.v) | 0);
-                      requestAnimationFrame(() => {
-                        try { wrap.scrollTo({ top, behavior: 'auto' }); } catch {}
-                        if (msg.ask) {
-                          try { chan.postMessage({ t: 'display:applied', v: wrap.scrollTop | 0 }); } catch {}
-                        }
-                      });
-                    } catch {}
-                    return;
-                  }
-                  if (msg && msg.kind === 'tp:script' && msg.source === 'main') {
-                    try { window.__lastDisplayHash = msg.textHash || ''; } catch {}
-                    if (typeof msg.text === 'string') {
-                      scriptEl.innerHTML = msg.text;
-                      applyScaled();
-                      applyBottomPad();
-                    }
-                    if (typeof msg.anchorRatio === 'number' && isFinite(msg.anchorRatio)) {
-                      const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                      wrap.scrollTop = Math.round(Math.max(0, Math.min(1, msg.anchorRatio)) * max);
-                    }
-                  } else if (msg && msg.kind === 'tp:typography' && msg.source === 'main' && msg.display === 'display') {
-                    // Apply CSS variables directly from payload
-                    try {
-                      const s = document.documentElement.style;
-                      const x = msg.t || {};
-                      if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
-                      if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
-                      if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
-                      if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
-                      if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
-                      if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
-                      if (x.color) s.setProperty('--tp-fg', x.color);
-                      if (x.background) s.setProperty('--tp-bg', x.background);
-                      if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
-                      if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
-                      // Also update our base metrics so applyScaled reflects the new values
-                      if (x.fontSizePx != null || x.lineHeight != null) {
-                        applyBase(x.fontSizePx, x.lineHeight);
-                      }
-                    } catch {}
-                    // reflow helpers
+                  // Script snapshots from main (raw text only)
+              if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
+                const raw = msg.rawText ?? msg.text ?? msg.html ?? '';
+                if (raw) {
+                  applyScriptSnapshot(raw);
+                }
                     applyScaled();
                     applyBottomPad();
+                    return;
+                  }
+                  // Typography updates
+                  if (msg && msg.kind === 'tp:typography') {
+                    if (msg.fontSize && msg.lineHeight) {
+                      applyBase(msg.fontSize, msg.lineHeight);
+                    } else {
+                      applyScaled();
+                    }
+                    applyBottomPad();
+                    return;
+                  }
+                  if (msg && msg.kind === 'tp:record') {
+                    applyRecordState(msg.state || 'idle');
+                    return;
+                  }
+                  if (msg && msg.type === 'rec-state') {
+                    applyRecordState(mapRecState(msg.state));
+                    return;
+                  }
+                  // Lightweight mirror/diagnostic channel only
+                  if (msg && msg.t === 'display:ping') {
+                    try { chan.postMessage({ t: 'display:pong' }); } catch {}
                   }
                 } catch {}
               });
@@ -302,19 +540,37 @@
 
             window.addEventListener('message', ev => {
               const d = ev.data||{};
-              // New display-sync snapshot via postMessage fallback
-              if (d && d.kind === 'tp:script' && d.source === 'main') {
-                try { window.__lastDisplayHash = d.textHash || ''; } catch {}
-                if (typeof d.text === 'string') {
-                  scriptEl.innerHTML = d.text;
-                  applyScaled();
-                  applyBottomPad();
-                }
-                if (typeof d.anchorRatio === 'number' && isFinite(d.anchorRatio)) {
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  wrap.scrollTop = Math.round(Math.max(0, Math.min(1, d.anchorRatio)) * max);
-                }
-                return; // handled
+              // Scroll mirror: obey main window scroll commands
+              if (d && d.kind === 'tp:record') {
+                applyRecordState(d.state || 'idle');
+                return;
+              }
+              if (d && d.type === 'rec-state') {
+                applyRecordState(mapRecState(d.state));
+                return;
+              }
+              // Typography via postMessage
+              if (d && d.kind === 'tp:typography') {
+                try {
+                  const s = document.documentElement.style;
+                  const x = d.t || d || {};
+                  if (x.fontFamily) s.setProperty('--tp-font-family', x.fontFamily);
+                  if (x.fontSizePx != null) s.setProperty('--tp-font-size', String(x.fontSizePx) + 'px');
+                  if (x.lineHeight != null) s.setProperty('--tp-line-height', String(x.lineHeight));
+                  if (x.weight != null) s.setProperty('--tp-weight', String(x.weight));
+                  if (x.letterSpacingEm != null) s.setProperty('--tp-letter-spacing', String(x.letterSpacingEm) + 'em');
+                  if (x.wordSpacingEm != null) s.setProperty('--tp-word-spacing', String(x.wordSpacingEm) + 'em');
+                  if (x.color) s.setProperty('--tp-fg', x.color);
+                  if (x.background) s.setProperty('--tp-bg', x.background);
+                  if (x.maxLineWidthCh != null) s.setProperty('--tp-maxch', String(x.maxLineWidthCh));
+                  if (x.dimOthers != null) s.setProperty('--tp-dim', String(x.dimOthers));
+                  if (x.fontSizePx != null || x.lineHeight != null) {
+                    applyBase(x.fontSizePx, x.lineHeight);
+                  }
+                } catch {}
+                applyScaled();
+                applyBottomPad();
+                return;
               }
               // WebRTC camera offer/candidate handling
               if (!window.__camPC && (d.type === 'cam-offer')) {
@@ -336,8 +592,6 @@
                 try { window.__camPC.addIceCandidate(d.candidate); } catch {}
                 return;
               }
-              if(d.type==='render'){ scriptEl.innerHTML = d.html||''; if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); else applyScaled(); applyBottomPad(); }
-              if(d.type==='typography'){ if(d.fontSize&&d.lineHeight) applyBase(d.fontSize,d.lineHeight); applyBottomPad(); }
               if (d && d.kind === 'tp:typography' && d.source === 'main' && d.display === 'display') {
                 try {
                   const s = document.documentElement.style;
@@ -373,15 +627,7 @@
                   window.__dispLastSeq = seq || lastSeq;
                   window.__dispLastTs = ts || lastTs;
                 } catch{}
-                // Convert ratio to absolute pixels if needed, then requestScroll
-                let absoluteValue;
-                if (typeof d.ratio === 'number' && isFinite(d.ratio)){
-                  const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                  absoluteValue = Math.round(d.ratio * max);
-                } else {
-                  absoluteValue = d.top||0;
-                }
-                requestScroll(absoluteValue);
+                if (applyScrollPayload(d)) return;
               }
               if(d.type==='preroll'){
                 if(d.show){ preRoll.style.display='flex'; if(typeof d.n==='number') preRollNum.textContent=String(d.n); }

@@ -131,6 +131,134 @@ let _cfgBridge = {
 
 let _enabled = false;
 
+function getObsBridge(): any | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    // Prefer the primary bridge
+    if ((window as any).__obsBridge) return (window as any).__obsBridge;
+    // Fallbacks for older wiring
+    if ((window as any).__tpObsBridge) return (window as any).__tpObsBridge;
+    const legacy = (window as any).__tpObs;
+    if (legacy && typeof legacy === 'object') return legacy;
+    return null;
+  } catch { return null; }
+}
+
+function inlineConnect(testOnly?: boolean): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const cfgUrl =
+        obsCfg && (obsCfg as any).host
+          ? `${(obsCfg as any).secure ? 'wss' : 'ws'}://${(obsCfg as any).host}:${(obsCfg as any).port}`
+          : null;
+      const url =
+        _cfgBridge.getUrl?.() ||
+        cfgUrl ||
+        'ws://127.0.0.1:4455';
+      const pass = _cfgBridge.getPass?.() || '';
+      try { console.log('[OBS-BRIDGE] inlineConnect', { url, hasPass: !!pass, testOnly: !!testOnly }); } catch {}
+
+      // Simple probe: open WebSocket; resolve on open/close
+      if (typeof WebSocket === 'undefined') {
+        try { console.warn('[OBS-BRIDGE] inlineConnect: WebSocket not available'); } catch {}
+        resolve(false);
+        return;
+      }
+
+      const ws = new WebSocket(url);
+      let settled = false;
+      ws.onopen = () => {
+        settled = true;
+        try { ws.close(1000, 'probe'); } catch {}
+        resolve(true);
+      };
+      ws.onerror = () => {
+        if (settled) return;
+        settled = true;
+        resolve(false);
+      };
+      ws.onclose = () => {
+        if (settled) return;
+        settled = true;
+        resolve(true);
+      };
+    } catch (err) {
+      try { console.warn('[OBS-BRIDGE] inlineConnect error', err); } catch {}
+      resolve(false);
+    }
+  });
+}
+
+async function safeConnect(testOnly?: boolean): Promise<boolean> {
+  try { console.log('[OBS-BRIDGE] connect()', { testOnly: !!testOnly, enabled: _enabled }); } catch {}
+  let bridge = getObsBridge();
+  if (!bridge || typeof bridge.connect !== 'function') {
+    if (typeof (window as any).__loadObsBridge === 'function') {
+      try { await (window as any).__loadObsBridge(); } catch {}
+      bridge = getObsBridge();
+    }
+  }
+
+  // If a native bridge exists, try it first; on failure or rejection, fall back to inline WS
+  if (bridge && typeof bridge.connect === 'function') {
+    try {
+      _cfgBridge.isEnabled = () => _enabled === true;
+      const res = await bridge.connect({ testOnly });
+      if (res) return true;
+    } catch (e) {
+      try { console.warn('[OBS] native bridge connect failed, falling back to inline', e); } catch {}
+    }
+  }
+
+  // If maybeConnect exists (inline bridge style), prefer that before raw WS probe
+  try {
+    if (bridge && typeof bridge.maybeConnect === 'function') {
+      try { await bridge.maybeConnect(); } catch {}
+      return !!(bridge.isConnected?.() || false);
+    }
+  } catch {}
+
+  try { console.info('[OBS] connect(testOnly=%o) no native bridge; using inline WebSocket', !!testOnly); } catch {}
+  return inlineConnect(testOnly);
+}
+
+async function safeSetEnabled(on: boolean): Promise<boolean> {
+  _enabled = !!on;
+  const bridge = getObsBridge();
+  if (!bridge) {
+    try { console.info('[OBS] setEnabled(%o) no bridge; flag set inline', on); } catch {}
+    // No native bridge; keep the flag and let inline connect handle it when called.
+    return true;
+  }
+  try {
+    // Prefer armed/maybeConnect if available
+    const ctrl: any = (bridge as any).setArmed ? bridge : (window as any).__tpObs;
+    if (ctrl && typeof ctrl.setArmed === 'function') {
+      ctrl.setArmed(!!on);
+      if (on && typeof ctrl.maybeConnect === 'function') {
+        await ctrl.maybeConnect();
+      } else if (!on && typeof ctrl.disconnect === 'function') {
+        await ctrl.disconnect();
+      }
+      return true;
+    }
+    if (typeof bridge.start === 'function' && typeof bridge.stop === 'function') {
+      if (on) await bridge.start();
+      else await bridge.stop();
+      return true;
+    }
+    if (typeof bridge.setEnabled === 'function') {
+      await bridge.setEnabled(!!on);
+      return true;
+    }
+    try { console.warn('[OBS] safeSetEnabled: bridge present but does not support known methods'); } catch {}
+    return true;
+  } catch (e) {
+    try { console.warn('[OBS] setEnabled(%o) failed', on, e); } catch {}
+    return false;
+  }
+}
+
 export function initBridge(opts = {}) {
   _cfgBridge = { ..._cfgBridge, ...opts };
   try {
@@ -139,42 +267,67 @@ export function initBridge(opts = {}) {
 }
 
 export function setEnabled(on) {
-  try {
-    if (on) connect();
-    else disconnect();
-  } catch {}
+  return safeSetEnabled(on);
 }
-export async function reconfigure(cfg = {}) {
+export async function reconfigure(cfg: any = {}) {
   try {
-    if (cfg && typeof cfg === 'object') {
-      obsCfg = { ...obsCfg, ...cfg, port: Number(cfg.port) || obsCfg.port };
-      // Keep password available for the inline bridge connect logic
-      if (cfg.password != null) {
-        try {
-          obsCfg.password = String(cfg.password || '');
-        } catch {}
+    // Merge incoming settings into the inline config
+    obsCfg = { ...obsCfg, ...cfg };
+
+    // Normalize port
+    if (typeof cfg?.port !== 'undefined') {
+      const n =
+        typeof cfg.port === 'string' ? parseInt(cfg.port, 10) : Number(cfg.port);
+      if (!Number.isNaN(n) && n > 0) {
+        (obsCfg as any).port = n;
       }
-      // Update the bridge getter so connect() picks up the latest password
-      try {
-        _cfgBridge.getPass = () => obsCfg.password || '';
-      } catch {}
     }
+
+    // Normalize password
+    const password =
+      typeof cfg?.password === 'string'
+        ? cfg.password
+        : (obsCfg as any).password || '';
+    (obsCfg as any).password = password;
+
+    // Build canonical URL from host/port unless an explicit url is provided
+    const explicitUrl =
+      cfg && typeof cfg.url === 'string' && cfg.url.trim() ? cfg.url.trim() : '';
+    const host = (obsCfg as any).host || '127.0.0.1';
+    const port = (obsCfg as any).port || 4455;
+    const scheme = (obsCfg as any).secure ? 'wss' : 'ws';
+    const url = explicitUrl || `${scheme}://${host}:${port}/`;
+
+    // Keep the inline bridge helpers in sync
+    try {
+      _cfgBridge.getUrl = () => url;
+      _cfgBridge.getPass = () => password;
+    } catch {}
+
+    // If the JS bridge (obsBridge.js) is present, push config into it
+    try {
+      const bridge = getObsBridge();
+      if (bridge && typeof (bridge as any).configure === 'function') {
+        (bridge as any).configure({ url, password });
+      }
+    } catch (err) {
+      try { console.warn('[OBS] bridge.configure failed', err); } catch {}
+    }
+
     // If already connected, reconnect soon to apply changes
     try {
       if (_ws) {
-        try {
-          // best-effort: close then reconnect
-          _ws.close(1000, 'reconfig');
-        } catch {}
+        try { _ws.close(1000, 'reconfig'); } catch {}
         reconnectSoon(200);
       }
     } catch {}
-  } catch {}
+  } catch (err) {
+    try { console.warn('[OBS] reconfigure failed', err); } catch {}
+  }
 }
 export async function test() {
   try {
-    await connect({ testOnly: true });
-    return true;
+    return await connect({ testOnly: true });
   } catch {
     return false;
   }
@@ -204,25 +357,22 @@ function reconnectSoon(ms = 400) {
   } catch {}
 }
 
-export async function connect({ testOnly = false, reason = 'runtime' } = {}) {
-  // If the bridge isn’t loaded yet, try to load it (once)
-  if (!window.__obsBridge || !window.__obsBridge.connect) {
-    if (typeof window.__loadObsBridge === 'function') {
-      try { await window.__loadObsBridge(); } catch {}
-    }
-  }
-  // If still not present, surface a clear error
-  if (!window.__obsBridge || !window.__obsBridge.connect) {
-    throw new Error('OBS bridge is not available on the page.');
-  }
-  // Mark desire for a persistent session; the bridge’s onclose will check this
-  _cfgBridge.isEnabled = () => _enabled === true;
-  // Hand off to the bridge
-  return window.__obsBridge.connect({ testOnly, reason });
+export async function connect({ testOnly = false } = {}) {
+  return safeConnect(testOnly);
+}
+
+// Compat alias
+export async function connect2(opts?: { testOnly?: boolean }) {
+  return safeConnect(opts?.testOnly);
 }
 
 export function isConnected() {
   return _identified;
+}
+
+// Compat aliases
+export function setEnabled3(on: boolean) {
+  return safeSetEnabled(on);
 }
 
 // Public initializer for UI wiring. Maps simple UI hooks into the registry settings

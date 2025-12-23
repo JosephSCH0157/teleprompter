@@ -1,8 +1,54 @@
-// src/ui/mapped-folder-bind.ts
+﻿// src/ui/mapped-folder-bind.ts
 // Bind Choose Folder button + Scripts <select> to mapped-folder SSOT.
 // Safe no-op if elements are missing.
 
 import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
+import { ScriptStore } from '../features/scripts-store';
+import { debugLog, hudLog } from '../env/logging';
+
+function getFolderPickerEnvironmentHint(): string {
+  try {
+    const proto = window.location.protocol;
+    const ua = navigator.userAgent || '';
+
+    if (proto === 'file:') {
+      return 'Folder picking is blocked when running from file://. Please run Anvil on http://localhost or https:// instead.';
+    }
+
+    const hasFS = typeof (window as any).showDirectoryPicker === 'function';
+    const hasWebkitDir = (() => {
+      const i = document.createElement('input');
+      return 'webkitdirectory' in i || 'directory' in i;
+    })();
+
+    if (!hasFS && !hasWebkitDir) {
+      return 'This browser/webview does not support folder picking. Use Chrome or Edge on http://localhost or https://.';
+    }
+
+    if (/OBS|Electron|WebView|Headless/i.test(ua)) {
+      return 'This embedded browser may not allow folder picking. Choose a scripts folder in a full browser (Chrome/Edge) first, then reopen Anvil here.';
+    }
+  } catch {
+    // ignore
+  }
+
+  return 'Folder picking is not available in this environment. Try running Anvil in a full browser (Chrome/Edge on http://localhost or https://).';
+}
+
+const SUPPORTED_EXT = /\.(docx|doc|txt|md)$/i;
+function isSupportedScriptName(name: string): boolean {
+  const lower = (name || '').toLowerCase().trim();
+  if (!lower) return false;
+  if (lower.startsWith('~$')) return false; // temp Office files
+  if (lower.startsWith('.')) return false;  // hidden/system
+  if (lower === 'thumbs.db') return false;
+  if (SUPPORTED_EXT.test(lower)) return true;
+  // Allow extensionless names (treat as plain text scripts)
+  if (!lower.includes('.')) return true;
+  const lastDot = lower.lastIndexOf('.');
+  if (lastDot === 0) return false;
+  return false;
+}
 
 type BindOpts = {
   button: string | HTMLElement; // Choose Folder button selector or element
@@ -11,10 +57,78 @@ type BindOpts = {
   onSelect?: (_fileOrHandle: FileSystemFileHandle | File | null) => void; // callback when user picks a script
 };
 
+export async function handleChooseFolder(doc: Document = document): Promise<void> {
+  const handleInitFailure = (err: any) => {
+    try {
+      console.warn('[mapped-folder] initMappedFolder failed', err);
+    } catch {}
+    try {
+      const toastFn = (window as any).toast;
+      if (typeof toastFn === 'function') {
+        toastFn('Could not initialize mapped folder. Check console for details.');
+      }
+    } catch {}
+  };
+
+  const initGuard = initMappedFolder().catch((err) => {
+    handleInitFailure(err);
+    throw err;
+  });
+  const awaitInit = async () => {
+    try {
+      await initGuard;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const hasFS = typeof (window as any).showDirectoryPicker === 'function';
+  const fallback = doc.getElementById('folderFallback') as HTMLInputElement | null;
+  let picked = false;
+
+  if (hasFS) {
+    try {
+      await pickMappedFolder();
+      picked = true;
+    } catch (err) {
+      try { console.info('[mapped-folder] directory picker cancelled/failed, falling back', err); } catch {}
+    }
+  }
+
+  if (!picked && fallback) {
+    try {
+      fallback.click();
+      picked = true;
+    } catch (err) {
+      try { console.warn('[mapped-folder] folderFallback click failed', err); } catch {}
+    }
+  }
+
+  const initOk = await awaitInit();
+  if (!initOk) return;
+
+  if (picked) {
+    return;
+  }
+
+  try {
+    const toastFn = (window as any).toast;
+    if (typeof toastFn === 'function') {
+      toastFn(getFolderPickerEnvironmentHint());
+    }
+  } catch {}
+
+  try {
+    console.warn('[mapped-folder] no supported folder picker available (both FS API and fallback failed)');
+  } catch {}
+}
+
 export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   const btn = typeof opts.button === 'string' ? document.querySelector(opts.button) as HTMLButtonElement : opts.button as HTMLButtonElement;
   const sel = typeof opts.select === 'string' ? document.querySelector(opts.select) as HTMLSelectElement : opts.select as HTMLSelectElement;
   const fallback = opts.fallbackInput ? (typeof opts.fallbackInput === 'string' ? document.querySelector(opts.fallbackInput) as HTMLInputElement : opts.fallbackInput) : null;
+  const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
 
   if (!btn || !sel) return () => {};
   // Avoid double-binding across reinjections
@@ -22,36 +136,32 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     return () => {};
   }
 
-  await initMappedFolder();
+  // Reassurance hint: folder picker may look empty; mapping still works and files are filtered after selection.
+  try {
+    const hintId = `${sel.id || 'scripts'}-picker-hint`;
+    let hint = document.getElementById(hintId) as HTMLElement | null;
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.id = hintId;
+      hint.className = 'sidebar-hint';
+      hint.textContent = 'Note: The folder picker may look empty. Choose the folder; Anvil will scan supported script files automatically.';
+      if (sel.parentElement) {
+        sel.parentElement.appendChild(hint);
+      }
+    }
+  } catch {}
+
+  let didInit = false;
+  const ensureInit = async () => {
+    if (didInit) return;
+    didInit = true;
+    await initMappedFolder();
+  };
 
   try { (btn as any).dataset.mappedFolderWired = '1'; } catch {}
-  btn.addEventListener('click', async () => {
-    try {
-      if ('showDirectoryPicker' in window) {
-        try {
-          const ok = await pickMappedFolder();
-          if (ok) {
-            await refreshList();
-            try { (window as any).HUD?.log?.('folder:mapped', { count: _lastCount }); } catch {}
-          } else {
-            // If picker returns falsy (cancel/no-op), do nothing
-          }
-        } catch (err: any) {
-          // Handle non-user-activation environments (CI/automation) by falling back to hidden input when present
-          const name = (err && (err.name || err.code)) || '';
-          if (String(name) === 'NotAllowedError' && fallback) {
-            try { (window as any).HUD?.log?.('folder:pick:not-allowed', { fallback: true }); } catch {}
-            fallback.click();
-          } else {
-            try { console.warn('[mapped-folder] pick failed', err); } catch {}
-          }
-        }
-      } else if (fallback) {
-        fallback.click();
-      } else {
-        try { console.warn('[mapped-folder] File System Access API not supported; provide fallback input'); } catch {}
-      }
-    } catch {}
+  btn.addEventListener('click', (ev) => {
+    try { ev.preventDefault(); } catch {}
+    void handleChooseFolder(document);
   });
 
   if (fallback) {
@@ -59,19 +169,37 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       try {
         const files = Array.from(fallback.files || []);
         // If user canceled or automation triggered empty selection, ignore silently
-        if (!files.length) { try { (window as any).HUD?.log?.('folder:fallback:empty'); } catch {}; return; }
+        if (!files.length) { hudLog('folder:fallback:empty'); return; }
         populateSelectFromFiles(files);
       } catch {}
     });
   }
 
   sel.addEventListener('change', async () => {
+    debugLog('[MAPPED-FOLDER] change', { id: sel.id, value: sel.value });
     try {
       const opt = sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : sel.options[sel.selectedIndex];
       if (!opt) return;
       sel.setAttribute('aria-busy','true');
       const handle = (opt as any)?.__handle || (opt as any)?._handle;
       const file = (opt as any)?.__file || (opt as any)?._file;
+      const ensureReadPermission = async (h: any): Promise<boolean> => {
+        try {
+          const hasQuery = typeof h?.queryPermission === 'function';
+          const hasRequest = typeof h?.requestPermission === 'function';
+          if (!hasQuery && !hasRequest) return true;
+          const q = hasQuery ? await h.queryPermission({ mode: 'read' }) : undefined;
+          if (q === 'granted') return true;
+          if (!hasRequest) return true;
+          const r = await h.requestPermission({ mode: 'read' });
+          return r === 'granted';
+        } catch { return true; }
+      };
+      if (handle && !(await ensureReadPermission(handle))) {
+        try { hudLog('folder:permission:denied', { id: sel.id }); } catch {}
+        toast('Allow folder access to load scripts, or re-pick the folder in Settings.');
+        return;
+      }
       if (handle || file) {
         const { name, text } = await readHandleOrFile(handle || file);
         try { (window as any).__tpCurrentName = name; } catch {}
@@ -84,7 +212,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         if (mockMode) {
           const name = opt?.text || 'Mock_Script.txt';
           const text = `This is a CI mock script for ${name}.\n\n- Line 1\n- Line 2\n- Line 3`;
-          try { (window as any).HUD?.log?.('script:loaded:mock', { name, chars: text.length }); } catch {}
+          hudLog('script:loaded:mock', { name, chars: text.length });
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
         }
@@ -94,7 +222,11 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           try { requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} }); } catch {}
         }
       }
-    } catch (e) { try { console.warn('[mapped-folder] mammoth parse failed', e); } catch {} }
+    } catch (e) {
+      try { console.warn('[mapped-folder] load failed', e); } catch {}
+      try { hudLog('folder:load:error', { id: sel.id, err: (e as any)?.name || (e as any)?.message || String(e) }); } catch {}
+      try { toast('Could not load script from the mapped folder. Recheck permissions or pick the folder again.'); } catch {}
+    }
     finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   });
 
@@ -109,6 +241,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
 
   async function refreshList() {
     try {
+      await ensureInit();
       // In deterministic CI mock mode, preserve pre-populated options (avoid wiping to "(No scripts found)")
       const mockMode = !!(window as any).__tpMockFolderMode;
       const hasPreMock = mockMode && sel && sel.options && sel.options.length > 1 && !(window as any).__tpFolder?.get?.();
@@ -128,38 +261,66 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
     finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   }
 
-  function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
-    try {
-      sel.innerHTML = '';
-      try { sel.setAttribute('aria-busy','true'); } catch {}
+function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
+  try {
+    sel.innerHTML = '';
+    const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
+    try { sel.setAttribute('aria-busy','true'); } catch {}
       if (!entries.length) {
         // Sidebar gets a Settings link placeholder instead of disabled select
         if (sel.id === 'scriptSelectSidebar') {
           sel.disabled = false;
-          const opt = new Option('Map script folder…', '__OPEN_SETTINGS__');
+          const opt = new Option('Map script folder...', '__OPEN_SETTINGS__');
           (opt as any).dataset.settingsLink = '1';
           sel.append(opt);
         } else {
           sel.disabled = true;
-          sel.append(new Option('(No scripts found)', '', true, false));
+          sel.append(new Option('No existing scripts yet — map folder and save new ones here', '', true, false));
         }
-        try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
+        try { ScriptStore.syncMapped([]); } catch {}
+        hudLog('folder:cleared', {});
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
         return;
-      }
-      sel.disabled = false;
-      for (const e of entries) {
-        const opt = new Option(e.name, e.name);
-        (opt as any)._handle = e.handle;
-        sel.append(opt);
-      }
+    }
+    sel.disabled = false;
+    for (const e of entries) {
+      try {
+        debugLog('[MAPPED-FOLDER] seen entry', {
+          name: e.name,
+          allowed: isSupportedScriptName(e.name),
+        });
+      } catch {}
+      if (!isSupportedScriptName(e.name)) continue;
+      const opt = new Option(e.name, e.name) as HTMLOptionElement & {
+        __fileHandle?: FileSystemFileHandle;
+        __file?: File;
+        _handle?: FileSystemFileHandle;
+        _file?: File;
+      };
+      try { opt._handle = e.handle; } catch {}
+      try { opt.__fileHandle = e.handle; } catch {}
+      try { mappedEntries.push({ id: e.name, title: e.name, handle: e.handle }); } catch {}
+      try {
+        debugLog('[MAPPED-FOLDER] option created', {
+          id: e.name,
+          label: e.name,
+          hasHandle: !!e.handle,
+          hasFile: false,
+        });
+      } catch {}
+      sel.append(opt);
+    }
+      try { debugLog('[MAPPED-FOLDER] syncing mapped entries', { count: mappedEntries.length }); } catch {}
+      try { ScriptStore.syncMapped(mappedEntries); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: mappedEntries.length, selectId: sel.id } })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
       // Preselect last used script if present
       try {
         const last = getLastScriptName();
         if (last) {
           setSelectedByName(sel, last);
-          (window as any).HUD?.log?.('script:last:preselect', { name: last });
+          hudLog('script:last:preselect', { name: last });
         }
         maybeAutoLoad(sel);
       } catch {}
@@ -167,9 +328,11 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
       try { announceCount(cnt); } catch {}
       try { sel.setAttribute('aria-busy','false'); } catch {}
+      queueMicrotask(() => {
+        try { if (sidebar) sidebar.value = sel.value; } catch {}
+      });
     } catch {}
   }
-
   function populateSelectFromFiles(files: File[]) {
     try {
       const mockMode = !!(window as any).__tpMockFolderMode;
@@ -180,36 +343,61 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         return;
       }
       sel.innerHTML = '';
+      const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
       try { sel.setAttribute('aria-busy','true'); } catch {}
-      const filtered = files.filter(f => /\.(txt|docx|md)$/i.test(f.name)).sort((a,b)=>a.name.localeCompare(b.name));
+      const filtered = files.filter(f => {
+        try {
+          debugLog('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
+        } catch {}
+        return isSupportedScriptName(f.name);
+      }).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
+        try { ScriptStore.syncMapped([]); } catch {}
         if (sel.id === 'scriptSelectSidebar') {
           sel.disabled = false;
-          const opt = new Option('Map script folder…', '__OPEN_SETTINGS__');
+          const opt = new Option('Map script folder...', '__OPEN_SETTINGS__');
           (opt as any).dataset.settingsLink = '1';
           sel.append(opt);
         } else {
           sel.disabled = true;
-          sel.append(new Option('(No scripts found)', '', true, false));
+          sel.append(new Option('No existing scripts yet — map folder and save new ones here', '', true, false));
         }
-        try { (window as any).HUD?.log?.('folder:cleared', {}); } catch {}
+        hudLog('folder:cleared', {});
         try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: 0 } })); } catch {}
         try { announceCount(0); } catch {}
         return;
       }
-      sel.disabled = false;
-      for (const f of filtered) {
-        const opt = new Option(f.name, f.name);
-        (opt as any)._file = f;
-        sel.append(opt);
-      }
-      try { (window as any).HUD?.log?.('folder:mapped', { count: filtered.length }); } catch {}
+    sel.disabled = false;
+    for (const f of filtered) {
+      const opt = new Option(f.name, f.name) as HTMLOptionElement & {
+        __fileHandle?: FileSystemFileHandle;
+        __file?: File;
+        _handle?: FileSystemFileHandle;
+        _file?: File;
+      };
+      try { opt._file = f; } catch {}
+      try { opt.__file = f; } catch {}
+      try { mappedEntries.push({ id: f.name, title: f.name, handle: f as any }); } catch {}
+      try {
+        debugLog('[MAPPED-FOLDER] option created', {
+          id: f.name,
+          label: f.name,
+          hasHandle: false,
+          hasFile: true,
+        });
+      } catch {}
+      sel.append(opt);
+    }
+      try { debugLog('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length }); } catch {}
+      try { ScriptStore.syncMapped(mappedEntries); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
+      hudLog('folder:mapped', { count: filtered.length });
       // Preselect last used script if present (fallback path) + maybe auto-load
       try {
         const last = getLastScriptName();
         if (last) {
           setSelectedByName(sel, last);
-          (window as any).HUD?.log?.('script:last:preselect', { name: last });
+          hudLog('script:last:preselect', { name: last });
         }
         maybeAutoLoad(sel);
       } catch {}
@@ -217,9 +405,11 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
       try { announceCount(cnt); } catch {}
       try { sel.setAttribute('aria-busy','false'); } catch {}
+      queueMicrotask(() => {
+        try { if (sidebar) sidebar.value = sel.value; } catch {}
+      });
     } catch {}
   }
-
   function announceCount(n: number) {
     try {
       // Ensure a small aria-live polite status next to the select
@@ -237,7 +427,9 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           document.body.appendChild(s);
         }
       }
-      s.textContent = n === 1 ? '1 script found' : `${n} scripts found`;
+      s.textContent = n === 0
+        ? 'No existing scripts yet — map folder and save new ones here'
+        : (n === 1 ? '1 script found' : `${n} scripts found`);
     } catch {}
   }
 }
@@ -283,7 +475,7 @@ export async function recheckMappedFolderPermissions() {
     // @ts-ignore
     const res = await (dir as any).requestPermission?.({ mode: 'read' });
     const granted = res === 'granted';
-    try { (window as any).HUD?.log?.('folder:permission', { granted }); } catch {}
+    hudLog('folder:permission', { granted });
     toast(granted ? 'Folder access granted' : 'Folder access denied');
     if (!granted) {
       try { await (window as any).__tpFolder?.clear?.(); } catch {}
@@ -294,7 +486,7 @@ export async function recheckMappedFolderPermissions() {
 
 // tiny toast: HUD event first; alert fallback to ensure visibility
 function toast(msg: string) {
-  try { (window as any).HUD?.log?.('toast', { msg }); } catch {}
+  hudLog('toast', { msg });
   try { window.dispatchEvent(new CustomEvent('tp:toast', { detail: { msg, ts: Date.now() } })); } catch {}
   try { if (!(window as any).HUD) alert(msg); } catch {}
 }
@@ -324,7 +516,10 @@ function maybeAutoLoad(sel: HTMLSelectElement) {
     const auto = !!(s && s.autoLoadLastScript);
     if (auto && sel.selectedIndex >= 0) {
       sel.dispatchEvent(new Event('change', { bubbles: true }));
-      (window as any).HUD?.log?.('script:auto-load:last', { name: sel.options[sel.selectedIndex]?.text });
+      hudLog('script:auto-load:last', { name: sel.options[sel.selectedIndex]?.text });
     }
   } catch {}
 }
+
+
+

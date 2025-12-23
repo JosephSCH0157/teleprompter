@@ -1,19 +1,30 @@
-import { getScrollBrain } from '../index';
+import { getScrollBrain } from './brain-access';
+import { appStore } from '../state/app-store';
+import { loadScrollPrefs } from '../features/scroll/scroll-prefs';
 import type { ScrollMode } from './scroll-brain';
 
 function resolveModeFromValue(value: string): ScrollMode {
   switch ((value || '').toLowerCase()) {
     case 'auto':
-    case 'wpm':
       return 'auto';
+    case 'wpm':
+      return 'wpm';
+    case 'timed':
+      return 'timed';
     case 'hybrid':
       return 'hybrid';
+    case 'asr':
+      return 'asr';
     case 'step':
       return 'step';
     case 'rehearsal':
       return 'rehearsal';
+    case 'off':
+      return 'off';
+    case 'manual':
+      return 'step';
     default:
-      return 'manual';
+      return 'hybrid';
   }
 }
 
@@ -25,6 +36,7 @@ function wireElement(el: HTMLSelectElement, setMode: (mode: ScrollMode) => void)
     try {
       const mode = resolveModeFromValue(el.value);
       setMode(mode);
+      try { appStore.set?.('scrollMode', mode); } catch {}
     } catch {}
   };
 
@@ -43,6 +55,28 @@ export function initScrollModeBridge(): void {
     const elements = select ? [select] : [];
 
     if (!elements.length) return;
+
+    const storedMode = (() => {
+      try {
+        const storeMode = (window as any).__tpStore?.get?.('scrollMode');
+        if (storeMode) return String(storeMode);
+      } catch {}
+      try {
+        const prefs = loadScrollPrefs();
+        if (prefs?.mode) return prefs.mode;
+      } catch {}
+      return undefined;
+    })();
+
+    if (storedMode) {
+      elements.forEach((el) => {
+        try {
+          if (Array.from(el.options).some((o) => o.value === storedMode)) {
+            el.value = storedMode;
+          }
+        } catch {}
+      });
+    }
 
     elements.forEach((el) => wireElement(el, brain.setMode));
   } catch {}

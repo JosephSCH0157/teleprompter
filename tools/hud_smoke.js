@@ -1,6 +1,10 @@
 // HUD smoke test: validates HUD mounts, renders a tagged note, filter behavior, and session id presence
 // Run inside app context (after teleprompter_pro.html boot). Exits with error on failure.
 (async function(){
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    console.log('[hud_smoke] skip: no DOM available (Node context)');
+    return;
+  }
   const ok = (b,m)=>{ if(!b) throw new Error(m); };
   try { localStorage.setItem('tp_hud_prod','1'); } catch {}
   // Wait a moment for loader to mount

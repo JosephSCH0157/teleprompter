@@ -3,9 +3,21 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
   // Render a compact settings body with tab content placeholders.
   // The media tab contains mic device selector and mic controls which
   // will be wired to the TS mic API via `wireSettingsDynamic`.
+  try { console.info('[settings-builder] renderSettingsBody TS v2025-12-07'); } catch {}
   const html = `
-    <div data-tab-content="general">
-      <h4>General</h4>
+    <div class="settings-body-root" data-settings-source="ts-builder-2025-12-07">
+    <div id="settingsTabs" class="settings-tabs" role="tablist">
+      <button type="button" class="settings-tab active" data-settings-tab="general" aria-pressed="true">General</button>
+      <button type="button" class="settings-tab" data-settings-tab="media" aria-pressed="false">Media</button>
+      <button type="button" class="settings-tab" data-settings-tab="recording" aria-pressed="false">Recording</button>
+      <button type="button" class="settings-tab" data-settings-tab="advanced" aria-pressed="false">Advanced</button>
+      <button type="button" class="settings-tab" data-settings-tab="pricing" aria-pressed="false">Pricing</button>
+      <button type="button" class="settings-tab" data-settings-tab="about" aria-pressed="false">About</button>
+    </div>
+
+    <div class="settings-panels">
+      <section class="settings-panel" data-settings-panel="general" data-tab-content="general">
+        <h4>General</h4>
       <div class="settings-grid">
         <div class="settings-card anim-in">
           <h4>Main Display Typography</h4>
@@ -24,7 +36,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           </div>
           <div class="settings-inline-row">
             <button id="typoResetMain" class="chip">Reset to Default</button>
-            <button id="typoCopyMainToDisplay" class="chip">Copy ➜ Display</button>
+            <button id="typoCopyMainToDisplay" class="chip">Copy ??? Display</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="readable">Readable</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="studio">Studio</button>
             <button class="chip" data-typo-preset data-display="main" data-typo-preset-name="bigroom">Big Room</button>
@@ -33,6 +45,16 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
 
         <div class="settings-card anim-in">
           <h4>External Display Typography</h4>
+          <div class="settings-inline-row" id="typographyPresetsRow">
+            <span class="microcopy" style="color:#9fb4c9;font-size:12px">Presets:</span>
+            <button type="button" class="chip btn-chip" data-typo-preset="default" aria-pressed="false">Default</button>
+            <button type="button" class="chip btn-chip" data-typo-preset="easyRead" aria-pressed="false">EasyRead</button>
+            <button type="button" class="chip btn-chip" data-typo-preset="smoothComfort" aria-pressed="false">SmoothComfort</button>
+            <label class="microcopy" style="margin-left:auto;display:flex;gap:8px;align-items:center;color:#9fb4c9;font-size:12px">
+              <input type="checkbox" id="typoPresetApplyBoth" />
+              Apply to main too
+            </label>
+          </div>
           <div class="settings-inline-row">
             <label>Font family <input id="typoFontFamily-display" placeholder='system-ui, "Segoe UI", Roboto, Arial, sans-serif'></label>
             <label>Size (px) <input id="typoFontSize-display" type="number" min="18" max="120"></label>
@@ -48,7 +70,7 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           </div>
           <div class="settings-inline-row">
             <button id="typoResetDisplay" class="chip">Reset to Default</button>
-            <button id="typoCopyDisplayToMain" class="chip">Copy ➜ Main</button>
+            <button id="typoCopyDisplayToMain" class="chip">Copy ??? Main</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="readable">Readable</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="studio">Studio</button>
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="bigroom">Big Room</button>
@@ -56,17 +78,17 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
       </div>
       <div class="settings-small">Changes apply live to the selected display and are persisted.</div>
-    </div>
+      </section>
 
-    <div data-tab-content="media" style="display:none">
-      <h4>Microphone</h4>
+      <section class="settings-panel" data-settings-panel="media" data-tab-content="media" hidden>
+        <h4>Microphone</h4>
       <div class="row">
         <label>Input device
           <select id="settingsMicSel" class="select-md"></select>
         </label>
       </div>
       <div class="row">
-        <button id="settingsRequestMicBtn" class="chip">Request mic</button>
+        <button id="settingsRequestMicBtn" class="chip" data-tp-request-mic="settings">Request mic</button>
         <button id="settingsReleaseMicBtn" class="chip">Release mic</button>
         <button id="settingsStartDbBtn" class="chip">Start dB meter</button>
         <button id="settingsStopDbBtn" class="chip">Stop dB meter</button>
@@ -79,6 +101,34 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </label>
       </div>
 
+      <section class="settings-card asr anim-in" id="asrSettingsCard">
+        <h4>ASR (speech-to-text)</h4>
+        <div class="settings-grid" style="gap:8px;grid-template-columns: repeat(auto-fit,minmax(160px,1fr));">
+          <label>Engine
+            <select id="asrEngine" title="Choose how Anvil listens to your voice. Different engines trade off speed, accuracy, and privacy.">
+              <option value="webspeech">Web Speech (browser)</option>
+              <option value="vosk">Offline (WASM)</option>
+              <option value="whisper">Server (Whisper bridge)</option>
+            </select>
+          </label>
+          <label>Language
+            <input id="asrLang" type="text" placeholder="en-US" title="Language you'll speak during recording so ASR can interpret correctly.">
+          </label>
+          <label><input id="asrInterim" type="checkbox" title="Show partial speech results before a sentence finishes for faster scroll response."> Use interim results</label>
+          <label><input id="asrFillers" type="checkbox" title="Remove filler words like um/uh/like so scroll aligns better with your script."> Filter filler words</label>
+          <label>Threshold
+            <input id="asrThresh" type="number" step="0.01" min="0" max="1" title="Minimum confidence before ASR accepts words. Higher = cleaner/slower; lower = more responsive/noisier.">
+          </label>
+          <label>Endpointing (ms)
+            <input id="asrEndMs" type="number" min="200" step="50" title="How long ASR waits after silence before finalizing a phrase. Lower reacts faster; higher is smoother but delayed.">
+          </label>
+        </div>
+        <div class="settings-small asr-status-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+          <span id="asrSaveStatus" aria-live="polite"></span>
+          <span id="asrAppliedStatus" aria-live="polite"></span>
+        </div>
+      </section>
+
       <h4>Hybrid Gate</h4>
       <div class="row">
         <label>Hybrid gate source
@@ -89,28 +139,55 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <option value="db_and_vad">VAD and dB</option>
           </select>
         </label>
-        <a id="linkAsrSettings" href="#asrSettings" class="settings-link" style="margin-left:12px">ASR settings</a>
       </div>
-    </div>
+      </section>
 
-    <div data-tab-content="recording" style="display:none">
-      <h4>Recording</h4>
+      <section class="settings-panel" data-settings-panel="recording" data-tab-content="recording" hidden>
+        <h4>Recording</h4>
+
+      <div class="settings-card anim-in">
+        <h4>Auto-record</h4>
+        <div class="row">
+          <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>
+        </div>
+        <div class="row" id="autoRecordFolderRow">
+          <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>
+          <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder</button>
+          <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>
+        </div>
+      </div>
+
+      <div class="settings-card anim-in">
+        <h4>Recorder integrations</h4>
+        <div class="row settings-inline-row" id="recAdaptersRow">
+          <div class="rec-list" style="display:flex;flex-wrap:wrap;gap:10px">
+            <label class="tp-check"><input type="checkbox" id="recAdapterCore" checked/> Core recorder</label>
+            <label class="tp-check"><input type="checkbox" id="recAdapterObs"/> OBS (WebSocket)</label>
+          </div>
+        </div>
+        <div class="row settings-inline-row">
+          <label class="tp-check"><input type="checkbox" id="recModeSingle"/> Single mode (one adapter at a time)</label>
+          <button id="recAdaptersRefresh" class="chip btn-chip" type="button">Refresh status</button>
+          <span id="recAdaptersHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Pick which integrations to trigger when Auto-record is on.</span>
+        </div>
+      </div>
+
       <div class="settings-card anim-in">
         <h4>OBS (WebSocket)</h4>
         <div class="row">
-          <label><input type="checkbox" id="settingsEnableObs"/> Enable OBS</label>
-          <span id="obsStatusText" class="badge muted" style="margin-left:auto">disconnected</span>
+          <label><input type="checkbox" id="settingsEnableObs" data-tp-obs-toggle/> Enable OBS</label>
+          <span id="obsStatusText" class="badge muted obs-status" style="margin-left:auto">disconnected</span>
         </div>
         <form id="settingsObsCredsForm" class="settings-inline-row" autocomplete="off" novalidate onsubmit="return false;">
-          <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455"/></label>
-          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="••••••"/></label>
+          <label>Host <input id="settingsObsHost" type="text" class="select-md" placeholder="127.0.0.1:4455" autocomplete="off"/></label>
+          <label>Password <input id="settingsObsPassword" type="password" class="select-md" placeholder="********" autocomplete="current-password"/></label>
           <button type="submit" hidden aria-hidden="true"></button>
         </form>
         <div class="row gap">
           <button id="settingsObsTest" data-action="obs-test" class="chip btn-chip" type="button">Test connection</button>
           <span id="settingsObsTestMsg" class="obs-test-msg" role="status" aria-live="polite"></span>
         </div>
-        <small class="muted">OBS ➜ Tools ➜ WebSocket Server Settings (default port 4455). Use this host and password.</small>
+        <small class="muted">OBS ??? Tools ??? WebSocket Server Settings (default port 4455). Use this host and password.</small>
       </div>
 
       <div class="settings-card anim-in">
@@ -121,11 +198,64 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <small class="muted">These buttons call the recorder registry so Bridge + OBS stay in sync.</small>
       </div>
-    </div>
+      </section>
 
-    <div data-tab-content="advanced" style="display:none">
-      <h4>Advanced</h4>
-      <div class="row">Advanced settings.</div>
+      <section class="settings-panel" data-settings-panel="advanced" data-tab-content="advanced" hidden>
+        <h4>Advanced</h4>
+        <div class="row">Advanced settings.</div>
+        <div class="row gap">
+          <button id="btnExportSettings" class="chip btn-chip" type="button">Export settings</button>
+          <button id="btnImportSettings" class="chip btn-chip" type="button">Import settings</button>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-panel="pricing" data-tab-content="pricing" hidden>
+        <div class="settings-card anim-in">
+          <h4>Pricing</h4>
+          <p>
+            You???re currently using a pre-release build of Anvil. During this phase,
+            all features are available to invited testers.
+          </p>
+          <ul>
+            <li>No watermarking.</li>
+            <li>Local files stay on your machine.</li>
+            <li>Feedback from this build helps shape the paid tiers.</li>
+          </ul>
+          <p class="settings-small">
+            Final pricing will be published closer to public launch.
+          </p>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-panel="about" data-tab-content="about" hidden>
+        <div class="settings-card anim-in" data-tab="about">
+          <h4>About Anvil</h4>
+          <div class="settings-small">
+            <p>
+              Anvil is part of the Podcaster?s Forge toolset ? a teleprompter and recording companion
+              designed for creators who want fewer tabs, less chaos, and more control.
+            </p>
+            <p>
+              If Anvil has saved you at least one cup of coffee?s worth of time,
+              you can support ongoing development here:
+              <a href="https://buymeacoffee.com/podcastersforge"
+                 class="settings-link"
+                 target="_blank"
+                 rel="noopener noreferrer">
+                buymeacoffee.com/podcastersforge
+              </a>.
+            </p>
+            <ul>
+              <li>Scroll control that stays smooth and predictable.</li>
+              <li>Color and typography options tuned for on-camera clarity.</li>
+              <li>Scripts stay local and easy to swap while you work.</li>
+              <li>OBS integration to keep recording in sync with your sessions.</li>
+            </ul>
+            <p id="aboutVersion">Version: dev build</p>
+          </div>
+        </div>
+      </section>
+    </div>
     </div>
   `;
 
@@ -153,6 +283,14 @@ export function addAsrWizardCard(root: HTMLElement) {
         <button id="asrGrantPerm" class="btn">Grant mic access</button>
       </div>
 
+      <div class="row" style="gap:8px;align-items:center;">
+        <label class="grow">Profile
+          <select id="asrProfileSelect"></select>
+        </label>
+        <button id="asrProfileLoad" class="chip btn-chip" type="button">Load profile</button>
+      </div>
+      <small class="muted">Choose a saved ASR profile to restore calibration values.</small>
+
       <div class="row">
         <label><input id="asrAEC" type="checkbox"> Echo cancellation</label>
         <label><input id="asrNS"  type="checkbox"> Noise suppression</label>
@@ -161,27 +299,35 @@ export function addAsrWizardCard(root: HTMLElement) {
       </div>
 
       <div class="row">
-        <label class="grow">Profile label <input id="asrLabel" placeholder="Studio A • MV7 • no AEC"></label>
+        <label class="grow">Profile label <input id="asrLabel" placeholder="Studio A | MV7 | no AEC"></label>
       </div>
 
       <div class="row">
         <div id="asrMeter" class="asr-meter"><div class="marker" aria-hidden="true"></div></div>
       </div>
       <div class="row spread">
-        <div>Noise: <span id="asrNoise">–</span> dBFS</div>
-        <div>Speech: <span id="asrSpeech">–</span> dBFS</div>
-        <div>SNR: <span id="asrSnr">–</span> dB</div>
+        <div>Noise: <span id="asrNoise">--</span> dBFS</div>
+        <div>Speech: <span id="asrSpeech">--</span> dBFS</div>
+        <div>SNR: <span id="asrSnr">--</span> dB</div>
       </div>
 
       <div class="row gap">
         <button id="asrStartBtn" class="btn primary">Start calibration</button>
+        <button id="asrCalibBtn" type="button" hidden aria-hidden="true">Calibrate (hidden)</button>
         <button id="asrPreviewBtn" class="btn">Preview (gate)</button>
         <button id="asrPreviewStop" class="btn">Stop preview</button>
         <button id="asrSaveBtn" class="btn success">Save profile</button>
+      </div>
+      <div
+        class="asr-status-banner"
+        data-calibration-status
+        id="asrCalStatus"
+        hidden
+      >
+        Click ???Start calibration??? to begin. We???ll ask you to stay quiet, then speak in your normal voice.
       </div>
       <small class="muted">Tip: Use headphones; leave NS/AGC off for best timing. Enable AEC only if using speakers.</small>
     `;
     container.appendChild(sec);
   } catch {}
 }
-

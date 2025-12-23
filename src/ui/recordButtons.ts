@@ -1,5 +1,5 @@
 import { isSessionRecording, startSessionRecording, stopSessionRecording } from '../recording/recorderRegistry';
-import type { AppStore } from '../state/appStore';
+import type { AppStore } from '../state/app-store';
 
 export interface WireRecordButtonsOptions {
   startSelector?: string | string[];

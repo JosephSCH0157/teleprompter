@@ -2,7 +2,16 @@
 // Tiny HUD chip in the topbar showing the current scroll mode.
 // Passive: no clicks, just reflects router/store state.
 
-type ScrollMode = 'manual' | 'auto' | 'hybrid' | 'step' | 'rehearsal' | string;
+type ScrollMode =
+  | 'timed'
+  | 'wpm'
+  | 'hybrid'
+  | 'asr'
+  | 'step'
+  | 'rehearsal'
+  | 'manual'
+  | 'auto'
+  | string;
 
 declare global {
   interface Window {
@@ -15,14 +24,20 @@ declare global {
 function formatMode(mode: ScrollMode): string {
   const m = String(mode || '').toLowerCase();
   switch (m) {
-    case 'auto':
-      return 'Auto';
+    case 'timed':
+      return 'Timed';
+    case 'wpm':
+      return 'WPM';
+    case 'asr':
+      return 'ASR';
     case 'hybrid':
       return 'Hybrid';
     case 'step':
       return 'Step';
     case 'rehearsal':
       return 'Rehearsal';
+    case 'auto':
+      return 'Auto';
     case 'manual':
     default:
       return 'Manual';
@@ -130,4 +145,3 @@ if (typeof document !== 'undefined') {
 }
 
 export { installModeChip };
-

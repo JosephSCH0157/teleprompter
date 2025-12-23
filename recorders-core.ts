@@ -307,7 +307,7 @@ const defaultSettings: RecorderSettings = {
   selected: ['obs', 'descript'],
   preferObsHandoff: false,
   configs: {
-    obs: { url: 'ws://192.168.1.200:4455', password: '' },
+    obs: { url: 'ws://127.0.0.1:4455', password: '' },
     companion: { url: 'http://127.0.0.1:8000', buttonId: '1.1' },
     bridge: { startUrl: 'http://127.0.0.1:5723/record/start', stopUrl: '' },
     descript: { startHotkey: 'Ctrl+R', via: 'bridge' },

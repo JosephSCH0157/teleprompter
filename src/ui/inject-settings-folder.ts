@@ -2,16 +2,16 @@
 // Ensures the mapped-folder controls exist inside the Settings panel.
 // Creates a compact row with: Choose Folder, Recheck, Scripts <select>, hidden fallback input.
 export function ensureSettingsFolderControls() {
-  // Host resolution: try Settings overlay body first (#settingsBody), then legacy panel fallbacks.
+  // Host resolution: prefer the Media settings panel; bail if it isn't present yet.
   const settingsBody = document.getElementById('settingsBody') as HTMLElement | null;
-  const host = settingsBody || (document.querySelector('#settings, #settingsPanel, [data-panel="settings"], aside.settings, .settings-panel') as HTMLElement | null)
-    || (document.querySelector('#menu, #sidebar, [data-role="settings"]') as HTMLElement | null);
+  const mediaPanel =
+    (settingsBody?.querySelector<HTMLElement>('[data-settings-panel="media"]')
+      ?? document.querySelector<HTMLElement>('[data-settings-panel="media"]'))
+    || document.querySelector<HTMLElement>('[data-tab-content="media"]');
 
-  if (!host) return false;
-
-  // Avoid duplicates if controls already exist anywhere in DOM.
-  const already = document.querySelector('#chooseFolderBtn, #scriptSelect, #recheckFolderBtn');
-  if (already) return true;
+  if (!mediaPanel) {
+    return false;
+  }
 
   // If legacy external scripts row exists in sidebar, hide it (will be relocated here).
   try {
@@ -19,28 +19,39 @@ export function ensureSettingsFolderControls() {
     if (legacyRow) legacyRow.style.display = 'none';
   } catch {}
 
-  // Card wrapper (Settings overlay uses cards keyed by data-tab). Place under 'general' tab (primary visibility).
-  const card = document.createElement('div');
-  card.className = 'settings-card settings-card--scripts';
-  card.id = 'scriptsFolderCard';
-  (card as any).dataset.tab = 'general';
+  // Reuse an existing card/controls if they already exist, but move them under the Media panel.
+  const existingControls = document.querySelector('#chooseFolderBtn, #scriptSelect, #recheckFolderBtn');
+  let card = (document.getElementById('scriptsFolderCard') || existingControls?.closest<HTMLElement>('.settings-card, [data-settings-panel]')) as HTMLElement | null;
 
-  card.innerHTML = `
-    <h4>Scripts Folder</h4>
-    <div class="settings-small">Map a directory of .txt / .md / .docx files; select to load instantly.</div>
-    <div class="settings-row settings-mapped-folder">
-      <div class="settings-row__controls">
-        <button id="chooseFolderBtn" type="button">Choose Folder</button>
-        <button id="recheckFolderBtn" type="button" title="Recheck permission">Recheck</button>
-        <select id="scriptSelect" class="select-md" aria-label="Mapped folder scripts" style="min-width:240px"></select>
-        <input id="folderFallback" type="file" webkitdirectory directory multiple hidden>
+  // Card wrapper (Settings overlay uses cards keyed by data-tab). Place under 'media' tab alongside recording controls.
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'settings-card settings-card--scripts';
+    card.id = 'scriptsFolderCard';
+    (card as any).dataset.tab = 'media';
+
+    card.innerHTML = `
+      <h4>Scripts Folder</h4>
+      <div class="settings-small">Map a directory of .txt / .md / .docx files; select to load instantly.</div>
+      <div class="settings-row settings-mapped-folder">
+        <div class="settings-row__controls">
+          <button id="chooseFolderBtn" type="button">Choose Folder</button>
+          <button id="recheckFolderBtn" type="button" title="Recheck permission">Recheck</button>
+          <select id="scriptSelect" class="select-md" aria-label="Mapped folder scripts" style="min-width:240px"></select>
+          <input id="folderFallback" type="file" webkitdirectory directory multiple hidden>
+        </div>
       </div>
-    </div>
-  `;
+    `;
+  } else {
+    // Normalize id/classes on reused nodes
+    if (!card.id) card.id = 'scriptsFolderCard';
+    card.classList.add('settings-card');
+    card.classList.add('settings-card--scripts');
+    (card as any).dataset.tab = 'media';
+  }
 
-  // Prefer inserting inside the General tab content container if present
-  const generalContainer = document.querySelector('[data-tab-content="general"]') as HTMLElement | null;
-  if (generalContainer) generalContainer.appendChild(card); else host.appendChild(card);
+  // Always insert inside the Media panel (Recording/Media tab)
+  if (card.parentElement !== mediaPanel) mediaPanel.appendChild(card);
   signalSettingsFolderReady('injected');
 
   // Ensure visibility tracks the active tab, even if injected after initial tab wiring.

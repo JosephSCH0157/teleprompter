@@ -86,10 +86,10 @@ while ($listener.IsListening) {
       $file = Join-Path -Path $Root -ChildPath $rel
       if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         # Try default file extension handling for directories
-        if (Test-Path -LiteralPath (Join-Path $file 'index.html')) {
-          $file = Join-Path $file 'index.html'
-        } elseif (Test-Path -LiteralPath (Join-Path $file 'teleprompter_pro.html')) {
+        if (Test-Path -LiteralPath (Join-Path $file 'teleprompter_pro.html')) {
           $file = Join-Path $file 'teleprompter_pro.html'
+        } elseif (Test-Path -LiteralPath (Join-Path $file 'index.html')) {
+          $file = Join-Path $file 'index.html'
         }
       }
       if (Test-Path -LiteralPath $file -PathType Leaf) {

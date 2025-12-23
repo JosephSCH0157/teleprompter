@@ -1,53 +1,95 @@
-// Pure string-based normalizers for teleprompter scripts
+﻿// @ts-nocheck
+import {
+  BLOCK_TAG_NAMES,
+  CUE_TAG_NAMES,
+  INLINE_TAG_BASES,
+  ALLOWED_NORMALIZED_TAG_NAMES,
+} from './tag-constants';
 
-export function fallbackNormalizeText(input: string): string {
-  let txt = String(input || '');
-  txt = txt.replace(/\r\n?/g, '\n').replace(/ +\n/g, '\n').replace(/[’]/g, "'");
-  txt = txt
-    .replace(/\[\/\s*s1\s*\]/gi, '[/s1]')
-    .replace(/\[\/\s*s2\s*\]/gi, '[/s2]')
-    .replace(/\[\/\s*note\s*\]/gi, '[/note]');
-  return txt;
+export {};
+
+// src/script/normalize.ts
+// Minimal, dependency-free normalizers used by tools-loader in dev/module boot.
+
+/**
+ * Strict normalizer: canonicalize markup to the standard used by the app.
+ * Safe rules only: normalize quotes/newlines, canonicalize core tags,
+ * and collapse blank lines. No aggressive reflow or block rewriting.
+ */
+const BLOCK_TAG_PATTERN = BLOCK_TAG_NAMES.join('|');
+const CUE_TAG_PATTERN = CUE_TAG_NAMES.join('|');
+const INLINE_TAG_PATTERN = INLINE_TAG_BASES.join('|');
+const ALLOWED_TAG_SET = new Set(ALLOWED_NORMALIZED_TAG_NAMES);
+const INLINE_CANONICAL_REGEXP = new RegExp(
+  `\\[\\s*(\\/)?\\s*(${INLINE_TAG_PATTERN})(\\s*=\\s*[^\\]]+)?\\s*\\]`,
+  'gi',
+);
+
+export function normalizeToStandardText(input = '') {
+  let text = String(input ?? '');
+
+  // Normalize common Unicode punctuation to ASCII
+  text = text
+    .replace(/[\u2018\u2019\u201B]/g, "'")  // curly single quotes → '
+    .replace(/[\u201C\u201D]/g, '"')       // curly double quotes → "
+    .replace(/\u00A0/g, ' ');              // non-breaking space → regular space
+
+  // Canonicalize speaker/note tags: lowercase + trim spaces inside brackets
+  text = text
+    .replace(new RegExp(`\\[\\s*(${BLOCK_TAG_PATTERN})\\s*\\]`, 'gi'), (_, tag) => `[${String(tag).toLowerCase()}]`)
+    .replace(new RegExp(`\\[\\s*\\/\\s*(${BLOCK_TAG_PATTERN})\\s*\\]`, 'gi'), (_, tag) => `[/${String(tag).toLowerCase()}]`)
+    .replace(new RegExp(`\\[\\s*(${CUE_TAG_PATTERN})\\s*\\]`, 'gi'), (_, tag) => `[${String(tag).toLowerCase()}]`);
+
+  text = text.replace(INLINE_CANONICAL_REGEXP, (_, slash, tag, attr) => {
+    const normalizedTag = String(tag).toLowerCase();
+    let attrStr = '';
+    if (attr) {
+      const eqIndex = attr.indexOf('=');
+      if (eqIndex >= 0) {
+        const value = attr.slice(eqIndex + 1).trim();
+        attrStr = '=' + value;
+      }
+    }
+    const prefix = slash ? '/' : '';
+    return `[${prefix}${normalizedTag}${attrStr}]`;
+  });
+
+  // Strip unsupported inline tags (clean up before validation)
+  text = text.replace(/\[([^\]]+)\]/g, (match, inner) => {
+    const trimmed = String(inner || '').trim();
+    if (!trimmed) return '';
+    const eqIndex = trimmed.indexOf('=');
+    const head = eqIndex >= 0 ? trimmed.slice(0, eqIndex) : trimmed;
+    let key = head.trim().toLowerCase();
+    if (key.startsWith('/')) key = key.slice(1).trim();
+    key = key.replace(/\s+/g, ' ');
+    return ALLOWED_TAG_SET.has(key) ? match : '';
+  });
+
+  // Normalize line endings and trim stray BOM
+  text = text
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+
+  // Trim trailing whitespace on each line
+  text = text.replace(/[ \t]+$/gm, '');
+
+  // Collapse excessive blank lines (3+ → 2)
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  return text;
 }
 
-export function normalizeToStandardText(input: string): string {
-  let txt = String(input || '');
-  txt = txt
-    .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/[’]/g, "'")
-    .replace(/\[\s*(s1|s2|note)\s*\]/gi, (_, x) => `[${(x || '').toLowerCase()}]`)
-    .replace(/\[\s*\/\s*(s1|s2|note)\s*\]/gi, (_, x) => `[/${(x || '').toLowerCase()}]`);
-
-  // Move inline notes out of speaker paragraphs
-  txt = txt.replace(
-    /\[(s1|s2)\]([\s\S]*?)\[note\]([\s\S]*?)\[\/note\]([\s\S]*?)\[\/\1\]/gi,
-    (_, r, pre, note, post) => `[note]${note.trim()}[/note]\n[${r}]${(pre + ' ' + post).trim()}[/${r}]`
-  );
-
-  txt = txt
-    .replace(/\[(s1|s2)\]\s*(?=\S)/gi, (_, r) => `[${r}]\n`)
-    .replace(/([^\n])\s*\[\/s(1|2)\](?=\s*$)/gim, (_, ch, sp) => `${ch}\n[/s${sp}]`);
-
-  txt = txt.replace(/\n?(\[note\][\s\S]*?\[\/note\])\n?/gi, '\n$1\n');
-  txt = txt.replace(/\n{3,}/g, '\n\n').trim() + '\n';
-
-  const blocks = txt.split(/\n{2,}/);
-  let current = 's1';
-  const out: string[] = [];
-  for (let b of blocks) {
-    const first = b.match(/^\s*\[(s1|s2|note)\]/i)?.[1]?.toLowerCase();
-    if (first === 'note') {
-      out.push(b);
-      continue;
-    }
-    if (first === 's1' || first === 's2') {
-      current = first;
-      if (!/\[\/s[12]\]/i.test(b)) b = b + `\n[/${current}]`;
-      out.push(b);
-    } else {
-      out.push(`[${current}]\n${b}\n[/${current}]`);
-    }
-  }
-  return out.join('\n\n') + '\n';
+/**
+ * Gentle fallback normalizer: basic whitespace and quote cleanup.
+ */
+export function fallbackNormalizeText(input = '') {
+  let text = String(input ?? '');
+  text = text
+    .replace(/[\u2018\u2019\u201B]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+  return text;
 }

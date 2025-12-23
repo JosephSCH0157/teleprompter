@@ -1,3 +1,9 @@
+// LEGACY HUD/ASR ENDPOINT
+// This file is loaded directly as .js by script tags or dynamic imports.
+// Source-of-truth logic now lives in TypeScript modules (src/asr/v2/*.ts, src/hud/*).
+// DO NOT rename or remove this file without updating the HUD/ASR build pipeline
+// to emit a matching .js artifact at the same URL.
+
 // src/asr/v2/adapters/vad.js
 // Minimal VAD adapter: consume tp:db events and derive speaking boolean
 export function createVadAdapter(thresholdDb = -42) {

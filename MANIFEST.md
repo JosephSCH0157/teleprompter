@@ -1,57 +1,44 @@
 ---
-build: anvil-baseline-1.6.0
+build: anvil-1.7.8
 commit: main
-date: 2025-10-12
-modules:
-	- teleprompter_pro.html
-	- teleprompter_pro.js
-	- teleprompter_pro.css
-	- display.html
-	- scroll-helpers.js
-	- scroll-control.js
-	- io-anchor.js
-	- recorders.js
-	- debug-tools.js
-	- debug-seed.js
+date: 2025-12-20
 ---
 
 # ANVIL Manifest
 
-**Build**: 2025-10-12 00:00  
-**Baseline**: feature/pll-controller  
-**Dev Mode**: ON when ?dev=1 or localStorage tp_dev_mode=1
+**Entry points**
+- App shell: `teleprompter_pro.html`
+- Main bundle: `dist/index.js` (from `src/index.ts`)
+- Styles: `teleprompter_pro.css`
+- Display shell: `display.html` (mirror-only; no TS bundle)
+- Recorder bridge (compat): `recorders.js` (from TS build:compat)
+- ASR hook bundle: `dist/index-hooks/asr.js`
+- Forge login: `login.html` + `dist/forge/login.js`
+- Forge account: `account.html` + `dist/forge/account.js`
+- Forge config injector: `forge-config.js`
 
-## Entry Points
-- App HTML: ./teleprompter_pro.html
-- Main script: ./teleprompter_pro.js
-- Scroll helpers: ./scroll-helpers.js
-- Speech/anchor: ./io-anchor.js
-- HUD: ./debug-tools.js
+**Runtime modules (TS source of truth)**
+- HUD: `src/hud/*` (loader/controller/toggle)
+- Rendering + ingest: `src/render-script.ts`, `src/features/script-ingest.ts`
+- Display sync: `src/features/display-sync.ts`
+- Scroll brain/router: `src/scroll/*`
+- Recorder registry/backends: `src/recording/*`
+- Forge auth/profile: `src/forge/*`
+- Easter eggs (TS): `src/ui/eggs.ts`
 
-## Flags & Storage
-- URL: ?dev=1 (enables dev)  
-- localStorage: tp_dev_mode=1, tp_calm=1
+**Legacy kept for compatibility (quarantined)**
+- Legacy HUD/debug and ASR stub: `legacy/debug-tools.legacy.js`, `legacy/debug-seed.legacy.js`, `legacy/asr-bridge-speech.legacy.js`
+- Legacy eggs: `legacy/eggs.legacy.js`
+- Archived pre-TS scroll/rehearsal helpers: `legacy/features/*.js`, `legacy/scroll/scroll-brain.js`
+- Other JS stubs still shipped for back-compat: `obs.js`, `hotkey.js`, `bridge.js`, `events.js`, `help.js`, `ui-sanitize.js`, `asr-types.js`
+- Generated logic helpers: `src/build-logic/*.js` (output of `npm run build:logic`)
 
-## Known Issues
-- Calm Mode routes many scroll paths but some direct writes may still bypass helpers.
-- MutationObserver anchoring may need throttle if logs show redundant anchors.
+**Generated modules**
+- `src/build-logic/**` — compiled from `src/logic/**` via `npm run build:logic` (do not edit)
 
-## Repro Steps
-1) Open teleprompter_pro.html in a browser
-2) Load sample text via Controls > Load sample text
-3) Click Start speech sync (if supported) or simulate matches; observe HUD logs (~ to toggle)
-
-## Files of Interest
-- Anchors: ./io-anchor.js
-- Scroll driver/control: ./scroll-control.js
-- HUD installer: ./debug-tools.js
-
-## Test Content
-- Add your own script content in the editor; debug seed file is included as ./debug-seed.js.
-
-## Recent Dev Changes (Unreleased)
-- Monotonic commit with hysteresis and per-commit jump caps; throttled commit application.
-- Distance-penalized ranking with rarity gating; duplicate-line penalty (HUD visible).
-- Jitter meter with auto-elevated thresholds; Lost Mode with high‑IDF 3‑gram re-anchoring.
-- Calm Mode end-of-script cap relaxation; dynamic ease step to avoid late-script slowdown.
-- End-of-script guard to stop further scrolling at bottom.
+**Notes**
+- `ui-sanitize.js` is intentionally commented out in `teleprompter_pro.html`.
+- Display window no longer loads the main TS bundle; it hydrates via `tp_display` snapshots.
+- Forge config is injected via `forge-config.js` (sets `window.__forgeSupabaseUrl/__forgeSupabaseAnonKey`).
+- Dev/QA: HUD/diagnostics temporarily disabled (no `#hud-root`; HUD boot gated; hudLog is console-only) while HUD v2 is redesigned.
+- Settings invariants: single overlay (`#settingsBody`), `mountSettings` rebuilds + wires once, `wireSettingsDynamic` guarded by `data-tpSettingsWired`, every card stores a `data-wired` flag, mic/cam selects use the helpers added in `src/ui/settings/wire.ts`, closing Settings is purely visual, and `npm run gate` (which rewrites `tools/ui_crawl_report.json`) must pass before landing.

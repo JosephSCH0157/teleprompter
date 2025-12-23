@@ -1,6 +1,10 @@
 // tools/rehearsal_smoke.js
 // Minimal smoke test for Rehearsal Mode behavior
 (function(){
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    console.log('[rehearsal_smoke] skip: no DOM available (Node context)');
+    return;
+  }
   function ok(cond, msg){ if(!cond) throw new Error('[rehearsal_smoke] ' + msg); }
   function getSel(){ return document.getElementById('scrollMode'); }
   const api = window.__tpRehearsal || {};

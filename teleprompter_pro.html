@@ -5,8 +5,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>Anvil v1.7.5c</title>
-  <meta name="description" content="Anvil Teleprompter Pro — speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+  <title>Anvil v1.7.8</title>
+  <meta name="description" content="Anvil Teleprompter Pro - speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
   <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
@@ -14,12 +14,18 @@
   <meta name="theme-color" content="#0b0f19" />
   <!-- Enable standalone display mode for iOS when added to Home Screen (needed for status-bar-style below) -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <!-- Removed: <meta name="msapplication-navbutton-color" ...> (obsolete) -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="color-scheme" content="dark light" />
 
   <!-- Canonical helps SEO (avoid /index.html vs /) -->
   <link rel="canonical" href="https://example.com/teleprompter/" />
+
+  <script>
+    try { window.APP_VERSION = '1.7.8'; window.__TP_TS_MODE = true; window.__TP_TS_OVERLAYS = true; } catch (err) { /* no-op */ }
+    try { window.__TP_TS_OVERLAYS = true; } catch {}
+  </script>
 
   <!-- Favicons -->
   <!-- Site icon (PNG). Place the provided anvil/mic image at assets/anvil-favicon.png -->
@@ -28,7 +34,7 @@
   <link rel="apple-touch-icon" href="assets/anvil-favicon.png">
 
   <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
-  <link rel="preconnect" href="http://192.168.1.200:4455" crossorigin>
+  <!-- OBS preconnect removed to avoid stale IPs; configure via Settings -->
   <!-- If you serve fonts or CDN assets, add preconnects for those origins, too -->
 
   <!-- Load CSS in a simple, reliable way -->
@@ -37,27 +43,33 @@
   <!-- Preload Mammoth so DOCX importer always sees window.mammoth -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
-  <!-- Modern TS boot loader (single entry) -->
-  <script type="module" src="/src/boot/boot-loader.js"></script>
+  <script src="/forge-config.js"></script>
 
-  <!-- Preload the dist bundle for faster module resolution -->
+  <!-- TS bundle preload + entry (single brain) -->
+  <link id="tp-dist-preload" rel="modulepreload" href="./dist/index.js?v=dev" as="script">
+  <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
+  <script type="module" src="./adapters/obsBridge.js"></script>
   <script>
     (function(){
       try {
-        var v = encodeURIComponent(window.__TP_ADDV || 'dev');
-        var href = './dist/index.js?v=' + v;
-        var link = document.createElement('link');
-        link.rel = 'modulepreload';
-        link.as = 'script';
-        link.href = href;
-        document.head.appendChild(link);
+        var dist = './dist/index.js';
+        var addv = (window).__TP_ADDV;
+        if (typeof addv === 'function') dist = addv(dist);
+        else if (addv) dist = dist + '?v=' + encodeURIComponent(addv);
+        else dist = dist + '?v=dev';
+        var preload = document.getElementById('tp-dist-preload');
+        if (preload) preload.href = dist;
+        var entry = document.getElementById('tp-dist-entry');
+        if (entry) entry.src = dist;
       } catch (err) {
-        try { console.warn('[preload] unable to append modulepreload link', err); } catch {}
+        try { console.warn('[preload] using default dist path', err); } catch {}
       }
     })();
   </script>
+  <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
+  <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
-  <!-- Dev flag → add .tp-dev class early so CSS can key off it -->
+<!-- Dev flag G?? add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
       try {
@@ -114,7 +126,7 @@
     })();
   </script>
 
-  <!-- Third-party: mammoth will be loaded lazily by ui/upload.js when needed -->
+  <!-- Third-party: mammoth will be loaded lazily by TS upload pipeline when needed -->
 
   <!-- (helpers loaded from modules in dev via src/index.js) -->
 
@@ -122,24 +134,30 @@
   
 
   <!-- Early UI sanitizer: remove duplicate settings panels injected by older builds/extensions -->
-  <script src="ui-sanitize.js"></script>
+  <!-- <script src="ui-sanitize.js"></script> -->
+  <!-- Legacy guard: ensure no old app-store script runs (TS bundle owns __tpStore) -->
+  <script>
+    try {
+      document.querySelectorAll('script[src*="state/app-store.js"]').forEach((s) => s.remove());
+    } catch {}
+  </script>
+
+  <!-- Local scripts store: provides window.Scripts and ESM export for TS wiring -->
+  <!-- Legacy scripts store disabled; TS script-editor now owns sidebar/load wiring -->
+  <!-- <script type="module" src="archive/scriptsStore_fixed.js"></script> -->
 
   <!-- Single loader above; no additional booters here. -->
-
-  <!-- Manual legacy escape hatch: only loads teleprompter_pro.js if ?legacy=1 is present -->
-  <script>
-    if (location.search.includes('legacy=1')) {
-      document.write('<script type="module" src="/teleprompter_pro.js"><\/script>');
-    }
-  </script>
 
   <!-- Module runtime controls the page; legacy direct scripts removed to avoid double wiring -->
 
   <!-- Inline critical CSS (small, ~2KB): topbar, chips, basic app grid and first-screen editor/viewer -->
   <style>
     :root{--bg:#0b0f19;--fg:#e6eef8;--muted:#9fb4c9;--chip-bg:rgba(255,255,255,0.03)}
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-    .topbar{display:flex;align-items:center;gap:8px;padding:8px 12px;height:48px;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
+    .topbar{display:flex;align-items:center;gap:8px;padding:6px 10px;position:sticky;top:0;z-index:1000;height:auto;min-height:var(--tp-topbar-h,48px);flex-wrap:nowrap;overflow-x:auto;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
+    .topbar .chip{padding:2px 8px;font-size:12px}
+    .topbar button{padding:6px 10px}
+    .page-tabs,.legend{flex:0 0 auto;white-space:nowrap}
     .topbar strong{font-weight:600;margin-right:6px}
     .chip{display:inline-block;padding:4px 8px;border-radius:8px;background:var(--chip-bg);color:var(--fg);font-size:13px}
     .inl-1{margin-left:auto}
@@ -150,10 +168,84 @@
     .script .line{padding:6px 0;color:var(--fg)}
     #dbMeterTop{display:flex;gap:2px;height:14px;align-items:flex-end;position:relative;padding:0 2px;border:1px solid var(--edge);border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#124,#124 5%,#135 5%,#135 20%,#145 20%,#145 40%,#254 40%,#352 60%,#542 80%,#731 90%,#921 95%,#b11);background-size:100% 100%;margin:0;}
     button.chip{border:0;background:transparent;color:var(--fg);cursor:pointer}
-    @media (max-width:900px){.app{grid-template-columns:1fr;}.topbar{height:56px;padding:10px}}
-    /* Extra tiny critical rules to stabilize first-paint for HUD and overlays */
-    #hud-root{position:fixed;right:12px;top:12px;z-index:2147483630;pointer-events:none;min-width:140px}
-    .overlay{display:none}
+    @media (max-width:900px){.app{grid-template-columns:1fr}}
+    @media (max-width:720px){.topbar{flex-wrap:wrap}}
+    /* HUD root styles disabled (HUD removed) */
+    /*
+    #hud-root.tp-hud-root {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      z-index: 2147483630;
+      pointer-events: auto;
+
+      min-width: 260px;
+      max-width: 420px;
+      max-height: 55vh;
+
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 55%), rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.8);
+      border-radius: 10px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7);
+
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #e5f0ff;
+
+      padding: 6px 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 120ms ease-out, transform 120ms ease-out;
+    }
+
+    #hud-root.tp-hud-root.open {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #hud-root.hidden {
+      display: none;
+    }
+
+    #hud-root.tp-hud-root.is-dragging {
+      cursor: grabbing;
+      user-select: none;
+    }
+
+    #hud-root.tp-hud-root .hud-section {
+      padding-top: 2px;
+      border-top: 1px solid rgba(51, 65, 85, 0.9);
+      margin-top: 2px;
+    }
+
+    #hud-root.tp-hud-root .hud-section:first-of-type {
+      border-top: 0;
+      margin-top: 0;
+    }
+
+    #hud-root.tp-hud-root .hud-label {
+      opacity: 0.7;
+      margin-right: 4px;
+    }
+
+    #hud-root.tp-hud-root .hud-value {
+      font-weight: 500;
+    }
+
+    #hud-root.tp-hud-root .hud-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    #hud-root.tp-hud-root .hud-row + .hud-row {
+      margin-top: 2px;
+    }
+    */
+    .overlay{display:flex}
     .overlay.hidden{display:none}
     .overlay .sheet{background:#07101a;color:var(--fg);border-radius:8px;padding:10px}
     button,select,input{font:inherit}
@@ -165,9 +257,6 @@
     /* Chip state colorization for toggles */
     .chip[data-state="open"], .chip[data-state="on"]{background:rgba(60,180,75,0.18)}
     .chip[data-state="closed"], .chip[data-state="off"]{background:var(--chip-bg)}
-    /* Save chip states */
-    #saveChip[data-state="saved"]{background:rgba(60,180,75,0.18)}
-    #saveChip[data-state="dirty"]{background:rgba(234,179,8,0.22)}
     /* Dev-only controls hidden by default; shown only with ?dev=1 */
     .dev-only{display:none !important}
     html.dev1 .dev-only{display:inline-flex !important}
@@ -190,147 +279,69 @@
 
   <!-- (Optional, prod) Tight CSP once everything is settled
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://unpkg.com; connect-src 'self' http://192.168.1.200:4455 ws://192.168.1.200:4455;"/>
+        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://unpkg.com; connect-src 'self' http://192.168.1.196:4455 ws://192.168.1.196:4455;"/>
   -->
 </head>
 
 <body>
+<div id="fatalFallback" class="fatal-fallback" hidden>
+  <div class="fatal-inner">
+    <h1>There seems to be a problem lighting the fire.</h1>
+    <p>Possibly wet coal. We're looking into the issue.</p>
+
+    <p class="fatal-hint">
+      Try reloading Anvil. If this keeps happening, email
+      <a href="mailto:support@podcastersforge.com">support@podcastersforge.com</a>
+      with what you were doing.
+    </p>
+
+    <p class="fatal-note">
+      Founders can also drop a note in the Iron Mine Support section.
+    </p>
+
+    <button id="btnReloadAnvil" type="button" class="btn btn-primary">
+      Reload Anvil
+    </button>
+  </div>
+</div>
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
-<!-- Safety bridge: guarantees OBS Test pill + basic Auto-scroll movement in CI/dev only -->
-<script>
-(function(){
-  try {
-    // Enable only for CI/dev: query/hash (?ci=1 or #ci or ?dev=1) or localStorage.tp_ci==='1'
-    var url = String(location && location.href || '');
-    var devOn = /(\?|#)(.*\bci=1\b|dev=1\b)/i.test(url) || (function(){try{return localStorage.getItem('tp_ci')==='1'}catch(e){return false}})();
-    if (!devOn) return; // fully disabled in prod sessions
-
-    if (window.__TP_SAFETY_BRIDGE) return; window.__TP_SAFETY_BRIDGE = '1.0';
-    var q = function(s){ return document.querySelector(s); };
-    var selTest = '#settingsObsTest,#obsTest,[data-action="obs-test"]';
-    var selAuto = '#autoToggle,[data-action="auto-toggle"]';
-    var selInc  = '#autoInc,[data-action="auto-inc"]';
-    var selDec  = '#autoDec,[data-action="auto-dec"]';
-
-    function ensurePill(btn){
-      var pill = q('#obsStatusText,#obsStatus');
-      if (!pill) { pill = document.createElement('span'); pill.id = 'obsStatusText'; pill.style.marginLeft = '8px'; btn.after(pill); }
-      return pill;
-    }
-    function getViewer(){ return q('#viewer,[data-role="viewer"]') || document.scrollingElement || document.documentElement; }
-
-  async function handler(e){
-      try {
-        var t = e && e.target && (e.target.closest ? e.target.closest(selTest+','+selAuto+','+selInc+','+selDec) : null);
-        if (!t) return;
-        // OBS Test connection
-        if (t.matches && t.matches(selTest)) {
-          if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
-          var pill = ensurePill(t); pill.textContent = 'testing…';
-          try {
-            var url  = (q('#settingsObsUrl,#obsUrl') && q('#settingsObsUrl,#obsUrl').value && q('#settingsObsUrl,#obsUrl').value.trim()) || 'ws://127.0.0.1:4455';
-            var pass = (q('#settingsObsPassword,#obsPassword') && q('#settingsObsPassword,#obsPassword').value) || '';
-            if (typeof window.__obsTestConnect === 'function') {
-              var res = await window.__obsTestConnect(url, pass);
-              var ver = (res && (res.version||res.obsWebSocketVersion||res.obsVersion)) || null;
-              pill.textContent = ver ? ('connected ('+ver+')') : 'connected';
-            } else {
-              pill.textContent = 'failed: probe not loaded';
-            }
-          } catch (err) {
-            pill.textContent = 'failed: ' + (err && (err.message||String(err)));
-            try { console.warn('[OBS test failed]', err); } catch (e) {}
-          }
-          return;
-        }
-        // Auto toggle / speed fallback
-        var btn = q(selAuto); if (!btn) return;
-        if (e.cancelable) e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); if (e.stopPropagation) e.stopPropagation();
-        var step = (e.shiftKey ? 5 : 0.5);
-        var isInc = !!(t.matches && t.matches(selInc));
-        var isDec = !!(t.matches && t.matches(selDec));
-        var isToggle = !!(t.matches && t.matches(selAuto));
-        if (!isInc && !isDec && !isToggle) return;
-        // Initialize defaults
-        if (typeof window.__autoSpeed !== 'number' || !(window.__autoSpeed > 0)) window.__autoSpeed = 60;
-        if (!btn.dataset.state) btn.dataset.state = 'off';
-        // Apply action
-        if (isInc) {
-          window.__autoSpeed = Math.max(5, window.__autoSpeed + step);
-        } else if (isDec) {
-          window.__autoSpeed = Math.max(5, window.__autoSpeed - step);
-        } else if (isToggle) {
-          btn.dataset.state = (btn.dataset.state === 'on' ? 'off' : 'on');
-        }
-        var isOn = btn.dataset.state === 'on';
-        var sFmt = (Math.round((Number(window.__autoSpeed)||0) * 10) / 10).toFixed(1);
-        btn.textContent = isOn ? ('Auto-scroll: On — ' + sFmt + ' px/s') : 'Auto-scroll: Off';
-        // Stop any previous fallback when toggling or when turning Off via speed buttons
-        try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
-        window.__autoFallbackTimer = null;
-        if (isOn) {
-          try {
-            if (window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function') { window.__scrollCtl.setSpeed(window.__autoSpeed); }
-            if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') { window.__scrollCtl.start(); }
-          } catch (e) {}
-          if (!(window.__scrollCtl && typeof window.__scrollCtl.setSpeed === 'function')) {
-            var viewer = getViewer();
-            // Immediate nudge to make movement detectable in short probes
-            try { viewer.scrollTop += Math.max(1, window.__autoSpeed / 5); } catch (e) {}
-            window.__autoFallbackTimer = setInterval(function(){
-              try {
-                // If the real engine becomes available, switch to it and stop fallback
-                if (window.__scrollCtl && typeof window.__scrollCtl.start === 'function') {
-                  try { clearInterval(window.__autoFallbackTimer); } catch (e) {}
-                  window.__autoFallbackTimer = null;
-                  try { window.__scrollCtl.setSpeed(window.__autoSpeed); } catch (e) {}
-                  try { window.__scrollCtl.start(); } catch (e) {}
-                  return;
-                }
-                viewer.scrollTop += window.__autoSpeed / 10;
-              } catch (e) {}
-            }, 100);
-          }
-        }
-      } catch (e) {}
-    }
-    document.addEventListener('click', handler, true);
-    document.addEventListener('click', handler, false);
-  } catch (e) {}
-})();
-</script>
 <div class="topbar">
-<strong>Anvil - Teleprompter</strong>
-<span id="appVersion" class="version-badge" aria-label="App version">v1.7.5c</span>
-<span class="chip" id="saveChip">Draft: —</span>
-<span class="chip" id="permChip">Mic: unknown</span>
-<span class="chip" id="displayChip">Display: closed</span>
-<span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
-<span class="chip" id="scrollChip">Scroll: idle</span>
-<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
-<span class="chip" id="camRtcChip">CamRTC: idle</span>
-<!-- Mic level + calibration -->
-<div class="mic-block">
-  <span class="topbar-label">Mic level</span>
-  <div id="dbMeterTop" title="Input level"></div>
-  <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
-</div>
-<!-- Auto status chip (Hybrid/Auto state) -->
-<span id="autoChip" class="chip" aria-live="polite" aria-atomic="true" title="Auto scroll status">Auto: Manual</span>
-<!-- Right-side controls wrapper (ASR chip mounts here) -->
-<div id="topbarRight" class="inl-1">
-  <!-- ASR chip + button will mount here -->
+  <strong>Anvil - Teleprompter</strong>
+  <span id="appVersion" class="version-badge" aria-label="App version">v1.7.8</span>
+  <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
+  <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+  <!-- Mic level + calibration -->
+  <div class="mic-block">
+    <span class="topbar-label">Mic level</span>
+    <div id="dbMeterTop" title="Input level"></div>
+    <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
+  </div>
+
+  <!-- Right-side controls wrapper (ASR chip mounts here) -->
+  <div id="topbarRight" class="inl-1">
+    <span id="recPillHost" class="rec-pill-host" aria-live="polite" aria-atomic="true">
+      <span id="recPill" class="rec-pill rec-pill--main" aria-hidden="true">REC</span>
+      <span id="recPillLive" class="sr-only rec-pill-live"></span>
+    </span>
+    <!-- ASR chip + button will mount here -->
     <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
+    <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
-    <button id="hudBtn" class="chip" data-action="hud-toggle">HUD</button>
-  <span id="selfChecksChip" class="chip chip-muted dev-only">
-    Self-checks: <strong id="selfChecksText">6/6 ✔</strong> <em>(click)</em>
-  </span>
-  
-</div>
-<div class="legend" id="legend"></div>
+    <span id="selfChecksChip" class="chip chip-muted dev-only">
+      Self-checks: <strong id="selfChecksText">6/6 OK</strong> <em>(click)</em>
+    </span>
+  </div>
+
+  <nav class="page-tabs" id="pageTabs">
+    <button class="page-tab is-active" data-tp-page="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
+  </nav>
+
+  <div class="legend" id="legend"></div>
+  <div id="scrollModeChip" data-role="scroll-mode-chip"></div>
+  <span id="obsChip" class="chip"></span>
+  <div data-step-ui="1" style="display:none;"></div>
 </div>
 <script>
   (function(){
@@ -352,7 +363,7 @@
     } catch(e){}
   })();
 </script>
-<div class="app">
+<div class="app page-panel" data-tp-panel="scripts">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
 <section class="mode-card" id="scrollModeCard">
@@ -361,47 +372,58 @@
     <span class="mode-pill" id="scrollModeStatus">Priority Control</span>
   </div>
   <label class="sr-only" for="scrollMode">Scroll Mode</label>
-  <select id="scrollMode" aria-label="Scroll Mode" aria-describedby="scrollModeHelpText">
+  <select id="scrollMode" aria-label="Scroll Mode" aria-describedby="scrollModeHelpText" aria-live="polite">
     <option value="timed">Timed</option>
     <option value="wpm">WPM</option>
-    <option value="hybrid" selected>Hybrid</option>
+    <option value="hybrid">Hybrid</option>
     <option value="asr">ASR</option>
     <option value="step">Step</option>
     <option value="rehearsal">Rehearsal</option>
   </select>
   <p class="mode-hint" id="scrollModeHelpText">Hybrid follows speech automatically. Switch anytime to lock in manual, ASR, or rehearsal modes.</p>
+  <p class="mode-hint" id="scrollModeInlineHint" aria-live="polite" hidden>ASR is disabled until Mic is ready.</p>
 </section>
 <div class="row">
-<button id="displayToggleBtn" class="chip" type="button" aria-pressed="false" data-action="display-toggle">Display: Closed</button>
+<button id="displayToggleBtnSidebar" class="chip" type="button" aria-pressed="false" data-action="display-toggle">Display: Closed</button>
 </div>
 <div class="row">
-<button id="micToggleBtn" class="chip mic-idle" type="button">Request Mic</button>
+<button id="micToggleBtn" class="chip mic-idle" type="button" data-tp-request-mic="sidebar">Request Mic</button>
 <button disabled="" id="recBtn" class="btn-primary btn-start" data-action="start-speech">Start speech sync</button>
 </div>
-<div class="row">
-  <label>Auto-scroll (px/s)
-    <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
-  </label>
-  <button id="autoDec" class="chip" title="–1 (Shift: –5)">–</button>
-  <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
-  <button id="autoToggle">Auto-scroll: Off</button>
-</div>
+  <div class="row" id="autoRow" data-role="auto-row" aria-hidden="false">
+    <div id="autoSpeedWrap">
+      <label>Auto-scroll (px/s)
+        <input id="autoSpeed" type="number" min="0" max="300" step="0.5" value="21"/>
+      </label>
+    </div>
+    <button id="autoDec" class="chip" title="-1 (Shift: -5)">-</button>
+    <button id="autoInc" class="chip" title="+1 (Shift: +5)">+</button>
+    <button id="autoToggle">Auto-scroll: Off</button>
+  </div>
 <div class="row visually-hidden" id="wpmRow" aria-hidden="true">
   <label>Target WPM
     <input id="wpmTarget" type="number" min="60" max="260" step="5" value="150"/>
   </label>
-  <span class="chip" id="wpmPx">≈ — px/s</span>
-  
+  <span class="chip" id="wpmPx">... px/s</span>
 </div>
-<!-- Hidden legacy mic device selector stub (kept for backward compatibility with older code paths) -->
-<select id="micDeviceSel" class="select-md" hidden></select>
- <div class="row" id="sidebarMediaHint">
-   <span class="chip sidebar-hint">Mic, devices & OBS now live under Settings ▶ Recording/Media</span>
- </div>
+<div class="row visually-hidden" id="stepControlsRow" aria-hidden="true">
+  <button id="stepPrevBtn" class="chip" type="button" title="Previous step">Step ↑</button>
+  <button id="stepNextBtn" class="chip" type="button" title="Next step">Step ↓</button>
+</div>
+<!-- Hidden mic device selector used by mic-bridge.ts as a bridge between sidebar and Settings -->
+<select id="micDeviceSel" class="select-md" hidden aria-hidden="true"></select>
+
+<div class="row" id="sidebarMediaHint" data-role="sidebar-media-hint">
+  <span class="chip sidebar-hint">
+    Mic &amp; camera quick controls are in this sidebar;
+    full device &amp; OBS settings live under
+    <strong>Settings ? Recording / Media</strong>.
+  </span>
+</div>
 <!-- Add a visible, labeled OBS toggle in the sidebar for quick access -->
 <div class="row obs-row">
   <label>
-    <input type="checkbox" id="enableObs" />
+    <input type="checkbox" id="enableObs" data-tp-obs-toggle />
     <span>Enable OBS</span>
   </label>
   <span class="chip obs-status" id="obsStatus" aria-live="polite">OBS: idle</span>
@@ -410,6 +432,8 @@
 <h2 class="select-md" >Camera</h2>
 <div class="row">
 <button id="cameraToggleBtn" class="chip" type="button" aria-pressed="false" data-action="camera-toggle"><span class="cam-label">Camera: Off</span><span class="spinner" aria-hidden="true"></span></button>
+<button id="startCam" data-action="start-camera" class="hidden" type="button" tabindex="-1" aria-hidden="true">Start Camera</button>
+<button id="stopCam" data-action="stop-camera" class="hidden" type="button" tabindex="-1" aria-hidden="true">Stop Camera</button>
 </div>
 <div class="row">
 <label>Size (%) <input id="camSize" max="60" min="15" step="1" type="number" value="28"/></label>
@@ -428,7 +452,6 @@
 <div class="row">
 <label>Pre-roll (sec)
           <input id="preroll" max="10" min="0" step="1" type="number" value="3"/>
-          <span id="recIndicator" class="rec-indicator hidden" title="Recording in progress">● REC</span>
 </label>
 </div>
 <div class="row">
@@ -460,31 +483,32 @@
 <button id="clearText">Clear</button>
 </div>
 <!-- Sidebar quick Scripts select moved into Title row below -->
+<div data-tp-speakers-panel>
 <h2 class="section-title">
   Speakers
-  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody">Hide</button>
+  <button id="toggleSpeakers" class="chip btn-chip" aria-expanded="true" aria-controls="speakersBody" data-tp-toggle-speakers data-action="speakers-toggle" title="Show or hide speaker controls">Hide</button>
 </h2>
 
 <div id="speakersBody" data-panel="speakers">
   <div class="row">
     <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
     <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
-    <button id="wrap-s1">Wrap ➜ S1</button>
+    <button id="wrap-s1">S1</button> 
   </div>
   <div class="row">
     <label>Name <input id="name-s2" type="text" placeholder="Speaker 2"></label>
     <label>Color <input id="color-s2" type="color" value="#facc15"></label>
-    <button id="wrap-s2">Wrap ➜ S2</button>
+    <button id="wrap-s2">S2</button> 
   </div>
   <div class="row">
     <label>Name <input id="name-g1" type="text" placeholder="Guest 1"></label>
     <label>Color <input id="color-g1" type="color" value="#34d399"></label>
-    <button id="wrap-g1">Wrap ➜ G1</button>
+    <button id="wrap-g1">G1</button> 
   </div>
   <div class="row">
     <label>Name <input id="name-g2" type="text" placeholder="Guest 2"></label>
     <label>Color <input id="color-g2" type="color" value="#f472b6"></label>
-    <button id="wrap-g2">Wrap ➜ G2</button>
+    <button id="wrap-g2">G2</button> 
   </div>
 
   <div class="row toolbar">
@@ -492,15 +516,13 @@
     <button id="wrap-italic"><i>I</i></button>
     <button id="wrap-underline"><span class="u">U</span></button>
     <button id="wrap-note">Note</button>
-    <button id="wrap-color">Color…</button>
-    <button id="wrap-bg">BG…</button>
-    <button id="autoTagBtn">Smart Tag</button>
-    <span class="chip">(use tags like [s1]…[/s1], [color=#ff0]…[/color])</span>
-  </div>
-  <div class="row">
-    <button id="speakersKeyBtn" data-action="speakers-key" class="chip">Key…</button>
-    <input id="speakersKey" type="text" placeholder="Type a key for speaker toggle" />
-  </div>
+    <button id="wrap-color">ColorGO</button>
+  <button id="wrap-bg">BGGO</button>
+  <button id="autoTagBtn">Smart Tag</button>
+  <span class="chip">(use tags like [s1]GO[/s1], [color=#ff0]GO[/color])</span>
+</div>
+  <p class="chip tp-speakers-hotkeys">Speaker hotkeys: S1 / S2 / G1 / G2</p>
+</div>
 </div>
 <div class="row">
 <label>Format
@@ -513,35 +535,32 @@
   </select>
   </label>
 <button id="downloadFile">Download</button>
-<button id="uploadFileBtn" data-action="upload">Upload file</button>
-<input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden>
+<button id="uploadFileBtn" type="button" data-action="upload" data-tp-script-upload-btn>Upload file</button>
+<input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden data-tp-script-upload-input>
 </div>
-<!-- Scripts row: sidebar select for next-to-load + file ops; folder mapping lives in Settings → General -->
-<div class="row">
-  <label>Scripts
-    <select id="scriptSelectSidebar" class="select-md" aria-label="Mapped folder scripts" aria-busy="true"></select>
-  </label>
-  <span class="chip sidebar-hint">Manage folder in Settings → General</span>
-  <!-- Keep legacy title input hidden for compatibility with tests and legacy save paths -->
-  <input id="scriptTitle" type="text" placeholder="Untitled" hidden />
-  <button id="scriptSaveBtn">Save</button>
-  <button id="scriptSaveAsBtn">Save As</button>
-  <button id="scriptLoadBtn">Load</button>
-  <button id="scriptDeleteBtn">Delete</button>
-  <button id="scriptRenameBtn">Rename</button>
-</div>
+<!-- Scripts row: saved scripts dropdown + file ops; folder mapping lives in Settings -> Media -->
+  <div class="row" id="sidebarScriptsRow">
+    <label>Saved Scripts
+      <select id="scriptSelectSidebar" class="select-md" aria-label="Saved scripts" aria-busy="true"></select>
+    </label>
+    <button id="scriptRefreshBtn" title="Refresh Scripts list">Refresh</button>
+    <span class="chip sidebar-hint">Manage folder in Settings -> Media</span>
+  </div>
+  <div class="row">
+    <label>Title <input id="scriptTitle" type="text" placeholder="Untitled" /></label>
+    <button id="scriptSaveBtn">Save</button>
+    <button id="scriptSaveAsBtn">Save As</button>
+    <button id="scriptLoadBtn">Load</button>
+    <button id="scriptDeleteBtn">Delete</button>
+    <button id="scriptRenameBtn">Rename</button>
+  </div>
 <div class="row">
 <button id="resetScriptBtn">Reset Script</button>
 </div>
 <p class="status" id="status"></p>
 <h2>Script</h2>
-<textarea id="editor" data-editor placeholder="Use tags: [s1]…[/s1], [s2]…[/s2], [g1]…[/g1], [g2]…[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
-<!-- Injected fallback speakers toggle & key buttons (ensure binder selectors always resolve even before JS mutates visibility) -->
-<!-- speakersToggleBtn already present as #toggleSpeakers; provide data-action alias without duplicate id -->
-<button id="speakersToggleBtnAlias" data-action="speakers-toggle" class="hidden" type="button" aria-controls="speakersBody" hidden>Speakers</button>
-<!-- speakersKeyBtn already exists; add alias element for binder multi-selector without duplicate id -->
-<button id="speakersKeyBtnAlias" data-action="speakers-key" class="hidden" type="button" hidden>Focus Key</button>
-<!-- Ensure help overlay root & settings overlay root exist early for binder wiring (already have #shortcutsOverlay & #settingsOverlay) -->
+<textarea id="editor" data-editor placeholder="Use tags: [s1]?[/s1], [s2]?[/s2], [g1]?[/g1], [g2]?[/g2]. Inline: [b], [i], [u], [note], [color=red], [bg=#112233]"></textarea>
+<p class="tp-paste-hint" data-tp-paste-hint hidden><em>Paste text in the editor to begin...</em></p>
 <!-- Camera preview fallback (binder expects #cameraPreview) already present later; duplicate guarded by ID uniqueness -->
 <!-- cameraPreview already defined later with proper classes; avoid duplicate -->
 <!-- (Removed legacy External Scripts + settings export/import UI: now injected into Settings overlay) -->
@@ -559,6 +578,33 @@
 <video id="cameraPreview" muted class="cam-preview" autoplay hidden></video>
 </main>
 </div>
+<script>
+  // Ensure the marker offset uses viewer scroll-padding so the first line sits on the marker after typography loads.
+  (function(){
+    function applyMarkerOffset(){
+      try {
+        const viewer = document.getElementById('viewer');
+        if (!viewer) return;
+        const pct = (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4);
+        const h = viewer.clientHeight || window.innerHeight || 0;
+        const offset = Math.max(0, Math.round(h * pct));
+        viewer.style.paddingTop = '0px';
+        viewer.style.scrollPaddingTop = offset + 'px';
+        if (offset > (viewer.clientHeight || 0) * 2) {
+          console.warn('[MARKER] insane offset', { offset, h: viewer.clientHeight });
+        }
+      } catch (e) {
+        try { console.warn('[marker] scrollPadding apply failed', e); } catch {}
+      }
+    }
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      applyMarkerOffset();
+    } else {
+      document.addEventListener('DOMContentLoaded', applyMarkerOffset, { once: true });
+    }
+    window.addEventListener('resize', applyMarkerOffset);
+  })();
+</script>
 <!-- Pre-roll overlay (main window) -->
 <div id="countOverlay" class="inl-7">
 <div class="row" >
@@ -567,7 +613,7 @@
 </div>
 </div>
 <!-- Near the end of <body> -->
-<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help">
+<div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help" hidden>
   <div class="sheet">
     <header>
       <h3 id="shortcutsTitle">Shortcuts</h3>
@@ -576,9 +622,9 @@
 
     <div class="shortcuts-grid">
       <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-      <div><strong>↑ / ↓</strong></div><div>Adjust Auto-scroll speed (±1)</div>
-      <div><strong>Shift + ↑ / ↓</strong></div><div>Adjust by ±5</div>
-      <div><strong>Mouse-wheel on speed field</strong></div><div>±1 (Shift: ±5)</div>
+      <div><strong>G?? / G??</strong></div><div>Adjust Auto-scroll speed (-?1)</div>
+      <div><strong>Shift + G?? / G??</strong></div><div>Adjust by -?5</div>
+      <div><strong>Mouse-wheel on speed field</strong></div><div>-?1 (Shift: -?5)</div>
       <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
       <div><strong>Shift + ?</strong></div><div>Open Help</div>
       <div><strong>Ctrl/Cmd + O</strong></div><div>Load selected script from mapped folder</div>
@@ -586,90 +632,239 @@
       <div><strong>F2</strong></div><div>Rename selected script</div>
       <div><strong>Delete</strong></div><div>Delete selected script</div>
     </div>
+    <section id="help-asr">
+      <h3>Speech-to-Text (ASR) Settings</h3>
+      <p>Anvil can listen to your voice and auto-scroll to follow you. Pick an engine and tune how it behaves.</p>
+
+      <h4>ASR Engines</h4>
+      <h5>Web Speech (Browser)</h5>
+      <p>Built-in browser recognition (e.g., Chrome Web Speech).</p>
+      <ul>
+        <li><strong>Pros:</strong> Very fast, no setup.</li>
+        <li><strong>Cons:</strong> Accuracy varies by browser/device; sensitive to noise.</li>
+      </ul>
+      <p>Use for quick tests or casual recordings.</p>
+
+      <h5>Offline Engine</h5>
+      <p>Local recognizer (no internet needed).</p>
+      <ul>
+        <li><strong>Pros:</strong> Private, consistent, works offline.</li>
+        <li><strong>Cons:</strong> Slightly slower; accuracy depends on model/hardware.</li>
+      </ul>
+      <p>Use when you want privacy or unreliable internet.</p>
+
+      <h5>Whisper Bridge</h5>
+      <p>High-accuracy Whisper (local or cloud-backed).</p>
+      <ul>
+        <li><strong>Pros:</strong> Excellent accuracy; handles accents and noisy rooms.</li>
+        <li><strong>Cons:</strong> Cloud use may spend tokens; a bit more latency.</li>
+      </ul>
+      <p>Use for serious podcast/video work.</p>
+
+      <h4>Common Options</h4>
+      <h5>Language</h5>
+      <p>Language you are speaking. Passed to the engine for correct interpretation.</p>
+
+      <h5>Use interim results</h5>
+      <p>Allows partial guesses before a sentence is done for faster scroll response.</p>
+      <ul>
+        <li><strong>On:</strong> Faster, more "live" scroll; can be jumpy in noise.</li>
+        <li><strong>Off:</strong> Waits for finalized phrases; smoother but slower.</li>
+      </ul>
+
+      <h5>Filter filler words</h5>
+      <p>Drop "um/uh/like..." so scroll matches script better and jitters less.</p>
+
+      <h4>Advanced Controls</h4>
+      <h5>Confidence threshold</h5>
+      <p>Minimum confidence (0.0-1.0) before accepting words.</p>
+      <ul>
+        <li><strong>Higher (0.8-0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
+        <li><strong>Lower (0.4-0.6):</strong> More responsive; occasional wrong words.</li>
+      </ul>
+
+      <h5>End-pointing ("s)</h5>
+      <p>Silence duration before a phrase finalizes (1,000,000 "s = 1s).</p>
+      <ul>
+        <li><strong>Lower (200k-400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
+        <li><strong>Higher (800k-1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
+      </ul>
+
+      <h4>Suggested Starting Points</h4>
+      <ul>
+        <li><strong>Podcast:</strong> Whisper Bridge; interim on; fillers on; threshold 0.55; end-pointing 900,000 "s.</li>
+        <li><strong>Fast live:</strong> Web Speech; interim on; fillers off; threshold 0.40; end-pointing 400,000 "s.</li>
+        <li><strong>Noisy room:</strong> Whisper Bridge; interim off; fillers on; threshold 0.70; end-pointing 1,000,000 "s.</li>
+      </ul>
+      <p>Tweak to taste: raise threshold/end-pointing to calm jitter; lower them to speed up.</p>
+    </section>
+    <section id="help-speaker-tags">
+      <h3>Speaker Tags (Strict - scripts won't render if invalid)</h3>
+      <p>Speaker tags must be on their own lines.</p>
+      <p><strong>? Correct:</strong></p>
+      <pre>[s1]
+(lines of text...)
+[/s1]</pre>
+      <p><strong>? Wrong:</strong> Intro [s1] or [s1] Hello</p>
+      <p>Every opening tag MUST have a matching closing tag.</p>
+      <p>[s1] must close with [/s1], [s2] with [/s2], [g1] with [/g1], [g2] with [/g2].</p>
+      <p>No overlaps / no crossing tags.</p>
+      <p><strong>? Wrong:</strong></p>
+      <pre>[s1]
+text...
+[s2]
+text...
+[/s1]
+[/s2]</pre>
+      <p>(This will fail validation and can render as a blank script.)</p>
+      <p>Notes are hidden in the teleprompter view:</p>
+      <p>Put production-only direction inside <code>[note] ... [/note]</code> on their own lines.</p>
+      <p>Visible pacing cues must be bracketed:</p>
+      <p>Use <code>[pause]</code>, <code>[beat]</code>, <code>[reflective pause]</code> inline where you want the pause to happen.</p>
+      <p>Allowed inline styling (must be closed):</p>
+      <p><code>[color=red]...[/color]</code>, <code>[bg=#112233]...[/bg]</code>, <code>[b]...[/b]</code>, <code>[i]...[/i]</code>, <code>[u]...[/u]</code></p>
+      <p>Quick wrap shortcuts: 1 / 2 / 3 / 4 wraps selection with <code>[s1]/[s2]/[g1]/[g2]</code></p>
+      <pre>[s1]
+Hey folks. This is BS with Joe. [beat]
+Tonight we're covering one idea.
+[/s1]
+
+[s2]
+Alright. [pause]
+Let's do it.
+[/s2]
+
+[note]
+Cold open: keep it tight, smile, 2 seconds of silence before first line.
+[/note]</pre>
+    </section>
+    <section id="help-tag-errors">
+      <h3>Tag Validator Errors (What Went Wrong &amp; How to Fix It)</h3>
+      <p>If your script fails validation, nothing will display. Every error below stops rendering by design.</p>
+      <ol>
+        <li>
+          <strong>Missing Closing Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Missing closing tag: [s1] was opened but never closed.</p>
+          <p>You started a speaker block but forgot to end it. Add the matching closing tag on its own line.</p>
+          <pre>[s1]
+This line has a speaker.
+
+? Fix:
+
+[s1]
+This line has a speaker.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Closing Tag Without Opening Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Orphan closing tag: [/s2] found with no matching opening tag.</p>
+          <p>You closed a speaker that was never opened. Either remove the closing tag or add the correct opening tag above it.</p>
+        </li>
+        <li>
+          <strong>Overlapping / Crossed Speaker Tags</strong>
+          <p><span role="img" aria-label="error">?</span> Invalid tag nesting: speaker tags cannot overlap or cross.</p>
+          <p>Start one speaker, close it, then start another - no nested/parallel blocks.</p>
+          <pre>[s1]
+Joe starts talking.
+[s2]
+Brad jumps in.
+[/s1]
+[/s2]</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Joe starts talking.
+[/s1]
+
+[s2]
+Brad jumps in.
+[/s2]</pre>
+        </li>
+        <li>
+          <strong>Speaker Tag Not on Its Own Line</strong>
+          <p><span role="img" aria-label="error">?</span> Invalid speaker tag placement: [s1] must be on its own line.</p>
+          <p>Speaker tags cannot share a row with text.</p>
+          <pre>[s1] Hey folks, this is BS with Joe.</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Hey folks, this is BS with Joe.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Unknown or Unsupported Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Unknown tag detected: [speaker1]</p>
+          <p>Only these tags are valid:</p>
+          <p>Speakers: [s1]/[s2]/[g1]/[g2]</p>
+          <p>Notes/cues/inline: [note]/[pause]/[beat]/[reflective pause]/[color=...]/[bg=#hex]/[b]/[i]/[u]</p>
+        </li>
+        <li>
+          <strong>Unclosed Inline Style Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Unclosed inline tag: [color=red] was never closed.</p>
+          <p>Inline tags must be closed just like HTML.</p>
+          <pre>[color=red]This is emphasized text.</pre>
+          <p>Correct:</p>
+          <pre>[color=red]This is emphasized text.[/color]</pre>
+        </li>
+        <li>
+          <strong>Notes Tag Misuse</strong>
+          <p><span role="img" aria-label="error">?</span> [note] tag must open and close on its own lines.</p>
+          <p>Notes are block-level only.</p>
+          <pre>[note]Camera tight shot[/note]</pre>
+          <p>Correct:</p>
+          <pre>[note]
+Camera tight shot.
+[/note]</pre>
+        </li>
+        <li>
+          <strong>Text Outside Any Speaker Block</strong>
+          <p><span role="img" aria-label="error">?</span> Text found outside of a speaker block.</p>
+          <p>Every spoken line must live inside [s1]/[s2]/[g1]/[g2].</p>
+          <pre>Welcome back to the show.
+[s1]
+Joe starts here.
+[/s1]</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Welcome back to the show.
+Joe starts here.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Empty Speaker Block</strong>
+          <p><span role="img" aria-label="error">?</span> Empty speaker block: [s2] contains no text.</p>
+          <p>Either add content or delete the empty block.</p>
+        </li>
+        <li>
+          <strong>Multiple Speaker Blocks Open at Once</strong>
+          <p><span role="img" aria-label="error">?</span> Multiple active speaker blocks detected.</p>
+          <p>Speakers are sequential - you cannot have two blocks open simultaneously.</p>
+        </li>
+        <li>
+          <strong>Validation Halt (Why the Script Is Blank)</strong>
+          <p><span role="img" aria-label="error">?</span> Script validation failed. Rendering halted to prevent incorrect display.</p>
+          <p>The system refuses to guess. Fix the first listed error - many others disappear after that.</p>
+        </li>
+      </ol>
+      <p>Tip: If your script suddenly appears blank, check for a missing or crossed speaker tag. One incorrect tag stops the entire render.</p>
+    </section>
     <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
-</div>
-<!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
-<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings">
+</div><!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
+<div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings" hidden>
   <div class="sheet settings-sheet">
     <header class="sheet-head">
       <h3 id="settingsTitle" class="settings-title">Settings</h3>
   <button id="settingsClose" class="btn-chip" data-action="settings-close">Close</button>
     </header>
-    <div class="settings-tabs" id="settingsTabs">
-      <button class="settings-tab active" data-tab="general">General</button>
-      <button class="settings-tab" data-tab="media">Media</button>
-      <button class="settings-tab" data-tab="recording">Recording</button>
-      <button class="settings-tab" data-tab="advanced">Advanced</button>
-      <button class="settings-tab" data-tab="pricing" type="button">Pricing</button>
-      <button class="settings-tab" data-tab="about" type="button">About</button>
-    </div>
-    <div id="settingsBody" class="settings-body">
-      <div class="settings-card" data-tab="pricing">
-        <h3>Pricing</h3>
-        <p class="dim">
-          Anvil starts with a free tier for solo creators. Paid plans unlock advanced features like
-          multi-recorder control, hybrid scroll tuning presets, and future Forge integrations.
-        </p>
-
-        <ul class="dim">
-          <li><strong>Free:</strong> Core teleprompter, script saving, basic OBS control.</li>
-          <li><strong>Creator:</strong> Auto-record presets, hybrid scroll profiles, priority fixes.</li>
-          <li><strong>Studio:</strong> Multi-seat, shared presets, dedicated support. (Coming soon)</li>
-        </ul>
-
-        <div class="hr"></div>
-
-        <p>
-          Want to keep Anvil’s hammer swinging while this all ships?
-          <br />
-          <a href="https://buymeacoffee.com/podcastersforge" target="_blank" rel="noopener noreferrer">
-            Buy me a coffee ☕
-          </a>
-        </p>
-      </div>
-
-      <div class="settings-card" data-tab="about">
-        <h3>About Anvil</h3>
-        <p class="dim">
-          Anvil is the teleprompter built for working creators — podcasters, YouTubers, and anyone recording without a full studio team.
-          It keeps your script, timing, and on‑screen tools in one place so you can focus on the delivery, not the juggling act.
-        </p>
-
-        <p class="dim">
-          Anvil is part of the Podcaster’s Forge toolset, an all‑in‑one workflow for writing, reading, and shipping shows from a single browser tab instead of ten different apps.
-        </p>
-
-        <ul class="dim">
-          <li>Smart scrolling modes for live reads and rehearsals</li>
-          <li>Color‑coded speakers and notes for easier performance</li>
-          <li>Script loading from local files instead of cloud lock‑in</li>
-          <li>OBS‑friendly layout designed for recording days</li>
-        </ul>
-
-        <div class="hr"></div>
-
-        <p class="dim">
-          You’re currently using Anvil <span id="aboutVersion">v1.7.3</span>.<br />
-          Built by the Podcaster’s Forge project.
-        </p>
-      </div>
-    </div>
-    <div class="settings-footer settings-small">Press Esc to close • Changes apply immediately</div>
-  </div>
+    <!-- Legacy tabs removed; TS builder handles tabs inside settingsBody -->
+    <div id="settingsBody" class="settings-body"></div>
 </div>
-<!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
+</div>
+  <!-- Dev helper scripts are imported from src/index.js in dev mode; no duplicate tags here -->
 
 <!-- Build label -->
 <div id="anvil-build-label">
-  ANVIL build 2025-10-15 00:00 • baseline: mainframe • HUD wired
+  ANVIL build 2025-10-15 00:00 - baseline: mainframe - HUD wired
 </div>
-
-<!-- HUD mount -->
-<div id="hud-root" data-role="hud-root"></div>
-
-  <!-- Present Mode exit button (visible only in Present Mode) -->
-  <button id="presentExitBtn" class="present-exit" type="button">Exit Present (Esc)</button>
 
   <!-- ASR bridge removed: logic now rides along inside the ASR module (index-hooks/asr.ts) -->
 
@@ -677,81 +872,8 @@
   
   <script>
     (function(){
-      // Display & Camera toggle wiring for prod HTML: aligns with mic toggle UX
       try {
-        var tog = document.getElementById('displayToggleBtn');
-        if (tog) {
-          var setState = function(open){
-            try{
-              tog.dataset.state = open ? 'open' : 'closed';
-              tog.textContent = open ? 'Display: Open' : 'Display: Closed';
-              tog.setAttribute('aria-pressed', open ? 'true' : 'false');
-            }catch(e){}
-          };
-          setState(false);
-          tog.addEventListener('click', function(){
-            try{
-              var isOpen = tog.dataset.state === 'open';
-              if (isOpen) {
-                try {
-                  if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay === 'function') window.__tpDisplay.closeDisplay();
-                  else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close();
-                } catch(e) {}
-                setState(false);
-              } else {
-                try {
-                  if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay === 'function') window.__tpDisplay.openDisplay();
-                  else window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
-                } catch(e) {}
-                setState(true);
-              }
-            }catch(e){}
-          });
-          document.addEventListener('tp:display:opened', function(){ try{ setState(true); }catch(e){} });
-          document.addEventListener('tp:display:closed', function(){ try{ setState(false); }catch(e){} });
-        }
-        var camTog = document.getElementById('cameraToggleBtn');
-        if (camTog) {
-          var setCam = function(on){
-            try {
-              camTog.dataset.state = on ? 'on' : 'off';
-              var lab = camTog.querySelector('.cam-label');
-              if (lab) lab.textContent = on ? 'Camera: On' : 'Camera: Off';
-              else camTog.textContent = on ? 'Camera: On' : 'Camera: Off';
-              camTog.setAttribute('aria-pressed', on ? 'true' : 'false');
-            } catch(e){}
-          };
-          setCam(false);
-          // Re-enable button helpers
-          function clearBusy(){ try { camTog.disabled = false; camTog.classList.remove('busy'); } catch(e){} }
-          document.addEventListener('tp:camera:started', clearBusy);
-          document.addEventListener('tp:camera:error', clearBusy);
-          document.addEventListener('tp:camera:stopped', clearBusy);
-          camTog.addEventListener('click', function(){
-            try {
-              var isOn = camTog.dataset.state === 'on';
-              var api = window.__tpCamera || window.__camApi;
-              // Re-query alias buttons late so order of inline scripts doesn't matter
-              var startBtnDyn = document.getElementById('startCamAlias') || document.getElementById('startCam') || document.querySelector('[data-action="start-camera"]');
-              var stopBtnDyn  = document.getElementById('stopCamAlias')  || document.getElementById('stopCam')  || document.querySelector('[data-action="stop-camera"]');
-              if (isOn) {
-                var did = false;
-                try { if (api && typeof api.stopCamera === 'function') { api.stopCamera(); did = true; } } catch(e){}
-                if (!did && stopBtnDyn && typeof stopBtnDyn.click === 'function') stopBtnDyn.click();
-                setCam(false);
-              } else {
-                // Busy state while starting
-                try { camTog.disabled = true; camTog.classList.add('busy'); } catch(e){}
-                var did2 = false;
-                try { if (api && typeof api.startCamera === 'function') { api.startCamera(); did2 = true; } } catch(e){}
-                if (!did2 && startBtnDyn && typeof startBtnDyn.click === 'function') startBtnDyn.click();
-                setCam(true);
-              }
-            } catch(e){}
-          });
-          document.addEventListener('tp:camera:started', function(){ try { setCam(true); } catch(e){} });
-          document.addEventListener('tp:camera:stopped', function(){ try { setCam(false); } catch(e){} });
-        }
+        // legacy display/camera wiring removed (TS bridges own these)
       } catch (e) {}
     })();
   </script>
@@ -761,8 +883,10 @@
   <!-- Test alias for legacy display selectors: clickable but visually hidden -->
   <button id="openDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-open">Open Display (alias)</button>
   <button id="closeDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-close">Close Display (alias)</button>
-  <!-- Hidden alias to preserve #speakerIndexChip for test/binders, removed from visible topbar -->
-  <span id="speakerIndexChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-speakers">Speakers</span>
+  <!-- Hidden aliases for removed status chips -->
+  <span id="saveChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-save"></span>
+  <span id="displayChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-display"></span>
+  <span id="autoChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-auto"></span>
   <script>
     (function(){
       try{
@@ -775,58 +899,31 @@
   </script>
   <script>
     (function(){
-      // Save status indicator wiring for #saveChip
-      try {
-        var saveChip = document.getElementById('saveChip');
-        if (!saveChip) return;
-
-        function setDirty(){
-          try {
-            saveChip.textContent = 'Draft: Modified';
-            saveChip.setAttribute('data-state','dirty');
-          } catch(e){}
-        }
-
-        function setSaved(){
-          try {
-            saveChip.textContent = 'Draft: Saved';
-            saveChip.setAttribute('data-state','saved');
-          } catch(e){}
-        }
-
-        // Initial state
-        try { saveChip.textContent = 'Draft: —'; saveChip.removeAttribute('data-state'); } catch(e){}
-
-        // Editor changes mark draft as modified
+      function markPasswordField(el){
         try {
-          var editor = document.getElementById('editor');
-          if (editor){ editor.addEventListener('input', setDirty, {passive:true}); }
-        } catch(e){}
-
-        // Title edits also mark as modified
-        try {
-          var title = document.getElementById('scriptTitle');
-          if (title){
-            title.addEventListener('input', setDirty, {passive:true});
-            title.addEventListener('change', setDirty, {passive:true});
+          if (el && el.getAttribute('autocomplete') !== 'current-password') {
+            el.setAttribute('autocomplete', 'current-password');
           }
-        } catch(e){}
+        } catch (err) {}
+      }
 
-        // After user clicks Save / Save As, show Saved state
+      function applyPasswordAutocomplete(){
         try {
-          var saveBtn = document.getElementById('scriptSaveBtn');
-          if (saveBtn){ saveBtn.addEventListener('click', function(){ setTimeout(setSaved, 0); }); }
-        } catch(e){}
-        try {
-          var saveAsBtn = document.getElementById('scriptSaveAsBtn');
-          if (saveAsBtn){ saveAsBtn.addEventListener('click', function(){ setTimeout(setSaved, 0); }); }
-        } catch(e){}
+          ['settingsObsPassword','obsPassword'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el) markPasswordField(el);
+          });
+        } catch (err) {}
+      }
 
-        // If app dispatches a custom event upon successful save, reflect that as well
-        try { window.addEventListener('tp:script:saved', function(){ setSaved(); }); } catch(e){}
-      } catch(e){}
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        applyPasswordAutocomplete();
+      } else {
+        document.addEventListener('DOMContentLoaded', applyPasswordAutocomplete, { once: true });
+      }
     })();
   </script>
+  <!-- legacy overlay binder removed; TS owns overlays -->
   <script>
     (function(){
       try {
@@ -842,5 +939,7 @@
       } catch (e) {}
     })();
   </script>
+  <!-- HUD mount point (hidden until HUD enabled) -->
+  <div id="hud-root" class="tp-hud-root" aria-hidden="true"></div>
 </body>
 </html>

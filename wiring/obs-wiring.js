@@ -62,15 +62,24 @@ export function initObsUI() {
     };
     const readPass = () => (byId('settingsObsPassword')?.value ?? byId('obsPassword')?.value ?? '');
     // UI checkbox reader is used to reflect state in the UI only; the engine relies on getObsEnabled()
-    const readEnabledFromUI = () => !!(byId('settingsEnableObs')?.checked || byId('enableObs')?.checked);
-    const writeEnabledToUI = (on) => {
+    // Settings/Recording owns the canonical "enabled" state.
+    // Sidebar checkbox only matters if Settings overlay isn't in the DOM yet.
+    const readEnabledFromUI = () => {
+        const settingsEl = byId('settingsEnableObs');
+        if (settingsEl)
+            return !!settingsEl.checked;
+        const sidebarEl = byId('enableObs');
+        return !!(sidebarEl && sidebarEl.checked);
+    };
+    const writeEnabledToUI = (enabled) => {
         try {
-            const elA = byId('settingsEnableObs');
-            const elB = byId('enableObs');
-            if (elA)
-                elA.checked = !!on;
-            if (elB)
-                elB.checked = !!on;
+            const checked = !!enabled;
+            const settingsEl = byId('settingsEnableObs');
+            const sidebarEl = byId('enableObs');
+            if (settingsEl)
+                settingsEl.checked = checked;
+            if (sidebarEl)
+                sidebarEl.checked = checked;
         }
         catch { }
     };
@@ -126,9 +135,7 @@ export function initObsUI() {
     try {
         const mo = new MutationObserver(() => {
             try {
-                const el = byId('settingsEnableObs') || byId('enableObs');
-                if (el)
-                    writeEnabledToUI(getObsEnabled());
+                writeEnabledToUI(getObsEnabled());
             }
             catch { }
         });

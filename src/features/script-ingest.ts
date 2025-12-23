@@ -1,4 +1,4 @@
-import { renderScript } from '../render-script';
+import { applyScript } from './apply-script';
 // src/features/script-ingest.ts
 // Wire mapped-folder file selection to teleprompter content.
 // Reads File or FileSystemFileHandle; injects into target or emits events.
@@ -14,16 +14,20 @@ export type IngestOpts = {
 let __ingestListening = false;
 let __docCh: BroadcastChannel | null = null;
 let __isRemote = false; // broadcast loop guard
+const __isDisplayCtx = (() => {
+  try { return (window as any).__TP_FORCE_DISPLAY === true; } catch { return false; }
+})();
+
 try {
   __docCh = (window as any).__tpDocCh || ((window as any).__tpDocCh = (new (window as any).BroadcastChannel ? new BroadcastChannel('tp-doc') : null));
-  if (__docCh && !(window as any).__tpDocChOnMsg) {
-    (window as any).__tpDocChOnMsg = true;
+  if (__docCh) {
     try {
       __docCh.onmessage = (ev: MessageEvent) => {
         try {
           const m = ev.data;
           // Respond to display hydration request
           if (m?.type === 'hello' && m.client === 'display') {
+              if (__isDisplayCtx) return; // display should not echo hello
             try {
               const snap = getCurrentScriptSnapshot();
               __docCh?.postMessage({ type: 'script', ...snap });
@@ -32,9 +36,12 @@ try {
           }
           if (m?.type === 'script' && typeof m.text === 'string') {
             __isRemote = true;
-            try { (window as any).__tpCurrentName = m.name; } catch {}
-            try { renderScript(m.text); } catch {}
-            __isRemote = false;
+            try {
+              try { (window as any).__tpCurrentName = m.name; } catch {}
+              applyScript(m.text, 'hydrate', { updateEditor: true });
+            } finally {
+              __isRemote = false;
+            }
           }
         } catch {}
       };
@@ -126,7 +133,6 @@ function applyToTarget(target: HTMLElement, text: string) {
   try {
     if (target instanceof HTMLTextAreaElement || target.tagName === 'TEXTAREA') {
       (target as HTMLTextAreaElement).value = text;
-      target.dispatchEvent(new Event('input', { bubbles: true }));
       return;
     }
     if ((target as HTMLElement).isContentEditable) {
@@ -134,8 +140,6 @@ function applyToTarget(target: HTMLElement, text: string) {
       return;
     }
   } catch {}
-  // Fallback broadcast
-  try { window.dispatchEvent(new CustomEvent('tp:script-apply', { detail: { text } })); } catch {}
 }
 
 export function installScriptIngest(opts: IngestOpts = {}) {
@@ -144,8 +148,12 @@ export function installScriptIngest(opts: IngestOpts = {}) {
   async function handle(item: File | FileSystemFileHandle) {
     const { name, text } = await readAny(item);
     try {
-      if (opts.onApply) opts.onApply(text, name);
-      else if (tgt) applyToTarget(tgt, text);
+      if (opts.onApply) {
+        opts.onApply(text, name);
+      } else {
+        applyScript(text, 'ingest', { updateEditor: true });
+        if (tgt) applyToTarget(tgt, text);
+      }
       (window as any).HUD?.log?.('script:loaded', { name, chars: text.length });
       try { localStorage.setItem('tp_last_script_name', name); } catch {}
       window.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: text.length } }));
@@ -156,12 +164,20 @@ export function installScriptIngest(opts: IngestOpts = {}) {
     window.addEventListener('tp:script-load', (e: any) => {
       try {
         const d = e?.detail;
+        // Ignore already-normalized echoes to avoid ingest loops
+        if (d && d.skipNormalize) {
+          return;
+        }
         // Support both { name, text } payloads and File/Handle payloads
         if (d && typeof d.text === 'string') {
           const name = typeof d.name === 'string' ? d.name : (function(){ try { return localStorage.getItem('tp_last_script_name') || 'Script.txt'; } catch { return 'Script.txt'; } })();
           const text = String(d.text);
-          if (opts.onApply) opts.onApply(text, name);
-          else if (tgt) applyToTarget(tgt, text);
+          if (opts.onApply) {
+            opts.onApply(text, name);
+          } else {
+            applyScript(text, 'ingest', { updateEditor: true });
+            if (tgt) applyToTarget(tgt, text);
+          }
           try { (window as any).HUD?.log?.('script:loaded', { name, chars: text.length }); } catch {}
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:script-loaded', { detail: { name, length: text.length } })); } catch {}
@@ -182,12 +198,12 @@ export function installGlobalIngestListener() {
   if (__ingestListening) return;
   __ingestListening = true;
 
-  let settingEditor = false; // guard against loops when we set editor programmatically
   const ed = document.querySelector('#editor') as HTMLTextAreaElement | null;
 
   // 1) Primary ingest listener
   window.addEventListener('tp:script-load' as any, async (ev: any) => {
     try {
+      if ((window as any).__TP_LOADING_SCRIPT) return;
       const d = ev?.detail || {};
       let name = d?.name || 'Untitled';
       let text: string | null = null;
@@ -206,24 +222,19 @@ export function installGlobalIngestListener() {
 
       if (typeof text !== 'string') return;
 
-      // Mirror into editor (for DEV/tests)
-      if (ed) { settingEditor = true; ed.value = text; settingEditor = false; }
-
       // Apply normalization if available so any entry path produces standard markup
       const skipNormalize = !!d?.skipNormalize;
-      if (!skipNormalize) {
-        try {
-          const runner = (window as any).__tpRequestScriptNormalization;
-          if (typeof runner === 'function') {
-            await runner('event:tp:script-load');
-          }
-        } catch {}
-      }
+      if (skipNormalize) return;
+      try {
+        const runner = (window as any).__tpRequestScriptNormalization;
+        if (typeof runner === 'function') {
+          await runner('event:tp:script-load');
+        }
+      } catch {}
 
       try { (window as any).__tpCurrentName = name; } catch {}
 
-      // Render locally
-      try { renderScript(text); } catch {}
+      try { applyScript(text, 'ingest', { updateEditor: true }); } catch {}
 
       // Broadcast to other windows only if local origin
       if (!__isRemote) {
@@ -243,7 +254,7 @@ export function installGlobalIngestListener() {
       let tmr: any;
       ed.addEventListener('input', () => {
         try {
-          if (settingEditor || (window as any).__tpNormalizingScript) return;
+          if ((window as any).__tpNormalizingScript) return;
           clearTimeout(tmr);
           const text = ed.value || '';
           tmr = setTimeout(() => {

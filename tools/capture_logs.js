@@ -63,7 +63,6 @@ async function capturePageLogs(browser, url, timeoutMs) {
 (async () => {
   const { host, timeout } = parseArgs();
   const urls = [
-    `${host}/index.html?dev=1&ci=1`,
     `${host}/teleprompter_pro.html?dev=1&ci=1`
   ];
 

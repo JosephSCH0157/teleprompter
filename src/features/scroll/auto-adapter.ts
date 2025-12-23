@@ -1,15 +1,16 @@
 // src/features/scroll/auto-adapter.ts
 // Thin TS adapter around the existing auto/PLL scroll engine.
-// Does NOT change its behavior; just presents a typed interface
-// for the mode router to use.
+// Presents the interface expected by the mode router.
 
-import type { AutoScrollAPI } from './mode-router';
+import type { AutoEngine, ScrollMode } from './mode-router';
 
 declare global {
 	interface Window {
 		__tpAuto?: {
+			set?: (on: boolean) => void;
 			setEnabled?: (on: boolean) => void;
-			setMode?: (mode: 'auto' | 'hybrid' | string) => void;
+			setMode?: (mode: string) => void;
+			setStepPx?: (px: number) => void;
 		};
 	}
 }
@@ -21,7 +22,7 @@ declare global {
  * If the engine is not available, returns null and the router will
  * simply not drive auto/hybrid modes (safe fallback).
  */
-export function getAutoScrollApi(): AutoScrollAPI | null {
+export function getAutoScrollApi(): AutoEngine | null {
 	if (typeof window === 'undefined') return null;
 
 	const w = window as Window;
@@ -30,7 +31,7 @@ export function getAutoScrollApi(): AutoScrollAPI | null {
 		return null;
 	}
 
-	const api: AutoScrollAPI = {
+	const api: AutoEngine = {
 		setEnabled(on: boolean): void {
 			try {
 				auto.setEnabled?.(!!on);
@@ -38,13 +39,19 @@ export function getAutoScrollApi(): AutoScrollAPI | null {
 				// ignore
 			}
 		},
-		setMode(mode: 'auto' | 'hybrid'): void {
+		setMode(mode: ScrollMode): void {
 			try {
 				// Pass through exact values; legacy can coerce internally if needed.
 				auto.setMode?.(mode);
 			} catch {
 				// ignore
 			}
+		},
+		start(): void {
+			try { auto.setEnabled?.(true); } catch {}
+		},
+		stop(): void {
+			try { auto.setEnabled?.(false); } catch {}
 		},
 	};
 
