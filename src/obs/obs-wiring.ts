@@ -5,7 +5,7 @@ import {
   subscribeRecorderSettings,
   setObsStatus,
 } from '../state/recorder-settings';
-import * as rec from '../../recorders.js';
+import * as rec from '../../recorders-bridge-compat';
 
 function toast(msg: string, type: 'ok' | 'error' | 'warn' | 'info' = 'info'): void {
   try {
