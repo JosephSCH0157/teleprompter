@@ -188,7 +188,8 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
     if (!lineEls.length) return 0;
     const scrollTop = (viewer as HTMLElement | null)?.scrollTop ?? 0;
     const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
-    if (scrollTop <= Math.max(2, firstLineHeight * 0.5)) return 0;
+    const topEpsilon = Math.max(24, firstLineHeight * 0.5);
+    if (scrollTop <= topEpsilon) return 0;
     const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
       ? (window as any).__TP_MARKER_PCT
       : 0.4;

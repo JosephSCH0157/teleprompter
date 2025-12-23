@@ -107,6 +107,20 @@ export function renderScript(text: string, container?: HTMLElement | null): void
         try { console.warn('[MARKER] insane offset', { markerOffset, viewerHeight: viewer.clientHeight }); } catch {}
       }
     }
+    try {
+      const padTarget = root.id ? `#${root.id}` : (root.className ? `.${root.className}` : root.tagName.toLowerCase());
+      const scrollPadTarget = viewer
+        ? (viewer.id ? `#${viewer.id}` : (viewer.className ? `.${viewer.className}` : viewer.tagName.toLowerCase()))
+        : 'none';
+      console.info([
+        '[MARKER_PADDING]',
+        `markerPct=${markerPct}`,
+        `hostH=${Math.round(h)}`,
+        `markerOffset=${markerOffset}`,
+        `paddingTop=${padTarget}`,
+        `scrollPaddingTop=${scrollPadTarget}`,
+      ].join(' '));
+    } catch {}
   } catch {}
 
   let currentSpeaker: SpeakerKey | null = null;
