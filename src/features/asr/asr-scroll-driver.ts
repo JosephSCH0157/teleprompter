@@ -252,6 +252,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindStrongCount = 0;
   let pendingMatch: PendingMatch | null = null;
   let pendingRaf = 0;
+  let bootLogged = false;
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -618,6 +619,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const snippet = formatLogSnippet(compacted, 60);
+    if (!bootLogged) {
+      bootLogged = true;
+      try {
+        const scroller = getScroller();
+        const scrollTop = scroller?.scrollTop ?? 0;
+        const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+          ? (window as any).__TP_MARKER_PCT
+          : 0.4;
+        const rect = scroller
+          ? scroller.getBoundingClientRect()
+          : document.documentElement.getBoundingClientRect();
+        const markerY = rect.top + (scroller ? scroller.clientHeight : window.innerHeight) * markerPct;
+        const lineEl = scroller?.querySelector<HTMLElement>('.line') ?? null;
+        const pxPerLine = lineEl?.offsetHeight ?? 0;
+        const computedLineHeight = (() => {
+          if (!scroller) return 0;
+          const parsed = Number.parseFloat(getComputedStyle(scroller).lineHeight);
+          return Number.isFinite(parsed) ? parsed : 0;
+        })();
+        const currentIndexRaw = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
+        const currentIndex = Number.isFinite(currentIndexRaw) ? Math.floor(currentIndexRaw) : currentIndexRaw;
+        console.info([
+          'ASR_BOOT',
+          `scrollTop=${Math.round(scrollTop)}`,
+          `markerY=${Math.round(markerY)}`,
+          `pxPerLine=${Math.round(pxPerLine)}`,
+          `lineHeight=${Number.isFinite(computedLineHeight) ? computedLineHeight.toFixed(2) : '?'}`,
+          `currentIndex=${currentIndex}`,
+        ].join(' '));
+      } catch {}
+    }
     const tokenCount = normTokens(compacted).length;
     const evidenceChars = compacted.length;
     const now = Date.now();
