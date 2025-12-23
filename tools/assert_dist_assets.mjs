@@ -3,8 +3,12 @@ import path from 'node:path';
 
 const requiredFiles = [
   'dist/teleprompter_pro.html',
+  'dist/teleprompter_pro.css',
   'dist/display.html',
   'dist/hud_popout.html',
+  'dist/assets',
+  'dist/forge-config.js',
+  'dist/adapters/obsBridge.js',
   'dist/hud/debug.js',
   'dist/hud/popout-entry.js',
   'dist/speech/recognizer.js',
