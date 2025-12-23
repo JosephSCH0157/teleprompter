@@ -69,7 +69,7 @@
   <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
   <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
-<!-- Dev flag G?? add .tp-dev class early so CSS can key off it -->
+<!-- Dev flag: add .tp-dev class early so CSS can key off it -->
   <script>
     (function(){
       try {
@@ -593,12 +593,10 @@
         if (!viewer) return;
         const pct = (typeof window.__TP_MARKER_PCT === 'number' ? window.__TP_MARKER_PCT : 0.4);
         const h = viewer.clientHeight || window.innerHeight || 0;
-        const offset = Math.max(0, Math.round(h * pct));
+        if (!isFinite(h) || h <= 0) return;
+        const offset = Math.max(0, Math.min(h, Math.round(h * pct)));
         viewer.style.paddingTop = '0px';
         viewer.style.scrollPaddingTop = offset + 'px';
-        if (offset > (viewer.clientHeight || 0) * 2) {
-          console.warn('[MARKER] insane offset', { offset, h: viewer.clientHeight });
-        }
       } catch (e) {
         try { console.warn('[marker] scrollPadding apply failed', e); } catch {}
       }
@@ -628,11 +626,11 @@
 
     <div class="shortcuts-grid">
       <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-      <div><strong>G?? / G??</strong></div><div>Adjust Auto-scroll speed (-?1)</div>
-      <div><strong>Shift + G?? / G??</strong></div><div>Adjust by -?5</div>
-      <div><strong>Mouse-wheel on speed field</strong></div><div>-?1 (Shift: -?5)</div>
+      <div><strong>ArrowUp / ArrowDown or + / -</strong></div><div>Adjust Auto-scroll speed (+/-1)</div>
+      <div><strong>Shift + ArrowUp / ArrowDown</strong></div><div>Adjust by +/-5</div>
+      <div><strong>Mouse-wheel on speed field</strong></div><div>+/-1 (Shift: +/-5)</div>
       <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
-      <div><strong>Shift + ?</strong></div><div>Open Help</div>
+      <div><strong>Shift + /</strong></div><div>Open Help</div>
       <div><strong>Ctrl/Cmd + O</strong></div><div>Load selected script from mapped folder</div>
       <div><strong>Ctrl/Cmd + S</strong></div><div>Save</div>
       <div><strong>F2</strong></div><div>Rename selected script</div>

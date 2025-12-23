@@ -615,6 +615,15 @@
     },
     {
       "type": "log",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
+        "lineNumber": 41624,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
       "text": "[auto-scroll] boot: wired JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
@@ -871,15 +880,6 @@
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 31285,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 41624,
         "columnNumber": 12
       }
     },
@@ -3346,15 +3346,6 @@
         "lineNumber": 30960,
         "columnNumber": 14
       }
-    },
-    {
-      "type": "warning",
-      "text": "[MARKER] insane offset JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-        "lineNumber": 599,
-        "columnNumber": 18
-      }
     }
   ],
   "notes": [
@@ -3368,9 +3359,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "bc6a8f258e5b68141e90b8dab0c34c9e6f907321",
+      "gitSha": "7a6bef9ae8f913bf30b9f2276519a7c415056c1b",
       "branch": "main",
-      "buildTime": "2025-12-23T19:02:51.323Z"
+      "buildTime": "2025-12-23T19:12:28.779Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
