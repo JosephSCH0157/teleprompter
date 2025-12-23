@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Anvil v1.7.8</title>
-  <meta name="description" content="Anvil Teleprompter Pro - speech-synced scrolling with OBS integration. Run scripts, mark takes, and auto-record scenes." />
+
   <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
@@ -307,6 +307,7 @@
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
 <div class="topbar">
+<<<<<<< HEAD
   <strong>Anvil - Teleprompter</strong>
   <span id="appVersion" class="version-badge" aria-label="App version">v1.7.8</span>
   <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
@@ -325,6 +326,28 @@
       <span id="recPillLive" class="sr-only rec-pill-live"></span>
     </span>
     <!-- ASR chip + button will mount here -->
+=======
+<strong>Anvil - Teleprompter</strong>
+<span id="appVersion" class="version-badge" aria-label="App version">v1.7.8</span>
+<span class="chip" id="saveChip">Draft: —</span>
+<span class="chip" id="permChip">Mic: unknown</span>
+<span class="chip" id="displayChip">Display: closed</span>
+<span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+<span class="chip" id="scrollChip">Scroll: idle</span>
+<span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor — • scrollTop —</span>
+<span class="chip" id="camRtcChip">CamRTC: idle</span>
+<!-- Mic level + calibration -->
+<div class="mic-block">
+  <span class="topbar-label">Mic level</span>
+  <div id="dbMeterTop" title="Input level"></div>
+  <button id="micCalBtn" class="mic-cal-btn" type="button">Calibrate Mic</button>
+</div>
+<!-- Auto status chip (Hybrid/Auto state) -->
+<span id="autoChip" class="chip" aria-live="polite" aria-atomic="true" title="Auto scroll status">Auto: Manual</span>
+<!-- Right-side controls wrapper (ASR chip mounts here) -->
+<div id="topbarRight" class="inl-1">
+  <!-- ASR chip + button will mount here -->
+>>>>>>> 75fef33e (chore(html): bump visible version)
     <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
