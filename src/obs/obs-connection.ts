@@ -174,7 +174,7 @@ function connectViaBridge(): void {
 
     const connectRes = await safeInvoke('connect', () => bridge.connect?.());
     logObsCommand('connect:explicit');
-    if (connectRes.error || connectRes.value === false) {
+    if (connectRes.error || (typeof connectRes.value === 'boolean' && !connectRes.value)) {
       updateStatus('disconnected', 'OBS connection failed');
       toastObs('OBS connection failed. Make sure OBS is running.', 'warn');
       return;
