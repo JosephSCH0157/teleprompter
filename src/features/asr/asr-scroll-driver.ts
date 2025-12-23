@@ -158,6 +158,30 @@ function getScroller(): HTMLElement | null {
   );
 }
 
+function isScrollable(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  if (el.scrollHeight - el.clientHeight > 2) return true;
+  try {
+    const st = getComputedStyle(el);
+    return /(auto|scroll)/.test(st.overflowY || '');
+  } catch {
+    return false;
+  }
+}
+
+function resolveActiveScroller(primary: HTMLElement | null, fallback: HTMLElement | null): HTMLElement | null {
+  if (isScrollable(primary)) return primary;
+  if (isScrollable(fallback)) return fallback;
+  return primary || fallback;
+}
+
+function describeElement(el: HTMLElement | null): string {
+  if (!el) return 'none';
+  const id = el.id ? `#${el.id}` : '';
+  const cls = el.className ? `.${String(el.className).trim().split(/\s+/).join('.')}` : '';
+  return `${el.tagName.toLowerCase()}${id}${cls}` || el.tagName.toLowerCase();
+}
+
 function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
   if (!scroller) return null;
   const idx = Math.max(0, Math.floor(lineIndex));
@@ -183,18 +207,25 @@ function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number):
 
 function computeMarkerLineIndex(scroller: HTMLElement | null): number {
   try {
-    const viewer = scroller || document.getElementById('viewer') || document.getElementById('scriptScrollContainer');
-    const lineEls = Array.from((viewer || document).querySelectorAll<HTMLElement>('.line'));
+    const viewer =
+      scroller ||
+      document.getElementById('viewer') ||
+      document.getElementById('scriptScrollContainer');
+    const root = document.getElementById('script') || viewer;
+    const container = viewer || root;
+    const lineEls = Array.from((container || document).querySelectorAll<HTMLElement>('.line'));
     if (!lineEls.length) return 0;
-    const scrollTop = (viewer as HTMLElement | null)?.scrollTop ?? 0;
+    const activeScroller = resolveActiveScroller(viewer as HTMLElement | null, root as HTMLElement | null);
+    const scrollTop = activeScroller?.scrollTop ?? 0;
     const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
     const topEpsilon = Math.max(24, firstLineHeight * 0.5);
     if (scrollTop <= topEpsilon) return 0;
     const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
       ? (window as any).__TP_MARKER_PCT
       : 0.4;
-    const rect = viewer ? viewer.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
-    const markerY = rect.top + (viewer ? viewer.clientHeight : window.innerHeight) * markerPct;
+    const host = (activeScroller || container) as HTMLElement | null;
+    const rect = host ? host.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
+    const markerY = rect.top + (host ? host.clientHeight : window.innerHeight) * markerPct;
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < lineEls.length; i++) {
@@ -441,10 +472,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
 
-      const targetLine = Math.max(0, Math.floor(line));
-      const targetTop = resolveTargetTop(scroller, targetLine);
+      let targetLine = Math.max(0, Math.floor(line));
+      let targetTop = resolveTargetTop(scroller, targetLine);
       const currentTop = scroller.scrollTop || 0;
-      const deltaPx = targetTop != null ? targetTop - currentTop : 0;
+      let deltaPx = targetTop != null ? targetTop - currentTop : 0;
 
       if (targetTop == null) {
         warnGuard('no_target', [
@@ -456,6 +487,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
 
+      if (targetLine <= lastLineIndex) {
+        if (targetLine === lastLineIndex) {
+          if (isFinal && hasEvidence && strongMatch && deltaPx > 0 && deltaPx <= creepNearPx) {
+            const nextLine = targetLine + 1;
+            const nextTop = resolveTargetTop(scroller, nextLine);
+            if (nextTop != null) {
+              const nextDeltaPx = nextTop - currentTop;
+              if (nextDeltaPx > 0 && nextDeltaPx <= maxTargetJumpPx) {
+                targetLine = nextLine;
+                targetTop = nextTop;
+                deltaPx = nextDeltaPx;
+                logDev('same-line advance', { line: targetLine, px: Math.round(nextDeltaPx), conf });
+              }
+            }
+          }
+        }
+      }
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
           if (deltaPx < 0 || deltaPx > creepNearPx) {
@@ -626,17 +674,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!bootLogged) {
       bootLogged = true;
       try {
-        const scroller = getScroller();
+        const viewer = getScroller();
+        const root = document.getElementById('script') || viewer;
+        const scroller = resolveActiveScroller(viewer, root);
         const scrollTop = scroller?.scrollTop ?? 0;
         const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
           ? (window as any).__TP_MARKER_PCT
           : 0.4;
-        const rect = scroller
-          ? scroller.getBoundingClientRect()
+        const host = scroller || root;
+        const rect = host
+          ? host.getBoundingClientRect()
           : document.documentElement.getBoundingClientRect();
-        const markerY = rect.top + (scroller ? scroller.clientHeight : window.innerHeight) * markerPct;
-        const lineEl = scroller?.querySelector<HTMLElement>('.line') ?? null;
+        const markerY = rect.top + (host ? host.clientHeight : window.innerHeight) * markerPct;
+        const lineEl = (root || scroller || document).querySelector<HTMLElement>('.line');
         const pxPerLine = lineEl?.offsetHeight ?? 0;
+        const topEpsilon = Math.max(24, (pxPerLine || 0) * 0.5);
         const computedLineHeight = (() => {
           if (!scroller) return 0;
           const parsed = Number.parseFloat(getComputedStyle(scroller).lineHeight);
@@ -646,7 +698,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const currentIndex = Number.isFinite(currentIndexRaw) ? Math.floor(currentIndexRaw) : currentIndexRaw;
         console.info([
           'ASR_BOOT',
+          `scroller=${describeElement(scroller)}`,
           `scrollTop=${Math.round(scrollTop)}`,
+          `topEps=${Math.round(topEpsilon)}`,
           `markerY=${Math.round(markerY)}`,
           `pxPerLine=${Math.round(pxPerLine)}`,
           `lineHeight=${Number.isFinite(computedLineHeight) ? computedLineHeight.toFixed(2) : '?'}`,

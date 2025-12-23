@@ -433,25 +433,52 @@ function isSettingsHydrating(): boolean {
   try { return !!(window as any).__tpSettingsHydrating; } catch { return false; }
 }
 
+function isScrollable(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  if (el.scrollHeight - el.clientHeight > 2) return true;
+  try {
+    const st = getComputedStyle(el);
+    return /(auto|scroll)/.test(st.overflowY || '');
+  } catch {
+    return false;
+  }
+}
+
+function resolveActiveScroller(primary: HTMLElement | null, fallback: HTMLElement | null): HTMLElement | null {
+  if (isScrollable(primary)) return primary;
+  if (isScrollable(fallback)) return fallback;
+  return primary || fallback;
+}
+
+function describeElement(el: HTMLElement | null): string {
+  if (!el) return 'none';
+  const id = el.id ? `#${el.id}` : '';
+  const cls = el.className ? `.${String(el.className).trim().split(/\s+/).join('.')}` : '';
+  return `${el.tagName.toLowerCase()}${id}${cls}` || el.tagName.toLowerCase();
+}
+
 function computeMarkerLineIndex(): number {
   try {
     const viewer =
       document.getElementById('viewer') ||
-      document.getElementById('scriptScrollContainer') ||
-      document.getElementById('script');
+      document.getElementById('scriptScrollContainer');
+    const root = document.getElementById('script') || viewer;
+    const container = viewer || root;
     const lineEls = Array.from(
-      (viewer || document).querySelectorAll<HTMLElement>('.line'),
+      (container || document).querySelectorAll<HTMLElement>('.line'),
     );
     if (!lineEls.length) return 0;
-    const scrollTop = (viewer as HTMLElement | null)?.scrollTop ?? 0;
+    const scroller = resolveActiveScroller(viewer, root);
+    const scrollTop = scroller?.scrollTop ?? 0;
     const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
     const topEpsilon = Math.max(24, firstLineHeight * 0.5);
     if (scrollTop <= topEpsilon) return 0;
     const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
       ? (window as any).__TP_MARKER_PCT
       : 0.4;
-    const rect = viewer ? viewer.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
-    const markerY = rect.top + (viewer ? viewer.clientHeight : window.innerHeight) * markerPct;
+    const host = scroller || container;
+    const rect = host ? host.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
+    const markerY = rect.top + (host ? host.clientHeight : window.innerHeight) * markerPct;
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < lineEls.length; i++) {
@@ -676,15 +703,27 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   syncAsrIndices(startIdx, 'session-start');
   try {
     const currentIdx = Number((window as any).currentIndex ?? startIdx);
+    const viewer =
+      document.getElementById('viewer') ||
+      document.getElementById('scriptScrollContainer');
+    const root = document.getElementById('script') || viewer;
+    const scroller = resolveActiveScroller(viewer, root);
+    const scrollerTop = scroller?.scrollTop ?? 0;
+    const firstLine = (root || viewer || document).querySelector<HTMLElement>('.line');
+    const firstLineHeight = firstLine?.offsetHeight || firstLine?.clientHeight || 0;
+    const topEpsilon = Math.max(24, firstLineHeight * 0.5);
     const markerSnap = getLineSnapshot(startIdx);
     const currentSnap = getLineSnapshot(currentIdx);
     const anchorLine = [
       'ASR_ANCHOR',
       `current=${currentIdx}`,
       `marker=${startIdx}`,
+      `scroller=${describeElement(scroller)}`,
+      `scrollTop=${Math.round(scrollerTop)}`,
+      `topEps=${Math.round(topEpsilon)}`,
       markerSnap?.snippet ? `markerText="${markerSnap.snippet}"` : '',
       currentSnap?.snippet ? `currentText="${currentSnap.snippet}"` : '',
-      `scrollTop=${Math.round(currentSnap?.scrollTop ?? 0)}`,
+      `snapScrollTop=${Math.round(currentSnap?.scrollTop ?? 0)}`,
       `lineH=${currentSnap?.lineHeight ?? 0}`,
     ].filter(Boolean).join(' ');
     console.warn(anchorLine);
