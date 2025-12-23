@@ -186,6 +186,9 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
     const viewer = scroller || document.getElementById('viewer') || document.getElementById('scriptScrollContainer');
     const lineEls = Array.from((viewer || document).querySelectorAll<HTMLElement>('.line'));
     if (!lineEls.length) return 0;
+    const scrollTop = (viewer as HTMLElement | null)?.scrollTop ?? 0;
+    const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
+    if (scrollTop <= Math.max(2, firstLineHeight * 0.5)) return 0;
     const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
       ? (window as any).__TP_MARKER_PCT
       : 0.4;
@@ -714,17 +717,43 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     if (topScores.length) {
       const bestScore = conf;
-      const forwardCandidates = topScores
+      const tieCandidates = topScores
         .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
         .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
-        .filter((entry) => entry.idx >= cursorLine && entry.score >= bestScore - forwardTieEps)
+        .filter((entry) => entry.score >= bestScore - forwardTieEps);
+      const hasTie = tieCandidates.length >= 2;
+      const forwardCandidates = tieCandidates
+        .filter((entry) => entry.idx >= cursorLine)
         .sort((a, b) => a.idx - b.idx || b.score - a.score);
-      if (forwardCandidates.length) {
-        const next = forwardCandidates[0];
-        if (next.idx !== rawIdx || next.score !== conf) {
-          const before = rawIdx;
-          rawIdx = next.idx;
-          conf = next.score;
+      const forwardPick = forwardCandidates[0];
+      if (hasTie && forwardPick && forwardPick.score < requiredThreshold) {
+        warnGuard('tie_forward', [
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `forward=${forwardPick.idx}`,
+          `sim=${formatLogScore(forwardPick.score)}`,
+          `need=${formatLogScore(requiredThreshold)}`,
+          `eps=${forwardTieEps}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        return;
+      }
+      if (hasTie && !forwardPick) {
+        warnGuard('tie_forward', [
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `sim=${formatLogScore(bestScore)}`,
+          `need=${formatLogScore(requiredThreshold)}`,
+          `eps=${forwardTieEps}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        return;
+      }
+      if (forwardPick && (forwardPick.idx !== rawIdx || forwardPick.score !== conf)) {
+        const before = rawIdx;
+        rawIdx = forwardPick.idx;
+        conf = forwardPick.score;
+        if (hasTie) {
           warnGuard('tie_forward', [
             `current=${cursorLine}`,
             `best=${before}`,
