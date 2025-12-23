@@ -2,6 +2,7 @@ import type { AsrProfile, AsrProfileId, AsrState } from './schema';
 import { getAppStore } from '../state/appStore';
 
 const KEY = 'tp_asr_profiles_v1';
+const ACTIVE_KEY = 'tp_asr_active_profile_v1';
 const store = getAppStore();
 const stateFromStore = (() => {
   if (!store) return null;
@@ -23,8 +24,17 @@ let state: AsrState = (() => {
       };
     }
     const raw = localStorage.getItem(KEY);
-    const parsed = raw ? JSON.parse(raw) as Partial<AsrState> : {};
-    return { profiles: {}, ...parsed } as AsrState;
+    const parsed = raw ? JSON.parse(raw) as Partial<AsrState> | Record<AsrProfileId, AsrProfile> : {};
+    const legacyProfiles = parsed && typeof parsed === 'object' && 'profiles' in parsed
+      ? (parsed as AsrState).profiles
+      : null;
+    const profiles = legacyProfiles && typeof legacyProfiles === 'object'
+      ? legacyProfiles
+      : (parsed && typeof parsed === 'object' ? (parsed as Record<AsrProfileId, AsrProfile>) : {});
+    const activeProfileId =
+      (typeof (parsed as AsrState)?.activeProfileId === 'string' && (parsed as AsrState).activeProfileId) ||
+      (localStorage.getItem(ACTIVE_KEY) || undefined);
+    return { profiles: profiles || {}, activeProfileId } as AsrState;
   } catch {
     return { profiles: {} } as AsrState;
   }
@@ -42,7 +52,11 @@ function syncAppStore() {
 }
 
 function save(opts?: { fromStore?: boolean }) {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  try { localStorage.setItem(KEY, JSON.stringify(state.profiles || {})); } catch {}
+  try {
+    if (state.activeProfileId) localStorage.setItem(ACTIVE_KEY, state.activeProfileId);
+    else localStorage.removeItem(ACTIVE_KEY);
+  } catch {}
   subs.forEach(fn => { try { fn(state); } catch {} });
   if (!opts?.fromStore) {
     syncAppStore();
@@ -92,11 +106,21 @@ try {
   window.addEventListener('storage', (e: StorageEvent) => {
     try {
       if (e.key === KEY && e.newValue) {
-        const next = JSON.parse(e.newValue) as AsrState;
+        const parsed = JSON.parse(e.newValue) as Partial<AsrState> | Record<AsrProfileId, AsrProfile>;
+        const legacyProfiles = parsed && typeof parsed === 'object' && 'profiles' in parsed
+          ? (parsed as AsrState).profiles
+          : null;
+        const profiles = legacyProfiles && typeof legacyProfiles === 'object'
+          ? legacyProfiles
+          : (parsed && typeof parsed === 'object' ? (parsed as Record<AsrProfileId, AsrProfile>) : {});
         state = {
-          ...next,
-          profiles: next?.profiles || {},
+          ...state,
+          profiles: profiles || {},
         } as AsrState;
+        save({ fromStore: true });
+      }
+      if (e.key === ACTIVE_KEY) {
+        state.activeProfileId = e.newValue || undefined;
         save({ fromStore: true });
       }
     } catch {}
