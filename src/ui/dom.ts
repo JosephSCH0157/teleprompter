@@ -7,6 +7,7 @@ import { setSessionPhase } from '../state/session';
 import { applyScript } from '../features/apply-script';
 import { getNextSampleScript } from '../content/sample-scripts';
 import { flushPendingSettingsEdits } from '../ui/settings';
+import { initStepControls } from './step-controls';
 
 
 type AnyFn = (...args: any[]) => any;
@@ -959,6 +960,7 @@ export function bindStaticDom() {
     installDbMeter();
     installObsChip();
   initSelfChecksChip();
+    initStepControls(document);
       // Keep empty script area informative before real content loads
     // Speakers section toggle (show/hide panel body)
     try {
