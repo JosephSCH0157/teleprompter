@@ -194,6 +194,14 @@
   "errors": [],
   "console": [
     {
+      "type": "warning",
+      "text": "<link rel=modulepreload> has no `href` value",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 48
+      }
+    },
+    {
       "type": "log",
       "text": "[ASR] orchestrator global shim installing",
       "location": {
@@ -609,15 +617,6 @@
     },
     {
       "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 40476,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
       "text": "[auto-scroll] boot: wired JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
@@ -632,15 +631,6 @@
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
         "lineNumber": 39197,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "debug",
-      "text": "[HUD] settings:folder:injected JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 29812,
-        "columnNumber": 14
       }
     },
     {
@@ -834,46 +824,10 @@
     },
     {
       "type": "log",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30130,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30130,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "script-store:syncMapped JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30137,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-EDITOR] syncSidebarFromSettings (no entries) JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30130,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "folder:cleared JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev",
-        "lineNumber": 30137,
+        "lineNumber": 40476,
         "columnNumber": 12
       }
     },
@@ -3327,9 +3281,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "0d1d15e0c9aa12c1f7d7891f27538e1a8519cd20",
+      "gitSha": "54bcf1a398e3876a93aca1f4f2f42dbfa0b9e12a",
       "branch": "main",
-      "buildTime": "2025-12-23T19:41:32.500Z"
+      "buildTime": "2025-12-24T02:34:54.193Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
