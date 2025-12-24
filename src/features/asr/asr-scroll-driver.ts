@@ -19,6 +19,8 @@ type PendingMatch = {
   hasEvidence: boolean;
   snippet: string;
   minThreshold?: number;
+  forced?: boolean;
+  forceReason?: string;
 };
 
 type AsrEventSnapshot = {
@@ -541,7 +543,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       const now = Date.now();
-      const { line, conf, isFinal, hasEvidence, snippet, minThreshold } = pending;
+      const { line, conf, isFinal, hasEvidence, snippet, minThreshold, forced, forceReason } = pending;
       const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
       const effectiveThreshold = Number.isFinite(minThreshold)
         ? clamp(minThreshold as number, 0, 1)
@@ -735,7 +737,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const base = targetTopPx == null ? currentTop : targetTopPx;
       const candidate = clamp(targetTop, 0, max);
-      const limitedTarget = Math.min(candidate, base + maxTargetJumpPx);
+      const limitedTarget = forced ? candidate : Math.min(candidate, base + maxTargetJumpPx);
       targetTopPx = Math.max(base, limitedTarget);
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
@@ -765,6 +767,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `marker=${markerIdx}`,
           `scrollTop=${Math.round(scroller.scrollTop || 0)}`,
           `lineH=${lineHeight}`,
+          forced ? `forced=${forceReason || 1}` : '',
           currentText ? `currentText="${currentText}"` : '',
           bestText ? `bestText="${bestText}"` : '',
           markerText ? `markerText="${markerText}"` : '',
@@ -992,6 +995,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
       logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
     }
+    const shortFinalForced =
+      shortFinalRecent &&
+      rawIdx >= cursorLine &&
+      shortFinalNeed < requiredThreshold &&
+      conf >= shortFinalNeed &&
+      conf < requiredThreshold;
     if (forwardBiasEligible && rawIdx < cursorLine && topScores.length) {
       const behindBy = cursorLine - rawIdx;
       const biasThreshold = clamp(requiredThreshold - forwardBiasSimSlack, 0, 1);
@@ -1215,6 +1224,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       hasEvidence,
       snippet,
       minThreshold: effectiveThreshold < requiredThreshold ? effectiveThreshold : undefined,
+      forced: outrunCommit || shortFinalForced,
+      forceReason: outrunCommit ? 'outrun' : (shortFinalForced ? 'short-final' : undefined),
     };
     schedulePending();
   };
