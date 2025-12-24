@@ -373,6 +373,74 @@
             const scrollSnapTail = 300;
             let scrollTargetTop = null;
             let scrollRaf = 0;
+            let pendingLineIdx = null;
+
+            function readLineIndex(el) {
+              try {
+                if (!el || !el.closest) return null;
+                const line = el.closest('.line');
+                if (!line) return null;
+                const raw =
+                  (line.dataset && (line.dataset.line || line.dataset.i || line.dataset.index || line.dataset.lineIdx)) ||
+                  line.getAttribute('data-line') ||
+                  line.getAttribute('data-line-idx');
+                if (raw != null && raw !== '') {
+                  const n = Number(raw);
+                  if (isFinite(n)) return Math.floor(n);
+                }
+                const id = line.id || '';
+                const m = /^tp-line-(\d+)$/.exec(id);
+                if (m) return Number(m[1]);
+              } catch {}
+              return null;
+            }
+
+            function findLineElByIndex(idx) {
+              try {
+                const id = 'tp-line-' + idx;
+                let el = document.getElementById(id);
+                if (el) return el;
+                if (scriptEl) {
+                  el = scriptEl.querySelector(
+                    `.line[data-line="${idx}"],.line[data-i="${idx}"],.line[data-index="${idx}"],.line[data-line-idx="${idx}"]`,
+                  );
+                  if (el) return el;
+                  const lines = scriptEl.querySelectorAll('.line');
+                  let best = null;
+                  let bestDist = Infinity;
+                  for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const val = readLineIndex(line) || i;
+                    const d = Math.abs(val - idx);
+                    if (d < bestDist) {
+                      bestDist = d;
+                      best = line;
+                    }
+                  }
+                  return best;
+                }
+              } catch {}
+              return null;
+            }
+
+            function elementTopRelativeTo(el, scroller) {
+              const r1 = el.getBoundingClientRect();
+              const r2 = scroller.getBoundingClientRect();
+              const scrollTop = scroller.scrollTop || 0;
+              return r1.top - r2.top + scrollTop;
+            }
+
+            function scrollToLine(idx) {
+              if (!wrap || !isFinite(idx)) return false;
+              const line = findLineElByIndex(Math.max(0, Math.floor(idx)));
+              if (!line) return false;
+              const markerPct = window.__TP_MARKER_PCT ?? 0.4;
+              const h = wrap.clientHeight || window.innerHeight || 0;
+              const markerOffset = Math.max(0, Math.round(h * markerPct));
+              const top = elementTopRelativeTo(line, wrap) - markerOffset;
+              requestScroll(top);
+              return true;
+            }
 
             function ensureScrollStep() {
               if (scrollRaf) return;
@@ -409,10 +477,22 @@
             }
 
             function applyScrollPayload(payload) {
+              const rawLine =
+                payload && (payload.cursorLine ?? payload.line ?? payload.lineIndex ?? payload.index);
+              const cursorLine = typeof rawLine === 'number' ? rawLine : Number(rawLine);
+              if (cursorLine != null && isFinite(cursorLine)) {
+                if (scrollToLine(cursorLine)) {
+                  pendingLineIdx = null;
+                  return true;
+                }
+                pendingLineIdx = Math.max(0, Math.floor(cursorLine));
+              }
+              const ratioRaw = payload && payload.anchorRatio != null ? payload.anchorRatio : payload?.ratio;
               const ratio = payload && typeof payload.ratio === 'number' && isFinite(payload.ratio) ? payload.ratio : null;
-              if (ratio != null) {
+              const ratioSafe = (typeof ratioRaw === 'number' && isFinite(ratioRaw)) ? ratioRaw : ratio;
+              if (ratioSafe != null) {
                 const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                const clamped = Math.max(0, Math.min(1, ratio));
+                const clamped = Math.max(0, Math.min(1, ratioSafe));
                 requestScroll(Math.round(clamped * max));
                 return true;
               }
@@ -492,6 +572,15 @@
                   applyMarkerOffset();
                   applyBottomPad();
                 }, 120);
+              } catch {}
+              try {
+                if (pendingLineIdx != null) {
+                  const idx = pendingLineIdx;
+                  pendingLineIdx = null;
+                  requestAnimationFrame(() => {
+                    if (!scrollToLine(idx)) pendingLineIdx = idx;
+                  });
+                }
               } catch {}
             }
 

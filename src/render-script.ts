@@ -136,7 +136,12 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       const div = document.createElement('div');
       div.className = 'line line-empty';
       div.innerHTML = '&nbsp;';
-      (div as any).dataset.i = String(i);
+      const idx = String(i);
+      div.id = `tp-line-${idx}`;
+      (div as any).dataset.i = idx;
+      (div as any).dataset.index = idx;
+      (div as any).dataset.line = idx;
+      (div as any).dataset.lineIdx = idx;
       frag.appendChild(div);
       continue;
     }
@@ -187,7 +192,12 @@ export function renderScript(text: string, container?: HTMLElement | null): void
 
     const div = document.createElement('div');
     div.className = 'line';
-    (div as any).dataset.i = String(i);
+    const idx = String(i);
+    div.id = `tp-line-${idx}`;
+    (div as any).dataset.i = idx;
+    (div as any).dataset.index = idx;
+    (div as any).dataset.line = idx;
+    (div as any).dataset.lineIdx = idx;
 
     if (currentSpeaker) {
       div.classList.add(SPEAKER_CLASS[currentSpeaker]);

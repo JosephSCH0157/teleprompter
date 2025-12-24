@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Minimal DOM helpers for the UI layer
 
+import { computeAnchorLineIndex } from '../scroll/scroll-helpers';
 import { getScrollWriter } from '../scroll/scroll-writer';
 import { setSessionPhase } from '../state/session';
 import { applyScript } from '../features/apply-script';
@@ -291,7 +292,14 @@ export function wireDisplayMirror() {
         if (!viewer || !window.sendToDisplay) return;
         const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
         const ratio = max > 0 ? (viewer.scrollTop / max) : 0;
-        window.sendToDisplay({ type: 'scroll', ratio, top: viewer.scrollTop });
+        const cursorLine = computeAnchorLineIndex(viewer);
+        window.sendToDisplay({
+          type: 'scroll',
+          ratio,
+          anchorRatio: ratio,
+          top: viewer.scrollTop,
+          cursorLine: cursorLine ?? undefined,
+        });
       } finally {
         scrollPending = false;
       }
@@ -491,7 +499,13 @@ function resetRun() {
     try {
       const max = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
       const ratio = max ? 0 : 0;
-      window.sendToDisplay && window.sendToDisplay({ type: 'scroll', top: 0, ratio });
+      window.sendToDisplay && window.sendToDisplay({
+        type: 'scroll',
+        top: 0,
+        ratio,
+        anchorRatio: ratio,
+        cursorLine: 0,
+      });
     } catch {}
   } catch {}
 

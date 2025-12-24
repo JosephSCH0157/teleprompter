@@ -13,6 +13,56 @@ const defaultViewer = () =>
   (document.getElementById('viewer') as HTMLElement | null) ||
   (document.querySelector('[data-role=\"viewer\"]') as HTMLElement | null);
 
+function readLineIndex(el: Element | null): number | null {
+  if (!el) return null;
+  const line = (el as HTMLElement).closest ? (el as HTMLElement).closest('.line') as HTMLElement | null : null;
+  if (!line) return null;
+  const raw =
+    line.dataset.i ||
+    line.dataset.index ||
+    line.dataset.lineIdx ||
+    line.dataset.line ||
+    line.getAttribute('data-line') ||
+    line.getAttribute('data-line-idx');
+  if (raw != null && raw !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  const id = line.id || '';
+  const m = /^tp-line-(\d+)$/.exec(id);
+  if (m) return Math.max(0, Number(m[1]));
+  return null;
+}
+
+export function computeAnchorLineIndex(scroller = defaultViewer()): number | null {
+  if (!scroller) return null;
+  const rect = scroller.getBoundingClientRect();
+  if (!rect.height || !rect.width) return null;
+  const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+    ? (window as any).__TP_MARKER_PCT
+    : 0.4;
+  const markerY = rect.top + rect.height * markerPct;
+  const markerX = rect.left + rect.width * 0.5;
+  const hit = document.elementFromPoint(markerX, markerY);
+  const hitIdx = readLineIndex(hit);
+  if (hitIdx != null) return hitIdx;
+  const lines = Array.from(scroller.querySelectorAll<HTMLElement>('.line'));
+  if (!lines.length) return null;
+  let bestIdx: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < lines.length; i++) {
+    const el = lines[i];
+    const r = el.getBoundingClientRect();
+    const y = r.top + r.height * 0.5;
+    const d = Math.abs(y - markerY);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = readLineIndex(el) ?? i;
+    }
+  }
+  return bestIdx != null ? Math.max(0, Math.floor(bestIdx)) : null;
+}
+
 const clampGuard = (target: number, max: number): boolean => {
   try {
     const guard = (window as any).__tpClampGuard;
@@ -42,7 +92,14 @@ function mirrorToDisplay(sc: HTMLElement): void {
     const max = Math.max(0, (sc.scrollHeight || 0) - (sc.clientHeight || 0));
     const top = sc.scrollTop || 0;
     const ratio = max > 0 ? top / max : 0;
-    send({ type: 'scroll', top, ratio });
+    const cursorLine = computeAnchorLineIndex(sc);
+    send({
+      type: 'scroll',
+      top,
+      ratio,
+      anchorRatio: ratio,
+      cursorLine: cursorLine ?? undefined,
+    });
   } catch {
     // ignore display mirror errors
   }
@@ -107,7 +164,10 @@ export function centerLine(lineIndex: number, getScroller = defaultViewer): void
   const idx = Math.max(0, Math.floor(lineIndex));
   const line =
     sc.querySelector<HTMLElement>(`.line[data-i=\"${idx}\"]`) ||
-    sc.querySelector<HTMLElement>(`.line[data-index=\"${idx}\"]`);
+    sc.querySelector<HTMLElement>(`.line[data-index=\"${idx}\"]`) ||
+    sc.querySelector<HTMLElement>(`.line[data-line=\"${idx}\"]`) ||
+    sc.querySelector<HTMLElement>(`.line[data-line-idx=\"${idx}\"]`) ||
+    (document.getElementById(`tp-line-${idx}`) as HTMLElement | null);
   if (!line) return;
   const offset = Math.max(0, (sc.clientHeight - line.offsetHeight) / 2);
   const target = clampScrollTop(sc, (line.offsetTop || 0) - offset);

@@ -2,6 +2,7 @@
 // Step-by-line / Step-by-block scroller for the Teleprompter viewer.
 // Non-invasive: uses existing #viewer, marker %, and scroll helpers if present.
 
+import { computeAnchorLineIndex } from '../../scroll/scroll-helpers';
 import { getScrollWriter } from '../../scroll/scroll-writer';
 
 export interface StepScrollConfig {
@@ -129,7 +130,14 @@ function scrollByPx(px: number): void {
   try {
     const top = (window as any).__lastScrollTarget ?? next;
     const ratio = max ? top / max : 0;
-    (window as any).sendToDisplay?.({ type: 'scroll', top, ratio });
+    const cursorLine = computeAnchorLineIndex(sc);
+    (window as any).sendToDisplay?.({
+      type: 'scroll',
+      top,
+      ratio,
+      anchorRatio: ratio,
+      cursorLine: cursorLine ?? undefined,
+    });
   } catch {
     // ignore
   }
