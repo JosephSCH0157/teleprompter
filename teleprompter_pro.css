@@ -39,6 +39,8 @@
 kbd{display:inline-block;min-width:1.6em;padding:.15em .45em;border:1px solid #374151;border-bottom-width:2px;border-radius:6px;background:#111827;color:#e5e7eb;font:12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;text-align:center}
 .btn-chip{background:#0e141b;border:1px solid var(--edge);padding:8px 10px;border-radius:10px;cursor:pointer;color:var(--fg)}
 .btn-chip:hover{background:#10161d}
+.btn-close{padding:10px 16px;font-size:14px;font-weight:700;border-color:#7a2c2c;background:#2a1515;color:#ffd6d6;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.btn-close:hover{background:#351b1b;border-color:#934040}
 .sheet-section{margin-top:12px;padding-top:8px;border-top:1px solid var(--edge)}
 #validatePanel pre{white-space:pre-wrap;-webkit-user-select:text;user-select:text;margin-top:8px;background:#0e141b;color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:12px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;line-height:1.4;max-height:40vh;overflow:auto}
 
