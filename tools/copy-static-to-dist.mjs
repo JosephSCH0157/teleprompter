@@ -19,6 +19,7 @@ const STATIC_PATHS = [
   'teleprompter_pro.css',
   'display.html',
   'hud_popout.html',
+  'login.html',
   'assets',
   'forge-config.js',
   path.join('adapters', 'obsBridge.js'),

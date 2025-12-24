@@ -11,6 +11,11 @@
   to = "/teleprompter_pro.html"
   status = 200
 
+[[redirects]]
+  from = "/login"
+  to = "/login.html"
+  status = 200
+
 # If you ever add SPA routes later, keep this OFF for now unless you need it.
 # [[redirects]]
 #   from = "/*"
