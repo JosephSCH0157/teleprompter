@@ -32,6 +32,16 @@
   status = 200
 
 [[redirects]]
+  from = "/anvil"
+  to = "/teleprompter_pro.html"
+  status = 200
+
+[[redirects]]
+  from = "/anvil/*"
+  to = "/teleprompter_pro.html"
+  status = 200
+
+[[redirects]]
   from = "/account"
   to = "/account.html"
   status = 200

@@ -35,10 +35,27 @@ async function handleSignup(email: string, password: string): Promise<void> {
   if (msg) msg.textContent = 'Check your email to confirm your account.';
 }
 
+function getResetRedirectUrl(): string {
+  try {
+    return new URL('reset', window.location.href).toString();
+  } catch {
+    return '/reset';
+  }
+}
+
+async function handleForgotPassword(email: string): Promise<void> {
+  if (!email) throw new Error('Enter your email to receive a reset link.');
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: getResetRedirectUrl(),
+  });
+  if (error) throw error;
+}
+
 function wireLoginPage(): void {
   const form = document.getElementById('login-form') as HTMLFormElement | null;
   const errorEl = document.getElementById('error');
   const signupBtn = document.getElementById('signup-btn');
+  const forgotBtn = document.getElementById('forgot-password');
 
   if (!form) return;
 
@@ -64,6 +81,19 @@ function wireLoginPage(): void {
         await handleSignup(email, password);
       } catch (err: any) {
         errorEl.textContent = err?.message || 'Sign-up failed.';
+      }
+    });
+  }
+
+  if (forgotBtn && errorEl) {
+    forgotBtn.addEventListener('click', async () => {
+      const email = (document.getElementById('email') as HTMLInputElement | null)?.value || '';
+      errorEl.textContent = '';
+      try {
+        await handleForgotPassword(email);
+        errorEl.textContent = 'If that email exists, a reset link is on the way.';
+      } catch (err: any) {
+        errorEl.textContent = err?.message || 'Password reset failed.';
       }
     });
   }
