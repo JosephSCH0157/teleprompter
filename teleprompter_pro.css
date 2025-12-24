@@ -371,6 +371,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-tab{background:#0e141b;border:1px solid var(--edge);padding:6px 10px;border-radius:20px;font-size:12px;cursor:pointer}
 .settings-tab.active{background:#12202a;color:var(--accent);border-color:var(--accent)}
 .settings-footer{margin-top:8px;opacity:.7;text-align:right}
+/* Pricing/About readability bump */
+.settings-panel[data-settings-panel="pricing"] .settings-card,
+.settings-panel[data-settings-panel="about"] .settings-card{
+    font-size:15px;
+    line-height:1.6;
+}
+.settings-panel[data-settings-panel="pricing"] .settings-card ul,
+.settings-panel[data-settings-panel="about"] .settings-card ul{
+    margin-top:8px;
+    padding-left:20px;
+}
+.settings-panel[data-settings-panel="about"] .settings-small{
+    font-size:14px;
+    line-height:1.65;
+    color:var(--fg);
+    opacity:.9;
+}
 /* Settings card animations */
 @keyframes cardFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 @keyframes cardFadeOut { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(4px); } }
