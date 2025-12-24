@@ -46,7 +46,6 @@
   <script src="/forge-config.js"></script>
 
   <!-- TS bundle preload + entry (single brain) -->
-  <link id="tp-dist-preload" rel="modulepreload" as="script">
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script>
