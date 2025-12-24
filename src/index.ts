@@ -50,6 +50,7 @@ import './index-hooks/preroll';
 import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
 import { ensureUserAndProfile, loadProfileSettings, saveProfileSettings, applySettingsPatch, type PersistedAppKey, type UserSettings } from './forge/authProfile';
+import { hasSupabaseConfig } from './forge/supabaseClient';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
@@ -146,6 +147,21 @@ function isCiSmoke(): boolean {
   } catch {
     return false;
   }
+}
+
+function isLocalhost(): boolean {
+  try {
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+function shouldGateAuth(): boolean {
+  if (!hasSupabaseConfig) return false;
+  if (isLocalhost()) return false;
+  return true;
 }
 
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
@@ -1622,14 +1638,16 @@ export async function boot() {
 
 			// Profile/settings hydration (Supabase) before UI wiring
 			let profileUserId: string | null = null;
-			try {
-				devLog('hydrate:start');
-				const ctx = await ensureUserAndProfile();
-				try { (window as any).__forgeUser = ctx.user; } catch {}
-				try { (window as any).__forgeProfile = ctx.profile; } catch {}
-				profileUserId = ctx.user?.id || null;
-			} catch (err) {
-				try { console.warn('[forge] auth/profile init failed', err); } catch {}
+			if (shouldGateAuth()) {
+				try {
+					devLog('hydrate:start');
+					const ctx = await ensureUserAndProfile();
+					try { (window as any).__forgeUser = ctx.user; } catch {}
+					try { (window as any).__forgeProfile = ctx.profile; } catch {}
+					profileUserId = ctx.user?.id || null;
+				} catch (err) {
+					try { console.warn('[forge] auth/profile init failed', err); } catch {}
+				}
 			}
 
 			if (profileUserId) {

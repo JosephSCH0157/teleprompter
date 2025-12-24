@@ -163,7 +163,7 @@ function shouldBypassAuth(): boolean {
 }
 
 export async function ensureUserAndProfile(): Promise<ForgeSessionContext> {
-  const redirectTarget = window.location.pathname + window.location.search;
+  const redirectTarget = window.location.pathname + window.location.search + window.location.hash;
   const loginUrl = `/login?redirect=${encodeURIComponent(redirectTarget)}`;
 
   if (shouldBypassAuth()) {
@@ -180,7 +180,7 @@ export async function ensureUserAndProfile(): Promise<ForgeSessionContext> {
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData?.user) {
-    window.location.href = loginUrl;
+    window.location.assign(loginUrl);
     throw new Error('No user session; redirecting to login.');
   }
 

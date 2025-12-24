@@ -21,6 +21,8 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   try { console.error('[supabaseClient] Missing Supabase URL or anon key.'); } catch {}
 }
 
+export const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,

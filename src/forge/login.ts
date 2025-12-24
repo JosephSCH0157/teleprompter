@@ -12,7 +12,7 @@ async function checkExistingSession(): Promise<void> {
   try {
     const { data, error } = await supabase.auth.getUser();
     if (!error && data?.user) {
-      window.location.href = getRedirectTarget();
+      window.location.assign(getRedirectTarget());
     }
   } catch {
     // fall through to wiring the form
@@ -23,7 +23,7 @@ async function handleLogin(email: string, password: string): Promise<void> {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   await ensureUserAndProfile();
-  window.location.href = getRedirectTarget();
+  window.location.assign(getRedirectTarget());
 }
 
 async function handleSignup(email: string, password: string): Promise<void> {
