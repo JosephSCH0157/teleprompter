@@ -100,6 +100,11 @@ const DEFAULT_SHORT_FINAL_SIM_SLACK = 0.12;
 const DEFAULT_OUTRUN_RELAXED_SIM = 0.5;
 const DEFAULT_OUTRUN_WINDOW_MS = 2500;
 const DEFAULT_OUTRUN_LOOKAHEAD_LINES = 6;
+const DEFAULT_FORCED_RATE_WINDOW_MS = 10000;
+const DEFAULT_FORCED_RATE_MAX = 2;
+const DEFAULT_FORCED_COOLDOWN_MS = 5000;
+const DEFAULT_FORCED_MIN_TOKENS = 4;
+const DEFAULT_FORCED_MIN_CHARS = 24;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
@@ -313,6 +318,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let pendingMatch: PendingMatch | null = null;
   let pendingRaf = 0;
   let bootLogged = false;
+  let forcedCooldownUntil = 0;
+  const forcedCommitTimes: number[] = [];
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -366,6 +373,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const outrunRelaxedSim = DEFAULT_OUTRUN_RELAXED_SIM;
   const outrunWindowMs = DEFAULT_OUTRUN_WINDOW_MS;
   const outrunLookaheadLines = DEFAULT_OUTRUN_LOOKAHEAD_LINES;
+  const forcedRateWindowMs = DEFAULT_FORCED_RATE_WINDOW_MS;
+  const forcedRateMax = DEFAULT_FORCED_RATE_MAX;
+  const forcedCooldownMs = DEFAULT_FORCED_COOLDOWN_MS;
+  const forcedMinTokens = DEFAULT_FORCED_MIN_TOKENS;
+  const forcedMinChars = DEFAULT_FORCED_MIN_CHARS;
   const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
   const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
   const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
@@ -412,6 +424,32 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const recordEvent = (entry: AsrEventSnapshot) => {
     eventRing.push(entry);
     if (eventRing.length > EVENT_RING_MAX) eventRing.shift();
+  };
+
+  const pruneForcedCommits = (now: number) => {
+    while (forcedCommitTimes.length && forcedCommitTimes[0] < now - forcedRateWindowMs) {
+      forcedCommitTimes.shift();
+    }
+  };
+
+  const getForcedCount = (now: number) => {
+    pruneForcedCommits(now);
+    return forcedCommitTimes.length;
+  };
+
+  const getForcedCooldownRemaining = (now: number) => Math.max(0, forcedCooldownUntil - now);
+
+  const logForcedDeny = (reason: string, parts: Array<string | number | null | undefined>) => {
+    try {
+      const line = ['ASR_FORCED_DENY', reason, ...parts.filter(Boolean)];
+      console.warn(line.join(' '));
+    } catch {}
+  };
+
+  const logForcedThrottle = (count: number) => {
+    try {
+      console.warn('ASR_FORCED_THROTTLE', `count=${count}`, `windowMs=${forcedRateWindowMs}`, `cooldownMs=${forcedCooldownMs}`);
+    } catch {}
   };
 
   const dumpRecentEvents = (label: string) => {
@@ -746,9 +784,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       resetLookahead('forward_commit');
       lastSeekTs = now;
       lastEvidenceAt = now;
+      if (forced) {
+        forcedCommitTimes.push(now);
+        pruneForcedCommits(now);
+      }
       try { (window as any).currentIndex = lastLineIndex; } catch {}
       ensureControllerActive();
       try {
+        const forcedCount = getForcedCount(now);
+        const forcedCooldown = getForcedCooldownRemaining(now);
         const markerIdx = computeMarkerLineIndex(scroller);
         const currentEl = getLineElementByIndex(scroller, prevLineIndex);
         const bestEl = getLineElementByIndex(scroller, targetLine);
@@ -767,7 +811,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `marker=${markerIdx}`,
           `scrollTop=${Math.round(scroller.scrollTop || 0)}`,
           `lineH=${lineHeight}`,
-          forced ? `forced=${forceReason || 1}` : '',
+          `forced=${forced ? 1 : 0}`,
+          forced ? `forceReason=${forceReason || 1}` : '',
+          `forcedCount10s=${forcedCount}`,
+          forcedCooldown ? `cooldown=${forcedCooldown}` : 'cooldown=0',
           currentText ? `currentText="${currentText}"` : '',
           bestText ? `bestText="${bestText}"` : '',
           markerText ? `markerText="${markerText}"` : '',
@@ -897,20 +944,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const outrunRecent =
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
     const outrunMax = cursorLine + Math.max(1, outrunLookaheadLines);
-    const outrunCandidate = topScores.length
+    const forwardBandScores = topScores.length
       ? topScores
         .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
         .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
         .filter((entry) => entry.idx > cursorLine && entry.idx <= outrunMax)
-        .sort((a, b) => a.idx - b.idx || b.score - a.score)[0]
-      : null;
-    const outrunPick =
-      outrunCandidate ||
-      (rawIdx > cursorLine && rawIdx <= outrunMax ? { idx: rawIdx, score: conf } : null);
-    const outrunFloor = shortFinalRecent
-      ? Math.min(outrunRelaxedSim, shortFinalNeed)
-      : outrunRelaxedSim;
-    const outrunEligible = !!outrunPick && outrunRecent && outrunPick.score >= outrunFloor;
+      : [];
+    const outrunCandidate = forwardBandScores
+      .sort((a, b) => b.score - a.score || a.idx - b.idx)[0] || null;
+    const bestForwardSim = outrunCandidate ? outrunCandidate.score : 0;
+    const outrunPick = outrunCandidate;
+    const outrunFloor = shortFinalRecent ? shortFinalNeed : outrunRelaxedSim;
+    const forwardCandidateOk = !!outrunCandidate && bestForwardSim >= outrunFloor;
+    const forcedEvidenceOk =
+      (tokenCount >= forcedMinTokens || evidenceChars >= forcedMinChars) && forwardCandidateOk;
+    const outrunEligible = !!outrunPick && outrunRecent && forcedEvidenceOk;
     const behindByForBias = cursorLine - rawIdx;
     const forwardBiasEligible =
       isFinal &&
@@ -977,30 +1025,121 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     let outrunCommit = false;
-    if (outrunEligible && outrunPick && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
-      const before = rawIdx;
-      const outrunNeed = outrunFloor;
-      rawIdx = outrunPick.idx;
-      conf = outrunPick.score;
-      effectiveThreshold = Math.min(effectiveThreshold, outrunNeed);
-      outrunCommit = true;
-      warnGuard('forward_outrun', [
-        `current=${cursorLine}`,
-        `best=${before}`,
-        `forward=${rawIdx}`,
-        `sim=${formatLogScore(conf)}`,
-        `need=${formatLogScore(effectiveThreshold)}`,
-        `delta=${rawIdx - cursorLine}`,
-        snippet ? `clue="${snippet}"` : '',
-      ]);
-      logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
+    let forceReason: string | undefined;
+    if (outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
+      if (!outrunPick) {
+        logForcedDeny('evidence', [
+          `tokens=${tokenCount}`,
+          `chars=${evidenceChars}`,
+          `bestForwardSim=${formatLogScore(bestForwardSim)}`,
+          `floor=${formatLogScore(outrunFloor)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+      } else if (!forcedEvidenceOk) {
+        logForcedDeny('evidence', [
+          `tokens=${tokenCount}`,
+          `chars=${evidenceChars}`,
+          `bestForwardSim=${formatLogScore(bestForwardSim)}`,
+          `floor=${formatLogScore(outrunFloor)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+      } else {
+        const delta = outrunPick.idx - cursorLine;
+        const cooldownRemaining = getForcedCooldownRemaining(now);
+        if (delta > outrunLookaheadLines) {
+          logForcedDeny('delta_cap', [
+            `delta=${delta}`,
+            `cap=${outrunLookaheadLines}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+        } else if (cooldownRemaining > 0) {
+          logForcedDeny('cooldown', [
+            `cooldownMs=${cooldownRemaining}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+        } else {
+          const forcedCount = getForcedCount(now);
+          if (forcedCount >= forcedRateMax) {
+            forcedCooldownUntil = now + forcedCooldownMs;
+            logForcedThrottle(forcedCount);
+            logForcedDeny('throttle', [
+              `count=${forcedCount}`,
+              `windowMs=${forcedRateWindowMs}`,
+              `cooldownMs=${forcedCooldownMs}`,
+            ]);
+          } else if (outrunEligible) {
+            const before = rawIdx;
+            const outrunNeed = outrunFloor;
+            rawIdx = outrunPick.idx;
+            conf = outrunPick.score;
+            effectiveThreshold = Math.min(effectiveThreshold, outrunNeed);
+            outrunCommit = true;
+            forceReason = 'outrun';
+            warnGuard('forward_outrun', [
+              `current=${cursorLine}`,
+              `best=${before}`,
+              `forward=${rawIdx}`,
+              `sim=${formatLogScore(conf)}`,
+              `need=${formatLogScore(effectiveThreshold)}`,
+              `delta=${rawIdx - cursorLine}`,
+              snippet ? `clue="${snippet}"` : '',
+            ]);
+            logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
+          }
+        }
+      }
     }
-    const shortFinalForced =
+    const shortFinalForcedCandidate =
       shortFinalRecent &&
-      rawIdx >= cursorLine &&
+      rawIdx > cursorLine &&
       shortFinalNeed < requiredThreshold &&
       conf >= shortFinalNeed &&
       conf < requiredThreshold;
+    let shortFinalForced = false;
+    if (shortFinalForcedCandidate && !outrunCommit) {
+      const forwardCandidate = outrunCandidate;
+      const forcedDelta = forwardCandidate ? forwardCandidate.idx - cursorLine : rawIdx - cursorLine;
+      const cooldownRemaining = getForcedCooldownRemaining(now);
+      if (!forcedEvidenceOk) {
+        logForcedDeny('evidence', [
+          `tokens=${tokenCount}`,
+          `chars=${evidenceChars}`,
+          `bestForwardSim=${formatLogScore(bestForwardSim)}`,
+          `floor=${formatLogScore(outrunFloor)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+      } else if (forcedDelta > outrunLookaheadLines) {
+        logForcedDeny('delta_cap', [
+          `delta=${forcedDelta}`,
+          `cap=${outrunLookaheadLines}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+      } else if (cooldownRemaining > 0) {
+        logForcedDeny('cooldown', [
+          `cooldownMs=${cooldownRemaining}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+      } else {
+        const forcedCount = getForcedCount(now);
+        if (forcedCount >= forcedRateMax) {
+          forcedCooldownUntil = now + forcedCooldownMs;
+          logForcedThrottle(forcedCount);
+          logForcedDeny('throttle', [
+            `count=${forcedCount}`,
+            `windowMs=${forcedRateWindowMs}`,
+            `cooldownMs=${forcedCooldownMs}`,
+          ]);
+        } else {
+          if (forwardCandidate.idx !== rawIdx || forwardCandidate.score !== conf) {
+            rawIdx = forwardCandidate.idx;
+            conf = forwardCandidate.score;
+          }
+          effectiveThreshold = Math.min(effectiveThreshold, shortFinalNeed);
+          shortFinalForced = true;
+          forceReason = forceReason || 'short-final';
+        }
+      }
+    }
     if (forwardBiasEligible && rawIdx < cursorLine && topScores.length) {
       const behindBy = cursorLine - rawIdx;
       const biasThreshold = clamp(requiredThreshold - forwardBiasSimSlack, 0, 1);
@@ -1225,7 +1364,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       snippet,
       minThreshold: effectiveThreshold < requiredThreshold ? effectiveThreshold : undefined,
       forced: outrunCommit || shortFinalForced,
-      forceReason: outrunCommit ? 'outrun' : (shortFinalForced ? 'short-final' : undefined),
+      forceReason,
     };
     schedulePending();
   };
