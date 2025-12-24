@@ -832,6 +832,8 @@ html.tp-present .present-exit { display: inline-flex; }
     /* center the column and keep some breathing room at the edges */
     margin-inline: auto;
     padding-inline: max(16px, 3vw);
+    font-family: var(--tp-font-family);
+    font-size: var(--tp-font-size);
     color: var(--tp-fg, #e6eef8);
     white-space: pre-wrap;
     overflow-wrap: break-word;
