@@ -55,6 +55,7 @@ import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
 import { initObsToggle } from './ui/obs-toggle';
+import { installAutoMaxCh } from './ui/autoMaxCh';
 import { wireRecordButtons } from './ui/recordButtons';
 import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
@@ -1915,7 +1916,12 @@ try {
 					try {
 						try { (window as any).__tpTsTypographyActive = true; } catch {}
 						applyTypographyTo(window, 'main');
-						const w = (window as any).__tpDisplayWindow as Window | null; if (w) applyTypographyTo(w, 'display');
+						try { installAutoMaxCh(); } catch {}
+						const w = (window as any).__tpDisplayWindow as Window | null;
+						if (w) {
+							applyTypographyTo(w, 'display');
+							try { installAutoMaxCh({ win: w, display: 'display' }); } catch {}
+						}
 						let bc: BroadcastChannel | null = null; try { bc = new BroadcastChannel('tp_display'); } catch {}
 						onTypography((d, t) => {
 							try { if (!getUiPrefs().linkTypography) return; } catch {}

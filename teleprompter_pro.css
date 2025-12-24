@@ -257,7 +257,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     .viewer{position:relative;overflow:auto;min-height:0; background: var(--tp-bg, transparent);}
     .script{
-        max-width: calc(var(--tp-maxch, 60) * 1ch);
+        max-width: calc(var(--tp-maxch, 95) * 1ch);
         margin:0 auto;
         padding:0;
         white-space: pre-wrap;
