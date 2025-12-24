@@ -213,16 +213,30 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         <div class="settings-card anim-in">
           <h4>Pricing</h4>
           <p>
-            You???re currently using a pre-release build of Anvil. During this phase,
-            all features are available to invited testers.
+            Anvil is currently in private beta.
           </p>
+          <p>
+            During this phase, full functionality is available to invited testers so the core
+            experience can be refined before public release.
+          </p>
+          <p><strong>What's Included in Beta</strong></p>
           <ul>
             <li>No watermarking.</li>
-            <li>Local files stay on your machine.</li>
-            <li>Feedback from this build helps shape the paid tiers.</li>
+            <li>All recording and scroll modes unlocked.</li>
+            <li>Local-first files - your scripts and recordings stay on your machine.</li>
+            <li>Full OBS integration.</li>
+            <li>Ongoing stability and usability improvements based on real-world use.</li>
           </ul>
-          <p class="settings-small">
-            Final pricing will be published closer to public launch.
+          <p>
+            Feedback from this phase directly shapes Anvil's final pricing and feature tiers.
+          </p>
+          <p><strong>What Comes Next</strong></p>
+          <p>
+            Public pricing will be announced closer to launch, with simple, transparent tiers
+            designed for independent creators - not enterprise bloat.
+          </p>
+          <p>
+            Early supporters and beta testers will receive priority access when paid plans go live.
           </p>
         </div>
       </section>
