@@ -1,5 +1,6 @@
 import { initScrollModeRouter, type ScrollMode, type SessionState } from './scroll/mode-router';
 import { getAutoScrollApi } from './scroll/auto-adapter';
+import { stepEngine } from './scroll/step-engine';
 import { appStore } from '../state/app-store';
 function bindAutoControls() {
   // Intentionally left empty; auto controls are owned by autoscroll.ts bindings.
@@ -36,7 +37,7 @@ function bindRouterControls() {
     initScrollModeRouter({
       auto,
       asr: null,
-      step: null,
+      step: stepEngine,
       session: sessionSource,
       scrollMode: scrollModeSource,
     });
