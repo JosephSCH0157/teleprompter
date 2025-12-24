@@ -46,7 +46,7 @@
   <script src="/forge-config.js"></script>
 
   <!-- TS bundle preload + entry (single brain) -->
-  <link id="tp-dist-preload" rel="modulepreload" href="./index.js" as="script">
+  <link id="tp-dist-preload" rel="modulepreload" as="script">
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script>
@@ -67,7 +67,17 @@
           candidates = candidates.map(function(p){ return p + '?v=dev'; });
         }
         var preload = document.getElementById('tp-dist-preload');
-        if (preload && candidates.length) preload.href = candidates[0];
+        if (!preload && !isDev && candidates.length) {
+          preload = document.createElement('link');
+          preload.id = 'tp-dist-preload';
+          preload.rel = 'modulepreload';
+          preload.as = 'script';
+          document.head.appendChild(preload);
+        }
+        if (preload) {
+          if (isDev) preload.removeAttribute('href');
+          else if (candidates.length) preload.href = candidates[0];
+        }
         var entry = document.getElementById('tp-dist-entry');
         if (!entry) {
           entry = document.createElement('script');
