@@ -18,6 +18,7 @@ type PendingMatch = {
   isFinal: boolean;
   hasEvidence: boolean;
   snippet: string;
+  minThreshold?: number;
 };
 
 type AsrEventSnapshot = {
@@ -85,6 +86,10 @@ const DEFAULT_MIN_EVIDENCE_CHARS = 40;
 const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
 const DEFAULT_INTERIM_STABLE_REPEATS = 2;
 const DEFAULT_FORWARD_TIE_EPS = 0.03;
+const DEFAULT_FORWARD_BIAS_RECENT_LINES = 6;
+const DEFAULT_FORWARD_BIAS_WINDOW_MS = 2500;
+const DEFAULT_FORWARD_BIAS_LOOKAHEAD_LINES = 12;
+const DEFAULT_FORWARD_BIAS_SIM_SLACK = 0.1;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
@@ -339,6 +344,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const backConfirmHits = DEFAULT_BACK_CONFIRM_HITS;
   const backConfirmWindowMs = DEFAULT_BACK_CONFIRM_WINDOW_MS;
   const forwardTieEps = DEFAULT_FORWARD_TIE_EPS;
+  const forwardBiasRecentLines = DEFAULT_FORWARD_BIAS_RECENT_LINES;
+  const forwardBiasWindowMs = DEFAULT_FORWARD_BIAS_WINDOW_MS;
+  const forwardBiasLookaheadLines = DEFAULT_FORWARD_BIAS_LOOKAHEAD_LINES;
+  const forwardBiasSimSlack = DEFAULT_FORWARD_BIAS_SIM_SLACK;
   const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
   const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
   const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
@@ -516,16 +525,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       const now = Date.now();
-      const { line, conf, isFinal, hasEvidence, snippet } = pending;
+      const { line, conf, isFinal, hasEvidence, snippet, minThreshold } = pending;
       const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
-      const strongMatch = conf >= requiredThreshold;
+      const effectiveThreshold = Number.isFinite(minThreshold)
+        ? clamp(minThreshold as number, 0, 1)
+        : requiredThreshold;
+      const strongMatch = conf >= effectiveThreshold;
       if (!strongMatch) {
         warnGuard('low_sim', [
           `current=${lastLineIndex}`,
           `best=${line}`,
           `delta=${line - lastLineIndex}`,
           `sim=${formatLogScore(conf)}`,
-          `need=${formatLogScore(requiredThreshold)}`,
+          `need=${formatLogScore(effectiveThreshold)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
         return;
@@ -855,6 +867,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     const topScores = Array.isArray(match.topScores) ? match.topScores : [];
+    let effectiveThreshold = requiredThreshold;
+    const behindByForBias = cursorLine - rawIdx;
+    const forwardBiasEligible =
+      isFinal &&
+      behindByForBias > 0 &&
+      behindByForBias <= forwardBiasRecentLines &&
+      lastLineIndex >= 0 &&
+      now - lastForwardCommitAt <= forwardBiasWindowMs;
     if (topScores.length) {
       const bestScore = conf;
       const tieCandidates = topScores
@@ -866,7 +886,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         .filter((entry) => entry.idx >= cursorLine)
         .sort((a, b) => a.idx - b.idx || b.score - a.score);
       const forwardPick = forwardCandidates[0];
-      if (hasTie && forwardPick && forwardPick.score < requiredThreshold) {
+      if (hasTie && forwardPick && forwardPick.score < requiredThreshold && !forwardBiasEligible) {
         warnGuard('tie_forward', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
@@ -878,7 +898,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ]);
         return;
       }
-      if (hasTie && !forwardPick) {
+      if (hasTie && !forwardPick && !forwardBiasEligible) {
         warnGuard('tie_forward', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
@@ -903,6 +923,32 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             snippet ? `clue="${snippet}"` : '',
           ]);
         }
+      }
+    }
+    if (forwardBiasEligible && rawIdx < cursorLine && topScores.length) {
+      const behindBy = cursorLine - rawIdx;
+      const biasThreshold = clamp(requiredThreshold - forwardBiasSimSlack, 0, 1);
+      const forwardMax = cursorLine + Math.max(1, forwardBiasLookaheadLines);
+      const forwardPick = topScores
+        .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
+        .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+        .filter((entry) => entry.idx >= cursorLine && entry.idx <= forwardMax)
+        .sort((a, b) => b.score - a.score || a.idx - b.idx)[0];
+      if (forwardPick && forwardPick.score >= biasThreshold) {
+        const before = rawIdx;
+        rawIdx = forwardPick.idx;
+        conf = forwardPick.score;
+        effectiveThreshold = Math.min(effectiveThreshold, biasThreshold);
+        warnGuard('forward_bias', [
+          `current=${cursorLine}`,
+          `best=${before}`,
+          `forward=${rawIdx}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(effectiveThreshold)}`,
+          `behind=${behindBy}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        logDev('forward bias', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
       }
     }
     let interimEligible = true;
@@ -1049,13 +1095,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
 
-    if (requiredThreshold > 0 && conf < requiredThreshold) {
+    if (effectiveThreshold > 0 && conf < effectiveThreshold) {
       warnGuard('low_sim', [
         `current=${cursorLine}`,
         `best=${rawIdx}`,
         `delta=${rawIdx - cursorLine}`,
         `sim=${formatLogScore(conf)}`,
-        `need=${formatLogScore(requiredThreshold)}`,
+        `need=${formatLogScore(effectiveThreshold)}`,
         snippet ? `clue="${snippet}"` : '',
       ]);
       return;
@@ -1092,6 +1138,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal,
       hasEvidence,
       snippet,
+      minThreshold: effectiveThreshold < requiredThreshold ? effectiveThreshold : undefined,
     };
     schedulePending();
   };
