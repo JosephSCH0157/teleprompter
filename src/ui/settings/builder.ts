@@ -232,26 +232,44 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <h4>About Anvil</h4>
           <div class="settings-small">
             <p>
-              Anvil is part of the Podcaster?s Forge toolset ? a teleprompter and recording companion
-              designed for creators who want fewer tabs, less chaos, and more control.
+              Anvil is a core tool in the Podcaster's Forge - a focused teleprompter and recording companion
+              built for creators who want fewer tabs, less chaos, and total control when the camera is on.
             </p>
             <p>
-              If Anvil has saved you at least one cup of coffee?s worth of time,
-              you can support ongoing development here:
+              Anvil is designed to stay out of your way.
+              No cloud lock-in. No jittery scrolling. No surprise behavior mid-take.
+            </p>
+            <p>
+              Just a calm, predictable tool that does exactly what you expect - every time.
+            </p>
+            <p><strong>What Anvil Does Well</strong></p>
+            <ul>
+              <li>Smooth, deterministic scroll control that stays locked and readable.</li>
+              <li>Typography and color tuning optimized for on-camera delivery.</li>
+              <li>Scripts stay local, portable, and easy to swap during sessions.</li>
+              <li>Mirrored display support for confidence monitors.</li>
+              <li>OBS integration to keep recording perfectly in sync.</li>
+              <li>Built with a TypeScript-first, single-runtime architecture for long-term stability.</li>
+            </ul>
+            <p>
+              Anvil is part of a larger Forge ecosystem designed to take creators from
+              idea to script to recording to publishing without duct-taped workflows or mental overhead.
+            </p>
+            <p><strong>Support Development</strong></p>
+            <p>
+              If Anvil has saved you at least one cup of coffee's worth of time, you can support ongoing
+              development here:
               <a href="https://buymeacoffee.com/podcastersforge"
                  class="settings-link"
                  target="_blank"
                  rel="noopener noreferrer">
                 buymeacoffee.com/podcastersforge
-              </a>.
+              </a>
             </p>
-            <ul>
-              <li>Scroll control that stays smooth and predictable.</li>
-              <li>Color and typography options tuned for on-camera clarity.</li>
-              <li>Scripts stay local and easy to swap while you work.</li>
-              <li>OBS integration to keep recording in sync with your sessions.</li>
-            </ul>
-            <p id="aboutVersion">Version: dev build</p>
+            <p>
+              Support helps fund continued work on Anvil and the rest of the Podcaster's Forge toolchain.
+            </p>
+            <p id="aboutVersion">Version: Anvil 2.0</p>
           </div>
         </div>
       </section>
