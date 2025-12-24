@@ -73,18 +73,14 @@
             z-index:9999;
             pointer-events:none;
           }
-          /* Match main app width and whitespace handling for identical wrapping */
+          /* Script wrapping (display typography is independent) */
           .script{
-            max-width:900px;
-            margin:0 auto;
+            margin:0;
             padding:0;
             white-space:pre-wrap;
             overflow-wrap:break-word;
             word-break:normal;
-            min-width:min(20ch, 100%);
           }
-          /* Match main app metrics exactly for consistent scroll physics */
-          .script p{font-size:48px;line-height:1.35;margin:0 0 28px}
           .u{text-decoration:underline}
           .note{color:var(--muted);font-style:italic;margin:0 0 28px}
           /* Align with main marker at 40% */

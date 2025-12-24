@@ -90,6 +90,11 @@ const DEFAULT_FORWARD_BIAS_RECENT_LINES = 6;
 const DEFAULT_FORWARD_BIAS_WINDOW_MS = 2500;
 const DEFAULT_FORWARD_BIAS_LOOKAHEAD_LINES = 12;
 const DEFAULT_FORWARD_BIAS_SIM_SLACK = 0.1;
+const DEFAULT_SHORT_FINAL_MIN_TOKENS = 2;
+const DEFAULT_SHORT_FINAL_MAX_TOKENS = 6;
+const DEFAULT_SHORT_FINAL_WINDOW_MS = 2500;
+const DEFAULT_SHORT_FINAL_LOOKAHEAD_LINES = 10;
+const DEFAULT_SHORT_FINAL_SIM_SLACK = 0.12;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
@@ -348,6 +353,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const forwardBiasWindowMs = DEFAULT_FORWARD_BIAS_WINDOW_MS;
   const forwardBiasLookaheadLines = DEFAULT_FORWARD_BIAS_LOOKAHEAD_LINES;
   const forwardBiasSimSlack = DEFAULT_FORWARD_BIAS_SIM_SLACK;
+  const shortFinalMinTokens = DEFAULT_SHORT_FINAL_MIN_TOKENS;
+  const shortFinalMaxTokens = DEFAULT_SHORT_FINAL_MAX_TOKENS;
+  const shortFinalWindowMs = DEFAULT_SHORT_FINAL_WINDOW_MS;
+  const shortFinalLookaheadLines = DEFAULT_SHORT_FINAL_LOOKAHEAD_LINES;
+  const shortFinalSimSlack = DEFAULT_SHORT_FINAL_SIM_SLACK;
   const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
   const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
   const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
@@ -868,6 +878,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     let effectiveThreshold = requiredThreshold;
+    const shortFinal =
+      isFinal && tokenCount >= shortFinalMinTokens && tokenCount <= shortFinalMaxTokens;
+    const shortFinalRecent =
+      shortFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= shortFinalWindowMs;
+    const shortFinalNeed = shortFinalRecent
+      ? clamp(requiredThreshold - shortFinalSimSlack, 0, 1)
+      : requiredThreshold;
     const behindByForBias = cursorLine - rawIdx;
     const forwardBiasEligible =
       isFinal &&
@@ -886,19 +903,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         .filter((entry) => entry.idx >= cursorLine)
         .sort((a, b) => a.idx - b.idx || b.score - a.score);
       const forwardPick = forwardCandidates[0];
-      if (hasTie && forwardPick && forwardPick.score < requiredThreshold && !forwardBiasEligible) {
+      const tieNeed = shortFinalRecent ? shortFinalNeed : requiredThreshold;
+      if (hasTie && forwardPick && forwardPick.score < tieNeed && !forwardBiasEligible) {
         warnGuard('tie_forward', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
           `forward=${forwardPick.idx}`,
           `sim=${formatLogScore(forwardPick.score)}`,
-          `need=${formatLogScore(requiredThreshold)}`,
+          `need=${formatLogScore(tieNeed)}`,
           `eps=${forwardTieEps}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
         return;
       }
-      if (hasTie && !forwardPick && !forwardBiasEligible) {
+      if (hasTie && !forwardPick && !forwardBiasEligible && !shortFinalRecent) {
         warnGuard('tie_forward', [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
@@ -925,20 +943,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
+    if (shortFinalRecent && rawIdx >= cursorLine) {
+      const forwardBand = rawIdx - cursorLine <= shortFinalLookaheadLines;
+      if (forwardBand && shortFinalNeed < effectiveThreshold) {
+        effectiveThreshold = shortFinalNeed;
+        logDev('short-final threshold', { cursorLine, best: rawIdx, need: effectiveThreshold, sim: conf });
+      }
+    }
     if (forwardBiasEligible && rawIdx < cursorLine && topScores.length) {
       const behindBy = cursorLine - rawIdx;
       const biasThreshold = clamp(requiredThreshold - forwardBiasSimSlack, 0, 1);
+      const forwardNeed = shortFinalRecent ? Math.min(biasThreshold, shortFinalNeed) : biasThreshold;
       const forwardMax = cursorLine + Math.max(1, forwardBiasLookaheadLines);
       const forwardPick = topScores
         .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
         .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
         .filter((entry) => entry.idx >= cursorLine && entry.idx <= forwardMax)
         .sort((a, b) => b.score - a.score || a.idx - b.idx)[0];
-      if (forwardPick && forwardPick.score >= biasThreshold) {
+      if (forwardPick && forwardPick.score >= forwardNeed) {
         const before = rawIdx;
         rawIdx = forwardPick.idx;
         conf = forwardPick.score;
-        effectiveThreshold = Math.min(effectiveThreshold, biasThreshold);
+        effectiveThreshold = Math.min(effectiveThreshold, forwardNeed);
         warnGuard('forward_bias', [
           `current=${cursorLine}`,
           `best=${before}`,
