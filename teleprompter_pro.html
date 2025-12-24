@@ -46,13 +46,17 @@
   <script src="/forge-config.js"></script>
 
   <!-- TS bundle preload + entry (single brain) -->
-  <link id="tp-dist-preload" rel="modulepreload" href="./dist/index.js?v=dev" as="script">
+  <link id="tp-dist-preload" rel="modulepreload" href="./index.js?v=dev" as="script">
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script>
     (function(){
       try {
-        var dist = './dist/index.js';
+        var host = (location && location.hostname) ? location.hostname : '';
+        var Q = new URLSearchParams(location.search);
+        var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+        var useDist = isLocal || Q.has('dev') || Q.get('dev') === '1' || Q.has('dev1') || Q.get('dev1') === '1';
+        var dist = useDist ? './dist/index.js' : './index.js';
         var addv = (window).__TP_ADDV;
         if (typeof addv === 'function') dist = addv(dist);
         else if (addv) dist = dist + '?v=' + encodeURIComponent(addv);
@@ -66,7 +70,7 @@
       }
     })();
   </script>
-  <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
+  <script id="tp-dist-entry" type="module" src="./index.js?v=dev"></script>
   <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
 <!-- Dev flag: add .tp-dev class early so CSS can key off it -->
