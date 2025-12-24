@@ -20,6 +20,8 @@ const STATIC_PATHS = [
   'display.html',
   'hud_popout.html',
   'login.html',
+  'account.html',
+  'reset.html',
   'assets',
   'forge-config.js',
   path.join('adapters', 'obsBridge.js'),
