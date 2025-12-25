@@ -209,7 +209,6 @@ import './ui/script-editor';
 
 // === UI Scroll Mode Router ===
 import { installAsrScrollBridge } from './scroll/asr-bridge';
-import { setBrainBaseSpeed } from './scroll/brain-hooks';
 import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode } from './scroll/scroll-brain';
 import { getScrollBrain } from './scroll/brain-access';
@@ -826,6 +825,7 @@ function applyUiScrollMode(
       break;
 	}
   selectPrefersAsr = asrEnabled;
+  try { setScrollModeSelectValue(normalized); } catch {}
   // Apply decisions
   try { brain?.setMode(brainMode); } catch {}
   if (setClampMode) setClampMode(clampMode);
@@ -989,6 +989,10 @@ function initScrollModeUiSync(): void {
       if (!t || t.id !== SCROLL_MODE_SELECT_ID) return;
       const mode = normalizeUiScrollMode(t.value);
       applyUiScrollMode(mode, { source: 'user', allowToast: true });
+      try {
+        const persisted = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+        if (persisted) localStorage.setItem('scrollMode', persisted);
+      } catch {}
       try {
         console.log('[mode] user selection', { mode, store: appStore.get?.('scrollMode') });
       } catch {}
