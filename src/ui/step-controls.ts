@@ -4,6 +4,12 @@ export function initStepControls(root: Document | HTMLElement = document): void 
   const prev = root.querySelector<HTMLButtonElement>('#stepPrevBtn');
   const next = root.querySelector<HTMLButtonElement>('#stepNextBtn');
 
-  prev?.addEventListener('click', () => stepPrev());
-  next?.addEventListener('click', () => stepNext());
+  if (prev && prev.dataset.stepWired !== '1') {
+    prev.dataset.stepWired = '1';
+    prev.addEventListener('click', () => stepPrev());
+  }
+  if (next && next.dataset.stepWired !== '1') {
+    next.dataset.stepWired = '1';
+    next.addEventListener('click', () => stepNext());
+  }
 }

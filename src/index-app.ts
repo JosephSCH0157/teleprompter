@@ -67,7 +67,6 @@ import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
-import * as scrollModeHooks from './index-hooks/apply-ui-scroll-mode';
 import './dev/ci-mocks';
 import './hud/loader';
 import { initAsrPersistence } from './features/asr/persistence';
@@ -204,7 +203,6 @@ import './ui/settings/asr-wizard';
 // If/when these are migrated to TS, drop the .js extension and types will flow.
 import { initHotkeys } from './features/hotkeys';
 import { initPersistence } from './features/persistence';
-import { initScrollFeature } from './features/scroll';
 import { initTelemetry } from './features/telemetry';
 import { initToasts } from './features/toasts';
 import './ui/script-editor';
@@ -217,30 +215,6 @@ import type { ScrollMode as BrainMode } from './scroll/scroll-brain';
 import { getScrollBrain } from './scroll/brain-access';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal' | 'wpm' | 'hybrid' | 'timed';
-
-function bridgeLegacyScrollController() {
-	if (typeof window === 'undefined') return;
-	const w = window as any;
-	if (w.__tpScrollCtlBridgeActive) return;
-	w.__tpScrollCtlBridgeActive = true;
-	const tryPatch = () => {
-		const ctl = w.__scrollCtl;
-		if (!ctl || ctl.__tpBrainProxy) return false;
-		const original = typeof ctl.setSpeed === 'function' ? ctl.setSpeed.bind(ctl) : null;
-		if (!original) return false;
-		ctl.setSpeed = function patchedLegacySpeed(value: number) {
-			try { setBrainBaseSpeed(value); } catch {}
-			return original(value);
-		};
-		ctl.__tpBrainProxy = true;
-		return true;
-	};
-	if (tryPatch()) return;
-	const timer = setInterval(() => {
-		if (tryPatch()) clearInterval(timer);
-	}, 800);
-	setTimeout(() => clearInterval(timer), 10_000);
-}
 
 const SCROLL_MODE_SELECT_ID = 'scrollMode';
 const ALLOWED_SCROLL_MODES: UiScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
@@ -888,6 +862,10 @@ function initScrollModeUiSync(): void {
   const updateFromStore = (mode: string | undefined) => {
     const normalized = normalizeUiScrollMode(mode);
     setScrollModeSelectValue(normalized);
+    const currentUi =
+      ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ??
+      lastStableUiMode;
+    if (lastScrollModeSource !== 'store' && currentUi === normalized) return;
     applyUiScrollMode(normalized, { skipStore: true, source: 'store' });
   };
 
@@ -1010,13 +988,7 @@ function initScrollModeUiSync(): void {
       const t = ev.target as HTMLSelectElement | null;
       if (!t || t.id !== SCROLL_MODE_SELECT_ID) return;
       const mode = normalizeUiScrollMode(t.value);
-      try { localStorage.setItem('scrollMode', mode); } catch {}
-      try { localStorage.setItem('tp_scroll_mode', mode); } catch {}
-      try { appStore.set?.('scrollMode', mode as any); } catch {}
-      if (mode === 'asr') {
-        try { (window as any).__tpAuto?.setEnabled?.(false); } catch {}
-      }
-      scrollModeHooks.applyUiScrollMode(mode, { source: 'user', allowToast: true });
+      applyUiScrollMode(mode, { source: 'user', allowToast: true });
       try {
         console.log('[mode] user selection', { mode, store: appStore.get?.('scrollMode') });
       } catch {}
@@ -1030,11 +1002,15 @@ initScrollModeUiSync();
 
 // Expose this function as the global router for existing JS
 try { (window as any).__tpAppStore = appStore; } catch {}
-(window as any).setScrollMode = (mode: UiScrollMode) => scrollModeHooks.applyUiScrollMode(mode, { source: 'external' });
+(window as any).setScrollMode = (mode: UiScrollMode) => {
+	const normalized = normalizeUiScrollMode(mode);
+	try { appStore.set?.('scrollMode', normalized as any); } catch {}
+	try { applyUiScrollMode(normalized, { skipStore: true, source: 'legacy' }); } catch {}
+	try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
+};
 (window as any).getScrollMode = () =>
   ((window as any).__tpUiScrollMode as UiScrollMode | undefined) ?? 'off';
-try { (window as any).__tpApplyUiScrollMode = scrollModeHooks.applyUiScrollMode; } catch {}
-try { (window as any).__tpApplyUiScrollModeLegacy = applyUiScrollMode; } catch {}
+try { (window as any).__tpApplyUiScrollMode = applyUiScrollMode; } catch {}
 export { applyUiScrollMode, appStore };
 
 // === Settings mirror + smoke helpers ===
@@ -1303,7 +1279,7 @@ function _ensureHud(store: any): void {
 
 const startPersistence = initOnce('persistence', initPersistence);
 const startTelemetry   = initOnce('telemetry',   initTelemetry);
-const startScroll      = initOnce('scroll',      initScrollFeature);
+const startScroll      = initOnce('scroll',      () => {});
 const startHotkeys     = initOnce('hotkeys',     initHotkeys);
 const startToasts      = initOnce('toasts',      initToasts);
 // Dev HUD for notes (only activates under ?dev=1 or __TP_DEV)
@@ -1361,7 +1337,6 @@ function onDomReady(fn: () => void): void {
             try { brain.reportAsrSilence(silent, ts ?? Date.now()); } catch {}
           },
 				});
-				bridgeLegacyScrollController();
 		// 1) Install the TypeScript scheduler before any scroll writers run.
 		try {
 			installScheduler();
@@ -1770,8 +1745,6 @@ export async function boot() {
               import('./boot/console-noise-filter').then(m => m.installConsoleNoiseFilter?.({ debug: false })).catch(()=>{});
             }
           } catch {}
-          // TS scroll router + UI wiring
-					try { initScrollFeature(); } catch {}
 					// Initialize features via idempotent wrappers
 					try { startPersistence(); } catch {}
 try { initScrollPrefsPersistence(appStore as any); } catch {}
@@ -1885,13 +1858,6 @@ try {
   try { applyUiScrollMode(scrollModeSource.get() as any, { skipStore: true, source: 'router' }); } catch {}
   try { initWpmBindings(); } catch {}
 
-  // Legacy setScrollMode bridge
-  (window as any).setScrollMode = (mode: 'auto'|'asr'|'step'|'rehearsal'|'off'|'timed'|'wpm'|'hybrid') => {
-    const normalized = normalizeUiScrollMode(mode);
-    try { store?.set?.('scrollMode', normalized); } catch {}
-    try { applyUiScrollMode(normalized, { skipStore: true, source: 'legacy' }); } catch {}
-    try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
-  };
 } catch {}
 
 // Display Sync
