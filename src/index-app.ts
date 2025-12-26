@@ -209,7 +209,6 @@ import './ui/script-editor';
 
 // === UI Scroll Mode Router ===
 import { installAsrScrollBridge } from './scroll/asr-bridge';
-import { initScrollModeBridge } from './scroll/mode-bridge';
 import type { ScrollMode as BrainMode } from './scroll/scroll-brain';
 import { getScrollBrain } from './scroll/brain-access';
 import { installWpmSpeedBridge } from './scroll/wpm-bridge';
@@ -1351,8 +1350,6 @@ function onDomReady(fn: () => void): void {
 		// LEGACY AUTO-SPEED HOOK – intentionally disabled.
 		// Autoscroll now owns #autoSpeed via src/features/autoscroll.ts.
 
-		// 3) Bridge legacy mode selectors into the TS scroll brain
-		try { initScrollModeBridge(); } catch {}
 	});
 } catch {}
 

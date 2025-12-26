@@ -418,6 +418,21 @@
     <option value="step">Step</option>
     <option value="rehearsal">Rehearsal</option>
   </select>
+  <script>
+    (function(){
+      try {
+        var el = document.getElementById('scrollMode');
+        if (!el) return;
+        var raw = '';
+        try { raw = localStorage.getItem('scrollMode') || ''; } catch (e) {}
+        var val = String(raw || '').trim().toLowerCase();
+        if (!val) return;
+        if (val === 'manual') val = 'step';
+        var ok = Array.prototype.some.call(el.options, function(o){ return o.value === val; });
+        if (ok) el.value = val;
+      } catch (e) {}
+    })();
+  </script>
   <p class="mode-hint" id="scrollModeHelpText">Hybrid follows speech automatically. Switch anytime to lock in manual, ASR, or rehearsal modes.</p>
   <p class="mode-hint" id="scrollModeInlineHint" aria-live="polite" hidden>ASR is disabled until Mic is ready.</p>
 </section>
