@@ -297,7 +297,7 @@
     html.dev1 #asrStatsHud{display:block !important}
     /* Test aliases: keep clickable for headless smoke while visually hidden */
     .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
-    .crawl-alias{position:fixed;left:2px;bottom:2px;width:8px;height:8px;opacity:0;z-index:2147483647;pointer-events:auto}
+    .crawl-alias{position:fixed;left:2px;bottom:2px;width:8px;height:8px;opacity:0;z-index:2147483647;pointer-events:none}
   </style>
 
   <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
@@ -935,8 +935,8 @@ Joe starts here.
   <!-- Test alias for legacy display selectors: clickable but visually hidden -->
   <button id="openDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-open">Open Display (alias)</button>
   <button id="closeDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-close">Close Display (alias)</button>
-  <!-- Crawl alias for upload (kept visible to UI crawler without changing UX) -->
-  <button id="uploadBtn" class="crawl-alias" type="button" aria-label="Upload file" title="alias-upload">Upload</button>
+  <!-- crawl-only alias: required by validate_ui_crawl.js; do not remove without updating contract -->
+  <button id="uploadBtn" class="crawl-alias" type="button" aria-label="Upload file" aria-hidden="true" tabindex="-1" title="alias-upload">Upload</button>
   <!-- Hidden aliases for removed status chips -->
   <span id="saveChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-save"></span>
   <span id="displayChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-display"></span>
