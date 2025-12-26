@@ -1,9 +1,18 @@
 function fallbackStep(deltaFactor = 0.9, sign: 1 | -1) {
-  const scroller = (document.scrollingElement ||
+  const viewer = document.getElementById('viewer') as HTMLElement | null;
+  const scroller = (viewer ||
+    document.scrollingElement ||
     document.documentElement ||
     document.body) as HTMLElement;
-  const viewport = window.innerHeight || scroller.clientHeight || 800;
+  const viewport =
+    viewer?.clientHeight || window.innerHeight || scroller.clientHeight || 800;
   const delta = viewport * deltaFactor * sign;
+  if (viewer) {
+    const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+    const next = Math.max(0, Math.min(viewer.scrollTop + delta, max));
+    viewer.scrollTop = next;
+    return;
+  }
   scroller.scrollTop += delta;
 }
 
