@@ -71,6 +71,34 @@ function getViewer(): HTMLElement | null {
   return document.getElementById('viewer');
 }
 
+function getScroller(): HTMLElement | null {
+  return (
+    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+    getViewer() ||
+    (document.scrollingElement as HTMLElement | null)
+  );
+}
+
+function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
+  try {
+    const isWin =
+      scroller === document.scrollingElement ||
+      scroller === document.documentElement ||
+      scroller === document.body;
+    if (isWin) {
+      const rect = el.getBoundingClientRect();
+      const scrollTop =
+        window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
+      return rect.top + scrollTop;
+    }
+    const rect = el.getBoundingClientRect();
+    const scRect = scroller.getBoundingClientRect();
+    return rect.top - scRect.top + scroller.scrollTop;
+  } catch {
+    return el.offsetTop || 0;
+  }
+}
+
 function getMarkerPct(cfg?: StepScrollConfig): number {
   const fromWin = (window as Window).__TP_MARKER_PCT;
   return typeof cfg?.markerPct === 'number'
@@ -97,8 +125,10 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
   if (sh?.scrollToEl) {
     sh.scrollToEl(el, offsetPx);
   } else {
-    const sc = getViewer();
-    const y = (el.offsetTop || 0) - offsetPx;
+    const sc = getScroller();
+    const y = sc
+      ? elementTopRelativeTo(el, sc) - offsetPx
+      : (el.offsetTop || 0) - offsetPx;
     if (!sc) {
       scrollWriter.scrollTo(Math.max(0, y), { behavior: 'auto' });
       return;
@@ -110,7 +140,7 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
 }
 
 function scrollByPx(px: number): void {
-  const sc = getViewer();
+  const sc = getScroller();
   if (!sc) {
     scrollWriter.scrollBy(px, { behavior: 'auto' });
     return;
@@ -227,8 +257,8 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     document.body;
 
   function stepLinesFn(sign: 1 | -1, count: number = stepLinesN): void {
-    const viewer = getViewer();
-    if (!viewer) return;
+    const scroller = getScroller();
+    if (!scroller) return;
 
     // Rehearsal Mode: disable pedal / keyboard driven stepping (wheel only)
     try {
@@ -243,8 +273,9 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
   }
 
   function stepBlockFn(sign: 1 | -1): void {
-    const viewer = getViewer();
-    if (!viewer) return;
+    const scroller = getScroller();
+    const markerHost = getViewer() || scroller;
+    if (!scroller || !markerHost) return;
 
     // Rehearsal Mode: disable block jumps
     try {
@@ -254,7 +285,7 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     }
 
     const markerPct = getMarkerPct(cfg);
-    const offset = markerOffsetPx(viewer, markerPct);
+    const offset = markerOffsetPx(markerHost, markerPct);
     const anchor = currentAnchor(root);
     if (!anchor) return;
 
@@ -313,7 +344,7 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     } else if (key === 'Home') {
       scrollWriter.scrollTo(0, { behavior: 'auto' });
     } else if (key === 'End') {
-      const v = getViewer();
+      const v = getScroller();
       const max = v ? Math.max(0, v.scrollHeight - v.clientHeight) : 0;
       scrollWriter.scrollTo(max, { behavior: 'auto' });
     }
