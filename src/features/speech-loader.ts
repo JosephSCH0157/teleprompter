@@ -3,6 +3,13 @@ import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
 import { stopAsrRuntime } from '../speech/runtime-control';
 import { createAsrScrollDriver, type AsrScrollDriver } from '../features/asr/asr-scroll-driver';
+import {
+  describeElement,
+  getFallbackScroller,
+  getPrimaryScroller,
+  getScriptRoot,
+  resolveActiveScroller,
+} from '../scroll/scroller';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -433,30 +440,6 @@ function isSettingsHydrating(): boolean {
   try { return !!(window as any).__tpSettingsHydrating; } catch { return false; }
 }
 
-function isScrollable(el: HTMLElement | null): boolean {
-  if (!el) return false;
-  if (el.scrollHeight - el.clientHeight > 2) return true;
-  try {
-    const st = getComputedStyle(el);
-    return /(auto|scroll)/.test(st.overflowY || '');
-  } catch {
-    return false;
-  }
-}
-
-function resolveActiveScroller(primary: HTMLElement | null, fallback: HTMLElement | null): HTMLElement | null {
-  if (isScrollable(primary)) return primary;
-  if (isScrollable(fallback)) return fallback;
-  return primary || fallback;
-}
-
-function describeElement(el: HTMLElement | null): string {
-  if (!el) return 'none';
-  const id = el.id ? `#${el.id}` : '';
-  const cls = el.className ? `.${String(el.className).trim().split(/\s+/).join('.')}` : '';
-  return `${el.tagName.toLowerCase()}${id}${cls}` || el.tagName.toLowerCase();
-}
-
 function parsePx(value: string | null | undefined): number {
   const parsed = Number.parseFloat(String(value || ''));
   return Number.isFinite(parsed) ? parsed : 0;
@@ -473,10 +456,8 @@ function getMarkerOffset(viewer: HTMLElement | null, root: HTMLElement | null) {
 }
 
 function checkAsrLayoutReady() {
-  const viewer =
-    document.getElementById('viewer') ||
-    document.getElementById('scriptScrollContainer');
-  const root = document.getElementById('script') || viewer;
+  const viewer = getPrimaryScroller();
+  const root = getScriptRoot() || viewer;
   const container = root || viewer;
   if (!container) return { ready: false, reason: 'no-container' as const };
   const lineEl = container.querySelector<HTMLElement>('.line');
@@ -551,16 +532,14 @@ async function waitForAsrLayoutReady(reason?: string): Promise<boolean> {
 
 function computeMarkerLineIndex(): number {
   try {
-    const viewer =
-      document.getElementById('viewer') ||
-      document.getElementById('scriptScrollContainer');
-    const root = document.getElementById('script') || viewer;
+    const viewer = getPrimaryScroller();
+    const root = getScriptRoot() || viewer;
     const container = viewer || root;
     const lineEls = Array.from(
       (container || document).querySelectorAll<HTMLElement>('.line'),
     );
     if (!lineEls.length) return 0;
-    const scroller = resolveActiveScroller(viewer, root);
+    const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
     const scrollTop = scroller?.scrollTop ?? 0;
     const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
     const topEpsilon = Math.max(24, firstLineHeight * 0.5);
@@ -592,10 +571,7 @@ function computeMarkerLineIndex(): number {
 
 function getLineSnapshot(index: number) {
   try {
-    const viewer =
-      document.getElementById('viewer') ||
-      document.getElementById('scriptScrollContainer') ||
-      document.getElementById('script');
+    const viewer = getPrimaryScroller() || getScriptRoot();
     const idx = Math.max(0, Math.floor(index));
     const line =
       viewer?.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
@@ -615,11 +591,9 @@ function getLineSnapshot(index: number) {
 }
 
 function syncAsrIndices(startIdx: number, reason: string): void {
-  const viewer =
-    document.getElementById('viewer') ||
-    document.getElementById('scriptScrollContainer');
-  const root = document.getElementById('script') || viewer;
-  const scroller = resolveActiveScroller(viewer, root);
+  const viewer = getPrimaryScroller();
+  const root = getScriptRoot() || viewer;
+  const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
   const scrollTop = scroller?.scrollTop ?? 0;
   const lineEl = (root || viewer || document).querySelector<HTMLElement>('.line');
   const lineHeight = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
@@ -635,11 +609,13 @@ const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
 let asrScrollDriver: AsrScrollDriver | null = null;
 let transcriptListener: ((event: Event) => void) | null = null;
 let sessionStopHooked = false;
+let asrBrainLogged = false;
 
 function attachAsrScrollDriver(): void {
   if (typeof window === 'undefined') return;
   if (!asrScrollDriver) {
     asrScrollDriver = createAsrScrollDriver();
+    try { (window as any).__tpAsrScrollDriver = asrScrollDriver; } catch {}
   }
   if (transcriptListener) return;
   transcriptListener = (event: Event) => {
@@ -663,6 +639,7 @@ function detachAsrScrollDriver(): void {
   if (asrScrollDriver) {
     asrScrollDriver.dispose();
     asrScrollDriver = null;
+    try { (window as any).__tpAsrScrollDriver = null; } catch {}
   }
 }
 
@@ -807,13 +784,28 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   attachAsrScrollDriver();
   const startIdx = computeMarkerLineIndex();
   syncAsrIndices(startIdx, 'session-start');
+  if (!asrBrainLogged) {
+    asrBrainLogged = true;
+    try {
+      const session = getSession();
+      const scroller = resolveActiveScroller(
+        getPrimaryScroller(),
+        getScriptRoot() || getFallbackScroller(),
+      );
+      console.warn('ASR_BRAIN_READY', {
+        asrDesired: session.asrDesired,
+        asrArmed: session.asrArmed,
+        brain: !!asrScrollDriver,
+        mode,
+        scrollerId: describeElement(scroller),
+      });
+    } catch {}
+  }
   try {
     const currentIdx = Number((window as any).currentIndex ?? startIdx);
-    const viewer =
-      document.getElementById('viewer') ||
-      document.getElementById('scriptScrollContainer');
-    const root = document.getElementById('script') || viewer;
-    const scroller = resolveActiveScroller(viewer, root);
+    const viewer = getPrimaryScroller();
+    const root = getScriptRoot() || viewer;
+    const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
     const scrollerTop = scroller?.scrollTop ?? 0;
     const firstLine = (root || viewer || document).querySelector<HTMLElement>('.line');
     const firstLineHeight = firstLine?.offsetHeight || firstLine?.clientHeight || 0;
@@ -879,6 +871,7 @@ export function stopSpeechBackendForSession(reason?: string): void {
     return;
   }
   detachAsrScrollDriver();
+  asrBrainLogged = false;
   try { stopAsrRuntime(); } catch {}
   try { window.__tpMic?.releaseMic?.(); } catch {}
   try { rec?.stop?.(); } catch {}

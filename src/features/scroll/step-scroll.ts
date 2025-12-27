@@ -4,6 +4,7 @@
 
 import { computeAnchorLineIndex } from '../../scroll/scroll-helpers';
 import { getScrollWriter } from '../../scroll/scroll-writer';
+import { getFallbackScroller, getPrimaryScroller, isWindowScroller } from '../../scroll/scroller';
 
 export interface StepScrollConfig {
   stepLines?: number;
@@ -72,19 +73,7 @@ function getViewer(): HTMLElement | null {
 }
 
 function getScroller(): HTMLElement | null {
-  return (
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-    getViewer() ||
-    (document.scrollingElement as HTMLElement | null)
-  );
-}
-
-function isWindowScroller(sc: HTMLElement): boolean {
-  return (
-    sc === document.scrollingElement ||
-    sc === document.documentElement ||
-    sc === document.body
-  );
+  return getPrimaryScroller() || getViewer() || getFallbackScroller();
 }
 
 function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {

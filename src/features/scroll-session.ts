@@ -8,11 +8,20 @@ import {
   startSpeechBackendForSession,
   stopSpeechBackendForSession,
 } from './speech-loader';
+import {
+  describeElement,
+  getFallbackScroller,
+  getPrimaryScroller,
+  getScriptRoot,
+  resolveActiveScroller,
+} from '../scroll/scroller';
 
 try {
   (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v3-2025-12-19-a';
   console.log('SCROLL_SESSION_FINGERPRINT', (window as any).__TP_SCROLL_SESSION_FINGERPRINT);
 } catch {}
+
+let asrOffLogged = false;
 
 function startAutoScroll(): void {
   try {
@@ -56,6 +65,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     try { console.debug('[scroll-session] stopping auto-scroll for phase', phase); } catch {}
     stopAutoScroll();
     stopSpeechBackendForSession('phase-change');
+    asrOffLogged = false;
     return;
   }
 
@@ -79,6 +89,29 @@ function maybeStartOnLive(phase: SessionPhase): void {
   if (shouldStartSpeech) {
     try { console.debug('[ASR] about to call startSpeech/startBackend', { mode: canonicalMode, reason: 'live-enter' }); } catch {}
     void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode });
+  } else if (!asrOffLogged) {
+    asrOffLogged = true;
+    const reason = !session.asrDesired
+      ? 'not-desired'
+      : !session.asrArmed
+        ? 'not-armed'
+        : (canonicalMode !== 'asr' && canonicalMode !== 'hybrid' && brain !== 'asr')
+          ? 'mode-blocked'
+          : 'unknown';
+    const scroller = resolveActiveScroller(
+      getPrimaryScroller(),
+      getScriptRoot() || getFallbackScroller(),
+    );
+    try {
+      console.warn('ASR_OFF_REASON', {
+        reason,
+        asrDesired: session.asrDesired,
+        asrArmed: session.asrArmed,
+        mode: canonicalMode,
+        brain,
+        scrollerId: describeElement(scroller),
+      });
+    } catch {}
   }
 
   if (!session.scrollAutoOnLive) {

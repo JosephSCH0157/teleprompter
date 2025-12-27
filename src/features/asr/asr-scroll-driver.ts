@@ -2,6 +2,13 @@ import { matchBatch } from '../../speech/orchestrator';
 import { normTokens } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
+import {
+  describeElement,
+  getFallbackScroller,
+  getPrimaryScroller,
+  getScriptRoot,
+  resolveActiveScroller,
+} from '../../scroll/scroller';
 
 type DriverOptions = {
   /** Minimum forward line delta before issuing a seek. */
@@ -64,6 +71,7 @@ const DEFAULT_MAX_STEP_PX = 10;
 const DEFAULT_CATCHUP_MED_MIN_PX = 80;
 const DEFAULT_CATCHUP_FAST_MIN_PX = 250;
 const DEFAULT_MAX_TARGET_JUMP_PX = 120;
+const DEFAULT_MAX_TARGET_JUMP_HYBRID_PX = 80;
 const DEFAULT_STRONG_WINDOW_MS = 700;
 const DEFAULT_FINAL_EVIDENCE_LEAD_LINES = 2;
 const DEFAULT_BACK_RECOVERY_MAX_PX = 15;
@@ -80,6 +88,10 @@ const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
 const DEFAULT_STRONG_BACK_SIM = 0.72;
 const DEFAULT_BACK_CONFIRM_HITS = 2;
 const DEFAULT_BACK_CONFIRM_WINDOW_MS = 1300;
+const DEFAULT_BEHIND_RECOVERY_MS = 2600;
+const DEFAULT_BEHIND_RECOVERY_MAX_LINES = 6;
+const DEFAULT_BEHIND_RECOVERY_MIN_SIM = 0.78;
+const DEFAULT_BEHIND_RECOVERY_COOLDOWN_MS = 5000;
 const DEFAULT_AMBIGUITY_SIM_DELTA = 0.06;
 const DEFAULT_AMBIGUITY_NEAR_LINES = 6;
 const DEFAULT_AMBIGUITY_FAR_LINES = 20;
@@ -127,6 +139,20 @@ function formatLogScore(value: number) {
 }
 
 const guardLastAt = new Map<string, number>();
+const logLastAt = new Map<string, number>();
+const LOG_THROTTLE_MS = 500;
+
+function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: string, payload?: any) {
+  const now = Date.now();
+  const last = logLastAt.get(key) ?? 0;
+  if (now - last < LOG_THROTTLE_MS) return;
+  logLastAt.set(key, now);
+  try {
+    const fn = (console as any)[level] || console.log;
+    if (payload === undefined) fn(message);
+    else fn(message, payload);
+  } catch {}
+}
 
 function warnGuard(reason: string, parts: Array<string | number | null | undefined>) {
   const now = Date.now();
@@ -137,6 +163,7 @@ function warnGuard(reason: string, parts: Array<string | number | null | undefin
     const line = ['🧱 ASR_GUARD', `reason=${reason}`, ...parts.filter(Boolean)];
     console.warn(line.join(' '));
   } catch {}
+  logThrottled(`ASR_GUARD:${reason}`, 'warn', 'ASR_GUARD', { reason, parts: parts.filter(Boolean) });
 }
 
 function resolveThreshold(): number {
@@ -177,35 +204,25 @@ function logDev(...args: any[]) {
   }
 }
 
-function getScroller(): HTMLElement | null {
-  return (
-    (document.getElementById('viewer') as HTMLElement | null) ||
-    (document.querySelector('[data-role="viewer"]') as HTMLElement | null)
-  );
-}
-
-function isScrollable(el: HTMLElement | null): boolean {
-  if (!el) return false;
-  if (el.scrollHeight - el.clientHeight > 2) return true;
+function getScrollMode(): string {
   try {
-    const st = getComputedStyle(el);
-    return /(auto|scroll)/.test(st.overflowY || '');
+    const store = (window as any).__tpStore;
+    const raw = store?.get?.('scrollMode') ?? (window as any).__tpUiScrollMode;
+    return String(raw || '').toLowerCase();
   } catch {
-    return false;
+    return '';
   }
 }
 
-function resolveActiveScroller(primary: HTMLElement | null, fallback: HTMLElement | null): HTMLElement | null {
-  if (isScrollable(primary)) return primary;
-  if (isScrollable(fallback)) return fallback;
-  return primary || fallback;
+function isHybridMode(): boolean {
+  return getScrollMode() === 'hybrid';
 }
 
-function describeElement(el: HTMLElement | null): string {
-  if (!el) return 'none';
-  const id = el.id ? `#${el.id}` : '';
-  const cls = el.className ? `.${String(el.className).trim().split(/\s+/).join('.')}` : '';
-  return `${el.tagName.toLowerCase()}${id}${cls}` || el.tagName.toLowerCase();
+function getScroller(): HTMLElement | null {
+  const primary = getPrimaryScroller();
+  const root = getScriptRoot();
+  const fallback = root || getFallbackScroller();
+  return resolveActiveScroller(primary, fallback);
 }
 
 function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
@@ -233,11 +250,8 @@ function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number):
 
 function computeMarkerLineIndex(scroller: HTMLElement | null): number {
   try {
-    const viewer =
-      scroller ||
-      document.getElementById('viewer') ||
-      document.getElementById('scriptScrollContainer');
-    const root = document.getElementById('script') || viewer;
+    const viewer = scroller || getPrimaryScroller();
+    const root = getScriptRoot() || viewer;
     const container = viewer || root;
     const lineEls = Array.from((container || document).querySelectorAll<HTMLElement>('.line'));
     if (!lineEls.length) return 0;
@@ -311,7 +325,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastResyncAt = 0;
   let lastBehindStrongIdx = -1;
   let lastBehindStrongAt = 0;
+  let behindStrongSince = 0;
   let behindStrongCount = 0;
+  let lastBehindRecoveryAt = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -321,6 +337,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let bootLogged = false;
   let forcedCooldownUntil = 0;
   const forcedCommitTimes: number[] = [];
+  let lastStuckDumpAt = 0;
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -361,6 +378,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const strongBackSim = DEFAULT_STRONG_BACK_SIM;
   const backConfirmHits = DEFAULT_BACK_CONFIRM_HITS;
   const backConfirmWindowMs = DEFAULT_BACK_CONFIRM_WINDOW_MS;
+  const behindRecoveryMs = DEFAULT_BEHIND_RECOVERY_MS;
+  const behindRecoveryMaxLines = DEFAULT_BEHIND_RECOVERY_MAX_LINES;
+  const behindRecoveryMinSim = DEFAULT_BEHIND_RECOVERY_MIN_SIM;
+  const behindRecoveryCooldownMs = DEFAULT_BEHIND_RECOVERY_COOLDOWN_MS;
   const forwardTieEps = DEFAULT_FORWARD_TIE_EPS;
   const forwardBiasRecentLines = DEFAULT_FORWARD_BIAS_RECENT_LINES;
   const forwardBiasWindowMs = DEFAULT_FORWARD_BIAS_WINDOW_MS;
@@ -512,6 +533,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return maxVelPxPerSec;
   };
 
+  const getMaxTargetJumpPx = () => {
+    if (isHybridMode()) return Math.min(maxTargetJumpPx, DEFAULT_MAX_TARGET_JUMP_HYBRID_PX);
+    return maxTargetJumpPx;
+  };
+
   const tickController = () => {
     if (!controllerActive || disposed) return;
     const scroller = getScroller();
@@ -582,6 +608,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       const now = Date.now();
+      const jumpCap = getMaxTargetJumpPx();
       const { line, conf, isFinal, hasEvidence, snippet, minThreshold, forced, forceReason } = pending;
       const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
       const effectiveThreshold = Number.isFinite(minThreshold)
@@ -622,7 +649,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const nextTop = resolveTargetTop(scroller, nextLine);
             if (nextTop != null) {
               const nextDeltaPx = nextTop - currentTop;
-              if (nextDeltaPx > 0 && nextDeltaPx <= maxTargetJumpPx) {
+              if (nextDeltaPx > 0 && nextDeltaPx <= jumpCap) {
                 targetLine = nextLine;
                 targetTop = nextTop;
                 deltaPx = nextDeltaPx;
@@ -656,7 +683,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
             const base = targetTopPx == null ? currentTop : targetTopPx;
             const desired = clamp(targetTop, 0, max);
-            const limitedTarget = Math.min(desired, base + maxTargetJumpPx);
+            const limitedTarget = Math.min(desired, base + jumpCap);
             if (limitedTarget > base) {
               targetTopPx = limitedTarget;
               lastSameLineNudgeTs = now;
@@ -692,7 +719,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const base = targetTopPx == null ? currentTop : targetTopPx;
             const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed);
             const creepTarget = clamp(base + creepStep, 0, max);
-            const limitedTarget = Math.min(creepTarget, base + maxTargetJumpPx);
+            const limitedTarget = Math.min(creepTarget, base + jumpCap);
             if (limitedTarget > base) {
               targetTopPx = limitedTarget;
               lastSameLineNudgeTs = now;
@@ -776,7 +803,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const base = targetTopPx == null ? currentTop : targetTopPx;
       const candidate = clamp(targetTop, 0, max);
-      const limitedTarget = forced ? candidate : Math.min(candidate, base + maxTargetJumpPx);
+      const limitedTarget = forced ? candidate : Math.min(candidate, base + jumpCap);
       targetTopPx = Math.max(base, limitedTarget);
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
@@ -790,6 +817,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         pruneForcedCommits(now);
       }
       try { (window as any).currentIndex = lastLineIndex; } catch {}
+      logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
+        prevIndex: prevLineIndex,
+        nextIndex: targetLine,
+        delta: targetLine - prevLineIndex,
+        sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+        scrollTopBefore: Math.round(currentTop),
+        scrollTopAfter: Math.round(targetTopPx ?? currentTop),
+        forced: !!forced,
+        mode: getScrollMode() || 'unknown',
+      });
       ensureControllerActive();
       try {
         const forcedCount = getForcedCount(now);
@@ -838,8 +875,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       bootLogged = true;
       try {
         const viewer = getScroller();
-        const root = document.getElementById('script') || viewer;
-        const scroller = resolveActiveScroller(viewer, root);
+        const root = getScriptRoot() || viewer;
+        const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
         const scrollTop = scroller?.scrollTop ?? 0;
         const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
           ? (window as any).__TP_MARKER_PCT
@@ -890,6 +927,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     maybeBumpForStall(now);
+    if (now - lastForwardCommitAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS && now - lastStuckDumpAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS) {
+      lastStuckDumpAt = now;
+      dumpRecentEvents('stuck');
+      logThrottled('ASR_GUARD:stuck', 'warn', 'ASR_GUARD', {
+        reason: 'stuck',
+        lastLineIndex,
+        lastForwardCommitAt,
+      });
+    }
 
     const anchorIdx = matchAnchorIdx >= 0
       ? matchAnchorIdx
@@ -935,6 +981,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     let effectiveThreshold = requiredThreshold;
+    const scrollerForMatch = getScroller();
+    const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
+    logThrottled('ASR_MATCH', 'log', 'ASR_MATCH', {
+      currentIndex: cursorLine,
+      bestIndex: rawIdx,
+      delta: rawIdx - cursorLine,
+      sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+      scrollTop: Math.round(scrollTopForMatch),
+      winBack: windowBack,
+      winAhead: windowAhead,
+      final: isFinal ? 1 : 0,
+    });
     const shortFinal =
       isFinal && tokenCount >= shortFinalMinTokens && tokenCount <= shortFinalMaxTokens;
     const shortFinalRecent =
@@ -1027,7 +1085,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     let outrunCommit = false;
     let forceReason: string | undefined;
-    if (outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
+    const allowForced = !isHybridMode();
+    if (allowForced && outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
       if (!outrunPick) {
         logForcedDeny('evidence', [
           `tokens=${tokenCount}`,
@@ -1097,7 +1156,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       conf >= shortFinalNeed &&
       conf < requiredThreshold;
     let shortFinalForced = false;
-    if (shortFinalForcedCandidate && !outrunCommit) {
+    if (allowForced && shortFinalForcedCandidate && !outrunCommit) {
       const forwardCandidate = outrunCandidate;
       const forcedDelta = forwardCandidate ? forwardCandidate.idx - cursorLine : rawIdx - cursorLine;
       const cooldownRemaining = getForcedCooldownRemaining(now);
@@ -1267,11 +1326,53 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           behindStrongCount += 1;
         } else {
           behindStrongCount = 1;
+          behindStrongSince = now;
         }
         lastBehindStrongIdx = rawIdx;
         lastBehindStrongAt = now;
       } else {
         behindStrongCount = 0;
+        behindStrongSince = 0;
+      }
+      if (
+        strongBehind &&
+        behindStrongCount >= backConfirmHits &&
+        behindStrongSince > 0 &&
+        now - behindStrongSince >= behindRecoveryMs &&
+        behindBy <= behindRecoveryMaxLines &&
+        conf >= Math.max(behindRecoveryMinSim, requiredThreshold) &&
+        now - lastBehindRecoveryAt >= behindRecoveryCooldownMs
+      ) {
+        const scroller = getScroller();
+        const scrollTopBefore = scroller?.scrollTop ?? 0;
+        const targetTop = scroller ? resolveTargetTop(scroller, rawIdx) : null;
+        if (scroller && targetTop != null) {
+          scroller.scrollTop = targetTop;
+          lastMoveAt = Date.now();
+        }
+        lastLineIndex = Math.max(0, Math.floor(rawIdx));
+        matchAnchorIdx = lastLineIndex;
+        lastForwardCommitAt = now;
+        lastSeekTs = now;
+        lastEvidenceAt = now;
+        behindStrongSince = 0;
+        behindStrongCount = 0;
+        lastBehindRecoveryAt = now;
+        resetLookahead('behind-reanchor');
+        try { (window as any).currentIndex = lastLineIndex; } catch {}
+        logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
+          prevIndex: cursorLine,
+          nextIndex: lastLineIndex,
+          delta: lastLineIndex - cursorLine,
+          sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+          scrollTopBefore: Math.round(scrollTopBefore),
+          scrollTopAfter: Math.round(targetTop ?? scrollTopBefore),
+          forced: false,
+          mode: getScrollMode() || 'unknown',
+          reason: 'behind-reanchor',
+        });
+        updateDebugState('behind-reanchor');
+        return;
       }
       if (!strongBehind || behindStrongCount < backConfirmHits) {
         noteBehindBlocked(now);
@@ -1403,7 +1504,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastResyncAt = 0;
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;
+    behindStrongSince = 0;
     behindStrongCount = 0;
+    lastBehindRecoveryAt = 0;
     lastForwardCommitAt = Date.now();
     resetLookahead('sync-index');
     if (pendingRaf) {
@@ -1412,6 +1515,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     pendingMatch = null;
     strongHits.length = 0;
+    lastStuckDumpAt = 0;
     try { (window as any).currentIndex = lastLineIndex; } catch {}
     updateDebugState('sync-index');
   };
