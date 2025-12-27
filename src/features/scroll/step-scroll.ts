@@ -152,6 +152,7 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
 }
 
 function scrollByPx(px: number): void {
+  console.debug('[STEP] scrollByPx HIT', { px });
   const sc = getScroller();
   if (!sc || isWindowScroller(sc)) {
     scrollWriter.scrollBy(px, { behavior: 'auto' });
@@ -268,6 +269,7 @@ function nextSpokenParagraph(
 }
 
 export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
+  console.debug('[STEP] installStepScroll loaded');
   const stepLinesN = cfg.stepLines ?? 1;
   const pageLinesN = cfg.pageLines ?? 4;
   const spokenSel =
@@ -296,6 +298,7 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     document.body;
 
   function stepLinesFn(sign: 1 | -1, count: number = stepLinesN): void {
+    console.debug('[STEP] stepLinesFn enter', { dir: sign, lines: count });
     const scroller = getScroller();
     if (!scroller) return;
 
@@ -312,6 +315,7 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
   }
 
   function stepBlockFn(sign: 1 | -1): void {
+    console.debug('[STEP] stepBlockFn enter', { dir: sign });
     const scroller = getScroller();
     const markerHost = getViewer() || scroller;
     if (!scroller || !markerHost) return;
