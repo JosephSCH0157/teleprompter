@@ -254,14 +254,6 @@ function getPxPerLine(): number {
   return pxPerLine;
 }
 
-function isDevMode(): boolean {
-  try {
-    return localStorage.getItem('tp_dev_mode') === '1';
-  } catch {
-    return false;
-  }
-}
-
 // Block stepping: jump to next/prev "spoken" paragraph inside #script, skipping notes
 function nextSpokenParagraph(
   from: HTMLElement | null,
