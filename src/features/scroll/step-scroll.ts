@@ -158,14 +158,41 @@ function scrollByPx(px: number): void {
     return;
   }
 
+  const DEV = (() => {
+    try {
+      return localStorage.getItem('tp_dev_mode') === '1';
+    } catch {
+      return false;
+    }
+  })();
+
   const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
   const next = Math.max(0, Math.min(sc.scrollTop + px, max));
+
+  if (DEV) {
+    console.debug('[STEP scrollByPx] before', {
+      px,
+      sc: sc?.id || sc?.tagName,
+      top: sc?.scrollTop,
+      h: sc?.scrollHeight,
+      ch: sc?.clientHeight,
+      isWin: sc ? isWindowScroller(sc) : null,
+      hasScrollTo: sc ? typeof (sc as any).scrollTo === 'function' : null,
+    });
+  }
 
   const sh = getScrollHelpers();
   if (sh?.requestScroll) {
     sh.requestScroll(next);
   } else {
     sc.scrollTop = next;
+  }
+
+  if (DEV) {
+    console.debug('[STEP scrollByPx] after', {
+      top: sc?.scrollTop,
+      next,
+    });
   }
 
   // Mirror to display if available

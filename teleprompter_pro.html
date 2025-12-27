@@ -63,7 +63,7 @@
         } else if (addv) {
           candidates = candidates.map(function(p){ return p + '?v=' + encodeURIComponent(addv); });
         } else if (isDev) {
-          candidates = candidates.map(function(p){ return p + '?v=dev'; });
+          candidates = candidates.map(function(p){ return p + '?v=dev&b=20251227a'; });
         }
         var preload = document.getElementById('tp-dist-preload');
         if (!preload && !isDev && candidates.length) {
