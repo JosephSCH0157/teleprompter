@@ -342,9 +342,6 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     const pxPerLine = getPxPerLine();
     const px = sign * lines * pxPerLine;
     if (!Number.isFinite(px) || px === 0) return;
-    if (isDevMode()) {
-      console.debug(`[STEP] pxPerLine=${pxPerLine} px=${px}`);
-    }
     scrollByPx(px);
   }
 
