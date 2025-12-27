@@ -79,6 +79,14 @@ function getScroller(): HTMLElement | null {
   );
 }
 
+function isWindowScroller(sc: HTMLElement): boolean {
+  return (
+    sc === document.scrollingElement ||
+    sc === document.documentElement ||
+    sc === document.body
+  );
+}
+
 function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
   try {
     const isWin =
@@ -124,24 +132,28 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
   const sh = getScrollHelpers();
   if (sh?.scrollToEl) {
     sh.scrollToEl(el, offsetPx);
-  } else {
-    const sc = getScroller();
-    const y = sc
-      ? elementTopRelativeTo(el, sc) - offsetPx
-      : (el.offsetTop || 0) - offsetPx;
-    if (!sc) {
-      scrollWriter.scrollTo(Math.max(0, y), { behavior: 'auto' });
-      return;
-    }
-    const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
-    const target = Math.max(0, Math.min(y, max));
-    try { scrollWriter.scrollTo(target, { behavior: 'auto' }); } catch {}
+    return;
   }
+
+  const sc = getScroller();
+  const y = sc
+    ? elementTopRelativeTo(el, sc) - offsetPx
+    : (el.offsetTop || 0) - offsetPx;
+  const targetY = Math.max(0, y);
+
+  if (!sc || isWindowScroller(sc)) {
+    scrollWriter.scrollTo(targetY, { behavior: 'auto' });
+    return;
+  }
+
+  const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+  const target = Math.max(0, Math.min(targetY, max));
+  sc.scrollTop = target;
 }
 
 function scrollByPx(px: number): void {
   const sc = getScroller();
-  if (!sc) {
+  if (!sc || isWindowScroller(sc)) {
     scrollWriter.scrollBy(px, { behavior: 'auto' });
     return;
   }
@@ -153,7 +165,7 @@ function scrollByPx(px: number): void {
   if (sh?.requestScroll) {
     sh.requestScroll(next);
   } else {
-    try { scrollWriter.scrollTo(next, { behavior: 'auto' }); } catch {}
+    sc.scrollTop = next;
   }
 
   // Mirror to display if available
@@ -342,11 +354,16 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
       safePreventDefault(e);
       stepLinesFn(+1, pageLinesN);
     } else if (key === 'Home') {
-      scrollWriter.scrollTo(0, { behavior: 'auto' });
+      safePreventDefault(e);
+      const sc = getScroller();
+      if (sc && !isWindowScroller(sc)) sc.scrollTop = 0;
+      else scrollWriter.scrollTo(0, { behavior: 'auto' });
     } else if (key === 'End') {
-      const v = getScroller();
-      const max = v ? Math.max(0, v.scrollHeight - v.clientHeight) : 0;
-      scrollWriter.scrollTo(max, { behavior: 'auto' });
+      safePreventDefault(e);
+      const sc = getScroller();
+      const max = sc ? Math.max(0, sc.scrollHeight - sc.clientHeight) : 0;
+      if (sc && !isWindowScroller(sc)) sc.scrollTop = max;
+      else scrollWriter.scrollTo(max, { behavior: 'auto' });
     }
   };
 
