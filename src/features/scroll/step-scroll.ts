@@ -330,10 +330,16 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     const markerPct = getMarkerPct(cfg);
     const offset = markerOffsetPx(markerHost, markerPct);
     const anchor = currentAnchor(root);
-    if (!anchor) return;
+    if (!anchor) {
+      stepLinesFn(sign, stepLinesN);
+      return;
+    }
 
-    const target =
-      nextSpokenParagraph(anchor, sign, root, spokenSel, noteSel) || anchor;
+    const target = nextSpokenParagraph(anchor, sign, root, spokenSel, noteSel);
+    if (!target || target === anchor) {
+      stepLinesFn(sign, stepLinesN);
+      return;
+    }
     scrollToEl(target, offset);
   }
 
