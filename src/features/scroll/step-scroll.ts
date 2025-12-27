@@ -152,48 +152,20 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
 }
 
 function scrollByPx(px: number): void {
-  console.debug('[STEP] scrollByPx HIT', { px });
   const sc = getScroller();
   if (!sc || isWindowScroller(sc)) {
     scrollWriter.scrollBy(px, { behavior: 'auto' });
     return;
   }
 
-  const DEV = (() => {
-    try {
-      return localStorage.getItem('tp_dev_mode') === '1';
-    } catch {
-      return false;
-    }
-  })();
-
   const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
   const next = Math.max(0, Math.min(sc.scrollTop + px, max));
-
-  if (DEV) {
-    console.debug('[STEP scrollByPx] before', {
-      px,
-      sc: sc?.id || sc?.tagName,
-      top: sc?.scrollTop,
-      h: sc?.scrollHeight,
-      ch: sc?.clientHeight,
-      isWin: sc ? isWindowScroller(sc) : null,
-      hasScrollTo: sc ? typeof (sc as any).scrollTo === 'function' : null,
-    });
-  }
 
   const sh = getScrollHelpers();
   if (sh?.requestScroll) {
     sh.requestScroll(next);
   } else {
     sc.scrollTop = next;
-  }
-
-  if (DEV) {
-    console.debug('[STEP scrollByPx] after', {
-      top: sc?.scrollTop,
-      next,
-    });
   }
 
   // Mirror to display if available
@@ -232,14 +204,73 @@ function markerOffsetPx(viewer: HTMLElement, markerPct: number): number {
   return Math.round(viewer.clientHeight * markerPct);
 }
 
-// Estimate a line height from the current anchor (fallback to viewer paragraph)
-function estimateLineHeight(el: HTMLElement | null): number {
-  const sample =
-    el || (document.querySelector('#viewer p') as HTMLElement | null);
-  const lh = sample
-    ? parseFloat(getComputedStyle(sample).lineHeight || '0')
-    : 0;
-  return Math.max(14, Math.floor(lh || 20));
+function readPxValue(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function readComputedFontSize(el: HTMLElement | null): number | null {
+  if (!el) return null;
+  try {
+    const fs = readPxValue(getComputedStyle(el).fontSize);
+    return fs && fs > 0 ? fs : null;
+  } catch {
+    return null;
+  }
+}
+
+function readComputedLineHeightPx(el: HTMLElement | null): number | null {
+  if (!el) return null;
+  try {
+    const lh = readPxValue(getComputedStyle(el).lineHeight);
+    return lh && lh > 0 ? lh : null;
+  } catch {
+    return null;
+  }
+}
+
+function getPxPerLine(): number {
+  const root = document.documentElement;
+  const rootStyle = root ? getComputedStyle(root) : null;
+  const viewer = getViewer();
+  const sample = viewer?.querySelector('p') as HTMLElement | null;
+
+  let fontSize =
+    readPxValue(rootStyle?.getPropertyValue('--tp-font-size')) ||
+    readComputedFontSize(sample) ||
+    readComputedFontSize(viewer) ||
+    readComputedFontSize(root);
+
+  if (!fontSize || fontSize <= 0) fontSize = 56;
+
+  let lineHeightMult =
+    readPxValue(rootStyle?.getPropertyValue('--tp-line-height')) || null;
+
+  if (!lineHeightMult || lineHeightMult <= 0) {
+    const lhPx =
+      readComputedLineHeightPx(sample) ||
+      readComputedLineHeightPx(viewer) ||
+      readComputedLineHeightPx(root);
+    if (lhPx && lhPx > 0) {
+      lineHeightMult = lhPx / fontSize;
+    }
+  }
+
+  if (!lineHeightMult || lineHeightMult <= 0) {
+    lineHeightMult = 1.4;
+  }
+
+  const pxPerLine = Math.round(Math.max(14, Math.min(fontSize * lineHeightMult, 300)));
+  return pxPerLine;
+}
+
+function isDevMode(): boolean {
+  try {
+    return localStorage.getItem('tp_dev_mode') === '1';
+  } catch {
+    return false;
+  }
 }
 
 // Block stepping: jump to next/prev "spoken" paragraph inside #script, skipping notes
@@ -269,7 +300,6 @@ function nextSpokenParagraph(
 }
 
 export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
-  console.debug('[STEP] installStepScroll loaded');
   const stepLinesN = cfg.stepLines ?? 1;
   const pageLinesN = cfg.pageLines ?? 4;
   const spokenSel =
@@ -298,7 +328,6 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     document.body;
 
   function stepLinesFn(sign: 1 | -1, count: number = stepLinesN): void {
-    console.debug('[STEP] stepLinesFn enter', { dir: sign, lines: count });
     const scroller = getScroller();
     if (!scroller) return;
 
@@ -309,13 +338,17 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
       // ignore
     }
 
-    const anchor = currentAnchor(root);
-    const lh = estimateLineHeight(anchor);
-    scrollByPx(sign * count * lh);
+    const lines = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : stepLinesN;
+    const pxPerLine = getPxPerLine();
+    const px = sign * lines * pxPerLine;
+    if (!Number.isFinite(px) || px === 0) return;
+    if (isDevMode()) {
+      console.debug(`[STEP] pxPerLine=${pxPerLine} px=${px}`);
+    }
+    scrollByPx(px);
   }
 
   function stepBlockFn(sign: 1 | -1): void {
-    console.debug('[STEP] stepBlockFn enter', { dir: sign });
     const scroller = getScroller();
     const markerHost = getViewer() || scroller;
     if (!scroller || !markerHost) return;
