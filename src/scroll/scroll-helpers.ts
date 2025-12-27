@@ -72,7 +72,7 @@ const clampGuard = (target: number, max: number): boolean => {
 };
 
 export function clampActive(): boolean {
-  try { return !!(window as any).__tpClampActive; } catch { return false; }
+  try { return (window as any).__tpClampActive === true; } catch { return false; }
 }
 
 export function setClampActive(on: boolean): void {
