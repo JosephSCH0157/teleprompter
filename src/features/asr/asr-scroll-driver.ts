@@ -3,6 +3,7 @@ import { normTokens } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
 import {
+  applyCanonicalScrollTop,
   describeElement,
   getFallbackScroller,
   getPrimaryScroller,
@@ -121,6 +122,8 @@ const DEFAULT_FORCED_MIN_CHARS = 24;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
+const DEFAULT_STALL_COMMIT_MS = 15000;
+const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
 const EVENT_RING_MAX = 50;
 const EVENT_DUMP_COUNT = 12;
 
@@ -140,6 +143,7 @@ function formatLogScore(value: number) {
 
 const guardLastAt = new Map<string, number>();
 const logLastAt = new Map<string, number>();
+let activeGuardCounts: Map<string, number> | null = null;
 const LOG_THROTTLE_MS = 500;
 
 function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: string, payload?: any) {
@@ -155,6 +159,13 @@ function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: str
 }
 
 function warnGuard(reason: string, parts: Array<string | number | null | undefined>) {
+  try {
+    if (activeGuardCounts) {
+      activeGuardCounts.set(reason, (activeGuardCounts.get(reason) || 0) + 1);
+    }
+  } catch {
+    // ignore
+  }
   const now = Date.now();
   const last = guardLastAt.get(reason) ?? 0;
   if (now - last < GUARD_THROTTLE_MS) return;
@@ -296,12 +307,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     ? Math.max(0, options.interimConfidenceScale ?? DEFAULT_INTERIM_SCALE)
     : DEFAULT_INTERIM_SCALE;
 
+  const sessionStartAt = Date.now();
   let threshold = resolveThreshold();
   let lastLineIndex = -1;
   let lastSeekTs = 0;
   let lastSameLineNudgeTs = 0;
   let lastMoveAt = 0;
   let lastIngestAt = 0;
+  let lastCommitAt = sessionStartAt;
+  let commitCount = 0;
+  let firstCommitIndex: number | null = null;
+  let lastCommitIndex: number | null = null;
+  let lastKnownScrollTop = 0;
+  let summaryEmitted = false;
+  let lastStallLogAt = 0;
   let lastForwardCommitAt = Date.now();
   let disposed = false;
   let desyncWarned = false;
@@ -411,6 +430,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const ambiguityFarLines = DEFAULT_AMBIGUITY_FAR_LINES;
   const strongHits: Array<{ ts: number; idx: number; conf: number; isFinal: boolean }> = [];
   const eventRing: AsrEventSnapshot[] = [];
+  const guardCounts = new Map<string, number>();
+
+  activeGuardCounts = guardCounts;
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -446,6 +468,121 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const recordEvent = (entry: AsrEventSnapshot) => {
     eventRing.push(entry);
     if (eventRing.length > EVENT_RING_MAX) eventRing.shift();
+  };
+
+  const summarizeGuardCounts = (limit = Number.POSITIVE_INFINITY) => {
+    const entries = Array.from(guardCounts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+    return entries.slice(0, limit);
+  };
+
+  const getTotalLines = () => {
+    try {
+      const root = getScriptRoot() || getPrimaryScroller();
+      const container = root || document;
+      const lines = container?.querySelectorAll?.('.line');
+      return lines ? lines.length : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
+    commitCount += 1;
+    if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
+      firstCommitIndex = Math.max(0, Math.floor(prevIndex));
+    }
+    if (Number.isFinite(nextIndex)) {
+      lastCommitIndex = Math.max(0, Math.floor(nextIndex));
+    }
+    lastCommitAt = now;
+  };
+
+  const emitSummary = (source: string) => {
+    if (summaryEmitted) return;
+    summaryEmitted = true;
+    const now = Date.now();
+    const durationMs = Math.max(0, now - sessionStartAt);
+    const scroller = getScroller();
+    const scrollerId = describeElement(scroller);
+    const scrollTop = scroller?.scrollTop ?? lastKnownScrollTop;
+    const totalLines = getTotalLines();
+    const firstIndex =
+      firstCommitIndex != null
+        ? firstCommitIndex
+        : (lastLineIndex >= 0 ? lastLineIndex : 0);
+    const lastIndex =
+      lastCommitIndex != null
+        ? lastCommitIndex
+        : (lastLineIndex >= 0 ? lastLineIndex : 0);
+    const linesAdvanced = Number.isFinite(firstIndex) && Number.isFinite(lastIndex)
+      ? lastIndex - firstIndex
+      : 0;
+    const denom = Math.max(1, totalLines - 1);
+    const traversedPct =
+      totalLines > 0 && Number.isFinite(lastIndex)
+        ? clamp(lastIndex / denom, 0, 1) * 100
+        : 0;
+    const guardSummary = summarizeGuardCounts();
+    const guardMap = guardSummary.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.reason] = entry.count;
+      return acc;
+    }, {});
+    const summary = {
+      mode: getScrollMode() || 'unknown',
+      durationMs,
+      commitCount,
+      firstIndex,
+      lastIndex,
+      linesAdvanced,
+      traversedPct: Number(traversedPct.toFixed(1)),
+      guardCounts: guardMap,
+      lastKnownScrollTop: Math.round(scrollTop || 0),
+      scrollerId,
+      source,
+    };
+    try { console.warn('ASR_SESSION_SUMMARY', summary); } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent('tp:asr:summary', { detail: summary }));
+    } catch {}
+    const warnUnsafe = commitCount === 0 || traversedPct < 5;
+    if (warnUnsafe) {
+      try {
+        (window as any).toast?.(
+          'ASR did not advance the script (0 commits). This run is not production-safe.',
+          { type: 'warning' },
+        );
+      } catch {}
+    } else {
+      try {
+        (window as any).toast?.(
+          `ASR session: ${commitCount} commits, ${linesAdvanced >= 0 ? '+' : ''}${linesAdvanced} lines (${summary.traversedPct}%)`,
+          { type: 'info' },
+        );
+      } catch {}
+    }
+  };
+
+  const summarizeGuardText = () => {
+    const top = summarizeGuardCounts(4);
+    if (!top.length) return 'none';
+    return top.map((entry) => `${entry.reason}:${entry.count}`).join(', ');
+  };
+
+  const maybeLogStall = (now: number) => {
+    if (now - lastCommitAt < DEFAULT_STALL_COMMIT_MS) return;
+    if (now - lastStallLogAt < DEFAULT_STALL_LOG_COOLDOWN_MS) return;
+    lastStallLogAt = now;
+    const reasonSummary = summarizeGuardText();
+    try {
+      console.warn('[ASR_STALLED] no commits in 15s', {
+        sinceMs: Math.round(now - lastCommitAt),
+        commitCount,
+        lastLineIndex,
+        reasonSummary,
+      });
+    } catch {}
   };
 
   const pruneForcedCommits = (now: number) => {
@@ -579,7 +716,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     move = Math.min(err, move, maxStepPx);
 
     if (move > 0) {
-      scroller.scrollTop = current + move;
+      const applied = applyCanonicalScrollTop(current + move, { scroller, reason: 'asr-tick' });
+      appliedTopPx = applied;
+      lastKnownScrollTop = applied;
       lastMoveAt = Date.now();
     }
     window.requestAnimationFrame(tickController);
@@ -743,7 +882,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           lastBackRecoverIdx = targetLine;
           lastBackRecoverHitAt = now;
           if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
-            scroller.scrollTop = currentTop + deltaPx;
+            const applied = applyCanonicalScrollTop(currentTop + deltaPx, {
+              scroller,
+              reason: 'asr-back-recovery',
+            });
+            lastKnownScrollTop = applied;
             lastMoveAt = Date.now();
             lastBackRecoverAt = now;
             backRecoverStreak = 0;
@@ -816,6 +959,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         forcedCommitTimes.push(now);
         pruneForcedCommits(now);
       }
+      noteCommit(prevLineIndex, targetLine, now);
       try { (window as any).currentIndex = lastLineIndex; } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         prevIndex: prevLineIndex,
@@ -913,6 +1057,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const now = Date.now();
     lastIngestAt = now;
     updateDebugState('ingest');
+    maybeLogStall(now);
     if (!isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars) {
       const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
       warnGuard('min_evidence', [
@@ -1347,7 +1492,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const scrollTopBefore = scroller?.scrollTop ?? 0;
         const targetTop = scroller ? resolveTargetTop(scroller, rawIdx) : null;
         if (scroller && targetTop != null) {
-          scroller.scrollTop = targetTop;
+          const applied = applyCanonicalScrollTop(targetTop, {
+            scroller,
+            reason: 'asr-behind-reanchor',
+          });
+          lastKnownScrollTop = applied;
           lastMoveAt = Date.now();
         }
         lastLineIndex = Math.max(0, Math.floor(rawIdx));
@@ -1355,6 +1504,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         lastForwardCommitAt = now;
         lastSeekTs = now;
         lastEvidenceAt = now;
+        noteCommit(cursorLine, lastLineIndex, now);
         behindStrongSince = 0;
         behindStrongCount = 0;
         lastBehindRecoveryAt = now;
@@ -1473,11 +1623,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const dispose = () => {
     if (disposed) return;
+    emitSummary('dispose');
     disposed = true;
     try {
       unsubscribe();
     } catch {
       // ignore
+    }
+    if (activeGuardCounts === guardCounts) {
+      activeGuardCounts = null;
     }
   };
 
@@ -1488,6 +1642,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastSameLineNudgeTs = 0;
     lastMoveAt = 0;
     lastIngestAt = 0;
+    lastCommitAt = Date.now();
+    lastStallLogAt = 0;
     matchAnchorIdx = lastLineIndex;
     targetTopPx = null;
     velPxPerSec = 0;

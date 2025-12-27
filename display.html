@@ -186,6 +186,16 @@
             const wrap = document.getElementById('wrap');
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
+            let lastScriptHash = '';
+            function hashScript(text) {
+              let h = 0;
+              const s = String(text || '');
+              for (let i = 0; i < s.length; i++) {
+                h = ((h << 5) - h) + s.charCodeAt(i);
+                h |= 0;
+              }
+              return String(h >>> 0);
+            }
             // Speakers legend (display window)
             const legendEl = document.getElementById('legend');
             const legendState = {
@@ -537,6 +547,9 @@
               const rawText = typeof payload === 'string'
                 ? payload
                 : String(payload?.rawText ?? payload?.text ?? '');
+              const nextHash = hashScript(rawText);
+              const shouldResetScroll = !!nextHash && nextHash !== lastScriptHash;
+              if (nextHash) lastScriptHash = nextHash;
 
               if (!rawText && payload && typeof payload !== 'string') {
                 try { console.warn('[display] ignored payload without rawText'); } catch {}
@@ -558,13 +571,17 @@
                 try { console.warn('[display] applyScriptSnapshot failed', err); } catch {}
               }
 
-              // 3) Ensure we start at the top (marker line)
-              try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+              // 3) Ensure we start at the top (marker line) only on true script loads
+              if (shouldResetScroll) {
+                try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+              }
               try {
                 requestAnimationFrame(() => {
                   applyMarkerOffset();
                   applyBottomPad();
-                  try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+                  if (shouldResetScroll) {
+                    try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+                  }
                 });
                 setTimeout(() => {
                   applyMarkerOffset();

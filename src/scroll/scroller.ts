@@ -1,3 +1,7 @@
+import { computeAnchorLineIndex } from './scroll-helpers';
+
+let displayScrollChannel: BroadcastChannel | null = null;
+
 export function getScrollContainer(): HTMLElement | null {
   try {
     return document.getElementById('scriptScrollContainer') as HTMLElement | null;
@@ -69,3 +73,75 @@ export function getPrimaryScroller(): HTMLElement | null {
   return getScrollContainer() || getViewerElement();
 }
 
+function isDevScrollSync(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__tpScrollDebug || w.__tpScrollSyncDebug) return true;
+    if (w.__TP_DEV || w.__TP_DEV1 || w.__tpDevMode) return true;
+    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.has('scrollDebug') || params.has('dev') || params.has('debug')) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+export function applyCanonicalScrollTop(
+  topPx: number,
+  opts: { scroller?: HTMLElement | null; reason?: string } = {},
+): number {
+  const scroller =
+    opts.scroller ||
+    resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
+  if (!scroller) return 0;
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  const target = Math.max(0, Math.min(Number(topPx) || 0, max));
+  try {
+    scroller.scrollTop = target;
+  } catch {
+    // ignore
+  }
+  try {
+    const send =
+      (window as any).sendToDisplay ||
+      (window as any).__tpSendToDisplay ||
+      (window as any).__tpDisplay?.sendToDisplay;
+    if (typeof send === 'function') {
+      const ratio = max > 0 ? target / max : 0;
+      const cursorLine = computeAnchorLineIndex(scroller);
+      send({
+        type: 'scroll',
+        top: target,
+        ratio,
+        anchorRatio: ratio,
+        cursorLine: cursorLine ?? undefined,
+      });
+    } else {
+      const displayWin = (window as any).__tpDisplayWindow as Window | null | undefined;
+      if (displayWin && !displayWin.closed && typeof displayWin.postMessage === 'function') {
+        displayWin.postMessage({ type: 'scroll', top: target }, '*');
+      } else if (typeof BroadcastChannel !== 'undefined') {
+        if (!displayScrollChannel) {
+          try { displayScrollChannel = new BroadcastChannel('tp_display'); } catch {}
+        }
+        try { displayScrollChannel?.postMessage({ type: 'scroll', top: target }); } catch {}
+      }
+    }
+  } catch {
+    // ignore display sync failures
+  }
+  if (isDevScrollSync()) {
+    try {
+      console.debug('[SCROLL_SYNC]', {
+        top: Math.round(target),
+        scroller: describeElement(scroller),
+        reason: opts.reason,
+      });
+    } catch {
+      // ignore
+    }
+  }
+  return target;
+}
