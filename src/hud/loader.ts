@@ -57,6 +57,22 @@ let didInit = false;
 let cachedHud: HudLoaderApi | null = null;
 let popupApi: HudPopupApi | null = null;
 
+function shouldAutoInitHud(): boolean {
+  try {
+    const qs = new URLSearchParams(String(location.search || ''));
+    if (qs.has('dev') || qs.get('dev') === '1') return true;
+    if (qs.has('dev1') || qs.get('dev1') === '1') return true;
+    if (qs.has('hud') || qs.get('hud') === '1') return true;
+    if (qs.has('scrollDebug') || qs.get('scrollDebug') === '1') return true;
+    if (/(#|&)dev\b/i.test(location.hash || '')) return true;
+    const w: any = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1) return true;
+    if (localStorage.getItem('tp_dev_mode') === '1') return true;
+    if (localStorage.getItem('tp_hud_prod') === '1') return true;
+  } catch {}
+  return false;
+}
+
 export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpStore ?? null }): HudLoaderApi {
   if (didInit && cachedHud) return cachedHud;
   const { store } = opts;
@@ -240,5 +256,5 @@ function destroy() {
 }
 
 try {
-  initHud();
+  if (shouldAutoInitHud()) initHud();
 } catch {}
