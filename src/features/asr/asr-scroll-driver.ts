@@ -152,6 +152,15 @@ const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
+const DEFAULT_LOW_SIM_FLOOR = 0.35;
+const DEFAULT_STUCK_RESYNC_WINDOW_MS = 2600;
+const DEFAULT_STUCK_RESYNC_LOOKAHEAD_BONUS = 80;
+const DEFAULT_STUCK_RESYNC_BACKTRACK_LINES = 1;
+const DEFAULT_STUCK_RELOCK_SIM = 0.55;
+const DEFAULT_DISTANCE_PENALTY_PER_LINE = 0.004;
+const DEFAULT_GENERIC_SIM_DELTA = 0.03;
+const DEFAULT_GENERIC_MIN_CANDIDATES = 3;
+const DEFAULT_GENERIC_MAX_TOKENS = 8;
 const EVENT_RING_MAX = 50;
 const EVENT_DUMP_COUNT = 12;
 
@@ -167,6 +176,11 @@ function formatLogSnippet(value: string, maxLen: number) {
 
 function formatLogScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : '?';
+}
+
+function applyDistancePenalty(score: number, distance: number, penaltyPerLine: number): number {
+  const penalty = Math.max(0, distance) * Math.max(0, penaltyPerLine);
+  return clamp(score - penalty, 0, 1);
 }
 
 function mergeEvidenceText(base: string, next: string): string {
@@ -399,6 +413,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let desyncWarned = false;
   let resyncUntil = 0;
   let resyncAnchorIdx: number | null = null;
+  let resyncReason: string | null = null;
+  let resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
+  let resyncBacktrackOverride = DEFAULT_MATCH_BACKTRACK_LINES;
   let matchAnchorIdx = -1;
   let targetTopPx: number | null = null;
   let appliedTopPx = 0;
@@ -465,7 +482,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const realignLookbackLines = DEFAULT_REALIGN_LOOKBACK_LINES;
   const realignSim = DEFAULT_REALIGN_SIM;
   const resyncWindowMs = DEFAULT_RESYNC_WINDOW_MS;
-  const resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
   const resyncCooldownMs = DEFAULT_RESYNC_COOLDOWN_MS;
   const strongBackSim = DEFAULT_STRONG_BACK_SIM;
   const backConfirmHits = DEFAULT_BACK_CONFIRM_HITS;
@@ -883,8 +899,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const resolveLookahead = (resyncActive: boolean) => {
     const base = matchLookaheadSteps[Math.min(lookaheadStepIndex, matchLookaheadSteps.length - 1)] || matchLookaheadLines;
-    const boosted = resyncActive ? base + resyncLookaheadBonus : base;
-    return clamp(boosted, matchLookaheadLines, matchLookaheadMax + resyncLookaheadBonus);
+    const bonus = resyncActive ? resyncLookaheadBonus : 0;
+    const boosted = resyncActive ? base + bonus : base;
+    return clamp(boosted, matchLookaheadLines, matchLookaheadMax + bonus);
   };
 
   const bumpLookahead = (reason: string, now: number) => {
@@ -903,6 +920,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     behindHitCount = 0;
     behindHitWindowStart = 0;
     logDev('lookahead reset', { reason, windowAhead: resolveLookahead(false) });
+  };
+
+  const resetResyncOverrides = () => {
+    resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
+    resyncBacktrackOverride = matchBacktrackLines;
+  };
+
+  const activateStuckResync = (anchorIdx: number, now: number) => {
+    resyncUntil = now + DEFAULT_STUCK_RESYNC_WINDOW_MS;
+    resyncAnchorIdx = Math.max(0, Math.floor(anchorIdx));
+    resyncReason = 'stuck';
+    resyncLookaheadBonus = DEFAULT_STUCK_RESYNC_LOOKAHEAD_BONUS;
+    resyncBacktrackOverride = Math.min(matchBacktrackLines, DEFAULT_STUCK_RESYNC_BACKTRACK_LINES);
+    logDev('stuck resync', {
+      anchor: resyncAnchorIdx,
+      windowAhead: resolveLookahead(true),
+      windowBack: resyncBacktrackOverride,
+    });
   };
 
   const noteBehindBlocked = (now: number) => {
@@ -1297,7 +1332,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bufferGrowing = bufferMs > 0 && bufferedText.length > prevBufferChars;
     const snippet = formatLogSnippet(bufferedText, 60);
     const fragmentTokenCount = normTokens(compacted).length;
-    const tokenCount = normTokens(bufferedText).length;
+    const tokens = normTokens(bufferedText);
+    const tokenCount = tokens.length;
     const evidenceChars = bufferedText.length;
     if (!bootLogged) {
       bootLogged = true;
@@ -1339,6 +1375,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastIngestAt = now;
     updateDebugState('ingest');
     maybeLogStall(now);
+    if (resyncReason === 'stuck' && resyncUntil && now >= resyncUntil) {
+      resyncReason = null;
+      resyncAnchorIdx = null;
+      resetResyncOverrides();
+    }
     const evidenceShort = !isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars;
     if (evidenceShort && !allowShortEvidence) {
       const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
@@ -1357,6 +1398,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     maybeBumpForStall(now);
     if (now - lastForwardCommitAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS && now - lastStuckDumpAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS) {
       lastStuckDumpAt = now;
+      clearEvidenceBuffer('stuck');
+      const anchorForStuck =
+        lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
+      activateStuckResync(anchorForStuck, now);
+      emitHudStatus('resync', 'Resyncing...');
       dumpRecentEvents('stuck');
       logThrottled('ASR_GUARD:stuck', 'warn', 'ASR_GUARD', {
         reason: 'stuck',
@@ -1374,7 +1420,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : Math.max(0, Math.floor(anchorIdx));
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
-    const windowBack = matchBacktrackLines;
+    const windowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
     const windowAhead = resolveLookahead(resyncActive);
     const match = matchBatch(bufferedText, !!isFinal, {
       currentIndex: effectiveAnchor,
@@ -1409,10 +1455,56 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
-    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
+    const rawBestSim = conf;
+    const rawScores = Array.isArray(match.topScores) ? match.topScores : [];
+    const rawScoreByIdx = new Map<number, number>();
+    rawScores.forEach((entry) => {
+      const idx = Number(entry.idx);
+      const score = Number(entry.score);
+      if (Number.isFinite(idx) && Number.isFinite(score)) {
+        rawScoreByIdx.set(idx, score);
+      }
+    });
+    let topScores = rawScores;
+    if (rawScores.length) {
+      const penalized = rawScores
+        .map((entry) => {
+          const idx = Number(entry.idx);
+          const score = Number(entry.score);
+          if (!Number.isFinite(idx) || !Number.isFinite(score)) return null;
+          const dist = Math.abs(idx - cursorLine);
+          return { idx, score: applyDistancePenalty(score, dist, DEFAULT_DISTANCE_PENALTY_PER_LINE) };
+        })
+        .filter(Boolean) as Array<{ idx: number; score: number }>;
+      penalized.sort((a, b) => b.score - a.score || a.idx - b.idx);
+      const best = penalized[0];
+      if (best) {
+        rawIdx = best.idx;
+        conf = best.score;
+      }
+      topScores = penalized;
+    } else {
+      const dist = Math.abs(rawIdx - cursorLine);
+      conf = applyDistancePenalty(conf, dist, DEFAULT_DISTANCE_PENALTY_PER_LINE);
+    }
+    const effectiveRawSim = rawScoreByIdx.get(rawIdx) ?? rawBestSim;
     let effectiveThreshold = requiredThreshold;
     const scrollerForMatch = getScroller();
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
+    const behindByLowSim =
+      rawIdx < cursorLine - windowBack ||
+      (rawIdx < cursorLine && effectiveRawSim < DEFAULT_LOW_SIM_FLOOR);
+    if (behindByLowSim) {
+      warnGuard('behind_noise', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `sim=${formatLogScore(effectiveRawSim)}`,
+        `floor=${formatLogScore(DEFAULT_LOW_SIM_FLOOR)}`,
+      ]);
+      emitHudStatus('behind_noise', 'Ignored: low-sim behind match');
+      return;
+    }
     logThrottled('ASR_MATCH', 'log', 'ASR_MATCH', {
       currentIndex: cursorLine,
       bestIndex: rawIdx,
@@ -1423,6 +1515,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       winAhead: windowAhead,
       final: isFinal ? 1 : 0,
     });
+    if (
+      resyncReason === 'stuck' &&
+      resyncActive &&
+      rawIdx >= cursorLine + minLineAdvance &&
+      conf >= DEFAULT_STUCK_RELOCK_SIM
+    ) {
+      resyncUntil = 0;
+      resyncAnchorIdx = null;
+      resyncReason = null;
+      resetResyncOverrides();
+      emitHudStatus('resync_lock', 'Resync locked');
+    }
     const shortFinal =
       isFinal && fragmentTokenCount >= shortFinalMinTokens && fragmentTokenCount <= shortFinalMaxTokens;
     const shortFinalRecent =
@@ -1669,9 +1773,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       nearMarker,
       isFinal,
     });
+    const genericCandidateCount = topScores.length
+      ? topScores.filter((entry) => Number(entry.score) >= conf - DEFAULT_GENERIC_SIM_DELTA).length
+      : 0;
+    const genericTranscript =
+      tokenCount > 0 &&
+      tokenCount <= DEFAULT_GENERIC_MAX_TOKENS &&
+      genericCandidateCount >= DEFAULT_GENERIC_MIN_CANDIDATES;
+    const effectiveConsistencyCount = consistencyCount + (genericTranscript ? 1 : 0);
     const consistencyState = allowShortEvidence
       ? evaluateConsistency(now, {
-        requiredCount: consistencyCount,
+        requiredCount: effectiveConsistencyCount,
         minSim: consistencyMinSim,
         maxDeltaLines: consistencyMaxDeltaLines,
         maxSpreadLines: consistencyMaxSpreadLines,
@@ -1689,7 +1801,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       };
     const catchupState = allowCatchup
       ? evaluateConsistency(now, {
-        requiredCount: consistencyCount,
+        requiredCount: effectiveConsistencyCount,
         minSim: catchupMinSim,
         maxDeltaLines: catchupMaxDeltaLines,
         maxSpreadLines: consistencyMaxSpreadLines,
@@ -1931,6 +2043,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (now - lastResyncAt >= resyncCooldownMs) {
         resyncUntil = now + resyncWindowMs;
         resyncAnchorIdx = Math.max(0, Math.floor(rawIdx - realignLookbackLines));
+        resyncReason = 'auto';
+        resetResyncOverrides();
         lastResyncAt = now;
         if (!desyncWarned) {
           desyncWarned = true;
@@ -2049,6 +2163,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastInterimBestIdx = -1;
     interimRepeatCount = 0;
     lastResyncAt = 0;
+    resyncUntil = 0;
+    resyncAnchorIdx = null;
+    resyncReason = null;
+    resetResyncOverrides();
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;
     behindStrongSince = 0;
