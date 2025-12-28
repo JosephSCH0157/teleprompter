@@ -49,6 +49,13 @@ type EvidenceEntry = {
   isFinal: boolean;
 };
 
+type LagSample = {
+  ts: number;
+  delta: number;
+  sim: number;
+  nearMarker: boolean;
+};
+
 type ConsistencyEntry = {
   ts: number;
   idx: number;
@@ -161,6 +168,12 @@ const DEFAULT_DISTANCE_PENALTY_PER_LINE = 0.004;
 const DEFAULT_GENERIC_SIM_DELTA = 0.03;
 const DEFAULT_GENERIC_MIN_CANDIDATES = 3;
 const DEFAULT_GENERIC_MAX_TOKENS = 8;
+const DEFAULT_LAG_DELTA_LINES = 12;
+const DEFAULT_LAG_WINDOW_MATCHES = 5;
+const DEFAULT_LAG_MIN_FORWARD_HITS = 3;
+const DEFAULT_CATCHUP_MODE_MAX_JUMP = 25;
+const DEFAULT_CATCHUP_MODE_MIN_SIM = 0.55;
+const DEFAULT_CATCHUP_MODE_DURATION_MS = 2500;
 const EVENT_RING_MAX = 50;
 const EVENT_DUMP_COUNT = 12;
 
@@ -535,6 +548,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let evidenceText = '';
   let lastBufferChars = 0;
   const consistencyEntries: ConsistencyEntry[] = [];
+  const lagSamples: LagSample[] = [];
+  let catchUpModeUntil = 0;
   const eventRing: AsrEventSnapshot[] = [];
   const guardCounts = new Map<string, number>();
 
@@ -730,6 +745,33 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const recordEvent = (entry: AsrEventSnapshot) => {
     eventRing.push(entry);
     if (eventRing.length > EVENT_RING_MAX) eventRing.shift();
+  };
+
+  const recordLagSample = (sample: LagSample) => {
+    lagSamples.push(sample);
+    if (lagSamples.length > DEFAULT_LAG_WINDOW_MATCHES) {
+      lagSamples.splice(0, lagSamples.length - DEFAULT_LAG_WINDOW_MATCHES);
+    }
+  };
+
+  const shouldTriggerCatchUp = () => {
+    if (!allowCatchup) return false;
+    const window = lagSamples.slice(-DEFAULT_LAG_WINDOW_MATCHES);
+    if (!window.length) return false;
+    const forwardHits = window.filter((entry) => entry.delta >= DEFAULT_LAG_DELTA_LINES && entry.nearMarker);
+    if (forwardHits.length < DEFAULT_LAG_MIN_FORWARD_HITS) return false;
+    const hasConfident = forwardHits.some((entry) => entry.sim >= DEFAULT_CATCHUP_MODE_MIN_SIM);
+    return hasConfident;
+  };
+
+  const activateCatchUpMode = (now: number, sample: LagSample) => {
+    const nextUntil = now + DEFAULT_CATCHUP_MODE_DURATION_MS;
+    if (nextUntil <= catchUpModeUntil) return;
+    catchUpModeUntil = nextUntil;
+    emitHudStatus(
+      'catchup',
+      `Catch-up: ON (Δ+${sample.delta}, sim ${formatLogScore(sample.sim)})`,
+    );
   };
 
   const silenceHandler = (event: Event) => {
@@ -1332,8 +1374,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bufferGrowing = bufferMs > 0 && bufferedText.length > prevBufferChars;
     const snippet = formatLogSnippet(bufferedText, 60);
     const fragmentTokenCount = normTokens(compacted).length;
-    const tokens = normTokens(bufferedText);
-    const tokenCount = tokens.length;
+    const tokenCount = normTokens(bufferedText).length;
     const evidenceChars = bufferedText.length;
     if (!bootLogged) {
       bootLogged = true;
@@ -1379,6 +1420,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       resyncReason = null;
       resyncAnchorIdx = null;
       resetResyncOverrides();
+    }
+    if (catchUpModeUntil && now >= catchUpModeUntil) {
+      catchUpModeUntil = 0;
     }
     const evidenceShort = !isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars;
     if (evidenceShort && !allowShortEvidence) {
@@ -1491,6 +1535,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let effectiveThreshold = requiredThreshold;
     const scrollerForMatch = getScroller();
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
+    const catchUpModeWasActive = catchUpModeUntil > now;
     const behindByLowSim =
       rawIdx < cursorLine - windowBack ||
       (rawIdx < cursorLine && effectiveRawSim < DEFAULT_LOW_SIM_FLOOR);
@@ -1503,6 +1548,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `floor=${formatLogScore(DEFAULT_LOW_SIM_FLOOR)}`,
       ]);
       emitHudStatus('behind_noise', 'Ignored: low-sim behind match');
+      return;
+    }
+    if (catchUpModeWasActive && rawIdx < cursorLine) {
+      warnGuard('catchup_ignore_behind', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `sim=${formatLogScore(effectiveRawSim)}`,
+      ]);
+      emitHudStatus('catchup', 'Catch-up: ON');
       return;
     }
     logThrottled('ASR_MATCH', 'log', 'ASR_MATCH', {
@@ -1765,6 +1820,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const nearMarker = consistencyRequireNearMarker
       ? Math.abs(rawIdx - markerIdx) <= Math.max(1, consistencyMarkerBandLines)
       : true;
+    if (allowCatchup) {
+      const lagSample: LagSample = {
+        ts: now,
+        delta: rawIdx - cursorLine,
+        sim: conf,
+        nearMarker,
+      };
+      recordLagSample(lagSample);
+      if (shouldTriggerCatchUp()) {
+        activateCatchUpMode(now, lagSample);
+      }
+    }
+    const catchUpModeActive = catchUpModeUntil > now;
     recordConsistencyEntry({
       ts: now,
       idx: rawIdx,
@@ -1780,7 +1848,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       tokenCount > 0 &&
       tokenCount <= DEFAULT_GENERIC_MAX_TOKENS &&
       genericCandidateCount >= DEFAULT_GENERIC_MIN_CANDIDATES;
-    const effectiveConsistencyCount = consistencyCount + (genericTranscript ? 1 : 0);
+    let effectiveConsistencyCount = consistencyCount + (genericTranscript ? 1 : 0);
+    if (catchUpModeActive && effectiveConsistencyCount > 0) {
+      effectiveConsistencyCount = Math.max(1, effectiveConsistencyCount - 1);
+    }
+    const catchupMaxDeltaLinesEffective = catchUpModeActive
+      ? Math.max(catchupMaxDeltaLines, DEFAULT_CATCHUP_MODE_MAX_JUMP)
+      : catchupMaxDeltaLines;
+    const catchupMinSimEffective = catchUpModeActive
+      ? Math.max(catchupMinSim, DEFAULT_CATCHUP_MODE_MIN_SIM)
+      : catchupMinSim;
     const consistencyState = allowShortEvidence
       ? evaluateConsistency(now, {
         requiredCount: effectiveConsistencyCount,
@@ -1802,8 +1879,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const catchupState = allowCatchup
       ? evaluateConsistency(now, {
         requiredCount: effectiveConsistencyCount,
-        minSim: catchupMinSim,
-        maxDeltaLines: catchupMaxDeltaLines,
+        minSim: catchupMinSimEffective,
+        maxDeltaLines: catchupMaxDeltaLinesEffective,
         maxSpreadLines: consistencyMaxSpreadLines,
         requireNearMarker: consistencyRequireNearMarker,
       })
@@ -1820,7 +1897,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let catchupCommit = false;
     if (allowCatchup && catchupState.ok && rawIdx > cursorLine) {
       const delta = rawIdx - cursorLine;
-      if (delta <= catchupMaxDeltaLines && conf >= catchupMinSim) {
+      if (delta <= catchupMaxDeltaLinesEffective && conf >= catchupMinSimEffective) {
         const cooldownRemaining = getForcedCooldownRemaining(now);
         if (!allowForced) {
           warnGuard('catchup_blocked', [
