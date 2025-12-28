@@ -226,6 +226,12 @@ function readAndMigrateScrollMode(): string {
     const canonical = localStorage.getItem(SCROLL_MODE_KEY);
     if (canonical) {
       const norm = normalizeScrollMode(canonical);
+      if (norm === 'asr') {
+        localStorage.setItem(SCROLL_MODE_KEY, 'hybrid');
+        try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch {}
+        legacyKeys.forEach((k) => { try { localStorage.removeItem(k); } catch {} });
+        return 'hybrid';
+      }
       if (norm !== canonical) localStorage.setItem(SCROLL_MODE_KEY, norm);
       // Clear legacy keys if canonical exists
       legacyKeys.forEach((k) => { try { localStorage.removeItem(k); } catch {} });
@@ -236,6 +242,12 @@ function readAndMigrateScrollMode(): string {
       const legacy = localStorage.getItem(k);
       if (legacy) {
         const norm = normalizeScrollMode(legacy);
+        if (norm === 'asr') {
+          localStorage.setItem(SCROLL_MODE_KEY, 'hybrid');
+          try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch {}
+          try { localStorage.removeItem(k); } catch {}
+          return 'hybrid';
+        }
         localStorage.setItem(SCROLL_MODE_KEY, norm);
         try { localStorage.removeItem(k); } catch {}
         return norm;
@@ -456,8 +468,11 @@ function buildInitialState(): AppStoreState {
         } catch {}
         return null;
       })();
+      if (fromPrefs === 'asr') {
+        try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch {}
+      }
       const migrated = readAndMigrateScrollMode();
-      const chosen = normalizeScrollMode(fromPrefs || migrated);
+      const chosen = normalizeScrollMode((fromPrefs === 'asr' ? null : fromPrefs) || migrated);
       try { localStorage.setItem(SCROLL_MODE_KEY, chosen); } catch {}
       return chosen;
     })(),

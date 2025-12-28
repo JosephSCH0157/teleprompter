@@ -22,7 +22,7 @@ export function wireMicToggle() {
     // Sync from global mic state events if available
     try {
       window.addEventListener('tp:mic:state', (e: any) => {
-        try { active = !!(e?.detail?.on); } catch {}
+        try { active = e?.detail?.state === 'capturing' || !!e?.detail?.capturing; } catch {}
         syncUI();
       });
     } catch {}

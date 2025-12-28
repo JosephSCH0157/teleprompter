@@ -23,7 +23,6 @@ function getMicSelect(): HTMLSelectElement | null {
 export function bindMicUI() {
   const micBtn = document.getElementById('micBtn') as HTMLButtonElement | null;
   const releaseBtn = document.getElementById('releaseMicBtn') as HTMLButtonElement | null;
-  const permChip = document.getElementById('permChip');
 
   if (micBtn) {
     micBtn.addEventListener('click', async () => {
@@ -34,7 +33,6 @@ export function bindMicUI() {
         if (api) {
           await api.requestMic(chosen);
         }
-        if (permChip) permChip.textContent = 'Mic: requested';
       } catch {}
     });
   }
@@ -44,7 +42,6 @@ export function bindMicUI() {
       try {
         const api = getMicApi();
         if (api) await api.releaseMic();
-        if (permChip) permChip.textContent = 'Mic: released';
       } catch {}
     });
   }

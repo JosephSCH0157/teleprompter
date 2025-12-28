@@ -23,6 +23,87 @@ let analyser: AnalyserNode | null = null;
 let audioCtx: AudioContext | null = null;
 let dbAnim: number | null = null;
 
+type MicPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
+type MicUiState = 'capturing' | 'granted' | 'blocked' | 'idle';
+
+function getPermissionState(): MicPermissionState {
+  try {
+    const known = (window as any).__tpMicPermState;
+    if (known === 'granted' || known === 'denied' || known === 'prompt') return known;
+  } catch {}
+  try {
+    if (appStore.get?.('micGranted')) return 'granted';
+  } catch {}
+  return 'unknown';
+}
+
+function hasLiveAudio(stream: MediaStream | null): boolean {
+  try {
+    if (!stream || typeof stream.getAudioTracks !== 'function') return false;
+    const tracks = stream.getAudioTracks();
+    return tracks.some((t) => t && t.readyState === 'live' && t.enabled);
+  } catch {
+    return false;
+  }
+}
+
+function getMicUiState(): { state: MicUiState; permission: MicPermissionState; capturing: boolean } {
+  const permission = getPermissionState();
+  const capturing = hasLiveAudio(audioStream) || (typeof mic?.isOpen === 'function' && mic.isOpen());
+  if (capturing) return { state: 'capturing', permission, capturing };
+  if (permission === 'granted') return { state: 'granted', permission, capturing };
+  if (permission === 'denied') return { state: 'blocked', permission, capturing };
+  return { state: 'idle', permission, capturing };
+}
+
+function updateMicPill(state: MicUiState): void {
+  try {
+    const pill = document.getElementById('permChip');
+    if (!pill) return;
+    const label =
+      state === 'capturing'
+        ? 'Mic: capturing'
+        : state === 'granted'
+          ? 'Mic: granted'
+          : state === 'blocked'
+            ? 'Mic: blocked'
+            : 'Mic: idle';
+    pill.textContent = label;
+    pill.dataset.micState = state;
+    pill.classList.toggle('mic-active', state === 'capturing');
+  } catch {
+    // ignore
+  }
+}
+
+export function emitMicState(): void {
+  try {
+    const detail = getMicUiState();
+    updateMicPill(detail.state);
+    window.dispatchEvent(new CustomEvent('tp:mic:state', { detail }));
+  } catch {
+    // ignore
+  }
+}
+
+async function syncPermissionState(): Promise<void> {
+  try {
+    if (!navigator.permissions?.query) return;
+    const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+    if (status.state === 'granted') {
+      try { (window as any).__tpMicPermState = 'granted'; } catch {}
+      try { appStore.set('micGranted', true); } catch {}
+    } else if (status.state === 'denied') {
+      try { (window as any).__tpMicPermState = 'denied'; } catch {}
+      try { appStore.set('micGranted', false); } catch {}
+    } else {
+      try { (window as any).__tpMicPermState = 'prompt'; } catch {}
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function buildDbBars(target: HTMLElement | null): HTMLElement[] {
   if (!target) return [];
   target.innerHTML = '';
@@ -141,13 +222,13 @@ async function requestMic(preferredId?: string): Promise<MediaStream> {
     audioStream = stream;
     mic.__lastStream = stream;
     try {
-      const permChip = document.getElementById('permChip');
-      if (permChip) permChip.textContent = 'Mic: allowed';
+      (window as any).__tpMicPermState = 'granted';
     } catch {
       // ignore
     }
     try { appStore.set('micGranted', true); } catch {}
     startDbMeter(stream);
+    emitMicState();
     try {
       if (chosenId) localStorage.setItem(DEVICE_KEY, chosenId);
     } catch {
@@ -157,11 +238,15 @@ async function requestMic(preferredId?: string): Promise<MediaStream> {
   } catch (err) {
     console.warn('requestMic failed', err);
     try {
-      const permChip = document.getElementById('permChip');
-      if (permChip) permChip.textContent = 'Mic: denied';
+      const name = String((err as any)?.name || '');
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        (window as any).__tpMicPermState = 'denied';
+        try { appStore.set('micGranted', false); } catch {}
+      }
     } catch {
       // ignore
     }
+    emitMicState();
     throw err;
   }
 }
@@ -174,13 +259,7 @@ function releaseMic(): void {
   }
   audioStream = null;
   mic.__lastStream = null;
-  try {
-    const permChip = document.getElementById('permChip');
-    if (permChip) permChip.textContent = 'Mic: released';
-  } catch {
-    // ignore
-  }
-  try { appStore.set('micGranted', false); } catch {}
+  emitMicState();
   stopDbMeter();
 }
 
@@ -253,10 +332,17 @@ if (typeof window !== 'undefined') {
 }
 
 try {
+  emitMicState();
+  void syncPermissionState();
+  appStore.subscribe?.('micGranted', () => emitMicState());
+} catch {}
+
+try {
   const delayedPopulate = (): void => {
     setTimeout(() => {
       try {
         void populateDevices();
+        emitMicState();
       } catch {
         // ignore
       }

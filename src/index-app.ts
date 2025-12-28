@@ -78,6 +78,7 @@ import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 import { showToast } from './ui/toasts';
 import { computeAsrReadiness, type AsrWarnReason, type AsrNotReadyReason } from './asr/readiness';
+import { getAsrState, onAsr } from './asr/store';
 import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
@@ -655,6 +656,89 @@ export type ApplyUiScrollModeOptions = {
 
 type GateReason = AsrNotReadyReason | 'MIC_ERROR';
 
+let asrGatePending = false;
+
+function hasActiveAsrProfile(): boolean {
+  try {
+    const s = getAsrState();
+    return !!(s.activeProfileId && (s.profiles as any)?.[s.activeProfileId]);
+  } catch {
+    return false;
+  }
+}
+
+function isMicCapturing(): boolean {
+  try {
+    const mic = (window as any).__tpMic;
+    const stream = mic?.__lastStream as MediaStream | undefined;
+    if (stream && typeof stream.getAudioTracks === 'function') {
+      const tracks = stream.getAudioTracks();
+      if (tracks.some((t) => t && t.readyState === 'live' && t.enabled)) return true;
+    }
+    if (typeof mic?.isOpen === 'function') return !!mic.isOpen();
+  } catch {}
+  return false;
+}
+
+async function ensureMicStream(): Promise<boolean> {
+  if (isMicCapturing()) return true;
+  try {
+    const mic = (window as any).__tpMic;
+    if (mic?.requestMic) {
+      await mic.requestMic();
+    }
+  } catch {}
+  return isMicCapturing();
+}
+
+function waitForActiveAsrProfile(timeoutMs = 60000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (hasActiveAsrProfile()) {
+      resolve(true);
+      return;
+    }
+    let done = false;
+    let tid: number | null = null;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      try { if (tid) window.clearTimeout(tid); } catch {}
+      try { unsub?.(); } catch {}
+      resolve(ok);
+    };
+    const unsub = onAsr((state) => {
+      try {
+        if (state?.activeProfileId && (state.profiles as any)?.[state.activeProfileId]) {
+          finish(true);
+        }
+      } catch {}
+    });
+    tid = window.setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+async function ensureAsrReadyForUser(): Promise<boolean> {
+  try {
+    const micRes = await ensureMicAccess();
+    if (!micRes.allowed) return false;
+  } catch {
+    return false;
+  }
+  if (!(await ensureMicStream())) return false;
+  if (hasActiveAsrProfile()) return true;
+  try {
+    const openAsr = (window as any).openSettingsToAsr;
+    if (typeof openAsr === 'function') {
+      openAsr(true);
+    } else if (typeof (window as any).startAsrWizard === 'function') {
+      await (window as any).startAsrWizard();
+    } else {
+      document.getElementById('settingsBtn')?.click();
+    }
+  } catch {}
+  return waitForActiveAsrProfile();
+}
+
 function applyUiScrollMode(
   mode: UiScrollMode,
   opts: ApplyUiScrollModeOptions = {},
@@ -686,7 +770,7 @@ function applyUiScrollMode(
       if (reason === 'NO_PERMISSION') {
         try { showToast('ASR blocked: microphone permission denied', { type: 'warning' }); } catch {}
       } else if (!asrRejectionToastShown) {
-        const toastMsg = "ASR needs mic access + calibration. Click 'Mic: Request' then 'Calibrate'.";
+        const toastMsg = 'ASR needs mic + calibration. Stayed in Hybrid.';
         try { showToast(toastMsg, { type: 'info' }); } catch {}
       }
       asrRejectionToastShown = true;
@@ -880,6 +964,14 @@ function initScrollModeUiSync(): void {
       updateFromStore(current);
       applyUiScrollMode(current, { skipStore: true, allowToast: false, source: 'boot' });
     } catch {}
+    try {
+      if (IS_CI_MODE) return;
+      const bootFallback = localStorage.getItem('tp_asr_boot_fallback') === '1';
+      if (bootFallback) {
+        localStorage.removeItem('tp_asr_boot_fallback');
+        showToast('Last time you used ASR. Select ASR to start mic + calibration.', { type: 'info' });
+      }
+    } catch {}
   };
 
   const applyOverlayMode = (mode: UiScrollMode) => {
@@ -988,10 +1080,33 @@ function initScrollModeUiSync(): void {
   }
 
   try {
+    const requestAsrModeSelection = async () => {
+      if (asrGatePending) return;
+      asrGatePending = true;
+      try {
+        const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+        const fallback = current === 'asr' ? 'hybrid' : current;
+        setScrollModeSelectValue(fallback);
+        const ok = await ensureAsrReadyForUser();
+        if (ok) {
+          applyUiScrollMode('asr', { source: 'user', allowToast: true });
+        } else {
+          applyUiScrollMode(fallback, { source: 'guard', allowToast: false });
+          showToast('ASR needs mic + calibration. Stayed in Hybrid.', { type: 'warning' });
+        }
+      } finally {
+        asrGatePending = false;
+      }
+    };
+
     document.addEventListener('change', (ev) => {
       const t = ev.target as HTMLSelectElement | null;
       if (!t || t.id !== SCROLL_MODE_SELECT_ID) return;
       const mode = normalizeUiScrollMode(t.value);
+      if (mode === 'asr') {
+        void requestAsrModeSelection();
+        return;
+      }
       applyUiScrollMode(mode, { source: 'user', allowToast: true });
       try {
         const persisted = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);

@@ -138,10 +138,10 @@ function initMicPillMenu() {
         const prof = profId ? (s.profiles as any)?.[profId] : null;
         if (prof) {
           pill.classList.add('is-active');
-          pill.textContent = prof.label || 'Mic active';
+          pill.dataset.asrProfile = String(prof.label || profId || 'profile');
         } else {
           pill.classList.remove('is-active');
-          pill.textContent = 'Mic';
+          try { delete pill.dataset.asrProfile; } catch {}
         }
       } catch {
         // ignore

@@ -429,6 +429,11 @@
         var val = String(raw || '').trim().toLowerCase();
         if (!val) return;
         if (val === 'manual') val = 'step';
+        if (val === 'asr') {
+          val = 'hybrid';
+          try { localStorage.setItem('scrollMode', val); } catch (e) {}
+          try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch (e) {}
+        }
         var ok = Array.prototype.some.call(el.options, function(o){ return o.value === val; });
         if (ok) el.value = val;
       } catch (e) {}

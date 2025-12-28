@@ -31,11 +31,14 @@ async function attemptGetUserMedia(): Promise<MicAccessResult> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stopStream(stream);
     try { appStore.set('micGranted', true as any); } catch {}
+    try { (window as any).__tpMicPermState = 'granted'; } catch {}
     return { allowed: true };
   } catch (err: any) {
     stopStream((err as any)?.stream || null);
     const name = (err && err.name) || '';
     if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      try { appStore.set('micGranted', false as any); } catch {}
+      try { (window as any).__tpMicPermState = 'denied'; } catch {}
       return { allowed: false, reason: 'NO_PERMISSION' };
     }
     return { allowed: false, reason: 'MIC_ERROR' };
@@ -45,10 +48,13 @@ async function attemptGetUserMedia(): Promise<MicAccessResult> {
 export async function ensureMicAccess(): Promise<MicAccessResult> {
   const state = await queryMicPermission();
   if (state === 'denied') {
+    try { appStore.set('micGranted', false as any); } catch {}
+    try { (window as any).__tpMicPermState = 'denied'; } catch {}
     return { allowed: false, reason: 'NO_PERMISSION' };
   }
   if (state === 'granted') {
     try { appStore.set('micGranted', true as any); } catch {}
+    try { (window as any).__tpMicPermState = 'granted'; } catch {}
     return { allowed: true };
   }
   return attemptGetUserMedia();
