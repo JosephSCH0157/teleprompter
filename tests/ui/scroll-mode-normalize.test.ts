@@ -18,9 +18,10 @@ describe('scroll mode migration and normalization', () => {
     localStorage.setItem('tp_scroll_mode', 'asr');
     jest.isolateModules(() => {
       const { appStore } = require('../../src/state/app-store') as { appStore: any };
-      expect(appStore.get('scrollMode')).toBe('asr');
-      expect(localStorage.getItem('scrollMode')).toBe('asr');
+      expect(appStore.get('scrollMode')).toBe('hybrid');
+      expect(localStorage.getItem('scrollMode')).toBe('hybrid');
       expect(localStorage.getItem('tp_scroll_mode')).toBeNull();
+      expect(localStorage.getItem('tp_asr_boot_fallback')).toBe('1');
     });
   });
 

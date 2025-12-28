@@ -624,6 +624,7 @@ type ScrollModeSource =
   | 'external'
   | 'hydrate'
   | 'fallback'
+  | 'guard'
   | 'legacy'
   | 'asr';
 
