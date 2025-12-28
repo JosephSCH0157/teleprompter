@@ -518,7 +518,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const evidenceEntries: EvidenceEntry[] = [];
   let evidenceText = '';
   let lastBufferChars = 0;
-  let lastBufferUpdateAt = 0;
   const consistencyEntries: ConsistencyEntry[] = [];
   const eventRing: AsrEventSnapshot[] = [];
   const guardCounts = new Map<string, number>();
@@ -558,7 +557,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       evidenceEntries.length = 0;
       evidenceText = '';
       lastBufferChars = 0;
-      lastBufferUpdateAt = 0;
       consistencyEntries.length = 0;
     }
   };
@@ -623,7 +621,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     evidenceEntries.length = 0;
     evidenceText = '';
     lastBufferChars = 0;
-    lastBufferUpdateAt = 0;
     consistencyEntries.length = 0;
     logDev('evidence buffer cleared', { reason });
     updateDebugState('buffer-clear');
@@ -636,7 +633,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     evidenceEntries.push({ ts: now, text: clean, isFinal });
     trimEvidenceEntries(now);
     evidenceText = buildEvidenceText(evidenceEntries);
-    lastBufferUpdateAt = now;
     lastBufferChars = evidenceText.length;
     return evidenceText;
   };
@@ -2069,7 +2065,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     evidenceEntries.length = 0;
     evidenceText = '';
     lastBufferChars = 0;
-    lastBufferUpdateAt = 0;
     consistencyEntries.length = 0;
     lastStuckDumpAt = 0;
     try { (window as any).currentIndex = lastLineIndex; } catch {}

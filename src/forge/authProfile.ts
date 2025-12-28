@@ -48,7 +48,9 @@ export type PersistedAppKey =
   | 'asr.threshold'
   | 'asr.endpointMs'
   | 'asrProfiles'
-  | 'asrActiveProfileId';
+  | 'asrActiveProfileId'
+  | 'asrTuningProfiles'
+  | 'asrTuningActiveProfileId';
 
 export type UserSettings = {
   app?: Partial<Record<PersistedAppKey, any>>;
