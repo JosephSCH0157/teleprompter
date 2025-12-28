@@ -259,6 +259,8 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
   'asr.endpointMs',
   'asrProfiles',
   'asrActiveProfileId',
+  'asrTuningProfiles',
+  'asrTuningActiveProfileId',
  'settingsTab',
 ];
 

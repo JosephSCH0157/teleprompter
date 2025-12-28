@@ -2,6 +2,7 @@ import { matchBatch } from '../../speech/orchestrator';
 import { normTokens } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
+import { ensureAsrTuningProfile, getActiveAsrTuningProfile, onAsrTuning, type AsrTuningProfile } from '../../asr/tuning-store';
 import {
   applyCanonicalScrollTop,
   describeElement,
@@ -29,6 +30,7 @@ type PendingMatch = {
   minThreshold?: number;
   forced?: boolean;
   forceReason?: string;
+  consistency?: { count: number; needed: number };
 };
 
 type AsrEventSnapshot = {
@@ -39,6 +41,32 @@ type AsrEventSnapshot = {
   sim: number;
   isFinal: boolean;
   snippet: string;
+};
+
+type EvidenceEntry = {
+  ts: number;
+  text: string;
+  isFinal: boolean;
+};
+
+type ConsistencyEntry = {
+  ts: number;
+  idx: number;
+  delta: number;
+  sim: number;
+  nearMarker: boolean;
+  isFinal: boolean;
+};
+
+type ConsistencyResult = {
+  ok: boolean;
+  count: number;
+  needed: number;
+  minDelta: number;
+  maxDelta: number;
+  minSim: number;
+  spread: number;
+  nearOk: boolean;
 };
 
 export interface AsrScrollDriver {
@@ -141,10 +169,45 @@ function formatLogScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : '?';
 }
 
+function mergeEvidenceText(base: string, next: string): string {
+  const a = String(base || '').trim();
+  const b = String(next || '').trim();
+  if (!a) return b;
+  if (!b) return a;
+  if (a.includes(b)) return a;
+  if (b.includes(a)) return b;
+  const aTokens = a.split(' ');
+  const bTokens = b.split(' ');
+  const max = Math.min(aTokens.length, bTokens.length);
+  let overlap = 0;
+  for (let n = max; n >= 1; n -= 1) {
+    const tail = aTokens.slice(-n).join(' ').toLowerCase();
+    const head = bTokens.slice(0, n).join(' ').toLowerCase();
+    if (tail === head) {
+      overlap = n;
+      break;
+    }
+  }
+  if (overlap > 0) {
+    return [...aTokens, ...bTokens.slice(overlap)].join(' ');
+  }
+  return `${a} ${b}`;
+}
+
+function buildEvidenceText(entries: EvidenceEntry[]): string {
+  let merged = '';
+  for (const entry of entries) {
+    merged = mergeEvidenceText(merged, entry.text);
+  }
+  return merged.replace(/\s+/g, ' ').trim();
+}
+
 const guardLastAt = new Map<string, number>();
 const logLastAt = new Map<string, number>();
+const guardStatusLastAt = new Map<string, number>();
 let activeGuardCounts: Map<string, number> | null = null;
 const LOG_THROTTLE_MS = 500;
+const HUD_STATUS_THROTTLE_MS = 500;
 
 function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: string, payload?: any) {
   const now = Date.now();
@@ -175,6 +238,16 @@ function warnGuard(reason: string, parts: Array<string | number | null | undefin
     console.warn(line.join(' '));
   } catch {}
   logThrottled(`ASR_GUARD:${reason}`, 'warn', 'ASR_GUARD', { reason, parts: parts.filter(Boolean) });
+}
+
+function emitHudStatus(key: string, text: string, detail?: Record<string, unknown>) {
+  const now = Date.now();
+  const last = guardStatusLastAt.get(key) ?? 0;
+  if (now - last < HUD_STATUS_THROTTLE_MS) return;
+  guardStatusLastAt.set(key, now);
+  const payload = { text, ts: now, ...detail };
+  try { window.dispatchEvent(new CustomEvent('tp:asr:guard', { detail: payload })); } catch {}
+  try { (window as any).__tpHud?.bus?.emit?.('asr:guard', payload); } catch {}
 }
 
 function resolveThreshold(): number {
@@ -419,26 +492,92 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const forcedCooldownMs = DEFAULT_FORCED_COOLDOWN_MS;
   const forcedMinTokens = DEFAULT_FORCED_MIN_TOKENS;
   const forcedMinChars = DEFAULT_FORCED_MIN_CHARS;
-  const minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
-  const minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
-  const interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
-  const interimStableRepeats = DEFAULT_INTERIM_STABLE_REPEATS;
+  let minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
+  let minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
+  let interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
+  let interimStableRepeats = DEFAULT_INTERIM_STABLE_REPEATS;
+  let bufferMs = 0;
+  let allowShortEvidence = false;
+  let allowCatchup = false;
+  let allowInterimCommit = true;
+  let consistencyCount = 0;
+  let consistencyWindowMs = 0;
+  let consistencyMaxDeltaLines = 0;
+  let consistencyMaxSpreadLines = 0;
+  let consistencySimSlack = 0;
+  let consistencyRequireNearMarker = true;
+  let consistencyMarkerBandLines = 0;
+  let catchupMaxDeltaLines = 0;
+  let catchupSimSlack = 0;
   const shortTokenMax = DEFAULT_SHORT_TOKEN_MAX;
   const shortTokenBoost = DEFAULT_SHORT_TOKEN_BOOST;
   const ambiguitySimDelta = DEFAULT_AMBIGUITY_SIM_DELTA;
   const ambiguityNearLines = DEFAULT_AMBIGUITY_NEAR_LINES;
   const ambiguityFarLines = DEFAULT_AMBIGUITY_FAR_LINES;
   const strongHits: Array<{ ts: number; idx: number; conf: number; isFinal: boolean }> = [];
+  const evidenceEntries: EvidenceEntry[] = [];
+  let evidenceText = '';
+  let lastBufferChars = 0;
+  let lastBufferUpdateAt = 0;
+  const consistencyEntries: ConsistencyEntry[] = [];
   const eventRing: AsrEventSnapshot[] = [];
   const guardCounts = new Map<string, number>();
 
   activeGuardCounts = guardCounts;
+
+  let activeTuningProfileId = '';
+  const applyTuningProfile = (profile: AsrTuningProfile) => {
+    if (!profile) return;
+    const prevProfileId = activeTuningProfileId;
+    const prevBufferMs = bufferMs;
+    activeTuningProfileId = String(profile.id || '');
+    minTokenCount = Number.isFinite(profile.minTokenCount) ? Math.max(0, profile.minTokenCount) : DEFAULT_MIN_TOKEN_COUNT;
+    minEvidenceChars = Number.isFinite(profile.minEvidenceChars) ? Math.max(0, profile.minEvidenceChars) : DEFAULT_MIN_EVIDENCE_CHARS;
+    interimHysteresisBonus = Number.isFinite(profile.interimHysteresisBonus)
+      ? Math.max(0, profile.interimHysteresisBonus)
+      : DEFAULT_INTERIM_HYSTERESIS_BONUS;
+    interimStableRepeats = Number.isFinite(profile.interimStableRepeats)
+      ? Math.max(1, profile.interimStableRepeats)
+      : DEFAULT_INTERIM_STABLE_REPEATS;
+    bufferMs = Number.isFinite(profile.bufferMs) ? Math.max(0, profile.bufferMs) : 0;
+    allowShortEvidence = !!profile.allowShortEvidence;
+    allowCatchup = !!profile.allowCatchup;
+    allowInterimCommit = profile.allowInterimCommit !== false;
+    consistencyCount = Number.isFinite(profile.consistencyCount) ? Math.max(0, profile.consistencyCount) : 0;
+    consistencyWindowMs = Number.isFinite(profile.consistencyWindowMs) ? Math.max(0, profile.consistencyWindowMs) : 0;
+    consistencyMaxDeltaLines = Number.isFinite(profile.consistencyMaxDeltaLines) ? Math.max(0, profile.consistencyMaxDeltaLines) : 0;
+    consistencyMaxSpreadLines = Number.isFinite(profile.consistencyMaxSpreadLines) ? Math.max(0, profile.consistencyMaxSpreadLines) : 0;
+    consistencySimSlack = Number.isFinite(profile.consistencySimSlack) ? Math.max(0, profile.consistencySimSlack) : 0;
+    consistencyRequireNearMarker = profile.consistencyRequireNearMarker !== false;
+    consistencyMarkerBandLines = Number.isFinite(profile.consistencyMarkerBandLines)
+      ? Math.max(0, profile.consistencyMarkerBandLines)
+      : 0;
+    catchupMaxDeltaLines = Number.isFinite(profile.catchupMaxDeltaLines) ? Math.max(0, profile.catchupMaxDeltaLines) : 0;
+    catchupSimSlack = Number.isFinite(profile.catchupSimSlack) ? Math.max(0, profile.catchupSimSlack) : 0;
+    if (prevProfileId !== activeTuningProfileId || prevBufferMs !== bufferMs) {
+      evidenceEntries.length = 0;
+      evidenceText = '';
+      lastBufferChars = 0;
+      lastBufferUpdateAt = 0;
+      consistencyEntries.length = 0;
+    }
+  };
+
+  try {
+    const hasScript = !!(getScriptRoot() || document.querySelector('.line'));
+    if (hasScript) ensureAsrTuningProfile('reading');
+  } catch {}
+  applyTuningProfile(getActiveAsrTuningProfile());
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
     if (typeof state.threshold === 'number') {
       threshold = clamp(state.threshold, 0, 1);
     }
+  });
+
+  const unsubscribeTuning = onAsrTuning(() => {
+    applyTuningProfile(getActiveAsrTuningProfile());
   });
 
   const syncMatchAnchor = (idx: number) => {
@@ -461,14 +600,139 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetTopPx,
         appliedTopPx,
         lastMoveAt,
+        tuningProfileId: activeTuningProfileId,
+        bufferChars: evidenceText.length,
+        bufferEntries: evidenceEntries.length,
       };
     } catch {}
+  };
+
+  const trimEvidenceEntries = (now: number) => {
+    if (!bufferMs || bufferMs <= 0) {
+      evidenceEntries.length = 0;
+      evidenceText = '';
+      return;
+    }
+    while (evidenceEntries.length && evidenceEntries[0].ts < now - bufferMs) {
+      evidenceEntries.shift();
+    }
+  };
+
+  const clearEvidenceBuffer = (reason: string) => {
+    if (!evidenceEntries.length && !evidenceText) return;
+    evidenceEntries.length = 0;
+    evidenceText = '';
+    lastBufferChars = 0;
+    lastBufferUpdateAt = 0;
+    consistencyEntries.length = 0;
+    logDev('evidence buffer cleared', { reason });
+    updateDebugState('buffer-clear');
+  };
+
+  const updateEvidenceBuffer = (text: string, isFinal: boolean, now: number) => {
+    if (!bufferMs || bufferMs <= 0) return text;
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return evidenceText;
+    evidenceEntries.push({ ts: now, text: clean, isFinal });
+    trimEvidenceEntries(now);
+    evidenceText = buildEvidenceText(evidenceEntries);
+    lastBufferUpdateAt = now;
+    lastBufferChars = evidenceText.length;
+    return evidenceText;
+  };
+
+  const trimConsistencyEntries = (now: number) => {
+    if (!consistencyWindowMs || consistencyWindowMs <= 0) {
+      consistencyEntries.length = 0;
+      return;
+    }
+    while (consistencyEntries.length && consistencyEntries[0].ts < now - consistencyWindowMs) {
+      consistencyEntries.shift();
+    }
+  };
+
+  const recordConsistencyEntry = (entry: ConsistencyEntry) => {
+    consistencyEntries.push(entry);
+    trimConsistencyEntries(entry.ts);
+    if (consistencyEntries.length > 24) {
+      consistencyEntries.splice(0, consistencyEntries.length - 24);
+    }
+  };
+
+  const evaluateConsistency = (
+    now: number,
+    opts: {
+      requiredCount: number;
+      minSim: number;
+      maxDeltaLines: number;
+      maxSpreadLines: number;
+      requireNearMarker: boolean;
+    },
+  ): ConsistencyResult => {
+    trimConsistencyEntries(now);
+    const needed = Math.max(0, opts.requiredCount);
+    const emptyResult: ConsistencyResult = {
+      ok: false,
+      count: consistencyEntries.length,
+      needed,
+      minDelta: 0,
+      maxDelta: 0,
+      minSim: 0,
+      spread: 0,
+      nearOk: false,
+    };
+    if (!needed || consistencyEntries.length < needed) {
+      return {
+        ...emptyResult,
+        count: consistencyEntries.length,
+        needed,
+      };
+    }
+    const tail = consistencyEntries.slice(-needed);
+    const deltas = tail.map((e) => e.delta);
+    const idxs = tail.map((e) => e.idx);
+    const sims = tail.map((e) => e.sim);
+    const minDelta = Math.min(...deltas);
+    const maxDelta = Math.max(...deltas);
+    const spread = Math.max(...idxs) - Math.min(...idxs);
+    const minSim = Math.min(...sims);
+    const nearOk = !opts.requireNearMarker || tail.every((e) => e.nearMarker);
+    const ok =
+      nearOk &&
+      minDelta >= minLineAdvance &&
+      maxDelta <= opts.maxDeltaLines &&
+      spread <= opts.maxSpreadLines &&
+      minSim >= opts.minSim;
+    return {
+      ok,
+      count: tail.length,
+      needed,
+      minDelta,
+      maxDelta,
+      minSim,
+      spread,
+      nearOk,
+    };
   };
 
   const recordEvent = (entry: AsrEventSnapshot) => {
     eventRing.push(entry);
     if (eventRing.length > EVENT_RING_MAX) eventRing.shift();
   };
+
+  const silenceHandler = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    if (detail && detail.silent) {
+      clearEvidenceBuffer('silence');
+    }
+  };
+
+  const resetHandler = () => {
+    clearEvidenceBuffer('script-reset');
+  };
+
+  try { window.addEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
+  try { window.addEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
 
   const summarizeGuardCounts = (limit = Number.POSITIVE_INFINITY) => {
     const entries = Array.from(guardCounts.entries())
@@ -748,7 +1012,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       const now = Date.now();
       const jumpCap = getMaxTargetJumpPx();
-      const { line, conf, isFinal, hasEvidence, snippet, minThreshold, forced, forceReason } = pending;
+      const { line, conf, isFinal, hasEvidence, snippet, minThreshold, forced, forceReason, consistency } = pending;
       const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
       const effectiveThreshold = Number.isFinite(minThreshold)
         ? clamp(minThreshold as number, 0, 1)
@@ -763,6 +1027,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `need=${formatLogScore(effectiveThreshold)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
+        emitHudStatus(
+          'low_sim',
+          `Blocked: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
+        );
         return;
       }
 
@@ -903,6 +1171,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `sim=${formatLogScore(conf)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
+        emitHudStatus('behind_blocked', 'Behind match ignored');
         return;
       }
 
@@ -915,6 +1184,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `final=${isFinal ? 1 : 0}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
+        if (consistency && consistency.needed > 0 && consistency.count < consistency.needed) {
+          emitHudStatus(
+            'confirmations',
+            `Waiting: confirmations ${consistency.count}/${consistency.needed}`,
+          );
+        } else {
+          emitHudStatus('no_evidence', 'Blocked: min evidence');
+        }
         return;
       }
 
@@ -1004,6 +1281,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ].filter(Boolean).join(' ');
         console.log(commitLine);
       } catch {}
+      if (forced && forceReason === 'catchup') {
+        emitHudStatus('catchup_commit', `Catch-up commit +${targetLine - prevLineIndex}`);
+      }
+      clearEvidenceBuffer('commit');
       logDev('target update', { line: targetLine, conf, pxDelta: deltaPx, targetTop: targetTopPx });
       updateDebugState('target-update');
     });
@@ -1014,7 +1295,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
-    const snippet = formatLogSnippet(compacted, 60);
+    const now = Date.now();
+    const prevBufferChars = lastBufferChars;
+    const bufferedText = updateEvidenceBuffer(compacted, isFinal, now);
+    const bufferGrowing = bufferMs > 0 && bufferedText.length > prevBufferChars;
+    const snippet = formatLogSnippet(bufferedText, 60);
+    const fragmentTokenCount = normTokens(compacted).length;
+    const tokenCount = normTokens(bufferedText).length;
+    const evidenceChars = bufferedText.length;
     if (!bootLogged) {
       bootLogged = true;
       try {
@@ -1052,13 +1340,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ].join(' '));
       } catch {}
     }
-    const tokenCount = normTokens(compacted).length;
-    const evidenceChars = compacted.length;
-    const now = Date.now();
     lastIngestAt = now;
     updateDebugState('ingest');
     maybeLogStall(now);
-    if (!isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars) {
+    const evidenceShort = !isFinal && tokenCount < minTokenCount && evidenceChars < minEvidenceChars;
+    if (evidenceShort && !allowShortEvidence) {
       const cursor = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
       warnGuard('min_evidence', [
         `cursor=${cursor}`,
@@ -1067,6 +1353,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `final=${isFinal ? 1 : 0}`,
         snippet ? `clue="${snippet}"` : '',
       ]);
+      emitHudStatus('min_evidence', `Blocked: min evidence (tokens=${tokenCount})`);
       logDev('short utterance ignored', { tokenCount, evidenceChars, isFinal });
       return;
     }
@@ -1093,7 +1380,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const windowBack = matchBacktrackLines;
     const windowAhead = resolveLookahead(resyncActive);
-    const match = matchBatch(compacted, !!isFinal, {
+    const match = matchBatch(bufferedText, !!isFinal, {
       currentIndex: effectiveAnchor,
       windowBack,
       windowAhead,
@@ -1112,6 +1399,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
     const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
     const interimHighThreshold = clamp(baseThreshold + shortBoost + interimHysteresisBonus, 0, 1);
+    const consistencyMinSim = clamp(requiredThreshold - consistencySimSlack, 0, 1);
+    const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     if (!Number.isFinite(rawIdx)) {
@@ -1139,7 +1428,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       final: isFinal ? 1 : 0,
     });
     const shortFinal =
-      isFinal && tokenCount >= shortFinalMinTokens && tokenCount <= shortFinalMaxTokens;
+      isFinal && fragmentTokenCount >= shortFinalMinTokens && fragmentTokenCount <= shortFinalMaxTokens;
     const shortFinalRecent =
       shortFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= shortFinalWindowMs;
     const shortFinalNeed = shortFinalRecent
@@ -1372,9 +1661,92 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logDev('forward bias', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
       }
     }
+    const markerIdx = consistencyRequireNearMarker ? computeMarkerLineIndex(scrollerForMatch) : -1;
+    const nearMarker = consistencyRequireNearMarker
+      ? Math.abs(rawIdx - markerIdx) <= Math.max(1, consistencyMarkerBandLines)
+      : true;
+    recordConsistencyEntry({
+      ts: now,
+      idx: rawIdx,
+      delta: rawIdx - cursorLine,
+      sim: conf,
+      nearMarker,
+      isFinal,
+    });
+    const consistencyState = allowShortEvidence
+      ? evaluateConsistency(now, {
+        requiredCount: consistencyCount,
+        minSim: consistencyMinSim,
+        maxDeltaLines: consistencyMaxDeltaLines,
+        maxSpreadLines: consistencyMaxSpreadLines,
+        requireNearMarker: consistencyRequireNearMarker,
+      })
+      : {
+        ok: false,
+        count: 0,
+        needed: 0,
+        minDelta: 0,
+        maxDelta: 0,
+        minSim: 0,
+        spread: 0,
+        nearOk: false,
+      };
+    const catchupState = allowCatchup
+      ? evaluateConsistency(now, {
+        requiredCount: consistencyCount,
+        minSim: catchupMinSim,
+        maxDeltaLines: catchupMaxDeltaLines,
+        maxSpreadLines: consistencyMaxSpreadLines,
+        requireNearMarker: consistencyRequireNearMarker,
+      })
+      : {
+        ok: false,
+        count: 0,
+        needed: 0,
+        minDelta: 0,
+        maxDelta: 0,
+        minSim: 0,
+        spread: 0,
+        nearOk: false,
+      };
+    let catchupCommit = false;
+    if (allowCatchup && catchupState.ok && rawIdx > cursorLine) {
+      const delta = rawIdx - cursorLine;
+      if (delta <= catchupMaxDeltaLines && conf >= catchupMinSim) {
+        const cooldownRemaining = getForcedCooldownRemaining(now);
+        if (!allowForced) {
+          warnGuard('catchup_blocked', [
+            `current=${cursorLine}`,
+            `best=${rawIdx}`,
+            `delta=${delta}`,
+          ]);
+        } else if (cooldownRemaining > 0) {
+          logForcedDeny('cooldown', [
+            `cooldownMs=${cooldownRemaining}`,
+          ]);
+        } else {
+          const forcedCount = getForcedCount(now);
+          if (forcedCount >= forcedRateMax) {
+            forcedCooldownUntil = now + forcedCooldownMs;
+            logForcedThrottle(forcedCount);
+            logForcedDeny('throttle', [
+              `count=${forcedCount}`,
+              `windowMs=${forcedRateWindowMs}`,
+              `cooldownMs=${forcedCooldownMs}`,
+            ]);
+          } else {
+            catchupCommit = true;
+            forceReason = forceReason || 'catchup';
+            effectiveThreshold = Math.min(effectiveThreshold, catchupMinSim);
+          }
+        }
+      }
+    }
     let interimEligible = true;
     if (!isFinal) {
-      if (conf < interimHighThreshold) {
+      if (!allowInterimCommit) {
+        interimEligible = false;
+      } else if (conf < interimHighThreshold && !(consistencyState.ok || catchupState.ok)) {
         lastInterimBestIdx = -1;
         interimRepeatCount = 0;
         interimEligible = false;
@@ -1387,13 +1759,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           snippet ? `clue="${snippet}"` : '',
         ]);
       } else {
+        let effectiveInterimRepeats = interimStableRepeats;
+        if (allowInterimCommit && bufferGrowing && (consistencyState.ok || catchupState.ok)) {
+          effectiveInterimRepeats = Math.max(1, interimStableRepeats - 1);
+        } else if (allowInterimCommit && evidenceShort && !consistencyState.ok) {
+          effectiveInterimRepeats = interimStableRepeats + 1;
+        }
         if (rawIdx === lastInterimBestIdx) {
           interimRepeatCount += 1;
         } else {
           lastInterimBestIdx = rawIdx;
           interimRepeatCount = 1;
         }
-        interimEligible = interimRepeatCount >= interimStableRepeats;
+        interimEligible =
+          interimRepeatCount >= effectiveInterimRepeats || consistencyState.ok || catchupState.ok;
         if (!interimEligible) {
           warnGuard('interim_unstable', [
             `current=${cursorLine}`,
@@ -1401,7 +1780,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `delta=${rawIdx - cursorLine}`,
             `sim=${formatLogScore(conf)}`,
             `repeats=${interimRepeatCount}`,
-            `need=${interimStableRepeats}`,
+            `need=${effectiveInterimRepeats}`,
             snippet ? `clue="${snippet}"` : '',
           ]);
         }
@@ -1459,6 +1838,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `sim=${formatLogScore(conf)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
+        emitHudStatus('behind_blocked', 'Behind match ignored');
         logDev('behind match ignored', { line: rawIdx, conf, cursorLine, isFinal, reason: 'interim' });
         return;
       }
@@ -1536,6 +1916,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `strong=${strongBehind ? 1 : 0}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
+        emitHudStatus('behind_blocked', 'Behind match ignored');
         logDev('behind match ignored', {
           line: rawIdx,
           conf,
@@ -1572,6 +1953,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `need=${formatLogScore(effectiveThreshold)}`,
         snippet ? `clue="${snippet}"` : '',
       ]);
+      emitHudStatus(
+        'low_sim_ingest',
+        `Blocked: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
+      );
       return;
     }
     if (tokenCount === 0) {
@@ -1580,6 +1965,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `best=${rawIdx}`,
         `tokens=${tokenCount}`,
       ]);
+      emitHudStatus('min_evidence_zero', 'Blocked: min evidence (tokens=0)');
       return;
     }
 
@@ -1603,11 +1989,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         hasPairEvidence = true;
       }
     }
-    const hasEvidence = outrunCommit
+    const consistencyOk = allowShortEvidence && consistencyState.ok;
+    const hasEvidence = outrunCommit || catchupCommit
       ? true
       : (isFinal
-        ? (hasPairEvidence || rawIdx >= cursorLine + finalEvidenceLeadLines)
-        : (hasPairEvidence && interimEligible));
+        ? (hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines)
+        : ((hasPairEvidence || consistencyOk) && interimEligible));
     pendingMatch = {
       line: Math.max(0, Math.floor(rawIdx)),
       conf,
@@ -1615,8 +2002,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       hasEvidence,
       snippet,
       minThreshold: effectiveThreshold < requiredThreshold ? effectiveThreshold : undefined,
-      forced: outrunCommit || shortFinalForced,
+      forced: outrunCommit || shortFinalForced || catchupCommit,
       forceReason,
+      consistency: { count: consistencyState.count, needed: consistencyState.needed },
     };
     schedulePending();
   };
@@ -1630,6 +2018,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     } catch {
       // ignore
     }
+    try {
+      unsubscribeTuning();
+    } catch {
+      // ignore
+    }
+    try { window.removeEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
+    try { window.removeEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
     if (activeGuardCounts === guardCounts) {
       activeGuardCounts = null;
     }
@@ -1671,6 +2066,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     pendingMatch = null;
     strongHits.length = 0;
+    evidenceEntries.length = 0;
+    evidenceText = '';
+    lastBufferChars = 0;
+    lastBufferUpdateAt = 0;
+    consistencyEntries.length = 0;
     lastStuckDumpAt = 0;
     try { (window as any).currentIndex = lastLineIndex; } catch {}
     updateDebugState('sync-index');

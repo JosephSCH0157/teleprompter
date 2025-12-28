@@ -24,6 +24,8 @@ const ASR_THRESHOLD_KEY = 'tp_asr_threshold_v1';
 const ASR_ENDPOINT_KEY = 'tp_asr_endpoint_v1';
 const ASR_PROFILES_KEY = 'tp_asr_profiles_v1';
 const ASR_ACTIVE_PROFILE_KEY = 'tp_asr_active_profile_v1';
+const ASR_TUNING_PROFILES_KEY = 'tp_asr_tuning_profiles_v1';
+const ASR_TUNING_ACTIVE_PROFILE_KEY = 'tp_asr_tuning_active_profile_v1';
 
 // Scroll router keys
 const SCROLL_MODE_KEY = 'scrollMode';
@@ -85,6 +87,8 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   'asr.filterFillers': ASR_FILTER_KEY,
   asrProfiles: ASR_PROFILES_KEY,
   asrActiveProfileId: ASR_ACTIVE_PROFILE_KEY,
+  asrTuningProfiles: ASR_TUNING_PROFILES_KEY,
+  asrTuningActiveProfileId: ASR_TUNING_ACTIVE_PROFILE_KEY,
 };
 
 function parseJson<T>(value: string | null): T | null {
@@ -140,6 +144,8 @@ export type AppStoreState = {
   'asr.endpointMs': number;
   asrProfiles: Record<string, unknown>;
   asrActiveProfileId: string | null;
+  asrTuningProfiles: Record<string, unknown>;
+  asrTuningActiveProfileId: string | null;
   asrLastAppliedAt: number;
   asrLastAppliedSummary: Record<string, unknown>;
   asrLastApplyOk: boolean;
@@ -416,6 +422,21 @@ function buildInitialState(): AppStoreState {
       } catch {}
       return null;
     })(),
+    asrTuningProfiles: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_TUNING_PROFILES_KEY);
+        const parsed = parseJson<Record<string, unknown>>(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {}
+      return {};
+    })(),
+    asrTuningActiveProfileId: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_TUNING_ACTIVE_PROFILE_KEY);
+        if (raw) return raw;
+      } catch {}
+      return null;
+    })(),
     asrLastAppliedAt: 0,
     asrLastAppliedSummary: {},
     asrLastApplyOk: false,
@@ -615,6 +636,12 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   }
   if (state.asrActiveProfileId && typeof state.asrActiveProfileId !== 'string') {
     state.asrActiveProfileId = null;
+  }
+  if (!state.asrTuningProfiles || typeof state.asrTuningProfiles !== 'object') {
+    state.asrTuningProfiles = {};
+  }
+  if (state.asrTuningActiveProfileId && typeof state.asrTuningActiveProfileId !== 'string') {
+    state.asrTuningActiveProfileId = null;
   }
   if (typeof state.asrLastAppliedAt !== 'number') {
     state.asrLastAppliedAt = 0;

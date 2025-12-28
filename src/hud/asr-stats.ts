@@ -1,5 +1,6 @@
 import type { AppStore } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
+import { getActiveAsrTuningProfile } from '../asr/tuning-store';
 
 export interface AsrStatsHudOptions {
   root?: HTMLElement | null;
@@ -13,6 +14,7 @@ export interface AsrStatsHudApi {
 
 const HUD_ID = 'asrStatsHud';
 const TEXT_ID = 'asrStatsText';
+const META_ID = 'asrStatsMeta';
 
 function isDev(): boolean {
   try {
@@ -64,6 +66,11 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     span.textContent = '…';
     panel.appendChild(span);
 
+    const meta = document.createElement('div');
+    meta.id = META_ID;
+    meta.style.cssText = 'margin-top:4px;color:#c9d7e6;font-size:11px;';
+    panel.appendChild(meta);
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = 'dB:on';
@@ -108,6 +115,7 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   }
 
   const textEl = document.getElementById(TEXT_ID) as HTMLElement | null;
+  const metaEl = document.getElementById(META_ID) as HTMLElement | null;
   const fmt = (v: unknown, n = 2) => {
     try {
       return typeof v === 'number' && isFinite(v) ? v.toFixed(n) : String(v);
@@ -133,16 +141,61 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   const onWindowStats = (e: Event) => handleStats((e as CustomEvent<any>)?.detail ?? {});
 
   window.addEventListener('asr:stats', onWindowStats);
+
+  let profileLabel = (() => {
+    try {
+      const profile = getActiveAsrTuningProfile();
+      return profile?.label || profile?.id || 'reading';
+    } catch {
+      return 'reading';
+    }
+  })();
+  let guardText = '';
+  const refreshMeta = () => {
+    if (!metaEl) return;
+    const base = `profile ${profileLabel}`;
+    metaEl.textContent = guardText ? `${base} | ${guardText}` : base;
+  };
+  refreshMeta();
+
+  const handleGuard = (payload: any) => {
+    try {
+      const detail = payload?.detail ?? payload ?? {};
+      const text = typeof detail.text === 'string' ? detail.text : '';
+      if (!text) return;
+      guardText = text;
+      refreshMeta();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleTuning = () => {
+    try {
+      const profile = getActiveAsrTuningProfile();
+      profileLabel = profile?.label || profile?.id || 'reading';
+      refreshMeta();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  window.addEventListener('tp:asr:guard', handleGuard as EventListener);
+  window.addEventListener('tp:asr:tuning', handleTuning as EventListener);
   try {
     bus?.on('asr:stats', handleStats);
+    bus?.on('asr:guard', handleGuard);
   } catch {
     /* ignore */
   }
 
   const destroy = () => {
     window.removeEventListener('asr:stats', onWindowStats);
+    window.removeEventListener('tp:asr:guard', handleGuard as EventListener);
+    window.removeEventListener('tp:asr:tuning', handleTuning as EventListener);
     try {
       bus?.off?.('asr:stats', handleStats);
+      bus?.off?.('asr:guard', handleGuard);
     } catch {
       /* ignore */
     }
