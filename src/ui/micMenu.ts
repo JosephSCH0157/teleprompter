@@ -6,13 +6,23 @@ import { showToast } from './toasts';
 const MIC_PILL_SELECTOR = '[data-tp-mic-pill]';
 const MENU_ID = 'micMenu';
 
-function openSettingsToAsr(startWizard?: boolean) {
+function openSettingsToMedia() {
+  let didStore = false;
   try {
     const store = getAppStore();
-    try { store?.set?.('overlay', 'settings'); } catch {}
-    try { store?.set?.('settingsTab', 'media'); } catch {}
+    if (store?.set) {
+      try { store.set('overlay', 'settings'); } catch {}
+      try { store.set('settingsTab', 'media'); } catch {}
+      didStore = true;
+    }
   } catch {}
+  if (!didStore) {
+    try { document.getElementById('settingsBtn')?.click(); } catch {}
+  }
+}
 
+function openSettingsToAsr(startWizard?: boolean) {
+  openSettingsToMedia();
   setTimeout(() => {
     try {
       const sec = document.getElementById('asrSettings');
@@ -196,6 +206,7 @@ autoInit();
 // Expose helper for other UI (top bar Calibrate Mic, legacy hooks)
 try {
   (window as any).openSettingsToAsr = openSettingsToAsr;
+  (window as any).openSettingsToMedia = openSettingsToMedia;
 } catch {
   // ignore
 }

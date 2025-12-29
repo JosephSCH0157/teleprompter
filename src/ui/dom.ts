@@ -395,10 +395,10 @@ export function wireMic() {
       try { ev.preventDefault(); } catch {}
       try {
         const anyWin = window as any;
-        if (typeof anyWin.openSettingsToAsr === 'function') {
-          anyWin.openSettingsToAsr(true);
-        } else if (typeof anyWin.startAsrWizard === 'function') {
-          anyWin.startAsrWizard();
+        if (typeof anyWin.openSettingsToMedia === 'function') {
+          anyWin.openSettingsToMedia();
+        } else if (typeof anyWin.openSettingsToAsr === 'function') {
+          anyWin.openSettingsToAsr(false);
         } else {
           document.getElementById('settingsBtn')?.click();
         }
