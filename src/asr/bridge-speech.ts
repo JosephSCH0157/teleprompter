@@ -11,6 +11,7 @@ declare global {
       setEnabled?: (on: boolean) => void;
       setMode?: (mode: string) => void;
       setStepPx?: (px: number) => void;
+      rebase?: (top?: number) => void;
     };
   }
 }
