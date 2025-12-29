@@ -19,6 +19,7 @@ export type MatchResult = {
   inBand?: boolean;
   bestSpan?: number;
   bestOverlap?: number;
+  bestOverlapRatio?: number;
 };
 
 // Minimal similarity helpers (kept pure for unit testing)
@@ -177,6 +178,7 @@ export function matchBatch(
   const scores: Record<number, number> = {};
   const spanByIdx: Record<number, number> = {};
   const overlapByIdx: Record<number, number> = {};
+  const overlapRatioByIdx: Record<number, number> = {};
   const windowAhead = cfg.MATCH_WINDOW_AHEAD;
   const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
   const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
@@ -271,10 +273,12 @@ export function matchBatch(
         if (hasNonSpoken) sc = sc - 0.6;
         else if (hasMeta) sc = sc * 0.5 - 0.2;
         const prev = scores[lineIdx];
+        const ratio = overlapTokens.length ? hits / overlapTokens.length : 0;
         if (!Number.isFinite(prev) || sc > prev) {
           scores[lineIdx] = sc;
           spanByIdx[lineIdx] = span;
           overlapByIdx[lineIdx] = hits;
+          overlapRatioByIdx[lineIdx] = ratio;
         }
         return;
       }
@@ -329,6 +333,7 @@ export function matchBatch(
     inBand,
     bestSpan: resolved.idx >= 0 ? spanByIdx[resolved.idx] || 1 : undefined,
     bestOverlap: resolved.idx >= 0 ? overlapByIdx[resolved.idx] : undefined,
+    bestOverlapRatio: resolved.idx >= 0 ? overlapRatioByIdx[resolved.idx] : undefined,
   };
 }
 

@@ -31,6 +31,11 @@ type PendingMatch = {
   forced?: boolean;
   forceReason?: string;
   consistency?: { count: number; needed: number };
+  relockOverride?: boolean;
+  relockReason?: string;
+  relockSpan?: number;
+  relockOverlapRatio?: number;
+  relockRepeat?: number;
 };
 
 type AsrEventSnapshot = {
@@ -130,6 +135,11 @@ const DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN = 4;
 const DEFAULT_LAG_RELOCK_MULTI_MIN_LINES = 2;
 const DEFAULT_LAG_RELOCK_MULTI_MAX_LINES = 4;
 const DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR = 0.3;
+const DEFAULT_RELOCK_SIM_FLOOR = 0.45;
+const DEFAULT_RELOCK_OVERLAP_RATIO = 0.3;
+const DEFAULT_RELOCK_SPAN_MIN_LINES = 2;
+const DEFAULT_RELOCK_REPEAT_WINDOW_MS = 2200;
+const DEFAULT_RELOCK_REPEAT_MIN = 3;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
 const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
@@ -456,6 +466,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let creepBudgetUsed = 0;
   let lastInterimBestIdx = -1;
   let interimRepeatCount = 0;
+  let relockRepeatIdx = -1;
+  let relockRepeatCount = 0;
+  let relockRepeatWindowStart = 0;
   let lastResyncAt = 0;
   let lastBehindStrongIdx = -1;
   let lastBehindStrongAt = 0;
@@ -1121,7 +1134,22 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       const now = Date.now();
       const jumpCap = getMaxTargetJumpPx();
-      const { line, conf, isFinal, hasEvidence, snippet, minThreshold, forced, forceReason, consistency } = pending;
+      const {
+        line,
+        conf,
+        isFinal,
+        hasEvidence,
+        snippet,
+        minThreshold,
+        forced,
+        forceReason,
+        consistency,
+        relockOverride,
+        relockReason,
+        relockSpan,
+        relockOverlapRatio,
+        relockRepeat,
+      } = pending;
       const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
       const effectiveThreshold = Number.isFinite(minThreshold)
         ? clamp(minThreshold as number, 0, 1)
@@ -1134,6 +1162,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `delta=${line - lastLineIndex}`,
           `sim=${formatLogScore(conf)}`,
           `need=${formatLogScore(effectiveThreshold)}`,
+          relockOverride ? `relock=1` : '',
+          relockReason ? `relockReason=${relockReason}` : '',
+          Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
+          Number.isFinite(relockOverlapRatio) ? `overlap=${formatLogScore(relockOverlapRatio)}` : '',
+          Number.isFinite(relockRepeat) ? `repeat=${relockRepeat}` : '',
           snippet ? `clue="${snippet}"` : '',
         ]);
         emitHudStatus(
@@ -1338,6 +1371,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       creepBudgetLine = -1;
       creepBudgetUsed = 0;
       lastForwardCommitAt = now;
+      relockRepeatIdx = -1;
+      relockRepeatCount = 0;
+      relockRepeatWindowStart = 0;
       resetLookahead('forward_commit');
       lastSeekTs = now;
       lastEvidenceAt = now;
@@ -1356,6 +1392,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         scrollTopAfter: Math.round(targetTopPx ?? currentTop),
         forced: !!forced,
         mode: getScrollMode() || 'unknown',
+        relock: !!relockOverride,
+        relockReason: relockReason || undefined,
       });
       ensureControllerActive();
       try {
@@ -1381,6 +1419,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `lineH=${lineHeight}`,
           `forced=${forced ? 1 : 0}`,
           forced ? `forceReason=${forceReason || 1}` : '',
+          relockOverride ? `relock=1` : '',
+          relockReason ? `relockReason=${relockReason}` : '',
+          Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
+          Number.isFinite(relockOverlapRatio) ? `overlap=${formatLogScore(relockOverlapRatio)}` : '',
+          Number.isFinite(relockRepeat) ? `repeat=${relockRepeat}` : '',
           `forcedCount10s=${forcedCount}`,
           forcedCooldown ? `cooldown=${forcedCooldown}` : 'cooldown=0',
           currentText ? `currentText="${currentText}"` : '',
@@ -1606,16 +1649,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
+    const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
     if (lagRelockActive && Number.isFinite(bestSpan) && bestSpan > 1) {
       const parts = [
         `Relock best=${rawIdx}`,
         `(${bestSpan}-line)`,
         `sim=${formatLogScore(conf)}`,
         Number.isFinite(bestOverlap) ? `overlap=${bestOverlap}` : null,
+        Number.isFinite(bestOverlapRatio) ? `overlapPct=${formatLogScore(bestOverlapRatio)}` : null,
         snippet ? `clue="${snippet}"` : null,
       ].filter(Boolean).join(' ');
       emitHudStatus('relock_match', parts);
-      logDev('relock match', { best: rawIdx, span: bestSpan, sim: conf, overlap: bestOverlap, clue: snippet });
+      logDev('relock match', {
+        best: rawIdx,
+        span: bestSpan,
+        sim: conf,
+        overlap: bestOverlap,
+        overlapPct: bestOverlapRatio,
+        clue: snippet,
+      });
     }
     const effectiveRawSim = rawScoreByIdx.get(rawIdx) ?? rawBestSim;
     let effectiveThreshold = requiredThreshold;
@@ -1784,6 +1836,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     let outrunCommit = false;
     let forceReason: string | undefined;
+    let relockOverride = false;
+    let relockReason: string | undefined;
     const allowForced = !isHybridMode();
     if (allowForced && outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
       if (!outrunPick) {
@@ -1943,6 +1997,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     const catchUpModeActive = catchUpModeUntil > now;
+    const stuckResyncActive = resyncActive && resyncReason === 'stuck';
+    const relockModeActive = lagRelockActive || catchUpModeActive || stuckResyncActive;
+    const relockForward = relockModeActive && inBand && rawIdx >= cursorLine + minLineAdvance;
+    if (relockForward) {
+      if (!relockRepeatWindowStart || now - relockRepeatWindowStart > DEFAULT_RELOCK_REPEAT_WINDOW_MS) {
+        relockRepeatWindowStart = now;
+        relockRepeatIdx = rawIdx;
+        relockRepeatCount = 1;
+      } else if (Math.abs(rawIdx - relockRepeatIdx) <= 1) {
+        relockRepeatCount += 1;
+      } else {
+        relockRepeatIdx = rawIdx;
+        relockRepeatCount = 1;
+      }
+    } else if (relockRepeatCount || relockRepeatWindowStart) {
+      relockRepeatIdx = -1;
+      relockRepeatCount = 0;
+      relockRepeatWindowStart = 0;
+    }
     recordConsistencyEntry({
       ts: now,
       idx: rawIdx,
@@ -2241,6 +2314,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
 
+    const overlapOk = Number.isFinite(bestOverlapRatio) && bestOverlapRatio >= DEFAULT_RELOCK_OVERLAP_RATIO;
+    const spanOk = Number.isFinite(bestSpan) && bestSpan >= DEFAULT_RELOCK_SPAN_MIN_LINES;
+    const repeatOk = relockRepeatCount >= DEFAULT_RELOCK_REPEAT_MIN;
+    const finalOk = isFinal && rawIdx > cursorLine;
+    const relockEvidenceOk = relockForward && (overlapOk || spanOk || repeatOk || finalOk);
+    if (relockEvidenceOk && conf < effectiveThreshold && conf >= DEFAULT_RELOCK_SIM_FLOOR) {
+      effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_RELOCK_SIM_FLOOR);
+      relockOverride = true;
+      relockReason = overlapOk ? 'overlap' : spanOk ? 'span' : repeatOk ? 'repeat' : 'final';
+      emitHudStatus(
+        'relock_override',
+        `Relock override: ${relockReason} (sim=${formatLogScore(conf)} >= ${formatLogScore(DEFAULT_RELOCK_SIM_FLOOR)})`,
+      );
+      logDev('relock override', {
+        reason: relockReason,
+        sim: conf,
+        span: bestSpan,
+        overlapPct: bestOverlapRatio,
+        repeat: relockRepeatCount,
+        delta: rawIdx - cursorLine,
+      });
+    }
     if (effectiveThreshold > 0 && conf < effectiveThreshold) {
       warnGuard('low_sim', [
         `current=${cursorLine}`,
@@ -2248,6 +2343,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `delta=${rawIdx - cursorLine}`,
         `sim=${formatLogScore(conf)}`,
         `need=${formatLogScore(effectiveThreshold)}`,
+        relockModeActive ? 'relock=1' : '',
+        relockReason ? `relockReason=${relockReason}` : '',
+        Number.isFinite(bestSpan) ? `span=${bestSpan}` : '',
+        Number.isFinite(bestOverlapRatio) ? `overlap=${formatLogScore(bestOverlapRatio)}` : '',
+        relockRepeatCount ? `repeat=${relockRepeatCount}` : '',
         snippet ? `clue="${snippet}"` : '',
       ]);
       emitHudStatus(
@@ -2302,6 +2402,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       forced: outrunCommit || shortFinalForced || catchupCommit,
       forceReason,
       consistency: { count: consistencyState.count, needed: consistencyState.needed },
+      relockOverride,
+      relockReason,
+      relockSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
+      relockOverlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
+      relockRepeat: relockRepeatCount || undefined,
     };
     schedulePending();
   };
@@ -2349,6 +2454,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     creepBudgetUsed = 0;
     lastInterimBestIdx = -1;
     interimRepeatCount = 0;
+    relockRepeatIdx = -1;
+    relockRepeatCount = 0;
+    relockRepeatWindowStart = 0;
     lastResyncAt = 0;
     resyncUntil = 0;
     resyncAnchorIdx = null;
