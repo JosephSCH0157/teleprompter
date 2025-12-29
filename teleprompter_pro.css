@@ -279,6 +279,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     /* Optional helpers if lines are marked */
     .tp-line { opacity: calc(1 - var(--tp-dim)); transition: opacity 120ms linear; }
     .tp-line.is-active { opacity: 1; }
+    .line.is-active { outline: 1px solid rgba(76, 163, 255, 0.25); outline-offset: 2px; }
     .u{ text-decoration: underline; }
 .note{ color: var(--muted); font-style: italic; margin:0 0 28px }
 

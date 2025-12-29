@@ -1,8 +1,16 @@
 export type CatchUpDeps = {
   getScroller: () => HTMLElement | null;
   getMarkerOffsetPx: () => number;
-  getActiveLineEl: () => HTMLElement | null;
+  getMarkerLineIndex: () => number | null;
+  getLineByIndex: (index: number) => HTMLElement | null;
   scrollToTop: (top: number) => void;
+  onCatchUp?: (info: {
+    index: number;
+    line: HTMLElement;
+    markerOffset: number;
+    targetTop: number;
+    scroller: HTMLElement;
+  }) => void;
   devLog?: (...args: any[]) => void;
 };
 
@@ -33,10 +41,15 @@ export function wireCatchUpButton(deps: CatchUpDeps): void {
 
   btn.addEventListener('click', () => {
     const scroller = deps.getScroller();
-    const line = deps.getActiveLineEl();
     if (!scroller) return;
+    const markerIndex = deps.getMarkerLineIndex();
+    if (!Number.isFinite(markerIndex as number) || (markerIndex as number) < 0) {
+      deps.devLog?.('[catchup] marker line index not found');
+      return;
+    }
+    const line = deps.getLineByIndex(Math.max(0, Math.floor(markerIndex as number)));
     if (!line) {
-      deps.devLog?.('[catchup] no active line element found (nothing to catch up to)');
+      deps.devLog?.('[catchup] no line element found for marker index', markerIndex);
       return;
     }
     const lineTop = elementTopRelativeTo(line, scroller);
@@ -49,5 +62,12 @@ export function wireCatchUpButton(deps: CatchUpDeps): void {
       scroller: scroller.id || scroller.tagName,
     });
     deps.scrollToTop(targetTop);
+    deps.onCatchUp?.({
+      index: Math.max(0, Math.floor(markerIndex as number)),
+      line,
+      markerOffset: marker,
+      targetTop,
+      scroller,
+    });
   });
 }

@@ -8,6 +8,7 @@ interface Window {
     setMode?: (mode: string) => void;
     setStepPx?: (px: number) => void;
     setSpeed?: (pxPerSec: number) => void;
+    rebase?: (top?: number) => void;
     getState?: () => { enabled: boolean; speed: number };
     startFromPreroll?: () => void;
   };

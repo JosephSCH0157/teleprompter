@@ -991,39 +991,23 @@ export function bindStaticDom() {
         } catch {}
         return document.getElementById(`tp-line-${idx}`) as HTMLElement | null;
       };
-      const getActiveLineEl = () => {
-        const scroller = resolveCatchUpScroller();
-        const root = getScriptRoot() || scroller || document;
-        const selector = [
-          '.line.is-active',
-          '.line.active',
-          '.tp-line.is-active',
-          '.tp-line.active',
-          'p.current',
-          'p.active',
-          '[data-active-line="1"]',
-          '[data-active="1"]',
-        ].join(',');
+      let lastCatchUpLine: HTMLElement | null = null;
+      const setActiveLine = (line: HTMLElement | null) => {
         try {
-          const found = (root as ParentNode).querySelector?.(selector) as HTMLElement | null;
-          if (found) return found;
+          if (lastCatchUpLine && lastCatchUpLine !== line) {
+            lastCatchUpLine.classList.remove('is-active');
+            lastCatchUpLine.classList.remove('tp-line');
+            lastCatchUpLine.removeAttribute('data-active-line');
+          }
         } catch {}
-        const anyWin = window as any;
-        const rawIdx = Number(
-          anyWin.currentIndex ??
-          anyWin.__tpAsrScrollState?.cursorLineIndex ??
-          NaN,
-        );
-        if (Number.isFinite(rawIdx)) {
-          const line = getLineElementByIndex(root as ParentNode, rawIdx);
-          if (line) return line;
+        if (line) {
+          try {
+            line.classList.add('tp-line');
+            line.classList.add('is-active');
+            line.setAttribute('data-active-line', '1');
+            lastCatchUpLine = line;
+          } catch {}
         }
-        const anchorIdx = scroller ? computeAnchorLineIndex(scroller) : computeAnchorLineIndex();
-        if (anchorIdx != null) {
-          const line = getLineElementByIndex(root as ParentNode, anchorIdx);
-          if (line) return line;
-        }
-        return null;
       };
       const getMarkerOffsetPx = () => {
         const scroller = resolveCatchUpScroller();
@@ -1033,12 +1017,45 @@ export function bindStaticDom() {
           : 0.4;
         return Math.max(0, Math.round(hostHeight * markerPct));
       };
+      const getMarkerLineIndex = () => {
+        const scroller = resolveCatchUpScroller();
+        const idx = scroller ? computeAnchorLineIndex(scroller) : computeAnchorLineIndex();
+        return Number.isFinite(idx as number) ? (idx as number) : null;
+      };
+      const getScrollMode = () => {
+        try {
+          const store = (window as any).__tpStore;
+          const raw = store?.get?.('scrollMode') ?? (window as any).__tpScrollMode?.getMode?.();
+          return String(raw || '').toLowerCase();
+        } catch {
+          return '';
+        }
+      };
       wireCatchUpButton({
         getScroller: resolveCatchUpScroller,
         getMarkerOffsetPx,
-        getActiveLineEl,
+        getMarkerLineIndex,
+        getLineByIndex: (index: number) => {
+          const scroller = resolveCatchUpScroller();
+          const root = getScriptRoot() || scroller || document;
+          return getLineElementByIndex(root as ParentNode, index);
+        },
         scrollToTop: (top: number) => {
           applyCanonicalScrollTop(top, { scroller: resolveCatchUpScroller(), reason: 'catchup' });
+        },
+        onCatchUp: ({ index, line, targetTop }) => {
+          const mode = getScrollMode();
+          setActiveLine(line);
+          try { (window as any).currentIndex = index; } catch {}
+          if (mode === 'step') {
+            try { (window as any).__tpStepIndex = index; } catch {}
+          }
+          if (mode === 'asr' || mode === 'hybrid') {
+            try { (window as any).__tpAsrScrollDriver?.setLastLineIndex?.(index); } catch {}
+          }
+          if (mode === 'timed' || mode === 'wpm' || mode === 'hybrid') {
+            try { (window as any).__tpAuto?.rebase?.(targetTop); } catch {}
+          }
         },
         devLog: (...args) => {
           try {

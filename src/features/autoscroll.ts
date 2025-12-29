@@ -63,6 +63,22 @@ let currentMode: 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'au
 // Momentary speed multiplier (Shift/Alt)
 let momentaryMult = 1;
 
+function clampTop(viewer: HTMLElement, top: number): number {
+  const max = Math.max(0, viewer.scrollHeight - viewer.clientHeight);
+  return Math.max(0, Math.min(Number(top) || 0, max));
+}
+
+function rebaseAutoScroll(nextTop?: number): void {
+  const viewer =
+    getViewer?.() ||
+    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+    (document.getElementById('viewer') as HTMLElement | null);
+  if (!viewer) return;
+  const top = Number.isFinite(nextTop as number) ? Number(nextTop) : (viewer.scrollTop || 0);
+  lastTargetTop = clampTop(viewer, top);
+  lastTs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 function allowAuto(): boolean {
   try {
     const store = (window as any).__tpStore || appStore;
@@ -385,6 +401,9 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
         try { console.log('[AUTO] setSpeed(from hotkey)', px); } catch {}
         return setSpeed(px);
       },
+      rebase: (top?: number) => {
+        try { rebaseAutoScroll(top); } catch {}
+      },
       getState: () => ({ enabled: active, speed: currentSpeedPx() }),
       setMode: (mode: any) => {
         try { currentMode = mode; } catch {}
@@ -527,6 +546,9 @@ function installLazyAutoGlobal(): void {
       },
       setSpeed: (px: number) => {
         setSpeed(px);
+      },
+      rebase: (top?: number) => {
+        rebaseAutoScroll(top);
       },
       getState: () => {
         const ctrl = initAutoscrollFeature();
