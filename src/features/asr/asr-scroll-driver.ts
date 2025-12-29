@@ -89,7 +89,6 @@ const DEFAULT_INTERIM_SCALE = 1.15;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
 const DEFAULT_MATCH_LOOKAHEAD_STEPS = [DEFAULT_MATCH_LOOKAHEAD_LINES, 120, 200, 400];
-const DEFAULT_MATCH_BAND_RADIUS = 40;
 const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
 const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
@@ -128,6 +127,9 @@ const DEFAULT_LAG_RELOCK_LOOKAHEAD_BONUS = 260;
 const DEFAULT_LAG_RELOCK_DURATION_MS = 2600;
 const DEFAULT_LAG_RELOCK_MIN_OVERLAP = 2;
 const DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN = 4;
+const DEFAULT_LAG_RELOCK_MULTI_MIN_LINES = 2;
+const DEFAULT_LAG_RELOCK_MULTI_MAX_LINES = 4;
+const DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR = 0.3;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
 const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
@@ -1507,6 +1509,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       windowAhead,
       minTokenOverlap: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_OVERLAP : undefined,
       minTokenLen: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN : undefined,
+      multiLineMinLines: lagRelockActive ? DEFAULT_LAG_RELOCK_MULTI_MIN_LINES : undefined,
+      multiLineMaxLines: lagRelockActive ? DEFAULT_LAG_RELOCK_MULTI_MAX_LINES : undefined,
     });
     if (!match) {
       warnGuard('no_match', [
@@ -1534,17 +1538,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
       return;
     }
+    if (rawIdx < 0) {
+      warnGuard('no_match', [
+        `current=${currentIdx}`,
+        `final=${isFinal ? 1 : 0}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      emitHudStatus('no_match', 'No match');
+      return;
+    }
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     const totalLines = getTotalLines();
     const bandStart = Number.isFinite((match as any)?.bandStart)
       ? Math.max(0, Math.floor((match as any).bandStart))
-      : Math.max(0, cursorLine - DEFAULT_MATCH_BAND_RADIUS);
+      : Math.max(0, cursorLine - windowBack);
     const bandEnd = Number.isFinite((match as any)?.bandEnd)
       ? Math.max(bandStart, Math.floor((match as any).bandEnd))
       : (totalLines > 0
-        ? Math.min(totalLines - 1, cursorLine + DEFAULT_MATCH_BAND_RADIUS)
-        : cursorLine + DEFAULT_MATCH_BAND_RADIUS);
+        ? Math.min(totalLines - 1, cursorLine + windowAhead)
+        : cursorLine + windowAhead);
     const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
     if (!inBand) {
       warnGuard('match_out_of_band', [
@@ -1591,21 +1604,35 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const dist = Math.abs(rawIdx - cursorLine);
       conf = applyDistancePenalty(conf, dist, DEFAULT_DISTANCE_PENALTY_PER_LINE);
     }
+    const bestSpan = Number((match as any)?.bestSpan);
+    const bestOverlap = Number((match as any)?.bestOverlap);
+    if (lagRelockActive && Number.isFinite(bestSpan) && bestSpan > 1) {
+      const parts = [
+        `Relock best=${rawIdx}`,
+        `(${bestSpan}-line)`,
+        `sim=${formatLogScore(conf)}`,
+        Number.isFinite(bestOverlap) ? `overlap=${bestOverlap}` : null,
+        snippet ? `clue="${snippet}"` : null,
+      ].filter(Boolean).join(' ');
+      emitHudStatus('relock_match', parts);
+      logDev('relock match', { best: rawIdx, span: bestSpan, sim: conf, overlap: bestOverlap, clue: snippet });
+    }
     const effectiveRawSim = rawScoreByIdx.get(rawIdx) ?? rawBestSim;
     let effectiveThreshold = requiredThreshold;
     const scrollerForMatch = getScroller();
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
     const catchUpModeWasActive = catchUpModeUntil > now;
+    const lowSimFloor = lagRelockActive ? DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR : DEFAULT_LOW_SIM_FLOOR;
     const behindByLowSim =
       rawIdx < cursorLine - windowBack ||
-      (rawIdx < cursorLine && effectiveRawSim < DEFAULT_LOW_SIM_FLOOR);
+      (rawIdx < cursorLine && effectiveRawSim < lowSimFloor);
     if (behindByLowSim) {
       warnGuard('behind_noise', [
         `current=${cursorLine}`,
         `best=${rawIdx}`,
         `delta=${rawIdx - cursorLine}`,
         `sim=${formatLogScore(effectiveRawSim)}`,
-        `floor=${formatLogScore(DEFAULT_LOW_SIM_FLOOR)}`,
+        `floor=${formatLogScore(lowSimFloor)}`,
       ]);
       emitHudStatus('behind_noise', 'Ignored: low-sim behind match');
       const lagDelta = rawIdx - cursorLine;

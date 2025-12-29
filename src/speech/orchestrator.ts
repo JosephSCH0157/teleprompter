@@ -80,6 +80,8 @@ export type MatchBatchOptions = {
   windowAhead?: number;
   minTokenOverlap?: number;
   minTokenLen?: number;
+  multiLineMaxLines?: number;
+  multiLineMinLines?: number;
 };
 
 let _rec: Recognizer | null = null;
@@ -197,7 +199,8 @@ function resolveBandRange(
   currentIndex: number,
   paraIndex: Array<{ line?: number }>,
   vParaIndex: string[] | null,
-  radius: number
+  windowBack: number,
+  windowAhead: number
 ) {
   const cur = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
   const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
@@ -205,8 +208,8 @@ function resolveBandRange(
     ? vParaIndex.length
     : (typeof lastEntry?.line === 'number' ? lastEntry.line + 1 : paraIndex.length);
   const safeCount = Math.max(0, lineCount);
-  const bandStart = Math.max(0, cur - radius);
-  const bandEnd = safeCount ? Math.min(safeCount - 1, cur + radius) : 0;
+  const bandStart = Math.max(0, cur - windowBack);
+  const bandEnd = safeCount ? Math.min(safeCount - 1, cur + windowAhead) : 0;
   return { bandStart, bandEnd };
 }
 
@@ -222,6 +225,8 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
     const res = matcher.matchBatch(matchTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any, {
       minTokenOverlap: opts?.minTokenOverlap,
       minTokenLen: opts?.minTokenLen,
+      multiLineMaxLines: opts?.multiLineMaxLines,
+      multiLineMinLines: opts?.multiLineMinLines,
     });
 
     // Compact matcher log (throttled)
@@ -233,8 +238,7 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       const deltaLines = bestIdx - curIdx;
       const topScores = Array.isArray(res?.topScores) ? res.topScores : [];
       const clue = compactClue(matchTokens, 6);
-      const bandRadius = 40;
-      const fallbackBand = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const fallbackBand = resolveBandRange(curIdx, paraIndex, vParaIndex, cfg.MATCH_WINDOW_BACK, cfg.MATCH_WINDOW_AHEAD);
       const bandStart =
         Number.isFinite((res as any)?.bandStart) ? Math.floor((res as any).bandStart) : fallbackBand.bandStart;
       const bandEnd =
@@ -249,7 +253,6 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
         `top=${formatTopScores(topScores)}`,
         `winBack=${cfg.MATCH_WINDOW_BACK}`,
         `winAhead=${cfg.MATCH_WINDOW_AHEAD}`,
-        `band=${bandRadius}`,
         `bandStart=${bandStart}`,
         `bandEnd=${bandEnd}`,
         `inBand=${inBand ? 1 : 0}`,
@@ -270,8 +273,7 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
     }
     try {
       const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
-      const bandRadius = 40;
-      const fallbackBand = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const fallbackBand = resolveBandRange(curIdx, paraIndex, vParaIndex, cfg.MATCH_WINDOW_BACK, cfg.MATCH_WINDOW_AHEAD);
       const bandStart =
         Number.isFinite((res as any)?.bandStart) ? Math.floor((res as any).bandStart) : fallbackBand.bandStart;
       const bandEnd =
