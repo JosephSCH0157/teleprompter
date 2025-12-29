@@ -89,6 +89,7 @@ const DEFAULT_INTERIM_SCALE = 1.15;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
 const DEFAULT_MATCH_LOOKAHEAD_STEPS = [DEFAULT_MATCH_LOOKAHEAD_LINES, 120, 200, 400];
+const DEFAULT_MATCH_BAND_RADIUS = 40;
 const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
 const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
@@ -118,6 +119,15 @@ const DEFAULT_BACK_RECOVERY_STRONG_CONF = 0.75;
 const DEFAULT_REALIGN_LEAD_LINES = 6;
 const DEFAULT_REALIGN_LOOKBACK_LINES = 3;
 const DEFAULT_REALIGN_SIM = 0.7;
+const DEFAULT_LAG_RELOCK_BEHIND_HITS = 3;
+const DEFAULT_LAG_RELOCK_WINDOW_MS = 2200;
+const DEFAULT_LAG_RELOCK_MIN_DELTA = 20;
+const DEFAULT_LAG_RELOCK_MIN_TOKENS = 4;
+const DEFAULT_LAG_RELOCK_MIN_CHARS = 18;
+const DEFAULT_LAG_RELOCK_LOOKAHEAD_BONUS = 260;
+const DEFAULT_LAG_RELOCK_DURATION_MS = 2600;
+const DEFAULT_LAG_RELOCK_MIN_OVERLAP = 2;
+const DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN = 4;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
 const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
@@ -454,6 +464,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
   let behindHitWindowStart = 0;
+  let lagRelockHits = 0;
+  let lagRelockWindowStart = 0;
   let pendingMatch: PendingMatch | null = null;
   let pendingRaf = 0;
   let bootLogged = false;
@@ -969,6 +981,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     resyncBacktrackOverride = matchBacktrackLines;
   };
 
+  const resetLagRelock = (reason?: string) => {
+    if (!lagRelockHits && !lagRelockWindowStart) return;
+    lagRelockHits = 0;
+    lagRelockWindowStart = 0;
+    logDev('lag relock reset', { reason });
+  };
+
   const activateStuckResync = (anchorIdx: number, now: number) => {
     resyncUntil = now + DEFAULT_STUCK_RESYNC_WINDOW_MS;
     resyncAnchorIdx = Math.max(0, Math.floor(anchorIdx));
@@ -976,6 +995,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     resyncLookaheadBonus = DEFAULT_STUCK_RESYNC_LOOKAHEAD_BONUS;
     resyncBacktrackOverride = Math.min(matchBacktrackLines, DEFAULT_STUCK_RESYNC_BACKTRACK_LINES);
     logDev('stuck resync', {
+      anchor: resyncAnchorIdx,
+      windowAhead: resolveLookahead(true),
+      windowBack: resyncBacktrackOverride,
+    });
+  };
+
+  const activateLagRelock = (anchorIdx: number, now: number) => {
+    resyncUntil = now + DEFAULT_LAG_RELOCK_DURATION_MS;
+    resyncAnchorIdx = Math.max(0, Math.floor(anchorIdx));
+    resyncReason = 'lag';
+    resyncLookaheadBonus = DEFAULT_LAG_RELOCK_LOOKAHEAD_BONUS;
+    resyncBacktrackOverride = 0;
+    lastResyncAt = now;
+    emitHudStatus('relock', 'Relock: forward scan');
+    logDev('lag relock', {
       anchor: resyncAnchorIdx,
       windowAhead: resolveLookahead(true),
       windowBack: resyncBacktrackOverride,
@@ -1416,7 +1450,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastIngestAt = now;
     updateDebugState('ingest');
     maybeLogStall(now);
-    if (resyncReason === 'stuck' && resyncUntil && now >= resyncUntil) {
+    if (resyncReason && resyncUntil && now >= resyncUntil) {
       resyncReason = null;
       resyncAnchorIdx = null;
       resetResyncOverrides();
@@ -1459,6 +1493,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ? matchAnchorIdx
       : (lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0));
     const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
+    const lagRelockActive = resyncActive && resyncReason === 'lag';
     const effectiveAnchor = resyncActive
       ? Math.max(0, Math.floor(resyncAnchorIdx as number))
       : Math.max(0, Math.floor(anchorIdx));
@@ -1470,6 +1505,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       currentIndex: effectiveAnchor,
       windowBack,
       windowAhead,
+      minTokenOverlap: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_OVERLAP : undefined,
+      minTokenLen: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN : undefined,
     });
     if (!match) {
       warnGuard('no_match', [
@@ -1499,6 +1536,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const totalLines = getTotalLines();
+    const bandStart = Number.isFinite((match as any)?.bandStart)
+      ? Math.max(0, Math.floor((match as any).bandStart))
+      : Math.max(0, cursorLine - DEFAULT_MATCH_BAND_RADIUS);
+    const bandEnd = Number.isFinite((match as any)?.bandEnd)
+      ? Math.max(bandStart, Math.floor((match as any).bandEnd))
+      : (totalLines > 0
+        ? Math.min(totalLines - 1, cursorLine + DEFAULT_MATCH_BAND_RADIUS)
+        : cursorLine + DEFAULT_MATCH_BAND_RADIUS);
+    const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
+    if (!inBand) {
+      warnGuard('match_out_of_band', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `bandStart=${bandStart}`,
+        `bandEnd=${bandEnd}`,
+        `inBand=${inBand ? 1 : 0}`,
+      ]);
+      emitHudStatus('match_out_of_band', 'Out-of-band match ignored');
+      resetLagRelock('out-of-band');
+      return;
+    }
     const rawBestSim = conf;
     const rawScores = Array.isArray(match.topScores) ? match.topScores : [];
     const rawScoreByIdx = new Map<number, number>();
@@ -1548,6 +1608,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `floor=${formatLogScore(DEFAULT_LOW_SIM_FLOOR)}`,
       ]);
       emitHudStatus('behind_noise', 'Ignored: low-sim behind match');
+      const lagDelta = rawIdx - cursorLine;
+      const lagSubstance =
+        tokenCount >= DEFAULT_LAG_RELOCK_MIN_TOKENS ||
+        evidenceChars >= DEFAULT_LAG_RELOCK_MIN_CHARS;
+      const lagEligible =
+        lagDelta <= -DEFAULT_LAG_RELOCK_MIN_DELTA &&
+        lagSubstance;
+      if (lagEligible) {
+        if (!lagRelockWindowStart || now - lagRelockWindowStart > DEFAULT_LAG_RELOCK_WINDOW_MS) {
+          lagRelockWindowStart = now;
+          lagRelockHits = 1;
+        } else {
+          lagRelockHits += 1;
+        }
+        if (!lagRelockActive && lagRelockHits >= DEFAULT_LAG_RELOCK_BEHIND_HITS && now - lastResyncAt >= resyncCooldownMs) {
+          activateLagRelock(cursorLine, now);
+          resetLagRelock('triggered');
+        }
+      } else {
+        resetLagRelock('behind_noise');
+      }
       return;
     }
     if (catchUpModeWasActive && rawIdx < cursorLine) {
@@ -1560,6 +1641,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       emitHudStatus('catchup', 'Catch-up: ON');
       return;
     }
+    resetLagRelock('in-band');
     logThrottled('ASR_MATCH', 'log', 'ASR_MATCH', {
       currentIndex: cursorLine,
       bestIndex: rawIdx,
@@ -1571,7 +1653,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       final: isFinal ? 1 : 0,
     });
     if (
-      resyncReason === 'stuck' &&
+      (resyncReason === 'stuck' || resyncReason === 'lag') &&
       resyncActive &&
       rawIdx >= cursorLine + minLineAdvance &&
       conf >= DEFAULT_STUCK_RELOCK_SIM
@@ -1581,6 +1663,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       resyncReason = null;
       resetResyncOverrides();
       emitHudStatus('resync_lock', 'Resync locked');
+      resetLagRelock('lock');
     }
     const shortFinal =
       isFinal && fragmentTokenCount >= shortFinalMinTokens && fragmentTokenCount <= shortFinalMaxTokens;
@@ -2249,6 +2332,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     behindStrongSince = 0;
     behindStrongCount = 0;
     lastBehindRecoveryAt = 0;
+    lagRelockHits = 0;
+    lagRelockWindowStart = 0;
     lastForwardCommitAt = Date.now();
     resetLookahead('sync-index');
     if (pendingRaf) {

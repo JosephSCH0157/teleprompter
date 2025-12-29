@@ -78,6 +78,8 @@ export type MatchBatchOptions = {
   currentIndex?: number;
   windowBack?: number;
   windowAhead?: number;
+  minTokenOverlap?: number;
+  minTokenLen?: number;
 };
 
 let _rec: Recognizer | null = null;
@@ -217,19 +219,27 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       noteAsrSpeechActivity(text);
     }
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState(opts);
-    const res = matcher.matchBatch(matchTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any);
+    const res = matcher.matchBatch(matchTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState as any, {
+      minTokenOverlap: opts?.minTokenOverlap,
+      minTokenLen: opts?.minTokenLen,
+    });
 
     // Compact matcher log (throttled)
     const now = Date.now();
     if (now - lastMatchLogAt >= MATCH_LOG_THROTTLE_MS) {
       lastMatchLogAt = now;
       const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
-      const bestIdx = Number.isFinite(res?.bestIdx) ? Math.floor(res.bestIdx) : 0;
+      const bestIdx = Number.isFinite(res?.bestIdx) ? Math.floor(res.bestIdx) : -1;
       const deltaLines = bestIdx - curIdx;
       const topScores = Array.isArray(res?.topScores) ? res.topScores : [];
       const clue = compactClue(matchTokens, 6);
       const bandRadius = 40;
-      const { bandStart, bandEnd } = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const fallbackBand = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const bandStart =
+        Number.isFinite((res as any)?.bandStart) ? Math.floor((res as any).bandStart) : fallbackBand.bandStart;
+      const bandEnd =
+        Number.isFinite((res as any)?.bandEnd) ? Math.floor((res as any).bandEnd) : fallbackBand.bandEnd;
+      const inBand = bestIdx >= bandStart && bestIdx <= bandEnd;
       const line = [
         '🧠 ASR_MATCH',
         `current=${curIdx}`,
@@ -242,10 +252,40 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
         `band=${bandRadius}`,
         `bandStart=${bandStart}`,
         `bandEnd=${bandEnd}`,
+        `inBand=${inBand ? 1 : 0}`,
         clue ? `clue="${clue}"` : '',
       ].filter(Boolean).join(' ');
       try { console.log(line); } catch {}
+      if (!inBand) {
+        try {
+          console.warn('[ASR] match out of band', {
+            current: curIdx,
+            best: bestIdx,
+            bandStart,
+            bandEnd,
+            clue,
+          });
+        } catch {}
+      }
     }
+    try {
+      const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
+      const bandRadius = 40;
+      const fallbackBand = resolveBandRange(curIdx, paraIndex, vParaIndex, bandRadius);
+      const bandStart =
+        Number.isFinite((res as any)?.bandStart) ? Math.floor((res as any).bandStart) : fallbackBand.bandStart;
+      const bandEnd =
+        Number.isFinite((res as any)?.bandEnd) ? Math.floor((res as any).bandEnd) : fallbackBand.bandEnd;
+      const bestIdx = Number.isFinite(res?.bestIdx) ? Math.floor(res.bestIdx) : -1;
+      const inBand = bestIdx >= bandStart && bestIdx <= bandEnd;
+      (res as any).bandStart = bandStart;
+      (res as any).bandEnd = bandEnd;
+      (res as any).inBand = inBand;
+      if (!inBand) {
+        res.bestIdx = -1;
+        res.bestSim = 0;
+      }
+    } catch {}
 
     // Convert line delta to px error so the adaptive governor can respond
     try {
@@ -272,7 +312,7 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
   } catch (err) {
     try { console.warn('[TP] matchBatch error', err); } catch {}
     // return a safe default
-    return { bestIdx: 0, bestSim: 0, topScores: [] };
+    return { bestIdx: -1, bestSim: 0, topScores: [] };
   }
 }
 

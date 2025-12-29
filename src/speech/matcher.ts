@@ -14,6 +14,9 @@ export type MatchResult = {
   bestIdx: number;
   bestSim: number;
   topScores: Array<{ idx: number; score: number }>;
+  bandStart?: number;
+  bandEnd?: number;
+  inBand?: boolean;
 };
 
 // Minimal similarity helpers (kept pure for unit testing)
@@ -121,8 +124,7 @@ export function computeJaccardSimilarity(tokens1: string[], tokens2: string[]) {
   return union.size ? inter.size / union.size : 0;
 }
 
-export function computeLineSimilarity(spokenTokens: string[], scriptText: string) {
-  const scriptTokens = normTokens(scriptText);
+export function computeLineSimilarityFromTokens(spokenTokens: string[], scriptTokens: string[]) {
   const tfidf = computeTFIDFSimilarity(spokenTokens, scriptTokens);
   const jacc = computeJaccardSimilarity(spokenTokens, scriptTokens);
   const containment = (() => {
@@ -152,6 +154,11 @@ export function computeLineSimilarity(spokenTokens: string[], scriptText: string
   return Math.max(0, Math.min(1, score));
 }
 
+export function computeLineSimilarity(spokenTokens: string[], scriptText: string) {
+  const scriptTokens = normTokens(scriptText);
+  return computeLineSimilarityFromTokens(spokenTokens, scriptTokens);
+}
+
 // Top-level matching API. It expects precomputed scriptWords and paraIndex
 // from the runtime and returns the best match for the spoken token batch.
 export function matchBatch(
@@ -161,7 +168,8 @@ export function matchBatch(
   vParaIndex: string[] | null,
   cfg: MatchConfig,
   currentIndex: number,
-  _viterbiState?: { path: number[]; pred?: number }
+  _viterbiState?: { path: number[]; pred?: number },
+  opts?: { minTokenOverlap?: number; minTokenLen?: number }
 ): MatchResult {
   const batch = spokenTokens.slice(-Math.max(3, spokenTokens.length));
   const candidates = new Set<number>();
@@ -172,14 +180,57 @@ export function matchBatch(
   for (let i = candidateStart; i <= candidateEnd; i++) candidates.add(i);
 
   const scores: Record<number, number> = {};
+  const bandRadius = 40;
+  const bandStart = Math.max(0, Math.floor(currentIndex) - bandRadius);
+  const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
+  const lineCount = vParaIndex
+    ? vParaIndex.length
+    : ((typeof lastEntry?.line === 'number' ? lastEntry.line + 1 : paraIndex.length));
+  const bandEnd = Math.min(Math.max(0, lineCount - 1), Math.floor(currentIndex) + bandRadius);
+  const minTokenOverlap = Number.isFinite(opts?.minTokenOverlap)
+    ? Math.max(0, Math.floor(Number(opts?.minTokenOverlap)))
+    : 0;
+  const minTokenLen = Number.isFinite(opts?.minTokenLen)
+    ? Math.max(1, Math.floor(Number(opts?.minTokenLen)))
+    : 4;
+  const overlapTokens = minTokenOverlap
+    ? batch.filter((token) => token.length >= minTokenLen)
+    : null;
+  if (minTokenOverlap > 0 && (!overlapTokens || overlapTokens.length < minTokenOverlap)) {
+    return {
+      bestIdx: -1,
+      bestSim: 0,
+      topScores: [],
+      bandStart,
+      bandEnd,
+      inBand: false,
+    };
+  }
   const candidateArray = Array.from(candidates);
   for (const j of candidateArray) {
     const entry = paraIndex[j];
     const lineIdx = typeof entry?.line === 'number' ? entry.line : j;
+    if (lineIdx < bandStart || lineIdx > bandEnd) continue;
     if (scores[lineIdx] != null) continue;
     const para = vParaIndex ? vParaIndex[j] : entry?.key;
     if (!para) continue;
-    let sc = computeLineSimilarity(batch, String(para));
+    const scriptText = String(para);
+    if (overlapTokens && overlapTokens.length) {
+      const scriptTokens = normTokens(scriptText);
+      if (!scriptTokens.length) continue;
+      const scriptSet = new Set(scriptTokens);
+      let hits = 0;
+      for (const tok of overlapTokens) {
+        if (scriptSet.has(tok)) hits += 1;
+      }
+      if (hits < minTokenOverlap) continue;
+      let sc = computeLineSimilarityFromTokens(batch, scriptTokens);
+      if (entry?.isMeta) sc = sc * 0.5 - 0.2;
+      else if (entry?.isNonSpoken) sc = sc - 0.6;
+      scores[lineIdx] = sc;
+      continue;
+    }
+    let sc = computeLineSimilarity(batch, scriptText);
     if (entry?.isMeta) sc = sc * 0.5 - 0.2;
     else if (entry?.isNonSpoken) sc = sc - 0.6;
     scores[lineIdx] = sc;
@@ -190,18 +241,16 @@ export function matchBatch(
     .slice(0, 3)
     .map(([idx, score]) => ({ idx: Number(idx), score: Number((score as number).toFixed(3)) }));
 
-  // Windowed matching band around the currently visible/expected line.
-  // Unless the top candidate is very strong (>= 0.82), prefer a candidate within ±40.
-  const radius = 40;
-  const bandStart = Math.max(0, Math.floor(currentIndex) - radius);
-  const lastEntry = paraIndex.length ? paraIndex[paraIndex.length - 1] : null;
-  const lineCount = vParaIndex ? vParaIndex.length : ((typeof lastEntry?.line === 'number' ? lastEntry.line + 1 : paraIndex.length));
-  const bandEnd = Math.min(lineCount - 1, Math.floor(currentIndex) + radius);
-  let best = top[0] || { idx: Math.max(0, currentIndex), score: 0 };
-  if (best && (best.idx < bandStart || best.idx > bandEnd) && (best.score as number) < 0.82) {
-    const inBand = top.find(t => t.idx >= bandStart && t.idx <= bandEnd);
-    if (inBand) best = inBand;
-  }
-  return { bestIdx: best.idx, bestSim: best.score as number, topScores: top };
+  const best = top[0] || { idx: -1, score: 0 };
+  const inBand = best.idx >= bandStart && best.idx <= bandEnd;
+  const resolved = inBand ? best : { idx: -1, score: 0 };
+  return {
+    bestIdx: resolved.idx,
+    bestSim: resolved.score as number,
+    topScores: top,
+    bandStart,
+    bandEnd,
+    inBand,
+  };
 }
 
