@@ -3,11 +3,19 @@
 
 import { computeAnchorLineIndex } from '../scroll/scroll-helpers';
 import { getScrollWriter } from '../scroll/scroll-writer';
+import {
+  applyCanonicalScrollTop,
+  getFallbackScroller,
+  getPrimaryScroller,
+  getScriptRoot,
+  resolveActiveScroller,
+} from '../scroll/scroller';
 import { setSessionPhase } from '../state/session';
 import { applyScript } from '../features/apply-script';
 import { getNextSampleScript } from '../content/sample-scripts';
 import { flushPendingSettingsEdits } from '../ui/settings';
 import { initStepControls } from './step-controls';
+import { wireCatchUpButton } from './catch-up';
 
 
 type AnyFn = (...args: any[]) => any;
@@ -961,6 +969,88 @@ export function bindStaticDom() {
     installObsChip();
   initSelfChecksChip();
     initStepControls(document);
+    try {
+      const resolveCatchUpScroller = () =>
+        resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
+      const getLineElementByIndex = (root: ParentNode | null, index: number) => {
+        if (!root || !Number.isFinite(index)) return null;
+        const idx = Math.max(0, Math.floor(index));
+        const selector = [
+          `.line[data-i="${idx}"]`,
+          `.line[data-index="${idx}"]`,
+          `.line[data-line="${idx}"]`,
+          `.line[data-line-idx="${idx}"]`,
+          `.tp-line[data-i="${idx}"]`,
+          `.tp-line[data-index="${idx}"]`,
+          `.tp-line[data-line="${idx}"]`,
+          `.tp-line[data-line-idx="${idx}"]`,
+        ].join(',');
+        try {
+          const found = (root as ParentNode).querySelector?.(selector) as HTMLElement | null;
+          if (found) return found;
+        } catch {}
+        return document.getElementById(`tp-line-${idx}`) as HTMLElement | null;
+      };
+      const getActiveLineEl = () => {
+        const scroller = resolveCatchUpScroller();
+        const root = getScriptRoot() || scroller || document;
+        const selector = [
+          '.line.is-active',
+          '.line.active',
+          '.tp-line.is-active',
+          '.tp-line.active',
+          'p.current',
+          'p.active',
+          '[data-active-line="1"]',
+          '[data-active="1"]',
+        ].join(',');
+        try {
+          const found = (root as ParentNode).querySelector?.(selector) as HTMLElement | null;
+          if (found) return found;
+        } catch {}
+        const anyWin = window as any;
+        const rawIdx = Number(
+          anyWin.currentIndex ??
+          anyWin.__tpAsrScrollState?.cursorLineIndex ??
+          NaN,
+        );
+        if (Number.isFinite(rawIdx)) {
+          const line = getLineElementByIndex(root as ParentNode, rawIdx);
+          if (line) return line;
+        }
+        const anchorIdx = scroller ? computeAnchorLineIndex(scroller) : computeAnchorLineIndex();
+        if (anchorIdx != null) {
+          const line = getLineElementByIndex(root as ParentNode, anchorIdx);
+          if (line) return line;
+        }
+        return null;
+      };
+      const getMarkerOffsetPx = () => {
+        const scroller = resolveCatchUpScroller();
+        const hostHeight = scroller?.clientHeight || window.innerHeight || 0;
+        const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+          ? (window as any).__TP_MARKER_PCT
+          : 0.4;
+        return Math.max(0, Math.round(hostHeight * markerPct));
+      };
+      wireCatchUpButton({
+        getScroller: resolveCatchUpScroller,
+        getMarkerOffsetPx,
+        getActiveLineEl,
+        scrollToTop: (top: number) => {
+          applyCanonicalScrollTop(top, { scroller: resolveCatchUpScroller(), reason: 'catchup' });
+        },
+        devLog: (...args) => {
+          try {
+            const debug =
+              (window as any).__tpScrollDebug === true ||
+              /scrollDebug=1/i.test(String(location.search || ''));
+            if (debug) console.debug(...args);
+            (window as any).__tpHud?.log?.(...args);
+          } catch {}
+        },
+      });
+    } catch {}
       // Keep empty script area informative before real content loads
     // Speakers section toggle (show/hide panel body)
     try {
