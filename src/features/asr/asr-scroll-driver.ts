@@ -139,10 +139,6 @@ const DEFAULT_LAG_RELOCK_MIN_TOKENS = 4;
 const DEFAULT_LAG_RELOCK_MIN_CHARS = 18;
 const DEFAULT_LAG_RELOCK_LOOKAHEAD_BONUS = 260;
 const DEFAULT_LAG_RELOCK_DURATION_MS = 2600;
-const DEFAULT_LAG_RELOCK_MIN_OVERLAP = 2;
-const DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN = 4;
-const DEFAULT_LAG_RELOCK_MULTI_MIN_LINES = 2;
-const DEFAULT_LAG_RELOCK_MULTI_MAX_LINES = 4;
 const DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR = 0.3;
 const DEFAULT_RELOCK_SIM_FLOOR = 0.45;
 const DEFAULT_RELOCK_OVERLAP_RATIO = 0.22;
@@ -195,7 +191,6 @@ const DEFAULT_STUCK_RESYNC_WINDOW_MS = 2600;
 const DEFAULT_STUCK_RESYNC_LOOKAHEAD_BONUS = 80;
 const DEFAULT_STUCK_RESYNC_BACKTRACK_LINES = 1;
 const DEFAULT_STUCK_RELOCK_SIM = 0.55;
-const DEFAULT_DISTANCE_PENALTY_PER_LINE = 0.004;
 const DEFAULT_GENERIC_SIM_DELTA = 0.03;
 const DEFAULT_GENERIC_MIN_CANDIDATES = 3;
 const DEFAULT_GENERIC_MAX_TOKENS = 8;
@@ -227,11 +222,6 @@ function formatLogSnippet(value: string, maxLen: number) {
 
 function formatLogScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : '?';
-}
-
-function applyDistancePenalty(score: number, distance: number, penaltyPerLine: number): number {
-  const penalty = Math.max(0, distance) * Math.max(0, penaltyPerLine);
-  return clamp(score - penalty, 0, 1);
 }
 
 function mergeEvidenceText(base: string, next: string): string {
