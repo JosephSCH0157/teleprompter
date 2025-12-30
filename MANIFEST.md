@@ -17,6 +17,25 @@ date: 2025-12-20
 - Forge account: `account.html` + `dist/forge/account.js`
 - Forge config injector: `forge-config.js`
 
+**Authoritative root layout (source of truth)**
+- This section is authoritative. Update here first and mirror README to match.
+- Source + build: `src/` is the main TypeScript source; `dist/` is built output.
+- Runtime / transitional modules at root: `asr/`, `speech/`, `hud/`, `settings/`, `controllers/`, `hotkeys/`, `wiring/`, `adapters/`, `boot/`, `legacy/`, `vendor/`.
+- Shared types (migration anchor): **types.ts** (`src/state/types.ts`) contains shared TypeScript types exported for use across legacy and new TS modules during the migration.
+- App entrypoints + static assets: HTML (`teleprompter_pro.html`, `display.html`, `index.html`), CSS (`teleprompter_pro.css`), plus `assets/` and `favicon2.png`.
+- Tooling / scripts: `tools/`, `scripts/`, `.husky/`, plus helper scripts (`dev-start.ps1`, `dev-stop.ps1`, `ps_static_server.ps1`, `start_server.bat`).
+- Tests / docs: `tests/`, `fixtures/`, `docs/`, plus `README.md`, `CHANGELOG.md`, `MANIFEST.md`.
+- Project config + generated listings: `package.json`, `tsconfig.json`, ESLint configs, `netlify.toml`, `.github/`, `.vscode/`, `.netlify/`, `node_modules/`, and generated trees (`filetree.txt`, `project_tree.txt`).
+
+**Where new code goes**
+- New features & logic -> `src/` (TypeScript only). If it is net-new or being actively evolved, it starts life here.
+- Bridges / shims only -> root runtime folders (e.g. `asr/`, `speech/`, `hud/`) only when adapting legacy code to TS or wiring into `src/`. No greenfield logic outside `src/`.
+
+**Migration legend**
+- TS-native (target state): `src/`, `dist/`, `src/state/types.ts`
+- Transitional (runtime-critical, migrating or wrapping legacy behavior): `asr/`, `speech/`, `hud/`, `settings/`, `controllers/`, `hotkeys/`, `wiring/`, `adapters/`, `boot/`
+- Legacy / frozen (no new logic): `legacy/`, `vendor/`
+
 **Runtime modules (TS source of truth)**
 - HUD: `src/hud/*` (loader/controller/toggle)
 - Rendering + ingest: `src/render-script.ts`, `src/features/script-ingest.ts`
