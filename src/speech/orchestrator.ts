@@ -193,6 +193,7 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
       console.error('DISPATCH_MISSING_MATCHID', Object.keys(payload));
     }
     if (isLogEnabled()) {
+      const payloadAny = payload as any;
       try {
         console.debug(
           '[ASR] dispatchTranscript keys=',
@@ -203,15 +204,15 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
           payload.noMatch,
         );
       } catch {}
-      if (!payload.noMatch) {
+      if (hasMatch) {
         try {
           console.assert(
-            typeof payload.matchId === 'string' && payload.matchId.length > 0,
+            typeof payloadAny.matchId === 'string' && payloadAny.matchId.length > 0,
             '[ASR] dispatchTranscript missing matchId for match payload',
             payload,
           );
           console.assert(
-            typeof payload.sim === 'number' && Number.isFinite(payload.sim),
+            typeof payloadAny.sim === 'number' && Number.isFinite(payloadAny.sim),
             '[ASR] dispatchTranscript sim not numeric for match payload',
             payload,
           );
