@@ -173,6 +173,9 @@ Status:
 Optional enforcement note:
 Any pricing-related UI must pass a plain-English test: a first-time creator should be able to explain Forge pricing accurately after reading it once.
 
+Trust contract:
+See `docs/Trust-Contract.md` for the user-facing trust contract that mirrors these principles.
+
 **Runtime modules (TS source of truth)**
 - HUD: `src/hud/*` (loader/controller/toggle)
 - Rendering + ingest: `src/render-script.ts`, `src/features/script-ingest.ts`

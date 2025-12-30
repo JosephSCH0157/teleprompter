@@ -107,6 +107,10 @@ Handy URLs:
 - Sitemap & wireframes: `docs/sitemap-wireframes.md`
 - TS migration plan: `docs/TS_MIGRATION.md` (build `src/logic` via `npm run build:logic` for d.ts outputs)
 
+## Trust & Pricing
+Podcaster's Forge operates under explicit transparency principles covering AI usage, API access, and pricing.
+See `docs/Trust-Contract.md` for the full trust contract governing all Forge tools.
+
 ## Packaging / release bumps
 - Visible version in HTML is bumped by `npm run postversion` (runs `tools/bump_html_version.js`).
 - Legacy HUD/debug and eggs are quarantined under `legacy/`; lint ignores them.

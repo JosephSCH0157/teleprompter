@@ -13,6 +13,10 @@ Release: v1.7.8
 
 - HUD popout direct URL now bootstraps reliably with fallback loader messaging instead of black screen.
 
+### Docs
+
+- Documented AI/API usage and pricing principles in MANIFEST.md and added docs/Trust-Contract.md with a README pointer.
+
 
 ## [1.7.7-pre-stabilization] - 2025-12-06
 
