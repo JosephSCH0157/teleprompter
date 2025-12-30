@@ -123,6 +123,10 @@ const DEFAULT_CATCHUP_MED_MIN_PX = 80;
 const DEFAULT_CATCHUP_FAST_MIN_PX = 250;
 const DEFAULT_MAX_TARGET_JUMP_PX = 120;
 const DEFAULT_MAX_TARGET_JUMP_HYBRID_PX = 80;
+const DEFAULT_NO_TARGET_RETRY_SIM = 0.9;
+const DEFAULT_NO_TARGET_RETRY_MAX_DELTA = 6;
+const DEFAULT_NO_TARGET_RETRY_FRAMES = 2;
+const DEFAULT_NO_TARGET_RETRY_WINDOW_MS = 350;
 const DEFAULT_STRONG_WINDOW_MS = 700;
 const DEFAULT_FINAL_EVIDENCE_LEAD_LINES = 2;
 const DEFAULT_BACK_RECOVERY_MAX_PX = 15;
@@ -388,6 +392,81 @@ function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number):
   );
 }
 
+function diagnoseNoTarget(scroller: HTMLElement | null, lineIndex: number) {
+  const reasons: string[] = [];
+  if (!Number.isFinite(lineIndex)) reasons.push('invalid_index');
+  if (!scroller) {
+    reasons.push('no_scroller');
+    return {
+      reasons,
+      lineEl: null as HTMLElement | null,
+      domLines: 0,
+      markerIdx: -1,
+      scrollerId: 'none',
+    };
+  }
+
+  const lineEl = getLineElementByIndex(scroller, lineIndex);
+  if (!lineEl) reasons.push('line_missing');
+  if (lineEl && !lineEl.isConnected) reasons.push('line_detached');
+  if (lineEl) {
+    try {
+      const style = getComputedStyle(lineEl);
+      if (style.display === 'none' || style.visibility === 'hidden') {
+        reasons.push('line_hidden');
+      }
+    } catch {}
+    try {
+      const rect = lineEl.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) reasons.push('line_zero_rect');
+    } catch {}
+  }
+
+  if (!scroller.isConnected) reasons.push('scroller_detached');
+  try {
+    const scrollerStyle = getComputedStyle(scroller);
+    if (scrollerStyle.display === 'none' || scrollerStyle.visibility === 'hidden') {
+      reasons.push('scroller_hidden');
+    }
+  } catch {}
+
+  let domLines = 0;
+  try { domLines = scroller.querySelectorAll('.line').length; } catch {}
+  if (domLines === 0) reasons.push('no_dom_lines');
+
+  const markerIdx = computeMarkerLineIndex(scroller);
+  if (!Number.isFinite(markerIdx) || markerIdx < 0) reasons.push('marker_idx_invalid');
+
+  return {
+    reasons,
+    lineEl,
+    domLines,
+    markerIdx,
+    scrollerId: describeElement(scroller),
+  };
+}
+
+function estimateTargetTopFromLines(
+  scroller: HTMLElement | null,
+  baseLineIndex: number,
+  targetLineIndex: number,
+): number | null {
+  if (!scroller) return null;
+  const baseIdx = Number.isFinite(baseLineIndex) ? Math.max(0, Math.floor(baseLineIndex)) : 0;
+  const targetIdx = Number.isFinite(targetLineIndex) ? Math.max(0, Math.floor(targetLineIndex)) : 0;
+  const baseEl =
+    getLineElementByIndex(scroller, baseIdx) ||
+    scroller.querySelector<HTMLElement>('.line');
+  if (!baseEl) return null;
+  const lineHeight = baseEl.offsetHeight || baseEl.clientHeight || 0;
+  if (!lineHeight) return null;
+  const deltaLines = targetIdx - baseIdx;
+  const offset = Math.max(0, (scroller.clientHeight - lineHeight) / 2);
+  const raw = (baseEl.offsetTop || 0) + deltaLines * lineHeight - offset;
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  return clamp(raw, 0, max);
+}
+
 function computeMarkerLineIndex(scroller: HTMLElement | null): number {
   try {
     const viewer = scroller || getPrimaryScroller();
@@ -491,12 +570,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindHitWindowStart = 0;
   let lagRelockHits = 0;
   let lagRelockWindowStart = 0;
-  let pendingMatch: PendingMatch | null = null;
-  let pendingRaf = 0;
-  let bootLogged = false;
-  let forcedCooldownUntil = 0;
-  const forcedCommitTimes: number[] = [];
-  let lastStuckDumpAt = 0;
+    let pendingMatch: PendingMatch | null = null;
+    let pendingRaf = 0;
+    let bootLogged = false;
+    let forcedCooldownUntil = 0;
+    const forcedCommitTimes: number[] = [];
+    let noTargetRetryLine = -1;
+    let noTargetRetryCount = 0;
+    let noTargetRetryAt = 0;
+    let noTargetRetryMatchId: string | null = null;
+    let lastStuckDumpAt = 0;
   let lastMatchId: string | undefined;
   let lastScriptHash = '';
   let missingMatchIdKeysLogged = false;
@@ -1312,19 +1395,86 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       let targetLine = Math.max(0, Math.floor(line));
-      let targetTop = resolveTargetTop(scroller, targetLine);
-      const currentTop = scroller.scrollTop || 0;
-      let deltaPx = targetTop != null ? targetTop - currentTop : 0;
+        let targetTop = resolveTargetTop(scroller, targetLine);
+        const currentTop = scroller.scrollTop || 0;
+        let deltaPx = targetTop != null ? targetTop - currentTop : 0;
 
-      if (targetTop == null) {
-        warnGuard('no_target', [
-          `current=${lastLineIndex}`,
-          `best=${targetLine}`,
-          `delta=${targetLine - lastLineIndex}`,
-          snippet ? `clue="${snippet}"` : '',
-        ]);
-        return;
-      }
+        if (targetTop == null) {
+          const deltaLines = targetLine - lastLineIndex;
+          const diag = diagnoseNoTarget(scroller, targetLine);
+          const reasonChain = diag.reasons.length ? diag.reasons.join('|') : 'unknown';
+          const retryEligible =
+            strongMatch &&
+            conf >= DEFAULT_NO_TARGET_RETRY_SIM &&
+            deltaLines >= 0 &&
+            deltaLines <= DEFAULT_NO_TARGET_RETRY_MAX_DELTA;
+          let retryCount = 0;
+
+          if (retryEligible) {
+            const sameKey =
+              noTargetRetryLine === targetLine &&
+              (matchId ? matchId === noTargetRetryMatchId : noTargetRetryMatchId == null);
+            if (!sameKey || now - noTargetRetryAt > DEFAULT_NO_TARGET_RETRY_WINDOW_MS) {
+              noTargetRetryCount = 0;
+            }
+            noTargetRetryLine = targetLine;
+            noTargetRetryMatchId = matchId || null;
+            noTargetRetryAt = now;
+            retryCount = noTargetRetryCount + 1;
+            noTargetRetryCount = retryCount;
+          }
+
+          warnGuard('no_target', [
+            `current=${lastLineIndex}`,
+            `best=${targetLine}`,
+            `delta=${deltaLines}`,
+            `why=${reasonChain}`,
+            `domLines=${diag.domLines}`,
+            `marker=${diag.markerIdx}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+          emitHudStatus('no_target', 'No target line in DOM', {
+            line: targetLine,
+            delta: deltaLines,
+            sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+            reasons: reasonChain,
+            domLines: diag.domLines,
+            marker: diag.markerIdx,
+            retry: retryCount,
+            matchId,
+          });
+          logDev('no_target', {
+            line: targetLine,
+            delta: deltaLines,
+            sim: conf,
+            reasons: reasonChain,
+            scroller: diag.scrollerId,
+            domLines: diag.domLines,
+            markerIdx: diag.markerIdx,
+            retry: retryCount,
+            matchId,
+          });
+
+          if (retryEligible && retryCount > 0 && retryCount <= DEFAULT_NO_TARGET_RETRY_FRAMES) {
+            const approxTop = estimateTargetTopFromLines(scroller, lastLineIndex, targetLine);
+            if (approxTop != null) {
+              const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+              const base = targetTopPx == null ? currentTop : targetTopPx;
+              const desired = clamp(approxTop, 0, max);
+              const limitedTarget = Math.min(desired, base + jumpCap);
+              if (limitedTarget > base) {
+                targetTopPx = limitedTarget;
+                lastEvidenceAt = now;
+                ensureControllerActive();
+                logDev('no_target_nudge', { line: targetLine, px: Math.round(limitedTarget - base), conf });
+              }
+            }
+            pendingMatch = { ...pending };
+            schedulePending();
+            return;
+          }
+          return;
+        }
 
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
