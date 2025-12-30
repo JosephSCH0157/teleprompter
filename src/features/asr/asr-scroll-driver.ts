@@ -1764,6 +1764,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
+    const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const noMatchFlag = !Number.isFinite(rawIdx) || rawIdx < 0;
+    if (isDevMode() && rawIdx !== cursorLine) {
+      const bestOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) : rawIdx;
+      const deltaOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) - cursorLine : NaN;
+      try {
+        console.debug(
+          '[ASR_EVENT_IDX]',
+          `matchId=${matchId}`,
+          `current=${cursorLine}`,
+          `best=${bestOut}`,
+          `delta=${Number.isFinite(deltaOut) ? deltaOut : 'NaN'}`,
+          `sim=${formatLogScore(conf)}`,
+          `noMatch=${noMatchFlag ? 1 : 0}`,
+        );
+      } catch {}
+    }
     if (!Number.isFinite(rawIdx)) {
       warnGuard('invalid_match', [
         `current=${currentIdx}`,
@@ -1781,8 +1798,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       emitHudStatus('no_match', 'No match');
       return;
     }
-
-    const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
     const totalLines = getTotalLines();
     const bandStart = Number.isFinite((match as any)?.bandStart)
       ? Math.max(0, Math.floor((match as any).bandStart))
