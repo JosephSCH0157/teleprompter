@@ -209,6 +209,9 @@ const DEFAULT_LAG_FORCE_HITS = 2;
 const DEFAULT_CATCHUP_MODE_MAX_JUMP = 25;
 const DEFAULT_CATCHUP_MODE_MIN_SIM = 0.55;
 const DEFAULT_CATCHUP_MODE_DURATION_MS = 2500;
+const DEFAULT_CATCHUP_LOOKAHEAD_BONUS = 120;
+const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
+const DEFAULT_FREEZE_LOW_SIM_WINDOW_MS = 5000;
 const EVENT_RING_MAX = 50;
 const EVENT_DUMP_COUNT = 12;
 
@@ -459,6 +462,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastForwardCommitAt = Date.now();
   let disposed = false;
   let desyncWarned = false;
+  let lowSimStreak = 0;
+  let lowSimFirstAt = 0;
+  let lowSimFreezeLogged = false;
   let resyncUntil = 0;
   let resyncAnchorIdx: number | null = null;
   let resyncReason: string | null = null;
@@ -954,6 +960,55 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     } catch {}
   };
 
+  const resetLowSimStreak = () => {
+    lowSimStreak = 0;
+    lowSimFirstAt = 0;
+  };
+
+  const noteLowSimFreeze = (now: number, snapshot: {
+    cursorLine: number;
+    bestIdx: number;
+    delta: number;
+    sim: number;
+    inBand: boolean;
+    requiredSim: number;
+    need: number;
+    repeatCount: number;
+    bestSpan?: number;
+    overlapRatio?: number;
+    snippet: string;
+    matchId?: string;
+    relockModeActive: boolean;
+    catchUpModeActive: boolean;
+    stuckResyncActive: boolean;
+  }) => {
+    if (!lowSimFirstAt) lowSimFirstAt = now;
+    lowSimStreak += 1;
+    if (lowSimFreezeLogged) return;
+    const elapsed = now - lowSimFirstAt;
+    if (lowSimStreak < DEFAULT_FREEZE_LOW_SIM_HITS && elapsed < DEFAULT_FREEZE_LOW_SIM_WINDOW_MS) return;
+    lowSimFreezeLogged = true;
+    try {
+      console.warn('[ASR_FREEZE_SNAPSHOT]', {
+        cursorLine: snapshot.cursorLine,
+        bestIdx: snapshot.bestIdx,
+        delta: snapshot.delta,
+        sim: Number.isFinite(snapshot.sim) ? Number(snapshot.sim.toFixed(3)) : snapshot.sim,
+        inBand: snapshot.inBand ? 1 : 0,
+        requiredSim: Number.isFinite(snapshot.requiredSim) ? Number(snapshot.requiredSim.toFixed(3)) : snapshot.requiredSim,
+        need: Number.isFinite(snapshot.need) ? Number(snapshot.need.toFixed(3)) : snapshot.need,
+        repeatCount: snapshot.repeatCount,
+        bestSpan: snapshot.bestSpan,
+        overlapRatio: snapshot.overlapRatio,
+        matchId: snapshot.matchId,
+        relock: snapshot.relockModeActive,
+        catchUp: snapshot.catchUpModeActive,
+        stuck: snapshot.stuckResyncActive,
+        snippet: snapshot.snippet,
+      });
+    } catch {}
+  };
+
   const pruneForcedCommits = (now: number) => {
     while (forcedCommitTimes.length && forcedCommitTimes[0] < now - forcedRateWindowMs) {
       forcedCommitTimes.shift();
@@ -1199,8 +1254,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ]);
         emitHudStatus(
           'low_sim',
-          `Blocked: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
+          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
         );
+        noteLowSimFreeze(Date.now(), {
+          cursorLine: lastLineIndex,
+          bestIdx: line,
+          delta: line - lastLineIndex,
+          sim: conf,
+          inBand: true,
+          requiredSim: requiredThreshold,
+          need: effectiveThreshold,
+          repeatCount: relockRepeat || 0,
+          bestSpan: relockSpan,
+          overlapRatio: relockOverlapRatio,
+          snippet: formatLogSnippet(snippet, 80),
+          matchId,
+          relockModeActive: !!relockOverride,
+          catchUpModeActive: false,
+          stuckResyncActive: false,
+        });
         return;
       }
 
@@ -1410,6 +1482,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         pruneForcedCommits(now);
       }
       noteCommit(prevLineIndex, targetLine, now);
+      resetLowSimStreak();
       try { (window as any).currentIndex = lastLineIndex; } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         matchId,
@@ -1487,6 +1560,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bufferedText = metaTranscript ? compacted : updateEvidenceBuffer(compacted, isFinal, now);
     const bufferGrowing = !metaTranscript && bufferMs > 0 && bufferedText.length > prevBufferChars;
     const snippet = formatLogSnippet(bufferedText, 60);
+    const freezeSnippet = formatLogSnippet(bufferedText, 80);
     const fragmentTokenCount = normTokens(compacted).length;
     const tokenCount = normTokens(bufferedText).length;
     const evidenceChars = bufferedText.length;
@@ -1580,7 +1654,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
     const driverWindowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
-    const driverWindowAhead = resolveLookahead(resyncActive);
+    const catchUpModeActivePre = catchUpModeUntil > now;
+    const lookaheadBase = resolveLookahead(resyncActive);
+    const driverWindowAhead = catchUpModeActivePre
+      ? clamp(lookaheadBase + DEFAULT_CATCHUP_LOOKAHEAD_BONUS, matchLookaheadLines, matchLookaheadMax + DEFAULT_CATCHUP_LOOKAHEAD_BONUS)
+      : lookaheadBase;
     const match = incomingMatch ?? matchBatch(bufferedText, !!isFinal, {
       currentIndex: effectiveAnchor,
       windowBack: driverWindowBack,
@@ -1733,6 +1811,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
     const catchUpModeWasActive = catchUpModeUntil > now;
     const lowSimFloor = lagRelockActive ? DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR : DEFAULT_LOW_SIM_FLOOR;
+    if (catchUpModeWasActive && rawIdx < cursorLine) {
+      warnGuard('catchup_ignore_behind', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `sim=${formatLogScore(effectiveRawSim)}`,
+      ]);
+      emitHudStatus('catchup', 'Catch-up: ON');
+      return;
+    }
     const behindByLowSim =
       rawIdx < cursorLine - matchWindowBack ||
       (rawIdx < cursorLine && effectiveRawSim < lowSimFloor);
@@ -1766,16 +1854,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       } else {
         resetLagRelock('behind_noise');
       }
-      return;
-    }
-    if (catchUpModeWasActive && rawIdx < cursorLine) {
-      warnGuard('catchup_ignore_behind', [
-        `current=${cursorLine}`,
-        `best=${rawIdx}`,
-        `delta=${rawIdx - cursorLine}`,
-        `sim=${formatLogScore(effectiveRawSim)}`,
-      ]);
-      emitHudStatus('catchup', 'Catch-up: ON');
       return;
     }
     resetLagRelock('in-band');
@@ -2100,7 +2178,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     }
     const forwardEvidence = inBand && rawIdx > cursorLine;
-    const lowSimForwardEvidence = forwardEvidence && (isFinal || repeatOk || spanOk || overlapOk);
+    const lowSimForwardEvidence = relockModeActive && forwardEvidence && (isFinal || repeatOk || spanOk || overlapOk);
     if (lowSimForwardEvidence && conf < effectiveThreshold) {
       effectiveThreshold = Math.min(effectiveThreshold, conf);
       if (!relockOverride) {
@@ -2109,6 +2187,36 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     if (effectiveThreshold > 0 && conf < effectiveThreshold) {
+      if (!relockModeActive) {
+        warnGuard('low_sim_wait', [
+          matchId ? `matchId=${matchId}` : '',
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `delta=${rawIdx - cursorLine}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(effectiveThreshold)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        emitHudStatus('low_sim_wait', 'Low confidence - waiting');
+        noteLowSimFreeze(now, {
+          cursorLine,
+          bestIdx: rawIdx,
+          delta: rawIdx - cursorLine,
+          sim: conf,
+          inBand,
+          requiredSim: requiredThreshold,
+          need: effectiveThreshold,
+          repeatCount: relockRepeatCount,
+          bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
+          overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
+          snippet: freezeSnippet,
+          matchId,
+          relockModeActive,
+          catchUpModeActive,
+          stuckResyncActive,
+        });
+        return;
+      }
       warnGuard('low_sim', [
         matchId ? `matchId=${matchId}` : '',
         `current=${cursorLine}`,
@@ -2127,6 +2235,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         'low_sim_ingest',
         `Ignored: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
       );
+      noteLowSimFreeze(now, {
+        cursorLine,
+        bestIdx: rawIdx,
+        delta: rawIdx - cursorLine,
+        sim: conf,
+        inBand,
+        requiredSim: requiredThreshold,
+        need: effectiveThreshold,
+        repeatCount: relockRepeatCount,
+        bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
+        overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
+        snippet: freezeSnippet,
+        matchId,
+        relockModeActive,
+        catchUpModeActive,
+        stuckResyncActive,
+      });
       return;
     }
     recordConsistencyEntry({
@@ -2367,6 +2492,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         lastSeekTs = now;
         lastEvidenceAt = now;
         noteCommit(cursorLine, lastLineIndex, now);
+        resetLowSimStreak();
         behindStrongSince = 0;
         behindStrongCount = 0;
         lastBehindRecoveryAt = now;

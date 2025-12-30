@@ -32,6 +32,7 @@ export type AsrTuningState = {
   activeProfileId?: AsrTuningProfileId;
 };
 
+const DISABLE_ASR_TUNING_PERSIST = true;
 const KEY = 'tp_asr_tuning_profiles_v1';
 const ACTIVE_KEY = 'tp_asr_tuning_active_profile_v1';
 const store = getAppStore();
@@ -88,6 +89,7 @@ const BUILTIN_PROFILES: Record<AsrTuningProfileId, AsrTuningProfile> = {
 };
 
 const stateFromStore = (() => {
+  if (DISABLE_ASR_TUNING_PERSIST) return null;
   if (!store) return null;
   try {
     const profiles = (store.get('asrTuningProfiles') as Record<AsrTuningProfileId, AsrTuningProfile> | undefined) || {};
@@ -129,6 +131,9 @@ function hydrateProfiles(raw: Record<AsrTuningProfileId, Partial<AsrTuningProfil
 
 let state: AsrTuningState = (() => {
   try {
+    if (DISABLE_ASR_TUNING_PERSIST) {
+      return { profiles: hydrateProfiles(null), activeProfileId: 'reading' } as AsrTuningState;
+    }
     if (stateFromStore) {
       return {
         profiles: hydrateProfiles(stateFromStore.profiles),
@@ -157,6 +162,7 @@ let storeSyncSuppressed = false;
 let calibrationRunning = false;
 
 function syncAppStore() {
+  if (DISABLE_ASR_TUNING_PERSIST) return;
   if (!store) return;
   storeSyncSuppressed = true;
   try { store.set('asrTuningProfiles', state.profiles); } catch {}
@@ -169,11 +175,13 @@ function emitChange() {
 }
 
 function save(opts?: { fromStore?: boolean }) {
-  try { localStorage.setItem(KEY, JSON.stringify(state.profiles || {})); } catch {}
-  try {
-    if (state.activeProfileId) localStorage.setItem(ACTIVE_KEY, state.activeProfileId);
-    else localStorage.removeItem(ACTIVE_KEY);
-  } catch {}
+  if (!DISABLE_ASR_TUNING_PERSIST) {
+    try { localStorage.setItem(KEY, JSON.stringify(state.profiles || {})); } catch {}
+    try {
+      if (state.activeProfileId) localStorage.setItem(ACTIVE_KEY, state.activeProfileId);
+      else localStorage.removeItem(ACTIVE_KEY);
+    } catch {}
+  }
   subs.forEach(fn => { try { fn(state); } catch {} });
   if (!opts?.fromStore) {
     syncAppStore();
@@ -348,7 +356,7 @@ export function startCadenceCalibration(opts?: { durationMs?: number; profileId?
   return { stop, done };
 }
 
-if (store) {
+if (store && !DISABLE_ASR_TUNING_PERSIST) {
   try {
     store.subscribe('asrTuningProfiles', (next) => {
       if (storeSyncSuppressed) return;
@@ -368,28 +376,30 @@ if (store) {
 }
 
 try {
-  window.addEventListener('storage', (e: StorageEvent) => {
-    try {
-      if (e.key === KEY && e.newValue) {
-        const parsed = JSON.parse(e.newValue) as Partial<AsrTuningState> | Record<AsrTuningProfileId, AsrTuningProfile>;
-        const legacyProfiles = parsed && typeof parsed === 'object' && 'profiles' in parsed
-          ? (parsed as AsrTuningState).profiles
-          : null;
-        const profiles = legacyProfiles && typeof legacyProfiles === 'object'
-          ? legacyProfiles
-          : (parsed && typeof parsed === 'object' ? (parsed as Record<AsrTuningProfileId, AsrTuningProfile>) : {});
-        state = {
-          ...state,
-          profiles: hydrateProfiles(profiles || {}),
-        } as AsrTuningState;
-        save({ fromStore: true });
-      }
-      if (e.key === ACTIVE_KEY) {
-        state.activeProfileId = e.newValue || undefined;
-        save({ fromStore: true });
-      }
-    } catch {}
-  });
+  if (!DISABLE_ASR_TUNING_PERSIST) {
+    window.addEventListener('storage', (e: StorageEvent) => {
+      try {
+        if (e.key === KEY && e.newValue) {
+          const parsed = JSON.parse(e.newValue) as Partial<AsrTuningState> | Record<AsrTuningProfileId, AsrTuningProfile>;
+          const legacyProfiles = parsed && typeof parsed === 'object' && 'profiles' in parsed
+            ? (parsed as AsrTuningState).profiles
+            : null;
+          const profiles = legacyProfiles && typeof legacyProfiles === 'object'
+            ? legacyProfiles
+            : (parsed && typeof parsed === 'object' ? (parsed as Record<AsrTuningProfileId, AsrTuningProfile>) : {});
+          state = {
+            ...state,
+            profiles: hydrateProfiles(profiles || {}),
+          } as AsrTuningState;
+          save({ fromStore: true });
+        }
+        if (e.key === ACTIVE_KEY) {
+          state.activeProfileId = e.newValue || undefined;
+          save({ fromStore: true });
+        }
+      } catch {}
+    });
+  }
 } catch {}
 
 try {
