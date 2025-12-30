@@ -16,6 +16,10 @@ Browser-based teleprompter with mirrored display, speech/scroll helpers, recordi
 - Forge pages: `login.html` → `dist/forge/login.js`, `account.html` → `dist/forge/account.js`
 - Legacy/compat: `recorders.js`, stubs in `legacy/` (kept for older bundles)
 
+Authoritative reference:
+This section is mirrored from `MANIFEST.md`, which is the canonical source for repository structure and migration rules.
+Update `MANIFEST.md` first; `README.md` is a mirror.
+
 ## Root layout
 Source + build: `src/` is the main TypeScript source; `dist/` is built output.
 
