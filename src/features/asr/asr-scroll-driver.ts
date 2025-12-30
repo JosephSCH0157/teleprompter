@@ -1165,7 +1165,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           relockOverride ? `relock=1` : '',
           relockReason ? `relockReason=${relockReason}` : '',
           Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
-          Number.isFinite(relockOverlapRatio) ? `overlap=${formatLogScore(relockOverlapRatio)}` : '',
+          typeof relockOverlapRatio === 'number' && Number.isFinite(relockOverlapRatio)
+            ? `overlap=${formatLogScore(relockOverlapRatio)}`
+            : '',
           Number.isFinite(relockRepeat) ? `repeat=${relockRepeat}` : '',
           snippet ? `clue="${snippet}"` : '',
         ]);
@@ -1422,7 +1424,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           relockOverride ? `relock=1` : '',
           relockReason ? `relockReason=${relockReason}` : '',
           Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
-          Number.isFinite(relockOverlapRatio) ? `overlap=${formatLogScore(relockOverlapRatio)}` : '',
+          typeof relockOverlapRatio === 'number' && Number.isFinite(relockOverlapRatio)
+            ? `overlap=${formatLogScore(relockOverlapRatio)}`
+            : '',
           Number.isFinite(relockRepeat) ? `repeat=${relockRepeat}` : '',
           `forcedCount10s=${forcedCount}`,
           forcedCooldown ? `cooldown=${forcedCooldown}` : 'cooldown=0',
