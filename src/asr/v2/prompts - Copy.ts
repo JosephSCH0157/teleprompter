@@ -3,23 +3,13 @@ import { getAsrState } from '../store';
 
 function openAsrSettings() {
   try {
-    (window as any).__tpSettings?.open?.();
-    const body = document.getElementById('settingsBody');
-    const overlay = document.getElementById('settingsOverlay');
-    // 'body' is unused here; overlay is used for visibility toggle
-    // Removing unused 'body' to satisfy lint
-    void body;
-    if (overlay) overlay.classList.remove('hidden');
-    // Show Media tab
-    const tabsRoot = document.getElementById('settingsTabs') || document;
-    (tabsRoot?.querySelectorAll('[data-tab-content]') || []).forEach((c) => ((c as HTMLElement).style.display = 'none'));
-    const media = document.querySelector('[data-tab-content="media"]') as HTMLElement | null;
-    if (media) media.style.display = '';
-    setTimeout(() => {
-      const sec = document.getElementById('asrSettings');
-      if (sec) { try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { sec.scrollIntoView(); } }
-    }, 40);
+    const anyWin = window as any;
+    if (typeof anyWin.openSettingsToAsr === 'function') {
+      anyWin.openSettingsToAsr(false);
+      return;
+    }
   } catch {}
+  try { document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click(); } catch {}
 }
 
 // Weak input SNR (< ~15 dB for ~5s)

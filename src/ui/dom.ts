@@ -399,16 +399,10 @@ export function wireMic() {
         if (typeof anyWin.openSettingsToMedia === 'function') {
           anyWin.openSettingsToMedia();
         } else {
-          const store = anyWin.__tpStore;
-          if (store?.set) {
-            try { store.set('overlay', 'settings'); } catch {}
-            try { store.set('settingsTab', 'media'); } catch {}
-          } else {
-            document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click();
-            if (typeof anyWin.__tpSettings?.open === 'function') {
-              anyWin.__tpSettings.open();
-            }
-          }
+          try { document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click(); } catch {}
+          try { anyWin.__tpSettings?.open?.(); } catch {}
+          try { document.querySelector<HTMLElement>('[data-settings-tab="media"]')?.click(); } catch {}
+          try { document.querySelector<HTMLElement>('[data-tab="media"]')?.click(); } catch {}
         }
       } catch {
         try { document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click(); } catch {}

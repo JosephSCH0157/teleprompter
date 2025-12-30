@@ -6,19 +6,56 @@ import { showToast } from './toasts';
 const MIC_PILL_SELECTOR = '[data-tp-mic-pill]';
 const MENU_ID = 'micMenu';
 
+function openSettingsOverlay(): void {
+  let opened = false;
+  try {
+    const btn = document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]');
+    if (btn) {
+      btn.click();
+      opened = true;
+    }
+  } catch {}
+  if (opened) return;
+  try {
+    (window as any).__tpSettings?.open?.();
+    opened = true;
+  } catch {}
+  if (opened) return;
+  try {
+    const overlay = document.getElementById('settingsOverlay');
+    if (overlay) {
+      overlay.hidden = false;
+      overlay.removeAttribute('hidden');
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
+  } catch {}
+}
+
+function selectSettingsTab(id: string): void {
+  try {
+    const btn = document.querySelector<HTMLElement>(`[data-settings-tab="${id}"]`);
+    if (btn) {
+      btn.click();
+      return;
+    }
+  } catch {}
+  try {
+    const btn = document.querySelector<HTMLElement>(`[data-tab="${id}"]`);
+    btn?.click();
+  } catch {}
+}
+
 function openSettingsToMedia() {
-  let didStore = false;
   try {
     const store = getAppStore();
     if (store?.set) {
-      try { store.set('overlay', 'settings'); } catch {}
       try { store.set('settingsTab', 'media'); } catch {}
-      didStore = true;
     }
   } catch {}
-  if (!didStore) {
-    try { document.getElementById('settingsBtn')?.click(); } catch {}
-  }
+  openSettingsOverlay();
+  selectSettingsTab('media');
+  setTimeout(() => selectSettingsTab('media'), 60);
 }
 
 function openSettingsToAsr(startWizard?: boolean) {
