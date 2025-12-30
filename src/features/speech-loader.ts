@@ -260,24 +260,24 @@ try {
 function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: string }), isFinal?: boolean): void {
   try {
     const incoming = typeof input === 'string' ? null : input;
-    const text =
-      typeof input === 'string'
-        ? input
-        : (typeof incoming?.text === 'string' ? incoming.text : '');
-    if (!text) return;
-    markResultTimestamp();
+    const inputText = typeof input === 'string' ? input : '';
     const finalFlag =
       typeof isFinal === 'boolean'
         ? isFinal
         : Boolean(incoming?.isFinal ?? incoming?.final);
     const payload: TranscriptPayload = incoming ? { ...(incoming as TranscriptPayload) } : {
-      text,
+      text: inputText,
       final: !!finalFlag,
       isFinal: !!finalFlag,
       timestamp: performance.now(),
       source: 'speech-loader',
       mode: lastScrollMode || getScrollMode(),
     };
+    const text = typeof payload.text === 'string'
+      ? payload.text
+      : inputText;
+    if (!text) return;
+    markResultTimestamp();
     if (payload.text == null) payload.text = text;
     if (payload.final == null) payload.final = !!finalFlag;
     if (payload.isFinal == null) payload.isFinal = !!finalFlag;

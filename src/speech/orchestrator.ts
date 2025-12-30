@@ -167,24 +167,31 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
       !!match &&
       Number.isFinite(match.bestIdx) &&
       Number(match.bestIdx) >= 0;
-    const noMatch = !hasMatch;
-    const matchId = hasMatch ? nextMatchId() : null;
     const meta = isMetaTranscript(text);
-    const payload = {
+    const base = {
       text,
       final,
       timestamp: Date.now(),
-      sim: hasMatch
-        ? (Number.isFinite(match?.bestSim) ? match?.bestSim : (typeof sim === 'number' ? sim : null))
-        : null,
-      line: hasMatch ? match?.bestIdx : null,
-      candidates: hasMatch ? match?.topScores : [],
-      matchId,
-      match: hasMatch ? match : null,
-      noMatch,
-      meta,
       source: meta ? 'meta' : 'orchestrator',
     };
+    const payload = hasMatch
+      ? {
+        ...match,
+        ...base,
+        matchId: nextMatchId(),
+        noMatch: false,
+        sim: Number.isFinite(match?.bestSim) ? match?.bestSim : (typeof sim === 'number' ? sim : null),
+        meta,
+        match,
+      }
+      : {
+        matchId: null,
+        noMatch: true,
+        ...base,
+      };
+    if (payload.matchId === undefined) {
+      console.error('DISPATCH_MISSING_MATCHID', Object.keys(payload));
+    }
     if (isLogEnabled()) {
       try {
         console.debug(
