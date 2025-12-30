@@ -109,7 +109,7 @@ function _showToast(msg: string) {
 }
 
 // One entry point for speech. Uses Web Speech by default.
-// If /speech/orchestrator.js exists (built from TS), we load it instead.
+// If /dist/speech/orchestrator.js exists (built from TS), we load it instead.
 // Autoscroll is managed externally; buffered stop handled in index listener
 
 let running = false;
@@ -314,7 +314,7 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
   } catch {}
 }
 
-// (dynamic import of '/speech/orchestrator.js' is performed inline where needed)
+// (dynamic import of '/dist/speech/orchestrator.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
 function _startWebSpeech(): { stop: () => void } | null {
@@ -981,11 +981,9 @@ async function probeUrl(url: string): Promise<boolean> {
 
 async function resolveOrchestratorUrl(): Promise<string> {
   const v = Date.now();
-  const primary = `/speech/orchestrator.js?v=${v}`;
-  const fallback = `/dist/speech/orchestrator.js?v=${v}`;
-  const chosen = (await probeUrl(primary)) ? primary : fallback;
-  try { console.log('[SPEECH] orchestrator resolved ->', chosen, chosen === fallback ? '(fallback)' : ''); } catch {}
-  return chosen;
+  const primary = `/dist/speech/orchestrator.js?v=${v}`;
+  try { console.log('[SPEECH] orchestrator resolved ->', primary); } catch {}
+  return primary;
 }
 
 (async () => {
@@ -1010,13 +1008,12 @@ async function resolveOrchestratorUrl(): Promise<string> {
 
       // Optional probe: only if explicitly opted-in; default avoids 404 noise in dev
       const probeOptIn = (() => { try { return localStorage.getItem('tp_probe_speech') === '1' || new URLSearchParams(location.search).get('probe') === '1'; } catch { return false; } })();
-      let hasOrchestrator = hasGlobalOrch;
-      if (!hasOrchestrator && !ciGuard && probeOptIn) {
-        try {
-          const res = await fetch('/speech/orchestrator.js', { method: 'HEAD', cache: 'no-store' });
-          hasOrchestrator = !!(res && res.ok);
-        } catch {}
-      }
+        let hasOrchestrator = hasGlobalOrch;
+        if (!hasOrchestrator && !ciGuard && probeOptIn) {
+          try {
+            hasOrchestrator = await probeUrl('/dist/speech/orchestrator.js');
+          } catch {}
+        }
 
       const supported = SRAvail || hasOrchestrator;
       const canUse = supported || force;

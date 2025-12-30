@@ -383,32 +383,38 @@ export function wireDisplayMirror() {
   } catch {}
 }
 
-export function wireMic() {
-  const req = $('micBtn');
-  const rel = $('releaseMicBtn');
-  on(req, 'click', async () => { try { await window.__tpMic?.requestMic?.(); } catch {} });
-  on(rel, 'click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} });
-  const cal = $('micCalBtn');
-  if (cal && !(cal as any)._tpMicCalWired) {
-    (cal as any)._tpMicCalWired = true;
-    cal.dataset.micCalWired = '1';
-    cal.addEventListener('click', (ev) => {
-      try { ev.preventDefault(); } catch {}
-      try {
-        const anyWin = window as any;
-        if (typeof anyWin.openSettingsToMedia === 'function') {
-          anyWin.openSettingsToMedia();
-        } else {
+  export function wireMic() {
+    const req = $('micBtn');
+    const rel = $('releaseMicBtn');
+    on(req, 'click', async () => { try { await window.__tpMic?.requestMic?.(); } catch {} });
+    on(rel, 'click', () => { try { window.__tpMic?.releaseMic?.(); } catch {} });
+    const cal = $('micCalBtn');
+    if (cal && !(cal as any)._tpMicCalWired) {
+      (cal as any)._tpMicCalWired = true;
+      cal.dataset.micCalWired = '1';
+      const openMediaSettings = (ev?: Event) => {
+        try { ev?.preventDefault(); } catch {}
+        try {
+          const anyWin = window as any;
+          if (typeof anyWin.openSettingsToMedia === 'function') {
+            anyWin.openSettingsToMedia();
+            return;
+          }
+          try { anyWin.__tpStore?.set?.('settingsTab', 'media'); } catch {}
           try { document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click(); } catch {}
           try { anyWin.__tpSettings?.open?.(); } catch {}
-          try { document.querySelector<HTMLElement>('[data-settings-tab="media"]')?.click(); } catch {}
-          try { document.querySelector<HTMLElement>('[data-tab="media"]')?.click(); } catch {}
+          const clickMediaTab = () => {
+            try { document.querySelector<HTMLElement>('[data-settings-tab="media"]')?.click(); } catch {}
+            try { document.querySelector<HTMLElement>('[data-tab="media"]')?.click(); } catch {}
+          };
+          clickMediaTab();
+          setTimeout(clickMediaTab, 80);
+        } catch {
+          try { document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click(); } catch {}
         }
-      } catch {
-        try { document.querySelector<HTMLElement>('#settingsBtn, [data-action="settings-open"]')?.click(); } catch {}
-      }
-    }, { capture: true });
-  }
+      };
+      cal.addEventListener('click', openMediaSettings, { capture: true });
+    }
 }
 
 export function wireCamera() {

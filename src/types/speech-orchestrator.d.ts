@@ -10,6 +10,6 @@ type RecognizerLike = {
   on?: AnyFn;
 };
 
-declare module '/speech/orchestrator.js' {
+declare module '/dist/speech/orchestrator.js' {
   export function startOrchestrator(): Promise<RecognizerLike | void> | RecognizerLike | void;
 }
