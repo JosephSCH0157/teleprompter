@@ -103,8 +103,9 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       // scroll-padding keeps scrollTo alignment without shifting the marker element
       viewer.style.paddingTop = '0px';
       viewer.style.scrollPaddingTop = `${markerOffset}px`;
-      if (markerOffset > (viewer.clientHeight || 0) * 2) {
-        try { console.warn('[MARKER] insane offset', { markerOffset, viewerHeight: viewer.clientHeight }); } catch {}
+      const viewerHeight = viewer.clientHeight || 0;
+      if (viewerHeight > 0 && markerOffset > viewerHeight * 2) {
+        try { console.warn('[MARKER] insane offset', { markerOffset, viewerHeight }); } catch {}
       }
     }
     try {
@@ -221,11 +222,11 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   try {
     if ((window as any).__TP_DEV || (window as any).__TP_DEV1) {
       const lineEls = Array.from(root.querySelectorAll<HTMLElement>('.line'));
-      if (lineEls.length && lineEls.every((el) => !el.dataset.speaker)) {
-        console.warn('[render] no speaker markers applied to rendered lines', {
-          lineCount: lineEls.length,
-        });
-      }
+        if (lineEls.length && lineEls.every((el) => !el.dataset.speaker)) {
+          console.info('[render] no speaker markers applied to rendered lines', {
+            lineCount: lineEls.length,
+          });
+        }
     }
   } catch {}
 

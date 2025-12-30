@@ -42,7 +42,8 @@ async function main() {
   const puppeteer = require('puppeteer');
   console.log('[e2e] launching browser...');
   const isHeadless = HEADLESS === true || HEADLESS === '1' || HEADLESS === 1 || HEADLESS === undefined || HEADLESS === null ? true : Boolean(HEADLESS);
-  const browser = await puppeteer.launch({ headless: isHeadless, args: ['--no-sandbox'] });
+  const headlessMode = isHeadless ? 'new' : false;
+  const browser = await puppeteer.launch({ headless: headlessMode, args: ['--no-sandbox'] });
   const page = await browser.newPage();
 
   page.on('console', (msg) => {

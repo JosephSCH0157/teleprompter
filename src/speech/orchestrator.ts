@@ -3,7 +3,7 @@ import * as matcher from './matcher';
 import type { Recognizer } from './recognizer';
 import { createRecognizer } from './recognizer';
 
-console.warn('[ASR_ORCH] LIVE envelope v2025-12-30b');
+console.info('[ASR_ORCH] LIVE envelope v2025-12-30b');
 
 const SILENCE_HOLD_MS = 1200;
 
