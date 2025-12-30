@@ -13,3 +13,5 @@ export interface AppBootOptions {
 }
 
 export type CoreInit = () => Promise<void>;
+
+export * from "../types/speaker-profile";
