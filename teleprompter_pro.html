@@ -382,26 +382,6 @@
   <span id="obsChip" class="chip"></span>
   <div data-step-ui="1" style="display:none;"></div>
 </div>
-<script>
-  (function(){
-    try {
-      var btn = document.getElementById('micCalBtn');
-      if (btn && !btn.dataset.wired) {
-        btn.dataset.wired = '1';
-        btn.addEventListener('click', function(){
-          try {
-            var calBtn = document.getElementById('asrCalibBtn');
-            if (calBtn){ calBtn.click(); return; }
-            if (window.showCalibModal) window.showCalibModal();
-            var settingsBtn = document.getElementById('settingsBtn');
-            if (settingsBtn) settingsBtn.click();
-            setTimeout(function(){ try { document.getElementById('asrCalibBtn')?.click(); } catch(e){} }, 150);
-          } catch(e){}
-        });
-      }
-    } catch(e){}
-  })();
-</script>
 <div class="app page-panel" data-tp-panel="scripts">
 <aside class="panel" id="sidebar">
 <h2>Controls</h2>
