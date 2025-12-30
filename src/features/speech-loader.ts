@@ -41,6 +41,12 @@ type TranscriptPayload = {
   source: string;
   mode: string;
   isFinal: boolean;
+  matchId?: string;
+  match?: unknown;
+  meta?: boolean;
+  line?: number;
+  candidates?: unknown;
+  sim?: number;
 };
 
 declare global {
@@ -250,17 +256,32 @@ try {
 } catch {}
 
 // Small router to bridge transcripts to both legacy and modern paths
-function routeTranscript(text: string, isFinal: boolean): void {
+function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: string }), isFinal?: boolean): void {
   try {
+    const incoming = typeof input === 'string' ? null : input;
+    const text =
+      typeof input === 'string'
+        ? input
+        : (typeof incoming?.text === 'string' ? incoming.text : '');
     if (!text) return;
     markResultTimestamp();
+    const finalFlag =
+      typeof isFinal === 'boolean'
+        ? isFinal
+        : Boolean(incoming?.isFinal ?? incoming?.final);
     const payload: TranscriptPayload = {
       text,
-      final: !!isFinal,
-      isFinal: !!isFinal,
-      timestamp: performance.now(),
-      source: 'speech-loader',
-      mode: lastScrollMode || getScrollMode(),
+      final: !!finalFlag,
+      isFinal: !!finalFlag,
+      timestamp: typeof incoming?.timestamp === 'number' ? incoming.timestamp : performance.now(),
+      source: typeof incoming?.source === 'string' ? incoming.source : 'speech-loader',
+      mode: typeof incoming?.mode === 'string' ? incoming.mode : (lastScrollMode || getScrollMode()),
+      matchId: typeof incoming?.matchId === 'string' ? incoming.matchId : undefined,
+      match: incoming?.match,
+      meta: incoming?.meta === true ? true : undefined,
+      line: typeof incoming?.line === 'number' ? incoming.line : undefined,
+      candidates: incoming?.candidates,
+      sim: typeof incoming?.sim === 'number' ? incoming.sim : undefined,
     };
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)

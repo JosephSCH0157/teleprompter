@@ -10,6 +10,7 @@ export type CatchUpDeps = {
     markerOffset: number;
     targetTop: number;
     scroller: HTMLElement;
+    prevTop: number;
   }) => void;
   devLog?: (...args: any[]) => void;
 };
@@ -42,6 +43,7 @@ export function wireCatchUpButton(deps: CatchUpDeps): void {
   btn.addEventListener('click', () => {
     const scroller = deps.getScroller();
     if (!scroller) return;
+    const prevTop = scroller.scrollTop || 0;
     const markerIndex = deps.getMarkerLineIndex();
     if (!Number.isFinite(markerIndex as number) || (markerIndex as number) < 0) {
       deps.devLog?.('[catchup] marker line index not found');
@@ -68,6 +70,7 @@ export function wireCatchUpButton(deps: CatchUpDeps): void {
       markerOffset: marker,
       targetTop,
       scroller,
+      prevTop,
     });
   });
 }

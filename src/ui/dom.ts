@@ -1017,11 +1017,6 @@ export function bindStaticDom() {
           : 0.4;
         return Math.max(0, Math.round(hostHeight * markerPct));
       };
-      const getMarkerLineIndex = () => {
-        const scroller = resolveCatchUpScroller();
-        const idx = scroller ? computeAnchorLineIndex(scroller) : computeAnchorLineIndex();
-        return Number.isFinite(idx as number) ? (idx as number) : null;
-      };
       const getScrollMode = () => {
         try {
           const store = (window as any).__tpStore;
@@ -1030,6 +1025,26 @@ export function bindStaticDom() {
         } catch {
           return '';
         }
+      };
+      const getAsrAnchorIndex = () => {
+        try {
+          const driver = (window as any).__tpAsrScrollDriver;
+          const driverIdx = typeof driver?.getLastLineIndex === 'function' ? driver.getLastLineIndex() : null;
+          if (Number.isFinite(driverIdx as number) && (driverIdx as number) >= 0) {
+            return Math.max(0, Math.floor(driverIdx as number));
+          }
+        } catch {}
+        const idxRaw = Number((window as any).currentIndex ?? -1);
+        return Number.isFinite(idxRaw) && idxRaw >= 0 ? Math.max(0, Math.floor(idxRaw)) : null;
+      };
+      const getMarkerLineIndex = () => {
+        const mode = getScrollMode();
+        if (mode === 'asr' || mode === 'hybrid') {
+          return getAsrAnchorIndex();
+        }
+        const scroller = resolveCatchUpScroller();
+        const idx = scroller ? computeAnchorLineIndex(scroller) : computeAnchorLineIndex();
+        return Number.isFinite(idx as number) ? (idx as number) : null;
       };
       wireCatchUpButton({
         getScroller: resolveCatchUpScroller,
@@ -1043,15 +1058,34 @@ export function bindStaticDom() {
         scrollToTop: (top: number) => {
           applyCanonicalScrollTop(top, { scroller: resolveCatchUpScroller(), reason: 'catchup' });
         },
-        onCatchUp: ({ index, line, targetTop }) => {
+        onCatchUp: ({ index, line, targetTop, prevTop }) => {
           const mode = getScrollMode();
           setActiveLine(line);
-          try { (window as any).currentIndex = index; } catch {}
-          if (mode === 'step') {
-            try { (window as any).__tpStepIndex = index; } catch {}
-          }
           if (mode === 'asr' || mode === 'hybrid') {
-            try { (window as any).__tpAsrScrollDriver?.setLastLineIndex?.(index); } catch {}
+            const prevIndex = Number.isFinite(index as number) ? Math.max(0, Math.floor(index as number)) : null;
+            const verify = () => {
+              const nextIndex = getAsrAnchorIndex();
+              if (
+                prevIndex != null &&
+                nextIndex != null &&
+                nextIndex < prevIndex - 2
+              ) {
+                try {
+                  console.warn('[CATCHUP_ABORTED_BACKJUMP]', { prevIndex, nextIndex });
+                } catch {}
+                applyCanonicalScrollTop(prevTop, { scroller: resolveCatchUpScroller(), reason: 'catchup-abort-backjump' });
+                try { (window as any).currentIndex = prevIndex; } catch {}
+              }
+            };
+            try {
+              if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => verify());
+              } else {
+                window.setTimeout?.(verify, 0);
+              }
+            } catch {
+              verify();
+            }
           }
           if (mode === 'timed' || mode === 'wpm' || mode === 'hybrid') {
             try { (window as any).__tpAuto?.rebase?.(targetTop); } catch {}

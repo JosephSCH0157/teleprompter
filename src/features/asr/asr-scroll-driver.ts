@@ -1,4 +1,3 @@
-import { matchBatch } from '../../speech/orchestrator';
 import { normTokens, type MatchResult } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
@@ -210,6 +209,7 @@ const DEFAULT_CATCHUP_MODE_MAX_JUMP = 25;
 const DEFAULT_CATCHUP_MODE_MIN_SIM = 0.55;
 const DEFAULT_CATCHUP_MODE_DURATION_MS = 2500;
 const DEFAULT_CATCHUP_LOOKAHEAD_BONUS = 120;
+const DEFAULT_BACKJUMP_BLOCK_LINES = 5;
 const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
 const DEFAULT_FREEZE_LOW_SIM_WINDOW_MS = 5000;
 const EVENT_RING_MAX = 50;
@@ -342,6 +342,16 @@ function isDevMode(): boolean {
     // ignore
   }
   return false;
+}
+
+function isOrchestratorLoggingEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    return typeof w.__tpSpeech?.matchBatch === 'function';
+  } catch {
+    return false;
+  }
 }
 
 function logDev(...args: any[]) {
@@ -506,6 +516,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let forcedCooldownUntil = 0;
   const forcedCommitTimes: number[] = [];
   let lastStuckDumpAt = 0;
+  let lastMatchId: string | undefined;
+  let lastScriptHash = '';
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -638,6 +650,47 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   };
 
+  const readScriptHash = () => {
+    try {
+      return String((window as any).__TP_LAST_APPLIED_HASH || '');
+    } catch {
+      return '';
+    }
+  };
+
+  if (!lastScriptHash) {
+    lastScriptHash = readScriptHash();
+  }
+
+  const setCurrentIndex = (nextIndex: number, reason: string) => {
+    if (!Number.isFinite(nextIndex)) return;
+    const next = Math.max(0, Math.floor(nextIndex));
+    const prevRaw = Number((window as any)?.currentIndex ?? lastLineIndex ?? -1);
+    const prev = Number.isFinite(prevRaw) ? Math.floor(prevRaw) : 0;
+    const scriptHash = readScriptHash();
+    const scriptHashChanged = !!scriptHash && scriptHash !== lastScriptHash;
+    const isBackJump = next < prev - DEFAULT_BACKJUMP_BLOCK_LINES;
+    const allowBackJump = reason === 'manualReset' || reason === 'scriptChanged';
+    if (isBackJump) {
+      try {
+        console.warn('[ASR_BACKJUMP]', {
+          oldIndex: prev,
+          newIndex: next,
+          lastMatchId,
+          reason,
+          scriptHashChanged,
+          blocked: !allowBackJump,
+        });
+      } catch {}
+      if (!allowBackJump) {
+        if (scriptHashChanged) lastScriptHash = scriptHash;
+        return;
+      }
+    }
+    try { (window as any).currentIndex = next; } catch {}
+    if (scriptHashChanged) lastScriptHash = scriptHash;
+  };
+
   try {
     const hasScript = !!(getScriptRoot() || document.querySelector('.line'));
     if (hasScript) ensureAsrTuningProfile('reading');
@@ -659,7 +712,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!Number.isFinite(idx)) return;
     const next = Math.max(0, Math.floor(idx));
     matchAnchorIdx = matchAnchorIdx >= 0 ? Math.max(matchAnchorIdx, next) : next;
-    try { (window as any).currentIndex = matchAnchorIdx; } catch {}
+    setCurrentIndex(matchAnchorIdx, 'match-anchor');
   };
 
   const updateDebugState = (tag: string) => {
@@ -1483,7 +1536,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       noteCommit(prevLineIndex, targetLine, now);
       resetLowSimStreak();
-      try { (window as any).currentIndex = lastLineIndex; } catch {}
+      setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         matchId,
         prevIndex: prevLineIndex,
@@ -1554,8 +1607,33 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
     const matchId = typeof detail?.matchId === 'string' ? detail.matchId : undefined;
+    if (!matchId) {
+      const snippet = formatLogSnippet(compacted, 60);
+      try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing matchId'); } catch {}
+      warnGuard('no_match_pipeline', [
+        `final=${isFinal ? 1 : 0}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      if (isDevMode() && isOrchestratorLoggingEnabled()) {
+        try { console.assert(false, 'driver saw matchId undefined while orchestrator logging is enabled'); } catch {}
+      }
+      emitHudStatus('no_match', 'No match (pipeline)');
+      return;
+    }
+    lastMatchId = matchId;
     const metaTranscript = detail?.source === 'meta' || detail?.meta === true;
     const incomingMatch = detail?.match;
+    if (!incomingMatch) {
+      const snippet = formatLogSnippet(compacted, 60);
+      try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing match payload'); } catch {}
+      warnGuard('no_match_pipeline', [
+        `matchId=${matchId}`,
+        `final=${isFinal ? 1 : 0}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      emitHudStatus('no_match', 'No match (pipeline)');
+      return;
+    }
     const prevBufferChars = lastBufferChars;
     const bufferedText = metaTranscript ? compacted : updateEvidenceBuffer(compacted, isFinal, now);
     const bufferGrowing = !metaTranscript && bufferMs > 0 && bufferedText.length > prevBufferChars;
@@ -1651,7 +1729,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const effectiveAnchor = resyncActive
       ? Math.max(0, Math.floor(resyncAnchorIdx as number))
       : Math.max(0, Math.floor(anchorIdx));
-    try { (window as any).currentIndex = effectiveAnchor; } catch {}
+    setCurrentIndex(effectiveAnchor, 'anchor-sync');
 
     const driverWindowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
     const catchUpModeActivePre = catchUpModeUntil > now;
@@ -1659,15 +1737,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const driverWindowAhead = catchUpModeActivePre
       ? clamp(lookaheadBase + DEFAULT_CATCHUP_LOOKAHEAD_BONUS, matchLookaheadLines, matchLookaheadMax + DEFAULT_CATCHUP_LOOKAHEAD_BONUS)
       : lookaheadBase;
-    const match = incomingMatch ?? matchBatch(bufferedText, !!isFinal, {
-      currentIndex: effectiveAnchor,
-      windowBack: driverWindowBack,
-      windowAhead: driverWindowAhead,
-      minTokenOverlap: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_OVERLAP : undefined,
-      minTokenLen: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN : undefined,
-      multiLineMinLines: lagRelockActive ? DEFAULT_LAG_RELOCK_MULTI_MIN_LINES : undefined,
-      multiLineMaxLines: lagRelockActive ? DEFAULT_LAG_RELOCK_MULTI_MAX_LINES : undefined,
-    });
+    const match = incomingMatch;
     if (!match) {
       warnGuard('no_match', [
         `current=${effectiveAnchor}`,
@@ -1746,28 +1816,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         rawScoreByIdx.set(idx, score);
       }
     });
-    let topScores = rawScores;
-    if (rawScores.length) {
-      const penalized = rawScores
-        .map((entry) => {
-          const idx = Number(entry.idx);
-          const score = Number(entry.score);
-          if (!Number.isFinite(idx) || !Number.isFinite(score)) return null;
-          const dist = Math.abs(idx - cursorLine);
-          return { idx, score: applyDistancePenalty(score, dist, DEFAULT_DISTANCE_PENALTY_PER_LINE) };
-        })
-        .filter(Boolean) as Array<{ idx: number; score: number }>;
-      penalized.sort((a, b) => b.score - a.score || a.idx - b.idx);
-      const best = penalized[0];
-      if (best) {
-        rawIdx = best.idx;
-        conf = best.score;
-      }
-      topScores = penalized;
-    } else {
-      const dist = Math.abs(rawIdx - cursorLine);
-      conf = applyDistancePenalty(conf, dist, DEFAULT_DISTANCE_PENALTY_PER_LINE);
-    }
+    const topScores = rawScores;
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
     const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
@@ -1920,8 +1969,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
         .filter((entry) => entry.score >= bestScore - forwardTieEps);
       const hasTie = tieCandidates.length >= 2;
+      const forwardMinIdx = cursorLine + Math.max(1, minLineAdvance);
       const forwardCandidates = tieCandidates
-        .filter((entry) => entry.idx >= cursorLine)
+        .filter((entry) => entry.idx >= forwardMinIdx)
         .sort((a, b) => a.idx - b.idx || b.score - a.score);
       const forwardPick = forwardCandidates[0];
       const tieNeed = shortFinalRecent ? shortFinalNeed : requiredThreshold;
@@ -1938,9 +1988,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
       if (hasTie && !forwardPick && !forwardBiasEligible && !shortFinalRecent && !outrunEligible) {
-        warnGuard('tie_forward', [
+        const guardReason = rawIdx <= cursorLine ? 'same_line_noop' : 'no_match_wait';
+        warnGuard(guardReason, [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
+          `minForward=${forwardMinIdx}`,
           `sim=${formatLogScore(bestScore)}`,
           `need=${formatLogScore(requiredThreshold)}`,
           `eps=${forwardTieEps}`,
@@ -2497,7 +2549,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongCount = 0;
         lastBehindRecoveryAt = now;
         resetLookahead('behind-reanchor');
-        try { (window as any).currentIndex = lastLineIndex; } catch {}
+        setCurrentIndex(lastLineIndex, 'behind-reanchor');
         logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
           prevIndex: cursorLine,
           nextIndex: lastLineIndex,
@@ -2681,7 +2733,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBufferChars = 0;
     consistencyEntries.length = 0;
     lastStuckDumpAt = 0;
-    try { (window as any).currentIndex = lastLineIndex; } catch {}
+    setCurrentIndex(lastLineIndex, 'manualReset');
     updateDebugState('sync-index');
   };
   const getLastLineIndex = () => lastLineIndex;
