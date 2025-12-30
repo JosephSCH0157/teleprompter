@@ -147,11 +147,27 @@ function getExpectedLineText(): string | undefined {
   try { return (window as any).__tpScript?.currentExpectedText?.(); } catch { return undefined; }
 }
 
+function isLogEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1 || w.__tpDevMode) return true;
+    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.has('dev') || params.has('debug')) return true;
+  } catch {}
+  return false;
+}
+
 function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchResult) {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
-    const matchId = nextMatchId();
+    const noMatch =
+      !match ||
+      !Number.isFinite(match.bestIdx) ||
+      Number(match.bestIdx) < 0;
+    const matchId = noMatch ? null : nextMatchId();
     const meta = isMetaTranscript(text);
     const detail = {
       text,
@@ -162,11 +178,26 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
       candidates: match?.topScores,
       matchId,
       match,
+      noMatch,
       meta,
       source: meta ? 'meta' : 'orchestrator',
     };
+    if (isLogEnabled() && !noMatch) {
+      try {
+        console.assert(
+          typeof detail.matchId === 'string' && detail.matchId.length > 0,
+          '[ASR] dispatchTranscript missing matchId for match payload',
+          detail,
+        );
+        console.assert(
+          typeof detail.sim === 'number' && Number.isFinite(detail.sim),
+          '[ASR] dispatchTranscript sim not numeric for match payload',
+          detail,
+        );
+      } catch {}
+    }
     try {
-      if (match) {
+      if (match && !noMatch) {
         console.log('[ASR] dispatchMatch', { matchId, line: match.bestIdx, sim: match.bestSim });
       }
     } catch {}

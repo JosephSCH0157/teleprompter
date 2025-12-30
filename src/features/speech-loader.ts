@@ -41,12 +41,13 @@ type TranscriptPayload = {
   source: string;
   mode: string;
   isFinal: boolean;
-  matchId?: string;
+  matchId?: string | null;
   match?: unknown;
   meta?: boolean;
   line?: number;
   candidates?: unknown;
   sim?: number;
+  noMatch?: boolean;
 };
 
 declare global {
@@ -276,12 +277,13 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
       timestamp: typeof incoming?.timestamp === 'number' ? incoming.timestamp : performance.now(),
       source: typeof incoming?.source === 'string' ? incoming.source : 'speech-loader',
       mode: typeof incoming?.mode === 'string' ? incoming.mode : (lastScrollMode || getScrollMode()),
-      matchId: typeof incoming?.matchId === 'string' ? incoming.matchId : undefined,
+      matchId: incoming?.matchId === null ? null : (typeof incoming?.matchId === 'string' ? incoming.matchId : undefined),
       match: incoming?.match,
       meta: incoming?.meta === true ? true : undefined,
       line: typeof incoming?.line === 'number' ? incoming.line : undefined,
       candidates: incoming?.candidates,
       sim: typeof incoming?.sim === 'number' ? incoming.sim : undefined,
+      noMatch: incoming?.noMatch === true ? true : undefined,
     };
     
     // Always emit to HUD bus (unconditional for debugging/monitoring)

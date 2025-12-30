@@ -21,10 +21,11 @@ type DriverOptions = {
 };
 
 type TranscriptDetail = {
-  matchId?: string;
+  matchId?: string | null;
   match?: MatchResult;
   source?: string;
   meta?: boolean;
+  noMatch?: boolean;
 };
 
 type PendingMatch = {
@@ -508,6 +509,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastStuckDumpAt = 0;
   let lastMatchId: string | undefined;
   let lastScriptHash = '';
+  let missingMatchIdKeysLogged = false;
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -1597,7 +1599,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
     const matchId = typeof detail?.matchId === 'string' ? detail.matchId : undefined;
+    const noMatch = detail?.noMatch === true;
     if (!matchId) {
+      if (isDevMode() && !missingMatchIdKeysLogged) {
+        missingMatchIdKeysLogged = true;
+        try {
+          const keys = detail && typeof detail === 'object' ? Object.keys(detail as Record<string, unknown>) : [];
+          console.debug('[ASR_PIPELINE] missing matchId keys=[' + keys.join(',') + ']');
+        } catch {}
+      }
+      if (noMatch) {
+        emitHudStatus('no_match', 'No match');
+        return;
+      }
       const snippet = formatLogSnippet(compacted, 60);
       try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing matchId'); } catch {}
       warnGuard('no_match_pipeline', [
@@ -1608,6 +1622,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try { console.assert(false, 'driver saw matchId undefined while orchestrator logging is enabled'); } catch {}
       }
       emitHudStatus('no_match', 'No match (pipeline)');
+      return;
+    }
+    if (noMatch) {
+      emitHudStatus('no_match', 'No match');
       return;
     }
     lastMatchId = matchId;
